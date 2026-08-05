@@ -1141,7 +1141,7 @@ export default function Locker() {
               {shuffleOnLaunch && (
                 <span
                   className={`rounded-full px-1.5 text-xs tabular-nums ${
-                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-yellow-500/15 text-yellow-400'
+                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent-ink' : 'bg-state-warning/15 text-state-warning'
                   }`}
                 >
                   {shuffleIncluded.size}
@@ -1154,7 +1154,7 @@ export default function Locker() {
             unassignedSkins.length + unassignedSounds.length > 0 && (
               <button
                 onClick={() => setViewMode('list')}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-state-warning/10 border border-state-warning/50 text-state-warning hover:bg-state-warning/20 transition-colors"
                 title={t('locker.page.switchToListViewToSeeUnassigned')}
               >
                 <Layers className="w-3 h-3" />
@@ -1182,7 +1182,7 @@ export default function Locker() {
             aria-pressed={hideEmptyHeroes}
             className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors cursor-pointer ${
               hideEmptyHeroes
-                ? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
+                ? 'border-accent/50 bg-accent/15 text-accent-ink hover:bg-accent/25'
                 : 'border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
             }`}
             title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}
@@ -1587,16 +1587,16 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
         {/* The count badge only earns its spot once something is installed; an
             empty Global card leans on the bottom import hint instead. */}
         {!isEmpty && (
-          <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+          <div className="absolute left-2 top-2 z-20 rounded-full bg-overlay-bg/45 px-2 py-0.5 text-[10px] font-medium text-overlay-primary/85 backdrop-blur-sm">
             {t('locker.page.modCount', { count })}
           </div>
         )}
       </div>
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-black/70 to-transparent p-2 text-right sm:p-3">
-        <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-overlay-bg/70 to-transparent p-2 text-right sm:p-3">
+        <div className="font-reaver text-lg leading-tight tracking-wide text-overlay-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {t('locker.page.global')}
         </div>
-        <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+        <div className="text-[11px] text-overlay-primary/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {isEmpty
             ? t('locker.page.globalEmptyHint')
             : t('locker.page.categoryCount', { count: typeCount })}
@@ -1735,7 +1735,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           className="absolute inset-0 h-full w-full object-cover object-center animate-hero-zoom-in"
         />
         <div className="absolute inset-0 bg-bg-primary/55" />
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-overlay-bg/50 to-transparent" />
       </div>
 
       {/* Progressive frosted-glass background — the same feathered, hard-edge-free
@@ -1748,7 +1748,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[560px] xl:w-[620px]"
       >
         <div
-          className="absolute inset-0"
+          className="locker-hero-glass-wash absolute inset-0"
           style={{
             backdropFilter: 'blur(48px) saturate(135%)',
             WebkitBackdropFilter: 'blur(48px) saturate(135%)',
@@ -1778,7 +1778,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, color-mix(in srgb, var(--color-bg-secondary) 95%, transparent) 28%, color-mix(in srgb, var(--color-bg-secondary) 75%, transparent) 50%, color-mix(in srgb, var(--color-bg-secondary) 40%, transparent) 70%, color-mix(in srgb, var(--color-bg-secondary) 15%, transparent) 85%, transparent 96%)',
           }}
         />
       </div>
@@ -1796,10 +1796,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         </button>
 
         <div className="flex items-baseline gap-2">
-          <h2 className="text-lg font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t('locker.page.global')}
           </h2>
-          <span className="text-xs text-white/60">
+          <span className="text-xs text-text-tertiary">
             {t('locker.page.modCount', { count: total })}
           </span>
         </div>
@@ -1833,13 +1833,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 type="button"
                 onClick={() => setSelectedType(type)}
                 className={`relative z-10 flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors ${
-                  isActive ? '' : 'hover:bg-white/10'
+                  isActive ? '' : 'hover:bg-hl/10'
                 }`}
               >
-                <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
+                <span className={`flex-1 truncate text-sm font-medium text-text-primary ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
                   {generalTabLabel(type, t)}
                 </span>
-                <span className="text-xs text-white/50">{count}</span>
+                <span className="text-xs text-text-tertiary">{count}</span>
               </button>
             );
           })}
@@ -1865,17 +1865,17 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           {activeType ? (
             <>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+                <h3 className="text-base font-semibold text-text-primary">
                   {generalTabLabel(activeType, t)}
                 </h3>
-                <span className="text-xs text-white/60">
+                <span className="text-xs text-text-tertiary">
                   {t('locker.page.modCount', { count: activeMods.length })}
                 </span>
                 {isPriorityTab && (
                   <button
                     type="button"
                     onClick={onAddGlobal}
-                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:border-accent/60 hover:bg-accent/20"
                     title={t('locker.globalPicker.description')}
                   >
                     <ArrowUpToLine className="h-3.5 w-3.5" />
@@ -1886,7 +1886,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   <button
                     type="button"
                     onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
-                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:border-accent/60 hover:bg-accent/20"
                     title={activeType === 'spirit-urn' ? t('locker.urnImport.trigger.title') : t('locker.soulImport.trigger.title')}
                   >
                     {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
@@ -1895,13 +1895,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 )}
               </div>
               {activeMods.length === 0 && isPropContainer ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
                   {activeType === 'spirit-urn' ? (
-                    <Box className="h-8 w-8 text-white/40" />
+                    <Box className="h-8 w-8 text-text-tertiary" />
                   ) : (
-                    <Ghost className="h-8 w-8 text-white/40" />
+                    <Ghost className="h-8 w-8 text-text-tertiary" />
                   )}
-                  <p className="max-w-sm text-sm text-white/70">
+                  <p className="max-w-sm text-sm text-text-secondary">
                     {t('locker.global.propEmpty', {
                       type: GLOBAL_MOD_TYPE_LABELS[activeType],
                     })}
@@ -1909,20 +1909,20 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   <button
                     type="button"
                     onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:border-accent/60 hover:bg-accent/20"
                   >
                     {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
                     {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 </div>
               ) : activeMods.length === 0 && isPriorityTab ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
-                  <ArrowUpToLine className="h-8 w-8 text-white/40" />
-                  <p className="max-w-sm text-sm text-white/70">{t('locker.globalPicker.empty')}</p>
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  <ArrowUpToLine className="h-8 w-8 text-text-tertiary" />
+                  <p className="max-w-sm text-sm text-text-secondary">{t('locker.globalPicker.empty')}</p>
                   <button
                     type="button"
                     onClick={onAddGlobal}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:border-accent/60 hover:bg-accent/20"
                   >
                     <ArrowUpToLine className="h-3.5 w-3.5" />
                     {t('locker.globalPicker.trigger')}
@@ -1931,9 +1931,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               ) : activeMods.length === 0 ? (
                 // Non-prop types can't be imported, so the empty state just
                 // points the user at Browse instead of an import button.
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
-                  <Layers className="h-8 w-8 text-white/40" />
-                  <p className="max-w-sm text-sm text-white/70">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  <Layers className="h-8 w-8 text-text-tertiary" />
+                  <p className="max-w-sm text-sm text-text-secondary">
                     {t('locker.global.typeEmpty', {
                       type: generalTabLabel(activeType, t),
                     })}
@@ -1979,7 +1979,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       } ${
                         mod.enabled
                           ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
-                          : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+                          : 'border-hl/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-hl/[0.16] hover:text-text-primary'
                       }`}
                     >
                       {/* Glass backdrop: a blurred copy of the cover art bleeds
@@ -2005,7 +2005,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           3D model over a frosted-glass panel so the environment
                           background shows through; other types keep a solid bg. */}
                       <div
-                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
+                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-hl/[0.08] ${
                           isPropContainer ? '' : 'bg-bg-tertiary'
                         }`}
                       >
@@ -2016,7 +2016,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             the retag kebab below) under the z-10 full-card toggle
                             and swallow the kebab's clicks. */}
                         {isPropContainer && (
-                          <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
+                          <div className="pointer-events-none absolute inset-0 bg-hl/[0.04] backdrop-blur-md" />
                         )}
                         {/* Prop containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
@@ -2113,7 +2113,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             }}
                             aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
                             title={t('locker.page.changeCategory')}
-                            className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-overlay-border/15 bg-overlay-bg/45 text-overlay-primary/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-overlay-bg/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
@@ -2129,7 +2129,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           }}
                           aria-label={t('locker.global.deleteMod', { name: mod.name })}
                           title={t('locker.global.deleteMod', { name: mod.name })}
-                          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-overlay-border/15 bg-overlay-bg/45 text-overlay-primary/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-state-danger/80 hover:text-overlay-primary focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -2181,7 +2181,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               )}
             </>
           ) : (
-            <p className="text-sm text-white/70">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
+            <p className="text-sm text-text-secondary">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
           )}
         </div>
 
@@ -2221,7 +2221,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           <div
             role="menu"
             aria-label={t('locker.page.changeGlobalCategory')}
-            className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-popup animate-fade-in"
             style={{ top: retagMenu.y, left: retagMenu.x }}
           >
             {/* The Global tab is folder placement, not classification, so its
@@ -2278,7 +2278,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     setRetagMenu(null);
                   }}
                   className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs cursor-pointer hover:bg-bg-tertiary ${
-                    isCurrent ? 'text-accent' : 'text-text-primary'
+                    isCurrent ? 'text-accent-ink' : 'text-text-primary'
                   }`}
                 >
                   {GLOBAL_MOD_TYPE_LABELS[type]}
@@ -2313,7 +2313,7 @@ function HeroGallerySkeleton() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-bg-secondary">
       <Skeleton className="relative aspect-[3/4]" rounded="none" />
-      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-overlay-bg/70 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
         <Skeleton className="h-3 w-2/3" rounded="sm" />
         <Skeleton className="h-2 w-1/3" rounded="sm" />
@@ -2403,7 +2403,7 @@ function HeroGalleryCard({
       data-locker-hero-id={hero.id}
       className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${typeaheadClassName}`}
     >
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
+      <div className="absolute inset-0 bg-gradient-to-t from-overlay-bg/70 via-overlay-bg/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative aspect-[3/4]">
         {!isRenderReady && fallbackStep < 3 && (
@@ -2454,7 +2454,7 @@ function HeroGalleryCard({
         }}
         aria-label={t('locker.page.browseHeroSkins', { hero: hero.name })}
         title={t('locker.page.browseHeroSkins', { hero: hero.name })}
-        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-white/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-overlay-border/30 bg-overlay-bg/40 p-1 text-overlay-primary/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-overlay-bg/60 focus-visible:opacity-100 group-hover:opacity-100"
       >
         <ExternalLink className="h-3 w-3" />
       </button>
@@ -2469,8 +2469,8 @@ function HeroGalleryCard({
         title={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
         className={`absolute right-2 top-2 z-20 flex items-center justify-center rounded-full border p-1 transition-opacity ${
           isFavorite
-            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300 opacity-100'
-            : 'border-white/30 bg-black/40 text-white/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/60'
+            ? 'border-state-warning/60 bg-state-warning/20 text-state-warning opacity-100'
+            : 'border-overlay-border/30 bg-overlay-bg/40 text-overlay-primary/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-overlay-bg/60'
         }`}
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
@@ -2482,7 +2482,7 @@ function HeroGalleryCard({
           outline. Filled vs outline reads at a glance without the accent color. */}
       {(facetKeys.length > 0 || inShufflePool) && (
         <div
-          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 ring-1 ring-inset ring-white/10 backdrop-blur-sm"
+          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-overlay-bg/55 px-2 py-1 ring-1 ring-inset ring-overlay-border/10 backdrop-blur-sm"
           title={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
           aria-label={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
         >
@@ -2495,7 +2495,7 @@ function HeroGalleryCard({
                 className={`h-3.5 w-3.5 ${
                   active
                     ? 'text-[#3b4250] drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]'
-                    : 'fill-none text-white/40 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
+                    : 'fill-none text-overlay-primary/40 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
                 }`}
                 fill={active ? `url(#${FACET_SHEEN_ID})` : 'none'}
                 strokeWidth={active ? 1.5 : 2}
@@ -2505,7 +2505,7 @@ function HeroGalleryCard({
           })}
           {inShufflePool && (
             <Shuffle
-              className="h-3.5 w-3.5 text-accent drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
+              className="h-3.5 w-3.5 text-accent-ink drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
               strokeWidth={2.25}
               aria-hidden
             />
@@ -2517,7 +2517,7 @@ function HeroGalleryCard({
       {!(hideHeroName && cardImage) && (
         <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
           {nameFailed ? (
-            <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
+            <div className="text-sm font-semibold text-overlay-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
           ) : (
             <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
               <img
@@ -2613,7 +2613,7 @@ function HeroCard({
   return (
     <div
       data-locker-hero-id={hero.id}
-      className={`group relative overflow-hidden rounded-lg border border-border bg-bg-secondary ${typeaheadClassName}`}
+      className={`locker-list-card group relative overflow-hidden rounded-lg border border-border bg-bg-secondary ${typeaheadClassName}`}
     >
       {/* Hero art bleeds behind the whole card; a gradient keeps the left side
           (where the text sits) dark enough to read, fading toward the portrait
@@ -2632,7 +2632,7 @@ function HeroCard({
       )}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+        className="locker-list-card-scrim pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
       />
 
       {/* Clickable header row toggles the dropdown. The favorite star is a
@@ -2646,17 +2646,17 @@ function HeroCard({
         >
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="truncate font-semibold drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+              <div className="locker-list-card-copy truncate font-semibold drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
                 {hero.name}
               </div>
               {hasAbilityRecolor && (
                 <RainbowPaletteIcon
-                  className="h-3.5 w-3.5 flex-shrink-0 text-accent drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"
+                  className="h-3.5 w-3.5 flex-shrink-0 text-accent-ink drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"
                   title={t('locker.page.abilityColorRecoloringAvailable')}
                 />
               )}
             </div>
-            <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+            <div className="locker-list-card-copy text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
               {countLabel}
             </div>
           </div>
@@ -2670,7 +2670,7 @@ function HeroCard({
           type="button"
           onClick={onToggleFavorite}
           className={`px-3 flex items-center transition-colors cursor-pointer ${
-            isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
+            isFavorite ? 'text-state-warning' : 'text-text-secondary hover:text-text-primary'
           }`}
           title={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
         >

@@ -135,13 +135,13 @@ export default function MyPublishedSection({
       )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span className="break-words">{error}</span>
           <button
             type="button"
             onClick={() => void load()}
-            className="ml-auto underline text-red-300 hover:text-red-200 cursor-pointer"
+            className="ml-auto underline text-state-danger hover:text-state-danger cursor-pointer"
           >
             {t('common.actions.retry')}
           </button>
@@ -172,14 +172,14 @@ export default function MyPublishedSection({
       )}
 
       {data && data.profiles.length > 0 && (
-        <ul className="divide-y divide-white/5 border border-white/10 rounded-lg bg-bg-secondary overflow-hidden">
+        <ul className="divide-y divide-hl/5 border border-hl/10 rounded-lg bg-bg-secondary overflow-hidden">
           {data.profiles.map((p) => {
             const confirming = confirmingId === p.id;
             const busy = deletingId === p.id;
             return (
               <li
                 key={p.id}
-                className="px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors"
+                className="px-4 py-3 flex items-center gap-3 hover:bg-hl/[0.02] transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <div

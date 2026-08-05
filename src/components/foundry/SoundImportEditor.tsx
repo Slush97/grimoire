@@ -349,7 +349,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
     }, [buffer]);
 
     if (decodeError) {
-        return <p className="mt-2 text-[11px] text-red-400">{decodeError}</p>;
+        return <p className="mt-2 text-[11px] text-state-danger">{decodeError}</p>;
     }
     if (!buffer) {
         return (
@@ -394,7 +394,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                 <button
                     type="button"
                     onClick={playSelection}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent-ink transition-colors hover:bg-accent/15"
                     title={t('foundry.sound.import.playSelection', 'Play selection')}
                 >
                     {playing ? <Pause size={14} /> : <Play size={14} className="translate-x-px" />}
@@ -433,12 +433,12 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                         <Loader2 size={11} className="animate-spin" />
                     )}
                     {normalize && targetState === 'missing' && (
-                        <span className="text-amber-500">
+                        <span className="text-state-warning">
                             {t('foundry.sound.import.matchUnavailable', 'original unavailable')}
                         </span>
                     )}
                     {normalize && targetRms !== null && (
-                        <span className="tabular-nums text-accent">
+                        <span className="tabular-nums text-accent-ink">
                             {gainDb >= 0 ? '+' : ''}
                             {gainDb.toFixed(1)} dB
                         </span>

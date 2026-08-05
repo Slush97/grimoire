@@ -10,12 +10,12 @@ function KeyringNotice() {
   const { t } = useTranslation();
   return (
     <div
-      className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm border border-yellow-500/25 bg-yellow-500/[0.07] px-2.5 py-1.5 text-[11px] leading-tight text-yellow-100"
+      className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm border border-state-warning/25 bg-state-warning/[0.07] px-2.5 py-1.5 text-[11px] leading-tight text-state-warning"
       title={t('social.account.safeStorageUnencrypted')}
     >
-      <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-yellow-300" />
+      <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-state-warning" />
       <span className="min-w-0">
-        <span className="font-medium text-yellow-200">{t('social.account.sessionOnlyPunctuated')}</span>{' '}
+        <span className="font-medium text-state-warning">{t('social.account.sessionOnlyPunctuated')}</span>{' '}
         <span className="text-text-secondary">{t('social.account.keyringUnavailable')}</span>
       </span>
     </div>
@@ -57,14 +57,14 @@ export default function SocialAccountSection() {
       </p>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start justify-between gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span className="break-words">{error}</span>
           </div>
           <button
             onClick={clearError}
-            className="text-xs text-red-300 hover:text-red-200 underline shrink-0"
+            className="text-xs text-state-danger hover:text-state-danger underline shrink-0"
           >
             {t('common.actions.dismiss')}
           </button>
@@ -78,11 +78,11 @@ export default function SocialAccountSection() {
               <img
                 src={status.user.avatar_url}
                 alt=""
-                className="w-12 h-12 rounded-full border border-white/10"
+                className="w-12 h-12 rounded-full border border-hl/10"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-white/10 flex items-center justify-center text-text-secondary">
+              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-hl/10 flex items-center justify-center text-text-secondary">
                 <Globe className="w-5 h-5" />
               </div>
             )}
@@ -103,7 +103,7 @@ export default function SocialAccountSection() {
             <KeyringNotice />
           )}
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-hl/5">
             <Button variant="secondary" icon={LogOut} onClick={logout} disabled={loading}>
               {t('social.account.signOut')}
             </Button>

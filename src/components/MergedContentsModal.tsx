@@ -150,7 +150,7 @@ export default function MergedContentsModal({
             </div>
             <div className="flex-1 min-w-0 space-y-1 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <Tag className="border-white/20 text-white/90" icon={Layers}>
+                <Tag className="border-hl/20 text-text-secondary" icon={Layers}>
                   {t('mergedContents.merged', { count: merged.sources.length })}
                 </Tag>
                 <span className="text-text-secondary text-xs">{t('mergedContents.created', { date: createdLabel })}</span>
@@ -170,7 +170,7 @@ export default function MergedContentsModal({
                 {t('mergedContents.sources', { count: merged.sources.length })}
               </div>
               {canExtract && merged.sources.length === 2 && (
-                <div className="text-[11px] text-amber-400/90">
+                <div className="text-[11px] text-state-warning/90">
                   {t('mergedContents.extractingDissolves')}
                 </div>
               )}
@@ -220,7 +220,7 @@ export default function MergedContentsModal({
                         <button
                           onClick={() => void handleExtract(src)}
                           disabled={rowLocked}
-                          className="p-1 ml-0.5 text-text-secondary hover:text-accent transition-colors rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="p-1 ml-0.5 text-text-secondary hover:text-accent-ink transition-colors rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           title={t('mergedContents.extractTitle')}
                           aria-label={`Extract ${src.modName}`}
                         >
@@ -326,7 +326,7 @@ export default function MergedContentsModal({
             )}
 
             {actionError && (
-              <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
+              <div className="flex items-start gap-2 text-sm text-state-danger bg-state-danger/10 border border-state-danger/30 rounded-lg p-2.5 mt-2">
                 <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
                 <div>{actionError}</div>
               </div>

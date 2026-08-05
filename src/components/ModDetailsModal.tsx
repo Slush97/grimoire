@@ -498,7 +498,7 @@ function ModDetailsModal({
         className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
       />
     ) : (
-      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent">
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent-ink">
         {submitter.name.charAt(0)}
       </div>
     )
@@ -529,19 +529,19 @@ function ModDetailsModal({
     switch (category.toLowerCase()) {
       case 'feature':
       case 'addition':
-        return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+        return 'bg-state-success/15 text-state-success border-state-success/30';
       case 'bugfix':
-        return 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+        return 'bg-state-danger/15 text-state-danger border-state-danger/30';
       case 'improvement':
       case 'optimization':
       case 'overhaul':
       case 'rewrite':
-        return 'bg-sky-500/15 text-sky-300 border-sky-500/30';
+        return 'bg-state-info/15 text-state-info border-state-info/30';
       case 'adjustment':
       case 'tweak':
       case 'amendment':
       case 'refactor':
-        return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+        return 'bg-state-warning/15 text-state-warning border-state-warning/30';
       case 'removal':
         return 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40';
       case 'suggestion':
@@ -584,7 +584,7 @@ function ModDetailsModal({
             : isActive
               ? 'border-accent/50 bg-accent/10'
               : isInstalled
-                ? 'border-green-500/30 bg-green-500/5'
+                ? 'border-state-success/30 bg-state-success/5'
                 : archived
                   ? 'border-border/70 bg-bg-secondary/70'
                   : 'border-border bg-bg-tertiary'
@@ -592,11 +592,11 @@ function ModDetailsModal({
       >
         <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${
           isUpdate
-            ? 'bg-accent/15 text-accent'
+            ? 'bg-accent/15 text-accent-ink'
             : isActive
-              ? 'bg-accent/20 text-accent'
+              ? 'bg-accent/20 text-accent-ink'
               : isInstalled
-                ? 'bg-green-500/15 text-green-400'
+                ? 'bg-state-success/15 text-state-success'
                 : archived
                   ? 'bg-bg-tertiary text-text-tertiary'
                   : 'bg-bg-secondary text-text-secondary'
@@ -641,7 +641,7 @@ function ModDetailsModal({
         </div>
         <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
           {isActive && (
-            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-ink">
               {t('common.status.active')}
             </span>
           )}
@@ -718,7 +718,7 @@ function ModDetailsModal({
                 )}
                 <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
                 {installedFileIsArchived && (
-                  <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+                  <span className="flex-shrink-0 rounded-full border border-state-success/40 bg-state-success/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-success">
                     {t('modDetails.files.yourVersion')}
                   </span>
                 )}
@@ -824,10 +824,10 @@ function ModDetailsModal({
   // dragged wide enough (56rem+) gets the modal's two-column layout.
   const outerClass = isSidebar
     ? 'h-full w-full @container'
-    : 'fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in';
+    : 'fixed inset-0 bg-overlay-bg/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in';
   const panelClass = isSidebar
     ? 'relative bg-bg-secondary h-full w-full overflow-hidden flex flex-col'
-    : 'relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl h-[min(90vh,920px)] max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl';
+    : 'relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl h-[min(90vh,920px)] max-h-[90vh] overflow-visible flex flex-col border border-border shadow-modal';
   const bodyContentClass = isSidebar
     ? 'mod-details-body-content flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain @4xl:flex-row @4xl:overflow-hidden'
     : 'mod-details-body-content flex h-full min-h-0 flex-col lg:flex-row overflow-y-auto overscroll-contain lg:overflow-hidden';
@@ -867,7 +867,7 @@ function ModDetailsModal({
             }}
             aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
             title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
-            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
+            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-popup transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
             {isNavigating && navigationDirection === 'previous' ? (
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -886,7 +886,7 @@ function ModDetailsModal({
             }}
             aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
             title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
-            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
+            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-popup transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
             {isNavigating && navigationDirection === 'next' ? (
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -935,13 +935,13 @@ function ModDetailsModal({
           )}
           <div className="flex items-center gap-2 flex-shrink-0">
             {updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent border border-accent/40">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink border border-accent/40">
                 <Download className="w-2.5 h-2.5" />
                 Update
               </span>
             )}
             {installed && !updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
+              <span className="inline-flex items-center gap-1 rounded-full bg-state-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-success border border-state-success/40">
                 <CheckCircle2 className="w-2.5 h-2.5" />
                 {t('modDetails.status.installed')}
               </span>
@@ -957,7 +957,7 @@ function ModDetailsModal({
                 className={
                   ignoreUpdates
                     ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
-                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent-ink hover:border-accent/40 transition-colors'
                 }
                 title={
                   ignoreUpdates
@@ -979,7 +979,7 @@ function ModDetailsModal({
               </button>
             )}
             {outdated && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
+              <span className="inline-flex items-center gap-1 rounded-full bg-state-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-warning border border-state-warning/40">
                 <AlertTriangle className="w-2.5 h-2.5" />
                 {t('modDetails.status.outdated')}
               </span>
@@ -1009,10 +1009,10 @@ function ModDetailsModal({
                     target="_blank"
                     rel="noopener noreferrer"
                     title={`View ${mod.name} on GameBanana`}
-                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent-ink"
                   >
                     <span className="min-w-0 truncate">{mod.name}</span>
-                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                   </a>
                 )
               )}
@@ -1041,14 +1041,14 @@ function ModDetailsModal({
                 )}
                 {showModified && (
                   <span
-                    className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
+                    className={`flex items-center gap-1 ${outdated ? 'text-state-warning' : ''}`}
                     title={outdated
                       ? `Last updated ${modifiedStr} (may be outdated for the current game version)`
                       : `Last updated ${modifiedStr}`}
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>{t('profiles.updated')}</span>
-                    <span className={outdated ? 'text-yellow-300' : 'text-text-primary'}>{modifiedStr}</span>
+                    <span className={outdated ? 'text-state-warning/80' : 'text-text-tertiary'}>{t('profiles.updated')}</span>
+                    <span className={outdated ? 'text-state-warning' : 'text-text-primary'}>{modifiedStr}</span>
                   </span>
                 )}
                 {totalDownloads > 0 && (
@@ -1077,13 +1077,13 @@ function ModDetailsModal({
         {deleteCandidate && (
           <div
             ref={deleteBackdropRef}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay-bg/65 p-4"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-file-title"
           >
             <div
-              className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
+              className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-modal"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 id="delete-file-title" className="text-lg font-semibold text-text-primary">
@@ -1128,7 +1128,7 @@ function ModDetailsModal({
         )}
 
         {offline && (
-          <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-5 py-2 text-xs text-amber-300">
+          <div className="flex items-center gap-2 border-b border-state-warning/20 bg-state-warning/10 px-5 py-2 text-xs text-state-warning">
             <CloudOff className="h-3.5 w-3.5 flex-shrink-0" />
             {t('modDetails.offlineNotice')}
           </div>
@@ -1188,11 +1188,11 @@ function ModDetailsModal({
                             }`}
                           />
                           {imageHidden && (
-                            <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
+                            <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-overlay-primary/80 bg-overlay-bg/40">
                               {t('modDetails.nsfw.previewHidden')}
                             </div>
                           )}
-                          <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="absolute top-2 right-2 p-1.5 rounded-md bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/80 border border-overlay-border/10 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Maximize2 className="w-3.5 h-3.5" />
                           </span>
                         </button>
@@ -1202,7 +1202,7 @@ function ModDetailsModal({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
                               aria-label={t('modDetails.aria.previousImage')}
-                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/90 hover:bg-overlay-bg/80 hover:text-overlay-primary border border-overlay-border/15 transition-colors cursor-pointer"
                             >
                               <ChevronLeft className="w-5 h-5" />
                             </button>
@@ -1210,11 +1210,11 @@ function ModDetailsModal({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToNext(); }}
                               aria-label={t('modDetails.aria.nextImage')}
-                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/90 hover:bg-overlay-bg/80 hover:text-overlay-primary border border-overlay-border/15 transition-colors cursor-pointer"
                             >
                               <ChevronRight className="w-5 h-5" />
                             </button>
-                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
+                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/85 text-[11px] border border-overlay-border/10">
                               {idx + 1} / {images.length}
                             </div>
                           </>
@@ -1292,16 +1292,16 @@ function ModDetailsModal({
                           }`}
                         />
                         {imageHidden && (
-                          <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
+                          <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-overlay-primary/80 bg-overlay-bg/40">
                             {t('modDetails.nsfw.previewHidden')}
                           </div>
                         )}
                         {images.length > 1 && (
-                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
+                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/85 text-[11px] border border-overlay-border/10">
                             {index + 1} / {images.length}
                           </div>
                         )}
-                        <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="absolute top-2 right-2 p-1.5 rounded-md bg-overlay-bg/55 backdrop-blur-sm text-overlay-primary/80 border border-overlay-border/10 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Maximize2 className="w-3.5 h-3.5" />
                         </span>
                       </button>
@@ -1323,7 +1323,7 @@ function ModDetailsModal({
               ) : section === 'Sound' && !audioPreviewUrl ? (
                 <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
                   <div className="flex flex-col items-center gap-2 text-text-secondary">
-                    <Volume2 className="w-12 h-12 text-accent/60" />
+                    <Volume2 className="w-12 h-12 text-accent-ink/60" />
                     <span className="text-sm">{t('modDetails.audio.soundMod')}</span>
                     <span className="text-xs opacity-60">{t('modDetails.audio.noPreview')}</span>
                   </div>
@@ -1333,10 +1333,10 @@ function ModDetailsModal({
               {audioPreviewUrl && (
                 <div className="relative rounded-lg overflow-hidden border border-border bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Volume2 className="w-4 h-4 text-accent" />
+                    <Volume2 className="w-4 h-4 text-accent-ink" />
                     <h3 className="font-medium text-sm text-text-primary">{t('modDetails.audio.preview')}</h3>
                   </div>
-                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
+                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-hl/10 p-1">
                     <AudioPreviewPlayer
                       src={audioPreviewUrl}
                       className="w-full"
@@ -1347,8 +1347,8 @@ function ModDetailsModal({
               )}
 
               {outdated && (
-                <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-yellow-200 text-xs">
-                  <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 rounded-lg border border-state-warning/30 bg-state-warning/10 px-3 py-2.5 text-state-warning text-xs">
+                  <AlertTriangle className="w-4 h-4 text-state-warning flex-shrink-0 mt-0.5" />
                   <span>{t('modDetails.outdatedWarning', { date: formatDate(dateModified!) })}</span>
                 </div>
               )}
@@ -1373,10 +1373,10 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`View ${mod.name} on GameBanana`}
-                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
+                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent-ink"
                       >
                         <span className="min-w-0">{mod.name}</span>
-                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                       </a>
                     )
                   )}
@@ -1395,7 +1395,7 @@ function ModDetailsModal({
                         )}
                         {showModified && (
                           <span
-                            className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
+                            className={`flex items-center gap-1 ${outdated ? 'text-state-warning' : ''}`}
                             title={`Last updated ${modifiedStr}`}
                           >
                             <RefreshCw className="h-3 w-3" />
@@ -1438,10 +1438,10 @@ function ModDetailsModal({
                           type="button"
                           onClick={openArtist}
                           title={`View ${submitter.name}'s mods`}
-                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent cursor-pointer"
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent-ink cursor-pointer"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
-                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent-ink" />
                         </button>
                       ) : submitterProfileUrl ? (
                         <a
@@ -1449,10 +1449,10 @@ function ModDetailsModal({
                           target="_blank"
                           rel="noopener noreferrer"
                           title={`View ${submitter.name} on GameBanana`}
-                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent"
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent-ink"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
-                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent-ink" />
                         </a>
                       ) : (
                         <span className="block min-w-0 truncate font-semibold text-text-primary">{submitter.name}</span>
@@ -1464,7 +1464,7 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Support ${submitter.name} on Ko-fi`}
-                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-brand-kofi-foreground shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
                         {t('modDetails.meta.koFi')}
@@ -1492,7 +1492,7 @@ function ModDetailsModal({
                     {t('modDetails.sections.about')}
                   </h3>
                   <div
-                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full"
+                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent-ink [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full"
                     onClick={handleRichHtmlClick}
                   >
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
@@ -1603,7 +1603,7 @@ function ModDetailsModal({
                               ) : (
                                 update.text && (
                                   <div
-                                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent-ink [&_a]:hover:underline"
                                     onClick={handleRichHtmlClick}
                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(update.text) }}
                                   />
@@ -1676,7 +1676,7 @@ function ModDetailsModal({
                           ) : (
                             <div
                               aria-hidden="true"
-                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-xs font-bold text-accent"
+                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-xs font-bold text-accent-ink"
                             >
                               {posterInitial}
                             </div>
@@ -1709,7 +1709,7 @@ function ModDetailsModal({
                   href={gbUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
+                  className="inline-flex items-center gap-2 text-accent-ink hover:text-accent-ink-hover transition-colors text-sm"
                 >
                   <ExternalLink className="w-4 h-4" />
                   {t('modDetails.viewOnGamebanana')}
@@ -1727,7 +1727,7 @@ function ModDetailsModal({
       {lightboxOpen && currentImageFullUrl && (
         <div
           ref={lightboxBackdropRef}
-          className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-[60] bg-overlay-bg/95 flex items-center justify-center p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
           aria-label={`${mod.name} - full size image`}
@@ -1736,7 +1736,7 @@ function ModDetailsModal({
             type="button"
             onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
             aria-label={t('modDetails.aria.closeFullSizeView')}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+            className="absolute top-4 right-4 p-2 rounded-full bg-overlay-bg/60 backdrop-blur-sm text-overlay-primary/90 hover:bg-overlay-bg/80 hover:text-overlay-primary border border-overlay-border/15 transition-colors cursor-pointer z-10"
           >
             <X className="w-5 h-5" />
           </button>
@@ -1746,7 +1746,7 @@ function ModDetailsModal({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
                 aria-label={t('modDetails.aria.previousImage')}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-overlay-bg/60 backdrop-blur-sm text-overlay-primary/90 hover:bg-overlay-bg/80 hover:text-overlay-primary border border-overlay-border/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
@@ -1754,11 +1754,11 @@ function ModDetailsModal({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToNext(); }}
                 aria-label={t('modDetails.aria.nextImage')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-overlay-bg/60 backdrop-blur-sm text-overlay-primary/90 hover:bg-overlay-bg/80 hover:text-overlay-primary border border-overlay-border/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
-              <div className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white/90 text-xs border border-white/15">
+              <div className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-overlay-bg/60 backdrop-blur-sm text-overlay-primary/90 text-xs border border-overlay-border/15">
                 {currentImageIndex + 1} / {images.length}
               </div>
             </>

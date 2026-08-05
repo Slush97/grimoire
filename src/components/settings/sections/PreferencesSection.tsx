@@ -25,7 +25,7 @@ export default function PreferencesSection() {
           description={<Tx k="settings.toggles.expandLocker" fallback="Start Locker list view with hero cards expanded." />}
         />
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <Toggle
           checked={settings?.autoDisableSiblingVariants ?? true}
@@ -34,7 +34,7 @@ export default function PreferencesSection() {
           description={<Tx k="settings.toggles.switchVariants" fallback="Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file." />}
         />
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <Toggle
           checked={settings?.autoEnableDownloads ?? false}
@@ -43,7 +43,7 @@ export default function PreferencesSection() {
           description={<Tx k="settings.toggles.enableAfterDownload" fallback="Enable mods as soon as they finish downloading. Stays disabled if no slot is free." />}
         />
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <Toggle
           checked={settings?.confirmProfileUpdate ?? true}
@@ -52,7 +52,7 @@ export default function PreferencesSection() {
           description={<Tx k="settings.toggles.confirmProfileUpdate" fallback="Confirm before overwriting a profile's saved mods. Off overwrites immediately." />}
         />
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <Toggle
           checked={settings?.ignoreConflictsByDefault ?? false}
@@ -61,7 +61,7 @@ export default function PreferencesSection() {
           description={<Tx k="settings.toggles.ignoreConflicts" fallback="Hide all conflicts from the Conflicts page. Off shows them." />}
         />
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <Toggle
           checked={settings?.discordRpcEnabled ?? false}

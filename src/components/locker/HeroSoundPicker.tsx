@@ -127,7 +127,7 @@ function ParamSliders({
           <button
             type="button"
             onClick={() => onChange({ volumeDb: 0, pitch: 1 })}
-            className="text-[9px] font-semibold uppercase tracking-wide text-accent hover:underline"
+            className="text-[9px] font-semibold uppercase tracking-wide text-accent-ink hover:underline"
           >
             {t('common.actions.reset')}
           </button>
@@ -196,7 +196,7 @@ function SoundSourceRow({
           )}
         </span>
         {isBusy ? (
-          <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-accent" />
+          <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-accent-ink" />
         ) : isActive ? (
           <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
             <Check className="h-2.5 w-2.5" /> {t('locker.sounds.applied')}
@@ -477,9 +477,9 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
   return (
     <section className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center gap-2">
-        <Music className="h-4 w-4 text-accent" />
+        <Music className="h-4 w-4 text-accent-ink" />
         <h3 className="text-sm font-semibold text-text-primary">{t('locker.sounds.soundsByAbility')}</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink">
           {t('locker.sounds.experimental')}
         </span>
       </div>
@@ -491,7 +491,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
         <div
           className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
             gameRunning
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              ? 'border-state-warning/40 bg-state-warning/10 text-state-warning'
               : 'border-border bg-bg-secondary/70 text-text-secondary'
           }`}
         >

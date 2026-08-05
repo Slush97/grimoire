@@ -15,6 +15,7 @@ import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
+import { initThemeSync } from '../lib/theme';
 import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
@@ -64,6 +65,7 @@ export default function Layout() {
   useEffect(() => {
     applyBackgroundGradient(backgroundGradient);
   }, [backgroundGradient]);
+  useEffect(() => initThemeSync(), []);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -235,7 +237,7 @@ export default function Layout() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-primary">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+        <Loader2 className="w-8 h-8 animate-spin text-accent-ink" />
       </div>
     );
   }
@@ -249,7 +251,10 @@ export default function Layout() {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
-        style={{ background: 'var(--app-bg-glow, none)', opacity: 'var(--app-bg-glow-opacity, 0)' }}
+        style={{
+          background: 'var(--app-bg-glow, none)',
+          opacity: 'calc(var(--app-bg-glow-opacity, 0) * var(--app-bg-glow-theme-opacity, 1))',
+        }}
       />
       <div className="relative z-10 flex min-h-0 flex-1">
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}
@@ -257,9 +262,9 @@ export default function Layout() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {gameinfoAlert && (
-          <div className="sticky top-0 z-40 border-b border-yellow-500/30 bg-yellow-500/10 backdrop-blur-sm">
-            <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">
-              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+          <div className="sticky top-0 z-40 border-b border-state-warning/30 bg-state-warning/10 backdrop-blur-sm">
+            <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-state-warning">
+              <AlertTriangle className="h-5 w-5 text-state-warning" />
               <div className="flex-1 text-sm">
                 <span className="font-semibold">{t('layout.gameinfoIssue')}</span> {gameinfoAlert}
               </div>
@@ -304,7 +309,7 @@ export default function Layout() {
                   components={{ name: <span className="font-semibold text-text-primary" /> }}
                 />
               </p>
-              <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
+              <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-state-warning">
                 {suspiciousPrompt.files.slice(0, 30).map((f) => (
                   <li key={f}>{f}</li>
                 ))}

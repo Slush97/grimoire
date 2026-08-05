@@ -151,7 +151,7 @@ export default function FloatingModelPanel({
   return (
     <div
       ref={ref}
-      className="absolute z-30 flex flex-col overflow-hidden rounded-xl border border-border/70 bg-bg-secondary/95 shadow-2xl backdrop-blur-md"
+      className="absolute z-30 flex flex-col overflow-hidden rounded-xl border border-border/70 bg-bg-secondary/95 shadow-popup backdrop-blur-md"
       // Park off-screen until the layout effect measures the parent and seeds a
       // real position, so the panel never flashes at 0,0.
       style={

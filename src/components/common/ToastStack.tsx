@@ -10,8 +10,8 @@ import Tx from '../translation/Tx';
 const TONE_CLASSES: Record<Toast['tone'], string> = {
   info: 'border-border bg-bg-secondary text-text-primary',
   success: 'border-state-success/40 bg-state-success/10 text-state-success',
-  warning: 'border-yellow-500/40 bg-yellow-500/15 text-yellow-200',
-  error: 'border-red-500/40 bg-red-500/10 text-red-300',
+  warning: 'border-state-warning/40 bg-state-warning/10 text-state-warning',
+  error: 'border-state-danger/40 bg-state-danger/10 text-state-danger',
 };
 
 const EXIT_MS = 200;
@@ -53,7 +53,7 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div
       role="status"
       aria-live="polite"
-      className={`pointer-events-auto flex max-w-[460px] items-center gap-2 rounded-lg border px-4 py-2 text-sm shadow-lg shadow-black/40 backdrop-blur-sm ${
+      className={`pointer-events-auto flex max-w-[460px] items-center gap-2 rounded-lg border px-4 py-2 text-sm shadow-toast backdrop-blur-sm ${
         TONE_CLASSES[toast.tone]
       } ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
     >

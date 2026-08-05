@@ -211,11 +211,11 @@ export default function AudioPreviewPlayer({
             {/* Play/Pause Button */}
             <button
                 onClick={togglePlay}
-                className={`flex-shrink-0 flex items-center justify-center rounded-full border border-accent/50 bg-accent/25 hover:bg-accent/35 hover:border-accent/70 active:scale-95 text-text-primary shadow-sm transition-all cursor-pointer ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
+                className={`flex-shrink-0 flex items-center justify-center rounded-full border border-accent-solid bg-accent-solid text-accent-solid-foreground hover:brightness-110 active:scale-95 shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
                 title={isPlaying ? t('audioPreview.pause') : t('audioPreview.play')}
             >
                 {isLoading ? (
-                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+                    <div className={`animate-spin rounded-full border-2 border-overlay-border border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 ) : isPlaying ? (
                     <Pause className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="currentColor" />
                 ) : (
@@ -232,7 +232,7 @@ export default function AudioPreviewPlayer({
                     className="h-full bg-accent rounded-full relative transition-all"
                     style={{ width: `${progress}%` }}
                 >
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-text-primary rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
             </div>
 

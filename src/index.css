@@ -83,6 +83,7 @@
 @theme {
   --color-bg-primary: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
+  --color-bg-sidebar: #1a1a1a;
   --color-bg-tertiary: #242424;
   /* Sunken/recessed surface, darker than the app bg. Sits behind cards and
      backs inactive picker/segment chips. */
@@ -90,13 +91,31 @@
   /* Dark "glass" surface for floating popovers layered over imagery (e.g. the
      Browse sound-card volume flyout). */
   --color-bg-glass: #0a0c10;
+  /* Card surface used by browse/results grids. */
+  --color-bg-card: #141414;
+  /* Surface-relative highlight tint. Use `hl` for raised fills, dividers,
+     borders and bevels; literal white remains reserved for media overlays. */
+  --color-hl: #ffffff;
+  --app-bg-glow-theme-opacity: 1;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
+  /* Compact solid controls always use a white foreground. Runtime accent
+     updates darken this fill only as much as needed to retain 4.5:1 contrast. */
+  --color-accent-solid: #c2410c;
+  --color-accent-solid-foreground: #ffffff;
   /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
      white and near-black based on the accent's luminance so a light user accent
      (cyan, emerald, amber) stays readable. Computed at runtime in
      applyAccentColor(); this default matches the shipped Ember orange. */
-  --color-accent-foreground: #ffffff;
+  --color-accent-foreground: #0f0f0f;
+  /* Accent used as text/line art on themed surfaces. Runtime accent changes
+     calculate both variants; the active theme selects the appropriate one. */
+  --color-accent-ink-dark: #f97316;
+  --color-accent-ink-light: #c2410c;
+  --color-accent-ink: var(--color-accent-ink-dark);
+  --color-accent-ink-hover-dark: #fb923c;
+  --color-accent-ink-hover-light: #9a3412;
+  --color-accent-ink-hover: var(--color-accent-ink-hover-dark);
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
@@ -113,8 +132,39 @@
   --color-state-danger:  #f87171;
   --color-state-info:    #60a5fa;
 
+  /* Invariant media-overlay palette. These colors always sit on the dark
+     overlay surface, regardless of the resolved app theme. App copy must use
+     text-* and state-* above instead. */
+  --color-overlay-bg: #0a0c10;
+  --color-overlay-primary: #ffffff;
+  --color-overlay-secondary: #e4e4e7;
+  --color-overlay-muted: #a1a1aa;
+  --color-overlay-border: #ffffff;
+  --color-overlay-success: #86efac;
+  --color-overlay-warning: #fde047;
+  --color-overlay-danger: #fca5a5;
+  --color-overlay-info: #93c5fd;
+  --color-overlay-accent: #fdba74;
+
+  /* Switch/slider thumb stays light over both accent and recessed tracks. */
+  --color-control-thumb: #ffffff;
+  --color-control-thumb-border: #0a0c10;
+
+  /* Foregrounds for saturated/brand fills. They are named tokens rather than
+     literal white utilities so the source guard can distinguish them from
+     accidental dark-only app copy. */
+  --color-state-danger-foreground: #ffffff;
+  --color-brand-kofi-foreground: #ffffff;
+
+  /* Shared elevation strengths. Light mode overrides these below to avoid the
+     dense, dirty-looking black shadows used by dark floating surfaces. */
+  --shadow-popup: 0 18px 48px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.55);
+  --shadow-toast: 0 10px 30px rgb(0 0 0 / 0.4);
+
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
+  --color-brand-foreground: #ffffff;
   --color-brand-kofi: #FF5E5B;
   --color-brand-kofi-hover: #ff4542;
 
@@ -130,9 +180,49 @@
   --font-mod-title: 'Reaver', serif;
 }
 
+/* Theme tokens are switched on the resolved theme, not the saved preference:
+   system mode therefore follows the OS after theme.ts resolves it. */
+:root {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-bg-primary: #eeeeef;
+  --color-bg-secondary: #fafafa;
+  --color-bg-sidebar: #e7e7ea;
+  --color-bg-tertiary: #e4e4e7;
+  --color-bg-sunken: #dcdce0;
+  /* bg-glass intentionally stays dark: it is a floating surface over art. */
+  --color-bg-card: #f8f8f9;
+  --color-hl: #18181b;
+  --app-bg-glow-theme-opacity: 0.65;
+  --color-accent-ink: var(--color-accent-ink-light);
+  --color-accent-ink-hover: var(--color-accent-ink-hover-light);
+  --color-text-primary: #18181b;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #686872;
+  --color-border: #c7c7cc;
+  --color-mod-title: #292524;
+
+  /* All four are >= 4.5:1 against both white cards and the page background. */
+  --color-state-success: #166534;
+  --color-state-warning: #92400e;
+  --color-state-danger:  #b91c1c;
+  --color-state-info:    #1d4ed8;
+  --shadow-popup: 0 14px 38px rgb(24 24 27 / 0.16);
+  --shadow-modal: 0 22px 58px rgb(24 24 27 / 0.2);
+  --shadow-toast: 0 8px 24px rgb(24 24 27 / 0.16);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 /* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
    legible over any underlying image. Pairs with `absolute inset-0`. Replaces
-   the gradient that was copy-pasted across the Locker/Installed surfaces. */
+   the gradient that was copy-pasted across the Locker/Installed surfaces.
+   Scrims and bg-glass are deliberately dark in both app themes. */
 @utility scrim-bottom {
   background-image: linear-gradient(
     to bottom,
@@ -246,6 +336,32 @@ body {
   background-clip: padding-box;
 }
 
+/* Glass panels remain intentionally trackless, but their thumb must not
+   disappear against light artwork. In light mode it stays faintly visible at
+   rest and becomes stronger while scrolling. */
+:root[data-theme='light'] .scrollbar-glass {
+  scrollbar-color: rgb(24 24 27 / 0.24) transparent;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling {
+  scrollbar-color: rgb(24 24 27 / 0.42) transparent;
+}
+
+:root[data-theme='light'] .scrollbar-glass::-webkit-scrollbar-thumb {
+  background: rgb(24 24 27 / 0.24);
+  background-clip: padding-box;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgb(24 24 27 / 0.42);
+  background-clip: padding-box;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgb(24 24 27 / 0.58);
+  background-clip: padding-box;
+}
+
 /* Font utility classes */
 .font-radiance {
   font-family: var(--font-radiance);
@@ -349,7 +465,7 @@ body {
   flex: 0 0 auto;
   border-radius: 7px;
   border: 1px solid rgba(120, 140, 170, 0.28);
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--color-hl) 2.5%, transparent);
   color: color-mix(in srgb, var(--color-text-secondary) 86%, transparent);
   font-size: clamp(10px, 4.3cqw, 13px);
   line-height: 16px;
@@ -372,7 +488,7 @@ body {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.16) 48%,
+    color-mix(in srgb, var(--color-hl) 16%, transparent) 48%,
     transparent 100%
   );
 }
@@ -380,7 +496,7 @@ body {
 .browse-action-button:hover {
   color: var(--color-text-primary);
   border-color: rgba(120, 140, 170, 0.4);
-  background: rgba(255, 255, 255, 0.055);
+  background: color-mix(in srgb, var(--color-hl) 5.5%, transparent);
 }
 
 .browse-action-button--icon {
@@ -400,7 +516,7 @@ body {
 
 .browse-action-button--install {
   border-color: rgba(120, 140, 170, 0.28);
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--color-hl) 2.5%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -505,8 +621,8 @@ body {
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.018);
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 4.5%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-hl) 1.8%, transparent);
 }
 
 .browse-readable-card:focus-visible {
@@ -568,7 +684,7 @@ body {
   position: absolute;
   inset: 22% 18%;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.18), transparent 62%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 62%);
   opacity: 0;
   transform: scale(0.78);
   transition:
@@ -625,8 +741,8 @@ body {
   .browse-art-parallax-card:not([data-parallax-disabled='true']):hover > .browse-card-hover-surface {
     transform: translateY(-2px);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.055),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+      inset 0 1px 0 color-mix(in srgb, var(--color-hl) 5.5%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--color-hl) 2.4%, transparent),
       0 14px 30px rgba(0, 0, 0, 0.3);
   }
 
@@ -640,19 +756,19 @@ body {
 
 .browse-is-scrolling .browse-card-hover-surface:hover {
   transform: none !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-hl) 3%, transparent) !important;
 }
 
 .browse-readable-card:hover {
-  border-color: rgba(235, 240, 250, 0.14);
+  border-color: color-mix(in srgb, var(--color-hl) 14%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.055),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 5.5%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-hl) 2.4%, transparent),
     0 14px 30px rgba(0, 0, 0, 0.3);
 }
 
 .browse-is-scrolling .browse-readable-card:hover {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: color-mix(in srgb, var(--color-hl) 7%, transparent) !important;
 }
 
 .browse-is-scrolling .browse-card-hover-surface:not(.browse-readable-card):hover {
@@ -1013,6 +1129,37 @@ body {
   width: 14rem;
 }
 
+/* Light mode benefits from a visibly bounded navigation rail. In dark mode the
+   existing tonal separation is already strong, so these layers intentionally
+   apply only to the light palette. */
+:root[data-theme='light'] .grimoire-sidebar {
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, var(--color-hl) 8%, transparent),
+    5px 0 16px color-mix(in srgb, var(--color-hl) 4%, transparent);
+}
+
+:root[data-theme='light'] .sidebar-header {
+  background: color-mix(in srgb, var(--color-bg-secondary) 76%, transparent);
+}
+
+:root[data-theme='light'] .sidebar-nav {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-bg-secondary) 30%, transparent),
+    transparent 5rem
+  );
+}
+
+:root[data-theme='light'] .sidebar-footer {
+  background: color-mix(in srgb, var(--color-bg-tertiary) 72%, var(--color-bg-sidebar));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-hl) 5%, transparent);
+}
+
+:root[data-theme='light'] .sidebar-settings-button:not([aria-current='page']) {
+  background: color-mix(in srgb, var(--color-bg-secondary) 82%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-hl) 7%, transparent);
+}
+
 .grimoire-sidebar[data-collapsed='true'] {
   width: 4rem;
 }
@@ -1087,6 +1234,54 @@ body {
   will-change: transform;
 }
 
+/* Artwork-backed controls were originally tuned around white type on a dark
+   scrim. Keep that treatment in dark mode, but in light mode turn the artwork
+   into a quiet texture and let crisp ink carry the labels. */
+.sidebar-art-label {
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 0.75));
+}
+
+:root[data-theme='light'] .sidebar-active-backdrop__image {
+  opacity: 0.68;
+  filter: saturate(0.95) contrast(0.96);
+}
+
+:root[data-theme='light'] .sidebar-active-backdrop__scrim {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-bg-secondary) 92%, transparent) 0%,
+    color-mix(in srgb, var(--color-bg-secondary) 46%, transparent) 58%,
+    color-mix(in srgb, var(--color-bg-secondary) 10%, transparent) 100%
+  );
+}
+
+:root[data-theme='light'] .sidebar-active-backdrop__shade {
+  background: transparent;
+}
+
+:root[data-theme='light'] .sidebar-surface-backdrop__image {
+  opacity: 0.84;
+  filter: saturate(1.04) contrast(1.02);
+}
+
+:root[data-theme='light'] .sidebar-surface-backdrop__scrim {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-bg-secondary) 68%, transparent) 0%,
+    color-mix(in srgb, var(--color-bg-secondary) 28%, transparent) 58%,
+    color-mix(in srgb, var(--color-bg-secondary) 5%, transparent) 100%
+  );
+}
+
+:root[data-theme='light'] .sidebar-surface-backdrop__shade {
+  background: transparent;
+}
+
+:root[data-theme='light'] .sidebar-art-label {
+  filter: none;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.8);
+}
+
 /* Settings gear: rotates on hover (light tease) and does a one-shot "spin into
    place" on click (the .settings-gear--spin flourish), which lands just as the
    route commits. .settings-gear only exists inside the Settings button, so the
@@ -1129,7 +1324,7 @@ body {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.09) 50%,
+    color-mix(in srgb, var(--color-hl) 9%, transparent) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -1160,7 +1355,7 @@ body {
   pointer-events: none;
   background-image: repeating-linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.06) 0 8px,
+    color-mix(in srgb, var(--color-hl) 6%, transparent) 0 8px,
     transparent 8px 20px
   );
   background-size: 28px 28px;
@@ -1224,13 +1419,13 @@ body {
 }
 
 .release-notes a {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .release-notes a:hover {
-  color: var(--color-accent-hover);
+  color: color-mix(in srgb, var(--color-accent-ink) 82%, var(--color-text-primary));
 }
 
 .release-notes strong { font-weight: 700; }
@@ -1322,13 +1517,13 @@ body {
 }
 
 .mod-comment-content a {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .mod-comment-content a:hover {
-  color: var(--color-accent-hover);
+  color: color-mix(in srgb, var(--color-accent-ink) 82%, var(--color-text-primary));
 }
 
 .mod-comment-content a:focus-visible {
@@ -1355,7 +1550,7 @@ body {
   padding: 0.55em 0.7em;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--color-hl) 3.5%, transparent);
   color: var(--color-text-secondary);
 }
 
@@ -1403,13 +1598,13 @@ body {
 .premium-glass-card {
   background: linear-gradient(
     135deg,
-    rgba(20, 20, 20, 0.45) 0%,
-    rgba(12, 12, 12, 0.75) 100%
+    color-mix(in srgb, var(--color-bg-secondary) 45%, transparent) 0%,
+    color-mix(in srgb, var(--color-bg-primary) 75%, transparent) 100%
   );
   backdrop-filter: blur(14px) saturate(125%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-hl) 8%, transparent);
   box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 6%, transparent),
     0 4px 20px rgba(0, 0, 0, 0.35);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1417,12 +1612,12 @@ body {
 .premium-glass-card:hover {
   background: linear-gradient(
     135deg,
-    rgba(25, 25, 25, 0.55) 0%,
-    rgba(18, 18, 18, 0.8) 100%
+    color-mix(in srgb, var(--color-bg-secondary) 55%, transparent) 0%,
+    color-mix(in srgb, var(--color-bg-primary) 80%, transparent) 100%
   );
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: color-mix(in srgb, var(--color-hl) 16%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 8%, transparent),
     0 12px 32px rgba(0, 0, 0, 0.5);
   /* Lift only, no scale(): this card has backdrop-filter, and scaling a
      backdrop-filtered element upscales its whole rasterized surface, softening
@@ -1445,17 +1640,17 @@ body {
 /* Accent Glow for Enabled cards */
 .premium-card-glow-active:hover {
   box-shadow: 
-    0 0 25px rgba(249, 115, 22, 0.12),
+    0 0 25px color-mix(in srgb, var(--color-accent) 12%, transparent),
     0 12px 30px rgba(0, 0, 0, 0.55);
-  border-color: rgba(249, 115, 22, 0.45);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 
 /* Warning Glow for Conflict cards */
 .premium-card-glow-warning:hover {
   box-shadow: 
-    0 0 25px rgba(250, 204, 21, 0.12),
+    0 0 25px color-mix(in srgb, var(--color-state-warning) 12%, transparent),
     0 12px 30px rgba(0, 0, 0, 0.55);
-  border-color: rgba(250, 204, 21, 0.45);
+  border-color: color-mix(in srgb, var(--color-state-warning) 45%, transparent);
 }
 
 /* Glassmorphic Overlay Badges */
@@ -1483,7 +1678,7 @@ body {
   font-weight: inherit;
   line-height: inherit;
   color: inherit;
-  background: rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--color-bg-sunken) 70%, transparent);
   border: none;
   border-bottom: 2px solid var(--color-accent);
   padding: 0 4px;
@@ -1491,6 +1686,133 @@ body {
   outline: none;
   width: 100%;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Light cards need depth, but the dark theme's dense black shadows look muddy
+   against paper surfaces. Media overlay badges above remain deliberately dark. */
+:root[data-theme='light'] .premium-glass-card {
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  border-color: var(--color-border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 5%, transparent),
+    0 4px 20px rgba(24, 24, 27, 0.12);
+}
+
+/* Installed grid cards keep a hint of their blurred cover art, but the footer
+   becomes paper instead of retaining the dark theme's black media scrim. */
+:root[data-theme='light'] .premium-glass-card .scrim-bottom {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(250 250 250 / 0.18),
+    rgb(250 250 250 / 0.78) 54%,
+    rgb(250 250 250 / 0.97)
+  );
+}
+
+/* Shared settings/profile cards need a firmer paper edge on the grey canvas. */
+:root[data-theme='light'] .app-card {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+  box-shadow: 0 1px 2px rgb(24 24 27 / 0.05);
+}
+
+/* Locker hero detail previously assumed every label sat on a dark portrait.
+   In light mode the portrait becomes atmosphere behind paper-like controls, so
+   structural copy uses the normal ink palette and its art scrims turn light. */
+:root[data-theme='light'] .locker-hero-name {
+  filter: brightness(0);
+  opacity: 0.78;
+}
+
+:root[data-theme='light'] .locker-hero-glass-wash {
+  background: linear-gradient(
+    to right,
+    var(--color-bg-secondary) 0%,
+    color-mix(in srgb, var(--color-bg-secondary) 96%, transparent) 36%,
+    color-mix(in srgb, var(--color-bg-secondary) 72%, transparent) 54%,
+    color-mix(in srgb, var(--color-bg-secondary) 30%, transparent) 72%,
+    color-mix(in srgb, var(--color-bg-secondary) 8%, transparent) 88%,
+    transparent 96%
+  ) !important;
+}
+
+/* A small amount of local paper behind isolated copy is preferable to forcing
+   every workshop pane opaque: hero artwork stays visible, while headings over
+   its brightest regions keep a stable contrast boundary. */
+.artwork-readable {
+  border-radius: 0.125rem;
+}
+
+:root[data-theme='light'] .artwork-readable {
+  background: color-mix(in srgb, var(--color-bg-secondary) 82%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-bg-secondary) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+:root[data-theme='light'] .locker-skin-card {
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.72),
+    0 2px 8px rgb(24 24 27 / 0.1);
+}
+
+:root[data-theme='light'] .locker-skin-card:hover {
+  background: var(--color-bg-secondary) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.82),
+    0 5px 14px rgb(24 24 27 / 0.13);
+}
+
+:root[data-theme='light'] .locker-skin-card__glass-image {
+  opacity: 0.2;
+}
+
+:root[data-theme='light'] .locker-skin-card .scrim-bottom {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(250 250 250 / 0.08),
+    rgb(250 250 250 / 0.72) 52%,
+    rgb(250 250 250 / 0.98)
+  );
+}
+
+/* Locker list rows reserve the left side for copy and let the hero art regain
+   saturation on the right. Dark mode keeps its existing cinematic treatment. */
+:root[data-theme='light'] .locker-list-card-scrim {
+  background-image: linear-gradient(
+    to right,
+    rgb(248 248 249 / 0.98) 0%,
+    rgb(248 248 249 / 0.92) 38%,
+    rgb(248 248 249 / 0.48) 62%,
+    transparent 86%
+  );
+}
+
+:root[data-theme='light'] .locker-list-card-copy {
+  filter: none;
+  text-shadow: none;
+}
+
+:root[data-theme='light'] .premium-glass-card:hover {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-hl) 7%, transparent),
+    0 12px 32px rgba(24, 24, 27, 0.18);
+}
+
+:root[data-theme='light'] .premium-card-glow:hover {
+  box-shadow: 0 12px 30px rgba(24, 24, 27, 0.18);
+}
+
+:root[data-theme='light'] .premium-card-glow-active:hover {
+  box-shadow:
+    0 0 25px color-mix(in srgb, var(--color-accent) 16%, transparent),
+    0 12px 30px rgba(24, 24, 27, 0.18);
+}
+
+:root[data-theme='light'] .premium-card-glow-warning:hover {
+  box-shadow:
+    0 0 25px color-mix(in srgb, var(--color-state-warning) 14%, transparent),
+    0 12px 30px rgba(24, 24, 27, 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {

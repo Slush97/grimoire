@@ -22,14 +22,14 @@ export function Card({ children, className = '', contentClassName = '', title, i
     const edgeClass = edge === 'active' ? 'w-[3px] bg-accent' : 'w-[2px] bg-accent/60';
     const hasBody = children !== undefined && children !== null && children !== false;
     return (
-        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-sm overflow-hidden relative ${className}`}>
+        <div className={`app-card bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
             {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
             {showHeader && (
-                <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-white/5' : ''}`}>
+                <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-hl/5' : ''}`}>
                     <div className="min-w-0">
                         {title && (
                             <div className={`flex items-center gap-2 ${description ? 'mb-1' : ''}`}>
-                                {Icon && <Icon className="w-4 h-4 text-accent" />}
+                                {Icon && <Icon className="w-4 h-4 text-accent-ink" />}
                                 <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">{title}</h3>
                             </div>
                         )}
@@ -57,7 +57,7 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
         warning: 'bg-state-warning/10 text-state-warning border-state-warning/20',
         error: 'bg-state-danger/10 text-state-danger border-state-danger/20',
         info: 'bg-state-info/10 text-state-info border-state-info/20',
-        neutral: 'bg-white/5 text-text-secondary border-white/10',
+        neutral: 'bg-hl/5 text-text-secondary border-hl/10',
     };
 
     return (
@@ -99,23 +99,32 @@ export function Tag({
     title,
     className = '',
 }: TagProps) {
-    const tones: Record<TagTone, { text: string; border: string; fill: string; overlayBorder: string }> = {
-        accent:  { text: 'text-accent',          border: 'border-accent/40',         fill: 'bg-accent/10',          overlayBorder: 'border-accent/70' },
-        warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayBorder: 'border-state-warning/70' },
-        danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayBorder: 'border-state-danger/70' },
-        success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayBorder: 'border-state-success/70' },
-        info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayBorder: 'border-state-info/70' },
-        neutral: { text: 'text-text-secondary',  border: 'border-white/10',          fill: 'bg-white/5',            overlayBorder: 'border-white/20' },
+    const tones: Record<TagTone, { text: string; border: string; fill: string; overlayText: string; overlayBorder: string }> = {
+        accent:  { text: 'text-accent-ink',      border: 'border-accent/40',         fill: 'bg-accent/10',          overlayText: 'text-overlay-accent',  overlayBorder: 'border-overlay-accent/70' },
+        warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayText: 'text-overlay-warning', overlayBorder: 'border-overlay-warning/70' },
+        danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayText: 'text-overlay-danger',  overlayBorder: 'border-overlay-danger/70' },
+        success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayText: 'text-overlay-success', overlayBorder: 'border-overlay-success/70' },
+        info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayText: 'text-overlay-info',    overlayBorder: 'border-overlay-info/70' },
+        neutral: { text: 'text-text-secondary',  border: 'border-hl/10',             fill: 'bg-hl/5',               overlayText: 'text-overlay-primary', overlayBorder: 'border-overlay-border/20' },
     };
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
+    // Overlay colors are owned by this component. Layout/typography utilities
+    // remain customizable, but a call site cannot repaint the invariant dark
+    // treatment with literal or arbitrary text-*, bg-*, border-*, or ring-*.
+    const safeClassName = isOverlay
+        ? className
+            .split(/\s+/)
+            .filter((utility) => !/(?:^|:)(?:text|bg|border|ring)-(?!transparent$|current$)/.test(utility))
+            .join(' ')
+        : className;
     const surface = isOverlay
-        ? `bg-bg-primary/90 border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
+        ? `bg-overlay-bg/90 border ${t.overlayBorder} ${t.overlayText} shadow-sm`
         : `${t.fill} border ${t.border} ${t.text} opacity-90`;
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${className}`}
+            className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${safeClassName}`}
         >
             {Icon && <Icon className="w-3 h-3" />}
             {children}
@@ -151,9 +160,9 @@ export function CheckboxMark({
             } ${disabled ? 'opacity-50' : ''} ${className}`}
         >
             {checked ? (
-                <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
+                <Check className="w-2.5 h-2.5 text-accent-foreground" strokeWidth={3} />
             ) : indeterminate ? (
-                <span className="w-2 h-0.5 rounded-full bg-black" />
+                <span className="w-2 h-0.5 rounded-full bg-accent-foreground" />
             ) : null}
         </span>
     );
@@ -260,7 +269,7 @@ export function Slider({
                     className="absolute w-full h-full opacity-0 cursor-pointer"
                 />
                 <div
-                    className="absolute h-4 w-4 bg-white rounded-full shadow-lg border-2 border-accent pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
+                    className="absolute h-4 w-4 rounded-full border-2 border-accent bg-bg-secondary shadow-sm pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
                     style={{ left: `calc(${percentage}% - 8px)` }}
                 />
             </div>
@@ -289,14 +298,14 @@ export function ToggleIndicator({ checked, disabled, className = '' }: ToggleInd
             aria-hidden
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 ease-out motion-reduce:transition-none ${
                 checked
-                    ? 'border-accent/55 bg-accent/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-accent/25 group-hover:border-accent/75 group-hover:bg-accent/20 group-hover/toggle:border-accent/75 group-hover/toggle:bg-accent/20'
-                    : 'border-white/15 bg-white/[0.16] group-hover:border-white/25 group-hover:bg-white/[0.22] group-hover/toggle:border-white/25 group-hover/toggle:bg-white/[0.22]'
+                    ? 'border-accent-hover/60 bg-accent shadow-sm group-hover:brightness-105 group-hover/toggle:brightness-105'
+                    : 'border-hl/20 bg-bg-sunken shadow-inner group-hover:border-hl/30 group-hover/toggle:border-hl/30'
             } ${disabled ? 'opacity-60' : ''} ${className}`}
         >
             <span
-                className={`absolute left-0.5 h-5 w-5 rounded-full bg-zinc-300 shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 transition-transform duration-150 ease-out motion-reduce:transition-none ${
+                className={`absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-control-thumb shadow-sm ring-1 ring-control-thumb-border/15 transition-transform duration-150 ease-out motion-reduce:transition-none ${
                     checked ? 'translate-x-5' : 'translate-x-0'
-                } ${checked ? 'ring-accent/45' : 'ring-white/35'}`}
+                }`}
             />
         </span>
     );
@@ -322,7 +331,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                 />
             </div>
             <div>
-                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-white transition-colors">{label}</span>}
+                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors">{label}</span>}
                 {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
             </div>
         </label>
@@ -346,15 +355,15 @@ export function Button({
     disabled,
     ...props
 }: ButtonProps) {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
-        primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus:ring-accent',
-        secondary: 'bg-bg-tertiary hover:bg-white/10 text-text-primary border border-white/5 focus:ring-white/60',
-        danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 focus:ring-red-500',
-        success: 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 focus:ring-green-500',
-        warning: 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/20 focus:ring-yellow-500',
-        ghost: 'hover:bg-white/5 text-text-secondary hover:text-text-primary focus:ring-white/40',
+        primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent',
+        secondary: 'bg-bg-tertiary hover:bg-hl/10 text-text-primary border border-hl/5 focus-visible:ring-hl/60',
+        danger: 'bg-state-danger/10 hover:bg-state-danger/20 text-state-danger border border-state-danger/20 focus-visible:ring-state-danger',
+        success: 'bg-state-success/10 hover:bg-state-success/20 text-state-success border border-state-success/20 focus-visible:ring-state-success',
+        warning: 'bg-state-warning/20 hover:bg-state-warning/30 text-state-warning border border-state-warning/20 focus-visible:ring-state-warning',
+        ghost: 'hover:bg-hl/5 text-text-secondary hover:text-text-primary focus-visible:ring-hl/40',
     };
 
     const sizes = {
@@ -403,7 +412,7 @@ export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', c
         md: 'h-8 w-8',
     };
     const tones = {
-        default: 'border-border text-text-secondary hover:border-white/25 hover:bg-white/5 hover:text-text-primary',
+        default: 'border-border text-text-secondary hover:border-hl/25 hover:bg-hl/5 hover:text-text-primary',
         danger: 'border-border text-text-secondary hover:border-state-danger/60 hover:bg-state-danger/10 hover:text-state-danger',
     };
     const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
@@ -523,7 +532,7 @@ export function SegmentedControl<T extends string>({
     };
 
     return (
-        <div role="tablist" aria-label={label} className={`flex gap-1.5 ${fill ? 'w-full' : 'flex-wrap'} ${className}`}>
+        <div role="radiogroup" aria-label={label} className={`flex gap-1.5 ${fill ? 'w-full' : 'flex-wrap'} ${className}`}>
             {options.map((opt, i) => {
                 const active = opt.value === value;
                 return (
@@ -531,8 +540,8 @@ export function SegmentedControl<T extends string>({
                         key={opt.value}
                         ref={(el) => { refs.current[i] = el; }}
                         type="button"
-                        role="tab"
-                        aria-selected={active}
+                        role="radio"
+                        aria-checked={active}
                         tabIndex={active ? 0 : -1}
                         disabled={disabled}
                         onClick={() => !disabled && onChange(opt.value)}
@@ -543,6 +552,15 @@ export function SegmentedControl<T extends string>({
                             } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                                 e.preventDefault();
                                 move(i, -1);
+                            } else if (e.key === 'Home' && !disabled) {
+                                e.preventDefault();
+                                onChange(options[0].value);
+                                refs.current[0]?.focus();
+                            } else if (e.key === 'End' && !disabled) {
+                                e.preventDefault();
+                                const last = options.length - 1;
+                                onChange(options[last].value);
+                                refs.current[last]?.focus();
                             }
                         }}
                         className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${

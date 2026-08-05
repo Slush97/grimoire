@@ -56,7 +56,7 @@ export function LeaderboardTab() {
                                     className="flex items-center justify-between gap-3 p-3 bg-bg-tertiary rounded-sm"
                                 >
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <span className="w-9 text-right font-mono text-accent shrink-0">
+                                        <span className="w-9 text-right font-mono text-accent-ink shrink-0">
                                             #{entry.rank}
                                         </span>
                                         {entry.avatar_url && (
@@ -74,11 +74,11 @@ export function LeaderboardTab() {
                                                 ))}
                                             </span>
                                         )}
-                                        <span className="text-accent w-28 text-right">
+                                        <span className="text-accent-ink w-28 text-right">
                                             {rankLabelFromBadge(entry.badge_level)}
                                         </span>
                                         {entry.wins !== undefined && (
-                                            <span className="text-green-400">{t('stats.leaderboard.winsCount', { count: entry.wins })}</span>
+                                            <span className="text-state-success">{t('stats.leaderboard.winsCount', { count: entry.wins })}</span>
                                         )}
                                         {entry.matches_played !== undefined && (
                                             <span>{t('stats.leaderboard.matchesCount', { count: entry.matches_played })}</span>

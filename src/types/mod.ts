@@ -1098,6 +1098,9 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
+  /** Light/dark color scheme. System follows the OS; light and dark override it.
+   *  Defaults to dark so upgrading preserves the app's existing appearance. */
+  colorScheme: 'system' | 'light' | 'dark';
   /** Hero render used as the active sidebar highlight background.
    *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
    *  legacy compat read so existing installs keep their chosen highlight; the

@@ -39,7 +39,7 @@ export function HiddenCreatorsManager({ creators, onRemove, className = '' }: Hi
           key={creator.id}
           className="flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/45 px-3 py-2.5"
         >
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent/10 font-semibold uppercase text-accent">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent/10 font-semibold uppercase text-accent-ink">
             {creator.name.charAt(0)}
           </div>
           <div className="min-w-0 flex-1">

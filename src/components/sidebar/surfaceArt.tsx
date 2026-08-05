@@ -26,8 +26,8 @@ export function SidebarActiveBackdrop({
           className="sidebar-active-backdrop__image h-full w-full object-cover opacity-75"
           style={heroImageStyle}
         />
-        <span className="absolute inset-0 bg-gradient-to-r from-bg-primary/90 via-bg-primary/55 to-bg-primary/20" />
-        <span className="absolute inset-0 bg-black/20" />
+        <span className="sidebar-active-backdrop__scrim absolute inset-0 bg-gradient-to-r from-bg-primary/90 via-bg-primary/55 to-bg-primary/20" />
+        <span className="sidebar-active-backdrop__shade absolute inset-0 bg-overlay-bg/20" />
       </span>
     );
   }
@@ -56,23 +56,23 @@ export function LaunchButtonBackdrop({
   imageStyle?: CSSProperties;
 }) {
   return (
-    <span aria-hidden className="pointer-events-none absolute inset-0">
+    <span aria-hidden className="sidebar-surface-backdrop pointer-events-none absolute inset-0">
       <img
         src={src}
         alt=""
-        className={`h-full w-full object-cover opacity-65 transition-transform duration-300 group-hover:scale-[1.04] ${
+        className={`sidebar-surface-backdrop__image h-full w-full object-cover opacity-65 transition-transform duration-300 group-hover:scale-[1.04] ${
           warm ? 'saturate-[0.95]' : 'saturate-[1.05]'
         }`}
         style={imageStyle ?? { objectPosition: position }}
       />
       <span
-        className={`absolute inset-0 ${
+        className={`sidebar-surface-backdrop__scrim absolute inset-0 ${
           warm
-            ? 'bg-gradient-to-r from-bg-primary/85 via-bg-primary/55 to-amber-950/25'
-            : 'bg-gradient-to-r from-bg-primary/82 via-bg-primary/50 to-emerald-950/20'
+            ? 'bg-gradient-to-r from-bg-primary/85 via-bg-primary/55 to-state-warning/25'
+            : 'bg-gradient-to-r from-bg-primary/82 via-bg-primary/50 to-state-success/20'
         }`}
       />
-      <span className="absolute inset-0 bg-black/20" />
+      <span className="sidebar-surface-backdrop__shade absolute inset-0 bg-overlay-bg/20" />
     </span>
   );
 }

@@ -104,10 +104,10 @@ export default function PublishDialog({
       dismissable={!submitting}
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="publish-profile-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
-              <Globe className="w-5 h-5 text-accent" />
+              <Globe className="w-5 h-5 text-accent-ink" />
               {t('profiles.actions.publishToDiscover')}
             </h2>
             <p className="text-sm text-text-secondary mt-1 truncate" title={profileName}>
@@ -117,7 +117,7 @@ export default function PublishDialog({
           <button
             onClick={() => { if (!submitting) onClose(); }}
             disabled={submitting}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -127,7 +127,7 @@ export default function PublishDialog({
         <div className="p-6 space-y-4">
           {published ? (
             <div className="space-y-3">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
+              <div className="bg-state-success/10 border border-state-success/30 rounded-md p-3 text-sm text-state-success flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <div className="font-medium">{t('social.publish.published')}</div>
@@ -143,7 +143,7 @@ export default function PublishDialog({
           ) : (
             <>
               {exportError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+                <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.couldNotBuildShareCode', { error: exportError })}</span>
                 </div>
@@ -157,7 +157,7 @@ export default function PublishDialog({
               )}
 
               {exportResult && exportResult.warnings.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-md p-3 text-sm text-yellow-200 flex items-start gap-2">
+                <div className="bg-state-warning/10 border border-state-warning/30 rounded-md p-3 text-sm text-state-warning flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <div className="font-medium">
@@ -174,7 +174,7 @@ export default function PublishDialog({
               )}
 
               {noShareableMods && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+                <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.noGamebananaMods')}</span>
                 </div>
@@ -217,7 +217,7 @@ export default function PublishDialog({
               </div>
 
               {!tosAccepted && (
-                <div className="bg-bg-tertiary border border-white/10 rounded-md p-3 text-xs text-text-secondary space-y-2">
+                <div className="bg-bg-tertiary border border-hl/10 rounded-md p-3 text-xs text-text-secondary space-y-2">
                   <p className="leading-relaxed">
                     {t('social.publish.tosBody')}
                   </p>
@@ -238,7 +238,7 @@ export default function PublishDialog({
               )}
 
               {submitError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+                <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{submitError}</span>
                 </div>

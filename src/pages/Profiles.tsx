@@ -432,7 +432,7 @@ export default function Profiles() {
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
+            <div className="bg-state-danger/10 border border-state-danger/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
               <AlertTriangle className="w-5 h-5" />
               <p>{error}</p>
             </div>
@@ -564,7 +564,7 @@ export default function Profiles() {
                     }
                   };
                   return (
-                    <div className="flex items-center gap-3 pb-2 mb-1 border-b border-white/5 text-xs text-text-secondary">
+                    <div className="flex items-center gap-3 pb-2 mb-1 border-b border-hl/5 text-xs text-text-secondary">
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
@@ -597,7 +597,7 @@ export default function Profiles() {
                           variant="ghost"
                           icon={Trash2}
                           onClick={() => setBulkDeleteSnapshotsOpen(true)}
-                          className="ml-auto text-state-danger hover:text-red-300"
+                          className="ml-auto text-state-danger hover:text-state-danger"
                           title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
                         >
                           <Tx
@@ -610,7 +610,7 @@ export default function Profiles() {
                     </div>
                   );
                 })()}
-                <ul className="divide-y divide-white/5">
+                <ul className="divide-y divide-hl/5">
                 {snapshots.map((snap) => {
                   const isRestoring = restoringSnapshotId === snap.snapshotId;
                   const isSelected = selectedSnapshotIds.has(snap.snapshotId);
@@ -735,7 +735,7 @@ export default function Profiles() {
                           onBlur={submitRename}
                           disabled={isRenaming}
                           aria-label={t('profiles.actions.renameProfile')}
-                          className="w-full px-2 py-1 bg-bg-tertiary border border-white/10 rounded text-text-primary text-lg font-semibold font-reaver focus:outline-none focus:ring-2 focus:ring-accent"
+                          className="w-full px-2 py-1 bg-bg-tertiary border border-hl/10 rounded text-text-primary text-lg font-semibold font-reaver focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       ) : (
                         profile.name
@@ -743,7 +743,7 @@ export default function Profiles() {
                     }
                     icon={Layers}
                     accentEdge={isActive ? 'active' : 'none'}
-                    className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-white/10'}`}
+                    className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-hl/10'}`}
                     action={
                       <div className="flex items-center gap-2">
                         {!isRenamingThis && (
@@ -753,7 +753,7 @@ export default function Profiles() {
                             disabled={isApplying || isUpdating}
                             aria-label={t('profiles.actions.renameProfile')}
                             title={t('profiles.actions.renameProfile')}
-                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -766,7 +766,7 @@ export default function Profiles() {
                             disabled={isRenaming}
                             aria-label={t('profiles.actions.cancelRename')}
                             title={t('common.actions.cancel')}
-                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors disabled:opacity-50"
+                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -784,7 +784,7 @@ export default function Profiles() {
                     }
                   >
                     <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-white/5">
+                        <div className="flex items-center justify-between text-sm text-text-secondary bg-bg-sunken/40 p-4 rounded-lg border border-hl/5">
                           <div className="flex flex-col items-center">
                             <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
                             <span className="text-xs uppercase tracking-wider opacity-70">
@@ -802,8 +802,8 @@ export default function Profiles() {
                       {/* Capabilities Indicators */}
                       {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
                         <div className="flex gap-2">
-                          <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
-                            <Terminal className="w-3 h-3 text-blue-400" />
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-hl/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
+                            <Terminal className="w-3 h-3 text-state-info" />
                             <span>
                               <Tx
                                 k="profiles.autoexec.count"
@@ -815,7 +815,7 @@ export default function Profiles() {
                         </div>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
+                      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-hl/5">
                         <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
                           <Button
                             size="sm"
@@ -901,7 +901,7 @@ export default function Profiles() {
 
                       {/* Expanded Content */}
                       {isExpanded && (
-                        <div className="mt-2 pt-4 border-t border-white/5 animate-fade-in space-y-4">
+                        <div className="mt-2 pt-4 border-t border-hl/5 animate-fade-in space-y-4">
                           {/* Mods List */}
                           <div>
                             <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
@@ -924,7 +924,7 @@ export default function Profiles() {
                                 const variantSummary = group.variants.map((variant) => variant.label).join(', ');
                                 const showVariantSummary = group.variants.length > 1 || group.variants.some((variant) => variant.hasDetail);
                                 return (
-                                  <div key={group.key} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 hover:bg-white/5 rounded">
+                                  <div key={group.key} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 hover:bg-hl/5 rounded">
                                     <div className="min-w-0 flex-1">
                                       <div className="truncate text-text-primary" title={group.name}>{group.name}</div>
                                       {showVariantSummary && (
@@ -935,7 +935,7 @@ export default function Profiles() {
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                       {group.variants.length > 1 && (
-                                        <span className="text-[10px] text-text-secondary bg-white/5 rounded px-1.5 py-0.5">
+                                        <span className="text-[10px] text-text-secondary bg-hl/5 rounded px-1.5 py-0.5">
                                           <Tx
                                             k="profiles.mods.files"
                                             values={{ count: group.variants.length }}
@@ -943,7 +943,7 @@ export default function Profiles() {
                                           />
                                         </span>
                                       )}
-                                      {group.enabled && <Check className="w-3 h-3 text-green-400" />}
+                                      {group.enabled && <Check className="w-3 h-3 text-state-success" />}
                                     </div>
                                   </div>
                                 );
@@ -958,7 +958,7 @@ export default function Profiles() {
 
                           {/* Crosshair Preview */}
                           {profile.crosshair && (
-                            <div className="pt-3 border-t border-white/5">
+                            <div className="pt-3 border-t border-hl/5">
                               <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">
                                   <Tx k="nav.crosshair" fallback="Crosshair" />
@@ -992,7 +992,7 @@ export default function Profiles() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <div
-                                      className="w-3 h-3 rounded-sm border border-white/20"
+                                      className="w-3 h-3 rounded-sm border border-hl/20"
                                       style={{ backgroundColor: `rgb(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})` }}
                                     />
                                     <span>
@@ -1014,7 +1014,7 @@ export default function Profiles() {
 
                           {/* Autoexec Commands */}
                           {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
-                            <div className="pt-3 border-t border-white/5">
+                            <div className="pt-3 border-t border-hl/5">
                               <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
                                 <Tx
                                   k="profiles.autoexec.commandsCount"
@@ -1024,7 +1024,7 @@ export default function Profiles() {
                               </div>
                               <div className="space-y-1 max-h-24 overflow-y-auto">
                                 {profile.autoexecCommands.map((cmd, idx) => (
-                                  <div key={idx} className="text-xs font-mono bg-white/5 rounded px-2 py-1 truncate" title={cmd}>
+                                  <div key={idx} className="text-xs font-mono bg-hl/5 rounded px-2 py-1 truncate" title={cmd}>
                                     {cmd}
                                   </div>
                                 ))}

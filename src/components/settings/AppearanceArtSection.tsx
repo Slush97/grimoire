@@ -222,7 +222,7 @@ function SurfacePreview({
   // `none` renders the plain button (SurfaceBackdrop returns nothing), exactly as
   // the real button looks with art turned off.
   return (
-    <span className={`${base} bg-bg-tertiary ring-1 ring-white/10`} aria-hidden>
+    <span className={`${base} bg-bg-tertiary ring-1 ring-hl/10`} aria-hidden>
       <SurfaceBackdrop
         bg={bg}
         defaultSrc={config.defaultSrc!}
@@ -504,7 +504,7 @@ export default function AppearanceArtSection() {
         }
       />
 
-      <div className="my-5 h-px bg-white/5" />
+      <div className="my-5 h-px bg-hl/5" />
 
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-text-primary">
@@ -542,7 +542,7 @@ export default function AppearanceArtSection() {
                 </span>
                 <span className="block truncate text-xs text-text-secondary">{detail}</span>
               </span>
-              <ImageIcon className="h-4 w-4 flex-shrink-0 text-text-secondary group-hover:text-accent" aria-hidden />
+              <ImageIcon className="h-4 w-4 flex-shrink-0 text-text-secondary group-hover:text-accent-ink" aria-hidden />
             </button>
           );
         })}

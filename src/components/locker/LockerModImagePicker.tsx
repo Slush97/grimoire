@@ -493,8 +493,8 @@ export function LockerModImagePicker({
                       className="block h-auto w-full transition-transform duration-200 group-hover:scale-105"
                       loading="lazy"
                     />
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/40 group-hover:opacity-100">
-                      <Check className="h-6 w-6 text-white" />
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-overlay-bg/0 opacity-0 transition-opacity group-hover:bg-overlay-bg/40 group-hover:opacity-100">
+                      <Check className="h-6 w-6 text-overlay-primary" />
                     </span>
                   </button>
                 ))}

@@ -174,7 +174,7 @@ export default function MaintenanceSection() {
                 />
               </p>
               {cleanupResult && (
-                <p className="text-xs text-accent mt-2 animate-fade-in">{cleanupResult}</p>
+                <p className="text-xs text-accent-ink mt-2 animate-fade-in">{cleanupResult}</p>
               )}
             </div>
             <Button
@@ -189,7 +189,7 @@ export default function MaintenanceSection() {
             </Button>
           </div>
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <div className="flex justify-between items-start gap-4">
             <div>
@@ -203,7 +203,7 @@ export default function MaintenanceSection() {
                 />
               </p>
               {resetResult && (
-                <p className="text-xs text-accent mt-2 animate-fade-in">{resetResult}</p>
+                <p className="text-xs text-accent-ink mt-2 animate-fade-in">{resetResult}</p>
               )}
             </div>
             <Button

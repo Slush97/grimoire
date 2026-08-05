@@ -70,13 +70,13 @@ export default function EditProfileDialog({
       dismissable={!submitting}
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2
               id="edit-profile-title"
               className="text-xl font-bold text-text-primary flex items-center gap-2"
             >
-              <Pencil className="w-5 h-5 text-accent" />
+              <Pencil className="w-5 h-5 text-accent-ink" />
               {t('social.editProfile.editYourPost')}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
@@ -88,7 +88,7 @@ export default function EditProfileDialog({
               if (!submitting) onClose();
             }}
             disabled={submitting}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -98,7 +98,7 @@ export default function EditProfileDialog({
         <div className="p-6 space-y-4">
           {saved ? (
             <div className="space-y-3">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
+              <div className="bg-state-success/10 border border-state-success/30 rounded-md p-3 text-sm text-state-success flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <div className="font-medium">{t('social.editProfile.saved')}</div>
@@ -154,7 +154,7 @@ export default function EditProfileDialog({
               </div>
 
               {submitError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+                <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{submitError}</span>
                 </div>

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Ban, Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
@@ -13,7 +12,7 @@ import {
   type BackgroundGradient,
 } from '../../lib/backgroundGradient';
 import { Button, SegmentedControl } from '../common/ui';
-import { useBackdropDismiss } from '../common/useBackdropDismiss';
+import { Modal } from '../common/Modal';
 import Tx from '../translation/Tx';
 
 const CUSTOM_FALLBACK: BackgroundGradient = { from: '#8b5cf6', to: '#06b6d4' };
@@ -44,7 +43,7 @@ function GradientTile({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`${TILE_BASE} ${active ? 'border-accent/70' : 'border-white/10 hover:border-white/30'}`}
+      className={`${TILE_BASE} ${active ? 'border-accent/70' : 'border-hl/10 hover:border-hl/30'}`}
       style={{ background: gradient ? backgroundGradientPreviewCss(gradient) : BACKGROUND_BASE }}
     >
       {children}
@@ -55,7 +54,7 @@ function GradientTile({
           their active state through the border alone, as the accent picker's
           custom swatch does. */}
       {active && !children && (
-        <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
+        <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-bg-primary/40">
           <Check className="h-2.5 w-2.5" aria-hidden />
         </span>
       )}
@@ -114,23 +113,6 @@ export default function BackgroundGradientPicker() {
     }
   }, [draft, saved, settings, saveSettings]);
 
-  useEffect(() => {
-    if (!pickerOpen) return;
-    // Escape commits, matching the accent picker directly above: both dismiss
-    // gestures keep the pick, and Cancel is the one explicit way to revert.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void commit();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [pickerOpen, commit]);
-
-  // Clicking the backdrop commits, matching the accent picker's gesture.
-  const backdropRef = useBackdropDismiss<HTMLDivElement>(
-    useCallback(() => void commit(), [commit]),
-    pickerOpen
-  );
-
   return (
     <div>
       <div className="mb-3">
@@ -172,7 +154,7 @@ export default function BackgroundGradientPicker() {
           aria-label={t('settings.appearance.background.custom')}
           aria-pressed={isCustomActive}
           aria-haspopup="dialog"
-          className={`${TILE_BASE} ${isCustomActive ? 'border-accent/70' : 'border-white/10 hover:border-white/30'}`}
+          className={`${TILE_BASE} ${isCustomActive ? 'border-accent/70' : 'border-hl/10 hover:border-hl/30'}`}
           style={
             isCustomActive
               ? { background: backgroundGradientPreviewCss(saved) }
@@ -186,28 +168,23 @@ export default function BackgroundGradientPicker() {
         </button>
       </div>
 
-      {pickerOpen && createPortal(
-        <div
-          ref={backdropRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-          role="presentation"
+      {pickerOpen && (
+        <Modal
+          onClose={() => void commit()}
+          labelledBy="custom-background-title"
+          size="none"
+          panelClassName="relative max-w-sm overflow-hidden rounded-sm p-6"
+          backdropClassName="backdrop-blur-sm"
         >
-          <div
-            className="relative w-full max-w-sm overflow-hidden rounded-sm border border-white/10 bg-bg-secondary p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('settings.appearance.background.custom')}
-          >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <h3 className="mb-4 flex items-center gap-2 font-reaver text-lg font-semibold tracking-wide text-text-primary">
-              <Pipette className="h-4 w-4 text-accent" aria-hidden />
+            <h3 id="custom-background-title" className="mb-4 flex items-center gap-2 font-reaver text-lg font-semibold tracking-wide text-text-primary">
+              <Pipette className="h-4 w-4 text-accent-ink" aria-hidden />
               <Tx k="settings.appearance.background.customTitle" fallback="Custom background glow" />
             </h3>
 
             <div className="space-y-4">
               <div
-                className="h-20 w-full rounded-sm border border-white/10"
+                className="h-20 w-full rounded-sm border border-hl/10"
                 style={{ background: backgroundGradientPreviewCss(draft) }}
                 aria-hidden
               />
@@ -225,7 +202,7 @@ export default function BackgroundGradientPicker() {
 
               <div className="flex items-center gap-2">
                 <span
-                  className="block h-9 w-9 shrink-0 rounded-sm border border-white/10"
+                  className="block h-9 w-9 shrink-0 rounded-sm border border-hl/10"
                   style={{ backgroundColor: draft[corner] }}
                   aria-hidden
                 />
@@ -233,7 +210,7 @@ export default function BackgroundGradientPicker() {
                 <HexColorInput
                   color={draft[corner]}
                   onChange={updateDraft}
-                  className="flex-1 rounded-sm border border-white/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="flex-1 rounded-sm border border-hl/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
                 />
               </div>
 
@@ -246,9 +223,7 @@ export default function BackgroundGradientPicker() {
                 </Button>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
+        </Modal>
       )}
     </div>
   );

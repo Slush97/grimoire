@@ -318,7 +318,7 @@ export default function ImportCustomModsModal({
 
   const statusIcon = (row: ImportRow) => {
     if (row.status === 'importing') {
-      return <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-accent" aria-hidden />;
+      return <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-accent-ink" aria-hidden />;
     }
     if (row.status === 'done') {
       return <Check className="h-4 w-4 flex-shrink-0 text-state-success" aria-hidden />;
@@ -378,14 +378,14 @@ export default function ImportCustomModsModal({
             className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-10 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
               dragActive
                 ? 'border-accent bg-accent/10'
-                : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-white/20 hover:bg-bg-tertiary'
+                : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-hl/20 hover:bg-bg-tertiary'
             }`}
           >
             <UploadCloud className="h-7 w-7 text-text-secondary" aria-hidden />
             <span className="text-sm font-medium text-text-primary">
               <Trans
                 i18nKey="installed.batchImport.dropFilesHere"
-                components={{ code: <code className="font-mono text-accent" /> }}
+                components={{ code: <code className="font-mono text-accent-ink" /> }}
               />
             </span>
             <span className="text-xs text-text-secondary">{t('installed.import.orClickToBrowse')}</span>
@@ -430,7 +430,7 @@ export default function ImportCustomModsModal({
                   key={row.path}
                   className={`flex items-center gap-2.5 rounded-lg border p-2 transition-colors ${
                     row.status === 'failed'
-                      ? 'border-state-danger/40 bg-red-500/5'
+                      ? 'border-state-danger/40 bg-state-danger/5'
                       : 'border-border bg-bg-tertiary/40'
                   }`}
                 >
@@ -504,8 +504,8 @@ export default function ImportCustomModsModal({
                     title={t('installed.imageField.nsfw')}
                     className={`flex-shrink-0 rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
                       row.nsfw
-                        ? 'border-accent/50 bg-accent/15 text-accent'
-                        : 'border-border text-text-secondary hover:border-white/20 hover:text-text-primary'
+                        ? 'border-accent/50 bg-accent/15 text-accent-ink'
+                        : 'border-border text-text-secondary hover:border-hl/20 hover:text-text-primary'
                     }`}
                   >
                     {t('installed.imageField.nsfw')}
@@ -534,7 +534,7 @@ export default function ImportCustomModsModal({
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-state-danger">
+          <div className="rounded-lg border border-state-danger/30 bg-state-danger/10 p-2 text-sm text-state-danger">
             {error}
           </div>
         )}

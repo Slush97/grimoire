@@ -120,22 +120,22 @@ export default function PriorityEditor({
         // it on-theme regardless of the user's accent hue. The overlay sits over
         // arbitrary thumbnail art, so the number gets a hard black outline
         // (text-shadow on all four corners) to stay legible over bright covers.
-        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
+        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none tabular-nums shadow-none transition-colors duration-150 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 ${
           variant === 'overlay'
-            ? 'bg-black/70 [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
-            : 'bg-bg-tertiary'
+            ? 'border-overlay-border/20 bg-overlay-bg/70 text-overlay-primary group-hover/order-chip:border-overlay-border/35 group-hover/order-chip:bg-overlay-bg/85 group-focus-visible/order-chip:outline-overlay-border/40 [text-shadow:-1px_-1px_0_var(--color-overlay-bg),1px_-1px_0_var(--color-overlay-bg),-1px_1px_0_var(--color-overlay-bg),1px_1px_0_var(--color-overlay-bg),0_0_2px_var(--color-overlay-bg)]'
+            : 'border-hl/20 bg-bg-tertiary text-text-primary group-hover/order-chip:border-hl/35 group-hover/order-chip:bg-hl/10 group-focus-visible/order-chip:outline-hl/40'
         }`}
       >
         #{value}
       </span>
       {!editing && (
-        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-hl/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
           {t('installed.priorityEditor.loadOrder')}
         </span>
       )}
       {editing && popoverPos && createPortal(
         <div
-          className="fixed z-[80] w-40 rounded-lg border border-border bg-bg-secondary p-2.5 text-left shadow-xl"
+          className="fixed z-[80] w-40 rounded-lg border border-border bg-bg-secondary p-2.5 text-left shadow-popup"
           style={{ top: popoverPos.top, left: popoverPos.left }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
@@ -170,7 +170,7 @@ export default function PriorityEditor({
             {t('installed.priorityEditor.lowerNumbersLoadFirst')}
           </span>
           {error && (
-            <span className="mt-1 block max-w-full truncate text-[10px] text-red-300" role="alert">
+            <span className="mt-1 block max-w-full truncate text-[10px] text-state-danger" role="alert">
               {error}
             </span>
           )}

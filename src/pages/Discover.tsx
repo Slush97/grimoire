@@ -24,7 +24,7 @@ import {
 } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useSocialStore } from '../stores/socialStore';
-import { Card, Button } from '../components/common/ui';
+import { Card, Button, Tag } from '../components/common/ui';
 import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import MyPublishedSection from '../components/social/MyPublishedSection';
@@ -248,7 +248,7 @@ export default function Discover() {
         {t('discover.publish.publishProfile')}
       </Button>
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-white/10"
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-hl/10"
         title={`Signed in as ${user.display_name}`}
       >
         {user.avatar_url ? (
@@ -360,14 +360,14 @@ export default function Discover() {
         </div>
       )}
       {!signedIn && signInError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start justify-between gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span className="break-words">{signInError}</span>
           </div>
           <button
             onClick={clearSignInError}
-            className="text-red-300 hover:text-red-200 underline shrink-0 cursor-pointer"
+            className="text-state-danger hover:text-state-danger underline shrink-0 cursor-pointer"
           >
             {t('common.actions.dismiss')}
           </button>
@@ -417,10 +417,10 @@ export default function Discover() {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="p-4 animate-pulse h-32">
-              <div className="h-4 bg-white/5 rounded w-1/2 mb-2" />
-              <div className="h-3 bg-white/5 rounded w-1/3 mb-4" />
-              <div className="h-3 bg-white/5 rounded w-full mb-1" />
-              <div className="h-3 bg-white/5 rounded w-3/4" />
+              <div className="h-4 bg-hl/5 rounded w-1/2 mb-2" />
+              <div className="h-3 bg-hl/5 rounded w-1/3 mb-4" />
+              <div className="h-3 bg-hl/5 rounded w-full mb-1" />
+              <div className="h-3 bg-hl/5 rounded w-3/4" />
             </Card>
           ))}
         </div>
@@ -481,7 +481,7 @@ export default function Discover() {
               >
                 <Card
                   contentClassName="p-0"
-                  className={`overflow-hidden flex flex-col transition-colors ${isActive ? 'border-accent/40' : 'hover:border-white/20'}`}
+                  className={`overflow-hidden flex flex-col transition-colors ${isActive ? 'border-accent/40' : 'hover:border-hl/20'}`}
                 >
                   {/* Image at the top, Twitter-card style. 16:9 full-bleed.
                       Layouts:
@@ -490,7 +490,7 @@ export default function Discover() {
                       - 2-4 thumbs : 2x2 mosaic, hairline separators */}
                   <div className="relative aspect-video bg-bg-tertiary overflow-hidden">
                     {mosaicSlots && (
-                      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px bg-black/40">
+                      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px bg-overlay-bg/40">
                         {mosaicSlots.map((url, i) =>
                           url ? (
                             <img
@@ -525,15 +525,14 @@ export default function Discover() {
                     {(p.is_featured || p.has_nsfw) && (
                       <div className="absolute top-2 left-2 flex items-center gap-1.5">
                         {p.is_featured && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-amber-300 border border-amber-300/30">
-                            <Sparkles className="w-3 h-3" />
+                          <Tag tone="warning" variant="overlay" icon={Sparkles}>
                             {t('discover.card.featured')}
-                          </span>
+                          </Tag>
                         )}
                         {p.has_nsfw && (
-                          <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-yellow-300 border border-yellow-300/30">
+                          <Tag tone="warning" variant="overlay">
                             NSFW
-                          </span>
+                          </Tag>
                         )}
                       </div>
                     )}
@@ -588,9 +587,9 @@ export default function Discover() {
                         className={`flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 -mr-1 rounded-md transition-colors ${
                           signedIn
                             ? liked
-                              ? 'text-state-danger hover:bg-red-500/10 cursor-pointer'
-                              : 'text-text-secondary hover:text-state-danger hover:bg-white/5 cursor-pointer'
-                            : 'text-text-tertiary cursor-help hover:bg-white/5'
+                              ? 'text-state-danger hover:bg-state-danger/10 cursor-pointer'
+                              : 'text-text-secondary hover:text-state-danger hover:bg-hl/5 cursor-pointer'
+                            : 'text-text-tertiary cursor-help hover:bg-hl/5'
                         } disabled:opacity-50`}
                         title={signedIn ? (liked ? 'Unlike' : 'Like') : 'Sign in to like'}
                         aria-label={signedIn ? (liked ? 'Unlike profile' : 'Like profile') : 'Sign in to like'}

@@ -216,7 +216,7 @@ export default function Crosshair() {
                         gets an explicit viewport-relative one that shrinks with
                         the window instead of collapsing. From xl it goes back to
                         taking whatever the row leaves over. */}
-                    <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-white/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
+                    <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-hl/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
                         <CrosshairStage scale={(resolution / 1080) * zoom} background={background} />
 
                         {/* Both overlay bars share one wrapping row so they move
@@ -227,7 +227,7 @@ export default function Crosshair() {
                         <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2">
                             {/* Scene picker. Thumbnails rather than words: you're
                                 choosing an image, so show the image. */}
-                            <div className="pointer-events-auto flex items-center gap-1.5 rounded-sm border border-white/10 bg-black/50 p-1.5 backdrop-blur-md">
+                            <div className="pointer-events-auto flex items-center gap-1.5 rounded-sm border border-overlay-border/10 bg-overlay-bg/50 p-1.5 backdrop-blur-md">
                                 {STAGE_BACKGROUNDS.map((b) => {
                                     const active = b.id === background;
                                     return (
@@ -239,7 +239,7 @@ export default function Crosshair() {
                                             title={t(`crosshair.preview.backgrounds.${b.id}`)}
                                             aria-label={t(`crosshair.preview.backgrounds.${b.id}`)}
                                             className={`h-8 w-12 cursor-pointer overflow-hidden rounded-sm border bg-bg-tertiary bg-cover bg-center transition-colors ${
-                                                active ? 'border-accent ring-1 ring-accent' : 'border-white/15 hover:border-white/40'
+                                                active ? 'border-accent ring-1 ring-accent' : 'border-hl/15 hover:border-hl/40'
                                             }`}
                                             style={b.src ? { backgroundImage: `url(${b.src})` } : undefined}
                                         >
@@ -255,19 +255,19 @@ export default function Crosshair() {
 
                             {/* Resolution + zoom. Stepped zoom instead of a fiddly
                                 80px track: the useful values are few and discrete. */}
-                            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-sm border border-white/10 bg-black/50 px-2 py-1.5 backdrop-blur-md">
+                            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-sm border border-overlay-border/10 bg-overlay-bg/50 px-2 py-1.5 backdrop-blur-md">
                                 <SegmentedControl
                                     options={RESOLUTIONS.map((r) => ({ value: String(r.height), label: r.label }))}
                                     value={String(resolution)}
                                     onChange={(v) => setResolution(parseInt(v, 10))}
                                     label={t('crosshair.preview.resolutionTitle')}
                                 />
-                                <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+                                <div className="flex items-center gap-1 border-l border-hl/10 pl-2">
                                     <button
                                         type="button"
                                         onClick={() => stepZoom(-1)}
                                         disabled={zoom === ZOOM_STEPS[0]}
-                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
+                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
                                         title={t('crosshair.preview.zoomOut')}
                                         aria-label={t('crosshair.preview.zoomOut')}
                                     >
@@ -276,7 +276,7 @@ export default function Crosshair() {
                                     <button
                                         type="button"
                                         onClick={() => setZoom(1)}
-                                        className="w-10 cursor-pointer rounded-sm py-1 text-center font-mono text-xs text-text-primary transition-colors hover:bg-white/10"
+                                        className="w-10 cursor-pointer rounded-sm py-1 text-center font-mono text-xs text-text-primary transition-colors hover:bg-hl/10"
                                         title={t('crosshair.preview.resetZoom')}
                                     >
                                         {zoom}x
@@ -285,7 +285,7 @@ export default function Crosshair() {
                                         type="button"
                                         onClick={() => stepZoom(1)}
                                         disabled={zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]}
-                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
+                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
                                         title={t('crosshair.preview.zoomIn')}
                                         aria-label={t('crosshair.preview.zoomIn')}
                                     >

@@ -34,8 +34,8 @@ export const BACKGROUND_GRADIENT_PRESETS: BackgroundGradientPreset[] = [
  *  its contrast, high enough to read as deliberate on a #0f0f0f base. */
 const GLOW_ALPHA = 0.3;
 
-/** The app's base background, painted under the glow in preview tiles. */
-export const BACKGROUND_BASE = '#0f0f0f';
+/** The active app background, painted under the glow in preview tiles. */
+export const BACKGROUND_BASE = 'var(--color-bg-primary)';
 
 /** Hex (3- or 6-digit, with or without `#`) to an rgba() string. Anything else
  *  resolves to fully transparent: settings.json is user-editable and the color
@@ -67,7 +67,7 @@ const LAYER: GlowGeometry = { alpha: GLOW_ALPHA, size: '55% 50%', stop: '70%' };
 
 /** Swatches identify a preset; they do not simulate it. Reusing the layer's
  *  geometry on an 80x48 tile tints only about a quarter of it and leaves the
- *  rest flat #0f0f0f, so every preset read as the same near-black rectangle
+ *  rest flat, so every preset read as the same nearly-solid rectangle
  *  sitting under a row of vivid accent chips. Swatches therefore get much
  *  larger radii and a higher alpha: both colors are legible at thumbnail size
  *  and the two glows meet in the middle instead of hugging opposite corners. */

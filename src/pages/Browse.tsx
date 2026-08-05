@@ -453,24 +453,24 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
   if (onImage) {
     switch (tone) {
       case 'accent':
-        return 'border-accent/40 bg-black/55 text-accent backdrop-blur-sm';
+        return 'border-overlay-accent/40 bg-overlay-bg/55 text-overlay-accent backdrop-blur-sm';
       case 'danger':
-        return 'border-state-danger/45 bg-black/55 text-state-danger backdrop-blur-sm';
+        return 'border-overlay-danger/45 bg-overlay-bg/55 text-overlay-danger backdrop-blur-sm';
       case 'info':
-        return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
+        return 'border-overlay-info/40 bg-overlay-bg/55 text-overlay-info backdrop-blur-sm';
       default:
-        return 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm';
+        return 'border-overlay-border/20 bg-overlay-bg/55 text-overlay-primary/90 backdrop-blur-sm';
     }
   }
   switch (tone) {
     case 'accent':
-      return 'border-accent/25 bg-accent/[0.08] text-accent';
+      return 'border-accent/25 bg-accent/[0.08] text-accent-ink';
     case 'danger':
       return 'border-state-danger/30 bg-state-danger/[0.09] text-state-danger';
     case 'info':
       return 'border-state-info/25 bg-state-info/[0.08] text-state-info';
     default:
-      return 'border-white/[0.1] bg-white/[0.04] text-text-secondary';
+      return 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary';
   }
 }
 
@@ -549,7 +549,7 @@ function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadab
         title={chip.label}
         loading="lazy"
         draggable={false}
-        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-black/40' : ''}`}
+        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-overlay-bg/40' : ''}`}
       />
     );
   }
@@ -611,13 +611,13 @@ function BrowseReadableChipRow({
             title={`${hiddenChips.length} more`}
             className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11px] font-medium leading-none ${
               onImage
-                ? 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm'
-                : 'border-white/[0.1] bg-white/[0.04] text-text-secondary'
+                ? 'border-overlay-border/20 bg-overlay-bg/55 text-overlay-primary/90 backdrop-blur-sm'
+                : 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary'
             }`}
           >
             +{hiddenChips.length}
           </span>
-          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-white/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
+          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-hl/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
             {hiddenChips.map((chip, index) => (
               <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} onImage={onImage} />
             ))}
@@ -1026,7 +1026,7 @@ function renderErrorWithLinks(text: string): React.ReactNode {
           href={part}
           target="_blank"
           rel="noreferrer noopener"
-          className="underline text-accent hover:text-accent-hover"
+          className="underline text-accent-ink hover:text-accent-ink-hover"
         >
           {part}
         </a>
@@ -3185,7 +3185,7 @@ export default function Browse() {
                 onError={() => setArtistAvatarFailed(true)}
               />
             ) : (
-              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-lg font-bold uppercase text-accent">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-lg font-bold uppercase text-accent-ink">
                 {submitter.name.charAt(0)}
               </div>
             )}
@@ -3197,10 +3197,10 @@ export default function Browse() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title={`View ${submitter.name} on GameBanana`}
-                    className="group inline-flex min-w-0 items-center gap-1.5 text-lg font-bold text-text-primary transition-colors hover:text-accent"
+                    className="group inline-flex min-w-0 items-center gap-1.5 text-lg font-bold text-text-primary transition-colors hover:text-accent-ink"
                   >
                     <span className="min-w-0 truncate">{submitter.name}</span>
-                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                   </a>
                 ) : (
                   <span className="min-w-0 truncate text-lg font-bold text-text-primary">{submitter.name}</span>
@@ -3229,7 +3229,7 @@ export default function Browse() {
                       title={link.label}
                       aria-label={link.label}
                       style={{ backgroundColor: color }}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-white/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-brand-foreground shadow-sm ring-1 ring-hl/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
                     >
                       <Icon className="h-4 w-4" />
                     </a>
@@ -3241,7 +3241,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-brand-kofi-foreground shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}
@@ -3260,7 +3260,7 @@ export default function Browse() {
                   type="button"
                   onClick={() => setSection(s)}
                   className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
+                    section === s ? 'bg-accent/15 text-accent-ink' : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
                   {s === 'Mod'
@@ -3313,7 +3313,7 @@ export default function Browse() {
                 )}
                 <button
                   type="submit"
-                  className="p-1.5 text-text-secondary hover:text-accent transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
+                  className="p-1.5 text-text-secondary hover:text-accent-ink transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
                   title={t('browse.search.submit')}
                 >
                   <Search className="w-4 h-4" />
@@ -3610,14 +3610,14 @@ export default function Browse() {
                     title={t('browse.filters.title')}
                     className={`flex items-center h-10 gap-2 px-3 rounded-lg border text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                       filterCount > 0
-                        ? 'bg-accent/10 border-accent/40 text-accent hover:bg-accent/20'
+                        ? 'bg-accent/10 border-accent/40 text-accent-ink hover:bg-accent/20'
                         : 'bg-bg-secondary border-border text-text-primary hover:bg-bg-tertiary'
                     }`}
                   >
                     <SlidersHorizontal className="w-4 h-4" />
                     <span>{t('browse.filters.title')}</span>
                     {filterCount > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent-solid text-accent-solid-foreground text-[11px] font-semibold flex items-center justify-center">
                         {filterCount}
                       </span>
                     )}
@@ -3644,7 +3644,7 @@ export default function Browse() {
                             setAddedFrom('');
                             setAddedTo('');
                           }}
-                          className="text-xs text-text-secondary hover:text-accent cursor-pointer"
+                          className="text-xs text-text-secondary hover:text-accent-ink cursor-pointer"
                         >
                           {t('browse.filters.clearAll')}
                         </button>
@@ -3951,7 +3951,7 @@ export default function Browse() {
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-state-warning shrink-0" />
                 <span className="text-sm">{t('browse.loadMore.couldntLoadMore')} {renderErrorWithLinks(loadMoreError)}</span>
               </div>
               <Button onClick={handleRetryFetch} variant="secondary" size="sm">{t('common.actions.retry')}</Button>
@@ -4219,14 +4219,14 @@ function ReadableBrowseModCard({
           : downloading
             ? 'border-accent/40'
             : installed && !installedDisabled
-              ? 'border-white/[0.07] premium-card-glow-active'
-              : 'border-white/[0.07]'
+              ? 'border-hl/[0.07] premium-card-glow-active'
+              : 'border-hl/[0.07]'
       }`}
     >
       <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
         {media}
         {showChips && chips.length > 0 && (
-          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
+          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-overlay-bg/75 via-overlay-bg/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
             <div className="pointer-events-auto min-w-0">
               <BrowseReadableChipRow
                 chips={chips}
@@ -4265,7 +4265,7 @@ function ReadableBrowseModCard({
 
         {showInlineAudioPreview && (
           <div
-            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-white/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
+            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-hl/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
               isMicro ? 'h-7' : 'h-[clamp(33px,12.8571cqw,41px)]'
             }`}
             onClick={(event) => event.stopPropagation()}
@@ -4284,7 +4284,7 @@ function ReadableBrowseModCard({
                   <button
                     type="button"
                     onClick={() => setShowVolumeSlider((value) => !value)}
-                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
                     title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-expanded={showVolumeSlider}
@@ -4296,7 +4296,7 @@ function ReadableBrowseModCard({
                     )}
                   </button>
                   {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-hl/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
                       <input
                         type="range"
                         min={0}
@@ -4325,7 +4325,7 @@ function ReadableBrowseModCard({
                 {!isMicro && (
                   <>
                     <span className="flex-shrink-0 text-[10px] tabular-nums text-text-secondary">0:00</span>
-                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80">
+                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-text-secondary">
                       <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
                     </span>
                   </>
@@ -4507,7 +4507,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
-                <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                <Loader2 className="w-4 h-4 animate-spin text-accent-ink" />
               </span>
             ) : (
               <button
@@ -4741,8 +4741,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               )}
             </div>
           )}
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+          <h3 className={`font-mod-title font-semibold truncate text-overlay-primary drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-overlay-primary/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4750,7 +4750,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         </div>
       ) : (
         <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : isCompact ? 'p-2.5' : 'p-3'}`}>
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <h3 className={`font-mod-title font-semibold truncate text-overlay-primary drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           {/* Stats / author / outdated. On minimal cards this group is collapsed
               to zero height at rest and slides up on hover or keyboard focus. */}
           <div
@@ -4760,7 +4760,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 : ''
             }
           >
-            <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <div className={`mt-1 flex flex-wrap items-center gap-3 text-overlay-primary/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
               <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
               <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
               {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4813,7 +4813,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-white/10 px-3 py-2 shadow-lg">
+          <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-hl/10 px-3 py-2 shadow-lg">
             <div className="flex-1 min-w-0">
               {audioControlsActive ? (
                 <AudioPreviewPlayer
@@ -4833,7 +4833,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 </div>
               )}
             </div>
-            <div className="w-px h-5 bg-white/20 flex-shrink-0" />
+            <div className="w-px h-5 bg-hl/20 flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
@@ -4841,7 +4841,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   e.stopPropagation();
                   onVolumeChange(volume > 0 ? 0 : 1);
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-overlay-primary/70 transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
                 title={volume > 0 ? 'Mute' : 'Unmute'}
                 aria-label={volume > 0 ? 'Mute' : 'Unmute'}
               >
@@ -4886,11 +4886,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </span>
         ) : downloading ? (
           <div className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title={t('browse.card.downloading')}>
-            <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+            <Loader2 className={`animate-spin text-accent-ink ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent-solid text-accent-solid-foreground rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -4898,7 +4898,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
-            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent-ink hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title={t('browse.card.install')}
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />

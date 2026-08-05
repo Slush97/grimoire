@@ -134,7 +134,7 @@ export default function TrippyPatternPicker({
           <div className="text-sm font-semibold text-text-primary">{summary}</div>
           {status && <div className="text-[11px] text-text-secondary">{status}</div>}
           {spriteFailed && (
-            <div className="text-[11px] text-amber-400/90">
+            <div className="text-[11px] text-state-warning/90">
               {t('locker.trippyPattern.swatchUnavailable')}
             </div>
           )}

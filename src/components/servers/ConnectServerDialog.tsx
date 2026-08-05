@@ -110,7 +110,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
           <button
             onClick={onClose}
             disabled={phase === 'working'}
-            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label={t('common.actions.close')}
           >
             <X size={18} />
@@ -122,9 +122,9 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
             <div className="space-y-4">
               <div className="flex items-center gap-3 text-text-primary">
                 {progress?.status === 'downloading' || progress?.status === 'decompressing' ? (
-                  <Download size={20} className="text-accent" />
+                  <Download size={20} className="text-accent-ink" />
                 ) : (
-                  <Loader2 size={20} className="animate-spin text-accent" />
+                  <Loader2 size={20} className="animate-spin text-accent-ink" />
                 )}
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
@@ -171,7 +171,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
 
           {phase === 'done' && (
             <div className="flex flex-col items-center gap-3 py-2 text-center">
-              <CheckCircle2 size={40} className="text-green-400" />
+              <CheckCircle2 size={40} className="text-state-success" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="primary" icon={Play} onClick={onClose} className="mt-2">
                 <Tx k="common.actions.done" fallback="Done" />
@@ -181,7 +181,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
 
           {phase === 'error' && (
             <div className="flex flex-col items-center gap-3 py-2 text-center">
-              <AlertTriangle size={40} className="text-red-500" />
+              <AlertTriangle size={40} className="text-state-danger" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="secondary" onClick={onClose} className="mt-2">
                 <Tx k="common.actions.close" fallback="Close" />

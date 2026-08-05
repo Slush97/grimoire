@@ -144,7 +144,7 @@ export default function LaunchOptionsCard() {
                   <span className="uppercase tracking-wide text-text-secondary">
                     <Tx k="autoexec.launchOptions.inSteamNow" fallback="In Steam now" />
                   </span>
-                  <code className="min-w-0 truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-text-primary/80">
+                  <code className="min-w-0 truncate rounded-sm bg-bg-sunken px-1.5 py-0.5 font-mono text-text-primary/80">
                     {onDisk || t('common.emptyValue')}
                   </code>
                 </div>

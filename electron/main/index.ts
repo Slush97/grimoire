@@ -26,9 +26,8 @@ protocol.registerSchemesAsPrivileged([
     },
 ]);
 
-// The app is dark-only, so pin Chromium and the OS chrome to dark regardless
-// of the system theme. On Windows this stops the native frame/menus rendering
-// light, and it makes prefers-color-scheme report dark in the renderer.
+// Keep the pre-ready frame dark. createWindow applies the persisted preference
+// once Electron's app paths (and therefore settings.json) are available.
 nativeTheme.themeSource = 'dark';
 
 // Initialize the file logger before anything else so console.* calls in IPC
@@ -212,6 +211,11 @@ function resolveInitialBounds(): {
 }
 
 function createWindow(): void {
+    // nativeTheme drives both native window chrome and the renderer's resolved
+    // prefers-color-scheme. Resolve it before constructing the window so its
+    // pre-paint background matches the selected (or system) theme.
+    nativeTheme.themeSource = loadSettings().colorScheme;
+    const initialBackground = nativeTheme.shouldUseDarkColors ? '#0f0f0f' : '#eeeeef';
     const initial = resolveInitialBounds();
     mainWindow = new BrowserWindow({
         width: initial.width,
@@ -223,10 +227,10 @@ function createWindow(): void {
         minHeight: MIN_WINDOW_HEIGHT,
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
-        backgroundColor: '#0f0f0f', // Dark background matching app theme
+        backgroundColor: initialBackground,
         autoHideMenuBar: true,
-        // Standard native frame on every platform. themeSource is forced to
-        // 'dark' above, so Windows draws its title bar dark; the previous
+        // Standard native frame on every platform. nativeTheme keeps its chrome
+        // aligned with the selected scheme; the previous
         // hidden-titleBar + overlay approach put the OS window controls on
         // top of the renderer, where they collided with in-app controls and
         // page-level overlays.

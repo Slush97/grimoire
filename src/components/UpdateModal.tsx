@@ -76,7 +76,7 @@ export default function UpdateModal({ onClose }: Props) {
             size="lg"
             panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
         >
-                <div className="flex items-start justify-between p-6 border-b border-white/10">
+                <div className="flex items-start justify-between p-6 border-b border-hl/10">
                     <div className="min-w-0">
                         <h2 id="update-modal-title" className="text-xl font-bold text-text-primary">
                             {status?.downloaded
@@ -98,7 +98,7 @@ export default function UpdateModal({ onClose }: Props) {
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+                        className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
                         aria-label={t('common.actions.close')}
                     >
                         <X className="w-5 h-5" />
@@ -107,8 +107,8 @@ export default function UpdateModal({ onClose }: Props) {
 
                 <div className="p-6 overflow-y-auto flex-1 min-h-0">
                     {installSource === 'managed' && (
-                        <div className="flex items-start gap-3 p-4 rounded-lg bg-bg-tertiary border border-white/10 mb-4">
-                            <Package className="w-5 h-5 flex-shrink-0 mt-0.5 text-accent" />
+                        <div className="flex items-start gap-3 p-4 rounded-lg bg-bg-tertiary border border-hl/10 mb-4">
+                            <Package className="w-5 h-5 flex-shrink-0 mt-0.5 text-accent-ink" />
                             <div className="text-sm text-text-secondary space-y-2">
                                 <p className="text-text-primary font-medium">{t('updateModal.managedByPackageManager')}</p>
                                 <p>
@@ -134,7 +134,7 @@ export default function UpdateModal({ onClose }: Props) {
                     )}
 
                     {status?.error && (
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm mb-4">
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-state-danger/10 border border-state-danger/30 text-state-danger text-sm mb-4">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                             <span>{status.error}</span>
                         </div>
@@ -185,10 +185,10 @@ export default function UpdateModal({ onClose }: Props) {
                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(releaseNotes) }}
                                 />
                             ) : (
-                                <div className="space-y-5 divide-y divide-white/5">
+                                <div className="space-y-5 divide-y divide-hl/5">
                                     {(releaseNotes as { version: string; note: string | null }[]).map((note, idx) => (
                                         <div key={`${note.version}-${idx}`} className={idx > 0 ? 'pt-5' : ''}>
-                                            <h4 className="font-semibold text-accent mb-2">v{note.version}</h4>
+                                            <h4 className="font-semibold text-accent-ink mb-2">v{note.version}</h4>
                                             {note.note ? (
                                                 <div
                                                     className="release-notes"
@@ -209,7 +209,7 @@ export default function UpdateModal({ onClose }: Props) {
                     )}
                 </div>
 
-                <div className="flex items-center justify-between gap-3 p-6 border-t border-white/10">
+                <div className="flex items-center justify-between gap-3 p-6 border-t border-hl/10">
                     <a
                         href="https://discord.gg/KgYGHEMq2P"
                         target="_blank"

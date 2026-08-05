@@ -683,7 +683,7 @@ export default function ImportProfileDialog({
       dismissable={!importing}
       panelClassName={`${socialProfileId ? 'max-w-5xl' : 'max-w-4xl'} max-h-[92vh] flex flex-col overflow-hidden`}
     >
-        <div className={`flex items-start justify-between ${parsed || socialProfileId ? 'px-4 sm:px-6 py-3' : 'p-4 sm:p-6'} border-b border-white/10`}>
+        <div className={`flex items-start justify-between ${parsed || socialProfileId ? 'px-4 sm:px-6 py-3' : 'p-4 sm:p-6'} border-b border-hl/10`}>
           <div className="min-w-0">
             <h2 id="import-profile-title" className="text-base sm:text-lg font-bold text-text-primary">
               {t('importProfile.title')}
@@ -696,7 +696,7 @@ export default function ImportProfileDialog({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+            className="p-1.5 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -717,30 +717,30 @@ export default function ImportProfileDialog({
             two awaits. */}
         {showSkeleton && (
           <>
-            <div className="px-4 sm:px-6 py-2.5 border-b border-white/10">
-              <div className="h-3 bg-white/5 rounded w-20 mb-2 animate-pulse" />
-              <div className="h-8 bg-white/5 rounded animate-pulse" />
+            <div className="px-4 sm:px-6 py-2.5 border-b border-hl/10">
+              <div className="h-3 bg-hl/5 rounded w-20 mb-2 animate-pulse" />
+              <div className="h-8 bg-hl/5 rounded animate-pulse" />
             </div>
-            <div className="px-4 sm:px-6 py-2 border-b border-white/5 flex items-center justify-between">
-              <div className="h-3 bg-white/5 rounded w-24 animate-pulse" />
-              <div className="h-4 bg-white/5 rounded w-32 animate-pulse" />
+            <div className="px-4 sm:px-6 py-2 border-b border-hl/5 flex items-center justify-between">
+              <div className="h-3 bg-hl/5 rounded w-24 animate-pulse" />
+              <div className="h-4 bg-hl/5 rounded w-32 animate-pulse" />
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-hl/5">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <li key={i} className="px-4 sm:px-6 py-2.5 flex items-center gap-3 sm:gap-4 animate-pulse">
-                    <div className="w-4 h-4 rounded-sm bg-white/5 flex-shrink-0" />
-                    <div className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0 rounded-sm bg-white/5" />
+                    <div className="w-4 h-4 rounded-sm bg-hl/5 flex-shrink-0" />
+                    <div className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0 rounded-sm bg-hl/5" />
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="h-3.5 bg-white/5 rounded w-2/3" />
-                      <div className="h-3 bg-white/5 rounded w-1/3" />
+                      <div className="h-3.5 bg-hl/5 rounded w-2/3" />
+                      <div className="h-3 bg-hl/5 rounded w-1/3" />
                     </div>
-                    <div className="h-3 bg-white/5 rounded w-16 flex-shrink-0" />
+                    <div className="h-3 bg-hl/5 rounded w-16 flex-shrink-0" />
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="border-t border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+            <div className="border-t border-hl/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
               <div className="text-xs text-text-secondary inline-flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 {t('importProfile.resolvingContents')}
@@ -753,7 +753,7 @@ export default function ImportProfileDialog({
         )}
 
         {showInputForm && (
-          <div className="p-4 sm:p-6 border-b border-white/10 space-y-3">
+          <div className="p-4 sm:p-6 border-b border-hl/10 space-y-3">
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -790,7 +790,7 @@ export default function ImportProfileDialog({
 
         {showResolved && parsed && report && (
           <>
-            <div className="px-4 sm:px-6 py-2.5 border-b border-white/10">
+            <div className="px-4 sm:px-6 py-2.5 border-b border-hl/10">
               <div className="flex items-baseline gap-2 mb-1">
                 <label className="text-[11px] uppercase tracking-wider text-text-secondary flex-shrink-0">
                   {t('importProfile.saveAs')}
@@ -815,8 +815,8 @@ export default function ImportProfileDialog({
               (() => {
                 const cmds = parsed.extensions!.grimoire!.autoexecCommands!;
                 return (
-                  <div className="border-b border-white/5 bg-yellow-500/5">
-                    <div className="px-4 sm:px-6 py-2 flex items-center gap-2 text-xs text-yellow-200">
+                  <div className="border-b border-hl/5 bg-state-warning/5">
+                    <div className="px-4 sm:px-6 py-2 flex items-center gap-2 text-xs text-state-warning">
                       <Terminal className="w-3.5 h-3.5 flex-shrink-0" />
                       <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
                         <input
@@ -867,7 +867,7 @@ export default function ImportProfileDialog({
               })()
             ) : null}
 
-            <div className="px-4 sm:px-6 py-2 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10 flex items-center justify-between gap-2 flex-wrap">
+            <div className="px-4 sm:px-6 py-2 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-hl/5 z-10 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-4 min-w-0">
                 <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer min-w-0">
                   <input
@@ -900,7 +900,7 @@ export default function ImportProfileDialog({
                 type="button"
                 onClick={() => void handleToggleShowAllVariants()}
                 disabled={importing || variantScanProgress !== null || selectableCount === 0}
-                className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-hl/10 text-text-secondary hover:text-text-primary hover:border-hl/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
                 title={t('importProfile.fetchVariantsTitle')}
               >
                 {variantScanProgress ? (
@@ -923,26 +923,26 @@ export default function ImportProfileDialog({
                 )}
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] justify-end flex-shrink-0">
-                <span className="px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-300 border border-green-500/20">
+                <span className="px-1.5 py-0.5 rounded-sm bg-state-success/10 text-state-success border border-state-success/20">
                   {report.exactCount} exact
                 </span>
                 {report.alreadyInstalledCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-white/5 text-text-secondary border border-white/10" title={t('importProfile.modsAlreadyInstalledLocally')}>
+                  <span className="px-1.5 py-0.5 rounded-sm bg-hl/5 text-text-secondary border border-hl/10" title={t('importProfile.modsAlreadyInstalledLocally')}>
                     {t('importProfile.onDiskCount', { count: report.alreadyInstalledCount })}
                   </span>
                 )}
                 {report.upgradedCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                  <span className="px-1.5 py-0.5 rounded-sm bg-state-info/10 text-state-info border border-state-info/20">
                     {report.upgradedCount} upgraded
                   </span>
                 )}
                 {report.unresolvableCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-red-500/10 text-red-300 border border-red-500/20">
+                  <span className="px-1.5 py-0.5 rounded-sm bg-state-danger/10 text-state-danger border border-state-danger/20">
                     {report.unresolvableCount} unresolvable
                   </span>
                 )}
                 {parsed.extensions?.grimoire?.crosshair && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-white/5 text-text-secondary border border-white/10">
+                  <span className="px-1.5 py-0.5 rounded-sm bg-hl/5 text-text-secondary border border-hl/10">
                     crosshair
                   </span>
                 )}
@@ -950,7 +950,7 @@ export default function ImportProfileDialog({
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-hl/5">
                 {rows.map((r, idx) => {
                   const mod = r.mod;
                   const hint = mod.entry.hint;
@@ -985,7 +985,7 @@ export default function ImportProfileDialog({
                   return (
                     <li key={idx} className="relative px-4 sm:px-6 py-2.5">
                       {r.status === 'downloading' && (
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/5 overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-hl/5 overflow-hidden">
                           {progressPct === null ? (
                             <div className="h-full w-1/3 bg-accent/70 animate-pulse" />
                           ) : (
@@ -1030,7 +1030,7 @@ export default function ImportProfileDialog({
                                 type="button"
                                 onClick={() => void toggleVariants(idx)}
                                 disabled={importing}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm hover:text-text-primary hover:bg-white/5 disabled:opacity-50 disabled:cursor-default cursor-pointer"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm hover:text-text-primary hover:bg-hl/5 disabled:opacity-50 disabled:cursor-default cursor-pointer"
                                 title={t('importProfile.chooseDifferentVariant')}
                               >
                                 {r.variantsOpen ? (
@@ -1051,7 +1051,7 @@ export default function ImportProfileDialog({
                             )}
                             {pickedSummary && (
                               <span
-                                className="text-accent truncate max-w-[14rem]"
+                                className="text-accent-ink truncate max-w-[14rem]"
                                 title={pickedFiles.map((f) => f.fileName).join('\n')}
                               >
                                 · {pickedSummary}
@@ -1059,7 +1059,7 @@ export default function ImportProfileDialog({
                             )}
                           </div>
                           {mod.status === 'upgraded' && (
-                            <div className="text-xs text-blue-300 mt-1 inline-flex items-center gap-1">
+                            <div className="text-xs text-state-info mt-1 inline-flex items-center gap-1">
                               <ArrowUpCircle className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="truncate">{t('importProfile.upgradedNotice')}</span>
                             </div>
@@ -1078,14 +1078,14 @@ export default function ImportProfileDialog({
                         </div>
                         <div className="text-sm flex-shrink-0 text-right sm:min-w-[100px]">
                           {r.status === 'pending' && !isUnresolvable && (
-                            <span className="text-amber-300 inline-flex items-center gap-1.5 justify-end text-xs" title={t('servers.connect.status.ready')}>
+                            <span className="text-state-warning inline-flex items-center gap-1.5 justify-end text-xs" title={t('servers.connect.status.ready')}>
                               <ArrowDownCircle className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="hidden sm:inline">{t('servers.connect.status.ready')}</span>
                             </span>
                           )}
                           {r.status === 'already-installed' && (
                             <span
-                              className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs"
+                              className="text-state-success inline-flex items-center gap-1.5 justify-end text-xs"
                               title={t('importProfile.alreadyInstalled')}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1093,13 +1093,13 @@ export default function ImportProfileDialog({
                             </span>
                           )}
                           {r.status === 'queued' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.queued')}>
+                            <span className="text-accent-ink inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.queued')}>
                               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
                               <span className="hidden sm:inline">{t('importProfile.status.queued')}</span>
                             </span>
                           )}
                           {r.status === 'downloading' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.downloading')}>
+                            <span className="text-accent-ink inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.downloading')}>
                               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
                               <span className="hidden sm:inline">
                                 {progressPct !== null ? `${Math.round(progressPct)}%` : t('importProfile.status.downloading')}
@@ -1107,7 +1107,7 @@ export default function ImportProfileDialog({
                             </span>
                           )}
                           {r.status === 'installed' && (
-                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.installed')}>
+                            <span className="text-state-success inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.installed')}>
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="hidden sm:inline">{t('nav.installed')}</span>
                             </span>
@@ -1168,7 +1168,7 @@ export default function ImportProfileDialog({
                                         className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm cursor-pointer text-sm border ${
                                           isPicked
                                             ? 'bg-accent/10 border-accent/40 text-text-primary'
-                                            : 'border-transparent hover:bg-white/5 text-text-secondary'
+                                            : 'border-transparent hover:bg-hl/5 text-text-secondary'
                                         }`}
                                       >
                                         <input
@@ -1209,10 +1209,10 @@ export default function ImportProfileDialog({
               </ul>
             </div>
 
-            <div className="border-t border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <div className="border-t border-hl/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
               <div className="text-xs text-text-secondary min-w-0 flex-1">
                 {importedProfileName ? (
-                  <span className="text-green-400 inline-flex items-center gap-1.5 min-w-0">
+                  <span className="text-state-success inline-flex items-center gap-1.5 min-w-0">
                     <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                     <span className="truncate">{t('importProfile.importedAs', { name: importedProfileName })}</span>
                   </span>
@@ -1254,7 +1254,7 @@ export default function ImportProfileDialog({
           if (!socialProfileId) return body;
           return (
             <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
-              <aside className="md:w-80 md:flex-shrink-0 md:border-r border-b md:border-b-0 border-white/10 overflow-hidden flex">
+              <aside className="md:w-80 md:flex-shrink-0 md:border-r border-b md:border-b-0 border-hl/10 overflow-hidden flex">
                 <SocialProfileHeader
                   profileId={socialProfileId}
                   seed={socialProfileSeed}

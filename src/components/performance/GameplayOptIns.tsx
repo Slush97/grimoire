@@ -49,15 +49,15 @@ export default function GameplayOptIns({
   })).filter((g) => g.controls.length > 0);
 
   return (
-    <div className="rounded-sm border border-white/5 bg-bg-tertiary/40">
+    <div className="rounded-sm border border-hl/5 bg-bg-tertiary/40">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-hl/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
       >
         <span className="flex items-center gap-2 min-w-0">
-          <Eye className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+          <Eye className="w-4 h-4 text-accent-ink shrink-0" aria-hidden="true" />
           <span className="text-sm font-medium text-text-primary">
             {t('performance.optIn.title')}
           </span>
@@ -75,7 +75,7 @@ export default function GameplayOptIns({
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-3">
+        <div className="px-4 pb-4 space-y-4 border-t border-hl/5 pt-3">
           <p className="text-xs text-text-secondary">{t('performance.optIn.description')}</p>
           {groups.map(({ group, controls }) => (
             <div key={group} className="space-y-2">

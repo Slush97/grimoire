@@ -154,7 +154,7 @@ export default function CardCropper({
     <Modal onClose={onCancel} size="none" panelClassName="max-w-xl" labelledBy="card-cropper-title">
       <div className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
-          <Crop className="h-4 w-4 text-accent" />
+          <Crop className="h-4 w-4 text-accent-ink" />
           <h2 id="card-cropper-title" className="text-sm font-semibold text-text-primary">
             {t('locker.crop.title', { variant: variantLabel })}
           </h2>
@@ -164,7 +164,7 @@ export default function CardCropper({
         </div>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-state-danger">
+          <div className="flex items-start gap-2 rounded-md border border-state-danger/40 bg-state-danger/10 p-3 text-xs text-state-danger">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span className="break-words">{error}</span>
           </div>
@@ -216,14 +216,14 @@ export default function CardCropper({
                 disabled={!img}
                 onClick={() => applyZoom(1)}
                 title={t('locker.crop.resetZoom')}
-                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
             </div>
 
             {img && (img.naturalWidth < targetWidth || img.naturalHeight < targetHeight) && (
-              <p className="text-[11px] leading-snug text-amber-400/90">
+              <p className="text-[11px] leading-snug text-state-warning/90">
                 {t('locker.crop.upscaleWarning', {
                   sourceWidth: img.naturalWidth,
                   sourceHeight: img.naturalHeight,
@@ -242,7 +242,7 @@ export default function CardCropper({
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary"
+            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary"
           >
             {t('common.actions.cancel')}
           </button>

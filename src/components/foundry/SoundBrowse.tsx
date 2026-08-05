@@ -370,7 +370,7 @@ function CategorySection({
     return (
         <section className="space-y-2">
             <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                <Icon size={14} className="text-accent" />
+                <Icon size={14} className="text-accent-ink" />
                 {title}
                 <span className="font-normal normal-case text-text-secondary/60">{section.total}</span>
             </h3>
@@ -384,7 +384,7 @@ function CategorySection({
                                     slot={group.slot}
                                 />
                                 {group.slot != null && (
-                                    <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent">
+                                    <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent-ink">
                                         {group.slot === 4
                                             ? t('foundry.sound.ult', 'ULT')
                                             : t('foundry.sound.slot', '{{n}}', { n: group.slot })}
@@ -492,9 +492,9 @@ function VoiceLinesSection({
             >
                 <ChevronRight
                     size={14}
-                    className={`text-accent transition-transform ${open ? 'rotate-90' : ''}`}
+                    className={`text-accent-ink transition-transform ${open ? 'rotate-90' : ''}`}
                 />
-                <MessageSquare size={14} className="text-accent" />
+                <MessageSquare size={14} className="text-accent-ink" />
                 <Tx k="foundry.sound.voiceLines.title" fallback="Voice lines" />
                 {!standalone && (
                     <span className="font-normal normal-case text-text-secondary/60">
@@ -594,7 +594,7 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                     type="button"
                     onClick={onToggle}
                     title={t('foundry.sound.play', 'Audition')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent-ink transition-colors hover:bg-accent/15"
                 >
                     {state === 'loading' ? (
                         <Loader2 size={15} className="animate-spin" />
@@ -625,7 +625,7 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                         title={t('foundry.sound.swap.button', 'Swap this sound for your own audio')}
                         className={`flex h-8 shrink-0 items-center gap-1.5 rounded-sm border px-2 text-xs transition-colors ${
                             swapOpen
-                                ? 'border-accent/50 bg-accent/15 text-accent'
+                                ? 'border-accent/50 bg-accent/15 text-accent-ink'
                                 : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
                         }`}
                     >
@@ -746,7 +746,7 @@ function SwapPanel({
     return (
         <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">
             <div className="mb-2 flex items-center justify-between">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-accent">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-accent-ink">
                     <Tx k="foundry.sound.swap.title" fallback="Swap with your own audio" />
                 </p>
                 <button
@@ -775,7 +775,7 @@ function SwapPanel({
                 }}
                 className={`flex w-full items-center justify-center gap-2 rounded-sm border border-dashed px-3 py-3 text-xs transition-colors ${
                     dragOver
-                        ? 'border-accent bg-accent/10 text-accent'
+                        ? 'border-accent bg-accent/10 text-accent-ink'
                         : 'border-border text-text-secondary hover:border-accent/50 hover:text-text-primary'
                 }`}
             >

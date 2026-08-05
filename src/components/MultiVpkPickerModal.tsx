@@ -67,7 +67,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                 <div className="p-5 space-y-4">
                     <p className="text-sm text-text-secondary">
                         <span className="font-medium text-text-primary">{data.modName}</span> contains{' '}
-                        {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">.vpk</code> files.
+                        {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-bg-sunken px-1 py-0.5 rounded">.vpk</code> files.
                         {t('multiVpk.uncheckHint')}
                     </p>
 
@@ -78,7 +78,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                         <button
                             type="button"
                             onClick={toggleAll}
-                            className="text-xs text-accent hover:text-accent-hover transition-colors cursor-pointer"
+                            className="text-xs text-accent-ink hover:text-accent-ink-hover transition-colors cursor-pointer"
                         >
                             {allSelected ? t('multiVpk.deselectAll') : t('multiVpk.selectAll')}
                         </button>
@@ -96,7 +96,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                                     className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors cursor-pointer ${
                                         isChecked
                                             ? 'border-accent/40 bg-accent/5 text-text-primary'
-                                            : 'border-border bg-bg-tertiary text-text-secondary hover:bg-white/5'
+                                            : 'border-border bg-bg-tertiary text-text-secondary hover:bg-hl/5'
                                     }`}
                                 >
                                     <input
@@ -117,7 +117,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                                         )}
                                     </div>
                                     {sizeLabel && (
-                                        <span className="flex-shrink-0 rounded bg-bg-primary/70 px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary border border-white/5">
+                                        <span className="flex-shrink-0 rounded bg-bg-primary/70 px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary border border-hl/5">
                                             {sizeLabel}
                                         </span>
                                     )}
@@ -130,7 +130,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                 <div className="flex justify-end gap-3 p-5 border-t border-border">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-hl/10 transition-colors cursor-pointer"
                     >
                         {t('multiVpk.cancelInstall')}
                     </button>

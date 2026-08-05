@@ -56,8 +56,8 @@ export default function CrosshairPresetRail({
   };
 
   return (
-    <div className="rounded-sm border border-white/5 bg-bg-secondary/50 backdrop-blur-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-2.5">
+    <div className="rounded-sm border border-hl/5 bg-bg-secondary/50 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hl/5 px-4 py-2.5">
         <h3 className="font-reaver text-sm tracking-wide text-text-primary">
           <Tx
             k="crosshair.presets.savedTitle"
@@ -128,7 +128,7 @@ export default function CrosshairPresetRail({
               <div
                 key={preset.id}
                 className={`group relative h-24 w-24 shrink-0 overflow-hidden rounded-sm border bg-bg-tertiary transition-colors ${
-                  isActive ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
+                  isActive ? 'border-accent ring-1 ring-accent' : 'border-hl/5 hover:border-hl/20'
                 }`}
               >
                 <button
@@ -140,11 +140,11 @@ export default function CrosshairPresetRail({
                   <CrosshairPreview size={72} scale={1440 / 1080} settings={preset.settings} transparent />
                 </button>
 
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1 pt-3 text-center text-[10px] font-medium text-white/90">
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-overlay-bg/85 to-transparent px-1.5 pb-1 pt-3 text-center text-[10px] font-medium text-overlay-primary/90">
                   {preset.name}
                 </span>
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-black/65 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-overlay-bg/65 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   <button
                     type="button"
                     onClick={() => onApply(preset.id)}
@@ -157,7 +157,7 @@ export default function CrosshairPresetRail({
                   <button
                     type="button"
                     onClick={() => onDelete(preset.id)}
-                    className="cursor-pointer rounded-sm bg-red-500/20 p-1.5 text-state-danger transition-colors hover:bg-red-500/40"
+                    className="cursor-pointer rounded-sm bg-state-danger/20 p-1.5 text-state-danger transition-colors hover:bg-state-danger/40"
                     title={t('common.actions.delete')}
                     aria-label={t('common.actions.delete')}
                   >

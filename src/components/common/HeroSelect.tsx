@@ -369,7 +369,7 @@ export function HeroSelect({
           // portaled to <body>, this has to clear modals and page chrome alike.
           // Positioned by positionListbox before paint; the inline top/left are
           // only a starting point so the node has a box to measure against.
-          className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-bg-secondary shadow-xl"
+          className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-bg-secondary shadow-popup"
           style={{ top: 0, left: 0 }}
         >
           {search && (
@@ -396,7 +396,7 @@ export function HeroSelect({
                     aria-label={search.clearLabel}
                     title={search.clearLabel}
                     onClick={clearSearch}
-                    className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-text-tertiary hover:bg-white/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-text-tertiary hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -449,7 +449,7 @@ export function HeroSelect({
                 <button
                   type="button"
                   onClick={clearSearch}
-                  className="mt-2 cursor-pointer text-xs font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className="mt-2 cursor-pointer text-xs font-medium text-accent-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   {search.clearLabel}
                 </button>

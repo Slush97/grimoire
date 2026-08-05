@@ -180,7 +180,7 @@ export default function GameSection() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-text-secondary">
                   {isValidPath === true && (
-                    <span className="text-green-400 flex items-center gap-1">
+                    <span className="text-state-success flex items-center gap-1">
                       <Check className="w-3 h-3" />
                       <Tx k="common.status.valid" fallback="Valid" />
                     </span>
@@ -243,7 +243,7 @@ export default function GameSection() {
             </p>
           </div>
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
             <div>
@@ -275,7 +275,7 @@ export default function GameSection() {
                     />
                   </p>
                   {gameinfoCandidates.length > 0 && (
-                    <p className="text-xs text-amber-300">
+                    <p className="text-xs text-state-warning">
                       <Tx
                         k="settings.gameinfo.foundNearby"
                         values={{ candidates: gameinfoCandidates.join(', ') }}
@@ -320,7 +320,7 @@ export default function GameSection() {
 
           {activeDeadlockPath && (
             <>
-              <div className="h-px bg-white/5" />
+              <div className="h-px bg-hl/5" />
               <AutoexecSection gamePath={activeDeadlockPath} />
             </>
           )}
@@ -402,7 +402,7 @@ function AutoexecSection({ gamePath }: { gamePath: string }) {
             fallback="Ensure autoexec.cfg exists for crosshairs and commands."
           />
         </p>
-        {result && <p className="text-xs text-accent mt-2">{result}</p>}
+        {result && <p className="text-xs text-accent-ink mt-2">{result}</p>}
       </div>
       {status && !status.exists && (
         <Button

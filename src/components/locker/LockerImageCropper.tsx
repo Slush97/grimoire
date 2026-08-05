@@ -343,7 +343,7 @@ export default function LockerImageCropper({
   return (
     <div className="flex flex-col gap-3">
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-state-danger">
+        <div className="flex items-start gap-2 rounded-md border border-state-danger/40 bg-state-danger/10 p-3 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span className="break-words">{error}</span>
         </div>
@@ -391,7 +391,7 @@ export default function LockerImageCropper({
             />
           ) : (
             <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-text-secondary">
-              <ImagePlus className={`h-6 w-6 ${dropActive ? 'text-accent opacity-100' : 'opacity-70'}`} />
+              <ImagePlus className={`h-6 w-6 ${dropActive ? 'text-accent-ink opacity-100' : 'opacity-70'}`} />
               {emptyHint && <span className="text-[11px] leading-snug">{emptyHint}</span>}
             </div>
           )}
@@ -399,13 +399,13 @@ export default function LockerImageCropper({
           {img && (
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               {/* Rule-of-thirds guides. */}
-              <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/25" />
-              <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/25" />
-              <div className="absolute top-1/3 left-0 right-0 h-px bg-white/25" />
-              <div className="absolute top-2/3 left-0 right-0 h-px bg-white/25" />
+              <div className="absolute left-1/3 top-0 bottom-0 w-px bg-overlay-primary/25" />
+              <div className="absolute left-2/3 top-0 bottom-0 w-px bg-overlay-primary/25" />
+              <div className="absolute top-1/3 left-0 right-0 h-px bg-overlay-primary/25" />
+              <div className="absolute top-2/3 left-0 right-0 h-px bg-overlay-primary/25" />
 
               {/* Name + gradient chrome preview (to scale with the frame). */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
+              <div className="absolute inset-0 bg-gradient-to-t from-overlay-bg/70 via-overlay-bg/10 to-transparent opacity-80" />
               {nameControls && !hideHeroName && namePosition === 'card' && (
                 <div
                   className="absolute bottom-0 left-0 right-0 flex flex-col items-end text-right"
@@ -413,7 +413,7 @@ export default function LockerImageCropper({
                 >
                   {nameFailed ? (
                     <div
-                      className="font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
+                      className="font-semibold text-overlay-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
                       style={{ fontSize: NAME_FALLBACK_FONT }}
                     >
                       {heroName}
@@ -434,7 +434,7 @@ export default function LockerImageCropper({
                 <div className="absolute left-0 top-0" style={{ padding: BD_NAME_PADDING }}>
                   {nameFailed ? (
                     <div
-                      className="font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
+                      className="font-bold text-overlay-primary drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
                       style={{ fontSize: Math.round(BD_NAME_HEIGHT * 0.9) }}
                     >
                       {heroName}
@@ -480,7 +480,7 @@ export default function LockerImageCropper({
           onClick={reset}
           title={t('locker.crop.resetZoom')}
           aria-label={t('locker.crop.resetZoom')}
-          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </button>

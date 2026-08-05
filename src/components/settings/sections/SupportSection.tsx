@@ -110,7 +110,7 @@ export default function SupportSection() {
           </div>
         </div>
 
-        <div className="h-px bg-white/5" />
+        <div className="h-px bg-hl/5" />
 
         <div className="space-y-3">
           <div>
@@ -152,7 +152,7 @@ export default function SupportSection() {
                 type="checkbox"
                 checked={includeFullLog}
                 onChange={(e) => setIncludeFullLog(e.target.checked)}
-                className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-3.5 w-3.5 rounded-sm border border-hl/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <Tx
                 k="settings.support.includeFullLog"
@@ -164,7 +164,7 @@ export default function SupportSection() {
                 type="checkbox"
                 checked={settings?.verboseModTrace ?? false}
                 onChange={(e) => settings && saveSettings({ ...settings, verboseModTrace: e.target.checked })}
-                className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-3.5 w-3.5 rounded-sm border border-hl/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <Tx
                 k="settings.support.verboseModTrace"
@@ -189,7 +189,7 @@ export default function SupportSection() {
                 value={bugReportText}
                 readOnly
                 rows={10}
-                className="w-full px-3 py-2 text-[11px] font-mono leading-relaxed bg-bg-tertiary/60 border border-white/5 rounded-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                className="w-full px-3 py-2 text-[11px] font-mono leading-relaxed bg-bg-tertiary/60 border border-hl/5 rounded-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
                 onFocus={(e) => e.currentTarget.select()}
               />
               <div className="flex flex-wrap gap-2">

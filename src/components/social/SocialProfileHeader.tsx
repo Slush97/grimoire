@@ -217,10 +217,10 @@ export default function SocialProfileHeader({
             <Boxes className="w-10 h-10 opacity-30" />
           </div>
         )}
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-overlay-bg/90 via-overlay-bg/40 to-transparent pointer-events-none" />
         {view && (
           <div
-            className="absolute left-3 right-3 bottom-2 text-base font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+            className="absolute left-3 right-3 bottom-2 text-base font-semibold text-overlay-primary truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
             title={view.title}
           >
             {view.title}
@@ -231,7 +231,7 @@ export default function SocialProfileHeader({
       {/* Body */}
       <div className="px-4 py-3 space-y-3 text-sm">
         {error && !view && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
+          <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -305,14 +305,14 @@ export default function SocialProfileHeader({
             </div>
 
             {likeError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2 text-xs text-state-danger flex items-start gap-2">
+              <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2 text-xs text-state-danger flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>{likeError}</span>
               </div>
             )}
 
             {reportOpen && !reported && (
-              <div className="bg-bg-secondary border border-white/10 rounded-md p-2.5 space-y-2">
+              <div className="bg-bg-secondary border border-hl/10 rounded-md p-2.5 space-y-2">
                 <div className="text-xs font-medium text-text-primary">{t('social.header.reportThisProfile')}</div>
                 <Textarea
                   inputSize="sm"
@@ -353,13 +353,13 @@ export default function SocialProfileHeader({
             )}
 
             {reported && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-md p-2 text-xs text-green-300 flex items-start gap-2">
+              <div className="bg-state-success/10 border border-state-success/30 rounded-md p-2 text-xs text-state-success flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>{t('social.header.reportSubmitted')}</span>
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 pt-1 border-t border-white/5">
+            <div className="flex items-center gap-1.5 pt-1 border-t border-hl/5">
               <Button
                 variant={detail?.viewer_has_liked ? 'primary' : 'secondary'}
                 size="sm"

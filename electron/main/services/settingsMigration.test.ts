@@ -95,3 +95,23 @@ describe('loadSettings hidden creator normalization', () => {
     expect(loadSettings().hiddenCreators).toEqual([{ id: 12, name: 'Valid' }]);
   });
 });
+
+describe('loadSettings color scheme normalization', () => {
+  it('defaults missing color schemes to dark', () => {
+    writeFileSync(settingsPath(), JSON.stringify({}));
+    expect(loadSettings().colorScheme).toBe('dark');
+  });
+
+  it.each(['system', 'light', 'dark'] as const)('keeps a valid %s color scheme', (colorScheme) => {
+    writeFileSync(settingsPath(), JSON.stringify({ colorScheme }));
+    expect(loadSettings().colorScheme).toBe(colorScheme);
+  });
+
+  it.each([null, '', 'sepia', 42, { mode: 'light' }])(
+    'normalizes malformed color scheme %j to dark',
+    (colorScheme) => {
+      writeFileSync(settingsPath(), JSON.stringify({ colorScheme }));
+      expect(loadSettings().colorScheme).toBe('dark');
+    }
+  );
+});

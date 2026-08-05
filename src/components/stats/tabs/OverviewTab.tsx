@@ -177,7 +177,7 @@ export function OverviewTab() {
                                             {/* Win-rate bar: instant visual scan across the roster */}
                                             <div className="flex-1 h-1.5 bg-bg-primary rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full rounded-full ${rate >= 50 ? 'bg-green-400/70' : 'bg-red-400/60'}`}
+                                                    className={`h-full rounded-full ${rate >= 50 ? 'bg-state-success/70' : 'bg-state-danger/60'}`}
                                                     style={{ width: `${Math.min(rate, 100)}%` }}
                                                 />
                                             </div>

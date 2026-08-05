@@ -42,5 +42,5 @@ export function timeAgo(unixSeconds: number): string {
 }
 
 export function winRateClass(rate: number): string {
-    return rate >= 50 ? 'text-green-400' : 'text-red-400'
+    return rate >= 50 ? 'text-state-success' : 'text-state-danger'
 }

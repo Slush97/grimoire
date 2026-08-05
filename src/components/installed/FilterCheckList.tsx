@@ -50,7 +50,7 @@ export function FilterCheckList({
             <button
               type="button"
               onClick={onClear}
-              className="text-[11px] text-accent hover:underline cursor-pointer"
+              className="text-[11px] text-accent-ink hover:underline cursor-pointer"
             >
               {t('common.actions.clear')}
             </button>
@@ -68,7 +68,7 @@ export function FilterCheckList({
               role="checkbox"
               aria-checked={checked}
               onClick={() => onToggle(option.key)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer"
             >
               <span
                 aria-hidden

@@ -54,7 +54,7 @@ function PlayerStatRow({
                             target="_blank"
                             rel="noopener noreferrer"
                             title={t('stats.social.openOnStatlocker')}
-                            className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent-ink transition-all"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
                         </a>
@@ -132,7 +132,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                                 name={mate.persona_name}
                                 avatarUrl={mate.avatar_url}
                                 fallbackIcon={UserCheck}
-                                fallbackTone="bg-green-500/20 text-green-400"
+                                fallbackTone="bg-state-success/20 text-state-success"
                                 subtitle={t('stats.social.gamesTogether', { count: mate.matches_played })}
                                 winRate={mate.win_rate || 0}
                                 wins={mate.wins}
@@ -153,7 +153,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                                 name={enemy.persona_name}
                                 avatarUrl={enemy.avatar_url}
                                 fallbackIcon={UserX}
-                                fallbackTone="bg-red-500/20 text-state-danger"
+                                fallbackTone="bg-state-danger/20 text-state-danger"
                                 subtitle={t('stats.social.gamesAgainst', { count: enemy.matches_played })}
                                 winRate={enemy.win_rate || 0}
                                 wins={enemy.wins}

@@ -301,8 +301,8 @@ export default function VariantPickerModal({
                 className={`relative flex items-center gap-3 rounded-lg border p-3 transition-colors ${
                     isActive
                         ? 'border-accent/40 bg-accent/5'
-                        : 'border-border bg-bg-tertiary hover:bg-white/5'
-                } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-2xl ring-1 ring-accent/30' : ''}`}
+                        : 'border-border bg-bg-tertiary hover:bg-hl/5'
+                } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-popup ring-1 ring-accent/30' : ''}`}
             >
                 <button
                     type="button"
@@ -395,7 +395,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => commitRename(v)}
                             disabled={!!pending}
-                            className="p-1.5 text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 text-accent-ink hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
                             title={t('common.actions.save')}
                             aria-label={t('variantPicker.saveFileName')}
                         >
@@ -409,7 +409,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={cancelRename}
                             disabled={!!pending}
-                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors cursor-pointer disabled:opacity-50"
                             title={t('common.actions.cancel')}
                             aria-label={t('profiles.actions.cancelRename')}
                         >
@@ -424,7 +424,7 @@ export default function VariantPickerModal({
                                     type="button"
                                     onClick={() => move(v, 'up')}
                                     disabled={overlay || !!pending || !canMoveUp}
-                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                    className="p-0.5 text-text-secondary hover:text-accent-ink hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
                                     title={canMoveUp ? 'Move up' : 'Already first in load order'}
                                     aria-label={t('variantPicker.moveFileUp')}
                                 >
@@ -438,7 +438,7 @@ export default function VariantPickerModal({
                                     type="button"
                                     onClick={() => move(v, 'down')}
                                     disabled={overlay || !!pending || !canMoveDown}
-                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                    className="p-0.5 text-text-secondary hover:text-accent-ink hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
                                     title={canMoveDown ? 'Move down' : 'Already last in load order'}
                                     aria-label={t('variantPicker.moveFileDown')}
                                 >
@@ -454,7 +454,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => startRename(v)}
                             disabled={overlay || !!pending}
-                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent-ink hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
                             aria-label={t('variantPicker.renameFile')}
                         >
@@ -464,7 +464,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => handleDelete(v)}
                             disabled={overlay || !!pending}
-                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-state-danger/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={`Delete ${primaryTitle}`}
                             aria-label={`Delete ${primaryTitle}`}
                         >
@@ -477,7 +477,7 @@ export default function VariantPickerModal({
                     </>
                 )}
                 {isPending && (
-                    <span className="text-xs text-accent">{t('variantPicker.saving')}</span>
+                    <span className="text-xs text-accent-ink">{t('variantPicker.saving')}</span>
                 )}
             </div>
         );
@@ -523,7 +523,7 @@ export default function VariantPickerModal({
                 </SortableContext>
                 <DragOverlay>
                     {activeVariant ? (
-                        <div className="pointer-events-none opacity-95 shadow-2xl">
+                        <div className="pointer-events-none opacity-95 shadow-popup">
                             {renderVariantRow(activeVariant, activeIndex, sectionVariants, true)}
                         </div>
                     ) : null}
@@ -541,7 +541,7 @@ export default function VariantPickerModal({
         >
                 <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                     <div className="flex min-w-0 items-center gap-2.5">
-                        <Files className="h-5 w-5 flex-shrink-0 text-accent" aria-hidden="true" />
+                        <Files className="h-5 w-5 flex-shrink-0 text-accent-ink" aria-hidden="true" />
                         <div className="min-w-0">
                             <h3 id="variant-picker-title" className="text-base font-semibold text-text-primary truncate">
                                 {onOpenModDetails ? (
@@ -550,10 +550,10 @@ export default function VariantPickerModal({
                                         onClick={onOpenModDetails}
                                         disabled={isUpdating}
                                         title={t('variantPicker.openModPage')}
-                                        className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent disabled:cursor-default disabled:opacity-60"
+                                        className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent-ink disabled:cursor-default disabled:opacity-60"
                                     >
                                         <span className="min-w-0 truncate">{modName}</span>
-                                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                                     </button>
                                 ) : (
                                     modName

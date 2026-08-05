@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictFilesGlobal: [],
     ignoredConflictMods: [],
     accentColor: '#f97316',
+    colorScheme: 'dark',
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,
@@ -46,6 +47,12 @@ const DEFAULT_SETTINGS: AppSettings = {
     backgroundGradient: null,
     verboseModTrace: false,
 };
+
+/** Accept only values Electron understands. Settings files are user-editable,
+ *  so treat anything else like an older file with no color-scheme preference. */
+export function normalizeColorScheme(value: unknown): AppSettings['colorScheme'] {
+    return value === 'system' || value === 'light' || value === 'dark' ? value : 'dark';
+}
 
 /** Normalize user-editable settings.json data into a small, deterministic
  *  creator list. Invalid ids are ignored and duplicate ids keep the most
@@ -83,6 +90,7 @@ export function loadSettings(): AppSettings {
         return {
             ...DEFAULT_SETTINGS,
             ...settings,
+            colorScheme: normalizeColorScheme(settings.colorScheme),
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
             browseNsfwContentMode:
                 settings.browseNsfwContentMode ??
@@ -132,7 +140,15 @@ export function saveSettings(settings: AppSettings): void {
 
     try {
         // Write to temp file first
-        writeFileSync(tempPath, JSON.stringify(settings, null, 2), 'utf-8');
+        writeFileSync(
+            tempPath,
+            JSON.stringify(
+                { ...settings, colorScheme: normalizeColorScheme(settings.colorScheme) },
+                null,
+                2
+            ),
+            'utf-8'
+        );
 
         // Atomic rename (on most filesystems, rename is atomic)
         renameSync(tempPath, path);

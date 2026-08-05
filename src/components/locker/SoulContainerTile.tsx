@@ -151,8 +151,8 @@ export default function SoulContainerTile({
         />
       ) : (
         generating && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <Loader2 className="h-5 w-5 animate-spin text-white/80" />
+          <div className="absolute inset-0 flex items-center justify-center bg-overlay-bg/30">
+            <Loader2 className="h-5 w-5 animate-spin text-overlay-primary/80" />
           </div>
         )
       )}

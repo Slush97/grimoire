@@ -65,7 +65,7 @@ export default function ConflictReorderActions({
       }
       className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
         isWinner
-          ? 'border-accent/40 bg-accent/15 text-accent cursor-default'
+          ? 'border-accent/40 bg-accent/15 text-accent-ink cursor-default'
           : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary hover:border-text-tertiary cursor-pointer'
       } disabled:cursor-not-allowed ${!bothEnabled ? 'opacity-50' : ''}`}
     >

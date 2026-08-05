@@ -122,7 +122,7 @@ export function AnchoredPopover({
       aria-label={ariaLabel}
       // z-80 is the popover rung of the ladder in index.css: portaled to
       // <body>, this has to clear page chrome and the sidebar alike.
-      className={`fixed z-[80] overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary shadow-xl animate-fade-in ${className}`}
+      className={`fixed z-[80] overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary shadow-popup animate-fade-in ${className}`}
       style={{ top: 0, left: 0 }}
     >
       {children}

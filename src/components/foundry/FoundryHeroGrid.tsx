@@ -72,7 +72,7 @@ function HeroCard({ hero, onPick }: { hero: HeroInfo; onPick: () => void }) {
       type="button"
       onClick={onPick}
       title={hero.name}
-      className={`group relative flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-md border border-border bg-bg-secondary text-left transition-all hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg hover:shadow-black/30 cursor-pointer ${
+      className={`group relative flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-md border border-border bg-bg-secondary text-left transition-all hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-popup cursor-pointer ${
         hero.selectable ? '' : 'opacity-70'
       }`}
     >
@@ -95,13 +95,13 @@ function HeroCard({ hero, onPick }: { hero: HeroInfo; onPick: () => void }) {
       )}
 
       {/* Bottom gradient + name plate. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-overlay-bg/85 via-overlay-bg/30 to-transparent" />
       <div className="relative z-10 p-2">
-        <span className="block truncate text-sm font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
+        <span className="block truncate text-sm font-semibold text-overlay-primary drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
           {hero.name}
         </span>
         {!hero.selectable && (
-          <span className="text-[10px] uppercase tracking-wide text-accent/90">
+          <span className="text-[10px] uppercase tracking-wide text-accent-ink/90">
             in development
           </span>
         )}

@@ -112,12 +112,19 @@ function formatBadgeCount(count: number): string {
 
 function GrimoireTitleIcon() {
   return (
-    <img
-      src={GRIMOIRE_TITLE_ICON}
-      alt=""
+    <span
       aria-hidden
-      draggable={false}
-      className="h-6 w-6 flex-shrink-0 opacity-90"
+      className="h-6 w-6 flex-shrink-0 bg-text-primary opacity-90"
+      style={{
+        WebkitMaskImage: `url(${GRIMOIRE_TITLE_ICON})`,
+        maskImage: `url(${GRIMOIRE_TITLE_ICON})`,
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+      }}
     />
   );
 }
@@ -805,7 +812,7 @@ export default function Sidebar() {
       ref={asideRef}
       data-collapsed={collapsed}
       className={`grimoire-sidebar relative border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden ${
-        transparentSidebar ? 'bg-transparent' : 'bg-bg-secondary'
+        transparentSidebar ? 'bg-transparent' : 'bg-bg-sidebar'
       }`}
     >
       {/* Single sliding highlight, positioned against the <aside> so it can glide
@@ -830,7 +837,7 @@ export default function Sidebar() {
           />
         </div>
       )}
-      <div className="relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
+      <div className="sidebar-header relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
         {labelMounted && !collapsed && (
           <div
             className="sidebar-title-shell pointer-events-none absolute inset-y-0 left-0 right-9 flex items-center justify-center"
@@ -864,7 +871,7 @@ export default function Sidebar() {
 
       <nav
         ref={navScrollRef}
-        className={`flex-1 min-h-0 overflow-y-auto p-2 ${
+        className={`sidebar-nav flex-1 min-h-0 overflow-y-auto p-2 ${
           transparentSidebar ? 'scrollbar-track-transparent' : ''
         }`}
       >
@@ -902,11 +909,11 @@ export default function Sidebar() {
                     } ${
                       tone === 'test'
                         ? active
-                          ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
-                          : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
+                          ? 'border-state-danger/80 bg-state-danger/25 text-state-danger font-bold hover:bg-state-danger/30'
+                          : 'border-state-danger/45 bg-state-danger/10 text-state-danger font-bold hover:border-state-danger/75 hover:bg-state-danger/20 hover:text-state-danger'
                         : active
                         ? sidebarHeroHighlightSrc
-                          ? 'border-white/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                          ? 'border-hl/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
                           : 'border-accent/40 text-text-primary font-medium hover:border-accent/60'
                         : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
                     }`
@@ -916,7 +923,7 @@ export default function Sidebar() {
                       <span className="relative z-10 flex h-full w-[46px] flex-shrink-0 items-center justify-center">
                         <Icon
                           className={`w-5 h-5 flex-shrink-0 ${
-                            tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
+                            tone === 'test' ? 'text-state-danger group-hover:text-state-danger' : 'text-text-primary/70 group-hover:text-text-primary'
                           }`}
                           strokeWidth={active ? 2 : 1.75}
                         />
@@ -947,7 +954,7 @@ export default function Sidebar() {
                               badgeTone === 'warning'
                                 ? 'border border-state-warning/60 bg-state-warning/10 text-state-warning'
                                 : badgeTone === 'info'
-                                  ? 'border border-accent/60 bg-accent/15 text-accent'
+                                  ? 'border border-accent/60 bg-accent/15 text-accent-ink'
                                   : 'border border-text-primary/50 text-text-primary/80'
                             }`}
                           >
@@ -964,14 +971,14 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      <div className="flex-shrink-0 border-t border-border p-3 space-y-2">
+      <div className="sidebar-footer flex-shrink-0 border-t border-border p-3 space-y-2">
         {stashStatus.active && (
           collapsed ? (
             <button
               onClick={handleRestoreNow}
               disabled={restorePending}
               title={t('sidebar.vanilla.collapsedTitle', { count: stashStatus.modCount ?? 0 })}
-              className="w-full flex items-center justify-center h-10 rounded-sm border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full flex items-center justify-center h-10 rounded-sm border border-state-warning/40 bg-state-warning/10 text-state-warning hover:bg-state-warning/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -980,7 +987,7 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
+            <div className="rounded-sm border border-state-warning/40 bg-state-warning/10 px-2.5 py-2 text-xs text-state-warning flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 leading-tight">
                 {t('sidebar.vanilla.stashed', { count: stashStatus.modCount ?? 0 })}
@@ -989,7 +996,7 @@ export default function Sidebar() {
                 onClick={handleRestoreNow}
                 disabled={restorePending}
                 title={t('sidebar.vanilla.restoreNowTitle')}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-state-warning/20 hover:bg-state-warning/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
               >
                 {restorePending ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -1007,8 +1014,8 @@ export default function Sidebar() {
           <div
             className={`rounded-sm px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'
-                ? 'border border-red-500/40 bg-red-500/10 text-red-300'
-                : 'border border-accent/40 bg-accent/10 text-accent'
+                ? 'border border-state-danger/40 bg-state-danger/10 text-state-danger'
+                : 'border border-accent/40 bg-accent/10 text-accent-ink'
             }`}
           >
             <div>{toast.text}</div>
@@ -1028,7 +1035,7 @@ export default function Sidebar() {
                   }
                 }}
                 className={`mt-1.5 text-xs font-medium underline-offset-2 hover:underline cursor-pointer ${
-                  toast.kind === 'error' ? 'text-red-200' : 'text-accent-hover'
+                  toast.kind === 'error' ? 'text-state-danger' : 'text-accent-ink-hover'
                 }`}
               >
                 {toast.action.label}
@@ -1046,7 +1053,7 @@ export default function Sidebar() {
               onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
               title={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
               aria-label={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
-              className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
+              className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-hl/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
             >
               <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               {soundVolume > 0 ? (
@@ -1056,7 +1063,7 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <div className="group relative flex h-10 w-full items-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] animate-fade-in">
+            <div className="group relative flex h-10 w-full items-center overflow-hidden rounded-sm border border-hl/10 bg-bg-tertiary text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] animate-fade-in">
               <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               <button
                 type="button"
@@ -1089,7 +1096,7 @@ export default function Sidebar() {
               onClick={handleStopGame}
               disabled={stopPending || !!launchPending}
               title={t('sidebar.launch.stopTitle')}
-              className={`flex w-full items-center overflow-hidden rounded-sm bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`flex w-full items-center overflow-hidden rounded-sm bg-state-danger/10 text-state-danger ring-1 ring-state-danger/40 hover:bg-state-danger/20 hover:ring-state-danger/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 collapsed ? 'h-10' : 'h-11'
               }`}
             >
@@ -1122,7 +1129,7 @@ export default function Sidebar() {
                       ? t('sidebar.launch.moddedStash')
                       : t('sidebar.launch.moddedDefault')
                 }
-                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-hl/10 hover:ring-hl/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-hl/35 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SurfaceBackdrop
                   bg={launchModdedBg}
@@ -1138,7 +1145,7 @@ export default function Sidebar() {
                   )}
                 </span>
                 {labelMounted && (
-                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                  <span className={`sidebar-art-label relative z-10 ${actionLabelClass}`} aria-hidden={!labelsVisible}>
                     {t('sidebar.launchModded')}
                   </span>
                 )}
@@ -1154,7 +1161,7 @@ export default function Sidebar() {
                       ? t('sidebar.launch.vanillaStash')
                       : t('sidebar.launch.vanillaDefault')
                 }
-                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-hl/10 hover:text-text-primary hover:ring-state-warning/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <SurfaceBackdrop
                   bg={launchVanillaBg}
@@ -1171,7 +1178,7 @@ export default function Sidebar() {
                   )}
                 </span>
                 {labelMounted && (
-                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                  <span className={`sidebar-art-label relative z-10 ${actionLabelClass}`} aria-hidden={!labelsVisible}>
                     {t('sidebar.launchVanilla')}
                   </span>
                 )}
@@ -1190,7 +1197,7 @@ export default function Sidebar() {
                 onClick={launchConfig.onLaunch}
                 disabled={launchConfig.disabled}
                 title={launchConfig.title}
-                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-hl/10 hover:ring-hl/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-hl/35 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SurfaceBackdrop
                   bg={launchConfig.bg}
@@ -1208,7 +1215,7 @@ export default function Sidebar() {
                 </span>
                 {labelMounted && (
                   <span
-                    className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`}
+                    className={`sidebar-art-label relative z-10 ${actionLabelClass}`}
                     aria-hidden={!labelsVisible}
                   >
                     {t(launchConfig.labelKey)}
@@ -1228,7 +1235,7 @@ export default function Sidebar() {
                   disabled={!!launchPending || stopPending}
                   title={launchConfig.switchTitle}
                   aria-label={launchConfig.switchTitle}
-                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-black/30 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-hl/10 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
                 >
                   <ArrowRightLeft className="h-3.5 w-3.5" />
                 </button>
@@ -1255,7 +1262,7 @@ export default function Sidebar() {
             type="button"
             onClick={() => setUpdateModalOpen(true)}
             title={t('sidebar.updateAvailableTitle')}
-            className="group update-stripes flex w-full h-10 items-center overflow-hidden rounded-sm border border-white/[0.08] bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-white/[0.14] text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+            className="group update-stripes flex w-full h-10 items-center overflow-hidden rounded-sm border border-hl/[0.08] bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-hl/[0.14] text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
           >
             <span className={actionIconClass}>
               <Download className="w-[18px] h-[18px]" strokeWidth={2} />
@@ -1296,10 +1303,10 @@ export default function Sidebar() {
           }}
           onMouseLeave={() => setMemeTooltip((cur) => (cur?.to === '/settings' ? null : cur))}
           aria-current={settingsActive ? 'page' : undefined}
-          className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+          className={`sidebar-settings-button group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
               ? sidebarHeroHighlightSrc
-                ? 'border-white/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                ? 'border-hl/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
                 : 'border-accent/40 bg-transparent text-text-primary font-semibold hover:border-accent/60'
               : 'border-accent/25 bg-bg-tertiary text-text-primary/90 hover:bg-accent/10 hover:border-accent/45 hover:text-text-primary'
           }`}

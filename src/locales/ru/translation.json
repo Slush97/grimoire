@@ -35,6 +35,17 @@
     "conflicts": "Конфликты",
     "settings": "Настройки"
   },
+  "settings": {
+    "appearance": {
+      "theme": {
+        "title": "Тема",
+        "description": "Выберите оформление Grimoire. Системная тема следует настройкам операционной системы.",
+        "system": "Системная",
+        "light": "Светлая",
+        "dark": "Тёмная"
+      }
+    }
+  },
   "autoexec": {
     "commands": {
       "title_other": "Ваши Команды ({{count}})"
