@@ -2340,8 +2340,7 @@
     "copyingAddress": "Copie de l'adresse",
     "addressCopied": "Adresse copiée",
     "copyAddressFailed": "Échec de la copie de l'adresse",
-    "openImage": "Ouvrir l'image",
-    "revealModInFolder": "Afficher le mod dans le dossier"
+    "openImage": "Ouvrir l'image"
   },
   "audioPreview": {
     "audioUnavailable": "Audio indisponible",

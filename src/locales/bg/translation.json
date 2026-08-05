@@ -2454,8 +2454,7 @@
     "copyingAddress": "Копиране на адреса",
     "addressCopied": "Адресът е копиран",
     "copyAddressFailed": "Копирането на адреса е неуспешно",
-    "openImage": "Отваряне на изображението",
-    "revealModInFolder": "Показване на мода в папка"
+    "openImage": "Отваряне на изображението"
   },
   "audioPreview": {
     "audioUnavailable": "Аудиото е недостъпно",
