@@ -27,7 +27,7 @@ export function SidebarActiveBackdrop({
           style={heroImageStyle}
         />
         <span className="sidebar-active-backdrop__scrim absolute inset-0 bg-gradient-to-r from-bg-primary/90 via-bg-primary/55 to-bg-primary/20" />
-        <span className="sidebar-active-backdrop__shade absolute inset-0 bg-black/20" />
+        <span className="sidebar-active-backdrop__shade absolute inset-0 bg-overlay-bg/20" />
       </span>
     );
   }
@@ -68,11 +68,11 @@ export function LaunchButtonBackdrop({
       <span
         className={`sidebar-surface-backdrop__scrim absolute inset-0 ${
           warm
-            ? 'bg-gradient-to-r from-bg-primary/85 via-bg-primary/55 to-amber-950/25'
-            : 'bg-gradient-to-r from-bg-primary/82 via-bg-primary/50 to-emerald-950/20'
+            ? 'bg-gradient-to-r from-bg-primary/85 via-bg-primary/55 to-state-warning/25'
+            : 'bg-gradient-to-r from-bg-primary/82 via-bg-primary/50 to-state-success/20'
         }`}
       />
-      <span className="sidebar-surface-backdrop__shade absolute inset-0 bg-black/20" />
+      <span className="sidebar-surface-backdrop__shade absolute inset-0 bg-overlay-bg/20" />
     </span>
   );
 }

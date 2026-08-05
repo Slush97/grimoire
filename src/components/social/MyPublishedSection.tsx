@@ -135,13 +135,13 @@ export default function MyPublishedSection({
       )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span className="break-words">{error}</span>
           <button
             type="button"
             onClick={() => void load()}
-            className="ml-auto underline text-red-300 hover:text-red-200 cursor-pointer"
+            className="ml-auto underline text-state-danger hover:text-state-danger cursor-pointer"
           >
             {t('common.actions.retry')}
           </button>

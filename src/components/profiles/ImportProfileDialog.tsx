@@ -815,8 +815,8 @@ export default function ImportProfileDialog({
               (() => {
                 const cmds = parsed.extensions!.grimoire!.autoexecCommands!;
                 return (
-                  <div className="border-b border-hl/5 bg-yellow-500/5">
-                    <div className="px-4 sm:px-6 py-2 flex items-center gap-2 text-xs text-yellow-200">
+                  <div className="border-b border-hl/5 bg-state-warning/5">
+                    <div className="px-4 sm:px-6 py-2 flex items-center gap-2 text-xs text-state-warning">
                       <Terminal className="w-3.5 h-3.5 flex-shrink-0" />
                       <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
                         <input
@@ -923,7 +923,7 @@ export default function ImportProfileDialog({
                 )}
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] justify-end flex-shrink-0">
-                <span className="px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-300 border border-green-500/20">
+                <span className="px-1.5 py-0.5 rounded-sm bg-state-success/10 text-state-success border border-state-success/20">
                   {report.exactCount} exact
                 </span>
                 {report.alreadyInstalledCount > 0 && (
@@ -932,12 +932,12 @@ export default function ImportProfileDialog({
                   </span>
                 )}
                 {report.upgradedCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                  <span className="px-1.5 py-0.5 rounded-sm bg-state-info/10 text-state-info border border-state-info/20">
                     {report.upgradedCount} upgraded
                   </span>
                 )}
                 {report.unresolvableCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-red-500/10 text-red-300 border border-red-500/20">
+                  <span className="px-1.5 py-0.5 rounded-sm bg-state-danger/10 text-state-danger border border-state-danger/20">
                     {report.unresolvableCount} unresolvable
                   </span>
                 )}
@@ -1059,7 +1059,7 @@ export default function ImportProfileDialog({
                             )}
                           </div>
                           {mod.status === 'upgraded' && (
-                            <div className="text-xs text-blue-300 mt-1 inline-flex items-center gap-1">
+                            <div className="text-xs text-state-info mt-1 inline-flex items-center gap-1">
                               <ArrowUpCircle className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="truncate">{t('importProfile.upgradedNotice')}</span>
                             </div>
@@ -1078,14 +1078,14 @@ export default function ImportProfileDialog({
                         </div>
                         <div className="text-sm flex-shrink-0 text-right sm:min-w-[100px]">
                           {r.status === 'pending' && !isUnresolvable && (
-                            <span className="text-amber-300 inline-flex items-center gap-1.5 justify-end text-xs" title={t('servers.connect.status.ready')}>
+                            <span className="text-state-warning inline-flex items-center gap-1.5 justify-end text-xs" title={t('servers.connect.status.ready')}>
                               <ArrowDownCircle className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="hidden sm:inline">{t('servers.connect.status.ready')}</span>
                             </span>
                           )}
                           {r.status === 'already-installed' && (
                             <span
-                              className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs"
+                              className="text-state-success inline-flex items-center gap-1.5 justify-end text-xs"
                               title={t('importProfile.alreadyInstalled')}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1107,7 +1107,7 @@ export default function ImportProfileDialog({
                             </span>
                           )}
                           {r.status === 'installed' && (
-                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.installed')}>
+                            <span className="text-state-success inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.installed')}>
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="hidden sm:inline">{t('nav.installed')}</span>
                             </span>
@@ -1212,7 +1212,7 @@ export default function ImportProfileDialog({
             <div className="border-t border-hl/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
               <div className="text-xs text-text-secondary min-w-0 flex-1">
                 {importedProfileName ? (
-                  <span className="text-green-400 inline-flex items-center gap-1.5 min-w-0">
+                  <span className="text-state-success inline-flex items-center gap-1.5 min-w-0">
                     <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                     <span className="truncate">{t('importProfile.importedAs', { name: importedProfileName })}</span>
                   </span>

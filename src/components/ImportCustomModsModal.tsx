@@ -430,7 +430,7 @@ export default function ImportCustomModsModal({
                   key={row.path}
                   className={`flex items-center gap-2.5 rounded-lg border p-2 transition-colors ${
                     row.status === 'failed'
-                      ? 'border-state-danger/40 bg-red-500/5'
+                      ? 'border-state-danger/40 bg-state-danger/5'
                       : 'border-border bg-bg-tertiary/40'
                   }`}
                 >
@@ -534,7 +534,7 @@ export default function ImportCustomModsModal({
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-state-danger">
+          <div className="rounded-lg border border-state-danger/30 bg-state-danger/10 p-2 text-sm text-state-danger">
             {error}
           </div>
         )}

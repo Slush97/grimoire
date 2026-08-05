@@ -275,7 +275,7 @@ export function HeroPoseLoadingState({
 }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-      <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+      <Loader2 className="h-6 w-6 animate-spin text-overlay-primary/80" />
       {generating && (
         <p className="text-xs text-text-secondary">
           {skinSourceCount > 1
@@ -1155,7 +1155,7 @@ export default function HeroPoseViewer({
           interaction.current.paused = next;
           setSpinPaused(next);
         }}
-        className="absolute bottom-3 left-3 z-10 rounded bg-black/60 px-3 py-1.5 text-xs text-white hover:bg-black/80"
+        className="absolute bottom-3 left-3 z-10 rounded bg-overlay-bg/60 px-3 py-1.5 text-xs text-overlay-primary hover:bg-overlay-bg/80"
       >
         {spinPaused ? t('locker.pose.resumeSpin') : t('locker.pose.pauseSpin')}
       </button>
@@ -1289,7 +1289,7 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
     e.decompiled ? e.source : `[decompile failed: ${e.error ?? 'unknown'} #${e.hash.slice(0, 8)}]`;
 
   return (
-    <div className="absolute bottom-3 right-3 z-10 max-h-[60%] w-[28rem] max-w-[55vw] overflow-auto rounded bg-black/80 p-2 font-mono text-[10px] leading-tight text-white">
+    <div className="absolute bottom-3 right-3 z-10 max-h-[60%] w-[28rem] max-w-[55vw] overflow-auto rounded bg-overlay-bg/80 p-2 font-mono text-[10px] leading-tight text-overlay-primary">
       <div className="mb-1 font-semibold">morphic extras - {rows.length} material(s)</div>
       {rows.map(({ name, morphic }) => {
         const dyn = Object.entries(morphic.dynamic_params ?? {});
@@ -1297,8 +1297,8 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
         const slots = Object.keys(morphic.texture_slots ?? {});
         const resolved = Object.keys(morphic.resolvedTextures ?? {});
         return (
-          <div key={name} className="mb-1.5 border-t border-white/20 pt-1">
-            <div className="text-amber-300">{name}</div>
+          <div key={name} className="mb-1.5 border-t border-overlay-border/20 pt-1">
+            <div className="text-state-warning">{name}</div>
             <div>
               schema v{morphic.schema_version ?? 1} - {morphic.shader} -{' '}
               {morphic.blend_mode ?? 'opaque'}
@@ -1309,7 +1309,7 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
               {slots.length ? `: ${slots.join(', ')}` : ''}
             </div>
             {dyn.length > 0 && (
-              <div className="text-cyan-300">
+              <div className="text-state-info">
                 dynamic_params ({dyn.length}):
                 {dyn.map(([k, e]) => (
                   <div key={k} className="pl-2">
@@ -1319,7 +1319,7 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
               </div>
             )}
             {dynTex.length > 0 && (
-              <div className="text-cyan-300">
+              <div className="text-state-info">
                 dynamic_texture_params ({dynTex.length}):
                 {dynTex.map(([k, e]) => (
                   <div key={k} className="pl-2">
@@ -1329,7 +1329,7 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
               </div>
             )}
             {(morphic.render_attributes_used?.length ?? 0) > 0 && (
-              <div className="text-white/60">attrs: {morphic.render_attributes_used!.join(', ')}</div>
+              <div className="text-overlay-primary/60">attrs: {morphic.render_attributes_used!.join(', ')}</div>
             )}
           </div>
         );

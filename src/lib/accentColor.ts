@@ -122,8 +122,12 @@ export function applyAccentColor(color: string | null | undefined): void {
   root.style.setProperty('--color-accent', base);
   root.style.setProperty('--color-accent-hover', hover);
   root.style.setProperty('--color-accent-foreground', accentForeground(base));
+  root.style.setProperty('--color-accent-solid', accentInk(base, '#ffffff'));
+  root.style.setProperty('--color-accent-solid-foreground', '#ffffff');
   // Dark ink is checked against the lightest dark surface; light ink against
   // a white card, so either remains readable throughout its theme.
   root.style.setProperty('--color-accent-ink-dark', accentInk(base, '#242424'));
   root.style.setProperty('--color-accent-ink-light', accentInk(base, '#ffffff'));
+  root.style.setProperty('--color-accent-ink-hover-dark', accentInk(hover, '#242424'));
+  root.style.setProperty('--color-accent-ink-hover-light', accentInk(hover, '#ffffff'));
 }

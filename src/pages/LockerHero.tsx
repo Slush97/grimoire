@@ -297,7 +297,7 @@ export function LockerHeroView({
           </div>
         )}
         {/* Bottom gradient for depth. */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-overlay-bg/50 to-transparent" />
       </div>
 
       {/* Top-right controls: adjust the hero-detail backdrop image, and the live

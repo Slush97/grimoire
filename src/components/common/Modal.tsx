@@ -132,7 +132,7 @@ export function Modal({
     return createPortal(
         <div
             ref={backdropRef}
-            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-overlay-bg/60 p-4 ${
                 closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
             } ${backdropClassName}`}
             role="dialog"
@@ -142,7 +142,7 @@ export function Modal({
             <div
                 ref={panelRef}
                 tabIndex={-1}
-                className={`w-full ${SIZE_CLASSES[size]} bg-bg-secondary border border-border rounded-lg shadow-2xl outline-none ${panelClassName}`}
+                className={`w-full ${SIZE_CLASSES[size]} bg-bg-secondary border border-border rounded-lg shadow-modal outline-none ${panelClassName}`}
             >
                 {children}
             </div>

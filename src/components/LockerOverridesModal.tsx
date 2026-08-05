@@ -474,7 +474,7 @@ export function LockerOverridesModal({
                 {/* Body */}
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                     {actionError && (
-                        <div className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                        <div className="mb-3 rounded-md border border-state-danger/40 bg-state-danger/10 px-3 py-2 text-xs text-state-danger">
                             {actionError}
                         </div>
                     )}
@@ -527,7 +527,7 @@ export function LockerOverridesModal({
                                                     disabled={busy}
                                                     title={`Remove ${card.heroName} card`}
                                                     aria-label={`Remove ${card.heroName} card`}
-                                                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/85 ring-1 ring-white/15 backdrop-blur-sm transition-all hover:bg-red-500 hover:text-white hover:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                                                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-overlay-bg/55 text-overlay-primary/85 ring-1 ring-overlay-border/15 backdrop-blur-sm transition-all hover:bg-state-danger hover:text-overlay-primary hover:ring-state-danger disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                                                 >
                                                     {isRemoving ? (
                                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -568,7 +568,7 @@ export function LockerOverridesModal({
                         ) : (
                             <div className="space-y-3">
                                 {gameRunning && (
-                                    <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                                    <div className="flex items-start gap-2 rounded-md border border-state-warning/40 bg-state-warning/10 px-3 py-2 text-xs text-state-warning">
                                         <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                                         <span>
                                             {t('lockerOverrides.restartForSound')}
@@ -763,7 +763,7 @@ export function LockerOverridesModal({
                                                 style={{ background: rainbowCss(0, 1, 1) }}
                                                 aria-hidden
                                             >
-                                                <Sparkles className="h-4 w-4 text-black/60" />
+                                                <Sparkles className="h-4 w-4 text-accent-foreground/70" />
                                             </span>
                                             <div className="min-w-0 flex-1">
                                                 <div className="truncate text-sm font-medium text-text-primary">

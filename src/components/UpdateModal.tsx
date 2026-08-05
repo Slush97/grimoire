@@ -134,7 +134,7 @@ export default function UpdateModal({ onClose }: Props) {
                     )}
 
                     {status?.error && (
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm mb-4">
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-state-danger/10 border border-state-danger/30 text-state-danger text-sm mb-4">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                             <span>{status.error}</span>
                         </div>

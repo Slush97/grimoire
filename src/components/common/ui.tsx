@@ -99,23 +99,32 @@ export function Tag({
     title,
     className = '',
 }: TagProps) {
-    const tones: Record<TagTone, { text: string; border: string; fill: string; overlayBorder: string }> = {
-        accent:  { text: 'text-accent-ink',      border: 'border-accent/40',         fill: 'bg-accent/10',          overlayBorder: 'border-accent/70' },
-        warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayBorder: 'border-state-warning/70' },
-        danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayBorder: 'border-state-danger/70' },
-        success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayBorder: 'border-state-success/70' },
-        info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayBorder: 'border-state-info/70' },
-        neutral: { text: 'text-text-secondary',  border: 'border-hl/10',             fill: 'bg-hl/5',               overlayBorder: 'border-hl/20' },
+    const tones: Record<TagTone, { text: string; border: string; fill: string; overlayText: string; overlayBorder: string }> = {
+        accent:  { text: 'text-accent-ink',      border: 'border-accent/40',         fill: 'bg-accent/10',          overlayText: 'text-overlay-accent',  overlayBorder: 'border-overlay-accent/70' },
+        warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayText: 'text-overlay-warning', overlayBorder: 'border-overlay-warning/70' },
+        danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayText: 'text-overlay-danger',  overlayBorder: 'border-overlay-danger/70' },
+        success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayText: 'text-overlay-success', overlayBorder: 'border-overlay-success/70' },
+        info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayText: 'text-overlay-info',    overlayBorder: 'border-overlay-info/70' },
+        neutral: { text: 'text-text-secondary',  border: 'border-hl/10',             fill: 'bg-hl/5',               overlayText: 'text-overlay-primary', overlayBorder: 'border-overlay-border/20' },
     };
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
+    // Overlay colors are owned by this component. Layout/typography utilities
+    // remain customizable, but a call site cannot repaint the invariant dark
+    // treatment with literal or arbitrary text-*, bg-*, border-*, or ring-*.
+    const safeClassName = isOverlay
+        ? className
+            .split(/\s+/)
+            .filter((utility) => !/(?:^|:)(?:text|bg|border|ring)-(?!transparent$|current$)/.test(utility))
+            .join(' ')
+        : className;
     const surface = isOverlay
-        ? `bg-bg-primary/90 border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
+        ? `bg-overlay-bg/90 border ${t.overlayBorder} ${t.overlayText} shadow-sm`
         : `${t.fill} border ${t.border} ${t.text} opacity-90`;
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${className}`}
+            className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${safeClassName}`}
         >
             {Icon && <Icon className="w-3 h-3" />}
             {children}
@@ -260,7 +269,7 @@ export function Slider({
                     className="absolute w-full h-full opacity-0 cursor-pointer"
                 />
                 <div
-                    className="absolute h-4 w-4 bg-white rounded-full shadow-lg border-2 border-accent pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
+                    className="absolute h-4 w-4 rounded-full border-2 border-accent bg-bg-secondary shadow-sm pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
                     style={{ left: `calc(${percentage}% - 8px)` }}
                 />
             </div>
@@ -289,12 +298,12 @@ export function ToggleIndicator({ checked, disabled, className = '' }: ToggleInd
             aria-hidden
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 ease-out motion-reduce:transition-none ${
                 checked
-                    ? 'border-accent-hover/60 bg-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_1px_2px_rgba(0,0,0,0.18)] group-hover:brightness-105 group-hover/toggle:brightness-105'
-                    : 'border-hl/20 bg-bg-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] group-hover:border-hl/30 group-hover/toggle:border-hl/30'
+                    ? 'border-accent-hover/60 bg-accent shadow-sm group-hover:brightness-105 group-hover/toggle:brightness-105'
+                    : 'border-hl/20 bg-bg-sunken shadow-inner group-hover:border-hl/30 group-hover/toggle:border-hl/30'
             } ${disabled ? 'opacity-60' : ''} ${className}`}
         >
             <span
-                className={`absolute left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] ring-1 ring-black/15 transition-transform duration-150 ease-out motion-reduce:transition-none ${
+                className={`absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-control-thumb shadow-sm ring-1 ring-control-thumb-border/15 transition-transform duration-150 ease-out motion-reduce:transition-none ${
                     checked ? 'translate-x-5' : 'translate-x-0'
                 }`}
             />
@@ -346,15 +355,15 @@ export function Button({
     disabled,
     ...props
 }: ButtonProps) {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
-        primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus:ring-accent',
-        secondary: 'bg-bg-tertiary hover:bg-hl/10 text-text-primary border border-hl/5 focus:ring-hl/60',
-        danger: 'bg-state-danger/10 hover:bg-state-danger/20 text-state-danger border border-state-danger/20 focus:ring-state-danger',
-        success: 'bg-state-success/10 hover:bg-state-success/20 text-state-success border border-state-success/20 focus:ring-state-success',
-        warning: 'bg-state-warning/20 hover:bg-state-warning/30 text-state-warning border border-state-warning/20 focus:ring-state-warning',
-        ghost: 'hover:bg-hl/5 text-text-secondary hover:text-text-primary focus:ring-hl/40',
+        primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent',
+        secondary: 'bg-bg-tertiary hover:bg-hl/10 text-text-primary border border-hl/5 focus-visible:ring-hl/60',
+        danger: 'bg-state-danger/10 hover:bg-state-danger/20 text-state-danger border border-state-danger/20 focus-visible:ring-state-danger',
+        success: 'bg-state-success/10 hover:bg-state-success/20 text-state-success border border-state-success/20 focus-visible:ring-state-success',
+        warning: 'bg-state-warning/20 hover:bg-state-warning/30 text-state-warning border border-state-warning/20 focus-visible:ring-state-warning',
+        ghost: 'hover:bg-hl/5 text-text-secondary hover:text-text-primary focus-visible:ring-hl/40',
     };
 
     const sizes = {

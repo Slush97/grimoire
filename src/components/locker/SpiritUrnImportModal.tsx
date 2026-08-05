@@ -300,7 +300,7 @@ export default function SpiritUrnImportModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-overlay-bg/50 flex items-center justify-center z-50 p-4">
       <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
@@ -385,15 +385,15 @@ export default function SpiritUrnImportModal({
                 </div>
               )}
               {building && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <Loader2 className="w-6 h-6 animate-spin text-white/80" />
+                <div className="absolute inset-0 flex items-center justify-center bg-overlay-bg/30">
+                  <Loader2 className="w-6 h-6 animate-spin text-overlay-primary/80" />
                 </div>
               )}
               {scene && (
                 <>
                   {previewStats && (
                     <span
-                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-[11px] text-text-secondary"
+                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-overlay-bg/50 text-[11px] text-overlay-secondary"
                       title={previewStats}
                     >
                       {previewStats}
@@ -404,7 +404,7 @@ export default function SpiritUrnImportModal({
                     <button
                       type="button"
                       onClick={() => setSpinning((s) => !s)}
-                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                      className="p-1 rounded bg-overlay-bg/50 text-overlay-secondary hover:text-overlay-primary cursor-pointer"
                       title={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
                       aria-label={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
                     >
@@ -413,7 +413,7 @@ export default function SpiritUrnImportModal({
                     <button
                       type="button"
                       onClick={rerollBackdrop}
-                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                      className="p-1 rounded bg-overlay-bg/50 text-overlay-secondary hover:text-overlay-primary cursor-pointer"
                       title={t('locker.soulImport.preview.shuffleBackdrop')}
                       aria-label={t('locker.soulImport.preview.shuffleBackdrop')}
                     >
@@ -426,7 +426,7 @@ export default function SpiritUrnImportModal({
                   <button
                     type="button"
                     onClick={() => bumpAxis(0, 90)}
-                    className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-overlay-bg/45 text-overlay-primary/80 hover:bg-overlay-bg/70 hover:text-overlay-primary cursor-pointer"
                     aria-label={t('locker.soulImport.orient.tiltUp')}
                   >
                     <ArrowUp className="w-4 h-4" />
@@ -434,14 +434,14 @@ export default function SpiritUrnImportModal({
                   <button
                     type="button"
                     onClick={() => bumpAxis(0, -90)}
-                    className="absolute bottom-9 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    className="absolute bottom-9 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-overlay-bg/45 text-overlay-primary/80 hover:bg-overlay-bg/70 hover:text-overlay-primary cursor-pointer"
                     aria-label={t('locker.soulImport.orient.tiltDown')}
                   >
                     <ArrowDown className="w-4 h-4" />
                   </button>
 
                   <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-[11px]">
-                    <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
+                    <span className="px-2 py-0.5 rounded bg-overlay-bg/50 text-overlay-secondary truncate">
                       {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
                     </span>
                   </div>
@@ -604,7 +604,7 @@ export default function SpiritUrnImportModal({
         {/* High-poly + error notices, full width above the footer. */}
         <div className="px-5 space-y-3">
           {highPoly && (
-            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+            <div className="flex items-start gap-2 text-xs text-state-warning bg-state-warning/10 border border-state-warning/30 rounded-lg p-3">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
               <span>
                 {t('locker.urnImport.highPolyWarning', {
@@ -616,7 +616,7 @@ export default function SpiritUrnImportModal({
           )}
 
           {error && (
-            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-state-danger/10 border border-state-danger/30 rounded-lg p-2">
               {error}
             </div>
           )}
@@ -625,28 +625,28 @@ export default function SpiritUrnImportModal({
         <div className="flex items-center gap-3 p-5 border-t border-border mt-3">
           {existingUrnImports.length > 0 && (
             <div
-              className="flex min-w-0 items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
+              className="flex min-w-0 items-center gap-2 text-xs text-state-warning bg-state-warning/10 border border-state-warning/30 rounded-lg px-3 py-2"
               title={t('locker.urnImport.conflict.body', { name: existingUrnImports[0].name })}
             >
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate text-amber-200/90">{t('locker.urnImport.conflict.heading')}</span>
-              <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
+              <span className="truncate text-state-warning/90">{t('locker.urnImport.conflict.heading')}</span>
+              <div className="flex shrink-0 overflow-hidden rounded-md border border-state-warning/40">
                 <button
                   onClick={() => setDisableExisting(true)}
                   className={`px-2.5 py-1 text-[11px] cursor-pointer transition-colors ${
                     disableExisting
                       ? 'bg-accent/25 text-text-primary'
-                      : 'text-amber-200/70 hover:bg-amber-500/10'
+                      : 'text-state-warning/70 hover:bg-state-warning/10'
                   }`}
                 >
                   {t('locker.soulImport.conflict.disableCurrent')}
                 </button>
                 <button
                   onClick={() => setDisableExisting(false)}
-                  className={`px-2.5 py-1 text-[11px] cursor-pointer border-l border-amber-500/40 transition-colors ${
+                  className={`px-2.5 py-1 text-[11px] cursor-pointer border-l border-state-warning/40 transition-colors ${
                     !disableExisting
                       ? 'bg-accent/25 text-text-primary'
-                      : 'text-amber-200/70 hover:bg-amber-500/10'
+                      : 'text-state-warning/70 hover:bg-state-warning/10'
                   }`}
                 >
                   {t('locker.soulImport.conflict.keepBoth')}

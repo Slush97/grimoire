@@ -302,7 +302,7 @@ export default function VariantPickerModal({
                     isActive
                         ? 'border-accent/40 bg-accent/5'
                         : 'border-border bg-bg-tertiary hover:bg-hl/5'
-                } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-2xl ring-1 ring-accent/30' : ''}`}
+                } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-popup ring-1 ring-accent/30' : ''}`}
             >
                 <button
                     type="button"
@@ -464,7 +464,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => handleDelete(v)}
                             disabled={overlay || !!pending}
-                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-state-danger/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={`Delete ${primaryTitle}`}
                             aria-label={`Delete ${primaryTitle}`}
                         >
@@ -523,7 +523,7 @@ export default function VariantPickerModal({
                 </SortableContext>
                 <DragOverlay>
                     {activeVariant ? (
-                        <div className="pointer-events-none opacity-95 shadow-2xl">
+                        <div className="pointer-events-none opacity-95 shadow-popup">
                             {renderVariantRow(activeVariant, activeIndex, sectionVariants, true)}
                         </div>
                     ) : null}

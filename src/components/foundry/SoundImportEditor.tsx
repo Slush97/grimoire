@@ -349,7 +349,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
     }, [buffer]);
 
     if (decodeError) {
-        return <p className="mt-2 text-[11px] text-red-400">{decodeError}</p>;
+        return <p className="mt-2 text-[11px] text-state-danger">{decodeError}</p>;
     }
     if (!buffer) {
         return (
@@ -433,7 +433,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                         <Loader2 size={11} className="animate-spin" />
                     )}
                     {normalize && targetState === 'missing' && (
-                        <span className="text-amber-500">
+                        <span className="text-state-warning">
                             {t('foundry.sound.import.matchUnavailable', 'original unavailable')}
                         </span>
                     )}

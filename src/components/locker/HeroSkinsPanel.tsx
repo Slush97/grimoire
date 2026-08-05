@@ -230,7 +230,7 @@ function LoadOrderRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex touch-none items-center gap-2.5 rounded-md border px-2 py-1.5 transition-colors ${
         isDragging
-          ? 'z-10 cursor-grabbing border-accent/40 bg-bg-secondary opacity-95 shadow-lg shadow-black/40'
+          ? 'z-10 cursor-grabbing border-accent/40 bg-bg-secondary opacity-95 shadow-popup'
           : 'cursor-grab border-hl/[0.08] bg-bg-secondary/60 hover:border-hl/[0.18] hover:bg-bg-secondary/80'
       }`}
     >
@@ -486,7 +486,7 @@ function SkinGroupCard({
         )}
         {loadOrderPosition !== undefined && (
           <span
-            className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-black/65 px-1.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-sm"
+            className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-overlay-bg/65 px-1.5 text-[10px] font-semibold tabular-nums text-overlay-primary backdrop-blur-sm"
             title={t('locker.skins.loadOrderPosition', { position: loadOrderPosition })}
           >
             {`#${loadOrderPosition}`}
@@ -542,7 +542,7 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-overlay-bg/65 text-overlay-primary/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
             onToggleIncluded && onRequestDelete ? 'right-[4.125rem]' : onToggleIncluded || onRequestDelete ? 'right-9' : 'right-1.5'
           }`}
         >
@@ -564,7 +564,7 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100 ${
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-overlay-bg/65 text-overlay-primary/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-overlay-primary focus-visible:opacity-100 group-hover/card:opacity-100 ${
             onToggleIncluded ? 'right-9' : 'right-1.5'
           }`}
         >
@@ -597,7 +597,7 @@ function SkinGroupCard({
           className={`absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-[opacity,background-color,color] duration-150 focus-visible:opacity-100 group-hover/card:opacity-100 ${
             isIncluded
               ? 'opacity-100 bg-accent text-accent-foreground hover:bg-accent/80'
-              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-black/65 text-white/90 hover:bg-accent/70 hover:text-accent-foreground`
+              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-overlay-bg/65 text-overlay-primary/90 hover:bg-accent/70 hover:text-accent-foreground`
           }`}
         >
           <Shuffle className="h-3.5 w-3.5" />
@@ -647,7 +647,7 @@ function SkinGroupCard({
           )}
           {variantsOpen && (
             <div
-              className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-hl/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
+              className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-hl/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-popup backdrop-blur-md"
               role="group"
               aria-label={t('locker.skins.variantToggles')}
               onMouseDown={(e) => e.stopPropagation()}
@@ -744,7 +744,7 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-overlay-bg/55 text-overlay-primary/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
             onToggleIncluded && onRequestDelete ? 'right-[4.5rem]' : onToggleIncluded || onRequestDelete ? 'right-10' : 'right-2'
           }`}
         >
@@ -763,7 +763,7 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100 ${
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-overlay-bg/55 text-overlay-primary/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-overlay-primary focus-visible:opacity-100 group-hover/row:opacity-100 ${
             onToggleIncluded ? 'right-10' : 'right-2'
           }`}
         >
@@ -793,7 +793,7 @@ function SkinGroupRow({
           className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-[opacity,background-color,color] duration-150 focus-visible:opacity-100 group-hover/row:opacity-100 ${
             isIncluded
               ? 'opacity-100 bg-accent text-accent-foreground hover:bg-accent/80'
-              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-black/55 text-white/90 hover:bg-accent/70 hover:text-accent-foreground`
+              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-overlay-bg/55 text-overlay-primary/90 hover:bg-accent/70 hover:text-accent-foreground`
           }`}
         >
           <Shuffle className="h-3.5 w-3.5" />

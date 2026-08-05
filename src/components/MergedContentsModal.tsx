@@ -170,7 +170,7 @@ export default function MergedContentsModal({
                 {t('mergedContents.sources', { count: merged.sources.length })}
               </div>
               {canExtract && merged.sources.length === 2 && (
-                <div className="text-[11px] text-amber-400/90">
+                <div className="text-[11px] text-state-warning/90">
                   {t('mergedContents.extractingDissolves')}
                 </div>
               )}
@@ -326,7 +326,7 @@ export default function MergedContentsModal({
             )}
 
             {actionError && (
-              <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
+              <div className="flex items-start gap-2 text-sm text-state-danger bg-state-danger/10 border border-state-danger/30 rounded-lg p-2.5 mt-2">
                 <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
                 <div>{actionError}</div>
               </div>

@@ -80,7 +80,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
             className="absolute top-0 right-0 h-full w-auto max-w-none"
           />
         ) : null}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-overlay-bg/50 to-transparent" />
       </div>
 
       {/* Feathered frosted glass behind the rail + content, so the render bleeds
@@ -90,7 +90,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
         className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
       >
         <div
-          className="absolute inset-0"
+          className="locker-hero-glass-wash absolute inset-0"
           style={{
             backdropFilter: 'blur(40px) saturate(130%)',
             WebkitBackdropFilter: 'blur(40px) saturate(130%)',
@@ -119,14 +119,14 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
         </button>
 
         {nameFailed ? (
-          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          <h2 className="text-2xl font-bold text-text-primary">
             {hero.name}
           </h2>
         ) : (
           <img
             src={getHeroNamePath(hero.name)}
             alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
+            className="locker-hero-name h-8 w-auto self-start object-contain"
             onError={() => setNameFailed(true)}
           />
         )}
@@ -143,11 +143,11 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
                 className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer ${
                   isActive
                     ? 'border-accent/60 bg-accent/15'
-                    : 'border-transparent hover:bg-white/10'
+                    : 'border-transparent hover:bg-hl/10'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
-                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
+                <Icon className="h-4 w-4 flex-shrink-0 text-text-secondary" />
+                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
               </button>
             );
           })}
@@ -173,7 +173,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
             <div className="space-y-8">
               <TextureBrowse heroes={scopedRoster} heroNames={heroNames} />
               <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-white/90">
+                <h4 className="artwork-readable w-fit text-sm font-semibold text-text-primary">
                   {t('foundry.workshop.abilityIcons', 'Ability & item icons')}
                 </h4>
                 <LibraryBrowse heroNames={heroNames} initialCategory="ability-icon" />

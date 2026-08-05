@@ -226,8 +226,8 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
           </div>
 
           {localSourceCount > 0 && (
-            <div className="flex items-start gap-2 text-xs text-text-secondary bg-amber-500/5 border border-amber-500/30 rounded-lg p-2.5">
-              <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 text-xs text-text-secondary bg-state-warning/5 border border-state-warning/30 rounded-lg p-2.5">
+              <Info className="w-4 h-4 text-state-warning flex-shrink-0 mt-0.5" />
               <div>
                 <div className="text-text-primary font-medium">
                   {t('mergeMods.localModsIncluded', { count: localSourceCount })}
@@ -265,7 +265,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
           </label>
 
           {error && (
-            <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
+            <div className="flex items-start gap-2 text-sm text-state-danger bg-state-danger/10 border border-state-danger/30 rounded-lg p-2.5">
               <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
               <div>{error}</div>
             </div>

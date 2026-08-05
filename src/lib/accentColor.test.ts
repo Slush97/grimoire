@@ -12,6 +12,8 @@ describe('accent color contrast', () => {
     for (const preset of ACCENT_PRESETS) {
       expect(contrastRatio(accentInk(preset.color, '#242424'), '#242424')).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(accentInk(preset.color, '#ffffff'), '#ffffff')).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(accentInk(preset.hover, '#242424'), '#242424')).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(accentInk(preset.hover, '#ffffff'), '#ffffff')).toBeGreaterThanOrEqual(4.5);
     }
   });
 

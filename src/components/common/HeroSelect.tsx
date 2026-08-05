@@ -369,7 +369,7 @@ export function HeroSelect({
           // portaled to <body>, this has to clear modals and page chrome alike.
           // Positioned by positionListbox before paint; the inline top/left are
           // only a starting point so the node has a box to measure against.
-          className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-bg-secondary shadow-xl"
+          className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-bg-secondary shadow-popup"
           style={{ top: 0, left: 0 }}
         >
           {search && (

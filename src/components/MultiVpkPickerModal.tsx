@@ -67,7 +67,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                 <div className="p-5 space-y-4">
                     <p className="text-sm text-text-secondary">
                         <span className="font-medium text-text-primary">{data.modName}</span> contains{' '}
-                        {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">.vpk</code> files.
+                        {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-bg-sunken px-1 py-0.5 rounded">.vpk</code> files.
                         {t('multiVpk.uncheckHint')}
                     </p>
 

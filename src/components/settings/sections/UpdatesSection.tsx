@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
 import { ArrowDownCircle, Download, RefreshCw, Sparkles, X } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { Badge, Button, Card } from '../../common/ui';
+import { Modal } from '../../common/Modal';
 import Tx from '../../translation/Tx';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
@@ -112,14 +112,14 @@ export default function UpdatesSection() {
                 </span>
               )}
               {updateStatus?.downloaded && (
-                <span className="text-xs text-green-400 inline-flex items-center gap-1">
+                <span className="text-xs text-state-success inline-flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
                   <ReleaseVersionLink version={updateStatus.updateInfo?.version} />{' '}
                   <Tx k="settings.updates.readyToInstall" fallback="ready to install" />
                 </span>
               )}
               {upToDate && !updateStatus?.available && !updateStatus?.checking && (
-                <span className="text-xs text-green-400">
+                <span className="text-xs text-state-success">
                   <Tx k="settings.updates.upToDate" fallback="✓ You're up to date!" />
                 </span>
               )}
@@ -215,13 +215,18 @@ export default function UpdatesSection() {
       {/* Changelog modal. Portaled to body like every other overlay in the app:
           the shell it would otherwise render inside is its own stacking context,
           which would sink a plain z-50 below the fixed status indicators. */}
-      {showChangelog && updateStatus?.updateInfo && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-bg-secondary border border-hl/10 rounded-sm w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in relative">
+      {showChangelog && updateStatus?.updateInfo && (
+        <Modal
+          onClose={() => setShowChangelog(false)}
+          labelledBy="update-changelog-title"
+          size="lg"
+          panelClassName="max-h-[80vh] overflow-hidden rounded-sm animate-fade-in relative"
+          backdropClassName="backdrop-blur-sm"
+        >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <div className="flex items-center justify-between p-6 border-b border-hl/10">
               <div>
-                <h2 className="text-xl font-bold">
+                <h2 id="update-changelog-title" className="text-xl font-bold">
                   <Tx k="settings.updates.whatsNewIn" fallback="What's New in" />{' '}
                   <ReleaseVersionLink version={updateStatus.updateInfo.version} />
                 </h2>
@@ -287,9 +292,7 @@ export default function UpdatesSection() {
                 <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
               </Button>
             </div>
-          </div>
-        </div>,
-        document.body
+        </Modal>
       )}
     </>
   );

@@ -157,7 +157,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
           description={<Tx k="settings.preferences.developerModeDescription" fallback="Use a dummy Deadlock directory for local testing without game files." />}
         />
         {settings?.devMode && settings?.devDeadlockPath && (
-          <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
+          <div className="mt-2 text-xs font-mono bg-bg-sunken p-2 rounded-sm text-text-secondary break-all">
             {settings.devDeadlockPath}
           </div>
         )}

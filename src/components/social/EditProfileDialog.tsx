@@ -98,7 +98,7 @@ export default function EditProfileDialog({
         <div className="p-6 space-y-4">
           {saved ? (
             <div className="space-y-3">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
+              <div className="bg-state-success/10 border border-state-success/30 rounded-md p-3 text-sm text-state-success flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <div className="font-medium">{t('social.editProfile.saved')}</div>
@@ -154,7 +154,7 @@ export default function EditProfileDialog({
               </div>
 
               {submitError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+                <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{submitError}</span>
                 </div>

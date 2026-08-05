@@ -134,7 +134,7 @@ export function PlayerSelect() {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-bg-secondary border border-hl/10 rounded-sm shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-80 bg-bg-secondary border border-hl/10 rounded-sm shadow-popup z-50 overflow-hidden">
                     {trackedPlayers.data.length > 0 && (
                         <div className="max-h-64 overflow-auto p-1.5" role="listbox">
                             {trackedPlayers.data.map((player) => {
@@ -171,8 +171,8 @@ export function PlayerSelect() {
                                                     }
                                                     className={`shrink-0 cursor-pointer transition-opacity ${
                                                         player.is_primary === 1
-                                                            ? 'text-yellow-400'
-                                                            : 'text-text-secondary opacity-0 group-hover:opacity-100 hover:text-yellow-400'
+                                                            ? 'text-state-warning'
+                                                            : 'text-text-secondary opacity-0 group-hover:opacity-100 hover:text-state-warning'
                                                     }`}
                                                 >
                                                     <Star
@@ -199,7 +199,7 @@ export function PlayerSelect() {
                                                 removeTrackedPlayer(player.account_id)
                                             }}
                                             title={t('stats.playerSelect.removePlayer')}
-                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all cursor-pointer"
+                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-state-danger/20 rounded transition-all cursor-pointer"
                                         >
                                             <Trash2 className="w-4 h-4 text-state-danger" />
                                         </button>

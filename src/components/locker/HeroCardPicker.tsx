@@ -371,8 +371,8 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                   ))}
                 </div>
                 {isBusy && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <Loader2 className="h-5 w-5 animate-spin text-white" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-overlay-bg/50 backdrop-blur-sm">
+                    <Loader2 className="h-5 w-5 animate-spin text-overlay-primary" />
                   </span>
                 )}
               </button>
@@ -430,7 +430,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                       alt={`${heroName} ${VARIANT_LABEL[slot.variant] ?? slot.variant}`}
                       className={`max-h-full max-w-full object-contain ${pick ? '' : 'opacity-30'}`}
                     />
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white/0 transition-colors group-hover:bg-black/55 group-hover:text-white/90">
+                    <span className="absolute inset-0 flex items-center justify-center bg-overlay-bg/0 text-overlay-primary/0 transition-colors group-hover:bg-overlay-bg/55 group-hover:text-overlay-primary/90">
                       <Upload className="h-4 w-4" />
                     </span>
                   </button>
@@ -446,7 +446,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                       aria-label={t('locker.cards.clearVariantImage', {
                         variant: VARIANT_LABEL[slot.variant] ?? slot.variant,
                       })}
-                      className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-white/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
+                      className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-overlay-bg/75 p-1 text-overlay-primary/90 shadow-sm ring-1 ring-overlay-border/10 transition-colors hover:bg-overlay-bg/90 hover:text-overlay-primary disabled:cursor-not-allowed"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>

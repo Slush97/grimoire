@@ -159,7 +159,7 @@ export default function BrowseFileQuickPicker({
       role="menu"
       aria-label={t('browse.filePicker.title', { name: modName })}
       onKeyDown={onMenuKeyDown}
-      className="fixed z-[80] overflow-hidden rounded-lg border border-border bg-bg-primary shadow-2xl animate-fade-in"
+      className="fixed z-[80] overflow-hidden rounded-lg border border-border bg-bg-primary shadow-popup animate-fade-in"
       style={{
         top: coords?.top ?? -9999,
         left: coords?.left ?? -9999,

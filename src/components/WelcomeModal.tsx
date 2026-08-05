@@ -189,8 +189,8 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
 
                         {/* Help text when auto-detect fails */}
                         {detectFailed && !isDetecting && (
-                            <div className="ml-7 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                                <p className="text-xs text-yellow-200 mb-2">
+                            <div className="ml-7 p-3 bg-state-warning/10 border border-state-warning/20 rounded-lg">
+                                <p className="text-xs text-state-warning mb-2">
                                     {t('welcome.autoDetectFailed')}
                                 </p>
                                 <code className="block text-xs text-text-secondary font-mono mb-2">
@@ -244,7 +244,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         )}
 
                         {gameinfoConfigured === true && (
-                            <p className="ml-7 text-xs text-green-400">
+                            <p className="ml-7 text-xs text-state-success">
                                 {gameinfoStatus}
                             </p>
                         )}

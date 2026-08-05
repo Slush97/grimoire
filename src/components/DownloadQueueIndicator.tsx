@@ -148,7 +148,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                 actually in flight) cancels the active fetch. */}
             {!isExpanded && (
                 <div
-                    className="group relative flex w-72 items-stretch overflow-hidden rounded-full border border-hl/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
+                    className="group relative flex w-72 items-stretch overflow-hidden rounded-full border border-hl/10 bg-bg-secondary/95 text-left shadow-toast backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
                 >
                     <button
                         type="button"
@@ -192,7 +192,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 e.stopPropagation();
                                 void handleCancelActive();
                             }}
-                            className="flex flex-shrink-0 items-center justify-center border-l border-hl/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                            className="flex flex-shrink-0 items-center justify-center border-l border-hl/5 px-3 text-text-secondary transition-colors hover:bg-state-danger/10 hover:text-state-danger cursor-pointer"
                             aria-label={t('downloadQueue.cancelDownload')}
                             title={t('downloadQueue.cancelDownload')}
                         >
@@ -215,7 +215,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                 pill stays anchored to the corner. Shows full progress detail
                 + the queue. */}
             {isExpanded && (
-                <div className="w-80 rounded-2xl border border-hl/10 bg-bg-secondary/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in">
+                <div className="w-80 rounded-2xl border border-hl/10 bg-bg-secondary/95 shadow-popup backdrop-blur-md animate-fade-in">
                     <div className="flex items-center justify-between border-b border-hl/5 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Download className="h-4 w-4 text-accent-ink" />
@@ -251,7 +251,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 <button
                                     type="button"
                                     onClick={() => void handleCancelActive()}
-                                    className="rounded-md p-1 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                                    className="rounded-md p-1 text-text-secondary transition-colors hover:bg-state-danger/10 hover:text-state-danger cursor-pointer"
                                     aria-label={t('downloadQueue.cancelDownload')}
                                     title={t('downloadQueue.cancelDownload')}
                                 >

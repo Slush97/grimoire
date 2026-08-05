@@ -180,7 +180,7 @@ export default function GameSection() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-text-secondary">
                   {isValidPath === true && (
-                    <span className="text-green-400 flex items-center gap-1">
+                    <span className="text-state-success flex items-center gap-1">
                       <Check className="w-3 h-3" />
                       <Tx k="common.status.valid" fallback="Valid" />
                     </span>
@@ -275,7 +275,7 @@ export default function GameSection() {
                     />
                   </p>
                   {gameinfoCandidates.length > 0 && (
-                    <p className="text-xs text-amber-300">
+                    <p className="text-xs text-state-warning">
                       <Tx
                         k="settings.gameinfo.foundNearby"
                         values={{ candidates: gameinfoCandidates.join(', ') }}

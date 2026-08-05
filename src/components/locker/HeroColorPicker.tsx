@@ -625,8 +625,8 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                 />
               )}
               {mode === 'hue' && previewLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                  <Loader2 className="h-4 w-4 animate-spin text-white/80" />
+                <div className="absolute inset-0 flex items-center justify-center bg-overlay-bg/20">
+                  <Loader2 className="h-4 w-4 animate-spin text-overlay-primary/80" />
                 </div>
               )}
             </div>
@@ -1039,7 +1039,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
         <div
           className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
             gameRunning
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              ? 'border-state-warning/40 bg-state-warning/10 text-state-warning'
               : 'border-border bg-bg-secondary/70 text-text-secondary'
           }`}
         >

@@ -31,8 +31,8 @@ import ConnectServerDialog from '../components/servers/ConnectServerDialog';
 // shooter: under 60ms is comfortable, under 120ms is playable, beyond that hurts.
 function pingTone(ms: number): { color: string } {
   if (ms < 0) return { color: 'text-text-secondary/50' };
-  if (ms < 60) return { color: 'text-green-400' };
-  if (ms < 120) return { color: 'text-yellow-400' };
+  if (ms < 60) return { color: 'text-state-success' };
+  if (ms < 120) return { color: 'text-state-warning' };
   return { color: 'text-state-danger' };
 }
 
@@ -147,7 +147,7 @@ export default function Servers() {
       />
 
       {!hasGamePath && (
-        <div className="flex items-center gap-2 rounded-sm border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-300">
+        <div className="flex items-center gap-2 rounded-sm border border-state-warning/20 bg-state-warning/10 px-3 py-2 text-sm text-state-warning">
           <AlertTriangle size={16} className="shrink-0" />
           <Tx
             k="servers.warning.gamePathRequired"
@@ -273,7 +273,7 @@ export default function Servers() {
                   {/* name + status */}
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${s.online ? 'bg-green-400' : 'bg-text-secondary/40'}`}
+                      className={`h-2 w-2 shrink-0 rounded-full ${s.online ? 'bg-state-success' : 'bg-text-secondary/40'}`}
                       title={s.online ? t('servers.status.online') : t('servers.status.stale')}
                     />
                     <div className="min-w-0">
@@ -306,7 +306,7 @@ export default function Servers() {
                   </div>
 
                   {/* players */}
-                  <div className={`text-sm md:text-center ${full ? 'text-yellow-400' : 'text-text-primary'}`}>
+                  <div className={`text-sm md:text-center ${full ? 'text-state-warning' : 'text-text-primary'}`}>
                     <Users size={12} className="mr-1 inline md:hidden" />
                     {s.player_count}/{s.max_players}
                   </div>

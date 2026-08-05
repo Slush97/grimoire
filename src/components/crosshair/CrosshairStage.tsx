@@ -141,7 +141,7 @@ export default function CrosshairStage({ scale, background }: CrosshairStageProp
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center transition-opacity duration-200"
       >
-        <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[11px] text-white/70 backdrop-blur-sm">
+        <span className="rounded-full border border-overlay-border/10 bg-overlay-bg/60 px-3 py-1 text-[11px] text-overlay-primary/70 backdrop-blur-sm">
           {t('crosshair.preview.followHint')}
         </span>
       </div>

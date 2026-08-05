@@ -99,6 +99,10 @@
   --app-bg-glow-theme-opacity: 1;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
+  /* Compact solid controls always use a white foreground. Runtime accent
+     updates darken this fill only as much as needed to retain 4.5:1 contrast. */
+  --color-accent-solid: #c2410c;
+  --color-accent-solid-foreground: #ffffff;
   /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
      white and near-black based on the accent's luminance so a light user accent
      (cyan, emerald, amber) stays readable. Computed at runtime in
@@ -109,6 +113,9 @@
   --color-accent-ink-dark: #f97316;
   --color-accent-ink-light: #c2410c;
   --color-accent-ink: var(--color-accent-ink-dark);
+  --color-accent-ink-hover-dark: #fb923c;
+  --color-accent-ink-hover-light: #9a3412;
+  --color-accent-ink-hover: var(--color-accent-ink-hover-dark);
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
@@ -125,8 +132,39 @@
   --color-state-danger:  #f87171;
   --color-state-info:    #60a5fa;
 
+  /* Invariant media-overlay palette. These colors always sit on the dark
+     overlay surface, regardless of the resolved app theme. App copy must use
+     text-* and state-* above instead. */
+  --color-overlay-bg: #0a0c10;
+  --color-overlay-primary: #ffffff;
+  --color-overlay-secondary: #e4e4e7;
+  --color-overlay-muted: #a1a1aa;
+  --color-overlay-border: #ffffff;
+  --color-overlay-success: #86efac;
+  --color-overlay-warning: #fde047;
+  --color-overlay-danger: #fca5a5;
+  --color-overlay-info: #93c5fd;
+  --color-overlay-accent: #fdba74;
+
+  /* Switch/slider thumb stays light over both accent and recessed tracks. */
+  --color-control-thumb: #ffffff;
+  --color-control-thumb-border: #0a0c10;
+
+  /* Foregrounds for saturated/brand fills. They are named tokens rather than
+     literal white utilities so the source guard can distinguish them from
+     accidental dark-only app copy. */
+  --color-state-danger-foreground: #ffffff;
+  --color-brand-kofi-foreground: #ffffff;
+
+  /* Shared elevation strengths. Light mode overrides these below to avoid the
+     dense, dirty-looking black shadows used by dark floating surfaces. */
+  --shadow-popup: 0 18px 48px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.55);
+  --shadow-toast: 0 10px 30px rgb(0 0 0 / 0.4);
+
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
+  --color-brand-foreground: #ffffff;
   --color-brand-kofi: #FF5E5B;
   --color-brand-kofi-hover: #ff4542;
 
@@ -160,6 +198,7 @@
   --color-hl: #18181b;
   --app-bg-glow-theme-opacity: 0.65;
   --color-accent-ink: var(--color-accent-ink-light);
+  --color-accent-ink-hover: var(--color-accent-ink-hover-light);
   --color-text-primary: #18181b;
   --color-text-secondary: #52525b;
   --color-text-tertiary: #686872;
@@ -167,10 +206,13 @@
   --color-mod-title: #292524;
 
   /* All four are >= 4.5:1 against both white cards and the page background. */
-  --color-state-success: #15803d;
+  --color-state-success: #166534;
   --color-state-warning: #92400e;
   --color-state-danger:  #b91c1c;
   --color-state-info:    #1d4ed8;
+  --shadow-popup: 0 14px 38px rgb(24 24 27 / 0.16);
+  --shadow-modal: 0 22px 58px rgb(24 24 27 / 0.2);
+  --shadow-toast: 0 8px 24px rgb(24 24 27 / 0.16);
 }
 
 :root[data-theme='dark'] {
@@ -291,6 +333,32 @@ body {
 
 .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.35);
+  background-clip: padding-box;
+}
+
+/* Glass panels remain intentionally trackless, but their thumb must not
+   disappear against light artwork. In light mode it stays faintly visible at
+   rest and becomes stronger while scrolling. */
+:root[data-theme='light'] .scrollbar-glass {
+  scrollbar-color: rgb(24 24 27 / 0.24) transparent;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling {
+  scrollbar-color: rgb(24 24 27 / 0.42) transparent;
+}
+
+:root[data-theme='light'] .scrollbar-glass::-webkit-scrollbar-thumb {
+  background: rgb(24 24 27 / 0.24);
+  background-clip: padding-box;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgb(24 24 27 / 0.42);
+  background-clip: padding-box;
+}
+
+:root[data-theme='light'] .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgb(24 24 27 / 0.58);
   background-clip: padding-box;
 }
 
@@ -1192,16 +1260,16 @@ body {
 }
 
 :root[data-theme='light'] .sidebar-surface-backdrop__image {
-  opacity: 0.64;
-  filter: saturate(0.9) contrast(0.96);
+  opacity: 0.84;
+  filter: saturate(1.04) contrast(1.02);
 }
 
 :root[data-theme='light'] .sidebar-surface-backdrop__scrim {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--color-bg-secondary) 88%, transparent) 0%,
-    color-mix(in srgb, var(--color-bg-secondary) 48%, transparent) 58%,
-    color-mix(in srgb, var(--color-bg-secondary) 12%, transparent) 100%
+    color-mix(in srgb, var(--color-bg-secondary) 68%, transparent) 0%,
+    color-mix(in srgb, var(--color-bg-secondary) 28%, transparent) 58%,
+    color-mix(in srgb, var(--color-bg-secondary) 5%, transparent) 100%
   );
 }
 
@@ -1666,6 +1734,19 @@ body {
     color-mix(in srgb, var(--color-bg-secondary) 8%, transparent) 88%,
     transparent 96%
   ) !important;
+}
+
+/* A small amount of local paper behind isolated copy is preferable to forcing
+   every workshop pane opaque: hero artwork stays visible, while headings over
+   its brightest regions keep a stable contrast boundary. */
+.artwork-readable {
+  border-radius: 0.125rem;
+}
+
+:root[data-theme='light'] .artwork-readable {
+  background: color-mix(in srgb, var(--color-bg-secondary) 82%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-bg-secondary) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 :root[data-theme='light'] .locker-skin-card {

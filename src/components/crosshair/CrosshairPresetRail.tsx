@@ -140,11 +140,11 @@ export default function CrosshairPresetRail({
                   <CrosshairPreview size={72} scale={1440 / 1080} settings={preset.settings} transparent />
                 </button>
 
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1 pt-3 text-center text-[10px] font-medium text-white/90">
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-overlay-bg/85 to-transparent px-1.5 pb-1 pt-3 text-center text-[10px] font-medium text-overlay-primary/90">
                   {preset.name}
                 </span>
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-black/65 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-overlay-bg/65 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   <button
                     type="button"
                     onClick={() => onApply(preset.id)}
@@ -157,7 +157,7 @@ export default function CrosshairPresetRail({
                   <button
                     type="button"
                     onClick={() => onDelete(preset.id)}
-                    className="cursor-pointer rounded-sm bg-red-500/20 p-1.5 text-state-danger transition-colors hover:bg-red-500/40"
+                    className="cursor-pointer rounded-sm bg-state-danger/20 p-1.5 text-state-danger transition-colors hover:bg-state-danger/40"
                     title={t('common.actions.delete')}
                     aria-label={t('common.actions.delete')}
                   >

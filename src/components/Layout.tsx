@@ -262,9 +262,9 @@ export default function Layout() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {gameinfoAlert && (
-          <div className="sticky top-0 z-40 border-b border-yellow-500/30 bg-yellow-500/10 backdrop-blur-sm">
-            <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">
-              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+          <div className="sticky top-0 z-40 border-b border-state-warning/30 bg-state-warning/10 backdrop-blur-sm">
+            <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-state-warning">
+              <AlertTriangle className="h-5 w-5 text-state-warning" />
               <div className="flex-1 text-sm">
                 <span className="font-semibold">{t('layout.gameinfoIssue')}</span> {gameinfoAlert}
               </div>
@@ -309,7 +309,7 @@ export default function Layout() {
                   components={{ name: <span className="font-semibold text-text-primary" /> }}
                 />
               </p>
-              <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
+              <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-state-warning">
                 {suspiciousPrompt.files.slice(0, 30).map((f) => (
                   <li key={f}>{f}</li>
                 ))}

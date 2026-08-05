@@ -432,7 +432,7 @@ export default function Profiles() {
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
+            <div className="bg-state-danger/10 border border-state-danger/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
               <AlertTriangle className="w-5 h-5" />
               <p>{error}</p>
             </div>
@@ -597,7 +597,7 @@ export default function Profiles() {
                           variant="ghost"
                           icon={Trash2}
                           onClick={() => setBulkDeleteSnapshotsOpen(true)}
-                          className="ml-auto text-state-danger hover:text-red-300"
+                          className="ml-auto text-state-danger hover:text-state-danger"
                           title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
                         >
                           <Tx
@@ -803,7 +803,7 @@ export default function Profiles() {
                       {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
                         <div className="flex gap-2">
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-hl/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
-                            <Terminal className="w-3 h-3 text-blue-400" />
+                            <Terminal className="w-3 h-3 text-state-info" />
                             <span>
                               <Tx
                                 k="profiles.autoexec.count"
@@ -943,7 +943,7 @@ export default function Profiles() {
                                           />
                                         </span>
                                       )}
-                                      {group.enabled && <Check className="w-3 h-3 text-green-400" />}
+                                      {group.enabled && <Check className="w-3 h-3 text-state-success" />}
                                     </div>
                                   </div>
                                 );

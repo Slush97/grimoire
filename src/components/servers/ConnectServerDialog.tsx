@@ -171,7 +171,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
 
           {phase === 'done' && (
             <div className="flex flex-col items-center gap-3 py-2 text-center">
-              <CheckCircle2 size={40} className="text-green-400" />
+              <CheckCircle2 size={40} className="text-state-success" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="primary" icon={Play} onClick={onClose} className="mt-2">
                 <Tx k="common.actions.done" fallback="Done" />
@@ -181,7 +181,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
 
           {phase === 'error' && (
             <div className="flex flex-col items-center gap-3 py-2 text-center">
-              <AlertTriangle size={40} className="text-red-500" />
+              <AlertTriangle size={40} className="text-state-danger" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="secondary" onClick={onClose} className="mt-2">
                 <Tx k="common.actions.close" fallback="Close" />

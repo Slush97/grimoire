@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { useAppStore } from '../../stores/appStore';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../../lib/accentColor';
 import { Button } from '../common/ui';
-import { useBackdropDismiss } from '../common/useBackdropDismiss';
+import { Modal } from '../common/Modal';
 import Tx from '../translation/Tx';
 
 const SWATCH_BASE =
@@ -53,22 +52,6 @@ export default function AccentColorPicker() {
     setCustomDraft(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
     setCustomPickerOpen(true);
   };
-
-  useEffect(() => {
-    if (!customPickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void commitCustomDraft();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [customPickerOpen, commitCustomDraft]);
-
-  // Dismiss on backdrop click, but not when the gesture merely ends there
-  // (drag-selecting the hex field and releasing outside used to commit).
-  const customPickerBackdropRef = useBackdropDismiss<HTMLDivElement>(
-    useCallback(() => void commitCustomDraft(), [commitCustomDraft]),
-    customPickerOpen
-  );
 
   const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
   const isCustomActive = !ACCENT_PRESETS.some((p) => p.color.toLowerCase() === current);
@@ -125,21 +108,16 @@ export default function AccentColorPicker() {
         </button>
       </div>
 
-      {customPickerOpen && createPortal(
-        <div
-          ref={customPickerBackdropRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-          role="presentation"
+      {customPickerOpen && (
+        <Modal
+          onClose={() => void commitCustomDraft()}
+          labelledBy="custom-accent-title"
+          size="none"
+          panelClassName="max-w-sm rounded-sm p-6 relative overflow-hidden"
+          backdropClassName="backdrop-blur-sm"
         >
-          <div
-            className="bg-bg-secondary border border-hl/10 rounded-sm p-6 w-full max-w-sm relative overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('settings.appearance.customAccentColor')}
-          >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver mb-4 flex items-center gap-2">
+            <h3 id="custom-accent-title" className="text-lg font-semibold text-text-primary tracking-wide font-reaver mb-4 flex items-center gap-2">
               <Pipette className="w-4 h-4 text-accent-ink" />
               <Tx k="settings.appearance.customAccent" fallback="Custom Accent" />
             </h3>
@@ -179,9 +157,7 @@ export default function AccentColorPicker() {
                 </Button>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
+        </Modal>
       )}
     </div>
   );

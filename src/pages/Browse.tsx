@@ -453,13 +453,13 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
   if (onImage) {
     switch (tone) {
       case 'accent':
-        return 'border-accent/40 bg-black/55 text-accent-ink backdrop-blur-sm';
+        return 'border-overlay-accent/40 bg-overlay-bg/55 text-overlay-accent backdrop-blur-sm';
       case 'danger':
-        return 'border-state-danger/45 bg-black/55 text-state-danger backdrop-blur-sm';
+        return 'border-overlay-danger/45 bg-overlay-bg/55 text-overlay-danger backdrop-blur-sm';
       case 'info':
-        return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
+        return 'border-overlay-info/40 bg-overlay-bg/55 text-overlay-info backdrop-blur-sm';
       default:
-        return 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm';
+        return 'border-overlay-border/20 bg-overlay-bg/55 text-overlay-primary/90 backdrop-blur-sm';
     }
   }
   switch (tone) {
@@ -549,7 +549,7 @@ function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadab
         title={chip.label}
         loading="lazy"
         draggable={false}
-        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-black/40' : ''}`}
+        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-overlay-bg/40' : ''}`}
       />
     );
   }
@@ -611,7 +611,7 @@ function BrowseReadableChipRow({
             title={`${hiddenChips.length} more`}
             className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11px] font-medium leading-none ${
               onImage
-                ? 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm'
+                ? 'border-overlay-border/20 bg-overlay-bg/55 text-overlay-primary/90 backdrop-blur-sm'
                 : 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary'
             }`}
           >
@@ -3229,7 +3229,7 @@ export default function Browse() {
                       title={link.label}
                       aria-label={link.label}
                       style={{ backgroundColor: color }}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-hl/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-brand-foreground shadow-sm ring-1 ring-hl/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
                     >
                       <Icon className="h-4 w-4" />
                     </a>
@@ -3241,7 +3241,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-brand-kofi-foreground shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}
@@ -3617,7 +3617,7 @@ export default function Browse() {
                     <SlidersHorizontal className="w-4 h-4" />
                     <span>{t('browse.filters.title')}</span>
                     {filterCount > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent-solid text-accent-solid-foreground text-[11px] font-semibold flex items-center justify-center">
                         {filterCount}
                       </span>
                     )}
@@ -3951,7 +3951,7 @@ export default function Browse() {
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-state-warning shrink-0" />
                 <span className="text-sm">{t('browse.loadMore.couldntLoadMore')} {renderErrorWithLinks(loadMoreError)}</span>
               </div>
               <Button onClick={handleRetryFetch} variant="secondary" size="sm">{t('common.actions.retry')}</Button>
@@ -4226,7 +4226,7 @@ function ReadableBrowseModCard({
       <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
         {media}
         {showChips && chips.length > 0 && (
-          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
+          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-overlay-bg/75 via-overlay-bg/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
             <div className="pointer-events-auto min-w-0">
               <BrowseReadableChipRow
                 chips={chips}
@@ -4284,7 +4284,7 @@ function ReadableBrowseModCard({
                   <button
                     type="button"
                     onClick={() => setShowVolumeSlider((value) => !value)}
-                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80 transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
+                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
                     title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-expanded={showVolumeSlider}
@@ -4325,7 +4325,7 @@ function ReadableBrowseModCard({
                 {!isMicro && (
                   <>
                     <span className="flex-shrink-0 text-[10px] tabular-nums text-text-secondary">0:00</span>
-                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80">
+                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-text-secondary">
                       <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
                     </span>
                   </>
@@ -4741,8 +4741,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               )}
             </div>
           )}
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+          <h3 className={`font-mod-title font-semibold truncate text-overlay-primary drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-overlay-primary/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4750,7 +4750,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         </div>
       ) : (
         <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : isCompact ? 'p-2.5' : 'p-3'}`}>
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <h3 className={`font-mod-title font-semibold truncate text-overlay-primary drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           {/* Stats / author / outdated. On minimal cards this group is collapsed
               to zero height at rest and slides up on hover or keyboard focus. */}
           <div
@@ -4760,7 +4760,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 : ''
             }
           >
-            <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <div className={`mt-1 flex flex-wrap items-center gap-3 text-overlay-primary/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
               <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
               <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
               {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4841,7 +4841,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   e.stopPropagation();
                   onVolumeChange(volume > 0 ? 0 : 1);
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/70 transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-overlay-primary/70 transition-colors hover:bg-hl/10 hover:text-text-primary cursor-pointer"
                 title={volume > 0 ? 'Mute' : 'Unmute'}
                 aria-label={volume > 0 ? 'Mute' : 'Unmute'}
               >
@@ -4890,7 +4890,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent-solid text-accent-solid-foreground rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}

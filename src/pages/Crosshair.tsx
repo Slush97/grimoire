@@ -227,7 +227,7 @@ export default function Crosshair() {
                         <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2">
                             {/* Scene picker. Thumbnails rather than words: you're
                                 choosing an image, so show the image. */}
-                            <div className="pointer-events-auto flex items-center gap-1.5 rounded-sm border border-white/10 bg-black/50 p-1.5 backdrop-blur-md">
+                            <div className="pointer-events-auto flex items-center gap-1.5 rounded-sm border border-overlay-border/10 bg-overlay-bg/50 p-1.5 backdrop-blur-md">
                                 {STAGE_BACKGROUNDS.map((b) => {
                                     const active = b.id === background;
                                     return (
@@ -255,7 +255,7 @@ export default function Crosshair() {
 
                             {/* Resolution + zoom. Stepped zoom instead of a fiddly
                                 80px track: the useful values are few and discrete. */}
-                            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-sm border border-white/10 bg-black/50 px-2 py-1.5 backdrop-blur-md">
+                            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-sm border border-overlay-border/10 bg-overlay-bg/50 px-2 py-1.5 backdrop-blur-md">
                                 <SegmentedControl
                                     options={RESOLUTIONS.map((r) => ({ value: String(r.height), label: r.label }))}
                                     value={String(resolution)}

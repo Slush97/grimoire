@@ -78,7 +78,7 @@ export function LeaderboardTab() {
                                             {rankLabelFromBadge(entry.badge_level)}
                                         </span>
                                         {entry.wins !== undefined && (
-                                            <span className="text-green-400">{t('stats.leaderboard.winsCount', { count: entry.wins })}</span>
+                                            <span className="text-state-success">{t('stats.leaderboard.winsCount', { count: entry.wins })}</span>
                                         )}
                                         {entry.matches_played !== undefined && (
                                             <span>{t('stats.leaderboard.matchesCount', { count: entry.matches_played })}</span>

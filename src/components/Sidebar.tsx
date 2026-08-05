@@ -909,8 +909,8 @@ export default function Sidebar() {
                     } ${
                       tone === 'test'
                         ? active
-                          ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
-                          : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
+                          ? 'border-state-danger/80 bg-state-danger/25 text-state-danger font-bold hover:bg-state-danger/30'
+                          : 'border-state-danger/45 bg-state-danger/10 text-state-danger font-bold hover:border-state-danger/75 hover:bg-state-danger/20 hover:text-state-danger'
                         : active
                         ? sidebarHeroHighlightSrc
                           ? 'border-hl/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
@@ -923,7 +923,7 @@ export default function Sidebar() {
                       <span className="relative z-10 flex h-full w-[46px] flex-shrink-0 items-center justify-center">
                         <Icon
                           className={`w-5 h-5 flex-shrink-0 ${
-                            tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
+                            tone === 'test' ? 'text-state-danger group-hover:text-state-danger' : 'text-text-primary/70 group-hover:text-text-primary'
                           }`}
                           strokeWidth={active ? 2 : 1.75}
                         />
@@ -978,7 +978,7 @@ export default function Sidebar() {
               onClick={handleRestoreNow}
               disabled={restorePending}
               title={t('sidebar.vanilla.collapsedTitle', { count: stashStatus.modCount ?? 0 })}
-              className="w-full flex items-center justify-center h-10 rounded-sm border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full flex items-center justify-center h-10 rounded-sm border border-state-warning/40 bg-state-warning/10 text-state-warning hover:bg-state-warning/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -987,7 +987,7 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
+            <div className="rounded-sm border border-state-warning/40 bg-state-warning/10 px-2.5 py-2 text-xs text-state-warning flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 leading-tight">
                 {t('sidebar.vanilla.stashed', { count: stashStatus.modCount ?? 0 })}
@@ -996,7 +996,7 @@ export default function Sidebar() {
                 onClick={handleRestoreNow}
                 disabled={restorePending}
                 title={t('sidebar.vanilla.restoreNowTitle')}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-state-warning/20 hover:bg-state-warning/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
               >
                 {restorePending ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -1014,7 +1014,7 @@ export default function Sidebar() {
           <div
             className={`rounded-sm px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'
-                ? 'border border-red-500/40 bg-red-500/10 text-red-300'
+                ? 'border border-state-danger/40 bg-state-danger/10 text-state-danger'
                 : 'border border-accent/40 bg-accent/10 text-accent-ink'
             }`}
           >
@@ -1035,7 +1035,7 @@ export default function Sidebar() {
                   }
                 }}
                 className={`mt-1.5 text-xs font-medium underline-offset-2 hover:underline cursor-pointer ${
-                  toast.kind === 'error' ? 'text-red-200' : 'text-accent-ink-hover'
+                  toast.kind === 'error' ? 'text-state-danger' : 'text-accent-ink-hover'
                 }`}
               >
                 {toast.action.label}
@@ -1096,7 +1096,7 @@ export default function Sidebar() {
               onClick={handleStopGame}
               disabled={stopPending || !!launchPending}
               title={t('sidebar.launch.stopTitle')}
-              className={`flex w-full items-center overflow-hidden rounded-sm bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`flex w-full items-center overflow-hidden rounded-sm bg-state-danger/10 text-state-danger ring-1 ring-state-danger/40 hover:bg-state-danger/20 hover:ring-state-danger/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 collapsed ? 'h-10' : 'h-11'
               }`}
             >
@@ -1161,7 +1161,7 @@ export default function Sidebar() {
                       ? t('sidebar.launch.vanillaStash')
                       : t('sidebar.launch.vanillaDefault')
                 }
-                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-hl/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-hl/10 hover:text-text-primary hover:ring-state-warning/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <SurfaceBackdrop
                   bg={launchVanillaBg}
@@ -1235,7 +1235,7 @@ export default function Sidebar() {
                   disabled={!!launchPending || stopPending}
                   title={launchConfig.switchTitle}
                   aria-label={launchConfig.switchTitle}
-                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-black/30 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-hl/10 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
                 >
                   <ArrowRightLeft className="h-3.5 w-3.5" />
                 </button>

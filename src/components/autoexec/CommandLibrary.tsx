@@ -118,7 +118,7 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                             <span className="mt-0.5 block text-xs leading-relaxed text-text-secondary">
                               <Tx k={cmd.descriptionKey} fallback={cmd.descriptionFallback} />
                             </span>
-                            <code className="mt-1.5 inline-block max-w-full truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-text-primary/70">
+                            <code className="mt-1.5 inline-block max-w-full truncate rounded-sm bg-bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-text-primary/70">
                               {cmd.command}
                             </code>
                           </span>

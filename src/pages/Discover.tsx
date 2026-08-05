@@ -24,7 +24,7 @@ import {
 } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useSocialStore } from '../stores/socialStore';
-import { Card, Button } from '../components/common/ui';
+import { Card, Button, Tag } from '../components/common/ui';
 import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import MyPublishedSection from '../components/social/MyPublishedSection';
@@ -360,14 +360,14 @@ export default function Discover() {
         </div>
       )}
       {!signedIn && signInError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start justify-between gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span className="break-words">{signInError}</span>
           </div>
           <button
             onClick={clearSignInError}
-            className="text-red-300 hover:text-red-200 underline shrink-0 cursor-pointer"
+            className="text-state-danger hover:text-state-danger underline shrink-0 cursor-pointer"
           >
             {t('common.actions.dismiss')}
           </button>
@@ -490,7 +490,7 @@ export default function Discover() {
                       - 2-4 thumbs : 2x2 mosaic, hairline separators */}
                   <div className="relative aspect-video bg-bg-tertiary overflow-hidden">
                     {mosaicSlots && (
-                      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px bg-black/40">
+                      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px bg-overlay-bg/40">
                         {mosaicSlots.map((url, i) =>
                           url ? (
                             <img
@@ -525,15 +525,14 @@ export default function Discover() {
                     {(p.is_featured || p.has_nsfw) && (
                       <div className="absolute top-2 left-2 flex items-center gap-1.5">
                         {p.is_featured && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-amber-300 border border-amber-300/30">
-                            <Sparkles className="w-3 h-3" />
+                          <Tag tone="warning" variant="overlay" icon={Sparkles}>
                             {t('discover.card.featured')}
-                          </span>
+                          </Tag>
                         )}
                         {p.has_nsfw && (
-                          <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-yellow-300 border border-yellow-300/30">
+                          <Tag tone="warning" variant="overlay">
                             NSFW
-                          </span>
+                          </Tag>
                         )}
                       </div>
                     )}
@@ -588,7 +587,7 @@ export default function Discover() {
                         className={`flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 -mr-1 rounded-md transition-colors ${
                           signedIn
                             ? liked
-                              ? 'text-state-danger hover:bg-red-500/10 cursor-pointer'
+                              ? 'text-state-danger hover:bg-state-danger/10 cursor-pointer'
                               : 'text-text-secondary hover:text-state-danger hover:bg-hl/5 cursor-pointer'
                             : 'text-text-tertiary cursor-help hover:bg-hl/5'
                         } disabled:opacity-50`}

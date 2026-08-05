@@ -648,7 +648,7 @@ export default function Conflicts() {
           hide the only path back. */}
       {conflicts.length === 0 && (
         <div className="mb-6 p-4 rounded-xl border border-border bg-bg-secondary text-sm text-text-secondary flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-400" />
+          <CheckCircle className="w-4 h-4 text-state-success" />
           {ignored.size > 0 ? (
             <Tx
               k="conflicts.empty.activeWithIgnored"
@@ -706,7 +706,7 @@ export default function Conflicts() {
                   onClick={() => setDisableTarget(mod)}
                   aria-label={t('conflicts.actions.disableNamed', { name: mod.name })}
                   title={t('conflicts.actions.disableNamed', { name: mod.name })}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-red-500/30 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200 cursor-pointer"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-state-danger/30 bg-state-danger/10 text-state-danger transition-colors hover:bg-state-danger/20 hover:text-state-danger cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -716,11 +716,11 @@ export default function Conflicts() {
             return (
               <div
                 key={`${conflict.modA}-${conflict.modB}-${i}`}
-                className="overflow-hidden rounded-xl border border-yellow-500/30 bg-bg-secondary"
+                className="overflow-hidden rounded-xl border border-state-warning/30 bg-bg-secondary"
               >
-                <div className="flex items-center gap-2 border-b border-yellow-500/20 bg-yellow-500/10 px-4 py-2">
-                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-500" />
-                  <span className="min-w-0 flex-1 truncate text-sm text-yellow-400" title={conflict.details}>
+                <div className="flex items-center gap-2 border-b border-state-warning/20 bg-state-warning/10 px-4 py-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-state-warning" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-state-warning" title={conflict.details}>
                     {conflict.details}
                   </span>
                   <button
@@ -772,12 +772,12 @@ export default function Conflicts() {
             return (
               <div
                 key={`${conflict.modA}-${conflict.modB}-${i}`}
-                className="bg-bg-secondary border border-yellow-500/30 rounded-xl overflow-hidden"
+                className="bg-bg-secondary border border-state-warning/30 rounded-xl overflow-hidden"
               >
                 {/* Header */}
-                <div className="bg-yellow-500/10 px-4 py-2 flex items-center gap-2 border-b border-yellow-500/20">
-                  <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                  <span className="text-sm text-yellow-400 min-w-0 flex-1 truncate" title={conflict.details}>
+                <div className="bg-state-warning/10 px-4 py-2 flex items-center gap-2 border-b border-state-warning/20">
+                  <AlertTriangle className="w-4 h-4 text-state-warning flex-shrink-0" />
+                  <span className="text-sm text-state-warning min-w-0 flex-1 truncate" title={conflict.details}>
                     {conflict.details}
                   </span>
                   <button
@@ -816,9 +816,9 @@ export default function Conflicts() {
                         <button
                           onClick={() => setDisableTarget(modA)}
                           aria-label={t('conflicts.actions.disableNamed', { name: modA.name })}
-                          className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                          className="absolute inset-x-0 bottom-0 bg-state-danger hover:bg-state-danger flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-overlay-border cursor-pointer"
                         >
-                          <span className="text-white text-sm font-medium flex items-center gap-1">
+                          <span className="text-state-danger-foreground text-sm font-medium flex items-center gap-1">
                             <X className="w-4 h-4" />
                             <Tx k="conflicts.actions.disable" fallback="Disable" />
                           </span>
@@ -869,9 +869,9 @@ export default function Conflicts() {
                         <button
                           onClick={() => setDisableTarget(modB)}
                           aria-label={t('conflicts.actions.disableNamed', { name: modB.name })}
-                          className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                          className="absolute inset-x-0 bottom-0 bg-state-danger hover:bg-state-danger flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-overlay-border cursor-pointer"
                         >
-                          <span className="text-white text-sm font-medium flex items-center gap-1">
+                          <span className="text-state-danger-foreground text-sm font-medium flex items-center gap-1">
                             <X className="w-4 h-4" />
                             <Tx k="conflicts.actions.disable" fallback="Disable" />
                           </span>
@@ -1108,7 +1108,7 @@ export default function Conflicts() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm text-text-primary" title={name}>{name}</span>
-                      <span className="flex-shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-400">
+                      <span className="flex-shrink-0 rounded border border-state-warning/40 bg-state-warning/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-state-warning">
                         <Tx k="conflicts.ignoredMods.tag" fallback="Ignored" />
                       </span>
                     </div>

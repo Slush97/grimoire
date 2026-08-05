@@ -128,7 +128,7 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('locker.globalPicker.searchPlaceholder')}
-            className="w-full rounded-lg border border-border bg-bg-input py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none"
+            className="w-full rounded-lg border border-border bg-bg-tertiary py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none"
           />
         </div>
       </div>

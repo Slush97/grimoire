@@ -22,7 +22,7 @@ export const MenuRoot = RadixContextMenu.Root;
 export const MenuTrigger = RadixContextMenu.Trigger;
 
 export const MENU_SURFACE_CLASS =
-  'z-[80] min-w-52 rounded-lg border border-hl/10 bg-bg-secondary/95 p-1.5 text-sm text-text-primary shadow-2xl shadow-black/30 backdrop-blur-md animate-fade-in';
+  'z-[80] min-w-52 rounded-lg border border-hl/10 bg-bg-secondary/95 p-1.5 text-sm text-text-primary shadow-popup backdrop-blur-md animate-fade-in';
 
 type MenuContentProps = RadixContextMenu.ContextMenuContentProps;
 

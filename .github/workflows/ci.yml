@@ -63,6 +63,12 @@ jobs:
         working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
 
+      # Reject dark-palette status text, literal white app copy, undefined
+      # custom theme utilities, and contrast regressions in semantic tokens.
+      - name: Theme source policy
+        working-directory: grimoire
+        run: pnpm theme:check
+
       # Vitest covers the FeModel parser, cloth fit math + solver stability,
       # Source 2 / NPR material reconstruction, the dynamic-scalar evaluator and
       # the profiles vpkIndex resolver. Nothing gated these until now, so a PR

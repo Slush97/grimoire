@@ -932,8 +932,8 @@ export default function ImportCollectionModal({
                 </button>
               </div>
               {needsVariantPicks.size > 0 && (
-                <div className="px-6 py-2.5 bg-amber-500/10 border-t border-amber-500/30 flex items-center justify-between gap-3">
-                  <div className="text-sm text-amber-200 flex items-center gap-2 min-w-0">
+                <div className="px-6 py-2.5 bg-state-warning/10 border-t border-state-warning/30 flex items-center justify-between gap-3">
+                  <div className="text-sm text-state-warning flex items-center gap-2 min-w-0">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                     <span>
                       {t('importCollection.pickVariantPrompt', { count: needsVariantPicks.size })}
@@ -972,7 +972,7 @@ export default function ImportCollectionModal({
                   key={row.item.id}
                   ref={setRowRef(row.item.id)}
                   className={`px-6 py-4 transition-colors ${
-                    needsVariantPicks.has(row.item.id) ? 'bg-amber-500/5' : ''
+                    needsVariantPicks.has(row.item.id) ? 'bg-state-warning/5' : ''
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -1053,7 +1053,7 @@ export default function ImportCollectionModal({
                       ) : nsfwSkipped ? (
                         <span className="text-text-tertiary">{t('importCollection.skippedNsfw')}</span>
                       ) : row.status === 'installed' ? (
-                        <span className="text-green-400 inline-flex items-center gap-1.5 justify-end">
+                        <span className="text-state-success inline-flex items-center gap-1.5 justify-end">
                           <CheckCircle2 className="w-4 h-4" /> {t('nav.installed')}
                         </span>
                       ) : row.status === 'resolving' ? (
@@ -1208,7 +1208,7 @@ export default function ImportCollectionModal({
                   </span>
                 )}
                 {profileStatus.kind === 'created' && (
-                  <span className="text-green-400 inline-flex items-center gap-1.5 text-xs">
+                  <span className="text-state-success inline-flex items-center gap-1.5 text-xs">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     {t('importCollection.status.profileSaved')}
                   </span>

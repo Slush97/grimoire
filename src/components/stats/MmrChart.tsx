@@ -313,7 +313,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
         <div>
             <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="text-xs text-text-secondary">
-                    <span className={delta >= 0 ? 'text-green-400' : 'text-state-danger'}>
+                    <span className={delta >= 0 ? 'text-state-success' : 'text-state-danger'}>
                         {delta >= 0 ? '+' : ''}
                         {delta.toFixed(1)}
                     </span>

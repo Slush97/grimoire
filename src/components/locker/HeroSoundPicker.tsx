@@ -491,7 +491,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
         <div
           className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
             gameRunning
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              ? 'border-state-warning/40 bg-state-warning/10 text-state-warning'
               : 'border-border bg-bg-secondary/70 text-text-secondary'
           }`}
         >

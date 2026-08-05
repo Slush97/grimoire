@@ -6,13 +6,21 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 ## Tokens, not raw values
 
+Every renderer surface belongs to one of these three contracts:
+
+- **App surfaces:** use `bg-bg-*`, `text-text-*`, and `border-border` (or `hl` for a surface-relative highlight). These resolve with light, dark, and system themes.
+- **Statuses:** use `state-success`, `state-warning`, `state-danger`, or `state-info` for text, icons, fills, borders, and rings. Pair status color with an icon and/or explicit label so meaning never depends on hue alone.
+- **Media overlays:** use the invariant `overlay-*` palette on `bg-overlay-bg`, or use `Tag variant="overlay"`. Overlay foregrounds stay bright because the coupled surface stays dark in both app themes.
+
+`pnpm theme:check` enforces these boundaries in renderer source. It rejects raw status-palette text, literal `text-white`, undefined custom theme utilities, and color overrides on overlay tags. CI runs the same command.
+
 - **No raw hex** in `className`/`style`. Use a token utility (`bg-bg-secondary`, `text-text-primary`, `border-border`, `bg-accent`). If a value is genuinely new and reusable, add a token to `@theme` first.
 - **No raw Tailwind palette colors** (`green-500`, `red-400`, `zinc-300`, ...) where a semantic token exists. Status/state -> `state-success | state-warning | state-danger | state-info`. Brand -> `brand-discord | brand-kofi`.
 - Prefer `text-text-primary` over `text-white`. The accent foreground flips by luminance at runtime; literal whites can't.
 - Surfaces: app bg `bg-bg-primary`, cards/panels `bg-bg-secondary`, inputs/raised `bg-bg-tertiary`.
 - Use `hl` for surface-relative highlights: dividers, subtle borders, raised tints, and hover fills. It adapts across light and dark themes; `white/*` does not.
 - Use `accent-ink` for accent-colored text and icons on neutral surfaces. Reserve `accent` for fills, borders, focus rings, and other large or decorative marks where the selected accent remains legible.
-- Literal black or white is appropriate when contrast depends on media rather than the app theme: scrims, image captions, artwork controls, and overlays on photos or hero art. Keep those colors coupled to their media treatment instead of converting them to theme text tokens.
+- Do not use literal `text-white`, including on media. Use `text-overlay-primary`/`secondary`/`muted` and keep it coupled to `bg-overlay-bg` or a media scrim. Brand and saturated status fills use their named foreground token.
 
 ## Components, not ad-hoc markup
 

@@ -92,7 +92,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+            <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -101,7 +101,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           {result && (
             <>
               {result.warnings.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-md p-3 text-sm text-yellow-200 flex items-start gap-2">
+                <div className="bg-state-warning/10 border border-state-warning/30 rounded-md p-3 text-sm text-state-warning flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <div className="font-medium">

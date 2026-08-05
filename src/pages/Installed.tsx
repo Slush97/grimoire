@@ -429,8 +429,10 @@ function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
     <span
       title={t('installed.priority.hint')}
       aria-label={t('installed.priority.chip')}
-      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent-ink ${
-        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
+      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border px-2 ${
+        variant === 'overlay'
+          ? 'border-overlay-accent/60 bg-overlay-bg/70 text-overlay-accent'
+          : 'border-accent/60 bg-bg-tertiary text-accent-ink'
       }`}
     >
       <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
@@ -3894,7 +3896,7 @@ export default function Installed() {
         </SortableContext>
         <DragOverlay>
           {activeEntry ? (
-            <div className="pointer-events-none opacity-95 shadow-2xl">
+            <div className="pointer-events-none opacity-95 shadow-popup">
               {renderEntryCard(activeEntry)}
             </div>
           ) : null}
@@ -4098,7 +4100,7 @@ export default function Installed() {
                 title={t('installed.filters.sortAndFilterHint')}
               />
               {activeAdjustmentCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
+                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent-solid px-1 text-[10px] font-semibold leading-none text-accent-solid-foreground ring-2 ring-bg-primary">
                   {activeAdjustmentCount}
                 </span>
               )}
@@ -4108,7 +4110,7 @@ export default function Installed() {
                 // overlays the page instead of clipping at this scroll edge.
                 <div
                   ref={filterPanelRef}
-                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans"
+                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-popup [&_button]:font-sans"
                 >
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
@@ -4333,7 +4335,7 @@ export default function Installed() {
                 title={t('installed.actions.lockerOverridesHint')}
               />
               {lockerOverrideCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
+                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent-solid px-1 text-[10px] font-semibold leading-none text-accent-solid-foreground ring-2 ring-bg-primary">
                   {lockerOverrideCount}
                 </span>
               )}
@@ -4354,7 +4356,7 @@ export default function Installed() {
                 title={t('installed.view.styleAndCardSize')}
               />
               {viewMenuOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans [&_input]:font-sans">
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-popup [&_button]:font-sans [&_input]:font-sans">
                   <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     {t('installed.view.style')}
                   </div>
@@ -4579,7 +4581,7 @@ export default function Installed() {
               <button
                 type="button"
                 onClick={() => setUpdatePickQueue([])}
-                className="text-text-muted hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="text-text-tertiary hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label={t('installed.updateAll.dismissPickNotice')}
               >
                 <X className="w-4 h-4" />
@@ -4730,7 +4732,7 @@ export default function Installed() {
       {detailsLoading && createPortal(
         <div
           ref={detailsLoadingBackdropRef}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
+          className="fixed inset-0 bg-overlay-bg/50 flex items-center justify-center z-50 animate-fade-in"
         >
           <div
             className="bg-bg-secondary border border-border rounded-xl p-6 flex items-center gap-3"
@@ -4746,7 +4748,7 @@ export default function Installed() {
       {detailsError && !detailsMod && createPortal(
         <div
           ref={detailsErrorBackdropRef}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-overlay-bg/50 flex items-center justify-center z-50 p-4"
         >
           <div
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
@@ -4991,7 +4993,7 @@ export default function Installed() {
         // short window).
         <div
           ref={selectBarRef}
-          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
+          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-popup px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
           style={selectBarPos ? { left: selectBarPos.x, top: selectBarPos.y } : undefined}
         >
           <span
@@ -5075,7 +5077,7 @@ export default function Installed() {
                   <div
                     role="dialog"
                     aria-label={t('installed.select.tagDialogLabel')}
-                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
+                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-popup p-1 animate-fade-in"
                   >
                     <button
                       type="button"
@@ -5232,13 +5234,13 @@ function UnknownFilterGuessModal({
   return createPortal(
     <div
       ref={backdropRef}
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+      className="fixed inset-0 bg-overlay-bg/60 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="unknown-filter-title"
     >
       <div
-        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
@@ -5340,13 +5342,13 @@ function BulkUnknownFixModal({
     <>
     <div
       ref={backdropRef}
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+      className="fixed inset-0 bg-overlay-bg/60 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="bulk-unknown-title"
     >
       <div
-        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
@@ -5585,7 +5587,7 @@ function UnknownMatchPanel({
       />
 
       {applyError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{applyError}</span>
         </div>
@@ -5609,8 +5611,8 @@ function UnknownMatchPanel({
           {t('installed.unknown.autoDetectSummary')}
         </summary>
         <div className="px-4 pb-4 space-y-3 border-t border-hl/5 pt-3">
-          <div className="flex items-start gap-2 text-xs text-yellow-200/90 bg-yellow-500/10 border border-yellow-500/25 rounded-md p-2.5">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
+          <div className="flex items-start gap-2 text-xs text-state-warning/90 bg-state-warning/10 border border-state-warning/25 rounded-md p-2.5">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-state-warning" />
             <span>
               {t('installed.unknown.autoDetectWarning')}
             </span>
@@ -5638,7 +5640,7 @@ function UnknownMatchPanel({
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
+            <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -5895,7 +5897,7 @@ function UnknownManualSearch({
             i18nKey="installed.unknown.manualSearchIntro"
             components={{
               lead: <span className="font-medium text-text-primary" />,
-              banana: <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-yellow-400" />,
+              banana: <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-state-warning" />,
             }}
           />
         </div>
@@ -5948,7 +5950,7 @@ function UnknownManualSearch({
       </div>
 
       {searchError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{searchError}</span>
         </div>
@@ -6005,7 +6007,7 @@ function UnknownManualSearch({
                     rel="noopener noreferrer"
                     title={`Open ${gbMod.name} on GameBanana to download it directly`}
                     aria-label={`Open ${gbMod.name} on GameBanana`}
-                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-hl/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
+                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-hl/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-state-warning/50 hover:text-state-warning hover:bg-state-warning/5"
                   >
                     <Banana className="w-4 h-4" />
                   </a>
@@ -6250,7 +6252,7 @@ function UnknownFileList({
             </div>
           )}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
+            <div className="bg-state-danger/10 border border-state-danger/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -6867,7 +6869,7 @@ function UnknownEmbeddedCard({
       </div>
 
       {!isMerge && typeof match.modId === 'number' && (
-        <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+        <div className="border-t border-state-success/20 px-4 py-3 bg-bg-sunken/50 flex flex-wrap justify-end gap-2">
           <Button variant="secondary" size="sm" icon={Info} disabled={linking} onClick={onView}>
             {t('installed.unknown.viewMod')}
           </Button>
@@ -6942,7 +6944,7 @@ function UnknownMatchCard({
 
       </div>
 
-      <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+      <div className="border-t border-state-success/20 px-4 py-3 bg-bg-sunken/50 flex flex-wrap justify-end gap-2">
         <Button
           variant="secondary"
           size="sm"
@@ -7887,7 +7889,7 @@ function ModCard({
   const baseChipClasses = `inline-flex min-w-0 ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent-ink`;
-  const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
+  const inferredTagChipClasses = `${baseChipClasses} border border-state-info/35 bg-state-info/15 text-state-info`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
@@ -8040,7 +8042,7 @@ function ModCard({
             ref={menuPanelRef}
             role="menu"
             data-card-menu-open
-            className="z-[80] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            className="z-[80] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-popup animate-fade-in"
             style={{
               position: 'fixed',
               right: Math.max(8, window.innerWidth - menuRect.right),
@@ -8208,7 +8210,7 @@ function ModCard({
                           tagged
                             ? mod.lockerHeroSource === 'manual'
                               ? 'text-accent-ink'
-                              : 'text-sky-200'
+                              : 'text-state-info'
                             : 'text-text-primary'
                         }`}
                       >
@@ -8307,7 +8309,7 @@ function ModCard({
         >
           <span className={toggleTrackClasses} aria-hidden>
             <span
-              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] ring-1 ring-black/15 transition-transform duration-200 ${
+              className={`absolute left-[2px] top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-control-thumb shadow-sm ring-1 ring-control-thumb-border/15 transition-transform duration-200 ${
                 mod.enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -8431,10 +8433,10 @@ function ModCard({
               )}
               {mod.isUnknown && (
                 <Tag
+                  tone="info"
                   variant="overlay"
                   icon={Wrench}
                   title={t('installed.card.unknownTitle')}
-                  className="border-cyan-300/70 text-cyan-200"
                 >
                   {t('installed.card.unknown')}
                 </Tag>
@@ -8455,7 +8457,6 @@ function ModCard({
                   variant="overlay"
                   icon={Layers}
                   title={t('installed.card.mergedTitle', { count: mod.merged.sources.length })}
-                  className="border-hl/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
@@ -8465,7 +8466,7 @@ function ModCard({
                   variant="overlay"
                   icon={Files}
                   title={variantStatusTitle}
-                  className="border-hl/20 text-white/90 tabular-nums"
+                  className="tabular-nums"
                 >
                   {variantStatusLabel}
                 </Tag>
@@ -8674,10 +8675,10 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
   return createPortal(
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay-bg/60 p-4 backdrop-blur-sm"
     >
       <div
-        className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
+        className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
@@ -8988,7 +8989,7 @@ function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCusto
           </label>
 
           {error && (
-            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-state-danger/10 border border-state-danger/30 rounded-lg p-2">
               {error}
             </div>
           )}

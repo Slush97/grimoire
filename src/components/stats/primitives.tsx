@@ -22,7 +22,7 @@ interface StatCardProps {
 
 export function StatCard({ label, value, tone = 'default', sub }: StatCardProps) {
     const valueClass =
-        tone === 'accent' ? 'text-accent-ink' : tone === 'success' ? 'text-green-400' : 'text-text-primary'
+        tone === 'accent' ? 'text-accent-ink' : tone === 'success' ? 'text-state-success' : 'text-text-primary'
     return (
         <div className="bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm px-5 py-4 text-center relative overflow-hidden">
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
@@ -170,14 +170,14 @@ export function MatchRow({
     return (
         <div
             className={`group flex items-center gap-3 p-2.5 bg-bg-tertiary rounded-sm border-l-2 transition-colors ${
-                won ? 'border-green-400/60' : 'border-red-400/60'
+                won ? 'border-state-success/60' : 'border-state-danger/60'
             } hover:bg-hl/5`}
         >
             <HeroChip heroId={heroId} size="md" />
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{heroName(heroId)}</span>
-                    <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-state-danger'}`}>
+                    <span className={`text-xs font-semibold ${won ? 'text-state-success' : 'text-state-danger'}`}>
                         {won ? t('stats.primitives.win') : t('stats.primitives.loss')}
                     </span>
                 </div>

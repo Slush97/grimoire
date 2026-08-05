@@ -57,7 +57,7 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
       onClose={onClose}
       size="none"
       panelClassName="max-w-3xl flex flex-col"
-      backdropClassName="bg-black/80"
+      backdropClassName="bg-overlay-bg/80"
     >
       {item && (
         <>
@@ -93,7 +93,7 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
               <ImageOff size={40} className="text-text-secondary/40" />
             )}
             {loading && (
-              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-sm bg-black/50 px-2 py-1 text-[11px] text-white/80">
+              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-sm bg-overlay-bg/50 px-2 py-1 text-[11px] text-overlay-primary/80">
                 <Loader2 size={12} className="animate-spin" />
                 {t('foundry.lightbox.decoding', 'Decoding full size...')}
               </div>
