@@ -49,7 +49,7 @@ export default function AppUpdateBanner() {
             aria-live="polite"
             className="flex flex-wrap items-center gap-3 overflow-hidden rounded-xl border border-accent/30 bg-accent/10 px-4 py-3"
           >
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-accent/20 text-accent">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-accent/20 text-accent-ink">
               <ArrowUpCircle className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
@@ -85,7 +85,7 @@ export default function AppUpdateBanner() {
               }}
               aria-label={t('appUpdateBanner.hideBannerUntilNextLaunch')}
               title={t('appUpdateBanner.hideUntilNextLaunch')}
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>

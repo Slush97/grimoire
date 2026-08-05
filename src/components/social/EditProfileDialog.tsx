@@ -70,13 +70,13 @@ export default function EditProfileDialog({
       dismissable={!submitting}
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2
               id="edit-profile-title"
               className="text-xl font-bold text-text-primary flex items-center gap-2"
             >
-              <Pencil className="w-5 h-5 text-accent" />
+              <Pencil className="w-5 h-5 text-accent-ink" />
               {t('social.editProfile.editYourPost')}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
@@ -88,7 +88,7 @@ export default function EditProfileDialog({
               if (!submitting) onClose();
             }}
             disabled={submitting}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />

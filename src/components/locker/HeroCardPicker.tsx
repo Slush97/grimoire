@@ -274,9 +274,9 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
   return (
     <section className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center gap-2">
-        <Images className="w-4 h-4 text-accent" />
+        <Images className="w-4 h-4 text-accent-ink" />
         <h3 className="text-sm font-semibold text-text-primary">{t('locker.cards.heroCard')}</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink">
           {t('locker.cards.experimental')}
         </span>
       </div>
@@ -332,7 +332,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 className={`group relative block w-full overflow-hidden rounded-[10px] border text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
                   isApplied
                     ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
-                    : 'border-white/[0.08] bg-bg-sunken/55 hover:border-white/[0.16]'
+                    : 'border-hl/[0.08] bg-bg-sunken/55 hover:border-hl/[0.16]'
                 } ${busySource !== null && !isBusy ? 'opacity-60' : 'cursor-pointer'}`}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
@@ -386,12 +386,12 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
           className={`space-y-3 rounded-[10px] border p-3 backdrop-blur-sm transition-[border-color,box-shadow] duration-200 ${
             customApplied
               ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
-              : 'border-white/[0.08] bg-bg-sunken/55'
+              : 'border-hl/[0.08] bg-bg-sunken/55'
           }`}
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Upload className="h-3.5 w-3.5 text-accent" />
+              <Upload className="h-3.5 w-3.5 text-accent-ink" />
               <span className="text-xs font-semibold text-text-primary">{t('locker.cards.uploadYourOwn')}</span>
             </div>
             {customApplied ? (
@@ -473,7 +473,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               onClick={handleApplyCustom}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
                 customApplied && !dirty
-                  ? 'bg-accent/15 text-accent ring-1 ring-accent/40'
+                  ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/40'
                   : 'bg-accent text-accent-foreground hover:bg-accent-hover disabled:opacity-50'
               }`}
             >
@@ -495,7 +495,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               disabled={exporting || customBusy || !hasPicks}
               onClick={handleExportCustom}
               title={t('locker.cards.exportVpkTitle')}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {exporting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -509,7 +509,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 type="button"
                 disabled={customBusy}
                 onClick={handleRevertCustom}
-                className="inline-flex cursor-pointer items-center rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex cursor-pointer items-center rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('locker.cards.revert')}
               </button>

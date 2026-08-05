@@ -61,7 +61,7 @@ export default function SettingsNav({ groups, active, onSelect, label }: Setting
                       )}
                       <Icon
                         className={`h-4 w-4 shrink-0 ${
-                          isActive ? 'text-accent' : 'text-text-primary/60 group-hover:text-text-primary'
+                          isActive ? 'text-accent-ink' : 'text-text-primary/60 group-hover:text-text-primary'
                         }`}
                         strokeWidth={isActive ? 2 : 1.75}
                       />

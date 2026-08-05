@@ -54,9 +54,9 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-accent" />
+        <Sparkles className="h-4 w-4 text-accent-ink" />
         <h3 className="text-sm font-semibold text-text-primary">{t('locker.effects.effects')}</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink">
           {t('locker.effects.experimental')}
         </span>
       </div>

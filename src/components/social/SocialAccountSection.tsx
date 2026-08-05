@@ -78,11 +78,11 @@ export default function SocialAccountSection() {
               <img
                 src={status.user.avatar_url}
                 alt=""
-                className="w-12 h-12 rounded-full border border-white/10"
+                className="w-12 h-12 rounded-full border border-hl/10"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-white/10 flex items-center justify-center text-text-secondary">
+              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-hl/10 flex items-center justify-center text-text-secondary">
                 <Globe className="w-5 h-5" />
               </div>
             )}
@@ -103,7 +103,7 @@ export default function SocialAccountSection() {
             <KeyringNotice />
           )}
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-hl/5">
             <Button variant="secondary" icon={LogOut} onClick={logout} disabled={loading}>
               {t('social.account.signOut')}
             </Button>

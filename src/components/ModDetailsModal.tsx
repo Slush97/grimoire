@@ -498,7 +498,7 @@ function ModDetailsModal({
         className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
       />
     ) : (
-      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent">
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent-ink">
         {submitter.name.charAt(0)}
       </div>
     )
@@ -592,9 +592,9 @@ function ModDetailsModal({
       >
         <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${
           isUpdate
-            ? 'bg-accent/15 text-accent'
+            ? 'bg-accent/15 text-accent-ink'
             : isActive
-              ? 'bg-accent/20 text-accent'
+              ? 'bg-accent/20 text-accent-ink'
               : isInstalled
                 ? 'bg-green-500/15 text-green-400'
                 : archived
@@ -641,7 +641,7 @@ function ModDetailsModal({
         </div>
         <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
           {isActive && (
-            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-ink">
               {t('common.status.active')}
             </span>
           )}
@@ -935,7 +935,7 @@ function ModDetailsModal({
           )}
           <div className="flex items-center gap-2 flex-shrink-0">
             {updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent border border-accent/40">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink border border-accent/40">
                 <Download className="w-2.5 h-2.5" />
                 Update
               </span>
@@ -957,7 +957,7 @@ function ModDetailsModal({
                 className={
                   ignoreUpdates
                     ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
-                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent-ink hover:border-accent/40 transition-colors'
                 }
                 title={
                   ignoreUpdates
@@ -1009,10 +1009,10 @@ function ModDetailsModal({
                     target="_blank"
                     rel="noopener noreferrer"
                     title={`View ${mod.name} on GameBanana`}
-                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent-ink"
                   >
                     <span className="min-w-0 truncate">{mod.name}</span>
-                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                   </a>
                 )
               )}
@@ -1323,7 +1323,7 @@ function ModDetailsModal({
               ) : section === 'Sound' && !audioPreviewUrl ? (
                 <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
                   <div className="flex flex-col items-center gap-2 text-text-secondary">
-                    <Volume2 className="w-12 h-12 text-accent/60" />
+                    <Volume2 className="w-12 h-12 text-accent-ink/60" />
                     <span className="text-sm">{t('modDetails.audio.soundMod')}</span>
                     <span className="text-xs opacity-60">{t('modDetails.audio.noPreview')}</span>
                   </div>
@@ -1333,10 +1333,10 @@ function ModDetailsModal({
               {audioPreviewUrl && (
                 <div className="relative rounded-lg overflow-hidden border border-border bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Volume2 className="w-4 h-4 text-accent" />
+                    <Volume2 className="w-4 h-4 text-accent-ink" />
                     <h3 className="font-medium text-sm text-text-primary">{t('modDetails.audio.preview')}</h3>
                   </div>
-                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
+                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-hl/10 p-1">
                     <AudioPreviewPlayer
                       src={audioPreviewUrl}
                       className="w-full"
@@ -1373,10 +1373,10 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`View ${mod.name} on GameBanana`}
-                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
+                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent-ink"
                       >
                         <span className="min-w-0">{mod.name}</span>
-                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent-ink" />
                       </a>
                     )
                   )}
@@ -1438,10 +1438,10 @@ function ModDetailsModal({
                           type="button"
                           onClick={openArtist}
                           title={`View ${submitter.name}'s mods`}
-                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent cursor-pointer"
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent-ink cursor-pointer"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
-                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent-ink" />
                         </button>
                       ) : submitterProfileUrl ? (
                         <a
@@ -1449,10 +1449,10 @@ function ModDetailsModal({
                           target="_blank"
                           rel="noopener noreferrer"
                           title={`View ${submitter.name} on GameBanana`}
-                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent"
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent-ink"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
-                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent-ink" />
                         </a>
                       ) : (
                         <span className="block min-w-0 truncate font-semibold text-text-primary">{submitter.name}</span>
@@ -1492,7 +1492,7 @@ function ModDetailsModal({
                     {t('modDetails.sections.about')}
                   </h3>
                   <div
-                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full"
+                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent-ink [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full"
                     onClick={handleRichHtmlClick}
                   >
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
@@ -1603,7 +1603,7 @@ function ModDetailsModal({
                               ) : (
                                 update.text && (
                                   <div
-                                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent-ink [&_a]:hover:underline"
                                     onClick={handleRichHtmlClick}
                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(update.text) }}
                                   />
@@ -1676,7 +1676,7 @@ function ModDetailsModal({
                           ) : (
                             <div
                               aria-hidden="true"
-                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-xs font-bold text-accent"
+                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-xs font-bold text-accent-ink"
                             >
                               {posterInitial}
                             </div>
@@ -1709,7 +1709,7 @@ function ModDetailsModal({
                   href={gbUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
+                  className="inline-flex items-center gap-2 text-accent-ink hover:text-accent-ink-hover transition-colors text-sm"
                 >
                   <ExternalLink className="w-4 h-4" />
                   {t('modDetails.viewOnGamebanana')}

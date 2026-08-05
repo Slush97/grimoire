@@ -270,7 +270,7 @@ export function LockerHeroView({
     );
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div className="locker-hero-detail relative flex h-full overflow-hidden">
       {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
           panel so it can bleed through the frosted-glass rail + selection
           column. The image is sized to the window height with natural aspect
@@ -347,7 +347,7 @@ export function LockerHeroView({
         className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
       >
         <div
-          className="absolute inset-0"
+          className="locker-hero-glass-wash absolute inset-0"
           style={{
             backdropFilter: 'blur(48px) saturate(135%)',
             WebkitBackdropFilter: 'blur(48px) saturate(135%)',
@@ -377,7 +377,7 @@ export function LockerHeroView({
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 40%, rgba(26,26,26,0.75) 58%, rgba(26,26,26,0.4) 74%, rgba(26,26,26,0.15) 87%, transparent 97%)',
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, color-mix(in srgb, var(--color-bg-secondary) 95%, transparent) 40%, color-mix(in srgb, var(--color-bg-secondary) 75%, transparent) 58%, color-mix(in srgb, var(--color-bg-secondary) 40%, transparent) 74%, color-mix(in srgb, var(--color-bg-secondary) 15%, transparent) 87%, transparent 97%)',
           }}
         />
       </div>
@@ -400,7 +400,7 @@ export function LockerHeroView({
             onClick={onToggleFavorite}
             className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
               isFavorite
-                ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+                ? 'border-state-warning/60 bg-state-warning/12 text-state-warning'
                 : 'border-border/70 text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -412,14 +412,14 @@ export function LockerHeroView({
         {/* Hero Name. Hidden when the active skin's backdrop already shows the
             hero name (issue #208). */}
         {hideHeroName && backdropImage ? null : nameFailed ? (
-          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          <h2 className="text-2xl font-bold text-text-primary">
             {hero.name}
           </h2>
         ) : (
           <img
             src={getHeroNamePath(hero.name)}
             alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
+            className="locker-hero-name h-8 w-auto self-start object-contain"
             onError={() => setNameFailed(true)}
           />
         )}
@@ -439,12 +439,12 @@ export function LockerHeroView({
                     ? 'cursor-default border-transparent opacity-40'
                     : isActive
                       ? 'border-accent/60 bg-accent/15 cursor-pointer'
-                      : 'border-transparent hover:bg-white/10 cursor-pointer'
+                      : 'border-transparent hover:bg-hl/10 cursor-pointer'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
-                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
-                {count !== null && <span className="text-xs text-white/50">{count}</span>}
+                <Icon className="h-4 w-4 flex-shrink-0 text-text-secondary" />
+                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
+                {count !== null && <span className="text-xs text-text-tertiary">{count}</span>}
               </button>
             );
           })}
@@ -469,10 +469,10 @@ export function LockerHeroView({
         <div className="space-y-4 p-6">
           {contentHeading && (
             <div className="flex items-baseline gap-2">
-              <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              <h3 className="text-base font-semibold text-text-primary">
                 {contentHeading.title}
               </h3>
-              <span className="text-xs text-white/60">{contentHeading.count}</span>
+              <span className="text-xs text-text-secondary">{contentHeading.count}</span>
             </div>
           )}
           {selectionPanel}
@@ -486,7 +486,7 @@ export function LockerHeroView({
           <Suspense
             fallback={
               <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+                <Loader2 className="h-6 w-6 animate-spin text-text-primary/80" />
               </div>
             }
           >

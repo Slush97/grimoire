@@ -423,7 +423,7 @@ export default function SoulContainerImportModal({
                     ? 'border-accent bg-accent/10'
                     : glbPath
                       ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
-                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
                 }`}
               >
                 <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />

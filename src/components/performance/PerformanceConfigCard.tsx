@@ -427,7 +427,7 @@ export default function PerformanceConfigCard() {
                         <button
                           type="button"
                           onClick={viewSqookyInBrowse}
-                          className="text-accent hover:underline"
+                          className="text-accent-ink hover:underline"
                         />
                       ),
                       kofi: (
@@ -435,7 +435,7 @@ export default function PerformanceConfigCard() {
                           href={SQOOKY_KOFI_URL}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="text-accent hover:underline"
+                          className="text-accent-ink hover:underline"
                         />
                       ),
                     }}
@@ -455,7 +455,7 @@ export default function PerformanceConfigCard() {
           />
         )}
 
-        <div className="border-t border-white/5 pt-4 space-y-3">
+        <div className="border-t border-hl/5 pt-4 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-2">
               <p className="flex items-start gap-2 text-sm text-text-secondary">

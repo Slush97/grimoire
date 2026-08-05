@@ -204,7 +204,7 @@ export function LoadingState({ variant = 'spinner', count = 8, label, className 
             aria-busy="true"
             aria-live="polite"
         >
-            <Loader2 className="w-6 h-6 animate-spin text-accent" aria-hidden />
+            <Loader2 className="w-6 h-6 animate-spin text-accent-ink" aria-hidden />
             {label && <p className="text-sm">{label}</p>}
         </div>
     );
@@ -253,7 +253,7 @@ export function ConfirmModal({
             <div className="flex justify-end gap-3">
                 <button
                     onClick={onCancel}
-                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-hl/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
                 >
                     {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
                 </button>

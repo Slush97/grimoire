@@ -28,7 +28,7 @@ const hexToRgb = (hex: string) => {
  *  refinement of the thing above it rather than a fifth top-level tab. */
 function SubGroup({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="space-y-4 border-t border-white/5 pt-4">
+    <div className="space-y-4 border-t border-hl/5 pt-4">
       <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">{title}</h4>
       {children}
     </div>
@@ -97,8 +97,8 @@ export default function CrosshairControls() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-sm border border-white/5 bg-bg-secondary/50 backdrop-blur-sm">
-      <div className="border-b border-white/5 p-3">
+    <div className="flex h-full min-h-0 flex-col rounded-sm border border-hl/5 bg-bg-secondary/50 backdrop-blur-sm">
+      <div className="border-b border-hl/5 p-3">
         <SegmentedControl
           fill
           options={tabs}
@@ -128,7 +128,7 @@ export default function CrosshairControls() {
             <Slider editable label={<Tx k="crosshair.controls.size" fallback="Size" />} value={dotSize} min={0} max={20} step={0.5} onChange={setDotSize} />
             <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={dotOpacity} min={0} max={1} step={0.05} onChange={setDotOpacity} />
             {dotOpacity === 0 && (
-              <p className="rounded-sm border border-white/5 bg-black/20 px-3 py-2 text-xs text-text-secondary">
+              <p className="rounded-sm border border-hl/5 bg-bg-sunken/40 px-3 py-2 text-xs text-text-secondary">
                 <Tx k="crosshair.hints.dotHidden" fallback="The dot is fully transparent. Raise Opacity to see it." />
               </p>
             )}
@@ -146,7 +146,7 @@ export default function CrosshairControls() {
               <label className="mb-2 block text-sm font-medium text-text-secondary">
                 <Tx k="crosshair.controls.color" fallback="Crosshair color" />
               </label>
-              <div className="flex items-center gap-3 rounded-sm border border-white/5 bg-black/20 p-3">
+              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-bg-sunken/40 p-3">
                 <input
                   type="color"
                   value={rgbToHex(colorR, colorG, colorB)}
@@ -173,7 +173,7 @@ export default function CrosshairControls() {
                       aria-label={t(`crosshair.colors.${c.key}`)}
                       aria-pressed={active}
                       className={`h-7 w-7 cursor-pointer rounded-sm border transition-colors ${
-                        active ? 'border-accent ring-1 ring-accent' : 'border-white/20 hover:border-white/50'
+                        active ? 'border-accent ring-1 ring-accent' : 'border-hl/20 hover:border-hl/50'
                       }`}
                       style={{ backgroundColor: `rgb(${c.r}, ${c.g}, ${c.b})` }}
                     />
@@ -182,14 +182,14 @@ export default function CrosshairControls() {
               </div>
             </div>
 
-            <div className="space-y-4 border-t border-white/5 pt-4">
+            <div className="space-y-4 border-t border-hl/5 pt-4">
               <Slider editable label={<Tx k="crosshair.colors.red" fallback="Red" />} value={colorR} min={0} max={255} onChange={setColorR} />
               <Slider editable label={<Tx k="crosshair.colors.green" fallback="Green" />} value={colorG} min={0} max={255} onChange={setColorG} />
               <Slider editable label={<Tx k="crosshair.colors.blue" fallback="Blue" />} value={colorB} min={0} max={255} onChange={setColorB} />
             </div>
 
             <SubGroup title={<Tx k="crosshair.controls.outlineColor" fallback="Outline color" />}>
-              <div className="flex items-center gap-3 rounded-sm border border-white/5 bg-black/20 p-3">
+              <div className="flex items-center gap-3 rounded-sm border border-hl/5 bg-bg-sunken/40 p-3">
                 <input
                   type="color"
                   value={rgbToHex(outlineColorR, outlineColorG, outlineColorB)}
@@ -222,7 +222,7 @@ export default function CrosshairControls() {
               checked={disableHeroSpecificCrosshairs}
               onChange={setDisableHeroSpecificCrosshairs}
             />
-            <p className="border-t border-white/5 pt-4 text-xs leading-relaxed text-text-secondary">
+            <p className="border-t border-hl/5 pt-4 text-xs leading-relaxed text-text-secondary">
               <Tx
                 k="crosshair.hints.applyExplainer"
                 fallback="Copy Code pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart."

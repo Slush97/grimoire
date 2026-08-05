@@ -700,6 +700,13 @@
       "noReleaseNotes": "Aucune note de version disponible."
     },
     "appearance": {
+      "theme": {
+        "title": "Thème",
+        "description": "Choisissez l’apparence de Grimoire. Le thème Système suit le réglage de votre système d’exploitation.",
+        "system": "Système",
+        "light": "Clair",
+        "dark": "Sombre"
+      },
       "accentNamed": "Utiliser la couleur d'accentuation {{name}}",
       "pickCustomColor": "Choisir une couleur personnalisée",
       "accentCustom": "Accentuation personnalisée",

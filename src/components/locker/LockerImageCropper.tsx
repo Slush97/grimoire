@@ -391,7 +391,7 @@ export default function LockerImageCropper({
             />
           ) : (
             <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-text-secondary">
-              <ImagePlus className={`h-6 w-6 ${dropActive ? 'text-accent opacity-100' : 'opacity-70'}`} />
+              <ImagePlus className={`h-6 w-6 ${dropActive ? 'text-accent-ink opacity-100' : 'opacity-70'}`} />
               {emptyHint && <span className="text-[11px] leading-snug">{emptyHint}</span>}
             </div>
           )}
@@ -480,7 +480,7 @@ export default function LockerImageCropper({
           onClick={reset}
           title={t('locker.crop.resetZoom')}
           aria-label={t('locker.crop.resetZoom')}
-          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </button>

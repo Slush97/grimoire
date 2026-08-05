@@ -10,6 +10,9 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 - **No raw Tailwind palette colors** (`green-500`, `red-400`, `zinc-300`, ...) where a semantic token exists. Status/state -> `state-success | state-warning | state-danger | state-info`. Brand -> `brand-discord | brand-kofi`.
 - Prefer `text-text-primary` over `text-white`. The accent foreground flips by luminance at runtime; literal whites can't.
 - Surfaces: app bg `bg-bg-primary`, cards/panels `bg-bg-secondary`, inputs/raised `bg-bg-tertiary`.
+- Use `hl` for surface-relative highlights: dividers, subtle borders, raised tints, and hover fills. It adapts across light and dark themes; `white/*` does not.
+- Use `accent-ink` for accent-colored text and icons on neutral surfaces. Reserve `accent` for fills, borders, focus rings, and other large or decorative marks where the selected accent remains legible.
+- Literal black or white is appropriate when contrast depends on media rather than the app theme: scrims, image captions, artwork controls, and overlays on photos or hero art. Keep those colors coupled to their media treatment instead of converting them to theme text tokens.
 
 ## Components, not ad-hoc markup
 

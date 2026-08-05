@@ -15,6 +15,7 @@ import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
+import { initThemeSync } from '../lib/theme';
 import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
@@ -64,6 +65,7 @@ export default function Layout() {
   useEffect(() => {
     applyBackgroundGradient(backgroundGradient);
   }, [backgroundGradient]);
+  useEffect(() => initThemeSync(), []);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -235,7 +237,7 @@ export default function Layout() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-primary">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+        <Loader2 className="w-8 h-8 animate-spin text-accent-ink" />
       </div>
     );
   }
@@ -249,7 +251,10 @@ export default function Layout() {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
-        style={{ background: 'var(--app-bg-glow, none)', opacity: 'var(--app-bg-glow-opacity, 0)' }}
+        style={{
+          background: 'var(--app-bg-glow, none)',
+          opacity: 'calc(var(--app-bg-glow-opacity, 0) * var(--app-bg-glow-theme-opacity, 1))',
+        }}
       />
       <div className="relative z-10 flex min-h-0 flex-1">
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}

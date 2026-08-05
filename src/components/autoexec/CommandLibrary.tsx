@@ -83,7 +83,7 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                 {/* Sticky so you always know which group you are scrolling
                     through in a long filtered list. */}
                 <h3 className="sticky top-0 z-10 mb-1.5 flex items-center gap-2 bg-bg-secondary/95 py-1 text-xs font-semibold uppercase tracking-wider text-text-secondary backdrop-blur-sm">
-                  <CategoryIcon className="h-3.5 w-3.5 text-accent" aria-hidden />
+                  <CategoryIcon className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
                   <Tx k={category.categoryKey} fallback={category.categoryFallback} />
                 </h3>
 
@@ -104,13 +104,13 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                           className={`group flex w-full items-start gap-3 rounded-sm border p-2.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                             added
                               ? 'cursor-default border-accent/20 bg-accent/5'
-                              : 'cursor-pointer border-white/5 bg-bg-tertiary/40 hover:border-accent/30 hover:bg-bg-tertiary'
+                              : 'cursor-pointer border-hl/5 bg-bg-tertiary/40 hover:border-accent/30 hover:bg-bg-tertiary'
                           }`}
                         >
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-2">
                               <span
-                                className={`truncate text-sm font-medium ${added ? 'text-accent' : 'text-text-primary'}`}
+                                className={`truncate text-sm font-medium ${added ? 'text-accent-ink' : 'text-text-primary'}`}
                               >
                                 <Tx k={cmd.nameKey} fallback={cmd.nameFallback} />
                               </span>
@@ -127,8 +127,8 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                             aria-hidden
                             className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border transition-colors ${
                               added
-                                ? 'border-accent/30 text-accent'
-                                : 'border-white/10 text-text-secondary group-hover:border-accent/50 group-hover:text-accent'
+                                ? 'border-accent/30 text-accent-ink'
+                                : 'border-hl/10 text-text-secondary group-hover:border-accent/50 group-hover:text-accent-ink'
                             }`}
                           >
                             {added ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}

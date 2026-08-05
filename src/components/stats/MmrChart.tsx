@@ -252,8 +252,8 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                     onClick={() => setRange(r.key)}
                     className={`px-2.5 py-1 rounded-sm text-xs transition-colors cursor-pointer ${
                         range === r.key
-                            ? 'bg-accent/15 text-accent border border-accent/40'
-                            : 'text-text-secondary border border-transparent hover:text-white hover:bg-white/5'
+                            ? 'bg-accent/15 text-accent-ink border border-accent/40'
+                            : 'text-text-secondary border border-transparent hover:text-text-primary hover:bg-hl/5'
                     }`}
                 >
                     {r.key === 'all' ? t('stats.mmrChart.all') : r.label}
@@ -383,7 +383,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                                 x2={W}
                                 y1={(b.yPct / 100) * height}
                                 y2={(b.yPct / 100) * height}
-                                stroke="#ffffff"
+                                stroke="var(--color-hl)"
                                 strokeOpacity={b.isDivisionStart ? 0.12 : 0.05}
                                 strokeDasharray="4 4"
                                 vectorEffect="non-scaling-stroke"
@@ -425,7 +425,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                     {/* Cursor tooltip: subrank badge + rank + score + date */}
                     {hoveredPoint && hoveredXY && (
                         <div
-                            className="absolute pointer-events-none z-10 bg-bg-secondary border border-white/10 rounded-sm shadow-lg px-2.5 py-1.5 flex items-center gap-2"
+                            className="absolute pointer-events-none z-10 bg-bg-secondary border border-hl/10 rounded-sm shadow-lg px-2.5 py-1.5 flex items-center gap-2"
                             style={{
                                 left: `${Math.min(88, Math.max(12, (hoveredXY.x / W) * 100))}%`,
                                 top: `${(hoveredXY.y / height) * 100}%`,

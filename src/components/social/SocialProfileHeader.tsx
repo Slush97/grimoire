@@ -312,7 +312,7 @@ export default function SocialProfileHeader({
             )}
 
             {reportOpen && !reported && (
-              <div className="bg-bg-secondary border border-white/10 rounded-md p-2.5 space-y-2">
+              <div className="bg-bg-secondary border border-hl/10 rounded-md p-2.5 space-y-2">
                 <div className="text-xs font-medium text-text-primary">{t('social.header.reportThisProfile')}</div>
                 <Textarea
                   inputSize="sm"
@@ -359,7 +359,7 @@ export default function SocialProfileHeader({
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 pt-1 border-t border-white/5">
+            <div className="flex items-center gap-1.5 pt-1 border-t border-hl/5">
               <Button
                 variant={detail?.viewer_has_liked ? 'primary' : 'secondary'}
                 size="sm"

@@ -429,7 +429,7 @@ function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
     <span
       title={t('installed.priority.hint')}
       aria-label={t('installed.priority.chip')}
-      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
+      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent-ink ${
         variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
       }`}
     >
@@ -4026,7 +4026,7 @@ export default function Installed() {
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div
-        className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
+        className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
             : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
@@ -4126,11 +4126,11 @@ export default function Installed() {
                         className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors cursor-pointer ${
                           sortMode === value
                             ? 'bg-accent/15 text-text-primary'
-                            : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                            : 'text-text-secondary hover:bg-hl/5 hover:text-text-primary'
                         }`}
                       >
                         <span>{label}</span>
-                        {sortMode === value && <Check className="h-3.5 w-3.5 text-accent" />}
+                        {sortMode === value && <Check className="h-3.5 w-3.5 text-accent-ink" />}
                       </button>
                     ))}
                   </div>
@@ -4158,7 +4158,7 @@ export default function Installed() {
                             className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
                               on
                                 ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
                             }`}
                           >
                             {label}
@@ -4192,7 +4192,7 @@ export default function Installed() {
                             className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
                               on
                                 ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
                             }`}
                           >
                             {label}
@@ -4213,7 +4213,7 @@ export default function Installed() {
                           <button
                             type="button"
                             onClick={() => setHeroFilter('all')}
-                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                            className="text-[11px] text-accent-ink hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
                           </button>
@@ -4286,7 +4286,7 @@ export default function Installed() {
                         setTagFilter([]);
                         setListFilter([]);
                       }}
-                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
+                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary cursor-pointer"
                     >
                       {t('common.actions.reset')}
                     </button>
@@ -4408,7 +4408,7 @@ export default function Installed() {
 
       {soloRestore && (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
-          <Beaker className="h-4 w-4 flex-shrink-0 text-accent" />
+          <Beaker className="h-4 w-4 flex-shrink-0 text-accent-ink" />
           <span className="flex-1 text-sm text-text-primary">
             {t('installed.solo.banner', { name: soloRestore.label })}
           </span>
@@ -4421,7 +4421,7 @@ export default function Installed() {
             onClick={() => clearSoloRestore()}
             title={t('common.actions.dismiss')}
             aria-label={t('common.actions.dismiss')}
-            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md p-1 text-text-secondary hover:bg-hl/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -4490,8 +4490,8 @@ export default function Installed() {
               }
               className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
                 disabledAlphabetical
-                  ? 'border-accent/40 bg-accent/10 text-accent'
-                  : 'border-white/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-white/20 hover:text-text-primary'
+                  ? 'border-accent/40 bg-accent/10 text-accent-ink'
+                  : 'border-hl/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-hl/20 hover:text-text-primary'
               }`}
             >
               <ArrowDownAZ className="h-3.5 w-3.5" />
@@ -4515,13 +4515,13 @@ export default function Installed() {
               if (pending.length === 0) return null;
               return (
                 <div className="update-stripes border border-accent/20 bg-bg-tertiary/40 rounded-md px-3 py-2 max-h-48 overflow-y-auto">
-                  <div className="text-[10px] uppercase tracking-wider text-accent mb-1.5 font-semibold">
+                  <div className="text-[10px] uppercase tracking-wider text-accent-ink mb-1.5 font-semibold">
                     {t('installed.updateAll.receivingUpdates', { count: pending.length })}
                   </div>
                   <ul className="space-y-1 text-sm text-text-primary">
                     {pending.map((m) => (
                       <li key={m.id} className="flex items-center gap-2 min-w-0">
-                        <Download className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                        <Download className="w-3.5 h-3.5 text-accent-ink flex-shrink-0" />
                         <span className="truncate" title={m.name}>{m.name}</span>
                       </li>
                     ))}
@@ -4563,7 +4563,7 @@ export default function Installed() {
               aria-live="polite"
               className="max-w-md bg-bg-secondary border border-accent/40 rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
             >
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-accent" />
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-accent-ink" />
               <div className="flex-1 text-sm text-text-primary">
                 <p>
                   {updatePickQueue.length === 1
@@ -4736,7 +4736,7 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 flex items-center gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <Loader2 className="w-5 h-5 animate-spin text-accent-ink" />
             <span className="text-sm text-text-secondary">{t('installed.details.loading')}</span>
           </div>
         </div>,
@@ -5004,7 +5004,7 @@ export default function Installed() {
           </span>
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" />
+              <Loader2 className="w-4 h-4 animate-spin text-accent-ink" />
               {bulkProgress.verb} {bulkProgress.done}/{bulkProgress.total}…
             </span>
           ) : (
@@ -5238,16 +5238,16 @@ function UnknownFilterGuessModal({
       aria-labelledby="unknown-filter-title"
     >
       <div
-        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               {mod.isUnknown ? (
                 <Wrench className="w-4 h-4 text-orange-400" />
               ) : (
-                <Link2 className="w-4 h-4 text-accent" />
+                <Link2 className="w-4 h-4 text-accent-ink" />
               )}
               {mod.isUnknown ? t('installed.unknown.fixModTitle') : t('installed.unknown.linkToGamebanana')}
             </h2>
@@ -5346,10 +5346,10 @@ function BulkUnknownFixModal({
       aria-labelledby="bulk-unknown-title"
     >
       <div
-        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="bulk-unknown-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               <Wrench className="w-4 h-4 text-orange-400" />
@@ -5393,7 +5393,7 @@ function BulkUnknownFixModal({
         </div>
 
         <div className="grid min-h-0 grid-cols-[240px_1fr] flex-1">
-          <div className="border-r border-white/10 p-3 overflow-y-auto space-y-1.5">
+          <div className="border-r border-hl/10 p-3 overflow-y-auto space-y-1.5">
             {unknownMods.map((mod) => {
               const cached = cache[mod.id];
               const cachedMatch = cached?.crcMatch;
@@ -5425,12 +5425,12 @@ function BulkUnknownFixModal({
                   className={`w-full text-left rounded-md border px-3 py-2 transition-colors cursor-pointer ${
                     isSelected
                       ? 'bg-accent/10 border-accent/40'
-                      : 'bg-bg-tertiary/40 border-white/5 hover:bg-bg-tertiary hover:border-white/10'
+                      : 'bg-bg-tertiary/40 border-hl/5 hover:bg-bg-tertiary hover:border-hl/10'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-text-primary truncate">{mod.name}</span>
-                    {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent flex-shrink-0" />}
+                    {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent-ink flex-shrink-0" />}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[11px] min-w-0">
                     <span className="font-mono text-text-tertiary truncate" title={mod.fileName}>{mod.fileName}</span>
@@ -5592,7 +5592,7 @@ function UnknownMatchPanel({
       )}
 
       {/* Fallback: keep the file but give it a custom name/thumbnail. */}
-      <div className="rounded-md bg-bg-tertiary/40 border border-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-md bg-bg-tertiary/40 border border-hl/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-text-secondary">
           {t('installed.unknown.cantFindHint')}
         </span>
@@ -5603,12 +5603,12 @@ function UnknownMatchPanel({
 
       {/* Advanced, demoted: the heavy CRC auto-matcher. Carries an explicit
           rate-limit warning and never runs without a click. */}
-      <details className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+      <details className="rounded-md bg-bg-tertiary/40 border border-hl/5 overflow-hidden">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-text-secondary hover:text-text-primary flex items-center gap-2">
-          <Beaker className="w-4 h-4 text-accent flex-shrink-0" />
+          <Beaker className="w-4 h-4 text-accent-ink flex-shrink-0" />
           {t('installed.unknown.autoDetectSummary')}
         </summary>
-        <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-hl/5 pt-3">
           <div className="flex items-start gap-2 text-xs text-yellow-200/90 bg-yellow-500/10 border border-yellow-500/25 rounded-md p-2.5">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
             <span>
@@ -5617,9 +5617,9 @@ function UnknownMatchPanel({
           </div>
 
           {loading && (
-            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
+                <Loader2 className="w-4 h-4 animate-spin text-accent-ink flex-shrink-0" />
                 <div className="min-w-0">
                   <div className="truncate">{progress?.message ?? t('installed.unknown.findingMatch')}</div>
                   {typeof progress?.checkedFiles === 'number' && typeof progress.totalFiles === 'number' && (
@@ -5656,7 +5656,7 @@ function UnknownMatchPanel({
           )}
 
           {result && match && !foundMatch && (
-            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 overflow-hidden">
+            <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 overflow-hidden">
               <div className="p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
@@ -5676,7 +5676,7 @@ function UnknownMatchPanel({
                 </div>
               </div>
               {autoMatchEnabled && (
-                <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+                <div className="border-t border-hl/5 px-4 py-3 bg-bg-sunken/20 flex flex-wrap justify-end gap-2">
                   <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRetry}>
                     {t('common.actions.retry')}
                   </Button>
@@ -5887,9 +5887,9 @@ function UnknownManualSearch({
   };
 
   return (
-    <div className="rounded-md bg-bg-tertiary/50 border border-white/5 p-4 space-y-3">
+    <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 p-4 space-y-3">
       <div className="flex items-start gap-3">
-        <Link2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+        <Link2 className="w-4 h-4 text-accent-ink flex-shrink-0 mt-0.5" />
         <div className="text-sm text-text-secondary">
           <Trans
             i18nKey="installed.unknown.manualSearchIntro"
@@ -5905,12 +5905,12 @@ function UnknownManualSearch({
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           <span className="text-text-tertiary">{t('installed.unknown.fromFileTree')}</span>
           {mod.lockerHero && (
-            <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5">
+            <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-hl/10 px-2 py-0.5">
               <HeroTagLabel heroName={mod.lockerHero} iconClassName="h-4 w-4" />
             </span>
           )}
           {mod.globalType && (
-            <span className="rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5 text-text-secondary">
+            <span className="rounded-full bg-bg-primary/60 border border-hl/10 px-2 py-0.5 text-text-secondary">
               {GLOBAL_MOD_TYPE_LABELS[mod.globalType] ?? mod.globalType}
             </span>
           )}
@@ -5918,14 +5918,14 @@ function UnknownManualSearch({
       )}
 
       <div className="flex items-center gap-2">
-        <div className="flex rounded-md overflow-hidden border border-white/10 text-xs flex-shrink-0">
+        <div className="flex rounded-md overflow-hidden border border-hl/10 text-xs flex-shrink-0">
           {(['Mod', 'Sound'] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setSection(s)}
               className={`px-2.5 py-2 transition-colors cursor-pointer ${
-                section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-white/5'
+                section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-hl/5'
               }`}
             >
               {s === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds')}
@@ -5939,10 +5939,10 @@ function UnknownManualSearch({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('installed.unknown.searchPlaceholder')}
-            className="w-full bg-bg-primary border border-white/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
+            className="w-full bg-bg-primary border border-hl/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
           />
           {searching && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-accent" />
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-accent-ink" />
           )}
         </div>
       </div>
@@ -5972,7 +5972,7 @@ function UnknownManualSearch({
               <div
                 key={gbMod.id}
                 className={`rounded-md border transition-colors ${
-                  isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-white/5 hover:border-white/15'
+                  isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-hl/5 hover:border-hl/15'
                 }`}
               >
                 <div className="flex items-center pr-2">
@@ -5986,7 +5986,7 @@ function UnknownManualSearch({
                       alt={gbMod.name}
                       nsfw={gbMod.nsfw}
                       hideNsfw
-                      className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
+                      className="w-16 h-11 rounded bg-bg-primary border border-hl/10 flex-shrink-0"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
@@ -5996,7 +5996,7 @@ function UnknownManualSearch({
                         {gbMod.rootCategory?.name ?? (section === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds'))} · #{gbMod.id}
                       </div>
                     </div>
-                    {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
+                    {isSel && <Check className="w-4 h-4 text-accent-ink flex-shrink-0" />}
                   </button>
 
                   <a
@@ -6005,14 +6005,14 @@ function UnknownManualSearch({
                     rel="noopener noreferrer"
                     title={`Open ${gbMod.name} on GameBanana to download it directly`}
                     aria-label={`Open ${gbMod.name} on GameBanana`}
-                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-white/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
+                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-hl/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
                   >
                     <Banana className="w-4 h-4" />
                   </a>
                 </div>
 
                 {isSel && (
-                  <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
+                  <div className="border-t border-hl/5 px-2.5 py-2.5 space-y-2">
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
@@ -6141,7 +6141,7 @@ function FileTreeBranch({
               type="button"
               onClick={() => onToggle(node.path)}
               style={indent}
-              className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-text-primary hover:bg-white/5 cursor-pointer"
+              className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-text-primary hover:bg-hl/5 cursor-pointer"
             >
               {isOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
@@ -6149,9 +6149,9 @@ function FileTreeBranch({
                 <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
               )}
               {isOpen ? (
-                <FolderOpen className="w-3.5 h-3.5 flex-shrink-0 text-accent" />
+                <FolderOpen className="w-3.5 h-3.5 flex-shrink-0 text-accent-ink" />
               ) : (
-                <Folder className="w-3.5 h-3.5 flex-shrink-0 text-accent" />
+                <Folder className="w-3.5 h-3.5 flex-shrink-0 text-accent-ink" />
               )}
               <span className="truncate">{node.name}</span>
               <span className="text-[10px] text-text-tertiary">{node.fileCount}</span>
@@ -6230,7 +6230,7 @@ function UnknownFileList({
     });
 
   return (
-    <div className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+    <div className="rounded-md bg-bg-tertiary/40 border border-hl/5 overflow-hidden">
       <button
         type="button"
         onClick={toggleOpen}
@@ -6243,10 +6243,10 @@ function UnknownFileList({
       </button>
 
       {open && (
-        <div className="border-t border-white/5 px-4 py-3 space-y-3">
+        <div className="border-t border-hl/5 px-4 py-3 space-y-3">
           {loading && (
             <div className="flex items-center gap-2 text-sm text-text-tertiary">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" /> {t('installed.unknown.readingVpk')}
+              <Loader2 className="w-4 h-4 animate-spin text-accent-ink" /> {t('installed.unknown.readingVpk')}
             </div>
           )}
           {error && (
@@ -6257,7 +6257,7 @@ function UnknownFileList({
           )}
           {tree && tree.children.size > 0 && (
             <>
-              <div className="max-h-64 overflow-auto rounded-md border border-white/5 bg-bg-primary/40 py-1.5 text-xs font-mono">
+              <div className="max-h-64 overflow-auto rounded-md border border-hl/5 bg-bg-primary/40 py-1.5 text-xs font-mono">
                 <FileTreeBranch nodes={tree.children} depth={0} expanded={expanded} onToggle={toggleNode} />
               </div>
               {!full && (
@@ -6306,11 +6306,11 @@ function ImprintReportList({ title, items }: {
 }) {
   if (items.length === 0) return null;
   return (
-    <details className="rounded-md border border-white/5 bg-bg-tertiary/40 overflow-hidden">
+    <details className="rounded-md border border-hl/5 bg-bg-tertiary/40 overflow-hidden">
       <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
         {title}
       </summary>
-      <ul className="divide-y divide-white/5 border-t border-white/5">
+      <ul className="divide-y divide-hl/5 border-t border-hl/5">
         {items.map((item) => (
           <li key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
             <span className="min-w-0 truncate text-sm text-text-primary" title={item.name}>{item.name}</span>
@@ -6381,7 +6381,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
             className="min-h-40"
           />
         ) : (
-          <div className="space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3">
+          <div className="space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3">
             <ImprintBucketLine count={eligible} label={t('installed.imprintAll.eligible', { count: eligible })} tone="accent" />
             <ImprintBucketLine count={counts.alreadyImprinted} label={t('installed.imprintAll.alreadyImprinted', { count: counts.alreadyImprinted })} />
             <ImprintBucketLine count={counts.blockedLoaded} label={t('installed.imprintAll.blockedLoaded', { count: counts.blockedLoaded })} tone="warning" />
@@ -6419,7 +6419,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
     body = (
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-accent" />
+          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-accent-ink" />
           <div className="min-w-0">
             <div className="text-sm text-text-primary">
               {t('installed.imprintAll.progress', { done, total })}
@@ -6456,7 +6456,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
     body = (
       <>
         <div className="flex items-center gap-2 text-sm text-text-primary">
-          <Fingerprint className="h-4 w-4 flex-shrink-0 text-accent" />
+          <Fingerprint className="h-4 w-4 flex-shrink-0 text-accent-ink" />
           {t('installed.imprintAll.imprintedSummary', { count: result.imprinted })}
         </div>
         <ImprintReportList title={t('installed.imprintAll.skippedTitle', { count: skipped.length })} items={skipped} />
@@ -6559,7 +6559,7 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
   };
 
   const sectionHeading = 'text-xs font-semibold uppercase tracking-wider text-text-tertiary';
-  const sectionBox = 'space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3';
+  const sectionBox = 'space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3';
 
   let body: ReactNode;
   if (error) {
@@ -6609,7 +6609,7 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
                 href={details.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex max-w-full items-baseline gap-1 break-all text-accent hover:underline"
+                className="inline-flex max-w-full items-baseline gap-1 break-all text-accent-ink hover:underline"
               >
                 <span className="min-w-0">{details.sourceUrl}</span>
                 <ExternalLink className="h-3 w-3 flex-shrink-0 self-center" aria-hidden />
@@ -6724,11 +6724,11 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
 
         {/* Same collapsible pattern as ImprintReportList: details/summary,
             collapsed by default so the sheet stays tidy. */}
-        <details className="overflow-hidden rounded-md border border-white/5 bg-bg-tertiary/40">
+        <details className="overflow-hidden rounded-md border border-hl/5 bg-bg-tertiary/40">
           <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
             {t('installed.imprintDetails.rawToggle')}
           </summary>
-          <pre className="max-h-64 overflow-auto border-t border-white/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
+          <pre className="max-h-64 overflow-auto border-t border-hl/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
             {details.rawAddonInfo}
           </pre>
         </details>
@@ -6822,7 +6822,7 @@ function UnknownEmbeddedCard({
               alt={match.modName ?? t('installed.unknown.gamebananaMod')}
               nsfw={match.nsfw}
               hideNsfw={hideNsfwPreviews}
-              className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+              className="w-24 h-16 rounded-md bg-bg-primary border border-hl/10 flex-shrink-0"
             />
           )}
           <div className="min-w-0 flex-1">
@@ -6907,7 +6907,7 @@ function UnknownMatchCard({
             alt={match.modName ?? t('installed.unknown.gamebananaMod')}
             nsfw={match.nsfw}
             hideNsfw={hideNsfwPreviews}
-            className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+            className="w-24 h-16 rounded-md bg-bg-primary border border-hl/10 flex-shrink-0"
           />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-state-success">
@@ -7186,7 +7186,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
+        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -7202,7 +7202,7 @@ function ModMediaPreview({
   }
 
   return (
-    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
+    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] ${mediaSpacingClasses}`}>
       <button
         type="button"
         onClick={(e) => {
@@ -7547,7 +7547,7 @@ function ModListRowContent({
             />
           </span>
         ) : (
-          <span className="inline-flex h-5 items-center rounded border border-white/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
+          <span className="inline-flex h-5 items-center rounded border border-hl/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
             {t('installed.card.off')}
           </span>
         )}
@@ -7560,7 +7560,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
@@ -7645,7 +7645,7 @@ function ModListRowContent({
       <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
         {isSound && (
           <div
-            className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-white/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
+            className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-hl/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
             data-card-action="true"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -7853,8 +7853,8 @@ function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-bg-tertiary border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
-      : 'bg-bg-tertiary/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-hl/[0.08] hover:border-hl/[0.14] hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 hover:border-hl/[0.14] hover:bg-bg-secondary hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
@@ -7885,8 +7885,8 @@ function ModCard({
   const tagIconClassName =
     viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
   const baseChipClasses = `inline-flex min-w-0 ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
-  const metaChipClasses = `${baseChipClasses} border border-white/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
-  const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
+  const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
+  const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent-ink`;
   const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
@@ -7911,7 +7911,9 @@ function ModCard({
   const dangerMenuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-state-danger hover:bg-state-danger/10 focus:outline-none focus-visible:bg-state-danger/10 disabled:cursor-not-allowed disabled:opacity-50';
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
   const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
-    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-white/20'
+    mod.enabled
+      ? 'border border-accent-hover/60 bg-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_1px_2px_rgba(0,0,0,0.18)] group-hover/toggle:brightness-105'
+      : 'border border-hl/20 bg-bg-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] group-hover/toggle:border-hl/30'
   }`;
   const isList = viewMode === 'list';
   const isCompact = viewMode === 'compact';
@@ -7929,8 +7931,8 @@ function ModCard({
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
-    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
-    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-hl/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-hl/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
   const audioPlayerClassName = isCompact
     ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
     : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
@@ -7980,7 +7982,7 @@ function ModCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
+          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent-ink hover:text-accent-ink/80' : 'text-text-tertiary hover:text-accent-ink'}`}
           title={favoriteLabel}
           aria-label={favoriteLabel}
           aria-pressed={favorite}
@@ -8124,7 +8126,7 @@ function ModCard({
                 disabled={menuBusy}
                 title={t('installed.priority.hint')}
                 className={`${menuItemClasses} disabled:cursor-not-allowed disabled:opacity-50 ${
-                  mod.priorityMod ? 'text-accent' : ''
+                  mod.priorityMod ? 'text-accent-ink' : ''
                 }`}
               >
                 <ArrowUpToLine className="w-3.5 h-3.5" />
@@ -8178,7 +8180,7 @@ function ModCard({
                             }}
                             disabled={menuBusy}
                             className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
-                              mod.globalType === type ? 'text-accent' : 'text-text-primary'
+                              mod.globalType === type ? 'text-accent-ink' : 'text-text-primary'
                             }`}
                           >
                             <span className="truncate">{GLOBAL_MOD_TYPE_LABELS[type]}</span>
@@ -8205,7 +8207,7 @@ function ModCard({
                         className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
                           tagged
                             ? mod.lockerHeroSource === 'manual'
-                              ? 'text-accent'
+                              ? 'text-accent-ink'
                               : 'text-sky-200'
                             : 'text-text-primary'
                         }`}
@@ -8305,7 +8307,7 @@ function ModCard({
         >
           <span className={toggleTrackClasses} aria-hidden>
             <span
-              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
+              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] ring-1 ring-black/15 transition-transform duration-200 ${
                 mod.enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -8340,7 +8342,7 @@ function ModCard({
               button below it still receives the click. */}
           <div
             className={`absolute top-2 left-2 z-40 w-6 h-6 rounded-md border-2 transition-colors pointer-events-none flex items-center justify-center shadow-md ${
-              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-white/40'
+              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-hl/40'
             }`}
           >
             {selected && <Check className="w-4 h-4 text-accent-foreground" strokeWidth={3} />}
@@ -8453,7 +8455,7 @@ function ModCard({
                   variant="overlay"
                   icon={Layers}
                   title={t('installed.card.mergedTitle', { count: mod.merged.sources.length })}
-                  className="border-white/20 text-white/90"
+                  className="border-hl/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
@@ -8463,7 +8465,7 @@ function ModCard({
                   variant="overlay"
                   icon={Files}
                   title={variantStatusTitle}
-                  className="border-white/20 text-white/90 tabular-nums"
+                  className="border-hl/20 text-white/90 tabular-nums"
                 >
                   {variantStatusLabel}
                 </Tag>
@@ -8679,7 +8681,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent/10 text-accent">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent/10 text-accent-ink">
             <Pencil className="h-4 w-4" />
           </div>
           <div className="min-w-0">
@@ -8725,7 +8727,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
                 ? 'border-accent bg-accent/10'
                 : thumbnailDataUrl
                   ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
             }`}
           >
             <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
@@ -8740,7 +8742,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
                 <>
                   <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
                   <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                  <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
+                  <div className="text-xs text-accent-ink mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
                 </>
               ) : thumbnailDataUrl ? (
                 <>
@@ -8907,7 +8909,7 @@ function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCusto
               {t('installed.import.vpkFile')}
             </label>
             <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-bg-tertiary/40 px-4 py-3 text-center">
-              <FilePlus className="w-5 h-5 text-accent" aria-hidden />
+              <FilePlus className="w-5 h-5 text-accent-ink" aria-hidden />
               <span className="text-sm text-text-primary font-medium truncate max-w-full">
                 {vpkPath.split(/[\\/]/).pop()}
               </span>
@@ -8947,7 +8949,7 @@ function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCusto
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
                     ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
               }`}
             >
               <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
@@ -8962,7 +8964,7 @@ function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCusto
                   <>
                     <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
                     <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                    <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
+                    <div className="text-xs text-accent-ink mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
                   </>
                 ) : (
                   <>

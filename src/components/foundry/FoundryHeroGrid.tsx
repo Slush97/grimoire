@@ -101,7 +101,7 @@ function HeroCard({ hero, onPick }: { hero: HeroInfo; onPick: () => void }) {
           {hero.name}
         </span>
         {!hero.selectable && (
-          <span className="text-[10px] uppercase tracking-wide text-accent/90">
+          <span className="text-[10px] uppercase tracking-wide text-accent-ink/90">
             in development
           </span>
         )}

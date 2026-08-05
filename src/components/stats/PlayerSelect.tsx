@@ -105,7 +105,7 @@ export function PlayerSelect() {
                 className={`flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-sm border transition-colors cursor-pointer ${
                     open
                         ? 'border-accent/40 bg-accent/10'
-                        : 'border-white/10 bg-bg-tertiary hover:border-accent/40'
+                        : 'border-hl/10 bg-bg-tertiary hover:border-accent/40'
                 }`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
@@ -134,7 +134,7 @@ export function PlayerSelect() {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-bg-secondary border border-white/10 rounded-sm shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-80 bg-bg-secondary border border-hl/10 rounded-sm shadow-xl z-50 overflow-hidden">
                     {trackedPlayers.data.length > 0 && (
                         <div className="max-h-64 overflow-auto p-1.5" role="listbox">
                             {trackedPlayers.data.map((player) => {
@@ -149,7 +149,7 @@ export function PlayerSelect() {
                                             setOpen(false)
                                         }}
                                         className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-sm cursor-pointer transition-colors ${
-                                            isSelected ? 'bg-accent/10' : 'hover:bg-white/5'
+                                            isSelected ? 'bg-accent/10' : 'hover:bg-hl/5'
                                         }`}
                                     >
                                         <Avatar url={player.avatar_url} />
@@ -189,7 +189,7 @@ export function PlayerSelect() {
                                             rel="noopener noreferrer"
                                             onClick={(e) => e.stopPropagation()}
                                             title={t('stats.playerSelect.openOnStatlocker')}
-                                            className="opacity-0 group-hover:opacity-100 p-1 text-text-secondary hover:text-accent rounded transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-1 text-text-secondary hover:text-accent-ink rounded transition-all"
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </a>
@@ -210,7 +210,7 @@ export function PlayerSelect() {
                     )}
 
                     <div
-                        className={`p-3 ${trackedPlayers.data.length > 0 ? 'border-t border-white/5' : ''}`}
+                        className={`p-3 ${trackedPlayers.data.length > 0 ? 'border-t border-hl/5' : ''}`}
                     >
                         <div className="flex gap-2">
                             <input
@@ -219,7 +219,7 @@ export function PlayerSelect() {
                                 value={searchInput}
                                 onChange={(e) => setSearchInput(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
-                                className="flex-1 min-w-0 px-3 py-2 bg-bg-tertiary rounded-sm border border-white/5 focus:outline-none focus:border-accent text-sm"
+                                className="flex-1 min-w-0 px-3 py-2 bg-bg-tertiary rounded-sm border border-hl/5 focus:outline-none focus:border-accent text-sm"
                             />
                             <Button onClick={handleAddPlayer} isLoading={isAdding} size="sm" aria-label={t('stats.playerSelect.addPlayer')}>
                                 {!isAdding && <Plus className="w-4 h-4" />}
@@ -242,7 +242,7 @@ export function PlayerSelect() {
                                         <button
                                             key={user.accountId}
                                             onClick={() => handleAddDetectedUser(user.accountId)}
-                                            className="w-full text-left px-3 py-2 bg-bg-tertiary rounded-sm hover:bg-white/10 transition-colors text-sm flex items-center justify-between cursor-pointer"
+                                            className="w-full text-left px-3 py-2 bg-bg-tertiary rounded-sm hover:bg-hl/10 transition-colors text-sm flex items-center justify-between cursor-pointer"
                                         >
                                             <span className="truncate">{user.personaName}</span>
                                             {user.mostRecent && <Badge variant="success">{t('stats.playerSelect.recent')}</Badge>}

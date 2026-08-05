@@ -394,7 +394,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                 <button
                     type="button"
                     onClick={playSelection}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent-ink transition-colors hover:bg-accent/15"
                     title={t('foundry.sound.import.playSelection', 'Play selection')}
                 >
                     {playing ? <Pause size={14} /> : <Play size={14} className="translate-x-px" />}
@@ -438,7 +438,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                         </span>
                     )}
                     {normalize && targetRms !== null && (
-                        <span className="tabular-nums text-accent">
+                        <span className="tabular-nums text-accent-ink">
                             {gainDb >= 0 ? '+' : ''}
                             {gainDb.toFixed(1)} dB
                         </span>

@@ -65,7 +65,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
       size="md"
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="export-profile-title" className="text-xl font-bold text-text-primary">
               {t('profiles.actions.exportProfile')}
@@ -76,7 +76,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -142,7 +142,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
               {result.shareCode && (
                 <div className="mt-2">
                   <div className="text-xs text-text-secondary mb-1">{t('exportProfile.shareCodePreview')}</div>
-                  <code className="block text-[11px] font-mono bg-bg-tertiary border border-white/5 rounded-md px-2 py-1.5 break-all text-text-secondary max-h-24 overflow-y-auto">
+                  <code className="block text-[11px] font-mono bg-bg-tertiary border border-hl/5 rounded-md px-2 py-1.5 break-all text-text-secondary max-h-24 overflow-y-auto">
                     {result.shareCode}
                   </code>
                 </div>
@@ -151,7 +151,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           )}
         </div>
 
-        <div className="p-4 border-t border-white/10 flex justify-end">
+        <div className="p-4 border-t border-hl/10 flex justify-end">
           <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
         </div>
     </Modal>

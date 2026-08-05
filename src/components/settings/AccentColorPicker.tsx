@@ -99,7 +99,7 @@ export default function AccentColorPicker() {
               title={preset.name}
               aria-label={t('settings.appearance.accentNamed', { name: preset.name })}
               aria-pressed={isActive}
-              className={`${SWATCH_BASE} ${isActive ? 'border-white/40' : 'border-white/10 hover:border-white/30'}`}
+              className={`${SWATCH_BASE} ${isActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
               style={{ backgroundColor: preset.color }}
             >
               {isActive && <Check className="w-4 h-4 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />}
@@ -114,7 +114,7 @@ export default function AccentColorPicker() {
           aria-label={t('settings.appearance.accentCustom')}
           aria-pressed={isCustomActive}
           aria-haspopup="dialog"
-          className={`${SWATCH_BASE} ${isCustomActive ? 'border-white/40' : 'border-white/10 hover:border-white/30'}`}
+          className={`${SWATCH_BASE} ${isCustomActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
           style={
             isCustomActive
               ? { backgroundColor: customDisplay }
@@ -132,7 +132,7 @@ export default function AccentColorPicker() {
           role="presentation"
         >
           <div
-            className="bg-bg-secondary border border-white/10 rounded-sm p-6 w-full max-w-sm relative overflow-hidden shadow-2xl"
+            className="bg-bg-secondary border border-hl/10 rounded-sm p-6 w-full max-w-sm relative overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -140,7 +140,7 @@ export default function AccentColorPicker() {
           >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver mb-4 flex items-center gap-2">
-              <Pipette className="w-4 h-4 text-accent" />
+              <Pipette className="w-4 h-4 text-accent-ink" />
               <Tx k="settings.appearance.customAccent" fallback="Custom Accent" />
             </h3>
             <div className="space-y-4">
@@ -151,7 +151,7 @@ export default function AccentColorPicker() {
               />
               <div className="flex items-center gap-2">
                 <span
-                  className="block w-9 h-9 rounded-sm border border-white/10 shrink-0"
+                  className="block w-9 h-9 rounded-sm border border-hl/10 shrink-0"
                   style={{ backgroundColor: customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR }}
                   aria-label={t('settings.appearance.selectedColorPreview')}
                 />
@@ -159,7 +159,7 @@ export default function AccentColorPicker() {
                 <HexColorInput
                   color={customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR}
                   onChange={handleCustomDraft}
-                  className="flex-1 bg-bg-tertiary border border-white/5 rounded-sm px-2 py-1.5 text-sm font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent uppercase"
+                  className="flex-1 bg-bg-tertiary border border-hl/5 rounded-sm px-2 py-1.5 text-sm font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent uppercase"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">

@@ -62,7 +62,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalCrosshair ?? false}
@@ -71,7 +71,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.experimental.crosshairDesignerDescription" fallback="Create custom crosshairs with a live preview." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalSocial ?? false}
@@ -80,7 +80,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalUnknownModMatching ?? false}
@@ -89,7 +89,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.toggles.fixUnknown" fallback="Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalVpkImprinting ?? false}
@@ -98,7 +98,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalDeadworksServers ?? false}
@@ -107,7 +107,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             description={<Tx k="settings.toggles.deadworks" fallback="Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           {/* This is the one flag whose payload lands in a different pane: the
               card it unlocks renders under Game setup, so without a pointer the
@@ -126,7 +126,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
                 <button
                   type="button"
                   onClick={onShowPerformanceConfig}
-                  className="inline-flex items-center gap-1 rounded-sm text-xs text-accent transition-colors cursor-pointer hover:text-accent-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+                  className="inline-flex items-center gap-1 rounded-sm text-xs text-accent-ink transition-colors cursor-pointer hover:text-accent-ink-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
                 >
                   <Tx
                     k="settings.experimental.performanceConfigWhere"
@@ -138,7 +138,7 @@ export default function ExperimentalSection({ onShowPerformanceConfig }: Experim
             )}
           </div>
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalFoundry ?? false}

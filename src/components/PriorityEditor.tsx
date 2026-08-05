@@ -120,7 +120,7 @@ export default function PriorityEditor({
         // it on-theme regardless of the user's accent hue. The overlay sits over
         // arbitrary thumbnail art, so the number gets a hard black outline
         // (text-shadow on all four corners) to stay legible over bright covers.
-        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
+        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-hl/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-hl/35 group-hover/order-chip:bg-hl/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-hl/40 ${
           variant === 'overlay'
             ? 'bg-black/70 [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
             : 'bg-bg-tertiary'
@@ -129,7 +129,7 @@ export default function PriorityEditor({
         #{value}
       </span>
       {!editing && (
-        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-hl/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
           {t('installed.priorityEditor.loadOrder')}
         </span>
       )}

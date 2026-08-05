@@ -39,7 +39,7 @@ export default function SyncIndicator({ className = '' }: SyncIndicatorProps) {
 
     return (
         <div className={`flex items-center gap-2 px-3 py-1.5 bg-bg-secondary/80 backdrop-blur-sm rounded-lg text-sm ${className}`}>
-            <RefreshCw className="w-4 h-4 animate-spin text-accent" />
+            <RefreshCw className="w-4 h-4 animate-spin text-accent-ink" />
             <span className="text-text-secondary">
                 {syncProgress.phase === 'error'
                     ? t('sync.error', { section: localizedSection(syncProgress.section, t) })

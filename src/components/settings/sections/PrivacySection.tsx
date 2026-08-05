@@ -74,7 +74,7 @@ export default function PrivacySection() {
             description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <div>
             <Toggle

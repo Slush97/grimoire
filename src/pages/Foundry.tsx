@@ -160,7 +160,7 @@ export default function Foundry() {
               onClick={() => tool.enabled && setActive(tool.id)}
               className={`flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors ${
                 isActive
-                  ? 'bg-accent/10 font-medium text-accent'
+                  ? 'bg-accent/10 font-medium text-accent-ink'
                   : tool.enabled
                     ? 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
                     : 'cursor-default text-text-secondary/50'

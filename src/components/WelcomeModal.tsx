@@ -151,7 +151,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 <div className="p-6 pb-4 text-center">
                     <h1
                         id="welcome-modal-title"
-                        className="text-3xl text-accent mb-1"
+                        className="text-3xl text-accent-ink mb-1"
                         style={{ fontFamily: "'IM Fell English', serif" }}
                     >
                         {t('welcome.title')}
@@ -167,7 +167,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">1</span>
+                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent-ink text-xs flex items-center justify-center font-bold">1</span>
                                 {t('welcome.steps.location')}
                             </h3>
                             {isDetecting && (
@@ -182,7 +182,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         </div>
 
                         {localPath && isValidPath && (
-                            <div className="text-xs font-mono bg-black/30 p-2 rounded text-text-secondary break-all ml-7">
+                            <div className="text-xs font-mono bg-bg-sunken/50 p-2 rounded text-text-secondary break-all ml-7">
                                 {localPath}
                             </div>
                         )}
@@ -212,7 +212,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                     <div className={`space-y-2 transition-opacity ${isValidPath ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">2</span>
+                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent-ink text-xs flex items-center justify-center font-bold">2</span>
                                 {t('welcome.steps.gameFiles')}
                             </h3>
                             {gameinfoConfigured === true && (
@@ -254,7 +254,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                     <div className={`space-y-2 transition-opacity ${isValidPath && gameinfoConfigured ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">3</span>
+                                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent-ink text-xs flex items-center justify-center font-bold">3</span>
                                 {t('nav.autoexec')}
                             </h3>
                             {autoexecStatus?.exists && (
@@ -292,7 +292,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-white/5 bg-bg-tertiary/30">
+                <div className="p-6 border-t border-hl/5 bg-bg-tertiary/30">
                     <Button
                         onClick={onComplete}
                         disabled={!canProceed}

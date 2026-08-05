@@ -33,21 +33,77 @@ function darken(hex: string, amount = 0.12): string {
   return `#${[adj(r), adj(g), adj(b)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+type Rgb = [number, number, number];
+
+function parseHex(hex: string): Rgb | null {
+  const value = (hex || '').trim().replace(/^#/, '');
+  const expanded = value.length === 3
+    ? value.split('').map((channel) => channel + channel).join('')
+    : value;
+  if (!/^[\da-f]{6}$/i.test(expanded)) return null;
+  return [0, 2, 4].map((offset) => parseInt(expanded.slice(offset, offset + 2), 16)) as Rgb;
+}
+
+function toHex(rgb: Rgb): string {
+  return `#${rgb.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function relativeLuminance(rgb: Rgb): number {
+  const [r, g, b] = rgb.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio for two hex colors. Invalid colors return 1. */
+export function contrastRatio(foreground: string, background: string): number {
+  const fg = parseHex(foreground);
+  const bg = parseHex(background);
+  if (!fg || !bg) return 1;
+  const lighter = Math.max(relativeLuminance(fg), relativeLuminance(bg));
+  const darker = Math.min(relativeLuminance(fg), relativeLuminance(bg));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 /**
  * Readable text/icon color (white or near-black) for a solid swatch of `hex`.
  *
- * Uses WCAG relative luminance. The 0.35 threshold sits just above the shipped
- * Ember orange (L ~ 0.32) so the default keeps white text, while genuinely
- * light accents (cyan ~ 0.38, emerald ~ 0.36, amber ~ 0.44) flip to near-black.
- * Near-black is the app's bg-primary so it reads as "ink" rather than pure #000.
+ * Chooses the higher-contrast of the app's near-black and white inks. One of
+ * those two candidates always clears WCAG AA for normal text.
  */
 export function accentForeground(hex: string): string {
-  const m = (hex || '').replace('#', '').match(/.{2}/g);
-  if (!m) return '#ffffff';
-  const [r, g, b] = m.map((c) => parseInt(c, 16) / 255);
-  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return luminance > 0.35 ? '#0f0f0f' : '#ffffff';
+  if (!parseHex(hex)) return '#ffffff';
+  const dark = '#0f0f0f';
+  const light = '#ffffff';
+  return contrastRatio(hex, dark) >= contrastRatio(hex, light) ? dark : light;
+}
+
+/**
+ * Preserve an accent as-is when it is readable as text, otherwise move it the
+ * minimum practical distance toward black or white until it reaches WCAG AA.
+ */
+export function accentInk(hex: string, background: string): string {
+  const source = parseHex(hex);
+  const surface = parseHex(background);
+  if (!source || !surface) return accentForeground(hex);
+  if (contrastRatio(hex, background) >= 4.5) return toHex(source);
+
+  const target: Rgb = relativeLuminance(surface) > 0.5 ? [0, 0, 0] : [255, 255, 255];
+  let low = 0;
+  let high = 1;
+  let best = target;
+  for (let i = 0; i < 24; i += 1) {
+    const amount = (low + high) / 2;
+    const mixed = source.map((channel, index) => channel + (target[index] - channel) * amount) as Rgb;
+    if (contrastRatio(toHex(mixed), background) >= 4.5) {
+      best = mixed;
+      high = amount;
+    } else {
+      low = amount;
+    }
+  }
+  return toHex(best);
 }
 
 /**
@@ -66,4 +122,8 @@ export function applyAccentColor(color: string | null | undefined): void {
   root.style.setProperty('--color-accent', base);
   root.style.setProperty('--color-accent-hover', hover);
   root.style.setProperty('--color-accent-foreground', accentForeground(base));
+  // Dark ink is checked against the lightest dark surface; light ink against
+  // a white card, so either remains readable throughout its theme.
+  root.style.setProperty('--color-accent-ink-dark', accentInk(base, '#242424'));
+  root.style.setProperty('--color-accent-ink-light', accentInk(base, '#ffffff'));
 }

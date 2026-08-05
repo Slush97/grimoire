@@ -54,7 +54,7 @@ function PlayerStatRow({
                             target="_blank"
                             rel="noopener noreferrer"
                             title={t('stats.social.openOnStatlocker')}
-                            className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent-ink transition-all"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
                         </a>

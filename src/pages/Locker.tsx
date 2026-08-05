@@ -1141,7 +1141,7 @@ export default function Locker() {
               {shuffleOnLaunch && (
                 <span
                   className={`rounded-full px-1.5 text-xs tabular-nums ${
-                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-yellow-500/15 text-yellow-400'
+                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent-ink' : 'bg-yellow-500/15 text-yellow-400'
                   }`}
                 >
                   {shuffleIncluded.size}
@@ -1182,7 +1182,7 @@ export default function Locker() {
             aria-pressed={hideEmptyHeroes}
             className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors cursor-pointer ${
               hideEmptyHeroes
-                ? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
+                ? 'border-accent/50 bg-accent/15 text-accent-ink hover:bg-accent/25'
                 : 'border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
             }`}
             title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}
@@ -1778,7 +1778,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, color-mix(in srgb, var(--color-bg-secondary) 95%, transparent) 28%, color-mix(in srgb, var(--color-bg-secondary) 75%, transparent) 50%, color-mix(in srgb, var(--color-bg-secondary) 40%, transparent) 70%, color-mix(in srgb, var(--color-bg-secondary) 15%, transparent) 85%, transparent 96%)',
           }}
         />
       </div>
@@ -1833,7 +1833,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 type="button"
                 onClick={() => setSelectedType(type)}
                 className={`relative z-10 flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors ${
-                  isActive ? '' : 'hover:bg-white/10'
+                  isActive ? '' : 'hover:bg-hl/10'
                 }`}
               >
                 <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
@@ -1895,7 +1895,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 )}
               </div>
               {activeMods.length === 0 && isPropContainer ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
                   {activeType === 'spirit-urn' ? (
                     <Box className="h-8 w-8 text-white/40" />
                   ) : (
@@ -1916,7 +1916,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 </div>
               ) : activeMods.length === 0 && isPriorityTab ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
                   <ArrowUpToLine className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">{t('locker.globalPicker.empty')}</p>
                   <button
@@ -1931,7 +1931,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               ) : activeMods.length === 0 ? (
                 // Non-prop types can't be imported, so the empty state just
                 // points the user at Browse instead of an import button.
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hl/15 bg-bg-sunken/30 px-6 py-12 text-center">
                   <Layers className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.global.typeEmpty', {
@@ -1979,7 +1979,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       } ${
                         mod.enabled
                           ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
-                          : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+                          : 'border-hl/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-hl/[0.16] hover:text-text-primary'
                       }`}
                     >
                       {/* Glass backdrop: a blurred copy of the cover art bleeds
@@ -2005,7 +2005,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           3D model over a frosted-glass panel so the environment
                           background shows through; other types keep a solid bg. */}
                       <div
-                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
+                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-hl/[0.08] ${
                           isPropContainer ? '' : 'bg-bg-tertiary'
                         }`}
                       >
@@ -2016,7 +2016,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             the retag kebab below) under the z-10 full-card toggle
                             and swallow the kebab's clicks. */}
                         {isPropContainer && (
-                          <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
+                          <div className="pointer-events-none absolute inset-0 bg-hl/[0.04] backdrop-blur-md" />
                         )}
                         {/* Prop containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
@@ -2278,7 +2278,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     setRetagMenu(null);
                   }}
                   className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs cursor-pointer hover:bg-bg-tertiary ${
-                    isCurrent ? 'text-accent' : 'text-text-primary'
+                    isCurrent ? 'text-accent-ink' : 'text-text-primary'
                   }`}
                 >
                   {GLOBAL_MOD_TYPE_LABELS[type]}
@@ -2505,7 +2505,7 @@ function HeroGalleryCard({
           })}
           {inShufflePool && (
             <Shuffle
-              className="h-3.5 w-3.5 text-accent drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
+              className="h-3.5 w-3.5 text-accent-ink drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
               strokeWidth={2.25}
               aria-hidden
             />
@@ -2613,7 +2613,7 @@ function HeroCard({
   return (
     <div
       data-locker-hero-id={hero.id}
-      className={`group relative overflow-hidden rounded-lg border border-border bg-bg-secondary ${typeaheadClassName}`}
+      className={`locker-list-card group relative overflow-hidden rounded-lg border border-border bg-bg-secondary ${typeaheadClassName}`}
     >
       {/* Hero art bleeds behind the whole card; a gradient keeps the left side
           (where the text sits) dark enough to read, fading toward the portrait
@@ -2632,7 +2632,7 @@ function HeroCard({
       )}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+        className="locker-list-card-scrim pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
       />
 
       {/* Clickable header row toggles the dropdown. The favorite star is a
@@ -2646,17 +2646,17 @@ function HeroCard({
         >
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="truncate font-semibold drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+              <div className="locker-list-card-copy truncate font-semibold drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
                 {hero.name}
               </div>
               {hasAbilityRecolor && (
                 <RainbowPaletteIcon
-                  className="h-3.5 w-3.5 flex-shrink-0 text-accent drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"
+                  className="h-3.5 w-3.5 flex-shrink-0 text-accent-ink drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"
                   title={t('locker.page.abilityColorRecoloringAvailable')}
                 />
               )}
             </div>
-            <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+            <div className="locker-list-card-copy text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
               {countLabel}
             </div>
           </div>

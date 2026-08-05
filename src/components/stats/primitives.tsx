@@ -22,9 +22,9 @@ interface StatCardProps {
 
 export function StatCard({ label, value, tone = 'default', sub }: StatCardProps) {
     const valueClass =
-        tone === 'accent' ? 'text-accent' : tone === 'success' ? 'text-green-400' : 'text-text-primary'
+        tone === 'accent' ? 'text-accent-ink' : tone === 'success' ? 'text-green-400' : 'text-text-primary'
     return (
-        <div className="bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-sm px-5 py-4 text-center relative overflow-hidden">
+        <div className="bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm px-5 py-4 text-center relative overflow-hidden">
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <p className={`text-3xl font-bold font-reaver tracking-wide ${valueClass}`}>{value}</p>
             <p className="text-xs text-text-secondary uppercase tracking-wider mt-1.5">{label}</p>
@@ -171,7 +171,7 @@ export function MatchRow({
         <div
             className={`group flex items-center gap-3 p-2.5 bg-bg-tertiary rounded-sm border-l-2 transition-colors ${
                 won ? 'border-green-400/60' : 'border-red-400/60'
-            } hover:bg-white/5`}
+            } hover:bg-hl/5`}
         >
             <HeroChip heroId={heroId} size="md" />
             <div className="flex-1 min-w-0">
@@ -215,7 +215,7 @@ export function MatchRow({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={t('stats.primitives.viewMatchOnStatlocker')}
-                className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all shrink-0"
+                className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent-ink transition-all shrink-0"
             >
                 <ExternalLink className="w-4 h-4" />
             </a>

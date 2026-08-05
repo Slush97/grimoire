@@ -199,7 +199,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                             className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm transition-colors ${
                               isPicked
                                 ? 'bg-accent/10 border border-accent/40 text-text-primary'
-                                : 'border border-transparent text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                                : 'border border-transparent text-text-secondary hover:bg-hl/5 hover:text-text-primary'
                             }`}
                           >
                             <input
@@ -213,7 +213,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                             </span>
                             <span className="truncate" title={variantLabelOf(variant)}>{variantLabelOf(variant)}</span>
                             {variant.enabled && (
-                              <span className="ml-auto text-[10px] text-accent uppercase tracking-wide">enabled</span>
+                              <span className="ml-auto text-[10px] text-accent-ink uppercase tracking-wide">enabled</span>
                             )}
                           </label>
                         );
@@ -239,7 +239,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
 
           {mergedSourceCount > 0 && (
             <div className="flex items-start gap-2 rounded-sm border border-accent/30 bg-accent/5 p-2.5 text-xs text-text-secondary">
-              <Info className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-accent-ink flex-shrink-0 mt-0.5" />
               <div>
                 <div className="text-text-primary font-medium">
                   {t('mergeMods.flattenCount', { count: mergedSourceCount })}

@@ -102,7 +102,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 42%, rgba(26,26,26,0.7) 62%, rgba(26,26,26,0.3) 80%, transparent 96%)',
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, color-mix(in srgb, var(--color-bg-secondary) 95%, transparent) 42%, color-mix(in srgb, var(--color-bg-secondary) 70%, transparent) 62%, color-mix(in srgb, var(--color-bg-secondary) 30%, transparent) 80%, transparent 96%)',
           }}
         />
       </div>

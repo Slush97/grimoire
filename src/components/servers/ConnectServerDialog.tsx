@@ -110,7 +110,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
           <button
             onClick={onClose}
             disabled={phase === 'working'}
-            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label={t('common.actions.close')}
           >
             <X size={18} />
@@ -122,9 +122,9 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
             <div className="space-y-4">
               <div className="flex items-center gap-3 text-text-primary">
                 {progress?.status === 'downloading' || progress?.status === 'decompressing' ? (
-                  <Download size={20} className="text-accent" />
+                  <Download size={20} className="text-accent-ink" />
                 ) : (
-                  <Loader2 size={20} className="animate-spin text-accent" />
+                  <Loader2 size={20} className="animate-spin text-accent-ink" />
                 )}
                 <div className="min-w-0">
                   <div className="text-sm font-medium">

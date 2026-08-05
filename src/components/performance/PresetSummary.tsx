@@ -82,7 +82,7 @@ export default function PresetSummary({ preset, release, creditSlot }: PresetSum
           target="_blank"
           rel="noreferrer noopener"
           title={pinLabel}
-          className="text-accent hover:underline inline-flex items-center gap-1 align-middle font-mono"
+          className="text-accent-ink hover:underline inline-flex items-center gap-1 align-middle font-mono"
         >
           <PinIcon className="w-3 h-3" aria-hidden="true" />
           {release.commit.slice(0, 8)}

@@ -691,7 +691,7 @@ export default function Conflicts() {
                     {mod.name}
                   </p>
                   {variant && (
-                    <p className="truncate text-xs text-accent" title={variant}>
+                    <p className="truncate text-xs text-accent-ink" title={variant}>
                       {variant}
                     </p>
                   )}
@@ -829,7 +829,7 @@ export default function Conflicts() {
                       {modA.name}
                     </p>
                     {variantA && (
-                      <p className="text-xs text-accent text-center break-words" title={variantA}>
+                      <p className="text-xs text-accent-ink text-center break-words" title={variantA}>
                         {variantA}
                       </p>
                     )}
@@ -882,7 +882,7 @@ export default function Conflicts() {
                       {modB.name}
                     </p>
                     {variantB && (
-                      <p className="text-xs text-accent text-center break-words" title={variantB}>
+                      <p className="text-xs text-accent-ink text-center break-words" title={variantB}>
                         {variantB}
                       </p>
                     )}
@@ -1113,7 +1113,7 @@ export default function Conflicts() {
                       </span>
                     </div>
                     {variant && (
-                      <p className="truncate text-xs text-accent" title={variant}>{variant}</p>
+                      <p className="truncate text-xs text-accent-ink" title={variant}>{variant}</p>
                     )}
                     {m?.fileName && (
                       <p className="truncate text-[11px] font-mono text-text-tertiary" title={m.fileName}>{m.fileName}</p>
@@ -1152,7 +1152,7 @@ export default function Conflicts() {
                 />
               </p>
               {getVariantLabel(disableTarget) && (
-                <p className="text-xs text-accent truncate" title={getVariantLabel(disableTarget) ?? undefined}>
+                <p className="text-xs text-accent-ink truncate" title={getVariantLabel(disableTarget) ?? undefined}>
                   {getVariantLabel(disableTarget)}
                 </p>
               )}

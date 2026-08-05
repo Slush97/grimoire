@@ -154,7 +154,7 @@ export default function CardCropper({
     <Modal onClose={onCancel} size="none" panelClassName="max-w-xl" labelledBy="card-cropper-title">
       <div className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
-          <Crop className="h-4 w-4 text-accent" />
+          <Crop className="h-4 w-4 text-accent-ink" />
           <h2 id="card-cropper-title" className="text-sm font-semibold text-text-primary">
             {t('locker.crop.title', { variant: variantLabel })}
           </h2>
@@ -216,7 +216,7 @@ export default function CardCropper({
                 disabled={!img}
                 onClick={() => applyZoom(1)}
                 title={t('locker.crop.resetZoom')}
-                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
@@ -242,7 +242,7 @@ export default function CardCropper({
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary"
+            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary"
           >
             {t('common.actions.cancel')}
           </button>

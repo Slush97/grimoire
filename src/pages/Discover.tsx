@@ -248,7 +248,7 @@ export default function Discover() {
         {t('discover.publish.publishProfile')}
       </Button>
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-white/10"
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-hl/10"
         title={`Signed in as ${user.display_name}`}
       >
         {user.avatar_url ? (
@@ -417,10 +417,10 @@ export default function Discover() {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="p-4 animate-pulse h-32">
-              <div className="h-4 bg-white/5 rounded w-1/2 mb-2" />
-              <div className="h-3 bg-white/5 rounded w-1/3 mb-4" />
-              <div className="h-3 bg-white/5 rounded w-full mb-1" />
-              <div className="h-3 bg-white/5 rounded w-3/4" />
+              <div className="h-4 bg-hl/5 rounded w-1/2 mb-2" />
+              <div className="h-3 bg-hl/5 rounded w-1/3 mb-4" />
+              <div className="h-3 bg-hl/5 rounded w-full mb-1" />
+              <div className="h-3 bg-hl/5 rounded w-3/4" />
             </Card>
           ))}
         </div>
@@ -481,7 +481,7 @@ export default function Discover() {
               >
                 <Card
                   contentClassName="p-0"
-                  className={`overflow-hidden flex flex-col transition-colors ${isActive ? 'border-accent/40' : 'hover:border-white/20'}`}
+                  className={`overflow-hidden flex flex-col transition-colors ${isActive ? 'border-accent/40' : 'hover:border-hl/20'}`}
                 >
                   {/* Image at the top, Twitter-card style. 16:9 full-bleed.
                       Layouts:
@@ -589,8 +589,8 @@ export default function Discover() {
                           signedIn
                             ? liked
                               ? 'text-state-danger hover:bg-red-500/10 cursor-pointer'
-                              : 'text-text-secondary hover:text-state-danger hover:bg-white/5 cursor-pointer'
-                            : 'text-text-tertiary cursor-help hover:bg-white/5'
+                              : 'text-text-secondary hover:text-state-danger hover:bg-hl/5 cursor-pointer'
+                            : 'text-text-tertiary cursor-help hover:bg-hl/5'
                         } disabled:opacity-50`}
                         title={signedIn ? (liked ? 'Unlike' : 'Like') : 'Sign in to like'}
                         aria-label={signedIn ? (liked ? 'Unlike profile' : 'Like profile') : 'Sign in to like'}

@@ -47,10 +47,10 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
       size="md"
       panelClassName="max-h-[80vh] flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="publish-pick-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
-              <Globe className="w-5 h-5 text-accent" />
+              <Globe className="w-5 h-5 text-accent-ink" />
               {t('social.picker.publishAProfile')}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
@@ -59,7 +59,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -90,7 +90,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           )}
 
           {sorted && sorted.length > 0 && (
-            <ul className="divide-y divide-white/5 border border-white/10 rounded-lg bg-bg-tertiary/30 overflow-hidden">
+            <ul className="divide-y divide-hl/5 border border-hl/10 rounded-lg bg-bg-tertiary/30 overflow-hidden">
               {sorted.map((p) => {
                 const modCount = p.mods.length;
                 const noMods = modCount === 0;
@@ -103,7 +103,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
                       className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${
                         noMods
                           ? 'opacity-50 cursor-not-allowed'
-                          : 'hover:bg-white/[0.04] cursor-pointer'
+                          : 'hover:bg-hl/[0.04] cursor-pointer'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
@@ -123,7 +123,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
                           )}
                         </div>
                       </div>
-                      <span className="text-xs text-accent shrink-0">
+                      <span className="text-xs text-accent-ink shrink-0">
                         {noMods ? '' : t('social.picker.publishArrow')}
                       </span>
                     </button>
@@ -134,7 +134,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-white/10 flex justify-end">
+        <div className="px-6 py-3 border-t border-hl/10 flex justify-end">
           <Button variant="ghost" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>

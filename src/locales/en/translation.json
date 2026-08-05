@@ -740,6 +740,13 @@
       "noReleaseNotes": "No release notes available."
     },
     "appearance": {
+      "theme": {
+        "title": "Theme",
+        "description": "Choose how Grimoire looks. System follows your operating system setting.",
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",

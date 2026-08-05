@@ -24,7 +24,7 @@ function ReleaseVersionLink({ version, className = '' }: { version?: string | nu
       target="_blank"
       rel="noopener noreferrer"
       title={t('settings.updates.releaseNotesTitle', { version })}
-      className={`underline decoration-dotted underline-offset-2 transition-colors hover:text-accent ${className}`}
+      className={`underline decoration-dotted underline-offset-2 transition-colors hover:text-accent-ink ${className}`}
     >
       v{version}
     </a>
@@ -106,7 +106,7 @@ export default function UpdatesSection() {
                 <Badge variant="info">v{appVersion || '...'}</Badge>
               </div>
               {updateStatus?.available && !updateStatus.downloaded && (
-                <span className="text-xs text-accent">
+                <span className="text-xs text-accent-ink">
                   <ReleaseVersionLink version={updateStatus.updateInfo?.version} />{' '}
                   <Tx k="settings.updates.available" fallback="available!" />
                 </span>
@@ -170,7 +170,7 @@ export default function UpdatesSection() {
           </div>
 
           {installSource === 'managed' && (
-            <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
+            <div className="rounded-lg bg-bg-tertiary border border-hl/10 p-3 text-sm text-text-secondary space-y-2">
               <p className="text-text-primary font-medium">
                 <Tx k="settings.updates.managed" fallback="Updates are managed by your package manager." />
               </p>
@@ -217,9 +217,9 @@ export default function UpdatesSection() {
           which would sink a plain z-50 below the fixed status indicators. */}
       {showChangelog && updateStatus?.updateInfo && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-bg-secondary border border-white/10 rounded-sm w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in relative">
+          <div className="bg-bg-secondary border border-hl/10 rounded-sm w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in relative">
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-hl/10">
               <div>
                 <h2 className="text-xl font-bold">
                   <Tx k="settings.updates.whatsNewIn" fallback="What's New in" />{' '}
@@ -237,7 +237,7 @@ export default function UpdatesSection() {
               </div>
               <button
                 onClick={() => setShowChangelog(false)}
-                className="p-2 rounded-sm hover:bg-white/5 transition-colors"
+                className="p-2 rounded-sm hover:bg-hl/5 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -252,7 +252,7 @@ export default function UpdatesSection() {
                 <div className="space-y-4">
                   {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
                     <div key={idx}>
-                      <h3 className="font-semibold text-accent">
+                      <h3 className="font-semibold text-accent-ink">
                         <ReleaseVersionLink version={note.version} />
                       </h3>
                       {note.note && (
@@ -270,7 +270,7 @@ export default function UpdatesSection() {
                 </p>
               )}
             </div>
-            <div className="flex justify-end gap-3 p-6 border-t border-white/10">
+            <div className="flex justify-end gap-3 p-6 border-t border-hl/10">
               <Button
                 onClick={() => setShowChangelog(false)}
                 variant="secondary"

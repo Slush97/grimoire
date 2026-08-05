@@ -159,7 +159,7 @@ function ParamSliders({
                     <button
                         type="button"
                         onClick={() => onChange({ volumeDb: 0, pitch: 1 })}
-                        className="text-[9px] font-semibold uppercase tracking-wide text-accent hover:underline"
+                        className="text-[9px] font-semibold uppercase tracking-wide text-accent-ink hover:underline"
                     >
                         {t('common.actions.reset')}
                     </button>
@@ -425,7 +425,7 @@ export function LockerOverridesModal({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                     <div className="flex items-center gap-2.5">
-                        <Wand2 className="h-5 w-5 text-accent" />
+                        <Wand2 className="h-5 w-5 text-accent-ink" />
                         <div>
                             <h2 id="locker-overrides-title" className="text-base font-semibold text-text-primary">{t('lockerOverrides.title')}</h2>
                             <p className="text-xs text-text-secondary">
@@ -597,7 +597,7 @@ export function LockerOverridesModal({
                                                         </span>
                                                         {sound.tuned && (
                                                             <SlidersHorizontal
-                                                                className="h-3 w-3 text-accent"
+                                                                className="h-3 w-3 text-accent-ink"
                                                                 aria-label={t('lockerOverrides.tuned')}
                                                             />
                                                         )}
@@ -705,7 +705,7 @@ export function LockerOverridesModal({
                                         >
                                             <HeroIcon heroName={color.heroName} />
                                             <span
-                                                className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-white/15"
+                                                className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-hl/15"
                                                 style={swatchStyle}
                                                 aria-hidden
                                             />
@@ -759,7 +759,7 @@ export function LockerOverridesModal({
                                         >
                                             <HeroIcon heroName={skin.heroName} />
                                             <span
-                                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-white/15"
+                                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-hl/15"
                                                 style={{ background: rainbowCss(0, 1, 1) }}
                                                 aria-hidden
                                             >
