@@ -260,6 +260,7 @@ function enrichMod(mod: Mod): WireMod {
             lockerHeroSource,
             globalType: globalType ?? undefined,
             merged: metadata.merged,
+            forgeInstall: metadata.forgeInstall,
             lockerCosmetics: metadata.lockerCosmetics,
             lockerSounds: metadata.lockerSounds,
             abilitySounds: abilitySounds ?? undefined,

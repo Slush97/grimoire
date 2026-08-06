@@ -27,6 +27,21 @@ export function findGrimoireUrlInArgv(argv: string[]): string | null {
 }
 
 /**
+ * Is this the URL DeadlockForge fires purely to start the app?
+ *
+ * The forge 1-click flow hands mods over on loopback rather than through a URL
+ * (see services/forgeBridge.ts), so the protocol is only used to launch a
+ * Grimoire that is not already running. It deliberately carries no payload:
+ * the site re-probes the bridge once we are up. Recognising it here keeps it
+ * from falling through to the GameBanana parser, which would reject it with a
+ * misleading "untrusted domain" warning.
+ */
+export function isForgeLaunchUrl(url: string): boolean {
+    const payload = url.slice(GRIMOIRE_PROTOCOL.length + 1).replace(/^\/+/, '').trim();
+    return payload.toLowerCase().startsWith('forge/launch');
+}
+
+/**
  * Parse a `grimoire:[url],[modType],[modId]` URL per the GameBanana 1-Click
  * spec. Returns null if the URL is malformed or the archive URL fails the
  * trusted-domain check.
@@ -35,6 +50,8 @@ export function parseGrimoireUrl(url: string): ParsedGrimoireUrl | null {
     if (!url.toLowerCase().startsWith(`${GRIMOIRE_PROTOCOL}:`)) return null;
     const payload = url.slice(GRIMOIRE_PROTOCOL.length + 1).trim();
     if (!payload) return null;
+    // Launch-only URL: starting the app was the whole point, so stop here.
+    if (isForgeLaunchUrl(url)) return null;
 
     const parts = payload.split(',');
     const archiveUrl = parts[0];

@@ -62,6 +62,8 @@ import type {
     OneClickInstallData,
     OneClickSuspiciousFilesData,
     MultiVpkPickData,
+    ForgeInstallRequestData,
+    ForgeBridgeStatus,
     SyncProgressData,
     UpdateStatus,
     LockerImageVariant,
@@ -460,6 +462,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     respondToOneClickSuspiciousFiles: (requestId: string, accepted: boolean) =>
         ipcRenderer.invoke('one-click-suspicious-response', { requestId, accepted }),
+
+    // DeadlockForge local install bridge. The renderer only ever sees the
+    // sanitized description of a pending install and hands back a yes/no; the
+    // VPK bytes and temp path never leave the main process.
+    onForgeInstallRequest: (callback: (data: ForgeInstallRequestData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: ForgeInstallRequestData) => callback(data);
+        ipcRenderer.on('forge-install-request', handler);
+        return () => ipcRenderer.removeListener('forge-install-request', handler);
+    },
+
+    respondToForgeInstall: (requestId: string, accepted: boolean) =>
+        ipcRenderer.invoke('forge-install-response', { requestId, accepted }),
+
+    onForgeEnableRequest: (callback: () => void) => {
+        const handler = () => callback();
+        ipcRenderer.on('forge-enable-request', handler);
+        return () => ipcRenderer.removeListener('forge-enable-request', handler);
+    },
+
+    respondToForgeEnable: (accepted: boolean) =>
+        ipcRenderer.invoke('forge-enable-response', { accepted }),
+
+    getForgeBridgeStatus: (): Promise<ForgeBridgeStatus> =>
+        ipcRenderer.invoke('forge-bridge-status'),
 
     onMultiVpkPick: (callback: (data: MultiVpkPickData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: MultiVpkPickData) => callback(data);

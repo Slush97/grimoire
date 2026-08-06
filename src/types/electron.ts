@@ -437,6 +437,29 @@ export interface OneClickSuspiciousFilesData {
     files: string[];
 }
 
+/**
+ * An install offered by deadlockforge.net over the local bridge, awaiting the
+ * user's confirmation.
+ *
+ * Every field here has already been validated or sanitized in the main process.
+ * `sizeBytes` is what the bridge actually received, never a caller-supplied
+ * figure, and `origin` is an allowlisted origin rather than anything the page
+ * chose to call itself.
+ */
+export interface ForgeInstallRequestData {
+    requestId: string;
+    name: string;
+    author?: string;
+    type?: string;
+    sizeBytes: number;
+    origin: string;
+}
+
+export interface ForgeBridgeStatus {
+    listening: boolean;
+    port: number | null;
+}
+
 export interface MultiVpkPickData {
     requestId: string;
     modName: string;
@@ -963,6 +986,17 @@ export interface ElectronAPI {
         requestId: string,
         selected: string[] | null
     ) => Promise<void>;
+
+    // DeadlockForge local install bridge
+    onForgeInstallRequest: (
+        callback: (data: ForgeInstallRequestData) => void
+    ) => () => void;
+    respondToForgeInstall: (requestId: string, accepted: boolean) => Promise<void>;
+    /** Fired when the site asked Grimoire to start and the bridge is still off,
+     *  so the user can opt in without hunting through Settings. */
+    onForgeEnableRequest: (callback: () => void) => () => void;
+    respondToForgeEnable: (accepted: boolean) => Promise<void>;
+    getForgeBridgeStatus: () => Promise<ForgeBridgeStatus>;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;

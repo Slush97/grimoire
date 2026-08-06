@@ -23,6 +23,24 @@ export interface MergedModSource {
   sha256AtMergeTime?: string;
 }
 
+/** Provenance for a VPK handed to Grimoire by deadlockforge.net over the local
+ *  install bridge. DeadlockForge forges VPKs in the browser, so unlike a
+ *  GameBanana download there is no remote record to enrich from: everything we
+ *  know is what the user confirmed in the install dialog. Presence of this
+ *  block is what marks a mod as forge-built. */
+export interface ForgeInstallInfo {
+  /** Sanitized display name shown in the confirmation dialog. */
+  name: string;
+  /** Sanitized author, when the site sent one. */
+  author?: string;
+  /** Advisory forge category: sound, texture, itemart or hud. */
+  type?: string;
+  /** Validated web origin the install came from, e.g. https://deadlockforge.net.
+   *  Recorded so the user can always see where a mod came from after the fact. */
+  origin: string;
+  installedAt: string;
+}
+
 export interface MergedModInfo {
   /** Random ID generated at merge time. Surfaced for UI keys and logging;
    *  the mod's normal `id` (md5 of filename) is what callers use to operate
@@ -633,6 +651,10 @@ export interface Mod {
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;
+  /** Set when this mod was handed over by deadlockforge.net through the local
+   *  install bridge. Drives the DeadlockForge badge in place of a thumbnail,
+   *  and is a permanent record of where the mod came from. */
+  forgeInstall?: ForgeInstallInfo;
   /** Set on the single Locker-managed cosmetics VPK that holds applied hero
    *  cards. Other surfaces treat a truthy value as "hide this artifact". */
   lockerCosmetics?: LockerCosmeticsInfo;
@@ -1024,6 +1046,11 @@ export interface AppSettings {
    *  versa) can be traced in the diagnostic report. Off by default; meant to
    *  be flipped on temporarily to capture a repro. */
   verboseModTrace?: boolean;
+  /** Opt-in: run the loopback HTTP bridge that lets deadlockforge.net hand a
+   *  freshly forged VPK straight to Grimoire (see services/forgeBridge.ts).
+   *  Off by default, so no listener exists at all unless the user asks for it.
+   *  Every install still goes through a confirmation dialog. */
+  forgeLocalInstallEnabled: boolean;
   /** Shared/legacy NSFW thumbnail blur preference for non-Installed surfaces. */
   hideNsfwPreviews: boolean;
   /** Browser-specific handling for GameBanana mods marked as NSFW. */
