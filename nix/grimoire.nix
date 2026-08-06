@@ -60,7 +60,7 @@ stdenv.mkDerivation (finalAttrs: {
     # The hash changes when pnpm-lock.yaml, the pinned pnpm major,
     # fetcherVersion, or social-types' package.json change.
     fetcherVersion = 4;
-    hash = "sha256-T3fw9+/NfUuk7O+dkAXeKPaH8MaD2znFrOPN6+MW+yA=";
+    hash = "sha256-1KfyeNRXK441zLpScEDi+fXw9+XpZYOyeoExG4nZuwY=";
   };
 
   nativeBuildInputs = [
