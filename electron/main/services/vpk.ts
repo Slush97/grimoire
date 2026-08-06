@@ -1,4 +1,4 @@
-import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
+import { openSync, readSync, closeSync, existsSync, statSync, fstatSync } from 'fs';
 import { heroForSoundCodename } from './heroSoundCodenames';
 import { parseVpksInWorkers } from './workers';
 import type { GlobalModType } from '../../../src/types/mod';
@@ -18,6 +18,12 @@ import type { GlobalModType } from '../../../src/types/mod';
  */
 
 const VPK_SIGNATURE = 0x55AA1234;
+
+/** Upper bound on a VPK directory tree we are willing to allocate for. Real
+ *  trees are well under a megabyte; this is a sanity ceiling, not a format
+ *  limit, and it exists so an untrusted header field cannot drive a huge
+ *  allocation in the main process. */
+const MAX_VPK_TREE_SIZE = 64 * 1024 * 1024;
 
 /**
  * Read a null-terminated string from a buffer at the given offset
@@ -237,6 +243,23 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
         // VPK v2 has an extended header (28 bytes total vs 12 for v1)
         // After the first 12 bytes, v2 has: FileDataSectionSize(4) + ArchiveMD5SectionSize(4) + OtherMD5SectionSize(4) + SignatureSectionSize(4)
         const headerSize = version === 2 ? 28 : 12;
+
+        // treeSize is an untrusted uint32 straight out of the file, so it can
+        // claim up to 4 GiB. Buffer.alloc zero-fills, so an unchecked value
+        // lets a 12-byte crafted file stall or OOM the main process, and it
+        // would do so on every conflict scan once the file is on disk. Clamp
+        // to what the file can actually contain, and to a ceiling far above
+        // any real directory tree.
+        const fileSize = fstatSync(fd).size;
+        const availableBytes = Math.max(0, fileSize - headerSize);
+        if (treeSize > availableBytes || treeSize > MAX_VPK_TREE_SIZE) {
+            console.warn(
+                `[parseVpkDirectory] ${vpkPath}: implausible tree size ${treeSize} ` +
+                `(file has ${availableBytes} bytes after the header, cap is ${MAX_VPK_TREE_SIZE}); refusing to parse`
+            );
+            closeSync(fd);
+            return null;
+        }
 
         // Read the directory tree (starts after the full header)
         const treeBuffer = Buffer.alloc(treeSize);
