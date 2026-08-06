@@ -13,3 +13,15 @@ export function getAssetPath(path: string): string {
     // In development, absolute paths work
     return path;
 }
+
+/**
+ * Bundled DeadlockForge badge, used as the thumbnail for mods installed through
+ * the local forge bridge.
+ *
+ * Deliberately a local asset: forge mods have no remote thumbnail to fetch, and
+ * fetching one would mean Grimoire reaching out to a third party on the
+ * strength of an install request. The badge ships in the app instead.
+ */
+export function getForgeBadgePath(): string {
+    return getAssetPath('/forge/deadlockforge-badge.png');
+}

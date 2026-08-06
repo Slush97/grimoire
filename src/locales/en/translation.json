@@ -2797,5 +2797,32 @@
     },
     "emptyApplied": "No {{noun}} overrides applied yet.",
     "openLocker": "Open the Locker"
+  },
+  "forge": {
+    "install": {
+      "title": "Install this mod?",
+      "needsPathTitle": "Set your Deadlock folder first",
+      "from": "Sent from {{origin}}",
+      "modLabel": "Mod",
+      "authorLabel": "Author",
+      "sizeLabel": "Size",
+      "confirm": "Install",
+      "openSettings": "Open Settings",
+      "disclaimer": "This mod was built on DeadlockForge and sent straight to Grimoire. It installs disabled, so you can review it before turning it on.",
+      "needsPathBody": "Grimoire needs to know where Deadlock is installed before it can add mods. Set the game folder in Settings, then forge your mod again."
+    },
+    "settings": {
+      "description": "Let deadlockforge.net send freshly forged mods straight to Grimoire, so you do not have to download and move the file yourself. Grimoire listens only on your own machine, accepts requests only from deadlockforge.net, and always asks before installing anything.",
+      "toggleLabel": "Allow DeadlockForge 1-click installs",
+      "listening": "Listening on 127.0.0.1:{{port}}",
+      "notListening": "Not listening"
+    },
+    "enable": {
+      "title": "Allow DeadlockForge 1-click installs?",
+      "confirm": "Allow",
+      "decline": "Not now",
+      "body": "DeadlockForge builds mods in your browser and can hand them straight to Grimoire, so you do not have to download the file and move it into your game folder yourself.",
+      "note": "Grimoire will listen only on your own machine, accept mods only from deadlockforge.net, and ask you to confirm every single install. You can turn this off any time in Settings."
+    }
   }
 }

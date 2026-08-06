@@ -7014,6 +7014,9 @@ interface ModCardProps {
      *  and is never disabled by the launch shuffle. */
     priorityMod?: boolean;
     merged?: import('../types/mod').MergedModInfo;
+    /** Came from deadlockforge.net over the local install bridge. Drives the
+     *  DeadlockForge badge, since these mods have no remote thumbnail. */
+    forgeInstall?: import('../types/mod').ForgeInstallInfo;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
@@ -7166,6 +7169,7 @@ function ModMediaPreview({
       enableImageContextMenu={false}
       imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
+      forgeInstalled={!!mod.forgeInstall}
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
@@ -7583,6 +7587,7 @@ function ModListRowContent({
             enableImageContextMenu={false}
             imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
+            forgeInstalled={!!mod.forgeInstall}
           />
         )}
         {canOpen && (

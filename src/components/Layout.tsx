@@ -16,8 +16,13 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
 import { useAppStore } from '../stores/appStore';
-import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
+import type {
+  OneClickSuspiciousFilesData,
+  MultiVpkPickData,
+  ForgeInstallRequestData,
+} from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
+import ForgeInstallModal from './ForgeInstallModal';
 import ImportCustomModsModal from './ImportCustomModsModal';
 import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
@@ -35,6 +40,13 @@ export default function Layout() {
   // This only catches failures before a download can be queued.
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
   const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
+  // A DeadlockForge install awaiting the user's confirmation. Only ever one at
+  // a time: the bridge drops extra requests while one is outstanding, so a page
+  // cannot stack prompts to fish for a stray click.
+  const [forgePrompt, setForgePrompt] = useState<ForgeInstallRequestData | null>(null);
+  // Opt-in prompt for the DeadlockForge bridge, raised when the site asks
+  // Grimoire to start and the feature is still switched off.
+  const [forgeEnablePrompt, setForgeEnablePrompt] = useState(false);
   // Shown when GameBanana starts returning 429s (the main process debounces the
   // event so a burst of rejected requests surfaces one warning, not a flood).
 
@@ -154,6 +166,20 @@ export default function Layout() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onForgeInstallRequest((data) => {
+      setForgePrompt(data);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onForgeEnableRequest(() => {
+      setForgeEnablePrompt(true);
+    });
+    return unsubscribe;
+  }, []);
+
   // Surface GameBanana rate limiting app-wide. The heavy "Fix Unknown"
   // auto-detect is the usual trigger, but any tab can hit it, so the warning
   // lives here rather than inside one page.
@@ -181,6 +207,23 @@ export default function Layout() {
     if (!multiVpkPrompt) return;
     await window.electronAPI.respondToMultiVpkPick(multiVpkPrompt.requestId, selected);
     setMultiVpkPrompt(null);
+  };
+
+  const respondToForgeInstall = async (accepted: boolean) => {
+    if (!forgePrompt) return;
+    await window.electronAPI.respondToForgeInstall(forgePrompt.requestId, accepted);
+    setForgePrompt(null);
+  };
+
+  const respondToForgeEnable = async (accepted: boolean) => {
+    await window.electronAPI.respondToForgeEnable(accepted);
+    setForgeEnablePrompt(false);
+    if (accepted) {
+      // Pull the saved setting back into the store so the Settings toggle and
+      // the status line agree with what just happened.
+      const settings = await getSettings();
+      useAppStore.setState({ settings });
+    }
   };
 
   const handleFixGameinfo = async () => {
@@ -324,6 +367,28 @@ export default function Layout() {
           ) : null
         }
       />
+      <ConfirmModal
+        isOpen={forgeEnablePrompt}
+        title={t('forge.enable.title')}
+        confirmLabel={t('forge.enable.confirm')}
+        cancelLabel={t('forge.enable.decline')}
+        onConfirm={() => respondToForgeEnable(true)}
+        onCancel={() => respondToForgeEnable(false)}
+        message={
+          <div className="space-y-2">
+            <p>{t('forge.enable.body')}</p>
+            <p className="text-xs">{t('forge.enable.note')}</p>
+          </div>
+        }
+      />
+      {forgePrompt && (
+        <ForgeInstallModal
+          key={forgePrompt.requestId}
+          data={forgePrompt}
+          needsGamePath={!getActiveDeadlockPath(useAppStore.getState().settings)}
+          onRespond={respondToForgeInstall}
+        />
+      )}
       {multiVpkPrompt && (
         <MultiVpkPickerModal
           key={multiVpkPrompt.requestId}
