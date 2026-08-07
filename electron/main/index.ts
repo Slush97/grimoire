@@ -71,6 +71,7 @@ app.commandLine.appendSwitch(
 import './ipc/settings';
 import './ipc/mods';
 import './ipc/gamebanana';
+import './ipc/gamebananaFileServers';
 import './ipc/system';
 import './ipc/conflicts';
 import './ipc/profiles';

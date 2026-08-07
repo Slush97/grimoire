@@ -20,6 +20,238 @@ function server(domain: string, rate: number, state = 'up') {
 }
 
 describe('gameBananaFileServerSelector', () => {
+    it('loads lightweight directory diagnostics without probing download servers', async () => {
+        let now = 1_000;
+        const fetchImpl = vi.fn(async () =>
+            directoryResponse([
+                server('filecache45', 500),
+                server('filecache44', 400),
+                server('filecache42', 9_000, 'down'),
+            ]),
+        );
+        const probeCandidate = vi.fn(async () => 1_000);
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl,
+            now: () => now,
+            cacheTtlMs: 12 * 60_000,
+            probeCandidate,
+        });
+
+        await expect(selector.getDiagnostics()).resolves.toEqual({
+            status: 'degraded',
+            availableServers: 2,
+            totalServers: 3,
+            directoryCheckedAt: 1_000,
+            directoryExpiresAt: 721_000,
+            needsProbe: true,
+            testedServers: [],
+        });
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(probeCandidate).not.toHaveBeenCalled();
+
+        now += 60_000;
+        await selector.getDiagnostics();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(probeCandidate).not.toHaveBeenCalled();
+    });
+
+    it('reports the last top-three local measurements and preferred server', async () => {
+        let now = 2_000;
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl: async () =>
+                directoryResponse([
+                    server('filecache45', 500),
+                    server('filecache44', 400),
+                    server('filecache43', 300),
+                    server('filecache42', 200),
+                ]),
+            now: () => now,
+            probeCandidate: async (url) => {
+                if (url.includes('filecache44')) return 900;
+                if (url.includes('filecache45')) return 100;
+                return null;
+            },
+        });
+
+        await selector.getCandidates(canonicalUrl);
+        now = 5_000;
+
+        await expect(selector.getDiagnostics()).resolves.toEqual({
+            status: 'healthy',
+            availableServers: 4,
+            totalServers: 4,
+            directoryCheckedAt: 2_000,
+            directoryExpiresAt: 722_000,
+            preferredServer: 'filecache44',
+            needsProbe: false,
+            localProbeCheckedAt: 2_000,
+            testedServers: [
+                { server: 'filecache45', bytesPerSecond: 100, available: true },
+                { server: 'filecache44', bytesPerSecond: 900, available: true },
+                { server: 'filecache43', available: false },
+            ],
+        });
+    });
+
+    it('forces a directory refresh while retaining historical local measurements', async () => {
+        let now = 10_000;
+        const fetchImpl = vi
+            .fn()
+            .mockResolvedValueOnce(
+                directoryResponse([
+                    server('filecache45', 500),
+                    server('filecache44', 400),
+                    server('filecache43', 300),
+                ]),
+            )
+            .mockResolvedValueOnce(
+                directoryResponse([
+                    server('filecache46', 800),
+                    server('filecache45', 500),
+                ]),
+            );
+        const probeCandidate = vi.fn(async (url: string) =>
+            url.includes('filecache44') ? 900 : 100,
+        );
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl,
+            now: () => now,
+            probeCandidate,
+        });
+
+        await selector.getCandidates(canonicalUrl);
+        now = 20_000;
+        const refreshed = await selector.refreshCache();
+
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(probeCandidate).toHaveBeenCalledTimes(3);
+        expect(refreshed).toMatchObject({
+            status: 'healthy',
+            availableServers: 2,
+            totalServers: 2,
+            directoryCheckedAt: 20_000,
+            preferredServer: 'filecache44',
+            needsProbe: true,
+            localProbeCheckedAt: 10_000,
+            testedServers: [
+                { server: 'filecache45', bytesPerSecond: 100, available: true },
+                { server: 'filecache44', bytesPerSecond: 900, available: true },
+                { server: 'filecache43', bytesPerSecond: 100, available: true },
+            ],
+        });
+
+        await selector.getCandidates(canonicalUrl);
+        expect(probeCandidate).toHaveBeenCalledTimes(5);
+    });
+
+    it('coalesces concurrent cache refresh requests', async () => {
+        let release!: (response: Response) => void;
+        const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+            release = resolve;
+        }));
+        const selector = createGameBananaFileServerSelector({ fetchImpl });
+
+        const first = selector.refreshCache();
+        const second = selector.refreshCache();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+        release(directoryResponse([server('filecache45', 500)]));
+        await expect(Promise.all([first, second])).resolves.toEqual([
+            expect.objectContaining({ status: 'healthy', availableServers: 1 }),
+            expect.objectContaining({ status: 'healthy', availableServers: 1 }),
+        ]);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let an old in-flight probe replace a freshly invalidated ranking', async () => {
+        let releaseOldProbe!: (bytesPerSecond: number) => void;
+        const fetchImpl = vi
+            .fn()
+            .mockResolvedValueOnce(directoryResponse([server('filecache45', 500)]))
+            .mockResolvedValueOnce(directoryResponse([server('filecache46', 800)]));
+        const probeCandidate = vi.fn((url: string) => {
+            if (url.includes('filecache45')) {
+                return new Promise<number>((resolve) => {
+                    releaseOldProbe = resolve;
+                });
+            }
+            return Promise.resolve(1_000);
+        });
+        const selector = createGameBananaFileServerSelector({ fetchImpl, probeCandidate });
+
+        await selector.getDiagnostics();
+        const oldDownload = selector.getCandidates(canonicalUrl);
+        await vi.waitFor(() => expect(probeCandidate).toHaveBeenCalledTimes(1));
+
+        await selector.refreshCache();
+        releaseOldProbe(500);
+        await oldDownload;
+
+        await expect(selector.getDiagnostics()).resolves.toMatchObject({
+            needsProbe: true,
+            testedServers: [],
+        });
+        await expect(selector.getCandidates(canonicalUrl)).resolves.toEqual([
+            'https://filecache46.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
+            'https://files.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
+        ]);
+        expect(probeCandidate).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports unavailable directory diagnostics without throwing or probing', async () => {
+        const probeCandidate = vi.fn(async () => 1);
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl: async () => {
+                throw new Error('offline');
+            },
+            probeCandidate,
+        });
+
+        await expect(selector.getDiagnostics()).resolves.toEqual({
+            status: 'unavailable',
+            availableServers: 0,
+            totalServers: 0,
+            needsProbe: true,
+            testedServers: [],
+            error: 'offline',
+        });
+        expect(probeCandidate).not.toHaveBeenCalled();
+    });
+
+    it('marks retained directory data degraded when a forced refresh fails', async () => {
+        let now = 1_000;
+        const fetchImpl = vi
+            .fn()
+            .mockResolvedValueOnce(
+                directoryResponse([
+                    server('filecache45', 500),
+                    server('filecache44', 400),
+                    server('filecache25', 0, 'terminated'),
+                ]),
+            )
+            .mockRejectedValueOnce(new Error('refresh failed'));
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl,
+            now: () => now,
+            probeCandidate: async () => 100,
+        });
+
+        await selector.getCandidates(canonicalUrl);
+        now = 5_000;
+        const diagnostics = await selector.refreshCache();
+
+        expect(diagnostics).toMatchObject({
+            status: 'degraded',
+            availableServers: 2,
+            totalServers: 2,
+            directoryCheckedAt: 1_000,
+            preferredServer: 'filecache45',
+            needsProbe: true,
+            localProbeCheckedAt: 1_000,
+            error: 'refresh failed',
+        });
+    });
+
     it('probes only the top three directory servers and keeps every fallback', async () => {
         const fetchImpl = vi.fn(async () =>
             directoryResponse([

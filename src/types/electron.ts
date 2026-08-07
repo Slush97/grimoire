@@ -398,6 +398,23 @@ export interface DownloadServerStatusData {
     previousServer?: string;
 }
 
+export interface GameBananaFileServerDiagnostics {
+    status: 'healthy' | 'degraded' | 'unavailable';
+    availableServers: number;
+    totalServers: number;
+    directoryCheckedAt?: number;
+    directoryExpiresAt?: number;
+    preferredServer?: string;
+    needsProbe: boolean;
+    localProbeCheckedAt?: number;
+    testedServers: Array<{
+        server: string;
+        bytesPerSecond?: number;
+        available: boolean;
+    }>;
+    error?: string;
+}
+
 export interface DownloadEventData {
     modId: number;
     fileId: number;
@@ -738,6 +755,8 @@ export interface ElectronAPI {
     exportHeroEffect: (heroName: string) => Promise<HeroEffectInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
+    getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
+    refreshGameBananaFileServerCache: () => Promise<GameBananaFileServerDiagnostics>;
     applyHeroSound: (
         heroName: string,
         slot: AbilitySlot,

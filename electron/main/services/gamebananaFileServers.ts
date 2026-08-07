@@ -1,3 +1,5 @@
+import type { GameBananaFileServerDiagnostics } from '../../../src/types/electron';
+
 const FILESERVERS_URL = 'https://gamebanana.com/apiv11/Util/Fileservers?_nPage=1';
 const DEFAULT_CACHE_TTL_MS = 12 * 60_000;
 const DEFAULT_PROBE_TIMEOUT_MS = 4_000;
@@ -9,6 +11,8 @@ type FetchLike = typeof globalThis.fetch;
 
 export interface GameBananaFileServerSelector {
     getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]>;
+    getDiagnostics(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
+    refreshCache(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
 }
 
 export interface GameBananaFileServerSelectorDependencies {
@@ -26,8 +30,17 @@ interface DirectoryServer {
 }
 
 interface CachedDirectory {
+    fetchedAt: number;
     expiresAt: number;
     servers: DirectoryServer[];
+    availableServers: number;
+    totalServers: number;
+}
+
+interface LocalProbeSnapshot {
+    testedAt: number;
+    results: Array<{ server: string; bytesPerSecond: number | null }>;
+    preferredServer: string | null;
 }
 
 export function isCanonicalGameBananaFilesUrl(value: string): boolean {
@@ -65,16 +78,30 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
 
-function parseDirectory(payload: unknown): DirectoryServer[] {
+interface ParsedDirectory {
+    servers: DirectoryServer[];
+    availableServers: number;
+    totalServers: number;
+}
+
+function parseDirectory(payload: unknown): ParsedDirectory {
     const root = asRecord(payload);
     const records = root?._aRecords;
-    if (!Array.isArray(records)) return [];
+    if (!Array.isArray(records)) {
+        return { servers: [], availableServers: 0, totalServers: 0 };
+    }
 
     const servers: DirectoryServer[] = [];
+    let availableServers = 0;
+    let totalServers = 0;
     for (const value of records) {
         const record = asRecord(value);
-        if (!record || record._sState !== 'up' || typeof record._sDomain !== 'string') continue;
+        if (!record || typeof record._sDomain !== 'string') continue;
         if (!FILESERVER_NAME_PATTERN.test(record._sDomain)) continue;
+        if (record._sState === 'terminated') continue;
+        totalServers += 1;
+        if (record._sState !== 'up') continue;
+        availableServers += 1;
 
         const stats = asRecord(record._aStats);
         const tenMinutes = asRecord(stats?._a10min);
@@ -83,9 +110,14 @@ function parseDirectory(payload: unknown): DirectoryServer[] {
         servers.push({ name: record._sDomain, tenMinuteRate: rate });
     }
 
-    return servers.sort(
-        (left, right) => right.tenMinuteRate - left.tenMinuteRate || left.name.localeCompare(right.name),
-    );
+    return {
+        servers: servers.sort(
+            (left, right) =>
+                right.tenMinuteRate - left.tenMinuteRate || left.name.localeCompare(right.name),
+        ),
+        availableServers,
+        totalServers,
+    };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -191,9 +223,14 @@ export function createGameBananaFileServerSelector(
         ((url: string, signal?: AbortSignal) => probeWithRange(url, signal, baseDependencies));
     let cachedDirectory: CachedDirectory | null = null;
     let cachedOrder: string[] | null = null;
+    let directoryStatus: GameBananaFileServerDiagnostics['status'] = 'unavailable';
+    let directoryError: string | undefined;
+    let lastLocalProbe: LocalProbeSnapshot | null = null;
+    let refreshInFlight: Promise<GameBananaFileServerDiagnostics> | null = null;
+    let routingGeneration = 0;
 
-    async function getDirectory(signal?: AbortSignal): Promise<DirectoryServer[]> {
-        if (cachedDirectory && baseDependencies.now() < cachedDirectory.expiresAt) {
+    async function getDirectory(signal?: AbortSignal, force = false): Promise<DirectoryServer[]> {
+        if (!force && cachedDirectory && baseDependencies.now() < cachedDirectory.expiresAt) {
             return cachedDirectory.servers;
         }
 
@@ -207,24 +244,71 @@ export function createGameBananaFileServerSelector(
                 signal,
             });
             if (!response.ok) throw new Error(`Fileserver directory returned HTTP ${response.status}`);
-            const servers = parseDirectory(await response.json());
+            const directory = parseDirectory(await response.json());
+            const fetchedAt = baseDependencies.now();
             cachedDirectory = {
-                expiresAt: baseDependencies.now() + baseDependencies.cacheTtlMs,
-                servers,
+                fetchedAt,
+                expiresAt: fetchedAt + baseDependencies.cacheTtlMs,
+                ...directory,
             };
             cachedOrder = null;
-            return servers;
+            routingGeneration += 1;
+            directoryStatus =
+                directory.availableServers > 0 &&
+                directory.availableServers === directory.totalServers &&
+                directory.servers.length === directory.availableServers
+                    ? 'healthy'
+                    : 'degraded';
+            directoryError = undefined;
+            return directory.servers;
         } catch (error) {
             throwIfAborted(signal);
-            if (cachedDirectory) return cachedDirectory.servers;
+            directoryError = error instanceof Error ? error.message : 'Directory refresh failed';
+            if (cachedDirectory) {
+                directoryStatus = 'degraded';
+                return cachedDirectory.servers;
+            }
+            directoryStatus = 'unavailable';
             throw error;
         }
+    }
+
+    function diagnosticsSnapshot(): GameBananaFileServerDiagnostics {
+        return {
+            status: directoryStatus,
+            availableServers: cachedDirectory?.availableServers ?? 0,
+            totalServers: cachedDirectory?.totalServers ?? 0,
+            ...(cachedDirectory
+                ? {
+                      directoryCheckedAt: cachedDirectory.fetchedAt,
+                      directoryExpiresAt: cachedDirectory.expiresAt,
+                  }
+                : {}),
+            ...(lastLocalProbe?.preferredServer
+                ? { preferredServer: lastLocalProbe.preferredServer }
+                : {}),
+            needsProbe: cachedOrder === null,
+            ...(lastLocalProbe ? { localProbeCheckedAt: lastLocalProbe.testedAt } : {}),
+            testedServers:
+                lastLocalProbe?.results.map((result) => ({
+                    server: result.server,
+                    ...(result.bytesPerSecond === null
+                        ? {}
+                        : { bytesPerSecond: result.bytesPerSecond }),
+                    available: result.bytesPerSecond !== null,
+                })) ?? [],
+            ...(directoryError ? { error: directoryError } : {}),
+        };
     }
 
     return {
         async getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]> {
             const source = normalizedCanonicalUrl(canonicalUrl);
             const fallback = source.toString();
+            if (refreshInFlight) {
+                await refreshInFlight;
+                throwIfAborted(signal);
+            }
             let servers: DirectoryServer[];
             try {
                 servers = await getDirectory(signal);
@@ -236,6 +320,7 @@ export function createGameBananaFileServerSelector(
             if (cachedOrder) {
                 return [...cachedOrder.map((name) => directUrl(name, source)), fallback];
             }
+            const probeGeneration = routingGeneration;
 
             const topServers = servers.slice(0, PROBE_COUNT);
             const probes = await Promise.all(
@@ -267,9 +352,43 @@ export function createGameBananaFileServerSelector(
             const unprobed = servers.slice(PROBE_COUNT);
             const failed = topServers.filter(({ name }) => !measuredNames.has(name));
             const ordered = [...measured, ...unprobed, ...failed];
-            cachedOrder = ordered.map(({ name }) => name);
+            if (routingGeneration === probeGeneration) {
+                cachedOrder = ordered.map(({ name }) => name);
+                lastLocalProbe = {
+                    testedAt: baseDependencies.now(),
+                    results: probes.map(({ server, bytesPerSecond }) => ({
+                        server: server.name,
+                        bytesPerSecond,
+                    })),
+                    preferredServer: ordered[0]?.name ?? null,
+                };
+            }
 
             return [...ordered.map((server) => directUrl(server.name, source)), fallback];
+        },
+        async getDiagnostics(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics> {
+            try {
+                await getDirectory(signal);
+            } catch {
+                throwIfAborted(signal);
+            }
+            return diagnosticsSnapshot();
+        },
+        refreshCache(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics> {
+            if (refreshInFlight) return refreshInFlight;
+            cachedOrder = null;
+            routingGeneration += 1;
+            refreshInFlight = (async () => {
+                try {
+                    await getDirectory(signal, true);
+                } catch {
+                    throwIfAborted(signal);
+                }
+                return diagnosticsSnapshot();
+            })().finally(() => {
+                refreshInFlight = null;
+            });
+            return refreshInFlight;
         },
     };
 }

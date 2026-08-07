@@ -184,6 +184,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>
         ipcRenderer.invoke('clear-preview-cache'),
+    getGameBananaFileServerDiagnostics: () =>
+        ipcRenderer.invoke('gamebanana-fileservers:getDiagnostics'),
+    refreshGameBananaFileServerCache: () =>
+        ipcRenderer.invoke('gamebanana-fileservers:refreshCache'),
     applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string, params?: AbilitySoundParams) =>
         ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName, params),
     revertHeroSound: (heroName: string, slot: AbilitySlot) =>
