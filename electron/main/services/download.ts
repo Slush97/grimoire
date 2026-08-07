@@ -14,6 +14,8 @@ import { makeDisabledFileName, scanMods, disableMod, enableMod } from './mods';
 import { imprintFreshlyInstalled } from './imprintMods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import { forgeFileNameStem } from './forgeProtocol';
+import { gameBananaFileServerSelector } from './gamebananaFileServers';
+import { downloadTransfer, type DownloadServerStatus } from './downloadTransfer';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
@@ -23,6 +25,9 @@ import type { DownloadModArgs } from '../../../src/types/electron';
 export type { DownloadModArgs };
 import https from 'https';
 import http from 'http';
+
+const GAMEBANANA_FILECACHE_HOST = /^filecache\d+\.gamebanana\.com$/;
+const MAX_DOWNLOAD_REDIRECTS = 10;
 
 interface DownloadQueueItem {
     modId: number;
@@ -386,13 +391,16 @@ async function processQueue(): Promise<void> {
  * Download a file with progress reporting
  * Includes timeouts to prevent indefinite hangs (P1 fix #5)
  */
-async function downloadFile(
+export async function downloadFile(
     url: string,
     destPath: string,
     onProgress: (downloaded: number, total: number) => void,
     connectionTimeoutMs = 30000,
     responseTimeoutMs = 600000, // 10 minutes for large files
-    onResponseFilename?: (filename: string) => void
+    onResponseFilename?: (filename: string) => void,
+    signal?: AbortSignal,
+    onServerStatus?: (status: DownloadServerStatus) => void,
+    redirectsRemaining = MAX_DOWNLOAD_REDIRECTS,
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
@@ -407,8 +415,19 @@ async function downloadFile(
         const finalize = (err: Error | null) => {
             if (settled) return;
             settled = true;
+            signal?.removeEventListener('abort', abortFromSignal);
             if (err) reject(err);
             else resolve();
+        };
+
+        const abortFromSignal = () => {
+            if (userCancelled) return;
+            userCancelled = true;
+            clearTimeout(connectionTimeoutId);
+            try { request.destroy(); } catch { /* already gone */ }
+            try { fileStream?.destroy(); } catch { /* already gone */ }
+            if (existsSync(destPath)) fs.unlink(destPath).catch(() => { });
+            finalize(new Error('CANCELLED_BY_USER'));
         };
 
         const request = protocol.get(url, (response) => {
@@ -416,23 +435,109 @@ async function downloadFile(
             clearTimeout(connectionTimeoutId);
 
             // Handle redirects - validate redirect URL too
-            if (response.statusCode === 301 || response.statusCode === 302) {
-                const redirectUrl = response.headers.location;
-                if (redirectUrl) {
-                    // Validate redirect URL (security: must be HTTPS and trusted domain)
-                    try {
-                        validateDownloadUrl(redirectUrl);
-                    } catch {
-                        // Allow game banana subdomains in redirects
-                        const parsed = new URL(redirectUrl);
-                        if (!parsed.hostname.endsWith('gamebanana.com')) {
-                            reject(new Error(`Redirect to untrusted domain: ${parsed.hostname}`));
-                            return;
-                        }
+            if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0)) {
+                const location = response.headers.location;
+                if (location) {
+                    if (redirectsRemaining <= 0) {
+                        response.resume();
+                        finalize(new Error('Download failed: too many redirects'));
+                        return;
                     }
-                    downloadFile(redirectUrl, destPath, onProgress, connectionTimeoutMs, responseTimeoutMs, onResponseFilename)
-                        .then(resolve)
-                        .catch(reject);
+
+                    let redirectUrl: string;
+                    try {
+                        redirectUrl = new URL(location, url).toString();
+                        validateDownloadUrl(redirectUrl);
+                    } catch (error) {
+                        response.resume();
+                        finalize(error instanceof Error ? error : new Error(String(error)));
+                        return;
+                    }
+
+                    // The recursive request owns cancellation from here. Detach
+                    // this completed hop first so one abort cannot invoke both
+                    // the redirect response and its destination request.
+                    signal?.removeEventListener('abort', abortFromSignal);
+                    if (!signal) currentCancelHandler = null;
+                    response.resume();
+
+                    const redirectHost = new URL(redirectUrl).hostname;
+                    if (GAMEBANANA_FILECACHE_HOST.test(redirectHost)) {
+                        const canonicalUrl = new URL(redirectUrl);
+                        canonicalUrl.hostname = 'files.gamebanana.com';
+                        const localAbort = signal ? null : new AbortController();
+                        const transferSignal = signal ?? localAbort!.signal;
+                        if (localAbort) {
+                            currentCancelHandler = () => localAbort.abort();
+                        }
+
+                        void (async () => {
+                            let candidates: string[];
+                            try {
+                                candidates = await gameBananaFileServerSelector.getCandidates(
+                                    canonicalUrl.toString(),
+                                    transferSignal,
+                                );
+                            } catch (error) {
+                                if (transferSignal.aborted) throw new Error('CANCELLED_BY_USER');
+                                console.warn('[download] Fileserver selection failed; using GameBanana route:', error);
+                                candidates = [];
+                            }
+
+                            // The canonical fallback redirects back through GameBanana and
+                            // is not a transfer endpoint. Preserve the direct server chosen
+                            // by GameBanana as the final candidate instead.
+                            const directCandidates = candidates.filter((candidate) => {
+                                try {
+                                    return GAMEBANANA_FILECACHE_HOST.test(new URL(candidate).hostname);
+                                } catch {
+                                    return false;
+                                }
+                            });
+                            if (!directCandidates.includes(redirectUrl)) {
+                                directCandidates.push(redirectUrl);
+                            }
+
+                            await downloadTransfer({
+                                candidateUrls: directCandidates,
+                                destinationPath: destPath,
+                                onProgress,
+                                onResponseFilename,
+                                connectionTimeoutMs,
+                                // Preserve the previous one-minute no-data cutoff so a
+                                // bad mirror fails over promptly even when the overall
+                                // large-file response allowance is much longer.
+                                stallTimeoutMs: Math.min(responseTimeoutMs, 60_000),
+                                signal: transferSignal,
+                                onServerStatus,
+                            });
+                        })()
+                            .then(() => {
+                                if (!signal) currentCancelHandler = null;
+                                finalize(null);
+                            })
+                            .catch((error: unknown) => {
+                                if (!signal) currentCancelHandler = null;
+                                finalize(error instanceof Error ? error : new Error(String(error)));
+                            });
+                        return;
+                    }
+
+                    downloadFile(
+                        redirectUrl,
+                        destPath,
+                        onProgress,
+                        connectionTimeoutMs,
+                        responseTimeoutMs,
+                        onResponseFilename,
+                        signal,
+                        onServerStatus,
+                        redirectsRemaining - 1,
+                    )
+                        .then(() => finalize(null))
+                        .catch((error: unknown) => finalize(
+                            error instanceof Error ? error : new Error(String(error)),
+                        ));
                     return;
                 }
             }
@@ -481,14 +586,14 @@ async function downloadFile(
             stream.on('finish', () => {
                 clearInterval(checkStall);
                 stream.close();
-                currentCancelHandler = null;
+                if (!signal) currentCancelHandler = null;
                 finalize(null);
             });
 
             stream.on('error', async (err) => {
                 clearInterval(checkStall);
                 stream.close();
-                currentCancelHandler = null;
+                if (!signal) currentCancelHandler = null;
                 if (existsSync(destPath)) {
                     await fs.unlink(destPath).catch(() => { });
                 }
@@ -509,7 +614,7 @@ async function downloadFile(
 
         request.on('error', (err) => {
             clearTimeout(connectionTimeoutId);
-            currentCancelHandler = null;
+            if (!signal) currentCancelHandler = null;
             if (connectionTimedOut || responseTimedOut) return;
             if (userCancelled) {
                 finalize(new Error('CANCELLED_BY_USER'));
@@ -523,7 +628,7 @@ async function downloadFile(
         // may leave the write stream in a state where neither 'finish' nor
         // 'error' fires, so the outer promise stays pending. Tear both down
         // and reject explicitly.
-        currentCancelHandler = () => {
+        const cancelThisDownload = () => {
             if (userCancelled) return;
             userCancelled = true;
             clearTimeout(connectionTimeoutId);
@@ -539,6 +644,13 @@ async function downloadFile(
             }
             finalize(new Error('CANCELLED_BY_USER'));
         };
+        if (!signal) currentCancelHandler = cancelThisDownload;
+
+        if (signal?.aborted) {
+            abortFromSignal();
+        } else {
+            signal?.addEventListener('abort', abortFromSignal, { once: true });
+        }
     });
 }
 
@@ -710,14 +822,29 @@ async function executeDownload(
 
     // Download with progress
     const expectedSize = file.fileSize || 0;
-    await downloadFile(file.downloadUrl, downloadPath, (downloaded, total) => {
-        mainWindow?.webContents.send('download-progress', {
-            modId,
-            fileId,
-            downloaded,
-            total,
-        });
-    });
+    await downloadFile(
+        file.downloadUrl,
+        downloadPath,
+        (downloaded, total) => {
+            mainWindow?.webContents.send('download-progress', {
+                modId,
+                fileId,
+                downloaded,
+                total,
+            });
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (status) => {
+            mainWindow?.webContents.send('download-server-status', {
+                modId,
+                fileId,
+                ...status,
+            });
+        },
+    );
 
     // Verify file size after download (P0 security fix)
     try {
@@ -1158,7 +1285,15 @@ async function executeOneClickDownload(
         undefined,
         (name) => {
             responseFilename = name;
-        }
+        },
+        undefined,
+        (status) => {
+            mainWindow?.webContents.send('download-server-status', {
+                modId,
+                fileId,
+                ...status,
+            });
+        },
     );
 
     try {
