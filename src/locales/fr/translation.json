@@ -18,6 +18,7 @@
       "reset": "Réinitialiser",
       "retry": "Réessayer",
       "save": "Enregistrer",
+      "undo": "Rétablir",
       "collapseDetails": "Moins de détails",
       "expandDetails": "Plus de détails",
       "tryAgain": "Réessayer"
@@ -59,8 +60,6 @@
     "sections": {
       "Mod": "Mods",
       "Sound": "Sons",
-      "Gui": "Interface",
-      "Model": "Modèles",
       "Wip": "WiPs"
     }
   },
@@ -221,7 +220,9 @@
     "commands": {
       "emptyTitle": "Aucune commande ajoutée",
       "emptyDescription": "Sélectionnez parmi les commandes à gauche",
-      "manualTooltip": "Cette commande est déjà présente dans autoexec.cfg et s'affiche en lecture seule.",
+      "manualTitle": "Déjà dans autoexec.cfg",
+      "manualDescription": "Lignes présentes dans le fichier avant Grimoire. Elles sont conservées en l'état et ne peuvent pas être modifiées ici.",
+      "removeLabel": "Retirer {{command}}",
       "title_one": "Vos commandes ({{count}})",
       "title_other": "Vos commandes ({{count}})"
     },
@@ -231,8 +232,13 @@
       "clearMessage_other": "Supprimer les {{count}} commandes de la liste ? Votre autoexec.cfg enregistré ne changera pas tant que vous n'aurez pas cliqué sur Enregistrer."
     },
     "customCommand": {
+      "add": "Ajouter",
+      "duplicate": "Cette commande est déjà dans votre liste",
       "title": "Commande personnalisée",
       "placeholder": "ex: fps_max 0"
+    },
+    "header": {
+      "description": "Commandes console que Deadlock exécute à chaque démarrage"
     },
     "launchOptions": {
       "description": "Arguments de lancement pour Deadlock. Grimoire les configure dans Steam juste avant le démarrage du jeu.",
@@ -245,7 +251,12 @@
     },
     "presets": {
       "title": "Commandes prédéfinies",
-      "toggle": "Activer/Désactiver les commandes prédéfinies",
+      "description": "Choisissez une commande et ajoutez-la à votre liste",
+      "countLabel": "{{shown}} sur {{total}}",
+      "addLabel": "Ajouter {{name}}",
+      "addedLabel": "{{name}} est déjà dans votre liste",
+      "noResults": "Aucune commande ne correspond à votre recherche",
+      "noResultsHint": "Essayez un terme plus court ou différent.",
       "performance": {
         "category": "Performances",
         "uncapFps": {
@@ -358,6 +369,8 @@
     },
     "status": {
       "error": "Erreur : {{error}}",
+      "fileActive": "autoexec.cfg actif",
+      "fileMissing": "autoexec.cfg non créé",
       "gamePathNotConfigured": "Chemin du jeu non configuré",
       "gamePathWarning": "Chemin du jeu non configuré. Définissez-le dans les Paramètres pour enregistrer.",
       "savedToAutoexec": "Enregistré dans autoexec.cfg",
@@ -637,9 +650,35 @@
       "list": "Vue liste"
     }
   },
+  "hiddenCreators": {
+    "title": "Créateurs masqués",
+    "description": "Masquer les mods des créateurs GameBanana sélectionnés dans Parcourir. Les modifs installées restent visibles.",
+    "manage": "Gérer les créateurs masqués",
+    "emptyTitle": "Aucun créateur masqué",
+    "emptyDescription": "Utilisez « Masquer le créateur » depuis la fiche ou la page d'un artiste de modif pour l'ajouter ici.",
+    "gamebananaId": "Membre GameBanana n°{{id}}",
+    "showCreator": "Afficher le créateur",
+    "hideCreator": "Masquer le créateur",
+    "hideNamedCreator": "Masquer {{name}} dans Parcourir",
+    "confirmTitle": "Masquer ce créateur ?",
+    "confirmMessage": "Masquer toutes les Modifs, Sons et WiPs publiés par {{name}} dans Parcourir ? Le contenu installé ne sera pas affecté.",
+    "hiddenToast": "Les créations de {{name}} sont désormais masquées.",
+    "shownToast": "Les créations de {{name}} sont à nouveau visibles."
+  },
   "settings": {
     "header": {
       "description": "Chemins, préférences et maintenance"
+    },
+    "nav": {
+      "label": "Catégories de paramètres",
+      "groups": {
+        "game": "Jeu",
+        "application": "Application",
+        "advanced": "Avancé"
+      },
+      "game": "Jeu",
+      "privacy": "Confidentialité et contenu",
+      "language": "Langue et région"
     },
     "sections": {
       "gameConfiguration": "Configuration du jeu",
@@ -647,6 +686,7 @@
       "appearance": "Apparence",
       "grimoireSocial": "Grimoire Social",
       "preferences": "Préférences",
+      "hiddenCreators": "Créateurs masqués",
       "experimentalFeatures": "Fonctionnalités expérimentales",
       "support": "Assistance",
       "maintenance": "Maintenance",
@@ -732,15 +772,31 @@
           "hero": "Occultiste",
           "custom": "Image personnalisée",
           "none": "Rien"
-        }
+        },
+        "adjustFraming": "Ajuster le cadrage"
+      },
+      "sidebar": {
+        "transparent": "Barre latérale transparente",
+        "transparentDescription": "Supprime le panneau sombre de la barre latérale pour l'aligner avec le fond de page. Les icônes, illustrations et séparateurs restent inchangés."
+      },
+      "background": {
+        "title": "Lueur d'arrière-plan",
+        "description": "Teinter le fond de l'application avec une lueur provenant des coins supérieur gauche et inférieur droit.",
+        "none": "Sans lueur",
+        "custom": "Lueur personnalisée",
+        "customTitle": "Lueur d'arrière-plan personnalisée",
+        "topLeft": "Haut gauche",
+        "bottomRight": "Bas droit"
+      },
+      "accent": {
+        "title": "Couleur d'accentuation",
+        "description": "Utilisée pour les boutons, liens, mises en valeur et contours de sélection dans toute l'application."
       }
     },
     "preferences": {
       "hideNsfw": "Masquer le contenu NSFW",
       "hideNsfwDescription": "Flouter les vignettes des mods marqués comme NSFW.",
       "hideOutdated": "Masquer les mods obsolètes",
-      "blurInstalledNsfw": "Flouter le contenu NSFW installé",
-      "blurInstalledNsfwDescription": "Flouter les miniatures des mods installés marqués comme NSFW.",
       "expandLocker": "Développer les listes du Casier par défaut",
       "switchVariants": "Désactiver les variantes au lieu de les empiler",
       "enableAfterDownload": "Activer les mods après le téléchargement",
@@ -757,6 +813,10 @@
       "dateFormat": "Format de date",
       "dateFormatDescription": "Comment les dates de téléchargement et de mise à jour sont affichées pour les mods et les fichiers."
     },
+    "errors": {
+      "loadFailed": "Impossible de charger vos paramètres : {{error}}",
+      "saveFailed": "Impossible d'enregistrer ce paramètre : {{error}}"
+    },
     "experimental": {
       "description": "Ces fonctionnalités sont encore en développement et peuvent être incomplètes ou boguées.",
       "statsDashboard": "Tableau de bord des statistiques",
@@ -765,8 +825,10 @@
       "crosshairDesignerDescription": "Créez des réticules personnalisés avec un aperçu en direct.",
       "socialDescription": "Connectez-vous avec Steam pour publier des profils et parcourir les téléchargements d'autres joueurs dans Découvrir.",
       "fixUnknownMods": "Corriger les mods inconnus",
+      "vpkImprint": "Marquer les mods installées",
       "deadworksServers": "Serveurs Deadworks",
       "performanceConfig": "Config Performance",
+      "performanceConfigWhere": "Ouvrir ses options dans Configuration du jeu",
       "foundry": "Forge"
     },
     "support": {
@@ -836,8 +898,12 @@
       "discordRpc": "Afficher votre activité Grimoire actuelle sur votre profil Discord. Ne communique qu'avec votre application Discord locale et n'envoie rien à Grimoire.",
       "contributeSalts": "Partagez les clés de rediffusion que Steam met déjà en cache pour les parties que vous regardez en jeu. N'envoie que l'ID de partie, le cluster serveur et deux clés de téléchargement : aucun ID de compte, aucun nom d'utilisateur, rien sur vous ou vos mods.",
       "fixUnknown": "Faire correspondre les VPK locaux inconnus avec GameBanana pour récupérer les noms et vignettes. Peut atteindre les limites de requêtes sur les grandes bibliothèques.",
+      "vpkImprint": "Ajoute une empreinte d'identification à chaque nouveau mod installé pour le reconnaître hors ligne. Ajoute un bouton « Marquer les mods installées » sur la page \"Installés\".",
       "deadworks": "Ajoute un onglet Serveurs pour parcourir et rejoindre les serveurs communautaires Deadworks. Téléchargement de contenu requis avant de se connecter.",
       "performanceConfig": "Boost FPS en un clic en utilisant le préréglage communautaire de Sqooky. Les mods continuent de fonctionner. Peut être supprimé à tout moment."
+    },
+    "privacy": {
+      "noHiddenCreators": "Aucun créateur n'est masqué pour le moment."
     }
   },
   "crosshair": {
@@ -846,7 +912,7 @@
       "copyCode": "Copier le code",
       "importFromGame": "Importer depuis le jeu",
       "importTitle": "Charger vos paramètres de réticule actuels du jeu dans l'éditeur.",
-      "saveAsNewPreset": "Enregistrer comme nouveau préréglage"
+      "saveCurrent": "Enregistrer"
     },
     "alert": {
       "applyPresetFailed": "Échec de l'application du préréglage. Assurez-vous que le chemin du jeu est correct.",
@@ -869,6 +935,7 @@
       "deletePreset": "Supprimer ce préréglage de réticule ?"
     },
     "controls": {
+      "color": "Couleur du réticule",
       "gap": "Écart",
       "height": "Hauteur",
       "opacity": "Opacité",
@@ -876,32 +943,51 @@
       "outlineGap": "Écart du contour",
       "outlineOpacity": "Opacité du contour",
       "outlineWidth": "Largeur du contour",
+      "rgb": "RVB({{r}}, {{g}}, {{b}})",
       "size": "Taille",
       "width": "Largeur"
     },
+    "header": {
+      "description": "Ajustez votre réticule et le visualiser sur un décor réel"
+    },
     "hints": {
+      "applyExplainer": "Partager le code colle l'intégralité du réticule dans la console en jeu (touche F7). Appliquer un préréglage l'écrit dans autoexec.cfg pour le conserver au redémarrage.",
+      "dotHidden": "Le point est totalement transparent. Augmentez l'opacité pour le rendre visible.",
       "pressF7": "Appuyez sur F7 dans le jeu"
     },
     "presetNamePlaceholder": "Nom...",
     "presets": {
       "deselectActive": "Désélectionner l'actif",
       "deselectTitle": "Retirer le réticule actif d'autoexec.cfg (les préréglages sont conservés)",
+      "empty": "Aucun préréglage. Enregistrez le réticule actuel pour y revenir plus tard.",
+      "saveFailed": "Impossible d'enregistrer le préréglage. Votre nom est conservé, réessayez.",
       "savedTitle_one": "Préréglages enregistrés ({{count}})",
       "savedTitle_other": "Préréglages enregistrés ({{count}})"
     },
     "preview": {
-      "description": "L'aperçu simule approximativement le réticule en jeu selon la résolution. L'écartement dynamique (bloom) n'est pas simulé.",
+      "backgrounds": {
+        "plain": "Uni",
+        "sandbox": "Sandbox",
+        "street": "Rue"
+      },
+      "followHint": "Déplacez votre curseur sur la scène : le réticule le suit",
       "pinned": "Épinglé",
       "pinTitle": "Garder la fenêtre de Grimoire au premier plan pour des ajustements rapides.",
       "pinWindow": "Épingler la fenêtre",
+      "resetZoom": "Réinitialiser le zoom",
       "resolutionTitle": "Afficher l'aperçu à la taille réelle en jeu pour cette résolution d'écran.",
-      "zoom": "Zoom :"
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière"
     },
     "sections": {
-      "centerDot": "Point central",
+      "outline": "Contour"
+    },
+    "tabs": {
       "color": "Couleur",
-      "inGameBehavior": "Comportement en jeu",
-      "shape": "Forme du réticule"
+      "dot": "Point",
+      "game": "Jeu",
+      "label": "Paramètres du réticule",
+      "lines": "Lignes"
     },
     "status": {
       "imported": "Importé"
@@ -936,7 +1022,88 @@
       "selectMultipleHint": "Sélectionner plusieurs mods pour une suppression, activation ou désactivation en masse",
       "lockerOverrides": "Remplacements du Casier",
       "lockerOverridesHint": "Remplacements du Casier : examiner et supprimer les portraits d'occultistes, les sons et les couleurs de capacité appliqués",
-      "authorPageNotFound": "Page de l'auteur de ce mod introuvable"
+      "authorPageNotFound": "Page de l'auteur de ce mod introuvable",
+      "copyEnabled": "Copier les mods actifs",
+      "copyEnabledHint": "Copier le nom de tout les mods activés dans le presse-papiers",
+      "copyEnabledToast": "Mods actifs copiés ({{count}})",
+      "copyFailed": "Copie impossible : {{error}}",
+      "imprintInstalledMods": "Marquer les mods installés",
+      "imprintInstalledModsHint": "Intégrer une empreinte d'identification dans vos mods installés pour reconnaître les fichiers orphelins hors ligne."
+    },
+    "imprintAll": {
+      "title": "Marquer les mods installés",
+      "description": "Recomprime chaque VPK installé avec une empreinte d'identification. La taille du fichier change mais son empreinte numérique d'origine est conservée.",
+      "checking": "Vérification de vos mods installés...",
+      "startImprinting_one": "Marquer {{count}} mod",
+      "startImprinting_other": "Marquer {{count}} mods",
+      "progress": "Marquage {{done}} sur {{total}}...",
+      "currentFile": "Marquage de {{fileName}}",
+      "eligible_one": "{{count}} éligible au marquage",
+      "eligible_other": "{{count}} éligibles au marquage",
+      "alreadyImprinted_one": "{{count}} déjà marquée (aucun changement)",
+      "alreadyImprinted_other": "{{count}} déjà marquées (aucun changement)",
+      "blockedLoaded_one": "{{count}} utilisée par le jeu en cours (ignorée)",
+      "blockedLoaded_other": "{{count}} utilisées par le jeu en cours (ignorées)",
+      "autoManaged_one": "{{count}} gérée automatiquement (fusion ou Casier), non éligible",
+      "autoManaged_other": "{{count}} gérées automatiquement (fusion ou Casier), non éligibles",
+      "anomalies_one": "{{count}} sera signalée, non marquée",
+      "anomalies_other": "{{count}} seront signalées, non marquées",
+      "repackNote": "Le marquage recomprime chaque VPK, sa taille varie. L'empreinte numérique d'origine demeure inchangée.",
+      "imprintedSummary_one": "{{count}} mod marquée",
+      "imprintedSummary_other": "{{count}} mods marquées",
+      "skippedTitle_one": "Ignorée ({{count}})",
+      "skippedTitle_other": "Ignorées ({{count}})",
+      "failedTitle_one": "Échouée ({{count}})",
+      "failedTitle_other": "Échouées ({{count}})",
+      "skipReasonLoaded": "Utilisée par le jeu en cours d'exécution",
+      "anomalyUnparseable": "Fichier VPK illisible",
+      "anomalyEmpty": "Fichier vide (0 octet) ou tronqué",
+      "anomalyChunked": "Fragmenté sur plusieurs fichiers paquets secondaires",
+      "anomalyHashDrift": "Fichier modifié depuis son enregistrement",
+      "anomalyForeignEmbed": "Contient un bloc d'extension tiers non-Grimoire",
+      "anomalyOrphanMerge": "Impossible de restaurer l'enregistrement de fusion",
+      "anomalyUnidentified": "Non identifiée : liez-la d'abord à sa source",
+      "empty": "Rien à marquer.",
+      "error": "Échec du marquage : {{error}}"
+    },
+    "imprintDetails": {
+      "menuEntry": "Voir l'empreinte",
+      "title": "Détails de l'empreinte",
+      "loading": "Lecture de l'empreinte...",
+      "empty": "Aucune empreinte trouvée dans ce fichier",
+      "error": "Impossible de lire l'empreinte : {{error}}",
+      "copied": "Copié dans le presse-papiers",
+      "copyValue": "Copier dans le presse-papiers",
+      "rawToggle": "addoninfo.txt brut",
+      "modTitle": "Titre",
+      "author": "Auteur",
+      "description": "Description",
+      "gamebananaId": "ID GameBanana",
+      "gamebananaFileId": "ID de fichier GameBanana",
+      "sourceUrl": "Page source",
+      "variant": "Variante",
+      "vpkIndex": "Index VPK",
+      "firstImprinted": "Premier marquage",
+      "lastWritten": "Mise à jour de l'empreinte",
+      "buildDate": "Marqué le",
+      "identityTitle": "Identité d'origine",
+      "sha256": "SHA-256",
+      "crc32": "CRC-32",
+      "size": "Taille",
+      "mergeTitle": "Empreinte de fusion",
+      "mergeName": "Nom de la fusion",
+      "createdAt": "Créée le",
+      "createdBy": "Créée par",
+      "schemaVersion": "Version de schéma",
+      "sourcesTitle_one": "Source de la fusion ({{count}})",
+      "sourcesTitle_other": "Sources de la fusion ({{count}})",
+      "sourcePriority": "priorité {{priority}}",
+      "sourceEnabled": "activée lors de la fusion",
+      "sourceDisabled": "désactivée lors de la fusion"
+    },
+    "provenance": {
+      "fromImprint": "Identifié depuis l'empreinte",
+      "fromMergeImprint": "Identifié depuis l'empreinte de fusion Grimoire"
     },
     "filters": {
       "searchPlaceholder": "Rechercher...",
@@ -953,13 +1120,33 @@
       "status": "Statut",
       "enabled": "Activé",
       "hero": "Occultistes",
-      "tags": "Étiquettes"
+      "tags": "Étiquettes",
+      "lists": "Listes"
+    },
+    "lists": {
+      "menuTrigger": "Ajouter à la liste",
+      "newList": "Nouvelle liste...",
+      "createTitle": "Nouvelle liste",
+      "create": "Créer",
+      "nameLabel": "Nom de la liste",
+      "namePlaceholder": "ex : Skins Geist",
+      "manage": "Gérer",
+      "manageTitle": "Gérer les listes",
+      "manageSubtitle": "Les listes regroupent les mods uniquement pour la navigation. En supprimer une ne supprime aucun mod.",
+      "emptyHint": "Aucune liste. Faites un clic droit sur un mod et choisissez Ajouter à la liste.",
+      "memberCount_one": "{{count}} mod",
+      "memberCount_other": "{{count}} mods",
+      "duplicateName": "Une autre liste utilise déjà ce nom.",
+      "deleteList": "Supprimer {{name}}"
     },
     "sections": {
       "enabled_one": "Activé",
       "enabled_other": "Activés",
       "disabled_one": "Desactivé",
-      "disabled_other": "Desactivés"
+      "disabled_other": "Desactivés",
+      "sortAlphabetical": "A-Z",
+      "sortAlphabeticalHint": "Trier les mod désactivés de A à Z. Les mods épinglés restent en haut.",
+      "sortCustomHint": "Revenir à votre ordre personnel (épinglées en premier, puis votre organisation)."
     },
     "view": {
       "viewOptions": "Options d'affichage",
@@ -978,6 +1165,11 @@
       "fixButtonHint": "Trouver des correspondances GameBanana ou ajouter des métadonnées personnalisées pour les mods locaux inconnus. Clic droit pour masquer ce bouton.",
       "fixButton": "Corriger les mods inconnus ({{count}})",
       "dmmDetected": "Mods de Deadlock Mod Manager détectés, importation en cours...",
+      "dmmConfirmTitle": "Importer les mods de Deadlock Mod Manager ?",
+      "dmmConfirmMessage_one": "Grimoire a trouvé une bibliothèque Deadlock Mod Manager (profil : {{profile}}) contenant {{count}} mod qu'il ne gère pas encore. L'importer ? Une sauvegarde instantanée et des métadonnées seront créées au préalable, et les fichiers de Deadlock Mod Manager ne seront ni déplacés ni supprimés. Ignorer passe directement à l'identification manuelle.",
+      "dmmConfirmMessage_other": "Grimoire a trouvé une bibliothèque Deadlock Mod Manager (profil : {{profile}}) contenant {{count}} mods qu'il ne gère pas encore. Les importer ? Une sauvegarde instantanée et des métadonnées seront créées au préalable, et les fichiers de Deadlock Mod Manager ne seront ni déplacés ni supprimés. Ignorer passe directement à l'identification manuelle.",
+      "dmmConfirmImport": "Importer",
+      "dmmConfirmSkip": "Ignorer",
       "dmmImported_one": "{{count}} mod détecté et importé depuis Deadlock Mod Manager",
       "dmmImported_other": "{{count}} mods détectés et importés depuis Deadlock Mod Manager",
       "dmmImportFailed": "Impossible d'importer les mods de Deadlock Mod Manager",
@@ -1036,7 +1228,11 @@
       "crcMatch": "Correspondance CRC",
       "modIdTag": "Mod #{{id}}",
       "fileIdTag": "Fichier #{{id}}",
-      "viewMod": "Voir le mod"
+      "viewMod": "Voir le mod",
+      "embeddedMetadataDesc": "Ce VPK contient des métadonnées Grimoire intégrées qui l'identifient. Aucune connexion réseau nécessaire.",
+      "embeddedMergeDesc_one": "Ceci est une fusion Grimoire de {{count}} mod, reconstruite à partir des métadonnées intégrées.",
+      "embeddedMergeDesc_other": "Ceci est une fusion Grimoire de {{count}} mods, reconstruite à partir des métadonnées intégrées.",
+      "linkInPlace": "Lier sur place"
     },
     "updateAll": {
       "description": "Retélécharger chaque mod disposant d'une mise à jour. Le statut d'activation de chaque mod sera restauré une fois l'installation terminée. Les téléchargements s'effectuent un par un et peuvent prendre un certain temps.",
@@ -1067,21 +1263,16 @@
       "makeCustomTitle": "Créer un mod personnalisé",
       "saveCustom": "Enregistrer le mod personnalisé",
       "alreadyInstalledHint": "Ce VPK est déjà installé. L'enregistrement ajoutera uniquement des métadonnées personnalisées.",
-      "title": "Importer un mod personnalisé",
-      "vpkHelp": "Le fichier sera copié dans votre dossier addons et renommé avec la prochaine priorité pak## disponible.",
-      "selectVpk": "Sélectionner un fichier VPK",
       "expectedVpk": "Fichier .vpk attendu - reçu \"{{name}}\".",
       "dropUnresolved": "Impossible de lire ce fichier. Si vous l'avez fait glisser depuis une archive ZIP ouverte, faites plutôt glisser le fichier .zip lui-même ici.",
       "vpkFile": "Fichier VPK",
-      "vpkSelected": "VPK sélectionné : {{path}}. Appuyez sur Entrée pour modifier.",
-      "vpkSelectedLocked": "VPK sélectionné : {{path}}",
-      "vpkAriaBrowse": "Déposez un fichier VPK ici ou appuyez sur Entrée pour parcourir",
-      "dropVpkHere": "Déposez un <code>.vpk</code> ici",
       "orClickToBrowse": "ou cliquez pour parcourir",
       "modName": "Nom du mod",
       "modNamePlaceholder": "Mon super skin",
       "thumbnailImage": "Image de vignette",
-      "thumbnailSelected": "Vignette sélectionnée : {{path}}. Appuyez sur Entrée pour modifier."
+      "thumbnailSelected": "Vignette sélectionnée : {{path}}. Appuyez sur Entrée pour modifier.",
+      "recognizedFromImprint": "Reconnu depuis l'empreinte",
+      "recognizedGameBananaId": "GameBanana n°{{id}}"
     },
     "merge": {
       "unmergeTitle": "Dissocier le mod ?",
@@ -1112,7 +1303,6 @@
       "disableCount_other": "Désactiver {{count}} mods",
       "merge": "Fusionner",
       "mergeMinHint": "Sélectionnez 2+ mods à fusionner",
-      "mergeAlreadyMergedHint": "Impossible de fusionner un mod déjà fusionné. Dissociez-le d'abord.",
       "mergeCombineHint_one": "Combiner {{count}} mod en un seul VPK",
       "mergeCombineHint_other": "Combiner {{count}} mods en un seul VPK",
       "tag": "Étiqueter",
@@ -1127,12 +1317,23 @@
       "global": "Global",
       "hero": "Occultiste"
     },
+    "priority": {
+      "make": "Définir comme Global",
+      "clear": "Retirer de Global",
+      "chip": "Global",
+      "hint": "Les mods globals se chargent avant toutes les autres, l'emportant toujours en cas de modification d'un même fichier. Le changement aléatoire d'apparences ne les désactive jamais.",
+      "busy": "Déplacement..."
+    },
     "card": {
       "soundPreview": "Aperçu sonore",
       "chooseFilesFor": "Choisir des fichiers pour {{name}}",
       "viewDetailsFor": "Voir les détails pour {{name}}",
       "off": "Désactivé",
       "deleteNamed": "Supprimer {{name}}",
+      "addDisabledFavorite": "Épingler {{name}} en haut des mods désactivés",
+      "removeDisabledFavorite": "Désépingler {{name}} du haut des mods désactivés",
+      "addFavoriteWhenDisabled": "Ajouter {{name}} aux favoris : l'épingle en haut une fois désactivée",
+      "removeFavoriteWhenDisabled": "Retirer {{name}} des favoris",
       "moreActions": "Plus d'actions",
       "moreActionsFor": "Plus d'actions pour {{name}}",
       "edit": "Modifier",
@@ -1152,7 +1353,17 @@
       "mergedBadge": "Fusionné · {{count}}",
       "noFilesEnabled": "Aucun fichier activé",
       "variantStatusTitle": "{{labels}} - cliquez sur la carte pour choisir les fichiers",
-      "revealInFolder": "Afficher dans le dossier"
+      "revealInFolder": "Afficher dans le dossier",
+      "soloLaunch": "Démarrer uniquement avec celle-ci"
+    },
+    "solo": {
+      "banner": "Test de {{name}} en solo : toutes les autres mods sont désactivés.",
+      "restore": "Restaurer les mods",
+      "partial_one": "{{count}} mod n'a pas pu être basculé ; lancement malgré tout.",
+      "partial_other": "{{count}} mods n'ont pas pu être basculés ; lancement malgré tout.",
+      "restorePartial_one": "{{count}} mod n'a pas pu être restauré ; réessayez.",
+      "restorePartial_other": "{{count}} mods n'ont pas pu être restaurés ; réessayez.",
+      "targetMissing": "Impossible de trouver ce mod pour le lancement solo. Il a peut-être été modifié ou retiré."
     },
     "edit": {
       "title": "Modifier le mod",
@@ -1183,6 +1394,37 @@
       "rangeError": "Utilisez 1-{{max}}",
       "chipAriaLabel": "Ordre de chargement {{value}}. Cliquez pour modifier.",
       "inputAriaLabel": "Définir l'ordre de chargement pour {{modName}}"
+    },
+    "batchImport": {
+      "title": "Importer des mods locals",
+      "help": "Déposez n'importe quel nombre de fichiers .vpk ou d'archives (.zip, .7z, .rar). Chacun est copié dans votre dossier d'extensions au prochain emplacement libre pak## priority, en utilisant le nom extrait de son fichier sauf si vous le modifiez. Conseil : glissez le fichier .zip lui-même, pas son contenu depuis une fenêtre d'archive ouverte.",
+      "selectFiles": "Sélectionner des fichiers VPK ou archives",
+      "ariaBrowse": "Déposez des fichiers VPK ou archives ici, ou appuyez sur Entrée pour parcourir",
+      "dropFilesHere": "Déposez les fichiers <code>.vpk</code> ou archives ici",
+      "dropMoreHere": "Déposez d'autres fichiers ici pour les ajouter",
+      "fileCount_one": "{{count}} fichier sélectionné",
+      "fileCount_other": "{{count}} fichiers sélectionnés",
+      "namesHint": "Les noms sont extraits des fichiers. Modifiez-les avant d'importer.",
+      "addMore": "Ajouter d'autres",
+      "clearAll": "Tout effacer",
+      "markAllNsfw": "Tout marquer NSFW",
+      "clearAllNsfw": "Effacer NSFW",
+      "thumbnailHint": "Cliquez ou déposez une image pour définir une miniature",
+      "nameFor": "Nom pour {{file}}",
+      "removeFile": "Retirer {{file}}",
+      "nameRequired": "Nom requis",
+      "unnamedBlocked_one": "{{count}} fichier nécessite encore un nom.",
+      "unnamedBlocked_other": "{{count}} fichiers nécessitent encore un nom.",
+      "importCount_one": "Importer {{count}} mod",
+      "importCount_other": "Importer {{count}} mods",
+      "importedCount_one": "{{count}} mod depuis ce fichier",
+      "importedCount_other": "{{count}} mods depuis ce fichier",
+      "importedToast_one": "{{count}} mod importé",
+      "importedToast_other": "{{count}} mods importée",
+      "someFailed_one": "{{count}} fichier n'a pas pu être importé. Il reste listé ci-dessous avec le motif.",
+      "someFailed_other": "{{count}} fichiers n'ont pas pu être importés. Ils restent listés ci-dessous avec le motif.",
+      "failedToast_one": "{{count}} fichier n'a pas pu être importé : {{error}}",
+      "failedToast_other": "{{count}} fichiers n'ont pas pu être importés. Première erreur : {{error}}"
     }
   },
   "locker": {
@@ -1194,7 +1436,10 @@
       "onLaunchHint": "Lorsqu'elle est activée, un de vos skins choisis sera équipée par occultiste à chaque lancement depuis Grimoire. Ajoutez des skins à la sélection avec le bouton de sélection aléatoire sur chaque skin.",
       "addToShuffle": "Ajouter {{name}} à la sélection aléatoire",
       "removeFromShuffle": "Retirer {{name}} de la sélection aléatoire",
-      "inPool": "Dans la sélection aléatoire"
+      "inPool": "Dans la sélection aléatoire",
+      "variantChoiceFor": "Choisir la variante aléatoire pour {{name}}",
+      "defaultVariant": "Conserver les fichiers actuels",
+      "anyVariant": "N'importe quelle variante"
     },
     "modImage": {
       "set": "Définir l'image du Casier pour {{name}}",
@@ -1217,6 +1462,20 @@
       "useLockerImage": "Utiliser l'image du Casier",
       "hideHeroName": "Masquer le nom de l'occultiste",
       "hideHeroNameHint": "Activez cette option si l'image affiche déjà le nom de l'occultiste."
+    },
+    "globalPicker": {
+      "title": "Ajouter des mods a Global",
+      "description": "Les mods globals se chargent avant tout le reste, l'emportant toujours quand deux mods modifient le même fichier. Le changement aléatoire d'apparences ne les désactive jamais.",
+      "trigger": "Ajouter des mods",
+      "searchPlaceholder": "Rechercher parmi les mods installés...",
+      "selectedCount_one": "{{count}} sélectionnée",
+      "selectedCount_other": "{{count}} sélectionnées",
+      "add": "Ajouter a Global",
+      "adding": "Ajout...",
+      "disabled": "Désactivé",
+      "noMatches": "Aucun mod installé ne correspond à cette recherche.",
+      "allGlobal": "Toutes les mods installés sont déjà Globals.",
+      "empty": "Aucun mod global pour le moment. Ajoutez un mod ici pour le maintenir actif en priorité."
     },
     "global": {
       "activeBadgeTitle": "Ce conteneur d'âmes est actif et chargé en jeu",
@@ -1620,7 +1879,7 @@
       "showLive3dModel": "Afficher le modèle 3D en direct",
       "lockerImages": "Images du Casier",
       "back": "Retour",
-      "favorite": "Favori",
+      "favorite": "Ajouter aux favoris",
       "unfavorite": "Retirer des favoris",
       "lockerSections": "Sections du Casier",
       "hero3dModel": "Modèle 3D de {{hero}}"
@@ -1642,7 +1901,8 @@
       "title": "Créer un nouveau profil",
       "placeholder": "Entrez un nom de profil, ex: Compétitif, Casual",
       "profileName": "Nom du profil",
-      "submit": "Créer un profil"
+      "submit": "Créer un profil",
+      "includeCrosshair": "Inclure le réticule actuel"
     },
     "import": {
       "title": "Importer un profil portable depuis un code de partage ou un fichier"
@@ -1695,11 +1955,13 @@
       "trigger": {
         "preUpdate": "Avant la mise à jour du mod",
         "preApplyProfile": "Avant l'application du profil",
+        "preDmmImport": "Avant l'importation DMM",
         "manual": "Sauvegarde manuelle"
       },
       "explanation": {
         "preUpdate": "Sauvegardé avant qu'une mise à jour de mod ne modifie votre ensemble installé.",
         "preApplyProfile": "Sauvegardé avant que l'application d'un profil ne modifie votre ensemble installé.",
+        "preDmmImport": "Capturée avant l'importation des mods depuis Deadlock Mod Manager.",
         "manual": "Sauvegardé manuellement depuis la page Profils."
       },
       "unselect": "Désélectionner la sauvegarde",
@@ -1728,7 +1990,9 @@
     },
     "crosshair": {
       "summary": "Écart : {{gap}} | Hauteur : {{height}} | Largeur : {{width}}",
-      "rgb": "RGB({{r}}, {{g}}, {{b}})"
+      "rgb": "RGB({{r}}, {{g}}, {{b}})",
+      "remove": "Retirer",
+      "removeTitle": "Retirer le réticule de ce profil"
     },
     "confirm": {
       "updateTitle": "Mettre à jour le profil",
@@ -1968,7 +2232,10 @@
     "merging": "Fusion en cours...",
     "merge": "Fusionner",
     "localModsIncluded_one": "{{count}} mod local inclus",
-    "localModsIncluded_other": "{{count}} mods locaux inclus"
+    "localModsIncluded_other": "{{count}} mods locaux inclus",
+    "flattenCount_one": "{{count}} mod fusionné sera aplati dans celle-ci",
+    "flattenCount_other": "{{count}} mods fusionnés seront aplatis dans celle-ci",
+    "flattenDescription": "Seules les mods sources d'origine sont inclus. Les fusions parentes sont supprimées après la réussite de la nouvelle fusion."
   },
   "mergedContents": {
     "disabledAtMerge": "Désactivé au moment de la fusion",
@@ -1979,6 +2246,14 @@
     "extractingDissolves": "Extraire un seul mod sépare la fusion",
     "priorityCaptured": "Priorité capturée au moment de la fusion",
     "extractTitle": "Extraire ceci en tant que mod autonome",
+    "addMods": "Ajouter des mods",
+    "addModsDescription": "Choisissez des mods autonomes installés pour reconstruire cette fusion. Les origineaux ajoutées restent dans le dossier désactivé.",
+    "noEligibleMods": "Aucun mod autonome éligible n'est installé.",
+    "addingMods": "Ajout...",
+    "addSelected_one": "Ajouter {{count}} mod",
+    "addSelected_other": "Ajouter {{count}} mods",
+    "addComplete_one": "{{count}} mod ajouté à la fusion",
+    "addComplete_other": "{{count}} mods ajoutés à la fusion",
     "copyShareCode": "Copier le code de partage",
     "unmerge": "Dissocier"
   },
@@ -2158,7 +2433,9 @@
       "recentlyAdded": "Ajoutés récemment",
       "recentlyUpdated": "Mis à jour récemment",
       "mostViewed": "Les plus vus",
-      "nameAZ": "Nom (A-Z)"
+      "nameAZ": "Nom (A-Z)",
+      "nameAZSyncing": "Nom (A-Z, synchronisation)",
+      "nameAZNeedsCatalog": "Nom (A-Z, catalogue requis)"
     },
     "filters": {
       "title": "Filtres",
@@ -2167,6 +2444,10 @@
       "hero": "Occultiste",
       "allHeroes": "Tous les occultistes",
       "noHero": "Pas d'occultiste (objet / UI / musique)",
+      "searchHeroesAria": "Rechercher des occultistes",
+      "heroFilterPlaceholder": "Filtrer...",
+      "noHeroesMatch": "Aucun résultat pour « {{query}} »",
+      "clearHeroSearch": "Effacer",
       "category": "Catégorie",
       "filterByCategory": "Filtrer par catégorie",
       "allCategories": "Toutes les catégories",
@@ -2184,7 +2465,9 @@
       "thisMonth": "Ce mois",
       "customRange": "Personnalisée",
       "from": "De",
-      "to": "À"
+      "to": "À",
+      "catalogSyncing": "Synchronisation du catalogue des mods. Les filtres de contenu et de date seront bientôt prêts.",
+      "catalogUnavailable": "Les filtres de contenu et de date nécessitent le catalogue local. Synchronisez-le depuis les Paramètres."
     },
     "previewVolume": "Volume",
     "loadMore": {
@@ -2261,6 +2544,7 @@
     "viewOnGamebanana": "Voir sur GameBanana",
     "copyLink": "Copier le lien",
     "linkCopied": "Lien copié",
+    "offlineNotice": "Les détails en direct de GameBanana sont temporairement indisponibles. Affichage des informations en cache ; la description, les fichiers et les commentaires ne sont pas disponibles.",
     "outdatedWarning": "Ce mod a été mis à jour pour la dernière fois le {{date}} et pourrait ne pas être compatible avec la version actuelle de Deadlock.",
     "deleteFile": {
       "title": "Supprimer le fichier installé ?",
@@ -2400,8 +2684,8 @@
       "notApplied": "Non appliqué"
     },
     "status": {
-      "applied": "Config performance v{{version}} appliquée.",
-      "appliedOutdated": "La config performance v{{version}} est appliquée ; v{{latest}} est disponible (réappliquez pour mettre à jour).",
+      "applied": "{{preset}} v{{version}} appliquée.",
+      "appliedOutdated": "{{preset}} v{{version}} est appliquée ; v{{latest}} est disponible (réappliquez pour mettre à jour).",
       "overrideNote_one": "Conservation de {{count}} modification.",
       "overrideNote_other": "Conservation de {{count}} modifications.",
       "handEditedNote": "Le fichier a été édité manuellement : \"Réappliquer\" intègre ces changements à vos modifications.",
@@ -2411,7 +2695,6 @@
       "wipedRestoreNote_other": "Vos {{count}} modifications sauvegardées seront également restaurées.",
       "notApplied": "La config performance n'est pas appliquée."
     },
-    "credit": "La carte semble sombre ? Réglez les ombres dans le jeu sur Moyen ou Bas. Les mises à jour du jeu effacent la configuration ; Grimoire le détecte ici pour que vous puissiez la réappliquer. Par <sqooky>Sqooky</sqooky> et <contributors>contributeurs<extlink></extlink></contributors>. Si cela vous aide, <kofi>offrez-leur un café</kofi>.",
     "restoreBackup": "Restaurer la sauvegarde",
     "reapply": "Réappliquer",
     "reapplyConfig": "Réappliquer la configuration",
@@ -2425,7 +2708,58 @@
       "description": "Choisissez l'éditeur pour les ajustements de configuration. Grimoire s'en souvient ; le bouton à côté de Modifier le fichier permet de le changer ultérieurement.",
       "systemDefaultHint": "Ce avec quoi votre systeme ouvre les fichiers texte",
       "browse": "Rechercher une application..."
-    }
+    },
+    "creditSqooky": "Parcourez les <sqooky>mods de Sqooky</sqooky> ou <kofi>offrez-lui un café</kofi>.",
+    "shadowsHint": "La carte semble sombre ? Réglez les ombres en jeu sur Moyen ou Bas.",
+    "switchTo": "Passer à {{preset}}",
+    "switchNote": "L'application remplace {{current}} par {{next}}. Vos ajustements enregistrés pour {{current}} sont conservés au cas où vous y reviendriez.",
+    "preset": {
+      "label": "Préréglage",
+      "meta_one": "{{count}} paramètre, par {{author}}",
+      "meta_other": "{{count}} paramètres, par {{author}}",
+      "unstable": "Cette configuration est expérimentale. Des instabilités sont à prévoir.",
+      "credit": "Valeurs issues de {{credit}}, sous licence {{license}}.",
+      "pinnedTag": "Fixé à la version {{ref}}",
+      "pinnedCommit": "Fixé à la version {{ref}} (aucun tag git publié)",
+      "tier": {
+        "balanced": "Équilibré",
+        "preview": "Aperçu",
+        "competitive": "Compétitif",
+        "aggressive": "Agressif",
+        "maximum": "Maximum",
+        "potato": "Potato"
+      },
+      "tierBlurb": {
+        "balanced": "Un gain global solide qui préserve l'aspect visuel du jeu. Commencez ici.",
+        "preview": "Ajustements en cours de l'auteur. Modifications plus récentes, moins de tests.",
+        "competitive": "Optimisé pour le jeu classé : supprime le bruit visuel tout en maintenant la lisibilité.",
+        "aggressive": "Sacrifie la qualité visuelle pour un gain important de taux de rafraîchissement.",
+        "maximum": "Pousse les réglages au maximum. Le jeu sera nettement détérioré visuellement.",
+        "potato": "Pour les machines très faibles. Attendez-vous à un rendu très rudimentaire."
+      }
+    },
+    "optIn": {
+      "title": "Paramètres de jeu du créateur",
+      "count": "{{enabled}} sur {{count}} activés",
+      "description": "Les paramètres de visibilité et de caméra du créateur sont inclus par défaut. Désactivez ce que vous ne souhaitez pas. Les outils de développement et de test restent désactivés sauf si vous les activez.",
+      "presetValue": "Ce préréglage le définit sur {{value}}",
+      "pending_one": "{{count}} paramètre de jeu modifié. Réappliquez pour l'écrire dans gameinfo.gi.",
+      "pending_other": "{{count}} paramètres de jeu modifiés. Réappliquez pour les écrire dans gameinfo.gi.",
+      "group": {
+        "visibility": "Visibilité des ennemis et des unités",
+        "camera": "Caméra et champ de vision",
+        "devtools": "Outils de développement et de test"
+      }
+    },
+    "version": {
+      "label": "Version",
+      "hint": "Revenez en arrière si une version plus récente fonctionne moins bien. Vos ajustements sont conservés.",
+      "option": "{{ref}} ({{date}})",
+      "optionNewest": "{{ref}} ({{date}}, plus récente)",
+      "pending": "Version modifiée pour la v{{version}}. Réappliquez pour l'écrire dans gameinfo.gi.",
+      "pinned": "Maintien sur la v{{version}}. La version intégrée la plus récente est la v{{latest}}."
+    },
+    "moreActions": "Plus d'actions"
   },
   "lockerOverrides": {
     "volume": "Volume",
@@ -2463,5 +2797,32 @@
     },
     "emptyApplied": "Aucun remplacement {{noun}} appliqué pour l'instant.",
     "openLocker": "Ouvrir le Casier"
+  },
+  "forge": {
+    "install": {
+      "title": "Installer ce mod ?",
+      "needsPathTitle": "Définissez d'abord votre dossier Deadlock",
+      "from": "Envoyé depuis {{origin}}",
+      "modLabel": "Mod",
+      "authorLabel": "Auteur",
+      "sizeLabel": "Taille",
+      "confirm": "Installer",
+      "openSettings": "Ouvrir les Paramètres",
+      "disclaimer": "Ce mod a été conçue sur DeadlockForge et transmis directement à Grimoire. Il s'installe en mode désactivé afin que vous puissiez le vérifier avant de l'activer.",
+      "needsPathBody": "Grimoire doit connaître l'emplacement d'installation de Deadlock avant d'ajouter des mods. Configurez le dossier du jeu dans les Paramètres, puis forgez à nouveau votre mod."
+    },
+    "settings": {
+      "description": "Permet à deadlockforge.net d'envoyer des mods nouvellement forgés directement à Grimoire, vous évitant de télécharger et déplacer le fichier manuellement. Grimoire écoute uniquement sur votre machine locale, accepte les requêtes provenant exclusivement de deadlockforge.net et vous demande toujours confirmation avant installation.",
+      "toggleLabel": "Autoriser l'installation en 1 clic DeadlockForge",
+      "listening": "Écoute sur 127.0.0.1:{{port}}",
+      "notListening": "Pas d'écoute"
+    },
+    "enable": {
+      "title": "Autoriser l'installation en 1 clic DeadlockForge ?",
+      "confirm": "Autoriser",
+      "decline": "Pas maintenant",
+      "body": "DeadlockForge génère des mods dans votre navigateur et peut les transmettre directement à Grimoire, vous évitant de télécharger le fichier et de le déplacer manuellement dans le dossier du jeu.",
+      "note": "Grimoire écoutera uniquement sur votre propre machine, n'acceptera que les mods en provenance de deadlockforge.net et vous demandera une confirmation pour chaque installation. Vous pouvez désactiver cela à tout moment dans les Paramètres."
+    }
   }
 }
