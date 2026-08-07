@@ -55,6 +55,7 @@ import type {
     VanillaRestoreResult,
     ProfileCrosshairSettings,
     DownloadProgressData,
+    DownloadServerStatusData,
     DownloadEventData,
     DownloadErrorData,
     ModsAutoDisabledData,
@@ -415,6 +416,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
             callback(data);
         ipcRenderer.on('download-progress', handler);
         return () => ipcRenderer.removeListener('download-progress', handler);
+    },
+    onDownloadServerStatus: (callback: (data: DownloadServerStatusData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: DownloadServerStatusData) =>
+            callback(data);
+        ipcRenderer.on('download-server-status', handler);
+        return () => ipcRenderer.removeListener('download-server-status', handler);
     },
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadEventData) => callback(data);

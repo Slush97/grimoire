@@ -390,6 +390,14 @@ export interface DownloadProgressData {
     total: number;
 }
 
+export interface DownloadServerStatusData {
+    modId: number;
+    fileId: number;
+    server: string;
+    phase: 'selected' | 'switching';
+    previousServer?: string;
+}
+
 export interface DownloadEventData {
     modId: number;
     fileId: number;
@@ -960,6 +968,7 @@ export interface ElectronAPI {
     // Events
     onGameBananaRateLimited: (callback: () => void) => () => void;
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
+    onDownloadServerStatus: (callback: (data: DownloadServerStatusData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;

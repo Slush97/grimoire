@@ -395,6 +395,8 @@
     "remainingQueued_one": "{{count}} queued",
     "remainingQueued_other": "{{count}} queued",
     "removeFromQueue": "Remove from queue",
+    "serverAutomatic": "Automatic · {{server}}",
+    "serverSwitching": "Switching from {{server}}…",
     "showDetails": "Show download details"
   },
   "stats": {

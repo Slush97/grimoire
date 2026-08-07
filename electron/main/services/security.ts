@@ -13,6 +13,17 @@ const ALLOWED_DOWNLOAD_DOMAINS = new Set([
     'www.gamebanana.com',
 ]);
 
+const GAMEBANANA_FILECACHE_DOMAIN = /^filecache\d+\.gamebanana\.com$/;
+
+/**
+ * Return whether a hostname is an approved GameBanana download host.
+ * Kept strict so lookalike suffixes cannot pass redirect validation.
+ */
+export function isAllowedGameBananaDownloadHostname(hostname: string): boolean {
+    const normalized = hostname.toLowerCase();
+    return ALLOWED_DOWNLOAD_DOMAINS.has(normalized) || GAMEBANANA_FILECACHE_DOMAIN.test(normalized);
+}
+
 /**
  * Validate a download URL for security
  * - Must use HTTPS protocol
@@ -37,8 +48,8 @@ export function validateDownloadUrl(url: string): void {
 
     // Validate domain is from GameBanana
     const hostname = parsedUrl.hostname.toLowerCase();
-    if (!ALLOWED_DOWNLOAD_DOMAINS.has(hostname)) {
-        throw new Error(`Download URL from untrusted domain: ${hostname}. Allowed: ${[...ALLOWED_DOWNLOAD_DOMAINS].join(', ')}`);
+    if (!isAllowedGameBananaDownloadHostname(hostname)) {
+        throw new Error(`Download URL from untrusted domain: ${hostname}`);
     }
 }
 
