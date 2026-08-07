@@ -41,6 +41,9 @@ describe('MaintenanceSection', () => {
         testedServers: [],
       })),
       refreshGameBananaFileServerCache: vi.fn(),
+      testGameBananaFileServers: vi.fn(),
+      getCurrentDownload: vi.fn(async () => null),
+      onDownloadQueueUpdated: vi.fn(() => vi.fn()),
     } as unknown as Window['electronAPI'];
   });
 

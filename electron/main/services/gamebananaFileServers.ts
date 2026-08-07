@@ -1,11 +1,15 @@
 import type { GameBananaFileServerDiagnostics } from '../../../src/types/electron';
 
 const FILESERVERS_URL = 'https://gamebanana.com/apiv11/Util/Fileservers?_nPage=1';
+const GRIMOIRE_FILES_URL =
+    'https://gamebanana.com/apiv11/Tool/22583?_csvProperties=_aFiles';
 const DEFAULT_CACHE_TTL_MS = 12 * 60_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_PROBE_TIMEOUT_MS = 4_000;
 const DEFAULT_PROBE_BYTES = 256 * 1024;
 const PROBE_COUNT = 3;
 const FILESERVER_NAME_PATTERN = /^filecache\d+$/;
+const FILESERVER_HOST_PATTERN = /^filecache\d+\.gamebanana\.com$/;
 
 type FetchLike = typeof globalThis.fetch;
 
@@ -13,12 +17,14 @@ export interface GameBananaFileServerSelector {
     getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]>;
     getDiagnostics(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
     refreshCache(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
+    testServers(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
 }
 
 export interface GameBananaFileServerSelectorDependencies {
     fetchImpl: FetchLike;
     now: () => number;
     cacheTtlMs: number;
+    requestTimeoutMs: number;
     probeTimeoutMs: number;
     probeBytes: number;
     probeCandidate: (url: string, signal?: AbortSignal) => Promise<number | null>;
@@ -74,6 +80,74 @@ function directUrl(serverName: string, source: URL): string {
     return result.toString();
 }
 
+function gameBananaDownloadUrl(value: unknown): URL | null {
+    if (typeof value !== 'string') return null;
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:'
+            && url.hostname === 'gamebanana.com'
+            && /^\/dl\/\d+$/.test(url.pathname)
+            && !url.username
+            && !url.password
+            ? url
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+async function resolveTestSource(
+    dependencies: Pick<GameBananaFileServerSelectorDependencies, 'fetchImpl' | 'requestTimeoutMs'>,
+    signal?: AbortSignal,
+): Promise<string> {
+    throwIfAborted(signal);
+    const { response: filesResponse, payload: filesPayload } = await boundedJsonFetch(
+        dependencies,
+        GRIMOIRE_FILES_URL,
+        {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'omit',
+        redirect: 'error',
+        },
+        signal,
+    );
+    if (!filesResponse.ok) {
+        throw new Error(`Grimoire file list returned HTTP ${filesResponse.status}`);
+    }
+
+    const payload = asRecord(filesPayload);
+    const files = Array.isArray(payload?._aFiles) ? payload._aFiles : [];
+    const currentFile = files
+        .map((value) => asRecord(value))
+        .filter((value): value is Record<string, unknown> => value !== null)
+        .filter((value) => value._bIsArchived !== true)
+        .map((value) => ({
+            downloadUrl: gameBananaDownloadUrl(value._sDownloadUrl),
+            addedAt: typeof value._tsDateAdded === 'number' ? value._tsDateAdded : 0,
+        }))
+        .filter((value): value is { downloadUrl: URL; addedAt: number } => value.downloadUrl !== null)
+        .sort((left, right) => right.addedAt - left.addedAt)[0];
+    if (!currentFile) throw new Error('GameBanana returned no current Grimoire download');
+
+    const redirectResponse = await boundedFetch(dependencies, currentFile.downloadUrl, {
+        method: 'HEAD',
+        credentials: 'omit',
+        redirect: 'manual',
+    }, signal);
+    if (![301, 302, 303, 307, 308].includes(redirectResponse.status)) {
+        throw new Error(`Grimoire download route returned HTTP ${redirectResponse.status}`);
+    }
+    const location = redirectResponse.headers.get('Location');
+    if (!location) throw new Error('Grimoire download route returned no location');
+
+    const source = new URL(location, currentFile.downloadUrl);
+    if (FILESERVER_HOST_PATTERN.test(source.hostname)) {
+        source.hostname = 'files.gamebanana.com';
+    }
+    return normalizedCanonicalUrl(source.toString()).toString();
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
@@ -123,6 +197,72 @@ function parseDirectory(payload: unknown): ParsedDirectory {
 function throwIfAborted(signal?: AbortSignal): void {
     if (!signal?.aborted) return;
     throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+}
+
+async function boundedFetch(
+    dependencies: Pick<GameBananaFileServerSelectorDependencies, 'fetchImpl' | 'requestTimeoutMs'>,
+    input: string | URL | Request,
+    init: RequestInit,
+    signal?: AbortSignal,
+): Promise<Response> {
+    throwIfAborted(signal);
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => controller.abort(), dependencies.requestTimeoutMs);
+    try {
+        return await dependencies.fetchImpl(input, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+    }
+}
+
+async function boundedJsonFetch(
+    dependencies: Pick<GameBananaFileServerSelectorDependencies, 'fetchImpl' | 'requestTimeoutMs'>,
+    input: string | URL | Request,
+    init: RequestInit,
+    signal?: AbortSignal,
+): Promise<{ response: Response; payload?: unknown }> {
+    throwIfAborted(signal);
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => controller.abort(), dependencies.requestTimeoutMs);
+    try {
+        const response = await dependencies.fetchImpl(input, {
+            ...init,
+            signal: controller.signal,
+        });
+        const payload = response.ok ? await response.json() : undefined;
+        return { response, payload };
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+    }
+}
+
+function waitForWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return promise;
+    throwIfAborted(signal);
+    return new Promise<T>((resolve, reject) => {
+        const abort = () => {
+            cleanup();
+            reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+        };
+        const cleanup = () => signal.removeEventListener('abort', abort);
+        signal.addEventListener('abort', abort, { once: true });
+        promise.then(
+            (value) => {
+                cleanup();
+                resolve(value);
+            },
+            (error: unknown) => {
+                cleanup();
+                reject(error);
+            },
+        );
+    });
 }
 
 function probeRangeBytes(value: string | null, maximum: number): number | null {
@@ -215,6 +355,7 @@ export function createGameBananaFileServerSelector(
         fetchImpl: overrides.fetchImpl ?? globalThis.fetch.bind(globalThis),
         now: overrides.now ?? Date.now,
         cacheTtlMs: overrides.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
+        requestTimeoutMs: overrides.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
         probeTimeoutMs: overrides.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
         probeBytes: overrides.probeBytes ?? DEFAULT_PROBE_BYTES,
     };
@@ -227,6 +368,7 @@ export function createGameBananaFileServerSelector(
     let directoryError: string | undefined;
     let lastLocalProbe: LocalProbeSnapshot | null = null;
     let refreshInFlight: Promise<GameBananaFileServerDiagnostics> | null = null;
+    let testInFlight: Promise<GameBananaFileServerDiagnostics> | null = null;
     let routingGeneration = 0;
 
     async function getDirectory(signal?: AbortSignal, force = false): Promise<DirectoryServer[]> {
@@ -236,15 +378,14 @@ export function createGameBananaFileServerSelector(
 
         throwIfAborted(signal);
         try {
-            const response = await baseDependencies.fetchImpl(FILESERVERS_URL, {
+            const { response, payload } = await boundedJsonFetch(baseDependencies, FILESERVERS_URL, {
                 method: 'GET',
                 headers: { Accept: 'application/json' },
                 credentials: 'omit',
                 redirect: 'error',
-                signal,
-            });
+            }, signal);
             if (!response.ok) throw new Error(`Fileserver directory returned HTTP ${response.status}`);
-            const directory = parseDirectory(await response.json());
+            const directory = parseDirectory(payload);
             const fetchedAt = baseDependencies.now();
             cachedDirectory = {
                 fetchedAt,
@@ -301,12 +442,11 @@ export function createGameBananaFileServerSelector(
         };
     }
 
-    return {
-        async getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]> {
+    async function getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]> {
             const source = normalizedCanonicalUrl(canonicalUrl);
             const fallback = source.toString();
             if (refreshInFlight) {
-                await refreshInFlight;
+                await waitForWithSignal(refreshInFlight, signal);
                 throwIfAborted(signal);
             }
             let servers: DirectoryServer[];
@@ -364,7 +504,37 @@ export function createGameBananaFileServerSelector(
                 };
             }
 
-            return [...ordered.map((server) => directUrl(server.name, source)), fallback];
+        return [...ordered.map((server) => directUrl(server.name, source)), fallback];
+    }
+
+    return {
+        getCandidates,
+        testServers(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics> {
+            if (testInFlight) return testInFlight;
+            testInFlight = (async () => {
+                const source = await resolveTestSource(baseDependencies, signal);
+                const previousProbe = lastLocalProbe;
+                const previousOrder = cachedOrder ? [...cachedOrder] : null;
+                cachedOrder = null;
+                routingGeneration += 1;
+                await getCandidates(source, signal);
+                const completedProbe = lastLocalProbe;
+                if (!completedProbe || completedProbe === previousProbe) {
+                    cachedOrder = previousOrder;
+                    routingGeneration += 1;
+                    throw new Error('No download servers available to test');
+                }
+                if (!completedProbe.results.some((result) => result.bytesPerSecond !== null)) {
+                    cachedOrder = previousOrder;
+                    lastLocalProbe = previousProbe;
+                    routingGeneration += 1;
+                    throw new Error('No download servers passed the speed test');
+                }
+                return diagnosticsSnapshot();
+            })().finally(() => {
+                testInFlight = null;
+            });
+            return testInFlight;
         },
         async getDiagnostics(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics> {
             try {

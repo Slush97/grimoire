@@ -8,3 +8,7 @@ ipcMain.handle('gamebanana-fileservers:getDiagnostics', () =>
 ipcMain.handle('gamebanana-fileservers:refreshCache', () =>
     gameBananaFileServerSelector.refreshCache(),
 );
+
+ipcMain.handle('gamebanana-fileservers:testServers', () =>
+    gameBananaFileServerSelector.testServers(),
+);

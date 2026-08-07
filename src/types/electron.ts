@@ -757,6 +757,7 @@ export interface ElectronAPI {
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
     refreshGameBananaFileServerCache: () => Promise<GameBananaFileServerDiagnostics>;
+    testGameBananaFileServers: () => Promise<GameBananaFileServerDiagnostics>;
     applyHeroSound: (
         heroName: string,
         slot: AbilitySlot,

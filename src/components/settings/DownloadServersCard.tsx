@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ExternalLink, RefreshCw, Server } from 'lucide-react';
+import { ChevronDown, ExternalLink, Gauge, RefreshCw, Server } from 'lucide-react';
 import type { GameBananaFileServerDiagnostics } from '../../types/electron';
 import { Badge, Button, Card } from '../common/ui';
 import Tx from '../translation/Tx';
@@ -46,8 +46,12 @@ export default function DownloadServersCard() {
   const { t, i18n } = useTranslation();
   const [diagnostics, setDiagnostics] = useState<GameBananaFileServerDiagnostics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTesting, setIsTesting] = useState(false);
+  const [downloadActive, setDownloadActive] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [feedback, setFeedback] = useState<'refreshed' | 'refreshFailed' | null>(null);
+  const [feedback, setFeedback] = useState<
+    'refreshed' | 'refreshFailed' | 'tested' | 'testFailed' | null
+  >(null);
   const [clock, setClock] = useState(Date.now);
 
   const refreshCache = useCallback(async () => {
@@ -64,6 +68,22 @@ export default function DownloadServersCard() {
       setIsLoading(false);
     }
   }, []);
+
+  const testServers = useCallback(async () => {
+    if (downloadActive) return;
+    setIsTesting(true);
+    setFeedback(null);
+    try {
+      const result = await window.electronAPI.testGameBananaFileServers();
+      setDiagnostics(result);
+      setLoadFailed(false);
+      setFeedback('tested');
+    } catch {
+      setFeedback('testFailed');
+    } finally {
+      setIsTesting(false);
+    }
+  }, [downloadActive]);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +106,22 @@ export default function DownloadServersCard() {
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let sawQueueUpdate = false;
+    const unsubscribe = window.electronAPI.onDownloadQueueUpdated((state) => {
+      sawQueueUpdate = true;
+      if (active) setDownloadActive(state.currentDownload !== null);
+    });
+    window.electronAPI.getCurrentDownload().then((currentDownload) => {
+      if (active && !sawQueueUpdate) setDownloadActive(currentDownload !== null);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const directoryIsStale = !!diagnostics?.directoryExpiresAt
@@ -132,14 +168,9 @@ export default function DownloadServersCard() {
                 </dt>
                 <dd className="mt-1 truncate text-sm font-medium text-text-primary" title={diagnostics.preferredServer}>
                   {diagnostics.preferredServer ?? (
-                    <Tx k="settings.downloadServers.retestsNextDownload" fallback="Retests next download" />
+                    <Tx k="settings.downloadServers.notTestedYet" fallback="Not tested yet" />
                   )}
                 </dd>
-                {diagnostics.needsProbe && diagnostics.preferredServer && (
-                  <dd className="mt-1 text-xs text-text-secondary">
-                    <Tx k="settings.downloadServers.retestsNextDownload" fallback="Retests next download" />
-                  </dd>
-                )}
               </div>
               <div className="min-w-0">
                 <dt className="text-xs text-text-secondary">
@@ -175,24 +206,6 @@ export default function DownloadServersCard() {
                 </dd>
               </div>
             </dl>
-
-            {directoryIsStale && (
-              <p className="text-xs text-state-warning">
-                <Tx
-                  k="settings.downloadServers.staleNotice"
-                  fallback="Cached server status has expired. Refresh cache to check current availability."
-                />
-              </p>
-            )}
-
-            {diagnostics.status === 'unavailable' && (
-              <p className="text-xs text-text-secondary">
-                <Tx
-                  k="settings.downloadServers.unavailableNotice"
-                  fallback="GameBanana did not return a usable server list. Downloads can still use its default route."
-                />
-              </p>
-            )}
 
             <details className="group border-t border-white/5 pt-4">
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-medium text-text-primary outline-none transition-colors hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/70">
@@ -234,24 +247,12 @@ export default function DownloadServersCard() {
                     <p className="mt-2 text-xs text-text-secondary">
                       <Tx
                         k="settings.downloadServers.noLocalTests"
-                        fallback="No local speed tests yet. The next download tests the best candidates automatically."
+                        fallback="No results yet."
                       />
                     </p>
                   )}
                 </div>
 
-                <a
-                  href={GAMEBANANA_FILESERVER_STATUS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-secondary underline decoration-dotted underline-offset-4 transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                >
-                  <Tx
-                    k="settings.downloadServers.openGameBananaStatus"
-                    fallback="Open GameBanana server status"
-                  />
-                  <ExternalLink aria-hidden className="h-3.5 w-3.5" />
-                </a>
               </div>
             </details>
           </>
@@ -273,35 +274,63 @@ export default function DownloadServersCard() {
           <p
             role="status"
             aria-live="polite"
-            className={`text-xs ${feedback === 'refreshFailed' ? 'text-state-warning' : 'text-text-secondary'}`}
+            className={`text-xs ${feedback === 'refreshFailed' || feedback === 'testFailed' ? 'text-state-warning' : 'text-text-secondary'}`}
           >
-            {feedback === 'refreshFailed'
+            {feedback === 'testFailed'
+              ? t('settings.downloadServers.testError', { defaultValue: 'Test failed.' })
+              : feedback === 'tested'
+                ? t('settings.downloadServers.testSuccess', { defaultValue: 'Test complete.' })
+              : feedback === 'refreshFailed'
               ? t('settings.downloadServers.refreshError', {
-                defaultValue: 'Could not refresh cache. Showing the previous results.',
+                defaultValue: 'Refresh failed.',
               })
               : t('settings.downloadServers.refreshSuccess', {
-                defaultValue: 'Server cache refreshed. The next download will retest mirrors.',
+                defaultValue: 'Status refreshed.',
               })}
           </p>
         )}
 
         <div className="flex flex-col items-start justify-between gap-3 border-t border-white/5 pt-4 sm:flex-row sm:items-center">
-          <p className="max-w-[70ch] text-xs text-text-secondary">
-            <Tx
-              k="settings.downloadServers.refreshDescription"
-              fallback="Refresh fetches GameBanana's latest server status. The next download retests the best mirrors on this PC."
-            />
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            icon={RefreshCw}
-            isLoading={isLoading}
-            onClick={() => void refreshCache()}
+          <a
+            href={GAMEBANANA_FILESERVER_STATUS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-secondary underline decoration-dotted underline-offset-4 transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
           >
-            <Tx k="settings.downloadServers.refreshCache" fallback="Refresh cache" />
-          </Button>
+            <Tx k="settings.downloadServers.openGameBananaStatus" fallback="GameBanana status" />
+            <ExternalLink aria-hidden className="h-3.5 w-3.5" />
+          </a>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon={Gauge}
+              isLoading={isTesting}
+              disabled={isLoading || downloadActive}
+              title={downloadActive
+                ? t('settings.downloadServers.testBlocked', {
+                  defaultValue: 'Available after the current download',
+                })
+                : t('settings.downloadServers.testHint', {
+                  defaultValue: 'Tests 3 servers · up to 768 KB',
+                })}
+              onClick={() => void testServers()}
+            >
+              <Tx k="settings.downloadServers.testNow" fallback="Test now" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon={RefreshCw}
+              isLoading={isLoading}
+              disabled={isTesting}
+              onClick={() => void refreshCache()}
+            >
+              <Tx k="settings.downloadServers.refreshCache" fallback="Refresh status" />
+            </Button>
+          </div>
         </div>
       </div>
     </Card>

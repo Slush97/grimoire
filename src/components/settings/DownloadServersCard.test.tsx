@@ -37,6 +37,9 @@ describe('DownloadServersCard', () => {
   let root: Root;
   let getDiagnostics: ReturnType<typeof vi.fn<() => Promise<Diagnostics>>>;
   let refreshCache: ReturnType<typeof vi.fn<() => Promise<Diagnostics>>>;
+  let testServers: ReturnType<typeof vi.fn<() => Promise<Diagnostics>>>;
+  let getCurrentDownload: ReturnType<typeof vi.fn>;
+  let onDownloadQueueUpdated: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -46,9 +49,15 @@ describe('DownloadServersCard', () => {
     root = createRoot(host);
     getDiagnostics = vi.fn();
     refreshCache = vi.fn();
+    testServers = vi.fn();
+    getCurrentDownload = vi.fn().mockResolvedValue(null);
+    onDownloadQueueUpdated = vi.fn(() => vi.fn());
     window.electronAPI = {
       getGameBananaFileServerDiagnostics: getDiagnostics,
       refreshGameBananaFileServerCache: refreshCache,
+      testGameBananaFileServers: testServers,
+      getCurrentDownload,
+      onDownloadQueueUpdated,
     } as unknown as Window['electronAPI'];
   });
 
@@ -97,7 +106,133 @@ describe('DownloadServersCard', () => {
     expect(host.textContent).toContain('13 of 13 online');
   });
 
-  it('refreshes only the cached GameBanana status and explains when local mirrors are retested', async () => {
+  it('tests server speed on demand and shows the measured winner', async () => {
+    await render({
+      status: 'healthy',
+      availableServers: 13,
+      totalServers: 13,
+      directoryCheckedAt: Date.now(),
+      directoryExpiresAt: Date.now() + 12 * 60_000,
+      needsProbe: true,
+      testedServers: [],
+    });
+    let finishTest!: (value: Diagnostics) => void;
+    testServers.mockImplementationOnce(() => new Promise((resolve) => {
+      finishTest = resolve;
+    }));
+
+    const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
+      candidate.textContent?.includes('Test now')
+    ));
+    expect(button).toBeDefined();
+    expect(button?.title).toContain('up to 768 KB');
+
+    act(() => button!.click());
+    expect(testServers).toHaveBeenCalledOnce();
+    expect(button!.disabled).toBe(true);
+
+    await act(async () => {
+      finishTest({
+        status: 'healthy',
+        availableServers: 13,
+        totalServers: 13,
+        directoryCheckedAt: Date.now(),
+        directoryExpiresAt: Date.now() + 12 * 60_000,
+        preferredServer: 'filecache44',
+        needsProbe: false,
+        localProbeCheckedAt: Date.now(),
+        testedServers: [
+          { server: 'filecache45', bytesPerSecond: 2.1 * 1024 * 1024, available: true },
+          { server: 'filecache44', bytesPerSecond: 4.2 * 1024 * 1024, available: true },
+          { server: 'filecache43', available: false },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).toContain('filecache44');
+    expect(host.textContent).toContain('4.2 MB/s');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('Test complete');
+  });
+
+  it('keeps the controls self-explanatory without repeated instructional copy', async () => {
+    await render({
+      status: 'healthy',
+      availableServers: 13,
+      totalServers: 13,
+      directoryCheckedAt: Date.now(),
+      directoryExpiresAt: Date.now() + 12 * 60_000,
+      needsProbe: true,
+      testedServers: [],
+    });
+
+    expect(host.textContent).toContain('Test now');
+    expect(host.textContent).toContain('Refresh status');
+    expect(host.textContent).toContain('No results yet');
+    expect(host.textContent).not.toContain("Refresh fetches GameBanana's latest server status");
+    expect(host.textContent).not.toContain('The next download retests');
+    expect(host.textContent).not.toContain('Downloads can still use its default route');
+  });
+
+  it('keeps previous results when an on-demand test fails', async () => {
+    await render({
+      status: 'healthy',
+      availableServers: 13,
+      totalServers: 13,
+      directoryCheckedAt: Date.now(),
+      directoryExpiresAt: Date.now() + 12 * 60_000,
+      preferredServer: 'filecache45',
+      needsProbe: false,
+      localProbeCheckedAt: Date.now() - 60_000,
+      testedServers: [
+        { server: 'filecache45', bytesPerSecond: 4.2 * 1024 * 1024, available: true },
+      ],
+    });
+    testServers.mockRejectedValueOnce(new Error('offline'));
+
+    const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
+      candidate.textContent?.includes('Test now')
+    ));
+    await act(async () => {
+      button!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).toContain('filecache45');
+    expect(host.textContent).toContain('4.2 MB/s');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('Test failed');
+  });
+
+  it('does not run a speed test while a download is active', async () => {
+    getCurrentDownload.mockResolvedValueOnce({
+      modId: 1,
+      fileId: 2,
+      fileName: 'large.zip',
+    });
+    await render({
+      status: 'healthy',
+      availableServers: 13,
+      totalServers: 13,
+      directoryCheckedAt: Date.now(),
+      directoryExpiresAt: Date.now() + 12 * 60_000,
+      needsProbe: true,
+      testedServers: [],
+    });
+    await act(async () => Promise.resolve());
+
+    const testButton = Array.from(host.querySelectorAll('button')).find((candidate) => (
+      candidate.textContent?.includes('Test now')
+    ));
+    const refreshButton = Array.from(host.querySelectorAll('button')).find((candidate) => (
+      candidate.textContent?.includes('Refresh status')
+    ));
+    expect(testButton?.disabled).toBe(true);
+    expect(testButton?.title).toContain('after the current download');
+    expect(refreshButton?.disabled).toBe(false);
+  });
+
+  it('refreshes only the cached GameBanana status', async () => {
     await render({
       status: 'healthy',
       availableServers: 12,
@@ -116,11 +251,9 @@ describe('DownloadServersCard', () => {
     }));
 
     const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
-      candidate.textContent?.includes('Refresh cache')
+      candidate.textContent?.includes('Refresh status')
     ));
     expect(button).toBeDefined();
-    expect(host.textContent).toContain("Refresh fetches GameBanana's latest server status");
-    expect(host.textContent).toContain('The next download retests the best mirrors on this PC');
 
     act(() => button!.click());
     expect(refreshCache).toHaveBeenCalledOnce();
@@ -144,7 +277,7 @@ describe('DownloadServersCard', () => {
     expect(host.textContent).toContain('8 of 16 online');
     expect(host.textContent).toContain('filecache45');
     expect(host.textContent).toContain('Last preferred');
-    expect(host.textContent).toContain('Retests next download');
+    expect(host.textContent).toContain('Status refreshed');
   });
 
   it('discloses only the three locally tested mirrors with measured outcomes', async () => {
@@ -176,10 +309,10 @@ describe('DownloadServersCard', () => {
     expect(details?.textContent).toContain('Unavailable');
     expect(details?.textContent).not.toContain('filecache37');
 
-    const statusLink = details?.querySelector<HTMLAnchorElement>(
+    const statusLink = host.querySelector<HTMLAnchorElement>(
       'a[href="https://gamebanana.com/fileservers"]',
     );
-    expect(statusLink?.textContent).toContain('Open GameBanana server status');
+    expect(statusLink?.textContent).toContain('GameBanana status');
     expect(statusLink?.target).toBe('_blank');
     expect(statusLink?.rel).toContain('noopener');
   });
@@ -200,8 +333,7 @@ describe('DownloadServersCard', () => {
     });
 
     expect(host.textContent).toContain('Last preferred');
-    expect(host.textContent).toContain('Retests next download');
-    expect(host.textContent).toContain('Cached server status has expired');
+    expect(host.textContent).toContain('Stale');
     expect(host.textContent).toContain('Checked 20 minutes ago');
   });
 
@@ -217,12 +349,10 @@ describe('DownloadServersCard', () => {
     });
 
     expect(host.textContent).toContain('Healthy');
-    expect(host.textContent).not.toContain('Cached server status has expired');
 
     act(() => vi.advanceTimersByTime(60_000));
 
     expect(host.textContent).toContain('Stale');
-    expect(host.textContent).toContain('Cached server status has expired');
   });
 
   it('keeps recovery available when GameBanana has no usable server directory', async () => {
@@ -237,12 +367,10 @@ describe('DownloadServersCard', () => {
 
     expect(host.textContent).toContain('Unavailable');
     expect(host.textContent).toContain('Status unavailable');
-    expect(host.textContent).toContain('GameBanana did not return a usable server list');
-    expect(host.textContent).toContain('Downloads can still use its default route');
-    expect(host.textContent).toContain('No local speed tests yet');
+    expect(host.textContent).toContain('No results yet');
     expect(host.textContent).not.toContain('upstream timed out');
     expect(Array.from(host.querySelectorAll('button')).some((button) => (
-      button.textContent?.includes('Refresh cache')
+      button.textContent?.includes('Refresh status')
     ))).toBe(true);
   });
 
@@ -263,7 +391,7 @@ describe('DownloadServersCard', () => {
     refreshCache.mockRejectedValueOnce(new Error('offline'));
 
     const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
-      candidate.textContent?.includes('Refresh cache')
+      candidate.textContent?.includes('Refresh status')
     ));
     await act(async () => {
       button!.click();
@@ -275,8 +403,7 @@ describe('DownloadServersCard', () => {
     expect(host.textContent).toContain('13 of 13 online');
     const announcement = host.querySelector('[role="status"]');
     expect(announcement?.getAttribute('aria-live')).toBe('polite');
-    expect(announcement?.textContent).toContain('Could not refresh cache');
-    expect(announcement?.textContent).toContain('Showing the previous results');
+    expect(announcement?.textContent).toContain('Refresh failed');
   });
 
   it('announces a refresh failure returned with retained diagnostics', async () => {
@@ -300,7 +427,7 @@ describe('DownloadServersCard', () => {
     });
 
     const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
-      candidate.textContent?.includes('Refresh cache')
+      candidate.textContent?.includes('Refresh status')
     ));
     await act(async () => {
       button!.click();
@@ -309,7 +436,7 @@ describe('DownloadServersCard', () => {
     });
 
     expect(host.textContent).toContain('filecache45');
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('Could not refresh cache');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('Refresh failed');
   });
 
   it('offers cache refresh recovery when the initial status request fails', async () => {
@@ -318,7 +445,7 @@ describe('DownloadServersCard', () => {
     expect(host.textContent).toContain('Unavailable');
     expect(host.textContent).toContain('GameBanana server status is unavailable');
     const button = Array.from(host.querySelectorAll('button')).find((candidate) => (
-      candidate.textContent?.includes('Refresh cache')
+      candidate.textContent?.includes('Refresh status')
     ));
     expect(button).toBeDefined();
     expect(button!.disabled).toBe(false);
