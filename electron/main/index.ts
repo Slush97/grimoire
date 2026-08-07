@@ -416,7 +416,9 @@ function createWindow(): void {
 // Register the `grimoire:` URL scheme so Windows hands `grimoire:...` URLs to
 // this app. The packaged NSIS installer also writes registry entries via the
 // `protocols:` block in electron-builder.yml, but the runtime call covers
-// dev/portable launches and re-asserts ownership when needed.
+// dev/portable launches and re-asserts ownership when needed. On macOS the
+// same `protocols:` block becomes CFBundleURLTypes in the app bundle's
+// Info.plist, which is what makes the `open-url` handler below fire at all.
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
         app.setAsDefaultProtocolClient(GRIMOIRE_PROTOCOL, process.execPath, [
@@ -429,7 +431,32 @@ if (process.defaultApp) {
 
 // Capture any `grimoire:` URL from the launch args. We dispatch it after the
 // renderer has loaded so the UI can show the toast before extraction starts.
-const initialProtocolUrl = findGrimoireUrlInArgv(process.argv);
+// Not a const: macOS delivers cold-launch URLs through `open-url` rather than
+// argv, and that event can beat `whenReady`, so the handler below parks the
+// URL here for the same deferred dispatch to pick up.
+let initialProtocolUrl = findGrimoireUrlInArgv(process.argv);
+
+/**
+ * Route a `grimoire:` URL that arrived while the app is already running.
+ *
+ * Shared by the two warm delivery paths, which are platform-split: Windows and
+ * Linux re-launch the binary and hand the URL to `second-instance` as argv,
+ * while macOS never touches argv and emits `open-url` on the running instance.
+ */
+function dispatchProtocolUrl(url: string): void {
+    if (isGrimoireAuthUrl(url)) {
+        void handleProtocolAuthCallback(url);
+    } else if (isForgeLaunchUrl(url)) {
+        // DeadlockForge could not find the bridge and asked us to start.
+        // Being open was the point; offer to switch the bridge on.
+        requestForgeEnable();
+    } else {
+        const parsed = parseGrimoireUrl(url);
+        if (parsed) {
+            void handleOneClickInstall(parsed, mainWindow);
+        }
+    }
+}
 
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -446,18 +473,27 @@ if (!gotTheLock) {
 
         const url = findGrimoireUrlInArgv(argv);
         if (url) {
-            if (isGrimoireAuthUrl(url)) {
-                void handleProtocolAuthCallback(url);
-            } else if (isForgeLaunchUrl(url)) {
-                // DeadlockForge could not find the bridge and asked us to start.
-                // Being open was the point; offer to switch the bridge on.
-                requestForgeEnable();
-            } else {
-                const parsed = parseGrimoireUrl(url);
-                if (parsed) {
-                    void handleOneClickInstall(parsed, mainWindow);
-                }
-            }
+            dispatchProtocolUrl(url);
+        }
+    });
+
+    // macOS hands `grimoire:` links to the running app through this event and
+    // never through argv, so without it every protocol entry point is dead on
+    // that platform: Discover sign-in waits forever on grimoire://auth/done,
+    // and GameBanana 1-click installs silently do nothing. Registered here at
+    // module scope rather than inside whenReady because a cold launch fires
+    // open-url before the app is ready, and Electron only buffers the event
+    // for listeners that already exist.
+    app.on('open-url', (event, url) => {
+        event.preventDefault();
+        if (app.isReady() && mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+            dispatchProtocolUrl(url);
+        } else {
+            // Cold launch. Park it for the whenReady dispatch below, which
+            // waits on did-finish-load so a toast has somewhere to appear.
+            initialProtocolUrl = url;
         }
     });
 

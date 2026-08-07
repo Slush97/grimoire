@@ -62,7 +62,8 @@ game runs inside a CrossOver (or other Wine) bottle and Grimoire manages the
 VPK files inside it.
 
 What works: browsing and installing from GameBanana, enable/disable/reorder,
-merging, conflicts, Locker, profiles, crosshair, autoexec, and stats.
+merging, conflicts, Locker, profiles, crosshair, autoexec, stats, 1-click
+installs, and signing in to Discover.
 
 What doesn't: auto-detecting the game (point Settings at the Deadlock folder
 inside your bottle by hand), the Launch buttons (start the game from CrossOver
