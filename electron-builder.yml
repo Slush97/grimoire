@@ -55,6 +55,27 @@ win:
     - nsis
     - portable
   icon: resources/icon.ico
+# macOS is Apple Silicon only, deliberately. Deadlock has no macOS build, so
+# Mac users run it under CrossOver/Wine and Grimoire just manages the VPK files
+# inside the bottle. The bundled vpkmerge CLI only ships a darwin-arm64 asset
+# (see scripts/fetch-vpkmerge.mjs), so pinning arm64 keeps the packaged build
+# from silently shipping without a working merge binary.
+#
+# This build is NOT notarized: that needs a paid Apple Developer certificate.
+# electron-builder still ad-hoc signs the arm64 output (required for anything
+# to launch on Apple Silicon), but Gatekeeper quarantines the download, so
+# first launch needs the right-click > Open dance. See README.
+mac:
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  category: public.app-category.games
+  icon: resources/icon.png
+  notarize: false
+dmg:
+  artifactName: "${productName}-${version}-${arch}.${ext}"
 nsis:
   oneClick: false
   perMachine: false

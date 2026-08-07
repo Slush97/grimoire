@@ -21,6 +21,7 @@
 - Windows: `Grimoire-Setup-x.y.z.exe`
 - Linux: `.AppImage` or `.deb`
 - Arch Linux: `yay -S grimoire-bin` ([AUR](https://aur.archlinux.org/packages/grimoire-bin))
+- macOS (Apple Silicon): `Grimoire-x.y.z-arm64.dmg`, see [macOS](#macos) below
 
 ### Debian / Ubuntu (apt)
 
@@ -53,6 +54,22 @@ environment.systemPackages = [ pkgs.grimoire ];
 
 Exposes `packages.<system>.{grimoire,vpkmerge}` and `overlays.default`.
 Updates come through the flake, not the in-app updater.
+
+### macOS
+
+Apple Silicon only, and partial support. Deadlock has no macOS build, so the
+game runs inside a CrossOver (or other Wine) bottle and Grimoire manages the
+VPK files inside it.
+
+What works: browsing and installing from GameBanana, enable/disable/reorder,
+merging, conflicts, Locker, profiles, crosshair, autoexec, and stats.
+
+What doesn't: auto-detecting the game (point Settings at the Deadlock folder
+inside your bottle by hand), the Launch buttons (start the game from CrossOver
+instead), and in-app updates (download the new `.dmg`).
+
+The build is not notarized, so on first launch macOS will refuse to open it.
+Right-click the app in Applications, choose Open, then confirm.
 
 Requires Deadlock installed via Steam.
 

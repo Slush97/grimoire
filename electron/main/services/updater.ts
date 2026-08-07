@@ -30,6 +30,19 @@ export function getInstallSource(): InstallSource {
 const installSource = getInstallSource();
 const updaterDisabled = installSource === 'managed';
 
+// Squirrel.Mac validates the downloaded build's code signature before swapping
+// it in, and the macOS build isn't signed or notarized yet (that needs a paid
+// Apple Developer certificate). Checking still works, so the user gets told a
+// new version exists and can read the changelog, but we refuse the download
+// rather than spend ~150MB on a bundle that can't install.
+function assertSelfUpdateSupported(): void {
+    if (process.platform === 'darwin') {
+        throw new Error(
+            'In-app updates are not available on macOS yet. Download the latest .dmg from the releases page and drag it over the installed copy.'
+        );
+    }
+}
+
 // Configure logging
 autoUpdater.logger = log;
 log.transports.file.level = 'info';
@@ -153,6 +166,7 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 
 export async function downloadUpdate(): Promise<void> {
     if (updaterDisabled) return;
+    assertSelfUpdateSupported();
     try {
         await autoUpdater.downloadUpdate();
     } catch (error) {
@@ -163,6 +177,7 @@ export async function downloadUpdate(): Promise<void> {
 
 export function quitAndInstall(): void {
     if (updaterDisabled) return;
+    assertSelfUpdateSupported();
     autoUpdater.quitAndInstall(false, true);
 }
 

@@ -6,6 +6,7 @@
 // shims like code.cmd need a shell and break on paths with spaces.
 import { spawn } from 'child_process';
 import { accessSync, constants, existsSync } from 'fs';
+import { homedir } from 'os';
 import { delimiter, join } from 'path';
 import { shell } from 'electron';
 import type { EditorCandidate } from '../../../src/types/electron';
@@ -53,10 +54,40 @@ function windowsCandidates(): Array<[path: string, name: string]> {
     ];
 }
 
+// macOS editors, named by the real executable inside each .app bundle rather
+// than the bundle itself: `open -a` would need a shell round-trip, while
+// spawning the bundle binary with a file argument opens that file directly and
+// keeps the same "spawn a real executable" contract as the other two lists.
+const MAC_BUNDLE_CANDIDATES: Array<[relativePath: string, name: string]> = [
+    ['Visual Studio Code.app/Contents/MacOS/Electron', 'Visual Studio Code'],
+    ['VSCodium.app/Contents/MacOS/Electron', 'VSCodium'],
+    ['Cursor.app/Contents/MacOS/Cursor', 'Cursor'],
+    ['Zed.app/Contents/MacOS/zed', 'Zed'],
+    ['Sublime Text.app/Contents/MacOS/sublime_text', 'Sublime Text'],
+    ['BBEdit.app/Contents/MacOS/BBEdit', 'BBEdit'],
+    ['TextMate.app/Contents/MacOS/TextMate', 'TextMate'],
+];
+
+function macCandidates(): Array<[path: string, name: string]> {
+    // Apps install system-wide or per-user; TextEdit ships on the sealed
+    // system volume, which is neither.
+    const roots = ['/Applications', join(homedir(), 'Applications')];
+    const candidates: Array<[string, string]> = [];
+    for (const [relative, name] of MAC_BUNDLE_CANDIDATES) {
+        for (const root of roots) candidates.push([join(root, relative), name]);
+    }
+    candidates.push(['/System/Applications/TextEdit.app/Contents/MacOS/TextEdit', 'TextEdit']);
+    return candidates;
+}
+
 export function listEditorCandidates(): EditorCandidate[] {
     const found: EditorCandidate[] = [];
     if (process.platform === 'win32') {
         for (const [path, name] of windowsCandidates()) {
+            if (existsSync(path)) found.push({ name, path });
+        }
+    } else if (process.platform === 'darwin') {
+        for (const [path, name] of macCandidates()) {
             if (existsSync(path)) found.push({ name, path });
         }
     } else {

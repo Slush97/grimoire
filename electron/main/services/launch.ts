@@ -123,6 +123,10 @@ function sleep(ms: number): Promise<void> {
  * exact-comm matching (pgrep -x) misses the game. Match against the full
  * cmdline (pgrep -f) instead, which finds both the game and its Proton
  * wrapper chain.
+ *
+ * macOS uses the same cmdline match: there's no macOS Deadlock build, so the
+ * game is always a Windows binary running under a CrossOver/Wine bottle, and
+ * the wine process carries the .exe path in its argv.
  */
 export async function isDeadlockRunning(): Promise<boolean> {
     try {
@@ -134,7 +138,7 @@ export async function isDeadlockRunning(): Promise<boolean> {
             ]);
             return /deadlock\.exe/i.test(result.stdout);
         }
-        if (process.platform === 'linux') {
+        if (process.platform === 'linux' || process.platform === 'darwin') {
             const result = await runCommand('pgrep', ['-f', DEADLOCK_PROCESS_NAME]);
             return result.code === 0 && result.stdout.trim().length > 0;
         }
@@ -178,7 +182,7 @@ async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
                 : ['/IM', DEADLOCK_PROCESS_NAME, '/T']
         );
     }
-    if (process.platform === 'linux') {
+    if (process.platform === 'linux' || process.platform === 'darwin') {
         return runCommand('pkill', [force ? '-KILL' : '-TERM', '-f', DEADLOCK_PROCESS_NAME]);
     }
     return { code: 0, stdout: '', stderr: '' };
@@ -433,6 +437,24 @@ async function syncLaunchOptionsToSteam(): Promise<void> {
 }
 
 /**
+ * Guard the launch buttons on platforms where we can't actually start the game.
+ *
+ * On macOS Deadlock lives inside a CrossOver/Wine bottle. A `steam://` URL
+ * there resolves to a native macOS Steam install (which doesn't have Deadlock)
+ * or to nothing at all, so the launch would either no-op silently or open the
+ * wrong Steam. Fail with a message that tells the user what to do instead.
+ *
+ * Called before any on-disk state changes so a refused launch moves no files.
+ */
+function assertLaunchSupported(): void {
+    if (process.platform === 'darwin') {
+        throw new Error(
+            'Launching from Grimoire is not supported on macOS yet. Start Deadlock from CrossOver instead: your mods are already applied.'
+        );
+    }
+}
+
+/**
  * Trigger Steam to launch Deadlock. Doesn't wait for the game to actually start.
  */
 async function triggerSteamLaunch(): Promise<void> {
@@ -455,6 +477,7 @@ export async function launchModded({
     onRestoreComplete,
     beforeLaunch,
 }: LaunchOptions): Promise<void> {
+    assertLaunchSupported();
     if (launchInFlight) {
         throw new Error('Another launch is already in progress');
     }
@@ -492,6 +515,7 @@ export async function launchVanilla({
     onRestoreComplete,
     beforeLaunch,
 }: LaunchOptions): Promise<void> {
+    assertLaunchSupported();
     if (launchInFlight) {
         throw new Error('Another launch is already in progress');
     }

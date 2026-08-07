@@ -22,6 +22,10 @@ jobs:
             platform: linux
           - os: windows-latest
             platform: win
+          # macos-latest is Apple Silicon, which matches the arm64-only mac
+          # target in electron-builder.yml and the darwin-arm64 vpkmerge asset.
+          - os: macos-latest
+            platform: mac
 
     runs-on: ${{ matrix.os }}
 
@@ -86,9 +90,16 @@ jobs:
           # builds refuse to start without this set to an https:// URL so
           # installers can't ship pointing at localhost:8787.
           GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.slusheliott.workers.dev
+          # No Apple Developer certificate yet. Without this, electron-builder
+          # hunts the keychain for a signing identity and warns noisily; it
+          # still ad-hoc signs the arm64 output, which is what lets the app
+          # launch on Apple Silicon at all.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           if [ "${{ matrix.platform }}" = "linux" ]; then
             pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
+          elif [ "${{ matrix.platform }}" = "mac" ]; then
+            pnpm exec electron-vite build && pnpm exec electron-builder --mac --publish never
           else
             pnpm exec electron-vite build && pnpm exec electron-builder --win --publish never
           fi
@@ -114,13 +125,20 @@ jobs:
         run: |
           cd release
           # Hash user-facing artifacts only (skip auto-update metadata and blockmaps).
+          # The mac .zip is user-facing too: it's the artifact electron-updater
+          # consumes, and the fallback for anyone who can't mount the .dmg.
           shopt -s nullglob
-          files=(*.exe *.AppImage *.deb)
+          files=(*.exe *.AppImage *.deb *.dmg *.zip)
           if [ ${#files[@]} -eq 0 ]; then
             echo "ERROR: no artifact files found to hash"
             exit 1
           fi
-          sha256sum "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          # macOS runners have shasum, not GNU coreutils' sha256sum.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          else
+            shasum -a 256 "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          fi
           echo "=== SHA256SUMS-${{ matrix.platform }}.txt ==="
           cat "SHA256SUMS-${{ matrix.platform }}.txt"
 
@@ -131,6 +149,8 @@ jobs:
             grimoire/release/*.exe
             grimoire/release/*.AppImage
             grimoire/release/*.deb
+            grimoire/release/*.dmg
+            grimoire/release/*.zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
