@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
+import type {
+    DownloadQueueItem,
+    DownloadProgressData,
+    DownloadServerStatusData,
+} from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
 import { rollPreparingSuffix } from '../lib/easterEggs';
 import Tx from './translation/Tx';
@@ -45,6 +49,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         progress: null,
     });
     const [isExpanded, setIsExpanded] = useState(false);
+    const [serverStatus, setServerStatus] = useState<DownloadServerStatusData | null>(null);
 
     // Speed/ETA derived from the rate of the current download's progress
     // stream. Anchored to the first sample after the active download
@@ -71,6 +76,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                 if (switched) {
                     sampleRef.current = null;
                     setSpeed(0);
+                    setServerStatus(null);
                 }
                 return {
                     ...prev,
@@ -103,13 +109,17 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         const completeUnsub = window.electronAPI.onDownloadComplete(() => {
             sampleRef.current = null;
             setSpeed(0);
+            setServerStatus(null);
             setQueueState((prev) => ({ ...prev, progress: null }));
         });
+
+        const serverStatusUnsub = window.electronAPI.onDownloadServerStatus(setServerStatus);
 
         return () => {
             queueUnsub();
             progressUnsub();
             completeUnsub();
+            serverStatusUnsub();
         };
     }, []);
 
@@ -139,6 +149,18 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     const currentFileName =
         queueState.currentDownload?.fileName ?? t('downloadQueue.preparing') + preparingSuffix;
     const currentTooltip = queueState.currentDownload?.modName ?? currentFileName;
+    const currentServerStatus = queueState.currentDownload
+        && serverStatus?.modId === queueState.currentDownload.modId
+        && serverStatus.fileId === queueState.currentDownload.fileId
+        ? serverStatus
+        : null;
+    const serverStatusText = currentServerStatus
+        ? currentServerStatus.phase === 'switching'
+            ? t('downloadQueue.serverSwitching', {
+                server: currentServerStatus.previousServer ?? currentServerStatus.server,
+            })
+            : t('downloadQueue.serverAutomatic', { server: currentServerStatus.server })
+        : '';
 
     return (
         <div className={`pointer-events-auto ${className}`}>
@@ -264,6 +286,11 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                     style={{ width: `${progressPercent}%` }}
                                 />
                             </div>
+                            {serverStatusText && (
+                                <p className="mt-1 truncate text-[11px] text-text-secondary" title={serverStatusText}>
+                                    {serverStatusText}
+                                </p>
+                            )}
                             <div className="mt-2 flex items-center justify-between text-[11px] text-text-secondary tabular-nums">
                                 <span>
                                     {queueState.progress
