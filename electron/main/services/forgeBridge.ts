@@ -94,6 +94,9 @@ export type ForgeInstallHandler = (request: ForgeInstallRequest) => Promise<void
 
 let server: Server | null = null;
 let boundPort: number | null = null;
+/** Non-null while a start is in flight, so overlapping calls await it rather
+ *  than racing to bind a second socket. */
+let startInFlight: Promise<void> | null = null;
 let installHandler: ForgeInstallHandler | null = null;
 let getMainWindow: (() => BrowserWindow | null) | null = null;
 
@@ -106,6 +109,10 @@ let pendingConfirm: {
 
 /** origin -> timestamp of the last accepted request. */
 const lastAcceptedByOrigin = new Map<string, number>();
+
+/** True from the moment an install request claims the slot until it finishes.
+ *  Set synchronously so concurrent requests cannot both get past the check. */
+let installInFlight = false;
 
 /** True while the opt-in prompt is on screen. */
 let enablePromptOpen = false;
@@ -164,7 +171,9 @@ function sendRejection(res: ServerResponse, rejection: ForgeRejection): void {
  */
 function awaitConfirmation(request: ForgeInstallRequest): Promise<boolean> {
     const window = getMainWindow?.() ?? null;
-    if (!window) return Promise.resolve(false);
+    // isDestroyed as well as null: a window torn down mid-install still
+    // satisfies the null check, and sending to it throws.
+    if (!window || window.isDestroyed()) return Promise.resolve(false);
 
     return new Promise<boolean>((resolve) => {
         const timer = setTimeout(() => {
@@ -269,7 +278,13 @@ async function streamBodyToTempFile(
                 finish({ ok: false, reason: 'TOO_LARGE' });
                 return;
             }
-            out.write(chunk);
+            // Respect backpressure: without pausing, a fast sender outruns the
+            // disk and the unwritten chunks queue up in the main process heap,
+            // which is exactly what streaming to a file is meant to avoid.
+            if (!out.write(chunk)) {
+                req.pause();
+                out.once('drain', () => req.resume());
+            }
         });
 
         req.on('end', () => {
@@ -305,92 +320,107 @@ async function handleInstall(
         return;
     }
 
-    // One dialog at a time. Extra fires are dropped rather than queued, so a
-    // burst cannot stack prompts on top of each other.
-    if (pendingConfirm) {
+    // Claim the slot synchronously, before the first await.
+    //
+    // Testing pendingConfirm alone was racy: it is only set once the body has
+    // finished streaming, so two requests arriving together both passed the
+    // check, both streamed a temp file, and the loser's file was orphaned when
+    // the winner replaced pendingConfirm. The per-origin cooldown does not
+    // serialize them either, since the apex and www origins are distinct keys.
+    if (installInFlight || pendingConfirm) {
         sendRejection(res, { ok: false, reason: 'BUSY', status: 429 });
         return;
     }
-
-    const lastAccepted = lastAcceptedByOrigin.get(origin) ?? 0;
-    if (Date.now() - lastAccepted < ORIGIN_COOLDOWN_MS) {
-        sendRejection(res, { ok: false, reason: 'COOLDOWN', status: 429 });
-        return;
-    }
-    lastAcceptedByOrigin.set(origin, Date.now());
+    installInFlight = true;
 
     const requestId = randomUUID();
     const tempPath = join(tmpdir(), `grimoire-forge-${requestId}.vpk`);
+    // Single owner for the temp file: every exit path below runs this, so no
+    // branch can leave a half-gigabyte file behind.
+    let tempPathToClean: string | null = tempPath;
 
-    const body = await streamBodyToTempFile(req, tempPath);
-    if (!body.ok) {
-        await safeUnlink(tempPath);
-        if (body.reason === 'TOO_LARGE') {
-            sendRejection(res, { ok: false, reason: 'TOO_LARGE', status: 413 });
+    try {
+        const lastAccepted = lastAcceptedByOrigin.get(origin) ?? 0;
+        if (Date.now() - lastAccepted < ORIGIN_COOLDOWN_MS) {
+            sendRejection(res, { ok: false, reason: 'COOLDOWN', status: 429 });
+            return;
         }
-        return;
-    }
+        lastAcceptedByOrigin.set(origin, Date.now());
 
-    if (body.size < FORGE_MIN_BYTES) {
-        await safeUnlink(tempPath);
-        sendRejection(res, { ok: false, reason: 'TOO_SMALL', status: 400 });
-        return;
-    }
+        const body = await streamBodyToTempFile(req, tempPath);
+        if (!body.ok) {
+            if (body.reason === 'TOO_LARGE') {
+                sendRejection(res, { ok: false, reason: 'TOO_LARGE', status: 413 });
+            }
+            return;
+        }
 
-    // Verify this is really a VPK before the user is even asked, so the dialog
-    // never describes something we would refuse to install anyway.
-    const handle = await fs.open(tempPath, 'r');
-    const head = Buffer.alloc(4);
-    try {
-        await handle.read(head, 0, 4, 0);
+        if (body.size < FORGE_MIN_BYTES) {
+            sendRejection(res, { ok: false, reason: 'TOO_SMALL', status: 400 });
+            return;
+        }
+
+        // Verify this is really a VPK before the user is even asked, so the
+        // dialog never describes something we would refuse to install anyway.
+        const handle = await fs.open(tempPath, 'r');
+        const head = Buffer.alloc(4);
+        try {
+            await handle.read(head, 0, 4, 0);
+        } finally {
+            await handle.close();
+        }
+        if (!hasVpkMagic(head)) {
+            sendRejection(res, { ok: false, reason: 'NOT_A_VPK', status: 400 });
+            return;
+        }
+
+        const name =
+            sanitizeForgeString(
+                decodeHeaderValue(req.headers[FORGE_NAME_HEADER] as string | undefined),
+                FORGE_MAX_NAME_LENGTH
+            ) || 'DeadlockForge mod';
+        const author =
+            sanitizeForgeString(
+                decodeHeaderValue(req.headers[FORGE_AUTHOR_HEADER] as string | undefined),
+                FORGE_MAX_AUTHOR_LENGTH
+            ) || undefined;
+        const type = normalizeForgeType(req.headers[FORGE_TYPE_HEADER] as string | undefined);
+
+        const request: ForgeInstallRequest = {
+            requestId,
+            name,
+            author,
+            type,
+            sizeBytes: body.size,
+            origin,
+            tempPath,
+        };
+
+        // Answer the site immediately and do the install behind the dialog. The
+        // site gets no success/failure signal by design: it learns nothing about
+        // the user's setup, and there is no oracle to probe.
+        sendJson(res, 202, { status: 'pending-confirm' });
+
+        const accepted = await awaitConfirmation(request);
+        if (!accepted) return;
+
+        try {
+            await installHandler?.(request);
+        } catch (err) {
+            console.error('[forgeBridge] Install failed:', err);
+            // The modal has already closed by now, so a console line is invisible
+            // to the user. Mirror the other install paths and let the UI toast it.
+            getMainWindow?.()?.webContents.send('forge-install-failed', {
+                name: request.name,
+            });
+        }
     } finally {
-        await handle.close();
-    }
-    if (!hasVpkMagic(head)) {
-        await safeUnlink(tempPath);
-        sendRejection(res, { ok: false, reason: 'NOT_A_VPK', status: 400 });
-        return;
-    }
-
-    const name =
-        sanitizeForgeString(
-            decodeHeaderValue(req.headers[FORGE_NAME_HEADER] as string | undefined),
-            FORGE_MAX_NAME_LENGTH
-        ) || 'DeadlockForge mod';
-    const author =
-        sanitizeForgeString(
-            decodeHeaderValue(req.headers[FORGE_AUTHOR_HEADER] as string | undefined),
-            FORGE_MAX_AUTHOR_LENGTH
-        ) || undefined;
-    const type = normalizeForgeType(req.headers[FORGE_TYPE_HEADER] as string | undefined);
-
-    const request: ForgeInstallRequest = {
-        requestId,
-        name,
-        author,
-        type,
-        sizeBytes: body.size,
-        origin,
-        tempPath,
-    };
-
-    // Answer the site immediately and do the install behind the dialog. The
-    // site gets no success/failure signal by design: it learns nothing about
-    // the user's setup, and there is no oracle to probe.
-    sendJson(res, 202, { status: 'pending-confirm' });
-
-    const accepted = await awaitConfirmation(request);
-    if (!accepted) {
-        await safeUnlink(tempPath);
-        return;
-    }
-
-    try {
-        await installHandler?.(request);
-    } catch (err) {
-        console.error('[forgeBridge] Install failed:', err);
-    } finally {
-        await safeUnlink(tempPath);
+        installInFlight = false;
+        if (tempPathToClean) {
+            const path = tempPathToClean;
+            tempPathToClean = null;
+            await safeUnlink(path);
+        }
     }
 }
 
@@ -441,7 +471,15 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     }
 
     if (req.method === 'POST' && path === FORGE_INSTALL_PATH) {
-        void handleInstall(req, res, origin);
+        // Nothing above this awaits the handler, so an unhandled rejection here
+        // would take down the main process. Everything is best-effort from the
+        // caller's point of view: the site is told nothing either way.
+        void handleInstall(req, res, origin).catch((err) => {
+            console.error('[forgeBridge] Install handler threw:', err);
+            if (!res.headersSent) {
+                sendRejection(res, { ok: false, reason: 'INTERNAL', status: 500 });
+            }
+        });
         return;
     }
 
@@ -503,28 +541,45 @@ export function configureForgeBridge(
  * exactly zero.
  */
 export async function startForgeBridge(): Promise<void> {
+    // Serialize on the in-flight start rather than on `server`, which is only
+    // assigned after the bind resolves: two overlapping calls would otherwise
+    // both get past the guard, bind two sockets, and leave one of them
+    // unreachable to stopForgeBridge (so the kill switch could not close it).
+    if (startInFlight) {
+        await startInFlight;
+        return;
+    }
     if (server) return;
-    if (!loadSettings().forgeLocalInstallEnabled) return;
-    if (!installHandler) {
-        console.warn('[forgeBridge] configureForgeBridge() not called, refusing to start');
-        return;
+
+    startInFlight = (async () => {
+        if (!loadSettings().forgeLocalInstallEnabled) return;
+        if (!installHandler) {
+            console.warn('[forgeBridge] configureForgeBridge() not called, refusing to start');
+            return;
+        }
+
+        const httpServer = createServer(handleRequest);
+        httpServer.maxConnections = MAX_CONNECTIONS;
+        httpServer.headersTimeout = HEADERS_TIMEOUT_MS;
+        httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
+
+        const port = await listenOnFirstFreePort(httpServer, FORGE_PORT_RANGE);
+        if (port === null) {
+            console.warn('[forgeBridge] No free port in range, bridge not started');
+            httpServer.close();
+            return;
+        }
+
+        server = httpServer;
+        boundPort = port;
+        console.log(`[forgeBridge] Listening on 127.0.0.1:${port}`);
+    })();
+
+    try {
+        await startInFlight;
+    } finally {
+        startInFlight = null;
     }
-
-    const httpServer = createServer(handleRequest);
-    httpServer.maxConnections = MAX_CONNECTIONS;
-    httpServer.headersTimeout = HEADERS_TIMEOUT_MS;
-    httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
-
-    const port = await listenOnFirstFreePort(httpServer, FORGE_PORT_RANGE);
-    if (port === null) {
-        console.warn('[forgeBridge] No free port in range, bridge not started');
-        httpServer.close();
-        return;
-    }
-
-    server = httpServer;
-    boundPort = port;
-    console.log(`[forgeBridge] Listening on 127.0.0.1:${port}`);
 }
 
 export async function stopForgeBridge(): Promise<void> {

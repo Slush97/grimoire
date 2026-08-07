@@ -1577,14 +1577,13 @@ export async function installForgeVpk(
         // GameBanana mod id, and repeat forges of the same sound are legitimate
         // separate mods. They install side by side and conflict detection
         // surfaces the overlap if the user enables both.
-        if (settings.autoEnableDownloads === true) {
-            // The install already succeeded, so an enable failure must not fail it.
-            try {
-                await enableInstalledVpks(deadlockPath, installedVpks, 'forge-install');
-            } catch (err) {
-                console.warn('[forgeInstall] Failed to auto-enable:', err);
-            }
-        }
+        //
+        // autoEnableDownloads is deliberately NOT honoured here. It means "enable
+        // things I chose to download", and a forge install is pushed by a web
+        // page rather than picked from Browse. Landing disabled keeps the second
+        // safety layer behind the confirmation dialog intact, and it keeps the
+        // dialog's promise ("it installs disabled, so you can review it") true
+        // for every user rather than only those with the setting off.
 
         mainWindow?.webContents.send('download-complete', { modId, fileId });
         console.log(`[forgeInstall] Installed ${installedVpks.length} VPK(s) from ${forge.origin}`);

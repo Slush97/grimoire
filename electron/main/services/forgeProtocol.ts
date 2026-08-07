@@ -52,7 +52,19 @@ export const ALLOWED_FORGE_ORIGINS = new Set<string>([
 export const DEV_FORGE_ORIGIN_PATTERN =
     /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/;
 
-/** Size envelope for an accepted VPK body. */
+/**
+ * Size envelope for an accepted VPK body.
+ *
+ * The ceiling is deliberately generous. SoundForge output scales with both the
+ * number of replaced sounds and the length of the replacement clip: measured on
+ * deadlockforge.net it runs at roughly 16 KB per second of audio per sound, so
+ * a 600-sound build (the site's own per-build cap) reaches ~103 MB from a 10
+ * second clip and ~287 MB from a 30 second one. A tighter cap would reject
+ * real mods rather than only abusive ones.
+ *
+ * Memory is not the constraint: the body streams to a temp file with
+ * backpressure, so the ceiling bounds disk use rather than heap.
+ */
 export const FORGE_MIN_BYTES = 1024;
 export const FORGE_MAX_BYTES = 512 * 1024 * 1024;
 
@@ -75,7 +87,8 @@ export type ForgeRejectReason =
     | 'TOO_SMALL'
     | 'NOT_A_VPK'
     | 'BUSY'
-    | 'COOLDOWN';
+    | 'COOLDOWN'
+    | 'INTERNAL';
 
 export interface ForgeRejection {
     ok: false;

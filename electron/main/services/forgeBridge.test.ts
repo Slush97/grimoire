@@ -1,4 +1,6 @@
 import { connect } from 'node:net';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The bridge pulls in electron (BrowserWindow type only, at runtime nothing is
@@ -31,6 +33,9 @@ import {
 import { VPK_MAGIC } from './forgeProtocol';
 
 const ORIGIN = 'https://deadlockforge.net';
+
+/** Temp files the bridge creates, so tests can assert none are left behind. */
+const isForgeTemp = (name: string) => name.startsWith('grimoire-forge-');
 
 /** A minimally valid VPK body: correct magic, over the 1 KB floor. */
 function makeVpk(size = 4096): Buffer {
@@ -133,6 +138,7 @@ beforeEach(async () => {
                         );
                     },
                 },
+                isDestroyed: () => false,
             }) as never
     );
 
@@ -308,6 +314,7 @@ describe('install', () => {
                             held.push(data.requestId);
                         },
                     },
+                    isDestroyed: () => false,
                 }) as never
         );
 
@@ -320,6 +327,65 @@ describe('install', () => {
 
         resolveForgeInstallConfirmation(held[0]!, false);
         await settle();
+    });
+
+    it('serializes concurrent installs and leaves no orphaned temp file', async () => {
+        // Regression: the busy check read pendingConfirm, which is only set once
+        // the body has finished streaming. Two requests arriving together both
+        // got past it, both wrote a temp file, and the loser's was orphaned. The
+        // per-origin cooldown did not help, since the apex and www origins are
+        // separate keys.
+        const before = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+
+        const [a, b] = await Promise.all([
+            install(makeVpk(), { Origin: 'https://deadlockforge.net' }),
+            install(makeVpk(), { Origin: 'https://www.deadlockforge.net' }),
+        ]);
+
+        const statuses = [a.status, b.status].sort();
+        expect(statuses).toEqual([202, 429]);
+        await settle();
+
+        // Exactly one reached the user.
+        expect(prompted).toHaveLength(1);
+
+        const after = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+        expect(after).toEqual(before);
+    });
+
+    it('survives an install handler that throws', async () => {
+        const before = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+
+        // void handleInstall(...) had no catch, so a throw became an unhandled
+        // rejection in the main process.
+        configureForgeBridge(
+            async () => {
+                throw new Error('boom');
+            },
+            () =>
+                ({
+                    webContents: {
+                        send: (_c: string, data: { requestId: string }) => {
+                            if (!data?.requestId) return;
+                            setTimeout(() => resolveForgeInstallConfirmation(data.requestId, true), 0);
+                        },
+                    },
+                    isDestroyed: () => false,
+                }) as never
+        );
+
+        const res = await install(makeVpk());
+        expect(res.status).toBe(202);
+        await settle();
+
+        // Still serving, and the failed install cleaned up after itself.
+        // Compared against the starting set rather than asserting empty: tmpdir
+        // is shared with the rest of the machine.
+        const ping = await fetch(`${baseUrl()}/forge/v1/ping`, {
+            headers: { Origin: ORIGIN },
+        });
+        expect(ping.status).toBe(200);
+        expect((await fs.readdir(tmpdir())).filter(isForgeTemp)).toEqual(before);
     });
 
     it('refuses everything once the kill switch is off', async () => {
