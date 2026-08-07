@@ -632,6 +632,12 @@ export async function stopForgeBridge(): Promise<void> {
         pendingConfirm = null;
     }
     lastAcceptedByOrigin.clear();
+
+    // close() only stops new connections: it leaves established keep-alive
+    // sockets open and waits for them, so the callback can hang and, worse, a
+    // client can keep using a socket to a bridge the user just switched off.
+    // The kill switch has to mean off, so drop the sockets too.
+    httpServer.closeAllConnections();
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     console.log('[forgeBridge] Stopped');
 }

@@ -1,4 +1,5 @@
 import { connect } from 'node:net';
+import { request as httpRequest } from 'node:http';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -53,30 +54,75 @@ let autoAccept = true;
 /** How many times the opt-in prompt was raised. */
 let enablePrompts = 0;
 
-function baseUrl(): string {
-    return `http://127.0.0.1:${getForgeBridgePort()}`;
+interface TestResponse {
+    status: number;
+    headers: Record<string, string | string[] | undefined>;
+    text: string;
+    json: () => unknown;
 }
 
-async function ping(headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`${baseUrl()}/forge/v1/ping`, {
-        headers: { Origin: ORIGIN, ...headers },
+/**
+ * Minimal HTTP client for these tests, on node:http with keep-alive disabled.
+ *
+ * Deliberately not fetch: each test restarts the bridge on the same port, and a
+ * pooling client happily reuses a socket belonging to the previous, now dead
+ * server. That surfaces as "other side closed" on whichever request comes next,
+ * which is a property of the client rather than anything wrong with the bridge.
+ * agent: false gives every request its own connection.
+ */
+function request(
+    path: string,
+    options: { method?: string; headers?: Record<string, string>; body?: Buffer } = {}
+): Promise<TestResponse> {
+    return new Promise((resolve, reject) => {
+        const req = httpRequest(
+            {
+                host: '127.0.0.1',
+                port: getForgeBridgePort() ?? 0,
+                path,
+                method: options.method ?? 'GET',
+                headers: options.headers ?? {},
+                agent: false,
+            },
+            (res) => {
+                const chunks: Buffer[] = [];
+                res.on('data', (c: Buffer) => chunks.push(c));
+                res.on('end', () => {
+                    const text = Buffer.concat(chunks).toString('utf8');
+                    resolve({
+                        status: res.statusCode ?? 0,
+                        headers: res.headers,
+                        text,
+                        json: () => JSON.parse(text),
+                    });
+                });
+            }
+        );
+        req.on('error', reject);
+        if (options.body) req.write(options.body);
+        req.end();
     });
+}
+
+async function ping(headers: Record<string, string> = {}): Promise<TestResponse> {
+    return request('/forge/v1/ping', { headers: { Origin: ORIGIN, ...headers } });
 }
 
 async function install(
     body: Buffer,
     headers: Record<string, string> = {}
-): Promise<Response> {
-    return fetch(`${baseUrl()}/forge/v1/install`, {
+): Promise<TestResponse> {
+    return request('/forge/v1/install', {
         method: 'POST',
         headers: {
             Origin: ORIGIN,
             'Content-Type': 'application/octet-stream',
             'X-Forge-Protocol': '1',
             'X-Forge-Name': 'Abrams%20Ult%20Airhorn',
+            'Content-Length': String(body.length),
             ...headers,
         },
-        body: new Uint8Array(body),
+        body,
     });
 }
 
@@ -176,18 +222,18 @@ describe('ping', () => {
     it('rejects an unknown origin', async () => {
         const res = await ping({ Origin: 'https://evil.com' });
         expect(res.status).toBe(403);
-        expect(res.headers.get('access-control-allow-origin')).toBeNull();
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
     });
 
     it('rejects a missing origin', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/ping`);
+        const res = await request('/forge/v1/ping');
         expect(res.status).toBe(403);
     });
 });
 
 describe('preflight', () => {
     it('grants private network access to an allowlisted origin', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/install`, {
+        const res = await request('/forge/v1/install', {
             method: 'OPTIONS',
             headers: {
                 Origin: ORIGIN,
@@ -196,18 +242,18 @@ describe('preflight', () => {
             },
         });
         expect(res.status).toBe(204);
-        expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+        expect(res.headers['access-control-allow-origin']).toBe(ORIGIN);
         // Without this header Chrome blocks the real request outright.
-        expect(res.headers.get('access-control-allow-private-network')).toBe('true');
+        expect(res.headers['access-control-allow-private-network']).toBe('true');
     });
 
     it('refuses the preflight for a foreign origin, so the POST never follows', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/install`, {
+        const res = await request('/forge/v1/install', {
             method: 'OPTIONS',
             headers: { Origin: 'https://evil.com', 'Access-Control-Request-Method': 'POST' },
         });
         expect(res.status).toBe(403);
-        expect(res.headers.get('access-control-allow-origin')).toBeNull();
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
     });
 });
 
@@ -297,10 +343,15 @@ describe('install', () => {
     });
 
     it('rejects a missing protocol header', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/install`, {
+        const vpk = makeVpk();
+        const res = await request('/forge/v1/install', {
             method: 'POST',
-            headers: { Origin: ORIGIN, 'Content-Type': 'application/octet-stream' },
-            body: new Uint8Array(makeVpk()),
+            headers: {
+                Origin: ORIGIN,
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': String(vpk.length),
+            },
+            body: vpk,
         });
         expect(res.status).toBe(400);
     });
@@ -409,9 +460,7 @@ describe('install', () => {
         // Still serving, and the failed install cleaned up after itself.
         // Compared against the starting set rather than asserting empty: tmpdir
         // is shared with the rest of the machine.
-        const ping = await fetch(`${baseUrl()}/forge/v1/ping`, {
-            headers: { Origin: ORIGIN },
-        });
+        const ping = await request('/forge/v1/ping', { headers: { Origin: ORIGIN } });
         expect(ping.status).toBe(200);
         expect((await fs.readdir(tmpdir())).filter(isForgeTemp)).toEqual(before);
     });
@@ -428,15 +477,15 @@ describe('install', () => {
 
 describe('dev origins', () => {
     it('accepts a localhost dev server in an unpackaged build', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/ping`, {
+        const res = await request('/forge/v1/ping', {
             headers: { Origin: 'http://localhost:8765' },
         });
         expect(res.status).toBe(200);
-        expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:8765');
+        expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8765');
     });
 
     it('still rejects non-loopback origins in an unpackaged build', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/ping`, {
+        const res = await request('/forge/v1/ping', {
             headers: { Origin: 'http://192.168.1.5:8765' },
         });
         expect(res.status).toBe(403);
@@ -492,7 +541,7 @@ describe('connection limit', () => {
         const results = await Promise.all(
             Array.from({ length: 40 }, async () => {
                 try {
-                    const res = await fetch(`${baseUrl()}/forge/v1/ping`, {
+                    const res = await request('/forge/v1/ping', {
                         headers: { Origin: ORIGIN },
                     });
                     return res.status;
@@ -524,16 +573,12 @@ describe('DNS rebinding', () => {
 
 describe('routing', () => {
     it('404s an unknown path', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/anything`, {
-            headers: { Origin: ORIGIN },
-        });
+        const res = await request('/forge/v1/anything', { headers: { Origin: ORIGIN } });
         expect(res.status).toBe(404);
     });
 
     it('has no read endpoints: install does not answer GET', async () => {
-        const res = await fetch(`${baseUrl()}/forge/v1/install`, {
-            headers: { Origin: ORIGIN },
-        });
+        const res = await request('/forge/v1/install', { headers: { Origin: ORIGIN } });
         expect(res.status).toBe(404);
     });
 });
