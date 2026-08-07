@@ -16,7 +16,7 @@ vi.mock('electron', () => ({
     },
 }));
 vi.mock('@grimoire/social-types/heroes', () => ({ inferHeroFromTitle: () => null }));
-vi.mock('./gameBananaFileServers', () => ({
+vi.mock('./gamebananaFileServers', () => ({
     gameBananaFileServerSelector: { getCandidates: selectorMocks.getCandidates },
 }));
 vi.mock('./downloadTransfer', () => ({ downloadTransfer: transferMocks.downloadTransfer }));
