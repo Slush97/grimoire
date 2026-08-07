@@ -1,4 +1,4 @@
-import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
+import { openSync, readSync, closeSync, existsSync, statSync, fstatSync } from 'fs';
 import { heroForSoundCodename } from './heroSoundCodenames';
 import { parseVpksInWorkers } from './workers';
 import type { GlobalModType } from '../../../src/types/mod';
@@ -18,6 +18,40 @@ import type { GlobalModType } from '../../../src/types/mod';
  */
 
 const VPK_SIGNATURE = 0x55AA1234;
+
+/** Upper bound on a VPK directory tree we are willing to allocate for. Real
+ *  trees are well under a megabyte; this is a sanity ceiling, not a format
+ *  limit, and it exists so an untrusted header field cannot drive a huge
+ *  allocation in the main process. */
+export const MAX_VPK_TREE_SIZE = 64 * 1024 * 1024;
+
+/** Upper bound on a single entry's payload. Individual assets are megabytes at
+ *  most; this only exists so a bogus entry length cannot drive a huge alloc. */
+export const MAX_VPK_ENTRY_SIZE = 256 * 1024 * 1024;
+
+/**
+ * Is a length read out of a VPK header plausible for this file?
+ *
+ * Every size field in a VPK is an untrusted uint32, so it can claim up to
+ * 4 GiB regardless of how big the file actually is. Buffer.alloc zero-fills,
+ * so an unchecked value lets a tiny crafted file stall or OOM whichever
+ * process reads it. Callers must run every declared length through this before
+ * allocating for it.
+ *
+ * Shared rather than inlined because the same header is parsed in four places
+ * here plus a copy in the worker pool, and only clamping one of them leaves
+ * the others exploitable.
+ */
+export function isPlausibleVpkLength(
+    declared: number,
+    fileSize: number,
+    offset: number,
+    cap = MAX_VPK_TREE_SIZE
+): boolean {
+    if (!Number.isFinite(declared) || declared < 0) return false;
+    if (declared > cap) return false;
+    return declared <= Math.max(0, fileSize - offset);
+}
 
 /**
  * Read a null-terminated string from a buffer at the given offset
@@ -238,6 +272,14 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
         // After the first 12 bytes, v2 has: FileDataSectionSize(4) + ArchiveMD5SectionSize(4) + OtherMD5SectionSize(4) + SignatureSectionSize(4)
         const headerSize = version === 2 ? 28 : 12;
 
+        if (!isPlausibleVpkLength(treeSize, fstatSync(fd).size, headerSize)) {
+            console.warn(
+                `[parseVpkDirectory] ${vpkPath}: implausible tree size ${treeSize}, refusing to parse`
+            );
+            closeSync(fd);
+            return null;
+        }
+
         // Read the directory tree (starts after the full header)
         const treeBuffer = Buffer.alloc(treeSize);
         readSync(fd, treeBuffer, 0, treeSize, headerSize);
@@ -399,6 +441,12 @@ export function parseVpkEntryStats(vpkPath: string): VpkEntryStat[] | null {
         const treeSize = headerBuffer.readUInt32LE(8);
         const headerSize = version === 2 ? 28 : 12;
 
+        if (!isPlausibleVpkLength(treeSize, fstatSync(fd).size, headerSize)) {
+            console.warn(`[vpk] ${vpkPath}: implausible tree size ${treeSize}, refusing to parse`);
+            closeSync(fd);
+            return null;
+        }
+
         const treeBuffer = Buffer.alloc(treeSize);
         readSync(fd, treeBuffer, 0, treeSize, headerSize);
         closeSync(fd);
@@ -482,6 +530,12 @@ export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | 
         const treeSize = headerBuffer.readUInt32LE(8);
         const headerSize = version === 2 ? 28 : 12;
 
+        if (!isPlausibleVpkLength(treeSize, fstatSync(fd).size, headerSize)) {
+            console.warn(`[vpk] ${vpkPath}: implausible tree size ${treeSize}, refusing to parse`);
+            closeSync(fd);
+            return null;
+        }
+
         const treeBuffer = Buffer.alloc(treeSize);
         readSync(fd, treeBuffer, 0, treeSize, headerSize);
 
@@ -527,10 +581,18 @@ export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | 
 
                         let archiveData = Buffer.alloc(0);
                         if (entryLength > 0) {
-                            archiveData = Buffer.alloc(entryLength);
+                            // entryLength is another untrusted uint32, so it gets
+                            // the same treatment as treeSize: check it against the
+                            // file that actually holds the data before allocating.
+                            // Throwing lands in the catch below, which closes fd.
                             if (archiveIndex === VPK_DIR_ARCHIVE_INDEX) {
                                 // Data lives in the dir VPK after header + tree.
-                                readSync(fd, archiveData, 0, entryLength, headerSize + treeSize + entryOffset);
+                                const dataOffset = headerSize + treeSize + entryOffset;
+                                if (!isPlausibleVpkLength(entryLength, fstatSync(fd).size, dataOffset, MAX_VPK_ENTRY_SIZE)) {
+                                    throw new Error(`implausible entry length ${entryLength} for ${fullPath}`);
+                                }
+                                archiveData = Buffer.alloc(entryLength);
+                                readSync(fd, archiveData, 0, entryLength, dataOffset);
                             } else {
                                 // Data lives in a sibling _NNN.vpk archive.
                                 const archivePath = vpkPath.replace(
@@ -539,6 +601,10 @@ export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | 
                                 );
                                 const afd = openSync(archivePath, 'r');
                                 try {
+                                    if (!isPlausibleVpkLength(entryLength, fstatSync(afd).size, entryOffset, MAX_VPK_ENTRY_SIZE)) {
+                                        throw new Error(`implausible entry length ${entryLength} for ${fullPath}`);
+                                    }
+                                    archiveData = Buffer.alloc(entryLength);
                                     readSync(afd, archiveData, 0, entryLength, entryOffset);
                                 } finally {
                                     closeSync(afd);

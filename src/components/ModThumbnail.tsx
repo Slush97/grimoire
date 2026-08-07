@@ -2,6 +2,7 @@ import { EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { MergedModSource } from '../types/mod';
 import { getHeroRenderPath } from '../lib/lockerUtils';
+import { getForgeBadgePath } from '../lib/assetPath';
 import ImageContextMenu from './ImageContextMenu';
 
 interface ModThumbnailProps {
@@ -27,6 +28,10 @@ interface ModThumbnailProps {
   /** Disable the image-specific right-click menu when the thumbnail belongs to
    *  a larger interactive surface with its own context menu. */
   enableImageContextMenu?: boolean;
+  /** Mod came from DeadlockForge. Those mods are built in the user's browser,
+   *  so there is no remote thumbnail to fetch and Grimoire will not go looking
+   *  for one: the bundled badge stands in. */
+  forgeInstalled?: boolean;
 }
 
 export default function ModThumbnail({
@@ -42,13 +47,17 @@ export default function ModThumbnail({
   heroPortrait,
   mergedSources,
   enableImageContextMenu = true,
+  forgeInstalled,
 }: ModThumbnailProps) {
   const { t } = useTranslation();
   const shouldBlur = nsfw && hideNsfw;
-  // Hero portrait wins over the uploader's thumbnail. NSFW blur is suppressed
-  // here because hero renders are official Valve art, not user uploads.
-  const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : src;
-  const resolvedBlur = heroPortrait ? false : shouldBlur;
+  // Hero portrait wins over the uploader's thumbnail, then any real thumbnail,
+  // then the DeadlockForge badge. The badge is last so a forge sound mod still
+  // shows its hero render in the Locker. NSFW blur is suppressed for both
+  // because neither is a user-uploaded image.
+  const forgeBadge = forgeInstalled && !src ? getForgeBadgePath() : undefined;
+  const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : (src ?? forgeBadge);
+  const resolvedBlur = heroPortrait || forgeBadge ? false : shouldBlur;
 
   // Collage path: only when there's no explicit src and we have sources to
   // tile. The user-uploaded thumbnail (when set) always wins so they have a

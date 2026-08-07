@@ -1,19 +1,38 @@
+import { useEffect, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../stores/appStore';
 import { Card, Toggle } from '../../common/ui';
 import Tx from '../../translation/Tx';
 import type { AppSettings } from '../../../types/mod';
+import type { ForgeBridgeStatus } from '../../../types/electron';
 
 // Day-to-day behaviour toggles: how mods install, how the Locker opens, and
 // what Grimoire tells other apps about you.
 export default function PreferencesSection() {
   const { settings, saveSettings } = useAppStore();
+  const { t } = useTranslation();
+  const [forgeStatus, setForgeStatus] = useState<ForgeBridgeStatus | null>(null);
 
   const update = async (patch: Partial<AppSettings>) => {
     if (settings) {
       await saveSettings({ ...settings, ...patch });
     }
   };
+
+  // Reflect whether the bridge actually came up. The port is picked at bind
+  // time from a small range, so showing it is the only way a user can tell
+  // which one to expect, and it confirms the toggle really took effect.
+  const forgeEnabled = settings?.forgeLocalInstallEnabled ?? false;
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI.getForgeBridgeStatus().then((status) => {
+      if (!cancelled) setForgeStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [forgeEnabled]);
 
   return (
     <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={SlidersHorizontal}>
@@ -41,6 +60,29 @@ export default function PreferencesSection() {
           onChange={(checked) => update({ autoEnableDownloads: checked })}
           label={<Tx k="settings.preferences.enableAfterDownload" fallback="Enable mods after download" />}
           description={<Tx k="settings.toggles.enableAfterDownload" fallback="Enable mods as soon as they finish downloading. Stays disabled if no slot is free." />}
+        />
+
+        <div className="h-px bg-white/5" />
+
+        <Toggle
+          checked={forgeEnabled}
+          onChange={(checked) => update({ forgeLocalInstallEnabled: checked })}
+          label={<Tx k="forge.settings.toggleLabel" fallback="Allow DeadlockForge 1-click installs" />}
+          description={
+            <span>
+              <Tx
+                k="forge.settings.description"
+                fallback="Let deadlockforge.net send freshly forged mods straight to Grimoire, so you do not have to download and move the file yourself. Grimoire listens only on your own machine, accepts requests only from deadlockforge.net, and always asks before installing anything."
+              />
+              {forgeEnabled && forgeStatus && (
+                <span className="mt-1 block font-mono text-xs opacity-70">
+                  {forgeStatus.listening && forgeStatus.port !== null
+                    ? t('forge.settings.listening', { port: forgeStatus.port })
+                    : t('forge.settings.notListening')}
+                </span>
+              )}
+            </span>
+          }
         />
 
         <div className="h-px bg-white/5" />

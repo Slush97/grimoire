@@ -55,6 +55,12 @@ export interface ModMetadata {
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;
+    /** Set when this VPK was handed over by deadlockforge.net through the local
+     *  install bridge (see services/forgeBridge.ts). Presence marks the mod as
+     *  forge-built so the UI can show the bundled DeadlockForge badge rather
+     *  than a GameBanana thumbnail (there is none to fetch, and Grimoire never
+     *  phones home for one). */
+    forgeInstall?: import('../../../src/types/mod').ForgeInstallInfo;
     /** Set on the single Locker cosmetics VPK that holds applied hero cards.
      *  The card selection set; rebuilt on every apply/revert. Presence marks
      *  the VPK as Locker-managed so other surfaces hide it. */

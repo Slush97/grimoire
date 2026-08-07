@@ -216,6 +216,12 @@ const { openSync, readSync, closeSync, statSync } = require('fs');
 
 const VPK_SIGNATURE = 0x55AA1234;
 
+// Mirror of isPlausibleVpkLength / MAX_VPK_TREE_SIZE in vpk.ts. This worker is
+// an eval'd source string so it cannot import them, but it is the parser the
+// conflict scan actually reaches: leaving it unclamped would keep the whole
+// allocation problem live no matter what vpk.ts does. Keep the two in step.
+const MAX_VPK_TREE_SIZE = 64 * 1024 * 1024;
+
 function readNullTerminatedString(buffer, offset) {
   let end = offset;
   while (end < buffer.length && buffer[end] !== 0) {
@@ -241,6 +247,17 @@ function parseVpkDirectory(vpkPath) {
     const version = headerBuffer.readUInt32LE(4);
     const treeSize = headerBuffer.readUInt32LE(8);
     const headerSize = version === 2 ? 28 : 12;
+
+    const fileSize = statSync(vpkPath).size;
+    if (
+      !Number.isFinite(treeSize) ||
+      treeSize < 0 ||
+      treeSize > MAX_VPK_TREE_SIZE ||
+      treeSize > Math.max(0, fileSize - headerSize)
+    ) {
+      closeSync(fd);
+      return null;
+    }
 
     const treeBuffer = Buffer.alloc(treeSize);
     readSync(fd, treeBuffer, 0, treeSize, headerSize);

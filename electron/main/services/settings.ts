@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     sidebarTransparent: false,
     backgroundGradient: null,
     verboseModTrace: false,
+    forgeLocalInstallEnabled: false,
 };
 
 /** Normalize user-editable settings.json data into a small, deterministic

@@ -13,6 +13,7 @@ import { fetchModDetails, type GameBananaModDetails } from './gamebanana';
 import { makeDisabledFileName, scanMods, disableMod, enableMod } from './mods';
 import { imprintFreshlyInstalled } from './imprintMods';
 import { validateDownloadUrl, validateFileSize } from './security';
+import { forgeFileNameStem } from './forgeProtocol';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
@@ -1483,6 +1484,110 @@ async function executeOneClickDownload(
 
     mainWindow?.webContents.send('download-complete', { modId, fileId });
     return { installedVpks };
+    } finally {
+        await cleanupDownloadWorkDir(workDir);
+    }
+}
+
+/**
+ * Install a VPK that arrived over the DeadlockForge local bridge.
+ *
+ * Deliberately separate from the download paths above: there is no URL, no
+ * archive, no GameBanana record to enrich from, and no queue to contend with
+ * (the bridge already serializes on its single-confirmation rule). What is
+ * shared is everything after the bytes land: conflict-free naming, metadata
+ * stamping, imprinting and the auto-enable policy, so a forge mod behaves
+ * exactly like any other install once it is on disk.
+ *
+ * The caller has already verified the file is a real VPK within the size
+ * envelope, and the user has confirmed the install dialog. `sourcePath` is
+ * copied, not moved, so the bridge stays the owner of its own temp file.
+ */
+export async function installForgeVpk(
+    deadlockPath: string,
+    forge: {
+        sourcePath: string;
+        name: string;
+        author?: string;
+        type?: string;
+        origin: string;
+    },
+    mainWindow: BrowserWindow | null
+): Promise<DownloadInstallResult> {
+    // Synthetic negative id, matching the convention direct-URL installs use:
+    // keeps UI events addressable without colliding with real GameBanana ids.
+    const modId = -Math.floor(Date.now() / 1000);
+    const fileId = -1;
+
+    const targetPath = getDisabledPath(deadlockPath);
+    const workDir = await createDownloadWorkDir();
+
+    try {
+        // The display name never reaches the filesystem directly: it goes
+        // through the same lowercase slug rule as every other install, so a
+        // hostile name cannot introduce separators or traversal sequences.
+        const stem = forgeFileNameStem(forge.name);
+        const stagedPath = join(workDir, `${stem}.vpk`);
+        await fs.copyFile(forge.sourcePath, stagedPath);
+
+        const renamed = await renameVpksToAvoidConflicts(
+            deadlockPath,
+            targetPath,
+            [{ path: stagedPath, fileName: basename(stagedPath) }],
+            forge.name
+        );
+        const installedVpks = renamed.map((r) => r.fileName);
+
+        // SoundForge output is hero voice/ability audio, so classify it as a
+        // Sound mod: that is what makes stampVpkLockerHero run its VPK-tree
+        // hero inference below and file the mod under the right hero in the
+        // Locker. Other forge types have no equivalent signal.
+        const section = forge.type === 'sound' ? 'Sound' : 'Mod';
+
+        const metadata = {
+            modName: forge.name,
+            author: forge.author,
+            // No thumbnailUrl: forge mods use the bundled DeadlockForge badge,
+            // keyed off the forgeInstall block below. Grimoire never fetches a
+            // remote image on the strength of an install request.
+            sourceSection: section,
+            lockerHero: undefined as string | undefined,
+            lockerHeroSource: undefined as LockerHeroSource | undefined,
+            forgeInstall: {
+                name: forge.name,
+                author: forge.author,
+                type: forge.type,
+                origin: forge.origin,
+                installedAt: new Date().toISOString(),
+            },
+        };
+
+        for (const vpkFileName of installedVpks) {
+            const vpkPath = join(targetPath, vpkFileName);
+            const base = stampVpkLockerHero(metadata, section, vpkPath);
+            await setModMetadataWithHash(vpkFileName, base, vpkPath);
+        }
+
+        const settings = loadSettings();
+        if (settings.experimentalVpkImprinting) {
+            await imprintFreshlyInstalled(deadlockPath, installedVpks);
+        }
+
+        // Sibling-variant handling is skipped on purpose: it keys off a real
+        // GameBanana mod id, and repeat forges of the same sound are legitimate
+        // separate mods. They install side by side and conflict detection
+        // surfaces the overlap if the user enables both.
+        //
+        // autoEnableDownloads is deliberately NOT honoured here. It means "enable
+        // things I chose to download", and a forge install is pushed by a web
+        // page rather than picked from Browse. Landing disabled keeps the second
+        // safety layer behind the confirmation dialog intact, and it keeps the
+        // dialog's promise ("it installs disabled, so you can review it") true
+        // for every user rather than only those with the setting off.
+
+        mainWindow?.webContents.send('download-complete', { modId, fileId });
+        console.log(`[forgeInstall] Installed ${installedVpks.length} VPK(s) from ${forge.origin}`);
+        return { installedVpks };
     } finally {
         await cleanupDownloadWorkDir(workDir);
     }

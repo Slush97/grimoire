@@ -1,0 +1,584 @@
+import { connect } from 'node:net';
+import { request as httpRequest } from 'node:http';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The bridge pulls in electron (BrowserWindow type only, at runtime nothing is
+// constructed) and the settings service. Both are stubbed so the HTTP surface
+// can be exercised in plain node.
+// isPackaged false mirrors a dev checkout, which is what enables the localhost
+// origins the DeadlockForge dev server needs.
+vi.mock('electron', () => ({ BrowserWindow: class { }, app: { isPackaged: false } }));
+
+const settings = { forgeLocalInstallEnabled: true, devMode: false };
+const saved: Record<string, unknown>[] = [];
+vi.mock('./settings', () => ({
+    loadSettings: () => settings,
+    saveSettings: (next: Record<string, unknown>) => {
+        saved.push(next);
+        Object.assign(settings, next);
+    },
+}));
+
+import {
+    configureForgeBridge,
+    getForgeBridgePort,
+    requestForgeEnable,
+    resolveForgeEnable,
+    resolveForgeInstallConfirmation,
+    startForgeBridge,
+    stopForgeBridge,
+    type ForgeInstallRequest,
+} from './forgeBridge';
+import { VPK_MAGIC } from './forgeProtocol';
+
+const ORIGIN = 'https://deadlockforge.net';
+
+/** Temp files the bridge creates, so tests can assert none are left behind. */
+const isForgeTemp = (name: string) => name.startsWith('grimoire-forge-');
+
+/** A minimally valid VPK body: correct magic, over the 1 KB floor. */
+function makeVpk(size = 4096): Buffer {
+    const buf = Buffer.alloc(size);
+    buf.writeUInt32LE(VPK_MAGIC, 0);
+    return buf;
+}
+
+/** Installs the bridge accepted, in arrival order. */
+let installed: ForgeInstallRequest[] = [];
+/** Requests the renderer was asked to confirm. */
+let prompted: ForgeInstallRequest[] = [];
+/** What the fake user answers. */
+let autoAccept = true;
+/** How many times the opt-in prompt was raised. */
+let enablePrompts = 0;
+
+interface TestResponse {
+    status: number;
+    headers: Record<string, string | string[] | undefined>;
+    text: string;
+    json: () => unknown;
+}
+
+/**
+ * Minimal HTTP client for these tests, on node:http with keep-alive disabled.
+ *
+ * Deliberately not fetch: each test restarts the bridge on the same port, and a
+ * pooling client happily reuses a socket belonging to the previous, now dead
+ * server. That surfaces as "other side closed" on whichever request comes next,
+ * which is a property of the client rather than anything wrong with the bridge.
+ * agent: false gives every request its own connection.
+ */
+function request(
+    path: string,
+    options: { method?: string; headers?: Record<string, string>; body?: Buffer } = {}
+): Promise<TestResponse> {
+    return new Promise((resolve, reject) => {
+        const req = httpRequest(
+            {
+                host: '127.0.0.1',
+                port: getForgeBridgePort() ?? 0,
+                path,
+                method: options.method ?? 'GET',
+                headers: options.headers ?? {},
+                agent: false,
+            },
+            (res) => {
+                const chunks: Buffer[] = [];
+                res.on('data', (c: Buffer) => chunks.push(c));
+                res.on('end', () => {
+                    const text = Buffer.concat(chunks).toString('utf8');
+                    resolve({
+                        status: res.statusCode ?? 0,
+                        headers: res.headers,
+                        text,
+                        json: () => JSON.parse(text),
+                    });
+                });
+            }
+        );
+        req.on('error', reject);
+        if (options.body) req.write(options.body);
+        req.end();
+    });
+}
+
+async function ping(headers: Record<string, string> = {}): Promise<TestResponse> {
+    return request('/forge/v1/ping', { headers: { Origin: ORIGIN, ...headers } });
+}
+
+async function install(
+    body: Buffer,
+    headers: Record<string, string> = {}
+): Promise<TestResponse> {
+    return request('/forge/v1/install', {
+        method: 'POST',
+        headers: {
+            Origin: ORIGIN,
+            'Content-Type': 'application/octet-stream',
+            'X-Forge-Protocol': '1',
+            'X-Forge-Name': 'Abrams%20Ult%20Airhorn',
+            'Content-Length': String(body.length),
+            ...headers,
+        },
+        body,
+    });
+}
+
+/** The confirmation is answered asynchronously, so give the handler a tick. */
+async function settle(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 60));
+}
+
+/** Send a hand-written request and return the response status code. */
+function rawRequest(raw: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+        const socket = connect(getForgeBridgePort()!, '127.0.0.1', () => {
+            socket.write(raw);
+        });
+        let buffer = '';
+        socket.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+            const match = /^HTTP\/1\.\d (\d{3})/.exec(buffer);
+            if (match) {
+                socket.destroy();
+                resolve(Number(match[1]));
+            }
+        });
+        socket.on('error', reject);
+        socket.setTimeout(3000, () => {
+            socket.destroy();
+            reject(new Error('raw request timed out'));
+        });
+    });
+}
+
+beforeEach(async () => {
+    installed = [];
+    prompted = [];
+    saved.length = 0;
+    autoAccept = true;
+    enablePrompts = 0;
+    settings.forgeLocalInstallEnabled = true;
+    settings.devMode = false;
+
+    configureForgeBridge(
+        async (request) => {
+            installed.push(request);
+        },
+        () =>
+            ({
+                // Stand in for the renderer: answer the confirmation as soon as
+                // the main process asks.
+                webContents: {
+                    send: (channel: string, data: { requestId: string }) => {
+                        if (channel === 'forge-enable-request') {
+                            enablePrompts += 1;
+                            return;
+                        }
+                        prompted.push(data as ForgeInstallRequest);
+                        setTimeout(
+                            () => resolveForgeInstallConfirmation(data.requestId, autoAccept),
+                            0
+                        );
+                    },
+                },
+                isDestroyed: () => false,
+            }) as never
+    );
+
+    await startForgeBridge();
+});
+
+afterEach(async () => {
+    await stopForgeBridge();
+});
+
+describe('bind', () => {
+    it('listens on loopback only', async () => {
+        expect(getForgeBridgePort()).not.toBeNull();
+        const res = await ping();
+        expect(res.status).toBe(200);
+    });
+
+    it('does not start when the setting is off', async () => {
+        await stopForgeBridge();
+        settings.forgeLocalInstallEnabled = false;
+        await startForgeBridge();
+        expect(getForgeBridgePort()).toBeNull();
+    });
+});
+
+describe('ping', () => {
+    it('reports readiness and nothing else', async () => {
+        const res = await ping();
+        const body = await res.json();
+        // No version string, no game path, no username, no mod counts: an
+        // allowlisted page learns only that the app is here.
+        expect(body).toEqual({ app: 'grimoire', protocol: 1, ready: true });
+    });
+
+    it('rejects an unknown origin', async () => {
+        const res = await ping({ Origin: 'https://evil.com' });
+        expect(res.status).toBe(403);
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    });
+
+    it('rejects a missing origin', async () => {
+        const res = await request('/forge/v1/ping');
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('preflight', () => {
+    it('grants private network access to an allowlisted origin', async () => {
+        const res = await request('/forge/v1/install', {
+            method: 'OPTIONS',
+            headers: {
+                Origin: ORIGIN,
+                'Access-Control-Request-Method': 'POST',
+                'Access-Control-Request-Private-Network': 'true',
+            },
+        });
+        expect(res.status).toBe(204);
+        expect(res.headers['access-control-allow-origin']).toBe(ORIGIN);
+        // Without this header Chrome blocks the real request outright.
+        expect(res.headers['access-control-allow-private-network']).toBe('true');
+    });
+
+    it('refuses the preflight for a foreign origin, so the POST never follows', async () => {
+        const res = await request('/forge/v1/install', {
+            method: 'OPTIONS',
+            headers: { Origin: 'https://evil.com', 'Access-Control-Request-Method': 'POST' },
+        });
+        expect(res.status).toBe(403);
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    });
+});
+
+describe('install', () => {
+    it('prompts, then installs on accept', async () => {
+        const res = await install(makeVpk());
+        expect(res.status).toBe(202);
+        await settle();
+
+        expect(prompted).toHaveLength(1);
+        expect(installed).toHaveLength(1);
+        expect(installed[0]!.name).toBe('Abrams Ult Airhorn');
+        expect(installed[0]!.origin).toBe(ORIGIN);
+        // Size is what we measured, not anything the caller claimed.
+        expect(installed[0]!.sizeBytes).toBe(4096);
+    });
+
+    it('installs nothing when the user declines', async () => {
+        autoAccept = false;
+        await install(makeVpk());
+        await settle();
+        expect(prompted).toHaveLength(1);
+        expect(installed).toHaveLength(0);
+    });
+
+    it('sanitizes the display name before it reaches the dialog', async () => {
+        await install(makeVpk(), {
+            'X-Forge-Name': encodeURIComponent('safe\u202egnp.exe'),
+        });
+        await settle();
+        expect(prompted[0]!.name).toBe('safegnp.exe');
+    });
+
+    it('rejects a payload that is not a VPK', async () => {
+        const notAVpk = Buffer.alloc(4096);
+        notAVpk.write('PK\u0003\u0004', 0);
+        const res = await install(notAVpk);
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual({ error: 'NOT_A_VPK' });
+        await settle();
+        // The user is never asked about something we would refuse anyway.
+        expect(prompted).toHaveLength(0);
+    });
+
+    it('rejects a body under the floor', async () => {
+        const res = await install(makeVpk(512));
+        expect(res.status).toBe(400);
+        await settle();
+        expect(installed).toHaveLength(0);
+    });
+
+    it('rejects a simple-request content type', async () => {
+        // The case that matters: a hostile page would use one of these
+        // precisely because it skips the preflight.
+        const res = await install(makeVpk(), { 'Content-Type': 'text/plain' });
+        expect(res.status).toBe(415);
+        await settle();
+        expect(prompted).toHaveLength(0);
+    });
+
+    it('answers a rejected request cleanly instead of resetting the socket', async () => {
+        // Regression: rejecting without consuming the body made Node tear the
+        // socket down, so the caller got a transport error rather than the
+        // status code. A site cannot tell BUSY from a closed app that way, and
+        // it would report the wrong thing. Body is deliberately larger than a
+        // socket buffer so the write is still in flight when we answer.
+        const big = makeVpk(256 * 1024);
+
+        const res = await install(big, { 'Content-Type': 'text/plain' });
+        expect(res.status).toBe(415);
+        expect(await res.json()).toEqual({ error: 'BAD_CONTENT_TYPE' });
+    });
+
+    it('answers BUSY cleanly while a large body is still arriving', async () => {
+        const big = makeVpk(256 * 1024);
+        const [a, b] = await Promise.all([
+            install(big, { Origin: 'https://deadlockforge.net' }),
+            install(big, { Origin: 'https://www.deadlockforge.net' }),
+        ]);
+        const statuses = [a.status, b.status].sort();
+        expect(statuses).toEqual([202, 429]);
+
+        // The rejected one must carry a readable body, not a reset connection.
+        const rejected = a.status === 429 ? a : b;
+        expect(await rejected.json()).toEqual({ error: 'BUSY' });
+        await settle();
+    });
+
+    it('rejects a missing protocol header', async () => {
+        const vpk = makeVpk();
+        const res = await request('/forge/v1/install', {
+            method: 'POST',
+            headers: {
+                Origin: ORIGIN,
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': String(vpk.length),
+            },
+            body: vpk,
+        });
+        expect(res.status).toBe(400);
+    });
+
+    it('rejects an oversized declared length before reading a byte', async () => {
+        // Raw socket rather than fetch: a well-behaved HTTP client refuses to
+        // send a Content-Length that does not match the body, and declaring a
+        // huge transfer we never intend to make is exactly the case under test.
+        const status = await rawRequest(
+            [
+                'POST /forge/v1/install HTTP/1.1',
+                `Host: 127.0.0.1:${getForgeBridgePort()}`,
+                `Origin: ${ORIGIN}`,
+                'Content-Type: application/octet-stream',
+                'X-Forge-Protocol: 1',
+                `Content-Length: ${600 * 1024 * 1024}`,
+                'Connection: close',
+                '',
+                '',
+            ].join('\r\n')
+        );
+        expect(status).toBe(413);
+        await settle();
+        expect(prompted).toHaveLength(0);
+    });
+
+    it('drops a second request while one confirmation is outstanding', async () => {
+        // Hold the first prompt open so the second arrives mid-flight.
+        autoAccept = true;
+        const held: string[] = [];
+        configureForgeBridge(
+            async (request) => {
+                installed.push(request);
+            },
+            () =>
+                ({
+                    webContents: {
+                        send: (_c: string, data: { requestId: string }) => {
+                            held.push(data.requestId);
+                        },
+                    },
+                    isDestroyed: () => false,
+                }) as never
+        );
+
+        const first = await install(makeVpk());
+        expect(first.status).toBe(202);
+
+        const second = await install(makeVpk());
+        expect(second.status).toBe(429);
+        expect(await second.json()).toEqual({ error: 'BUSY' });
+
+        resolveForgeInstallConfirmation(held[0]!, false);
+        await settle();
+    });
+
+    it('serializes concurrent installs and leaves no orphaned temp file', async () => {
+        // Regression: the busy check read pendingConfirm, which is only set once
+        // the body has finished streaming. Two requests arriving together both
+        // got past it, both wrote a temp file, and the loser's was orphaned. The
+        // per-origin cooldown did not help, since the apex and www origins are
+        // separate keys.
+        const before = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+
+        const [a, b] = await Promise.all([
+            install(makeVpk(), { Origin: 'https://deadlockforge.net' }),
+            install(makeVpk(), { Origin: 'https://www.deadlockforge.net' }),
+        ]);
+
+        const statuses = [a.status, b.status].sort();
+        expect(statuses).toEqual([202, 429]);
+        await settle();
+
+        // Exactly one reached the user.
+        expect(prompted).toHaveLength(1);
+
+        const after = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+        expect(after).toEqual(before);
+    });
+
+    it('survives an install handler that throws', async () => {
+        const before = (await fs.readdir(tmpdir())).filter(isForgeTemp);
+
+        // void handleInstall(...) had no catch, so a throw became an unhandled
+        // rejection in the main process.
+        configureForgeBridge(
+            async () => {
+                throw new Error('boom');
+            },
+            () =>
+                ({
+                    webContents: {
+                        send: (_c: string, data: { requestId: string }) => {
+                            if (!data?.requestId) return;
+                            setTimeout(() => resolveForgeInstallConfirmation(data.requestId, true), 0);
+                        },
+                    },
+                    isDestroyed: () => false,
+                }) as never
+        );
+
+        const res = await install(makeVpk());
+        expect(res.status).toBe(202);
+        await settle();
+
+        // Still serving, and the failed install cleaned up after itself.
+        // Compared against the starting set rather than asserting empty: tmpdir
+        // is shared with the rest of the machine.
+        const ping = await request('/forge/v1/ping', { headers: { Origin: ORIGIN } });
+        expect(ping.status).toBe(200);
+        expect((await fs.readdir(tmpdir())).filter(isForgeTemp)).toEqual(before);
+    });
+
+    it('refuses everything once the kill switch is off', async () => {
+        settings.forgeLocalInstallEnabled = false;
+        const res = await install(makeVpk());
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({ error: 'BRIDGE_DISABLED' });
+        await settle();
+        expect(installed).toHaveLength(0);
+    });
+});
+
+describe('dev origins', () => {
+    it('accepts a localhost dev server in an unpackaged build', async () => {
+        const res = await request('/forge/v1/ping', {
+            headers: { Origin: 'http://localhost:8765' },
+        });
+        expect(res.status).toBe(200);
+        expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8765');
+    });
+
+    it('still rejects non-loopback origins in an unpackaged build', async () => {
+        const res = await request('/forge/v1/ping', {
+            headers: { Origin: 'http://192.168.1.5:8765' },
+        });
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('opt-in prompt', () => {
+    it('does not ask when the bridge is already on', async () => {
+        requestForgeEnable();
+        expect(enablePrompts).toBe(0);
+    });
+
+    it('asks once, then turns the bridge on when accepted', async () => {
+        await stopForgeBridge();
+        settings.forgeLocalInstallEnabled = false;
+
+        requestForgeEnable();
+        expect(enablePrompts).toBe(1);
+
+        // A second fire while the prompt is open must not stack another.
+        requestForgeEnable();
+        expect(enablePrompts).toBe(1);
+
+        await resolveForgeEnable(true);
+        expect(settings.forgeLocalInstallEnabled).toBe(true);
+        expect(getForgeBridgePort()).not.toBeNull();
+    });
+
+    it('stops asking for the session once declined', async () => {
+        await stopForgeBridge();
+        settings.forgeLocalInstallEnabled = false;
+
+        requestForgeEnable();
+        expect(enablePrompts).toBe(1);
+        await resolveForgeEnable(false);
+
+        // A page firing the launch URL in a loop must not be able to nag.
+        requestForgeEnable();
+        requestForgeEnable();
+        expect(enablePrompts).toBe(1);
+        expect(settings.forgeLocalInstallEnabled).toBe(false);
+        expect(getForgeBridgePort()).toBeNull();
+    });
+});
+
+describe('connection limit', () => {
+    it('serves more concurrent connections than a browser will open', async () => {
+        // Regression: maxConnections was 8, and Node destroys the excess rather
+        // than queueing it, so callers got a reset instead of a response. CI
+        // surfaced it as "other side closed" once the client pool grew past the
+        // cap. A browser holds several sockets per origin, so this broke real
+        // traffic too, as an unexplained network error on the site.
+        const results = await Promise.all(
+            Array.from({ length: 40 }, async () => {
+                try {
+                    const res = await request('/forge/v1/ping', {
+                        headers: { Origin: ORIGIN },
+                    });
+                    return res.status;
+                } catch {
+                    return 0;
+                }
+            })
+        );
+        expect(results.filter((s) => s === 200)).toHaveLength(40);
+    });
+});
+
+describe('DNS rebinding', () => {
+    it('rejects a request whose Host is an attacker domain pointed at loopback', async () => {
+        // fetch always sets Host from the URL, so this needs a raw socket too.
+        const status = await rawRequest(
+            [
+                'GET /forge/v1/ping HTTP/1.1',
+                'Host: evil.com',
+                `Origin: ${ORIGIN}`,
+                'Connection: close',
+                '',
+                '',
+            ].join('\r\n')
+        );
+        expect(status).toBe(403);
+    });
+});
+
+describe('routing', () => {
+    it('404s an unknown path', async () => {
+        const res = await request('/forge/v1/anything', { headers: { Origin: ORIGIN } });
+        expect(res.status).toBe(404);
+    });
+
+    it('has no read endpoints: install does not answer GET', async () => {
+        const res = await request('/forge/v1/install', { headers: { Origin: ORIGIN } });
+        expect(res.status).toBe(404);
+    });
+});

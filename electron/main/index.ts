@@ -49,6 +49,7 @@ import {
     GRIMOIRE_PROTOCOL,
     findGrimoireUrlInArgv,
     handleOneClickInstall,
+    isForgeLaunchUrl,
     parseGrimoireUrl,
 } from './services/oneClickInstall';
 import {
@@ -96,10 +97,19 @@ import './ipc/servers';
 import './ipc/foundry';
 import './ipc/performanceConfig';
 import './ipc/dmmMigrate';
+import './ipc/forge';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
 import { loadSettings, saveSettings } from './services/settings';
+import {
+    configureForgeBridge,
+    requestForgeEnable,
+    startForgeBridge,
+    stopForgeBridge,
+    type ForgeInstallRequest,
+} from './services/forgeBridge';
+import { installForgeVpk } from './services/download';
 import { backfillMissingMetadataHashes } from './services/metadata';
 import { backfillImprintedFlags } from './services/imprintMods';
 import { destroyDiscordRpc } from './services/discordRpc';
@@ -132,6 +142,36 @@ function getConfiguredDeadlockPath(): string | null {
         return settings.devDeadlockPath;
     }
     return settings.deadlockPath;
+}
+
+/**
+ * Install a VPK handed over by deadlockforge.net through the local bridge.
+ *
+ * By the time this runs the bridge has verified the payload is a real VPK
+ * inside the size envelope, and the user has confirmed the dialog. All that is
+ * left is to route it into the normal install pipeline.
+ */
+async function handleForgeInstall(request: ForgeInstallRequest): Promise<void> {
+    const deadlockPath = getConfiguredDeadlockPath();
+    if (!deadlockPath) {
+        // The confirmation dialog already refuses to offer Install without a
+        // configured game folder, so reaching here means the renderer's copy of
+        // settings was stale. Nothing to install into: log and drop.
+        console.warn('[forgeInstall] No Deadlock path configured, ignoring install request');
+        return;
+    }
+
+    await installForgeVpk(
+        deadlockPath,
+        {
+            sourcePath: request.tempPath,
+            name: request.name,
+            author: request.author,
+            type: request.type,
+            origin: request.origin,
+        },
+        mainWindow
+    );
 }
 
 async function backfillStartupMetadataHashes(): Promise<void> {
@@ -408,6 +448,10 @@ if (!gotTheLock) {
         if (url) {
             if (isGrimoireAuthUrl(url)) {
                 void handleProtocolAuthCallback(url);
+            } else if (isForgeLaunchUrl(url)) {
+                // DeadlockForge could not find the bridge and asked us to start.
+                // Being open was the point; offer to switch the bridge on.
+                requestForgeEnable();
             } else {
                 const parsed = parseGrimoireUrl(url);
                 if (parsed) {
@@ -484,6 +528,12 @@ if (!gotTheLock) {
 
         createWindow();
 
+        // Start the DeadlockForge local install bridge. No-op unless the user
+        // has switched it on in Settings, so the listening socket does not
+        // exist for anyone who never uses DeadlockForge.
+        configureForgeBridge(handleForgeInstall, getMainWindow);
+        void startForgeBridge();
+
         // If we were launched via a `grimoire:` URL, dispatch it once the
         // renderer is ready so the UI can navigate + show a toast before the
         // download begins. webContents.once handles both cold-launch and
@@ -492,6 +542,12 @@ if (!gotTheLock) {
         if (initialProtocolUrl && mainWindow) {
             if (isGrimoireAuthUrl(initialProtocolUrl)) {
                 void handleProtocolAuthCallback(initialProtocolUrl);
+            } else if (isForgeLaunchUrl(initialProtocolUrl)) {
+                // Cold launch from the site's "start Grimoire" URL. Wait for the
+                // renderer so the prompt has somewhere to appear.
+                mainWindow.webContents.once('did-finish-load', () => {
+                    requestForgeEnable();
+                });
             } else {
                 const parsedInitial = parseGrimoireUrl(initialProtocolUrl);
                 if (parsedInitial) {
@@ -549,6 +605,7 @@ if (!gotTheLock) {
     // user's profile the moment Grimoire quits (no-op if RPC was never enabled).
     app.on('before-quit', () => {
         destroyDiscordRpc();
+        void stopForgeBridge();
     });
 }
 
