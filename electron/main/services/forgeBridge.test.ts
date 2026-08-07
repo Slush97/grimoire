@@ -268,6 +268,34 @@ describe('install', () => {
         expect(prompted).toHaveLength(0);
     });
 
+    it('answers a rejected request cleanly instead of resetting the socket', async () => {
+        // Regression: rejecting without consuming the body made Node tear the
+        // socket down, so the caller got a transport error rather than the
+        // status code. A site cannot tell BUSY from a closed app that way, and
+        // it would report the wrong thing. Body is deliberately larger than a
+        // socket buffer so the write is still in flight when we answer.
+        const big = makeVpk(256 * 1024);
+
+        const res = await install(big, { 'Content-Type': 'text/plain' });
+        expect(res.status).toBe(415);
+        expect(await res.json()).toEqual({ error: 'BAD_CONTENT_TYPE' });
+    });
+
+    it('answers BUSY cleanly while a large body is still arriving', async () => {
+        const big = makeVpk(256 * 1024);
+        const [a, b] = await Promise.all([
+            install(big, { Origin: 'https://deadlockforge.net' }),
+            install(big, { Origin: 'https://www.deadlockforge.net' }),
+        ]);
+        const statuses = [a.status, b.status].sort();
+        expect(statuses).toEqual([202, 429]);
+
+        // The rejected one must carry a readable body, not a reset connection.
+        const rejected = a.status === 429 ? a : b;
+        expect(await rejected.json()).toEqual({ error: 'BUSY' });
+        await settle();
+    });
+
     it('rejects a missing protocol header', async () => {
         const res = await fetch(`${baseUrl()}/forge/v1/install`, {
             method: 'POST',
@@ -451,6 +479,29 @@ describe('opt-in prompt', () => {
         expect(enablePrompts).toBe(1);
         expect(settings.forgeLocalInstallEnabled).toBe(false);
         expect(getForgeBridgePort()).toBeNull();
+    });
+});
+
+describe('connection limit', () => {
+    it('serves more concurrent connections than a browser will open', async () => {
+        // Regression: maxConnections was 8, and Node destroys the excess rather
+        // than queueing it, so callers got a reset instead of a response. CI
+        // surfaced it as "other side closed" once the client pool grew past the
+        // cap. A browser holds several sockets per origin, so this broke real
+        // traffic too, as an unexplained network error on the site.
+        const results = await Promise.all(
+            Array.from({ length: 40 }, async () => {
+                try {
+                    const res = await fetch(`${baseUrl()}/forge/v1/ping`, {
+                        headers: { Origin: ORIGIN },
+                    });
+                    return res.status;
+                } catch {
+                    return 0;
+                }
+            })
+        );
+        expect(results.filter((s) => s === 200)).toHaveLength(40);
     });
 });
 

@@ -69,8 +69,22 @@ const ORIGIN_COOLDOWN_MS = 3000;
 const HEADERS_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
-/** Concurrent sockets. The site opens one at a time; this is purely a cap. */
-const MAX_CONNECTIONS = 8;
+/**
+ * Concurrent sockets.
+ *
+ * Node does not queue past this: it destroys the excess connections outright,
+ * so the caller sees a reset rather than a response. A browser keeps several
+ * sockets alive per origin (preflight, probe, install, plus anything the pool
+ * holds open), so a tight cap silently breaks legitimate traffic and surfaces
+ * as an unexplained network error on the site. This is only a backstop against
+ * socket exhaustion; the real limits are the single in-flight install and the
+ * body size cap.
+ */
+const MAX_CONNECTIONS = 64;
+
+/** How much of a rejected request's body we will read and throw away so the
+ *  caller can read our response. Past this the socket is dropped instead. */
+const MAX_REJECT_DRAIN_BYTES = 2 * 1024 * 1024;
 
 export interface ForgeInstallRequest {
     requestId: string;
@@ -158,7 +172,32 @@ function sendJson(res: ServerResponse, status: number, body: Record<string, unkn
     res.end(payload);
 }
 
-function sendRejection(res: ServerResponse, rejection: ForgeRejection): void {
+/**
+ * Reject a request that may still be sending a body.
+ *
+ * Answering without consuming the body makes Node tear the socket down, and
+ * the caller then sees a transport error rather than our status code. That
+ * matters for every early rejection: a site told "connection reset" cannot
+ * tell BUSY from a closed app, so it would report the wrong thing to the user.
+ *
+ * The body is drained and discarded, capped so a large payload we have already
+ * decided to refuse cannot be used to make us read half a gigabyte. Past the
+ * cap the socket is dropped, which is the one case where the caller does not
+ * get a clean answer.
+ */
+function sendRejection(
+    res: ServerResponse,
+    rejection: ForgeRejection,
+    req?: IncomingMessage
+): void {
+    if (req && !req.readableEnded) {
+        let drained = 0;
+        req.on('data', (chunk: Buffer) => {
+            drained += chunk.length;
+            if (drained > MAX_REJECT_DRAIN_BYTES) req.destroy();
+        });
+        req.resume();
+    }
     sendJson(res, rejection.status, { error: rejection.reason });
 }
 
@@ -310,13 +349,13 @@ async function handleInstall(
         req.headers[FORGE_PROTOCOL_HEADER] as string | undefined
     );
     if (headerCheck !== true) {
-        sendRejection(res, headerCheck);
+        sendRejection(res, headerCheck, req);
         return;
     }
 
     const lengthCheck = validateDeclaredLength(req.headers['content-length']);
     if (lengthCheck !== true) {
-        sendRejection(res, lengthCheck);
+        sendRejection(res, lengthCheck, req);
         return;
     }
 
@@ -328,7 +367,7 @@ async function handleInstall(
     // the winner replaced pendingConfirm. The per-origin cooldown does not
     // serialize them either, since the apex and www origins are distinct keys.
     if (installInFlight || pendingConfirm) {
-        sendRejection(res, { ok: false, reason: 'BUSY', status: 429 });
+        sendRejection(res, { ok: false, reason: 'BUSY', status: 429 }, req);
         return;
     }
     installInFlight = true;
@@ -342,7 +381,7 @@ async function handleInstall(
     try {
         const lastAccepted = lastAcceptedByOrigin.get(origin) ?? 0;
         if (Date.now() - lastAccepted < ORIGIN_COOLDOWN_MS) {
-            sendRejection(res, { ok: false, reason: 'COOLDOWN', status: 429 });
+            sendRejection(res, { ok: false, reason: 'COOLDOWN', status: 429 }, req);
             return;
         }
         lastAcceptedByOrigin.set(origin, Date.now());
@@ -428,7 +467,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     // Re-read settings per request so toggling the kill switch takes effect
     // immediately, without needing a restart.
     if (!loadSettings().forgeLocalInstallEnabled) {
-        sendRejection(res, { ok: false, reason: 'BRIDGE_DISABLED', status: 403 });
+        sendRejection(res, { ok: false, reason: 'BRIDGE_DISABLED', status: 403 }, req);
         return;
     }
 
@@ -441,14 +480,14 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     if (!originCheck.ok) {
         // Note: no CORS headers on a rejection, so a disallowed page cannot
         // read this response either.
-        sendRejection(res, originCheck);
+        sendRejection(res, originCheck, req);
         return;
     }
     const { origin } = originCheck;
 
     const hostCheck = validateHost(req.headers.host, boundPort ?? 0);
     if (hostCheck !== true) {
-        sendRejection(res, hostCheck);
+        sendRejection(res, hostCheck, req);
         return;
     }
 
@@ -483,7 +522,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
         return;
     }
 
-    sendRejection(res, { ok: false, reason: 'NOT_FOUND', status: 404 });
+    sendRejection(res, { ok: false, reason: 'NOT_FOUND', status: 404 }, req);
 }
 
 /** Try each candidate port until one binds. */
