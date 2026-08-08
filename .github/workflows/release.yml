@@ -91,9 +91,10 @@ jobs:
           # installers can't ship pointing at localhost:8787.
           GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.slusheliott.workers.dev
           # No Apple Developer certificate yet. Without this, electron-builder
-          # hunts the keychain for a signing identity and warns noisily; it
-          # still ad-hoc signs the arm64 output, which is what lets the app
-          # launch on Apple Silicon at all.
+          # hunts the runner keychain for a signing identity and fails noisily.
+          # It does not fall back to ad-hoc signing, it skips signing entirely,
+          # so scripts/mac-adhoc-sign.cjs applies the ad-hoc signature that an
+          # arm64 bundle needs to launch at all.
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           if [ "${{ matrix.platform }}" = "linux" ]; then

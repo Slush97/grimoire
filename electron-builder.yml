@@ -61,10 +61,14 @@ win:
 # (see scripts/fetch-vpkmerge.mjs), so pinning arm64 keeps the packaged build
 # from silently shipping without a working merge binary.
 #
-# This build is NOT notarized: that needs a paid Apple Developer certificate.
-# electron-builder still ad-hoc signs the arm64 output (required for anything
-# to launch on Apple Silicon), but Gatekeeper quarantines the download, so
-# first launch needs the right-click > Open dance. See README.
+# This build is NOT signed by a real identity and NOT notarized: both need a
+# paid Apple Developer certificate. electron-builder does not ad-hoc sign as a
+# fallback either, it skips signing outright when it finds no identity, and an
+# unsigned arm64 bundle will not launch at all. scripts/mac-adhoc-sign.cjs
+# applies the ad-hoc signature instead, via afterPack. Gatekeeper still
+# quarantines the download, so first launch needs the right-click > Open dance.
+# See README.
+afterPack: ./scripts/mac-adhoc-sign.cjs
 mac:
   target:
     - target: dmg
