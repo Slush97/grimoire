@@ -55,6 +55,23 @@ win:
     - nsis
     - portable
   icon: resources/icon.ico
+# macOS runs Deadlock through a CrossOver bottle (see docs/macos.md), so the
+# audience is Apple Silicon only in practice.
+#
+# There is no Developer ID cert. identity is pinned to null so electron-builder
+# never auto-discovers the local Apple Development cert (which is not valid for
+# distribution and would fail on every other machine). Skipping electron-builder
+# signing leaves the bundle with an INVALID signature, which macOS reports as
+# "damaged", so scripts/adhoc-sign-mac.mjs re-signs ad-hoc afterwards. Users
+# still get the "unidentified developer" prompt on first launch.
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.games
+  icon: resources/icon.png
+  identity: null
+afterPack: scripts/adhoc-sign-mac.mjs
 nsis:
   oneClick: false
   perMachine: false

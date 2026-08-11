@@ -22,8 +22,8 @@
 
 import { promises as fs, existsSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { spawn } from 'child_process';
+import { getSteamRoots } from './steamRoots';
 
 export const DEADLOCK_STEAM_APP_ID = '1422450';
 
@@ -36,21 +36,13 @@ export interface LaunchOptionsLookup {
     currentValue: string | null;
 }
 
-/** Per-platform candidate locations for Steam's `userdata` root. */
+/**
+ * Candidate locations for Steam's `userdata` root, one per discovered Steam
+ * root. On macOS that includes the Steam inside each CrossOver bottle, whose
+ * localconfig.vdf is the one that actually governs Deadlock. See steamRoots.ts.
+ */
 function getSteamUserdataRoots(): string[] {
-    const paths: string[] = [];
-    const home = homedir();
-    if (process.platform === 'linux') {
-        paths.push(join(home, '.steam/steam/userdata'));
-        paths.push(join(home, '.local/share/Steam/userdata'));
-        paths.push(join(home, '.var/app/com.valvesoftware.Steam/.steam/steam/userdata'));
-    } else if (process.platform === 'win32') {
-        paths.push('C:\\Program Files (x86)\\Steam\\userdata');
-        paths.push('C:\\Program Files\\Steam\\userdata');
-    } else if (process.platform === 'darwin') {
-        paths.push(join(home, 'Library/Application Support/Steam/userdata'));
-    }
-    return paths;
+    return getSteamRoots().map((root) => join(root, 'userdata'));
 }
 
 /**
