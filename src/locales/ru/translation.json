@@ -52,7 +52,7 @@
     "versusLower": "И"
   },
   "sync": {
-    "syncing": "Синхронтзация {{section}}: {{percent}}%",
+    "syncing": "Синхронизация {{section}}: {{percent}}%",
     "error": "Ошибка синхронизации: {{section}}",
     "sections": {
       "Mod": "Моды",
