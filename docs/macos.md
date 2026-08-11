@@ -95,13 +95,13 @@ shipping a build with no mod merging.
   "unidentified developer" prompt on first launch.
 - **Auto-update does not work on macOS.** Squirrel.Mac validates that an update
   carries the same signing identity as the running app, and an ad-hoc signature
-  has none (`TeamIdentifier=not set`). `getInstallSource()` in
-  `services/updater.ts` only special-cases Linux, so macOS is still treated as
-  `'standard'` and the in-app updater is offered even though installing will
-  fail. macOS users have to download each release manually. Fixing this
-  properly needs a paid Developer ID and notarization; short of that, macOS
-  should be routed to a manual-download path the way managed Linux installs
-  are.
+  has none (`TeamIdentifier=not set`), so an in-app update would download and
+  then fail at the install step. `getInstallSource()` reports `'manual'` on
+  darwin to handle this: unlike `'managed'`, which defers the whole lifecycle
+  to a package manager and never checks, `'manual'` still checks and still
+  reports a new version, but `downloadUpdate` and `quitAndInstall` are gated
+  and the UI points at the releases page instead. Users update by downloading
+  each release. Fixing it properly needs a paid Developer ID and notarization.
 - **CI does not cover macOS.** `ci.yml` runs `ubuntu-latest` only, so a
   Mac-only build break surfaces at release time rather than on the PR. The
   bottle discovery, drive mapping, and launch-argument tests are all
