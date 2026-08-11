@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { homedir } from 'os'
+import { getSteamRoots } from './steamRoots'
 
 export interface SteamUser {
     steamId64: string
@@ -13,24 +13,14 @@ export interface SteamUser {
 }
 
 /**
- * Get platform-specific Steam config paths
+ * Steam config folders to probe, one per discovered Steam root.
+ *
+ * On macOS this includes the Steam inside each CrossOver bottle, which is the
+ * only place a Deadlock player's loginusers.vdf can actually be, since the
+ * native macOS client cannot install the game. See steamRoots.ts.
  */
 function getSteamConfigPaths(): string[] {
-    const paths: string[] = []
-    const home = homedir()
-
-    if (process.platform === 'linux') {
-        paths.push(join(home, '.steam/steam/config'))
-        paths.push(join(home, '.local/share/Steam/config'))
-        paths.push(join(home, '.var/app/com.valvesoftware.Steam/.steam/steam/config'))
-    } else if (process.platform === 'win32') {
-        paths.push('C:\\Program Files (x86)\\Steam\\config')
-        paths.push('C:\\Program Files\\Steam\\config')
-    } else if (process.platform === 'darwin') {
-        paths.push(join(home, 'Library/Application Support/Steam/config'))
-    }
-
-    return paths
+    return getSteamRoots().map((root) => join(root, 'config'))
 }
 
 /**

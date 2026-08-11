@@ -13,8 +13,11 @@ import {
 } from './deadlock';
 import { loadSettings } from './settings';
 import { writeLaunchOptions, readLaunchOptions, isSteamRunning } from './launchOptions';
+import { findBottleForPath } from './steamRoots';
+import { launchAppInBottle } from './bottleLaunch';
 
-// Deadlock's Steam AppID — used for the steam://rungameid/... URI scheme.
+// Deadlock's Steam AppID. Used for the steam://rungameid/... URI scheme on
+// Windows and Linux, and for steam.exe -applaunch inside a bottle on macOS.
 const DEADLOCK_STEAM_APP_ID = 1422450;
 const DEADLOCK_PROCESS_NAME = 'deadlock.exe';
 
@@ -134,7 +137,10 @@ export async function isDeadlockRunning(): Promise<boolean> {
             ]);
             return /deadlock\.exe/i.test(result.stdout);
         }
-        if (process.platform === 'linux') {
+        // macOS behaves like Linux here: the game runs as a Windows process
+        // under a translation layer (Wine/CrossOver rather than Proton), so the
+        // host only ever sees it via the full cmdline.
+        if (process.platform === 'linux' || process.platform === 'darwin') {
             const result = await runCommand('pgrep', ['-f', DEADLOCK_PROCESS_NAME]);
             return result.code === 0 && result.stdout.trim().length > 0;
         }
@@ -178,7 +184,7 @@ async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
                 : ['/IM', DEADLOCK_PROCESS_NAME, '/T']
         );
     }
-    if (process.platform === 'linux') {
+    if (process.platform === 'linux' || process.platform === 'darwin') {
         return runCommand('pkill', [force ? '-KILL' : '-TERM', '-f', DEADLOCK_PROCESS_NAME]);
     }
     return { code: 0, stdout: '', stderr: '' };
@@ -434,8 +440,20 @@ async function syncLaunchOptionsToSteam(): Promise<void> {
 
 /**
  * Trigger Steam to launch Deadlock. Doesn't wait for the game to actually start.
+ *
+ * When the install lives inside a CrossOver bottle (the only way Deadlock
+ * exists on macOS, since it ships no macOS depot) the steam:// URL is useless:
+ * the host handler is the native Steam client, which does not have the game.
+ * Drive that bottle's own steam.exe instead.
  */
-async function triggerSteamLaunch(): Promise<void> {
+async function triggerSteamLaunch(deadlockPath: string): Promise<void> {
+    if (process.platform === 'darwin') {
+        const bottle = findBottleForPath(deadlockPath);
+        if (bottle) {
+            launchAppInBottle(bottle, DEADLOCK_STEAM_APP_ID);
+            return;
+        }
+    }
     await shell.openExternal(`steam://rungameid/${DEADLOCK_STEAM_APP_ID}`);
 }
 
@@ -472,7 +490,7 @@ export async function launchModded({
         }
         await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
-        await triggerSteamLaunch();
+        await triggerSteamLaunch(deadlockPath);
     } finally {
         launchInFlight = false;
     }
@@ -523,7 +541,7 @@ export async function launchVanilla({
     try {
         await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
-        await triggerSteamLaunch();
+        await triggerSteamLaunch(deadlockPath);
     } catch (err) {
         // Steam URL failed — immediately restore so the user isn't left with
         // no mods AND no game.
