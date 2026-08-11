@@ -353,3 +353,109 @@ jobs:
           aws s3 cp repo/grimoire.gpg "s3://${BUCKET}/grimoire.gpg" \
             --endpoint-url "$R2_ENDPOINT" \
             --cache-control "no-cache"
+
+  # The flatpak repackages the released .deb (same binaries users already run)
+  # rather than building from source, so it can only be assembled after the
+  # release exists. This job patches the manifest to this version, builds the
+  # bundle, attaches it to the release, and commits the bump back to main so
+  # the repo matches what shipped. That last part used to be a manual chore
+  # (see "chore(flatpak): repackage the v1.27.0 deb").
+  flatpak-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') && inputs.draft != true
+
+    permissions:
+      contents: write
+
+    # Matches runtime-version/base-version in the manifest. The image ships
+    # flatpak + flatpak-builder and pre-adds the flathub remote; --privileged
+    # is required for the bubblewrap sandbox the builder runs builds in.
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+
+    steps:
+      # Check out main rather than the tag: a tag checkout is detached and the
+      # manifest bump at the end of this job needs a branch to push to.
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      # Only needed to hash the .deb. flatpak-builder itself fetches the .deb
+      # from the release URL pinned in the manifest, so the bundle is built
+      # from exactly the bytes users download.
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-build
+          path: artifacts
+
+      - name: Point the manifest at this release
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB="artifacts/grimoire_${VERSION}_amd64.deb"
+          if [ ! -f "$DEB" ]; then
+            echo "ERROR: $DEB not found in artifacts"; ls -la artifacts; exit 1
+          fi
+          SHA="$(sha256sum "$DEB" | awk '{print $1}')"
+          DATE="$(date -u +%Y-%m-%d)"
+          MANIFEST=flatpak/com.grimoiremods.Grimoire.yml
+          METAINFO=flatpak/com.grimoiremods.Grimoire.metainfo.xml
+
+          # Three version-stamped spots in the manifest: the ar command that
+          # unpacks the .deb, and the source url/sha256 pair. The 8-space
+          # anchors keep these off the sibling `path:` sources below them.
+          sed -i "s|^      - ar x grimoire_.*_amd64\.deb$|      - ar x grimoire_${VERSION}_amd64.deb|" "$MANIFEST"
+          sed -i "s|^        url: .*$|        url: https://github.com/Slush97/grimoire/releases/download/v${VERSION}/grimoire_${VERSION}_amd64.deb|" "$MANIFEST"
+          sed -i "s|^        sha256: .*$|        sha256: ${SHA}|" "$MANIFEST"
+
+          # Newest release first. Skipped if the entry already exists so a
+          # re-run of this job stays idempotent.
+          if grep -q "version=\"${VERSION}\"" "$METAINFO"; then
+            echo "metainfo already lists ${VERSION}"
+          else
+            sed -i "s|^  <releases>$|  <releases>\n    <release version=\"${VERSION}\" date=\"${DATE}\"/>|" "$METAINFO"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "=== $MANIFEST (sources) ==="
+          grep -A4 '^    sources:' "$MANIFEST"
+          echo "=== $METAINFO (releases) ==="
+          grep -A3 '<releases>' "$METAINFO"
+
+      - name: Build bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: flatpak/com.grimoiremods.Grimoire.yml
+          bundle: Grimoire-${{ steps.meta.outputs.version }}.flatpak
+          # The .deb source is version-stamped, so a build dir cached from the
+          # previous release would never be reused anyway.
+          cache: false
+
+      - name: Attach bundle to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: Grimoire-${{ steps.meta.outputs.version }}.flatpak
+
+      # Runs after the bundle is attached: if the push is rejected the release
+      # is already complete and only the repo-side bump needs redoing.
+      - name: Commit the manifest bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "esocidae"
+          git config user.email "slusheliott@gmail.com"
+          git add flatpak/com.grimoiremods.Grimoire.yml flatpak/com.grimoiremods.Grimoire.metainfo.xml
+          if git diff --cached --quiet; then
+            echo "No changes to push; manifest already matches."
+            exit 0
+          fi
+          git commit -m "chore(flatpak): repackage the v${{ steps.meta.outputs.version }} deb"
+          git push origin main
