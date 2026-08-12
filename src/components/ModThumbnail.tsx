@@ -205,7 +205,12 @@ type CollageCell =
  * surface because the grid parent uses the same bg as the cells.
  */
 function buildCollage(sources: MergedModSource[]): { cells: CollageCell[]; cols: number } {
-  const withThumbs = sources.filter((s) => !!s.thumbnailUrl);
+  // merged.sources is stored in vpkmerge argv order (descending priority,
+  // last-input-wins), so render ascending pakNN to match the load-order list
+  // in MergedContentsModal and the merge modal.
+  const withThumbs = sources
+    .filter((s) => !!s.thumbnailUrl)
+    .sort((a, b) => a.priorityAtMergeTime - b.priorityAtMergeTime);
   const total = withThumbs.length;
   if (total === 0) return { cells: [], cols: 1 };
 
