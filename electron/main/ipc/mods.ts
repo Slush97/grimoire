@@ -40,6 +40,7 @@ import {
     unmergeMod,
     extractMergeSource,
     addMergeSources,
+    replaceMergeSources,
     reserveOutputSlot,
 } from '../services/modMerger';
 import {
@@ -61,7 +62,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, AddMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -1777,6 +1778,26 @@ ipcMain.handle(
             throw new Error('No Deadlock path configured');
         }
         return addMergeSources(deadlockPath, mergedModId, addModIds, { strict });
+    }
+);
+
+// replace-merge-sources - swap absorbed sources for freshly downloaded
+// replacements and rebuild the merge in its current slot. Each replacement
+// inherits the retired source's merge-time priority, so collision order
+// survives. Old source VPKs are deleted only after the swap lands.
+ipcMain.handle(
+    'replace-merge-sources',
+    async (
+        _,
+        mergedModId: string,
+        replacements: MergeSourceReplacement[],
+        strict = false
+    ): Promise<ReplaceMergeSourcesResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        return replaceMergeSources(deadlockPath, mergedModId, replacements, { strict });
     }
 );
 
