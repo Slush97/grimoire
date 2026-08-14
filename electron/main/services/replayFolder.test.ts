@@ -5,7 +5,7 @@
  * them in isolation. No electron touchpoints in this dep chain, so the real
  * service runs.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import {
   mkdtempSync,
   mkdirSync,
@@ -16,8 +16,10 @@ import {
   readdirSync,
   realpathSync,
   symlinkSync,
+  statSync,
+  rmSync,
 } from 'fs';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
 import { join } from 'path';
 import { ensureReplayFolderLink } from './replayFolder';
 
@@ -155,5 +157,49 @@ describe('ensureReplayFolderLink', () => {
     expect(lstatSync(real).isSymbolicLink()).toBe(true);
     writeFileSync(join(link, '123.dem'), 'demo');
     expect(readFileSync(join(elsewhere, '123.dem'), 'utf-8')).toBe('demo');
+  });
+
+  // The "replays on another drive" case above, but with the drive boundary that
+  // makes it bite. rename() cannot cross a filesystem, so on Windows a mod
+  // folder full of replays (which is the normal state after 1.27.0) plus a
+  // citadel/replays junction to another volume throws EXDEV on the first file
+  // and no folder is ever linked. Both trees are under tmpdir() in the test
+  // above, so it can never catch that.
+  //
+  // Reproduced here by straddling a real boundary: tmpdir() is tmpfs on most
+  // Linux hosts while $HOME is a disk filesystem. Skipped rather than faked when
+  // the host has them on one device, since a mocked EXDEV would only assert that
+  // the code does what it was written to do.
+  const crossDevice = (() => {
+    try {
+      const onDisk = mkdtempSync(join(homedir(), '.grimoire-replays-xdev-'));
+      const differs = statSync(onDisk).dev !== statSync(tmpdir()).dev;
+      if (!differs) rmSync(onDisk, { recursive: true, force: true });
+      return differs ? onDisk : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  (crossDevice ? it : it.skip)('moves replays onto another volume instead of failing EXDEV', () => {
+    const { root, real, link } = sandbox();
+    const elsewhere = mkdtempSync(join(crossDevice!, 'target-'));
+    symlinkSync(elsewhere, real, 'junction');
+    mkdirSync(link, { recursive: true });
+    writeFileSync(join(link, '456.dem'), 'moved');
+
+    // Guard the premise: if these ever land on one device the test proves nothing.
+    expect(statSync(link).dev).not.toBe(statSync(elsewhere).dev);
+
+    ensureReplayFolderLink(root);
+
+    expect(readFileSync(join(elsewhere, '456.dem'), 'utf-8')).toBe('moved');
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    writeFileSync(join(link, '123.dem'), 'demo');
+    expect(readFileSync(join(elsewhere, '123.dem'), 'utf-8')).toBe('demo');
+  });
+
+  afterAll(() => {
+    if (crossDevice) rmSync(crossDevice, { recursive: true, force: true });
   });
 });
