@@ -3,25 +3,20 @@ import { Download, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type {
-    DownloadQueueItem,
     DownloadProgressData,
     DownloadServerStatusData,
 } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
 import { rollPreparingSuffix } from '../lib/easterEggs';
 import Tx from './translation/Tx';
+import { getVisibleDownloadQueue, useDownloadActivity } from '../lib/downloadActivity';
 
 interface DownloadQueueIndicatorProps {
     className?: string;
 }
 
-interface QueueState {
-    queue: DownloadQueueItem[];
-    currentDownload: DownloadQueueItem | null;
-    progress: { downloaded: number; total: number } | null;
-}
-
 interface SpeedSample {
+    target: string;
     time: number;
     bytes: number;
 }
@@ -43,11 +38,13 @@ function formatEta(seconds: number, t: TFunction): string {
 
 export default function DownloadQueueIndicator({ className = '' }: DownloadQueueIndicatorProps) {
     const { t } = useTranslation();
-    const [queueState, setQueueState] = useState<QueueState>({
-        queue: [],
-        currentDownload: null,
-        progress: null,
-    });
+    const downloadActivity = useDownloadActivity();
+    const visibleDownloads = getVisibleDownloadQueue(downloadActivity);
+    const queueState = {
+        queue: visibleDownloads.queue,
+        currentDownload: visibleDownloads.current,
+        progress: downloadActivity.current ? downloadActivity.progress : null,
+    };
     const [isExpanded, setIsExpanded] = useState(false);
     const [serverStatus, setServerStatus] = useState<DownloadServerStatusData | null>(null);
 
@@ -56,72 +53,54 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     // changes so we report average throughput for this file rather than
     // bleeding speed from the previous one.
     const sampleRef = useRef<SpeedSample | null>(null);
-    const [speed, setSpeed] = useState(0);
+    const [speedState, setSpeedState] = useState<{ target: string | null; value: number }>({
+        target: null,
+        value: 0,
+    });
     const [preparingSuffix] = useState(rollPreparingSuffix);
 
     useEffect(() => {
-        Promise.all([
-            window.electronAPI.getDownloadQueue(),
-            window.electronAPI.getCurrentDownload(),
-        ]).then(([queue, currentDownload]) => {
-            setQueueState((prev) => ({ ...prev, queue, currentDownload }));
-        });
-
-        const queueUnsub = window.electronAPI.onDownloadQueueUpdated((data) => {
-            setQueueState((prev) => {
-                const nextCurrent = data.currentDownload;
-                const switched =
-                    prev.currentDownload?.modId !== nextCurrent?.modId ||
-                    prev.currentDownload?.fileId !== nextCurrent?.fileId;
-                if (switched) {
-                    sampleRef.current = null;
-                    setSpeed(0);
-                    setServerStatus(null);
-                }
-                return {
-                    ...prev,
-                    queue: data.queue,
-                    currentDownload: nextCurrent,
-                    progress: switched ? null : prev.progress,
-                };
-            });
-        });
-
         const progressUnsub = window.electronAPI.onDownloadProgress((data: DownloadProgressData) => {
             const now = Date.now();
+            const target = `${data.modId}:${data.fileId}`;
             const anchor = sampleRef.current;
-            if (!anchor) {
-                sampleRef.current = { time: now, bytes: data.downloaded };
+            if (!anchor || anchor.target !== target) {
+                sampleRef.current = { target, time: now, bytes: data.downloaded };
+                setSpeedState({ target, value: 0 });
             } else {
                 const dt = (now - anchor.time) / 1000;
                 if (dt > 0.25) {
                     const rate = (data.downloaded - anchor.bytes) / dt;
                     // Light smoothing so the readout doesn't twitch every tick.
-                    setSpeed((prev) => (prev <= 0 ? rate : prev * 0.7 + rate * 0.3));
+                    setSpeedState((prev) => ({
+                        target,
+                        value: prev.target !== target || prev.value <= 0
+                            ? rate
+                            : prev.value * 0.7 + rate * 0.3,
+                    }));
                 }
             }
-            setQueueState((prev) => ({
-                ...prev,
-                progress: { downloaded: data.downloaded, total: data.total },
-            }));
         });
 
         const completeUnsub = window.electronAPI.onDownloadComplete(() => {
             sampleRef.current = null;
-            setSpeed(0);
+            setSpeedState({ target: null, value: 0 });
             setServerStatus(null);
-            setQueueState((prev) => ({ ...prev, progress: null }));
         });
 
         const serverStatusUnsub = window.electronAPI.onDownloadServerStatus(setServerStatus);
 
         return () => {
-            queueUnsub();
             progressUnsub();
             completeUnsub();
             serverStatusUnsub();
         };
     }, []);
+
+    const currentTarget = queueState.currentDownload
+        ? `${queueState.currentDownload.modId}:${queueState.currentDownload.fileId}`
+        : null;
+    const currentSpeed = speedState.target === currentTarget ? speedState.value : 0;
 
     const handleCancelQueued = async (modId: number) => {
         await window.electronAPI.removeFromQueue(modId);
@@ -139,10 +118,10 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     const progressPercentRounded = Math.round(progressPercent);
 
     const etaSeconds = useMemo(() => {
-        if (!queueState.progress || speed <= 0) return 0;
+        if (!queueState.progress || currentSpeed <= 0) return 0;
         const remaining = queueState.progress.total - queueState.progress.downloaded;
-        return remaining / speed;
-    }, [queueState.progress, speed]);
+        return remaining / currentSpeed;
+    }, [queueState.progress, currentSpeed]);
 
     if (totalItems === 0) return null;
 
@@ -191,10 +170,10 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             </div>
                             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
                                 <span className="tabular-nums">{progressPercentRounded}%</span>
-                                {speed > 0 && (
+                                {currentSpeed > 0 && (
                                     <>
                                         <span className="opacity-50">·</span>
-                                        <span className="tabular-nums">{formatSpeed(speed)}</span>
+                                        <span className="tabular-nums">{formatSpeed(currentSpeed)}</span>
                                     </>
                                 )}
                                 {totalItems > 1 && (
@@ -298,7 +277,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                         : '—'}
                                 </span>
                                 <span className="flex items-center gap-2">
-                                    {speed > 0 && <span>{formatSpeed(speed)}</span>}
+                                    {currentSpeed > 0 && <span>{formatSpeed(currentSpeed)}</span>}
                                     {etaSeconds > 0 && (
                                         <>
                                             <span className="opacity-50">·</span>
