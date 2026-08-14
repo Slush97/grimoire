@@ -270,13 +270,47 @@ async function mapWithConcurrency<T>(
     await Promise.all(runners);
 }
 
+/** Connection-level failure codes. The network dropped, the DNS lookup failed,
+ *  the socket timed out: none of it is a claim about the archive. */
+const TRANSIENT_ERROR_CODES = new Set([
+    'EAI_AGAIN',
+    'ECONNABORTED',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ENETDOWN',
+    'ENETUNREACH',
+    'ENOTFOUND',
+    'EPIPE',
+    'ETIMEDOUT',
+    'UND_ERR_BODY_TIMEOUT',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_SOCKET',
+]);
+
 /**
  * A probe failure that says nothing about the archive itself (rate limiting,
- * CDN hiccup). Stamping these `failed` would freeze the file behind the
- * failed-retry window; leaving the row pending lets the next run re-probe.
+ * CDN hiccup, the user's connection going away). Stamping these `failed` would
+ * freeze the file behind the failed-retry window; leaving the row pending lets
+ * the next run re-probe.
+ *
+ * The network arm matters as much as the rate-limit one. undici reports every
+ * connection-level failure as a bare `TypeError: fetch failed` with the real
+ * reason on `.cause`, so a user who goes offline mid-run banks a `failed` row
+ * per candidate: one report had ~100 files stamped in a row, which then made
+ * their retry (the whole point of the feature, and the only recovery from a
+ * lost metadata sidecar) silently check nothing for the next six hours.
  */
-function isTransientProbeError(err: unknown): boolean {
-    return /Archive range request failed: (?:429|5\d\d)\b/.test(errorMessage(err));
+export function isTransientProbeError(err: unknown, depth = 0): boolean {
+    if (/Archive range request failed: (?:408|429|5\d\d)\b/.test(errorMessage(err))) return true;
+    if (!(err instanceof Error) || depth > 4) return false;
+    if (err.name === 'TypeError' && err.message === 'fetch failed') return true;
+    const code = (err as NodeJS.ErrnoException).code;
+    if (typeof code === 'string' && TRANSIENT_ERROR_CODES.has(code)) return true;
+    // Follow the cause chain: undici hangs the real errno off the TypeError,
+    // and our own wrappers can add another layer on top of that.
+    return err.cause === undefined ? false : isTransientProbeError(err.cause, depth + 1);
 }
 
 /**
