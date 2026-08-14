@@ -89,11 +89,17 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
-import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
+import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
+import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef, GameBananaFile } from '../types/gamebanana';
+import {
+  mergeSourceModIds,
+  planMergeSourceUpdates,
+  type MergeSourceUpdateOutcome,
+  type MergeSourceUpdateSkip,
+} from '../lib/mergeSourceUpdate';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -111,7 +117,13 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import {
+  createEnabledVpkRestoreSnapshot,
+  createGlobalVpkRestoreSnapshot,
+  restoreReplacementVpkState,
+  type EnabledVpkRestoreSnapshot,
+  type GlobalVpkRestoreSnapshot,
+} from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -532,6 +544,7 @@ interface InstalledEntryCardProps {
   soundVolume: number;
   conflicts: ModConflict[];
   updateAvailable: boolean;
+  staleSourceCount: number;
   fixingUnknown: boolean;
   loadPosition: number | undefined;
   loadCount: number;
@@ -586,6 +599,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   soundVolume,
   conflicts,
   updateAvailable,
+  staleSourceCount,
   fixingUnknown,
   loadPosition,
   loadCount,
@@ -626,6 +640,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         conflicts={conflicts}
         soundVolume={soundVolume}
         updateAvailable={updateAvailable}
+        staleSourceCount={staleSourceCount}
         entryKey={entry.key}
         onOpenDetails={
           mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
@@ -1409,6 +1424,12 @@ export default function Installed() {
 
   // Map of mod id → true if a newer version exists on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+  // Merged mod id -> fileNames of its absorbed sources whose GameBanana file is
+  // gone. Kept apart from `updatesAvailable` because runUpdate has nothing to
+  // re-download for a merged VPK; this is surfaced as information only.
+  const [mergedSourceUpdates, setMergedSourceUpdates] = useState<Map<string, Set<string>>>(
+    new Map(),
+  );
 
   // "Update all" confirm + progress. Progress is null when idle, otherwise
   // { done, total } so the button can render "Updating 2/5…" and stay disabled
@@ -2160,6 +2181,10 @@ export default function Installed() {
         );
       }
       const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
+      const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
+      if (restoreGlobal.ambiguous) {
+        throw new Error(t('installed.updateAll.ambiguousGlobalState'));
+      }
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -2177,25 +2202,44 @@ export default function Installed() {
 
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
 
-      // Replacement downloads land disabled, so restore the enabled state after
+      // Replacement downloads land disabled with fresh metadata. Restore both
+      // enabled state and the user's Global priority-root placement after
       // reloading. Match by GB ids because local ids change on reinstall.
-      if (restoreEnabled.hadEnabled) {
+      let restoreFailureMessage: string | null = null;
+      if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
         await loadMods();
         const newMods = useAppStore
           .getState()
           .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        for (const newMod of newMods) {
-          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
-          if (newMod.enabled) continue;
-          try {
-            await toggleMod(newMod.id);
-          } catch (err) {
-            console.warn('[Update] failed to re-enable updated mod:', err);
-          }
+        const restoreFailures = await restoreReplacementVpkState(
+          newMods,
+          restoreEnabled,
+          restoreGlobal,
+          {
+            setGlobal: (modId) => setModPriorityFolder(modId, true),
+            enable: async (modId) => {
+              await toggleMod(modId);
+            },
+          },
+        );
+        if (restoreFailures.length > 0) {
+          const summary = restoreFailures
+            .map((failure) => `${failure.action}: ${String(failure.error)}`)
+            .join('; ');
+          restoreFailureMessage = t('installed.updateAll.restoreStateFailed', { details: summary });
         }
       }
 
-      closeModDetails();
+      // A restore failure is NOT an update failure: the new file is installed
+      // and only its enabled/Global state is off. Throwing here would report a
+      // succeeded update as a failed one and skip the refresh below, so keep
+      // the overlay open on the explanation instead and always reconcile the
+      // store with what actually landed on disk.
+      if (restoreFailureMessage) {
+        setDetailsError(restoreFailureMessage);
+      } else {
+        closeModDetails();
+      }
       loadMods();
     } catch (err) {
       setDetailsError(String(err));
@@ -2224,6 +2268,7 @@ export default function Installed() {
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
+        wasGlobal: !!m.priorityMod,
         fileDescription: m.fileDescription,
         sourceFileName: m.sourceFileName,
       }));
@@ -2251,6 +2296,7 @@ export default function Installed() {
       gameBananaId: number;
       gameBananaFileId: number;
       restoreEnabled: EnabledVpkRestoreSnapshot;
+      restoreGlobal: GlobalVpkRestoreSnapshot;
       fileName: string;
     }[] = [];
     let progress = 0;
@@ -2404,6 +2450,21 @@ export default function Installed() {
 
       for (const batch of okBatches.values()) {
         try {
+          const restoreEnabled = createEnabledVpkRestoreSnapshot(
+            batch.snapshots.map((snapshot) => ({
+              enabled: snapshot.wasEnabled,
+              vpkIndex: snapshot.vpkIndex,
+            })),
+          );
+          const restoreGlobal = createGlobalVpkRestoreSnapshot(
+            batch.snapshots.map((snapshot) => ({
+              priorityMod: snapshot.wasGlobal,
+              vpkIndex: snapshot.vpkIndex,
+            })),
+          );
+          if (restoreGlobal.ambiguous) {
+            throw new Error(t('installed.updateAll.ambiguousGlobalState'));
+          }
           for (const snapshot of batch.snapshots) {
             await deleteMod(snapshot.oldId);
           }
@@ -2417,12 +2478,8 @@ export default function Installed() {
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,
-            restoreEnabled: createEnabledVpkRestoreSnapshot(
-              batch.snapshots.map((snapshot) => ({
-                enabled: snapshot.wasEnabled,
-                vpkIndex: snapshot.vpkIndex,
-              })),
-            ),
+            restoreEnabled,
+            restoreGlobal,
             fileName: batch.fileName,
           });
         } catch (err) {
@@ -2447,23 +2504,28 @@ export default function Installed() {
     }
 
     // Refresh once so the new installs are in the store with their new ids,
-    // then re-enable anything that was enabled before. Match by GB ids; the
+    // then restore Global placement and enabled state. Match by GB ids; the
     // local mod id changes on reinstall.
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.restoreEnabled.hadEnabled) continue;
+      if (!c.restoreEnabled.hadEnabled && !c.restoreGlobal.hadGlobal) continue;
       const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
-      for (const newMod of newMods) {
-        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
-        if (newMod.enabled) continue;
-        try {
-          await toggleMod(newMod.id);
-        } catch (err) {
-          failures.push(`re-enable ${c.fileName}: ${String(err)}`);
-        }
+      const restoreFailures = await restoreReplacementVpkState(
+        newMods,
+        c.restoreEnabled,
+        c.restoreGlobal,
+        {
+          setGlobal: (modId) => setModPriorityFolder(modId, true),
+          enable: async (modId) => {
+            await toggleMod(modId);
+          },
+        },
+      );
+      for (const failure of restoreFailures) {
+        failures.push(`restore ${failure.action} ${c.fileName}: ${String(failure.error)}`);
       }
     }
     setUpdateAllProgress(null);
@@ -2845,6 +2907,101 @@ export default function Installed() {
     );
   };
 
+  /**
+   * Update every outdated source of the open merge in one pass: resolve each
+   * stale source to its current GameBanana file, download the replacements as
+   * normal installs, then hand them all to a single `replaceMergeSources`
+   * rebuild. One rebuild, not one per source.
+   *
+   * Sources that can't be confidently resolved (no clear replacement, or a
+   * download that produced several VPKs with nothing to say which is the
+   * replacement) are reported back rather than guessed at. The merge is left
+   * alone for those; the per-source extract button is the manual route.
+   */
+  const handleUpdateMergeSources = async (): Promise<MergeSourceUpdateOutcome> => {
+    const targetId = mergedContentsMod?.id;
+    const staleFileNames = targetId ? mergedSourceUpdates.get(targetId) : undefined;
+    const stale = (mergedContentsMod?.merged?.sources ?? []).filter((source) =>
+      staleFileNames?.has(source.fileName),
+    );
+    if (!targetId || stale.length === 0) return { updated: 0, skipped: [] };
+
+    const filesByModId = new Map<number, GameBananaFile[]>();
+    const categoryByModId = new Map<number, number>();
+    for (const [gbId, section] of mergeSourceModIds(stale)) {
+      try {
+        const details = await getModDetails(gbId, section);
+        filesByModId.set(gbId, details.files ?? []);
+        if (typeof details.category?.id === 'number') categoryByModId.set(gbId, details.category.id);
+      } catch (err) {
+        console.warn(`[MergeUpdate] failed to fetch files for GB mod ${gbId}:`, err);
+      }
+    }
+
+    // Don't re-download a file the user already has installed standalone.
+    const claimed = new Set<number>();
+    for (const mod of mods) {
+      if (typeof mod.gameBananaFileId !== 'number') continue;
+      if (!filesByModId.has(mod.gameBananaId ?? -1)) continue;
+      claimed.add(mod.gameBananaFileId);
+    }
+
+    const plan = planMergeSourceUpdates(stale, filesByModId, claimed);
+    const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
+      modName: entry.source.modName,
+      reason: entry.reason,
+    }));
+    if (plan.resolved.length === 0) return { updated: 0, skipped };
+
+    try {
+      await createSnapshot('pre-update');
+    } catch (err) {
+      console.warn('[MergeUpdate] failed to capture pre-update snapshot:', err);
+    }
+
+    // Snapshot the install list so each download's output can be identified as
+    // the mods that were not there before it ran.
+    const replacements: MergeSourceReplacement[] = [];
+    for (const entry of plan.resolved) {
+      const before = new Set(useAppStore.getState().mods.map((mod) => mod.id));
+      try {
+        await downloadMod(
+          entry.gameBananaId,
+          entry.fileId,
+          entry.fileName,
+          entry.section,
+          categoryByModId.get(entry.gameBananaId) ?? 0,
+        );
+      } catch (err) {
+        console.warn(`[MergeUpdate] download failed for ${entry.source.modName}:`, err);
+        skipped.push({ modName: entry.source.modName, reason: 'download-failed' });
+        continue;
+      }
+      await loadMods({ silent: true });
+      const installed = useAppStore
+        .getState()
+        .mods.filter((mod) => !before.has(mod.id) && mod.gameBananaFileId === entry.fileId);
+      if (installed.length !== 1) {
+        // Zero means the archive yielded nothing usable; more than one means a
+        // multi-VPK download where nothing identifies the replacement. Both
+        // leave whatever landed installed as normal mods.
+        skipped.push({
+          modName: entry.source.modName,
+          reason: installed.length === 0 ? 'download-failed' : 'multi-vpk',
+        });
+        continue;
+      }
+      replacements.push({ oldFileName: entry.source.fileName, newModId: installed[0].id });
+    }
+
+    if (replacements.length === 0) return { updated: 0, skipped };
+
+    await replaceMergeSources(targetId, replacements);
+    await loadMods({ silent: true });
+    setMergedContentsMod(useAppStore.getState().mods.find((mod) => mod.id === targetId) ?? null);
+    return { updated: replacements.length, skipped };
+  };
+
 
   // Surface a non-fatal store notice (e.g. the 99-enabled cap) through the same
   // transient toast, then clear it from the store so it doesn't re-fire.
@@ -3037,9 +3194,10 @@ export default function Installed() {
   useEffect(() => {
     let cancelled = false;
     const checkUpdates = async () => {
-      // Absorbed merge sources are intentionally excluded: updating them on
-      // disk would leave the merged VPK stale, so we don't flag updates the
-      // user can't act on without unmerging first.
+      // Absorbed merge sources never enter `targets`: runUpdate would rewrite
+      // the source VPK on disk and leave the merged VPK stale, so they can't be
+      // updated in place. They are still checked separately below and reported
+      // as information on the merged mod (see `mergedTargets`).
       // Mods with `ignoreUpdates` set are excluded too: the user pinned the
       // installed version on purpose (e.g. the author replaced the file with
       // one they don't want) and shouldn't see the pulse.
@@ -3050,16 +3208,28 @@ export default function Installed() {
           m.gameBananaFileId > 0 &&
           !m.ignoreUpdates,
       );
-      if (targets.length === 0) {
+      // Merged mods carry their sources' provenance in the manifest, so the
+      // same live-file-list check answers "did any ingredient go stale?".
+      const mergedTargets = visibleMods.filter((m) => !!m.merged && !m.ignoreUpdates);
+      if (targets.length === 0 && mergedTargets.length === 0) {
         setUpdatesAvailable(new Set());
+        setMergedSourceUpdates(new Map());
         return;
       }
 
-      // One fetch per GB mod id; variants share the result.
+      // One fetch per GB mod id; variants and merge sources share the result.
       const uniqueIds = new Map<number, string>();
       for (const m of targets) {
         if (!uniqueIds.has(m.gameBananaId!)) {
           uniqueIds.set(m.gameBananaId!, m.sourceSection ?? 'Mod');
+        }
+      }
+      for (const m of mergedTargets) {
+        for (const source of m.merged!.sources) {
+          if (typeof source.gameBananaId !== 'number') continue;
+          if (!uniqueIds.has(source.gameBananaId)) {
+            uniqueIds.set(source.gameBananaId, source.section ?? 'Mod');
+          }
         }
       }
 
@@ -3100,6 +3270,20 @@ export default function Installed() {
         }
       }
       setUpdatesAvailable(available);
+
+      const staleByMerge = new Map<string, Set<string>>();
+      for (const mod of mergedTargets) {
+        const stale = new Set<string>();
+        for (const source of mod.merged!.sources) {
+          if (typeof source.gameBananaId !== 'number') continue;
+          if (typeof source.gameBananaFileId !== 'number' || source.gameBananaFileId <= 0) continue;
+          const liveIds = updateCheckCache.get(source.gameBananaId);
+          if (!liveIds) continue;
+          if (!liveIds.has(source.gameBananaFileId)) stale.add(source.fileName);
+        }
+        if (stale.size > 0) staleByMerge.set(mod.id, stale);
+      }
+      setMergedSourceUpdates(staleByMerge);
     };
     checkUpdates();
     return () => {
@@ -3833,6 +4017,8 @@ export default function Installed() {
       entry.kind === 'single'
         ? updatesAvailable.has(entry.mod.id)
         : entry.variants.some((v) => updatesAvailable.has(v.id)),
+    staleSourceCount:
+      entry.kind === 'single' ? (mergedSourceUpdates.get(entry.mod.id)?.size ?? 0) : 0,
     fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
     loadCount: enabledModCount,
@@ -4911,6 +5097,8 @@ export default function Installed() {
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
+          staleSourceFileNames={mergedSourceUpdates.get(mergedContentsMod.id)}
+          onUpdateSources={handleUpdateMergeSources}
           eligibleMods={eligibleMergeAdditions}
           onAddSources={handleAddMergeSources}
         />
@@ -7023,6 +7211,9 @@ interface ModCardProps {
   conflicts: ModConflict[];
   soundVolume: number;
   updateAvailable?: boolean;
+  /** Absorbed merge sources whose GameBanana file is gone. Informational only:
+   *  a merged VPK has no file of its own to re-download. */
+  staleSourceCount?: number;
   onOpenDetails?: () => void;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
@@ -7669,6 +7860,7 @@ function ModCard({
   conflicts,
   soundVolume,
   updateAvailable,
+  staleSourceCount = 0,
   onOpenDetails,
   onViewAuthor,
   onToggle,
@@ -8320,6 +8512,16 @@ function ModCard({
                   className="border-white/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
+                </Tag>
+              )}
+              {staleSourceCount > 0 && (
+                <Tag
+                  variant="overlay"
+                  icon={Download}
+                  title={t('installed.card.staleSourcesTitle', { count: staleSourceCount })}
+                  className="border-amber-300/70 text-amber-200"
+                >
+                  {t('installed.card.staleSourcesBadge', { count: staleSourceCount })}
                 </Tag>
               )}
               {group && group.variantCount > 1 && (

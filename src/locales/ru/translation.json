@@ -1,6 +1,7 @@
 {
   "common": {
     "view": "Вид",
+    "gameRunningWarning": "Игра запущена. Закройте Deadlock, чтобы изменить загруженные моды.",
     "actions": {
       "cancel": "Отменить",
       "clear": "Очистить",
@@ -8,12 +9,16 @@
       "confirm": "Подтвердить",
       "copy": "Скопировать",
       "delete": "Удалить",
-      "dismiss": "ОтменитьГ",
+      "dismiss": "Отменить",
       "done": "Готово",
       "apply": "Применить",
+      "browse": "Обзор",
+      "remove": "Удалить",
       "refresh": "Перезагрузить",
+      "reset": "Сброс",
       "retry": "Ещё раз",
       "save": "Сохранить",
+      "undo": "Отменить",
       "collapseDetails": "Свернуть детали",
       "expandDetails": "Развернуть детали",
       "tryAgain": "Попробрвать снова"
@@ -24,15 +29,49 @@
       "tryAgain": "Попробовать снова"
     },
     "status": {
-      "copied": "Скопировано"
+      "active": "Активно",
+      "archived": "Перенесено в архив",
+      "checking": "Идет проверка...",
+      "configured": "Настроено",
+      "copied": "Скопировано",
+      "inactive": "Неактивно",
+      "invalid": "Неверно",
+      "missing": "Пропущено",
+      "valid": "Верно"
+    },
+    "relativeTime": {
+      "justNow": "прямо сейчас",
+      "minutesAgo": "{{count}}мин назад",
+      "hoursAgo": "{{count}}ч назад",
+      "daysAgo": "{{count}}д назад",
+      "weeksAgo": "{{count}}нед назад",
+      "monthsAgo": "{{count}} мес. назад",
+      "yearsAgo": "{{count}} г. назад"
     },
     "versus": "И",
     "versusLower": "И"
   },
+  "sync": {
+    "syncing": "Синхронизация {{section}}: {{percent}}%",
+    "error": "Ошибка синхронизации: {{section}}",
+    "sections": {
+      "Mod": "Моды",
+      "Sound": "Звуки",
+      "Wip": "В работе"
+    }
+  },
   "nav": {
+    "installed": "Установлено",
+    "browse": "Обзор",
+    "discover": "Интересное",
     "servers": "Сервера",
     "locker": "Шкафчик",
+    "foundry": "Дверь заклинило",
     "conflicts": "Конфликты",
+    "profiles": "Профили",
+    "crosshair": "Перекрестие",
+    "autoexec": "Автоисполнение",
+    "stats": "Статистика",
     "settings": "Настройки"
   },
   "autoexec": {

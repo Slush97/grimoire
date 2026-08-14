@@ -25,6 +25,7 @@ import type {
     EditLocalModArgs,
     LockerClearScope,
     MergeModsArgs,
+    MergeSourceReplacement,
     ImprintInstalledProgress,
     TrippySpriteOptions,
     TrippyVfxChoice,
@@ -332,6 +333,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
     addMergeSources: (mergedModId: string, addModIds: string[], strict = false) =>
         ipcRenderer.invoke('add-merge-sources', mergedModId, addModIds, strict),
+    replaceMergeSources: (
+        mergedModId: string,
+        replacements: MergeSourceReplacement[],
+        strict = false
+    ) => ipcRenderer.invoke('replace-merge-sources', mergedModId, replacements, strict),
     imprintOneMod: (modId: string) => ipcRenderer.invoke('imprint-one-mod', modId),
     imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
     imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),

@@ -1,69 +1,31 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
-import { homedir } from 'os';
-import { execFileSync } from 'child_process';
+import {
+    getSteamRoots,
+    findBottleForPath,
+    readBottleDriveMap,
+    resolveBottleWindowsPath,
+} from './steamRoots';
 
 const DEADLOCK_APP_ID = '1422450';
 
 /**
- * Steam install locations to probe (the directory that contains steamapps/),
- * in priority order. On Windows we ask the registry first so users with
- * Steam installed off the C: default are handled correctly.
- */
-function getSteamInstallPaths(): string[] {
-    const home = homedir();
-
-    if (process.platform === 'linux') {
-        return [
-            join(home, '.steam/steam'),
-            join(home, '.local/share/Steam'),
-            join(home, '.var/app/com.valvesoftware.Steam/.steam/steam'),
-        ];
-    }
-
-    if (process.platform === 'darwin') {
-        return [join(home, 'Library/Application Support/Steam')];
-    }
-
-    if (process.platform === 'win32') {
-        const paths: string[] = [];
-        const push = (p: string | null) => {
-            if (!p) return;
-            const norm = p.replace(/\//g, '\\').replace(/\\+$/, '');
-            if (!paths.some((existing) => existing.toLowerCase() === norm.toLowerCase())) {
-                paths.push(norm);
-            }
-        };
-        push(queryWindowsRegistry('HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam', 'InstallPath'));
-        push(queryWindowsRegistry('HKCU\\SOFTWARE\\Valve\\Steam', 'SteamPath'));
-        push('C:\\Program Files (x86)\\Steam');
-        push('C:\\Program Files\\Steam');
-        return paths;
-    }
-
-    return [];
-}
-
-function queryWindowsRegistry(key: string, value: string): string | null {
-    try {
-        const stdout = execFileSync('reg', ['query', key, '/v', value], {
-            stdio: ['ignore', 'pipe', 'ignore'],
-            timeout: 2000,
-        }).toString();
-        const match = stdout.match(/REG_SZ\s+(.+?)\s*$/m);
-        return match ? match[1].trim() : null;
-    } catch {
-        return null;
-    }
-}
-
-/**
  * Read every "path" entry from a Steam libraryfolders.vdf so we discover
  * every Steam library on the machine, not just the default install dir.
+ *
+ * Returns host paths. On macOS the Steam root can live inside a CrossOver
+ * bottle, and a Windows Steam records Windows paths ("D:\\SteamLibrary") that
+ * mean nothing to the host filesystem, so those are mapped back through the
+ * prefix's dosdevices links. A library on a drive letter the prefix no longer
+ * maps is dropped rather than guessed at.
  */
 function readSteamLibraries(steamInstallPath: string): string[] {
     const vdfPath = join(steamInstallPath, 'steamapps', 'libraryfolders.vdf');
     if (!existsSync(vdfPath)) return [];
+
+    const bottle = process.platform === 'darwin' ? findBottleForPath(steamInstallPath) : null;
+    const driveMap = bottle ? readBottleDriveMap(bottle.bottlePath) : null;
+
     try {
         const content = readFileSync(vdfPath, 'utf-8');
         const libraries: string[] = [];
@@ -71,7 +33,13 @@ function readSteamLibraries(steamInstallPath: string): string[] {
         let match: RegExpExecArray | null;
         while ((match = re.exec(content)) !== null) {
             // VDF escapes backslashes; "C:\\SteamLibrary" -> "C:\SteamLibrary"
-            libraries.push(match[1].replace(/\\\\/g, '\\'));
+            const raw = match[1].replace(/\\\\/g, '\\');
+            if (driveMap) {
+                const mapped = resolveBottleWindowsPath(raw, driveMap);
+                if (mapped) libraries.push(mapped);
+                continue;
+            }
+            libraries.push(raw);
         }
         return libraries;
     } catch {
@@ -106,7 +74,7 @@ export function looksLikeDeadlockPath(path: string): boolean {
  * Deadlock are preferred, as that is Steam's authoritative record.
  */
 export function detectDeadlockPath(): string | null {
-    const steamInstalls = getSteamInstallPaths();
+    const steamInstalls = getSteamRoots();
     const visited = new Set<string>();
     const fallback: string[] = [];
 

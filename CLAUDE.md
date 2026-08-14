@@ -1,6 +1,6 @@
 # Grimoire
 
-Mod manager and companion tool for Deadlock (Valve hero shooter). Electron desktop app (Windows/Linux).
+Mod manager and companion tool for Deadlock (Valve hero shooter). Electron desktop app (Windows/Linux/macOS shipped; the macOS build is Apple Silicon only, ad-hoc signed, and cannot auto-update, see `docs/macos.md`).
 
 ## What It Does
 
@@ -98,6 +98,7 @@ Design docs and references live in `docs/`:
 - `social-architecture.md` + `social-architecture-decisions.md` - Architecture and ADRs for the planned `grimoire-social` companion service (see below)
 - `ability-vfx-recolor.md` - Hero ability VFX layer extraction + in app recoloring. Read before touching `detectVfxLayer`/`extractVfxLayer` (in `vpk.ts`/`modMerger.ts`) or building the recolor/Locker surface. Covers why particle recolor must use an in place scalar patch, not a KV3 re-encode.
 - `locker-global-mods.md` - "Global" mods: the `citadel/grimoire` priority root that outranks every other mod. Read before touching grimoire-folder handling, the `modLoadOrder` helpers, or the shuffle planner. Covers the deliberate split between `globalType` (classification, labelled "General") and `priorityMod` (placement, labelled "Global").
+- `macos.md` - Why macOS needs a CrossOver bottle, how Steam roots are discovered there, and how launching differs. Read before touching `steamRoots.ts`, `bottleLaunch.ts`, or any per-platform Steam path list. Covers why the three old hardcoded path lists were collapsed into one module, and why the shipped mac build is arm64-only and cannot auto-update.
 - `deadworks-servers.md` - The Deadworks server browser: relay data flow, content provisioning, and (critically) how the deadworks content path is woven into grimoire's canonical `gameinfo.gi` block so Fix Configuration never erases it. Read before touching `deadworksServers.ts`, `ipc/servers.ts`, or the gameinfo handling in `system.ts`/`deadlock.ts`.
 
 ## Companion Service: grimoire-social

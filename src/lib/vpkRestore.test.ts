@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Mod } from '../types/mod';
 import {
   getVpkIndex,
   createEnabledVpkRestoreSnapshot,
+  createGlobalVpkRestoreSnapshot,
+  restoreReplacementVpkState,
   shouldRestoreVpkEnabled,
+  shouldRestoreVpkGlobal,
 } from './vpkRestore';
 
 /** Minimal Mod; the restore logic only reads `vpkIndex` (via getVpkIndex). */
@@ -105,5 +108,64 @@ describe('shouldRestoreVpkEnabled', () => {
     const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 })];
     expect(shouldRestoreVpkEnabled(fresh[0], fresh, snap)).toBe(false);
     expect(shouldRestoreVpkEnabled(fresh[1], fresh, snap)).toBe(true);
+  });
+});
+
+describe('Global placement restore', () => {
+  it('restores Global placement to the matching replacement VPK only', () => {
+    const snap = createGlobalVpkRestoreSnapshot([
+      { priorityMod: true, vpkIndex: 0 },
+      { priorityMod: false, vpkIndex: 1 },
+    ]);
+    const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 })];
+
+    expect(shouldRestoreVpkGlobal(fresh[0], fresh, snap)).toBe(true);
+    expect(shouldRestoreVpkGlobal(fresh[1], fresh, snap)).toBe(false);
+  });
+
+  it('marks a disabled replacement Global without enabling it', async () => {
+    const fresh = [mod({ id: 'replacement', enabled: false })];
+    const setGlobal = vi.fn(async () => {});
+    const enable = vi.fn(async () => {});
+
+    const failures = await restoreReplacementVpkState(
+      fresh,
+      createEnabledVpkRestoreSnapshot([{ enabled: false }]),
+      createGlobalVpkRestoreSnapshot([{ priorityMod: true }]),
+      { setGlobal, enable },
+    );
+
+    expect(setGlobal).toHaveBeenCalledWith('replacement');
+    expect(enable).not.toHaveBeenCalled();
+    expect(failures).toEqual([]);
+  });
+
+  it('restores Global placement before enabling the replacement', async () => {
+    const calls: string[] = [];
+    const fresh = [mod({ id: 'replacement', enabled: false })];
+
+    await restoreReplacementVpkState(
+      fresh,
+      createEnabledVpkRestoreSnapshot([{ enabled: true }]),
+      createGlobalVpkRestoreSnapshot([{ priorityMod: true }]),
+      {
+        setGlobal: async () => { calls.push('global'); },
+        enable: async () => { calls.push('enable'); },
+      },
+    );
+
+    expect(calls).toEqual(['global', 'enable']);
+  });
+
+  it('flags mixed legacy placement as ambiguous instead of promoting ordinary siblings', () => {
+    const snap = createGlobalVpkRestoreSnapshot([
+      { priorityMod: true },
+      { priorityMod: false },
+    ]);
+    const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 })];
+
+    expect(snap.ambiguous).toBe(true);
+    expect(shouldRestoreVpkGlobal(fresh[0], fresh, snap)).toBe(false);
+    expect(shouldRestoreVpkGlobal(fresh[1], fresh, snap)).toBe(false);
   });
 });

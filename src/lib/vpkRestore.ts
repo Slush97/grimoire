@@ -13,6 +13,14 @@ export type EnabledVpkRestoreSnapshot = {
   enabledUnindexed: boolean;
 };
 
+export type GlobalVpkRestoreSnapshot = {
+  hadGlobal: boolean;
+  allGlobal: boolean;
+  ambiguous: boolean;
+  globalIndexes: Set<number>;
+  globalUnindexed: boolean;
+};
+
 export function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
   return typeof mod.vpkIndex === 'number' && Number.isInteger(mod.vpkIndex) && mod.vpkIndex >= 0
     ? mod.vpkIndex
@@ -58,4 +66,78 @@ export function shouldRestoreVpkEnabled(
     return index === undefined ? snapshot.enabledUnindexed : snapshot.enabledIndexes.has(index);
   }
   return snapshot.enabledIndexes.size === 0 && snapshot.enabledUnindexed;
+}
+
+export function createGlobalVpkRestoreSnapshot(
+  targets: Array<{ priorityMod?: boolean; vpkIndex?: number }>
+): GlobalVpkRestoreSnapshot {
+  const globalIndexes = new Set<number>();
+  let globalUnindexed = false;
+  for (const target of targets) {
+    if (!target.priorityMod) continue;
+    const index = getVpkIndex(target);
+    if (index === undefined) {
+      globalUnindexed = true;
+    } else {
+      globalIndexes.add(index);
+    }
+  }
+  const allGlobal = targets.length > 0 && targets.every((target) => !!target.priorityMod);
+  return {
+    hadGlobal: globalUnindexed || globalIndexes.size > 0,
+    allGlobal,
+    ambiguous: globalUnindexed && !allGlobal,
+    globalIndexes,
+    globalUnindexed,
+  };
+}
+
+export function shouldRestoreVpkGlobal(
+  mod: Mod,
+  candidates: Mod[],
+  snapshot: GlobalVpkRestoreSnapshot
+): boolean {
+  if (!snapshot.hadGlobal) return false;
+  const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
+  const index = getVpkIndex(mod);
+  if (hasIndexedCandidates) {
+    if (snapshot.globalIndexes.size === 0) return snapshot.globalUnindexed && snapshot.allGlobal;
+    return index === undefined ? snapshot.globalUnindexed : snapshot.globalIndexes.has(index);
+  }
+  return snapshot.globalIndexes.size === 0 && snapshot.globalUnindexed && snapshot.allGlobal;
+}
+
+export type ReplacementVpkRestoreFailure = {
+  action: 'global' | 'enable';
+  mod: Mod;
+  error: unknown;
+};
+
+export async function restoreReplacementVpkState(
+  candidates: Mod[],
+  enabledSnapshot: EnabledVpkRestoreSnapshot,
+  globalSnapshot: GlobalVpkRestoreSnapshot,
+  operations: {
+    setGlobal: (modId: string) => Promise<void>;
+    enable: (modId: string) => Promise<void>;
+  }
+): Promise<ReplacementVpkRestoreFailure[]> {
+  const failures: ReplacementVpkRestoreFailure[] = [];
+  for (const mod of candidates) {
+    if (!mod.priorityMod && shouldRestoreVpkGlobal(mod, candidates, globalSnapshot)) {
+      try {
+        await operations.setGlobal(mod.id);
+      } catch (error) {
+        failures.push({ action: 'global', mod, error });
+      }
+    }
+    if (!mod.enabled && shouldRestoreVpkEnabled(mod, candidates, enabledSnapshot)) {
+      try {
+        await operations.enable(mod.id);
+      } catch (error) {
+        failures.push({ action: 'enable', mod, error });
+      }
+    }
+  }
+  return failures;
 }

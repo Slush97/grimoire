@@ -732,6 +732,25 @@ export interface AddMergeSourcesResult {
   addedFileNames: string[];
 }
 
+export interface MergeSourceReplacement {
+  /** fileName of the absorbed source being swapped out, as recorded in the
+   *  merge manifest. */
+  oldFileName: string;
+  /** Local mod id of the freshly installed replacement VPK. */
+  newModId: string;
+}
+
+export interface ReplaceMergeSourcesResult {
+  /** Updated merge manifest. The merge keeps its on-disk mod id, load-order
+   *  slot, metadata key, and stable merge id. */
+  merged: MergedModInfo;
+  /** Final on-disk filenames of the newly absorbed replacement VPKs. */
+  replacedFileNames: string[];
+  /** Filenames of the old source VPKs deleted after the rebuild. Shorter than
+   *  `replacedFileNames` when an old source was already gone from disk. */
+  retiredFileNames: string[];
+}
+
 export interface UnknownModFilterGuess {
   modId: string;
   fileName: string;
