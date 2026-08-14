@@ -14,6 +14,8 @@ import type {
     UnmergeModResult,
     ExtractMergeSourceResult,
     AddMergeSourcesResult,
+    MergeSourceReplacement,
+    ReplaceMergeSourcesResult,
     ImprintAllInstalledResult,
     ImprintInstalledProgress,
     ImprintPreflightResult,
@@ -910,6 +912,11 @@ export interface ElectronAPI {
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
     addMergeSources: (mergedModId: string, addModIds: string[], strict?: boolean) => Promise<AddMergeSourcesResult>;
+    replaceMergeSources: (
+        mergedModId: string,
+        replacements: MergeSourceReplacement[],
+        strict?: boolean,
+    ) => Promise<ReplaceMergeSourcesResult>;
     imprintOneMod: (modId: string) => Promise<Mod>;
     imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
     imprintPreflight: () => Promise<ImprintPreflightResult>;
@@ -1114,7 +1121,7 @@ export interface ElectronAPI {
     updater: {
         getVersion: () => Promise<string>;
         getStatus: () => Promise<UpdateStatus>;
-        getInstallSource: () => Promise<'managed' | 'appimage' | 'standard'>;
+        getInstallSource: () => Promise<'managed' | 'appimage' | 'standard' | 'manual'>;
         checkForUpdates: () => Promise<UpdateInfo | null>;
         downloadUpdate: () => Promise<void>;
         installUpdate: () => void;

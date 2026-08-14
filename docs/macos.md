@@ -77,11 +77,32 @@ Process control (`isDeadlockRunning`, `requestDeadlockStop`) shares the Linux
 branch: the game is a Windows process under a translation layer, so the host
 only ever sees it via the full cmdline, and `pgrep -f` / `pkill -f` are correct.
 
+## Packaging
+
+`release.yml` builds macOS alongside Linux and Windows, producing an arm64
+`.dmg` and `-mac.zip`. Apple Silicon only, for two reasons: vpkmerge publishes
+a `darwin-arm64` asset and no `darwin-x64` one (`scripts/fetch-vpkmerge.mjs`),
+and the CrossOver bottles Deadlock runs in are arm64 in practice. The build
+step asserts the runner arch so an x64 runner fails loudly rather than quietly
+shipping a build with no mod merging.
+
 ## What is not supported
 
-- **No packaged macOS build.** `electron-builder.yml` has no `mac` target and
-  there is no `package:mac` script. Adding one requires decisions about signing
-  and notarization, and the auto-updater expects a signed build.
-- **CI does not cover macOS.** `ci.yml` runs `ubuntu-latest` only. The bottle
-  discovery, drive mapping, and launch-argument tests are all
+- **The build is ad-hoc signed, not notarized.** There is no Developer ID
+  certificate, so `electron-builder.yml` pins `identity: null` and
+  `scripts/adhoc-sign-mac.mjs` re-signs afterwards (see that file for why an
+  invalid signature is worse than an honest ad-hoc one). Users get the
+  "unidentified developer" prompt on first launch.
+- **Auto-update does not work on macOS.** Squirrel.Mac validates that an update
+  carries the same signing identity as the running app, and an ad-hoc signature
+  has none (`TeamIdentifier=not set`), so an in-app update would download and
+  then fail at the install step. `getInstallSource()` reports `'manual'` on
+  darwin to handle this: unlike `'managed'`, which defers the whole lifecycle
+  to a package manager and never checks, `'manual'` still checks and still
+  reports a new version, but `downloadUpdate` and `quitAndInstall` are gated
+  and the UI points at the releases page instead. Users update by downloading
+  each release. Fixing it properly needs a paid Developer ID and notarization.
+- **CI does not cover macOS.** `ci.yml` runs `ubuntu-latest` only, so a
+  Mac-only build break surfaces at release time rather than on the PR. The
+  bottle discovery, drive mapping, and launch-argument tests are all
   platform-independent and do run there.

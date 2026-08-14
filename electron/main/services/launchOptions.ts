@@ -85,10 +85,19 @@ async function findLocalConfigPath(preferredAccountId?: string): Promise<{ path:
     return null;
 }
 
+/** pgrep with the given args. Resolves true when at least one process matches. */
+function pgrepMatches(args: string[]): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+        const proc = spawn('pgrep', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        proc.on('close', (code) => resolve(code === 0));
+        proc.on('error', () => resolve(false));
+    });
+}
+
 /** Whether Steam.exe / steam is currently running. Best-effort, platform-aware. */
 export async function isSteamRunning(): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-        if (process.platform === 'win32') {
+    if (process.platform === 'win32') {
+        return new Promise<boolean>((resolve) => {
             const proc = spawn('tasklist.exe', ['/FI', 'IMAGENAME eq steam.exe', '/NH'], {
                 windowsHide: true,
             });
@@ -96,16 +105,33 @@ export async function isSteamRunning(): Promise<boolean> {
             proc.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
             proc.on('close', () => resolve(/steam\.exe/i.test(stdout)));
             proc.on('error', () => resolve(false));
-        } else if (process.platform === 'linux' || process.platform === 'darwin') {
-            // pgrep returns 0 if any process matches. We look for the Steam
-            // client binary, not just any "steam" string in argv.
-            const proc = spawn('pgrep', ['-x', 'steam'], { stdio: ['ignore', 'pipe', 'ignore'] });
-            proc.on('close', (code) => resolve(code === 0));
-            proc.on('error', () => resolve(false));
-        } else {
-            resolve(false);
-        }
-    });
+        });
+    }
+
+    if (process.platform === 'linux') {
+        // pgrep returns 0 if any process matches. We look for the Steam
+        // client binary, not just any "steam" string in argv.
+        return pgrepMatches(['-x', 'steam']);
+    }
+
+    if (process.platform === 'darwin') {
+        // The Steam that owns Deadlock here is the bottle's *Windows*
+        // steam.exe running under Wine, which the host only ever sees through
+        // the full cmdline (same reasoning as isDeadlockRunning in launch.ts).
+        // `pgrep -x steam` matches the native client only, so on its own it
+        // reports "not running" while the bottle's Steam has localconfig.vdf
+        // open, and syncLaunchOptionsToSteam would rewrite a file Steam is
+        // about to overwrite from memory, silently dropping the user's launch
+        // options. getSteamRoots returns both kinds of root, so check both and
+        // treat either as running: refusing to write is the safe direction.
+        const [native, bottled] = await Promise.all([
+            pgrepMatches(['-x', 'steam']),
+            pgrepMatches(['-f', 'steam\\.exe']),
+        ]);
+        return native || bottled;
+    }
+
+    return false;
 }
 
 /**
