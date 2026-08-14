@@ -2343,15 +2343,19 @@ export default function Installed() {
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
       const resolutions: Resolution[] = [];
       const resolvedByOldFileId = new Map<number, { fileId: number; fileName: string }>();
-      // Seed claims with live files already installed as siblings outside this
-      // run, so neither the fuzzy match nor the single-file fallback
-      // re-downloads a variant the user already has.
+      // Track live files already installed as siblings outside this run. They
+      // are valid update destinations: if V5 is already installed beside the
+      // stale V4, updating V4 should remove it and transfer its enabled/Global
+      // state to V5 instead of silently refusing to act. Only uninstalled live
+      // files are "claimed" to prevent two unrelated stale variants from both
+      // being mapped to the same new download.
       const groupOldIds = new Set(group.map((s) => s.oldId));
+      const installedLiveIds = new Set<number>();
       const claimedIds = new Set<number>();
       for (const m of mods) {
         if (m.gameBananaId !== group[0].gameBananaId || groupOldIds.has(m.id)) continue;
         if (typeof m.gameBananaFileId === 'number' && liveFileIds.has(m.gameBananaFileId)) {
-          claimedIds.add(m.gameBananaFileId);
+          installedLiveIds.add(m.gameBananaFileId);
         }
       }
       for (const s of group) {
@@ -2384,11 +2388,14 @@ export default function Installed() {
         if (match) {
           resolutions.push({ ok: true, snapshot: s, fileId: match.id, fileName: match.fileName });
           resolvedByOldFileId.set(s.gameBananaFileId, { fileId: match.id, fileName: match.fileName });
-          claimedIds.add(match.id);
-        } else if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
+          if (!installedLiveIds.has(match.id)) claimedIds.add(match.id);
+        } else if (
+          liveFiles.length === 1 &&
+          (installedLiveIds.has(liveFiles[0].id) || !claimedIds.has(liveFiles[0].id))
+        ) {
           resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
           resolvedByOldFileId.set(s.gameBananaFileId, { fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
-          claimedIds.add(liveFiles[0].id);
+          if (!installedLiveIds.has(liveFiles[0].id)) claimedIds.add(liveFiles[0].id);
         } else {
           resolutions.push({
             ok: false,
@@ -2465,16 +2472,29 @@ export default function Installed() {
           if (restoreGlobal.ambiguous) {
             throw new Error(t('installed.updateAll.ambiguousGlobalState'));
           }
+          // The replacement may already be installed as a disabled sibling
+          // (for example the user installed V5 from Browse while V4 remained
+          // enabled). In that case the update is a promotion, not another
+          // download: delete the stale install and restore its state onto the
+          // existing current file.
+          const replacementAlreadyInstalled = mods.some(
+            (mod) =>
+              mod.gameBananaId === batch.gameBananaId &&
+              mod.gameBananaFileId === batch.fileId &&
+              !batch.snapshots.some((snapshot) => snapshot.oldId === mod.id),
+          );
           for (const snapshot of batch.snapshots) {
             await deleteMod(snapshot.oldId);
           }
-          await downloadMod(
-            batch.gameBananaId,
-            batch.fileId,
-            batch.fileName,
-            batch.section,
-            batch.categoryId,
-          );
+          if (!replacementAlreadyInstalled) {
+            await downloadMod(
+              batch.gameBananaId,
+              batch.fileId,
+              batch.fileName,
+              batch.section,
+              batch.categoryId,
+            );
+          }
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,

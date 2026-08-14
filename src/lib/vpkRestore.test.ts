@@ -100,6 +100,12 @@ describe('shouldRestoreVpkEnabled', () => {
     expect(shouldRestoreVpkEnabled(fresh[0], fresh, snap)).toBe(true);
   });
 
+  it('restores a sole replacement when the new archive no longer has the old index', () => {
+    const snap = createEnabledVpkRestoreSnapshot([{ enabled: true, vpkIndex: 1 }]);
+    const fresh = [mod({ id: 'n' })];
+    expect(shouldRestoreVpkEnabled(fresh[0], fresh, snap)).toBe(true);
+  });
+
   it('does not restore an indexed sibling that was off, even when another was on', () => {
     const snap = createEnabledVpkRestoreSnapshot([
       { enabled: true, vpkIndex: 1 },
@@ -155,6 +161,13 @@ describe('Global placement restore', () => {
     );
 
     expect(calls).toEqual(['global', 'enable']);
+  });
+
+  it('restores Global placement to a sole replacement after archive topology changes', () => {
+    const snap = createGlobalVpkRestoreSnapshot([{ priorityMod: true, vpkIndex: 1 }]);
+    const fresh = [mod({ id: 'replacement' })];
+
+    expect(shouldRestoreVpkGlobal(fresh[0], fresh, snap)).toBe(true);
   });
 
   it('flags mixed legacy placement as ambiguous instead of promoting ordinary siblings', () => {
