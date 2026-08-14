@@ -9,7 +9,11 @@ import type {
 import { formatBytes } from '../lib/formatBytes';
 import { rollPreparingSuffix } from '../lib/easterEggs';
 import Tx from './translation/Tx';
-import { getVisibleDownloadQueue, useDownloadActivity } from '../lib/downloadActivity';
+import {
+    cancelDownloadRequest,
+    getVisibleDownloadQueue,
+    useDownloadActivity,
+} from '../lib/downloadActivity';
 
 interface DownloadQueueIndicatorProps {
     className?: string;
@@ -102,12 +106,16 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         : null;
     const currentSpeed = speedState.target === currentTarget ? speedState.value : 0;
 
-    const handleCancelQueued = async (modId: number) => {
-        await window.electronAPI.removeFromQueue(modId);
+    const handleCancelQueued = async (modId: number, fileId: number) => {
+        cancelDownloadRequest(modId, fileId);
+        await window.electronAPI.cancelDownloadTarget(modId, fileId);
     };
 
     const handleCancelActive = async () => {
-        await window.electronAPI.cancelActiveDownload();
+        const current = queueState.currentDownload;
+        if (!current) return;
+        cancelDownloadRequest(current.modId, current.fileId);
+        await window.electronAPI.cancelDownloadTarget(current.modId, current.fileId);
     };
 
     const totalItems = queueState.queue.length + (queueState.currentDownload ? 1 : 0);
@@ -317,7 +325,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                void handleCancelQueued(item.modId);
+                                                void handleCancelQueued(item.modId, item.fileId);
                                             }}
                                             className="rounded-md p-1 text-text-secondary opacity-0 transition-opacity hover:text-state-danger group-hover:opacity-100 cursor-pointer"
                                             title={t('downloadQueue.removeFromQueue')}

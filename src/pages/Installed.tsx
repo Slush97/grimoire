@@ -89,7 +89,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
@@ -114,7 +114,7 @@ import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
-import { releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
+import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { formatBytes } from '../lib/formatBytes';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
 import { planFileUpdates } from '../lib/updateFileMatch';
@@ -126,6 +126,7 @@ import {
   type GlobalVpkRestoreSnapshot,
 } from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
+import { findReplacementTargetIdsAfterInstall } from '../lib/replacementCleanup';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
@@ -1417,9 +1418,8 @@ export default function Installed() {
   // "Install" and the row never picked up its Installed/Active styling.
   const [detailsGameBananaId, setDetailsGameBananaId] = useState<number | null>(null);
   const [detailsDates, setDetailsDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
-  // Local id of the installed mod that triggered the overlay. On download we
-  // delete this entry first so Update/Reinstall replaces the old VPK instead
-  // of installing a second copy alongside it.
+  // Local id of the installed mod that triggered the overlay. A successful
+  // Update/Reinstall removes this predecessor after the replacement lands.
   const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
   // Monotonic guard so a slower linked-item fetch can't clobber a newer one.
   const detailsRequestIdRef = useRef(0);
@@ -1667,19 +1667,19 @@ export default function Installed() {
     setDetailsSection(item.section);
     setDetailsCategoryId(0);
 
-    // A linked item has no clicked entry, so anchor the overlay on the first
-    // installed sibling (if any). The file sets and update pulse follow from
-    // that plus the live mod list.
-    let sourceModId: string | null = null;
-    let ignoreUpdates = false;
-    for (const candidate of mods) {
-      if (candidate.gameBananaId !== item.id) continue;
-      if (!sourceModId) sourceModId = candidate.id;
-      if (candidate.ignoreUpdates) ignoreUpdates = true;
-    }
+    // A linked item has no clicked entry, so choose an installed sibling as
+    // its anchor. The file sets and update pulse follow from that anchor plus
+    // the live mod list.
+    const linkedCandidates = mods.filter((candidate) => candidate.gameBananaId === item.id);
+    // Prefer the sibling that actually carries the update pulse. Choosing the
+    // first installed sibling could anchor on a current variant and suppress
+    // both the badge and the stale variant's replacement plan.
+    const source = linkedCandidates.find((candidate) => updatesAvailable.has(candidate.id))
+      ?? linkedCandidates[0]
+      ?? null;
     setDetailsGameBananaId(item.id);
-    setDetailsSourceModId(sourceModId);
-    setDetailsIgnoreUpdates(ignoreUpdates);
+    setDetailsSourceModId(source?.id ?? null);
+    setDetailsIgnoreUpdates(!!source?.ignoreUpdates);
     setDetailsDates(null);
 
     const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
@@ -2260,9 +2260,6 @@ export default function Installed() {
           console.warn('[Update] failed to capture pre-update snapshot:', err);
         }
       }
-      for (const mod of replacementTargets) {
-        await deleteMod(mod.id);
-      }
 
       const replacementAlreadyInstalled = mods.some(
         (mod) =>
@@ -2270,16 +2267,28 @@ export default function Installed() {
           mod.gameBananaFileId === fileId &&
           !replacementTargets.some((target) => target.id === mod.id),
       );
+      if (!isDownloadRequestPending(detailsMod.id, fileId)) return;
       if (!replacementAlreadyInstalled) {
         await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
+        await loadMods();
+        const installedAfterDownload = useAppStore.getState().mods;
+        const targetIds = findReplacementTargetIdsAfterInstall(
+          installedAfterDownload,
+          replacementTargets,
+          fileId,
+        );
+        for (const targetId of targetIds) await deleteModApi(targetId);
+      } else {
+        for (const mod of replacementTargets) await deleteModApi(mod.id);
       }
+
+      await loadMods();
 
       // Replacement downloads land disabled with fresh metadata. Restore both
       // enabled state and the user's Global priority-root placement after
       // reloading. Match by GB ids because local ids change on reinstall.
       let restoreFailureMessage: string | null = null;
       if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
-        await loadMods();
         const newMods = useAppStore
           .getState()
           .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
@@ -2290,7 +2299,7 @@ export default function Installed() {
           {
             setGlobal: (modId) => setModPriorityFolder(modId, true),
             enable: async (modId) => {
-              await toggleMod(modId);
+              if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
             },
           },
         );
@@ -2310,7 +2319,7 @@ export default function Installed() {
       // and only its enabled/Global state is off. Throwing here would report a
       // succeeded update as a failed one, so surface it in the overlay instead.
       if (restoreFailureMessage) {
-        setDetailsError(restoreFailureMessage);
+        showToast(restoreFailureMessage, { tone: 'warning', duration: 7000 });
       }
 
       // Keep the overlay open on the freshly installed file so the row flips to
@@ -2321,7 +2330,10 @@ export default function Installed() {
       const installed = useAppStore
         .getState()
         .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-      if (installed) setDetailsSourceModId(installed.id);
+      if (installed) {
+        setDetailsSourceModId(installed.id);
+        setDetailsIgnoreUpdates(!!installed.ignoreUpdates);
+      }
     } catch (err) {
       // The error dialog below only renders when no mod is loaded, and the
       // overlay now stays open through the install, so a failure has to be
@@ -2546,9 +2558,6 @@ export default function Installed() {
               mod.gameBananaFileId === batch.fileId &&
               !batch.snapshots.some((snapshot) => snapshot.oldId === mod.id),
           );
-          for (const snapshot of batch.snapshots) {
-            await deleteMod(snapshot.oldId);
-          }
           if (!replacementAlreadyInstalled) {
             await downloadMod(
               batch.gameBananaId,
@@ -2558,6 +2567,19 @@ export default function Installed() {
               batch.categoryId,
             );
           }
+          await loadMods();
+          const installedAfterDownload = useAppStore.getState().mods;
+          const cleanupTargets = batch.snapshots.map((snapshot) => ({
+            id: snapshot.oldId,
+            gameBananaId: snapshot.gameBananaId,
+            gameBananaFileId: snapshot.gameBananaFileId,
+          }));
+          const targetIds = findReplacementTargetIdsAfterInstall(
+            installedAfterDownload,
+            cleanupTargets,
+            batch.fileId,
+          );
+          for (const targetId of targetIds) await deleteModApi(targetId);
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,
@@ -2603,7 +2625,7 @@ export default function Installed() {
         {
           setGlobal: (modId) => setModPriorityFolder(modId, true),
           enable: async (modId) => {
-            await toggleMod(modId);
+            if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
           },
         },
       );

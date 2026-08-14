@@ -141,4 +141,31 @@ describe('planFileUpdates', () => {
     expect([...plan.sourcesByTargetFileId.keys()]).toEqual([2]);
     expect(plan.sourcesByTargetFileId.has(3)).toBe(false);
   });
+
+  it('keeps confident matches separate when another stale variant is unresolved', () => {
+    const files = [
+      { ...file(2, 'gold-v2.zip'), description: 'Gold' },
+      { ...file(3, 'silver-v2.zip'), description: 'Silver' },
+    ];
+    const plan = planFileUpdates(10, files, [
+      {
+        id: 'old-gold',
+        gameBananaId: 10,
+        gameBananaFileId: 1,
+        installedFileId: 1,
+        fileDescription: 'Gold',
+      },
+      {
+        id: 'unknown',
+        gameBananaId: 10,
+        gameBananaFileId: 4,
+        installedFileId: 4,
+        sourceFileName: 'unrelated.zip',
+      },
+    ]);
+
+    expect(plan.sourcesByTargetFileId.get(2)).toEqual(['old-gold']);
+    expect(plan.sourcesByTargetFileId.has(3)).toBe(false);
+    expect(plan.unresolvedSourceIds).toEqual(['unknown']);
+  });
 });

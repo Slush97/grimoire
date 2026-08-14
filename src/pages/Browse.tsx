@@ -68,15 +68,17 @@ import {
   getGamebananaCategories,
   backfillGameBananaFileId,
   createSnapshot,
+  deleteMod as deleteModApi,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
+  isDownloadRequestPending,
   releaseDownloadRequest,
   requestDownload,
-  useDownloadActivity,
+  useDownloadQueueActivity,
 } from '../lib/downloadActivity';
 import type {
   GameBananaMod,
@@ -116,6 +118,7 @@ import {
   createGlobalVpkRestoreSnapshot,
   restoreReplacementVpkState,
 } from '../lib/vpkRestore';
+import { findReplacementTargetIdsAfterInstall } from '../lib/replacementCleanup';
 import { showToast } from '../stores/toastStore';
 
 const DEFAULT_PER_PAGE = 36;
@@ -852,6 +855,26 @@ function BrowseSoundPlaceholder({ title }: { title: string }) {
   );
 }
 
+/**
+ * Compositor-only download indicator for cards. The old stroked SVG spinner
+ * could look stepped at these tiny sizes; this keeps a quiet track underneath
+ * a continuous orbit and never depends on React progress renders to move.
+ */
+function BrowseDownloadSpinner({
+  className = '',
+  size = 'default',
+}: {
+  className?: string;
+  size?: 'default' | 'large';
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`browse-download-spinner ${size === 'large' ? 'browse-download-spinner--large' : ''} ${className}`}
+    />
+  );
+}
+
 function BrowseReadableAction({
   modName,
   installed,
@@ -955,9 +978,7 @@ function BrowseReadableAction({
     queueShift ? 'browse-action-button--queue-shift' : '',
   ].filter(Boolean).join(' ');
   const icon =
-    action === 'downloading'
-      ? Loader2
-      : action === 'installed'
+    action === 'installed'
         ? Check
         : action === 'enable'
           ? Power
@@ -967,12 +988,16 @@ function BrowseReadableAction({
   const content = (
     iconOnly ? (
       <span className={`browse-action-button-icon browse-action-button-icon--${action}`}>
-        {React.createElement(icon, { 'aria-hidden': true, className: action === 'downloading' ? 'animate-spin' : undefined })}
+        {action === 'downloading'
+          ? <BrowseDownloadSpinner />
+          : React.createElement(icon, { 'aria-hidden': true })}
       </span>
     ) : (
       <>
         <span className={`browse-action-button-icon browse-action-button-icon--${action}`}>
-          {React.createElement(icon, { 'aria-hidden': true, className: action === 'downloading' ? 'animate-spin' : undefined })}
+          {action === 'downloading'
+            ? <BrowseDownloadSpinner />
+            : React.createElement(icon, { 'aria-hidden': true })}
         </span>
         <span className="browse-action-button-label">
           {action === 'queued' ? (
@@ -1126,7 +1151,10 @@ export default function Browse() {
   const setBrowseUi = useAppStore((s) => s.setBrowseUi);
   const browseSession = useAppStore((s) => s.browseSession);
   const setBrowseSession = useAppStore((s) => s.setBrowseSession);
-  const downloadActivity = useDownloadActivity();
+  // Browse only needs queue membership. Byte-progress ticks belong to the
+  // details popup and queue indicator; subscribing the whole catalog to them
+  // redrew every visible card throughout an install/reinstall.
+  const downloadActivity = useDownloadQueueActivity();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const hiddenCreators = useMemo(() => settings?.hiddenCreators ?? [], [settings?.hiddenCreators]);
   const hiddenCreatorIds = useMemo(() => hiddenCreators.map((creator) => creator.id), [hiddenCreators]);
@@ -2550,10 +2578,23 @@ export default function Browse() {
             mod.gameBananaFileId === fileId &&
             !updateSourceIds.includes(mod.id),
         );
-      for (const target of replacementTargets) await deleteMod(target.id);
 
       if (!replacementAlreadyInstalled) {
+        // Snapshot capture can leave an optimistic row on screen long enough
+        // for the user to cancel it. Do not cross IPC after that cancellation.
+        if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
         await downloadMod(selectedMod.id, fileId, fileName, selectedDetailsSection, effectiveCategoryId);
+        await loadMods();
+        const installedAfterDownload = useAppStore.getState().mods;
+        const targetIds = findReplacementTargetIdsAfterInstall(
+          installedAfterDownload,
+          replacementTargets,
+          fileId,
+        );
+        for (const targetId of targetIds) await deleteModApi(targetId);
+      } else {
+        if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
+        for (const target of replacementTargets) await deleteModApi(target.id);
       }
       await loadMods();
 
@@ -2569,7 +2610,9 @@ export default function Browse() {
           restoreGlobal,
           {
             setGlobal: (modId) => setModPriorityFolder(modId, true),
-            enable: async (modId) => { await toggleMod(modId); },
+            enable: async (modId) => {
+              if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
+            },
           },
         );
         if (failures.length > 0) {
@@ -2772,7 +2815,11 @@ export default function Browse() {
   }, [selectedMod, installedMods]);
   const selectedUpdateSourcesByTargetFileId = useMemo(() => {
     const sources = new Map(selectedUpdatePlan.sourcesByTargetFileId);
-    if (!selectedMod || selectedUpdatePlan.unresolvedSourceIds.length === 0) return sources;
+    if (
+      !selectedMod ||
+      sources.size > 0 ||
+      selectedUpdatePlan.unresolvedSourceIds.length === 0
+    ) return sources;
 
     // If every unresolved local VPK came from the same old GameBanana file,
     // the ambiguity is only "which new variant does the user want?". Let every
@@ -4520,7 +4567,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
-                <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                <BrowseDownloadSpinner className="text-accent" />
               </span>
             ) : (
               <button
@@ -4898,8 +4945,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title={t('browse.card.downloading')}>
-            <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+          <div className={`browse-download-badge flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title={t('browse.card.downloading')}>
+            <BrowseDownloadSpinner className="text-accent" size={isCompact ? 'default' : 'large'} />
           </div>
         ) : queuePosition ? (
           <div
