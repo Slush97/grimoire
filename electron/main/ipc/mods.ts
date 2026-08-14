@@ -66,6 +66,10 @@ import type { AbilitySoundClassification, AddMergeSourcesResult, MergeSourceRepl
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
+// Last path we warned about skipping the orphan prune for, so the warning lands
+// once per path instead of once per get-mods.
+let lastUntrustedPathWarned: string | null = null;
+
 interface UnknownCacheBulkRequest {
     modId: string;
     requestId?: string;
@@ -336,11 +340,21 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // roots are created on demand by getAddonsPath/getGrimoirePath, so the scan
     // silently fabricates an empty addons tree and reports zero mods rather than
     // failing. Pruning against that deletes every name, id, thumbnail and hero
-    // assignment the user has, unrecoverably (reported 2026-08-14: 26 mods
-    // reduced to "Pak01".."Pak31" after a PC restart). gameinfo.gi is the
-    // discriminator: Steam ships it and none of our mkdirs create it.
+    // assignment the user has (reported 2026-08-14: 26 mods reduced to
+    // "Pak01".."Pak31" after a PC restart). gameinfo.gi is the discriminator:
+    // Steam ships it and nothing on the install path writes one.
+    //
+    // The devMode check stays load-bearing rather than redundant: setupDevMode
+    // (services/dev.ts) writes an empty gameinfo.gi into the sandbox, so the
+    // sandbox passes this test and would otherwise prune the real sidecar
+    // against a tree that has never held a mod.
     const trustworthyScan = isValidDeadlockPath(deadlockPath);
-    if (!trustworthyScan) {
+    if (!trustworthyScan && deadlockPath !== lastUntrustedPathWarned) {
+        // Once per path, not once per get-mods: this handler runs on every visit
+        // to Installed, every toggle and every reorder, and a user whose
+        // gameinfo.gi is genuinely missing (antivirus, partial verify) would
+        // otherwise drown their own diagnostic report in this line.
+        lastUntrustedPathWarned = deadlockPath;
         console.warn(
             `[Metadata] Skipping orphan prune: ${deadlockPath} has no game/citadel/gameinfo.gi, so this scan (${mods.length} VPKs) is not evidence of what is installed.`
         );
@@ -348,7 +362,7 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     if (!settings.devMode && trustworthyScan) {
         // Prune against ALL scanned files (including managed VPKs) so we don't
         // wipe their metadata before filtering them out of the list below.
-        pruneOrphanMetadata(new Set(mods.map((m) => m.metaKey)));
+        pruneOrphanMetadata(new Set(mods.map((m) => m.metaKey)), deadlockPath);
     }
     // Hide Grimoire-managed Locker VPKs (hero cards + ability sounds). They're
     // driven solely through the Locker pickers and are auto-enabled + pinned to
