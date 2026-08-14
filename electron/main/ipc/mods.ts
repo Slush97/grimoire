@@ -17,7 +17,7 @@ import {
     runExclusiveModMutation,
     type Mod,
 } from '../services/mods';
-import { metaKeyFor } from '../services/deadlock';
+import { metaKeyFor, isValidDeadlockPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
@@ -329,7 +329,23 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // sandbox starts empty, and pruning against it would wipe every real
     // install's name/thumbnail/gameBananaId from the global metadata sidecar.
     const settings = loadSettings();
-    if (!settings.devMode) {
+    // Same reasoning, for the real install: an empty scan is only evidence that
+    // the user has no mods when it came from a Deadlock folder that is actually
+    // there. A configured path can stop resolving (Steam mid-update after a
+    // reboot, a moved library, a drive that has not come up yet), and the scan
+    // roots are created on demand by getAddonsPath/getGrimoirePath, so the scan
+    // silently fabricates an empty addons tree and reports zero mods rather than
+    // failing. Pruning against that deletes every name, id, thumbnail and hero
+    // assignment the user has, unrecoverably (reported 2026-08-14: 26 mods
+    // reduced to "Pak01".."Pak31" after a PC restart). gameinfo.gi is the
+    // discriminator: Steam ships it and none of our mkdirs create it.
+    const trustworthyScan = isValidDeadlockPath(deadlockPath);
+    if (!trustworthyScan) {
+        console.warn(
+            `[Metadata] Skipping orphan prune: ${deadlockPath} has no game/citadel/gameinfo.gi, so this scan (${mods.length} VPKs) is not evidence of what is installed.`
+        );
+    }
+    if (!settings.devMode && trustworthyScan) {
         // Prune against ALL scanned files (including managed VPKs) so we don't
         // wipe their metadata before filtering them out of the list below.
         pruneOrphanMetadata(new Set(mods.map((m) => m.metaKey)));

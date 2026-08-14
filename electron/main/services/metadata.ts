@@ -396,6 +396,23 @@ export function pruneOrphanMetadata(validKeys: Set<string>): void {
     );
     if (orphans.length === 0) return;
 
+    // A prune that empties a populated sidecar is never a self-heal. Deleting a
+    // mod drops its own row synchronously (deleteMod -> removeModMetadata), so
+    // orphans are always a minority left behind by an older version or an
+    // outside-Grimoire delete. "Nothing on disk matches anything on record"
+    // instead means the scan saw nothing, which is what a Deadlock folder that
+    // briefly stopped resolving looks like. Refuse it: the cost of keeping an
+    // orphan is one stale name on a recycled pakNN slot, the cost of the wipe is
+    // every name, GameBanana id, thumbnail and hero assignment the user has,
+    // with no way back. Callers guard this too (see get-mods); this is the
+    // invariant that holds when a caller forgets.
+    if (validKeys.size === 0) {
+        console.warn(
+            `[Metadata] Refusing to prune ${orphans.length} entries against an empty scan: that would clear the sidecar, and no mod list is worth that.`
+        );
+        return;
+    }
+
     for (const key of orphans) {
         delete metadata[key];
     }
