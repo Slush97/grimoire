@@ -1278,6 +1278,8 @@
       "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",
       "receivingUpdates": "Mods receiving updates ({{count}})",
       "dismissError": "Dismiss update error",
+      "restoreStateFailed": "The mod was updated, but its previous state could not be fully restored ({{details}})",
+      "ambiguousGlobalState": "This update was not applied because the old multi-file install has mixed Global placement and no saved variant identities. Make every file Global or remove every file from Global, then try again.",
       "pickReplacement_one": "Pick replacement",
       "pickReplacement_other": "Pick replacements ({{count}})",
       "dismissPickNotice": "Dismiss manual pick notice"

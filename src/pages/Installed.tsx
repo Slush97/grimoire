@@ -111,7 +111,13 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import {
+  createEnabledVpkRestoreSnapshot,
+  createGlobalVpkRestoreSnapshot,
+  restoreReplacementVpkState,
+  type EnabledVpkRestoreSnapshot,
+  type GlobalVpkRestoreSnapshot,
+} from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -2160,6 +2166,10 @@ export default function Installed() {
         );
       }
       const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
+      const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
+      if (restoreGlobal.ambiguous) {
+        throw new Error(t('installed.updateAll.ambiguousGlobalState'));
+      }
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -2177,21 +2187,30 @@ export default function Installed() {
 
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
 
-      // Replacement downloads land disabled, so restore the enabled state after
+      // Replacement downloads land disabled with fresh metadata. Restore both
+      // enabled state and the user's Global priority-root placement after
       // reloading. Match by GB ids because local ids change on reinstall.
-      if (restoreEnabled.hadEnabled) {
+      if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
         await loadMods();
         const newMods = useAppStore
           .getState()
           .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        for (const newMod of newMods) {
-          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
-          if (newMod.enabled) continue;
-          try {
-            await toggleMod(newMod.id);
-          } catch (err) {
-            console.warn('[Update] failed to re-enable updated mod:', err);
-          }
+        const restoreFailures = await restoreReplacementVpkState(
+          newMods,
+          restoreEnabled,
+          restoreGlobal,
+          {
+            setGlobal: (modId) => setModPriorityFolder(modId, true),
+            enable: async (modId) => {
+              await toggleMod(modId);
+            },
+          },
+        );
+        if (restoreFailures.length > 0) {
+          const summary = restoreFailures
+            .map((failure) => `${failure.action}: ${String(failure.error)}`)
+            .join('; ');
+          throw new Error(t('installed.updateAll.restoreStateFailed', { details: summary }));
         }
       }
 
@@ -2224,6 +2243,7 @@ export default function Installed() {
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
+        wasGlobal: !!m.priorityMod,
         fileDescription: m.fileDescription,
         sourceFileName: m.sourceFileName,
       }));
@@ -2251,6 +2271,7 @@ export default function Installed() {
       gameBananaId: number;
       gameBananaFileId: number;
       restoreEnabled: EnabledVpkRestoreSnapshot;
+      restoreGlobal: GlobalVpkRestoreSnapshot;
       fileName: string;
     }[] = [];
     let progress = 0;
@@ -2404,6 +2425,21 @@ export default function Installed() {
 
       for (const batch of okBatches.values()) {
         try {
+          const restoreEnabled = createEnabledVpkRestoreSnapshot(
+            batch.snapshots.map((snapshot) => ({
+              enabled: snapshot.wasEnabled,
+              vpkIndex: snapshot.vpkIndex,
+            })),
+          );
+          const restoreGlobal = createGlobalVpkRestoreSnapshot(
+            batch.snapshots.map((snapshot) => ({
+              priorityMod: snapshot.wasGlobal,
+              vpkIndex: snapshot.vpkIndex,
+            })),
+          );
+          if (restoreGlobal.ambiguous) {
+            throw new Error(t('installed.updateAll.ambiguousGlobalState'));
+          }
           for (const snapshot of batch.snapshots) {
             await deleteMod(snapshot.oldId);
           }
@@ -2417,12 +2453,8 @@ export default function Installed() {
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,
-            restoreEnabled: createEnabledVpkRestoreSnapshot(
-              batch.snapshots.map((snapshot) => ({
-                enabled: snapshot.wasEnabled,
-                vpkIndex: snapshot.vpkIndex,
-              })),
-            ),
+            restoreEnabled,
+            restoreGlobal,
             fileName: batch.fileName,
           });
         } catch (err) {
@@ -2447,23 +2479,28 @@ export default function Installed() {
     }
 
     // Refresh once so the new installs are in the store with their new ids,
-    // then re-enable anything that was enabled before. Match by GB ids; the
+    // then restore Global placement and enabled state. Match by GB ids; the
     // local mod id changes on reinstall.
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.restoreEnabled.hadEnabled) continue;
+      if (!c.restoreEnabled.hadEnabled && !c.restoreGlobal.hadGlobal) continue;
       const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
-      for (const newMod of newMods) {
-        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
-        if (newMod.enabled) continue;
-        try {
-          await toggleMod(newMod.id);
-        } catch (err) {
-          failures.push(`re-enable ${c.fileName}: ${String(err)}`);
-        }
+      const restoreFailures = await restoreReplacementVpkState(
+        newMods,
+        c.restoreEnabled,
+        c.restoreGlobal,
+        {
+          setGlobal: (modId) => setModPriorityFolder(modId, true),
+          enable: async (modId) => {
+            await toggleMod(modId);
+          },
+        },
+      );
+      for (const failure of restoreFailures) {
+        failures.push(`restore ${failure.action} ${c.fileName}: ${String(failure.error)}`);
       }
     }
     setUpdateAllProgress(null);
