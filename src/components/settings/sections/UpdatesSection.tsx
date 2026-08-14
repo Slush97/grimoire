@@ -47,7 +47,10 @@ export default function UpdatesSection() {
     } | null;
   } | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [installSource, setInstallSource] = useState<'managed' | 'appimage' | 'standard'>('standard');
+  const [installSource, setInstallSource] = useState<'managed' | 'appimage' | 'standard' | 'manual'>('standard');
+  // See UpdateModal: 'managed' defers to the package manager, 'manual' (ad-hoc
+  // signed macOS) can check but cannot apply an update in place.
+  const canSelfInstall = installSource !== 'managed' && installSource !== 'manual';
 
   // Derived, not state: a check in flight sets `checking`, so this falls back
   // to false on its own while one runs.
@@ -137,14 +140,14 @@ export default function UpdatesSection() {
               >
                 <Tx k="settings.updates.whatsNew" fallback="What's New" />
               </Button>
-              {installSource === 'managed' ? null : updateStatus?.downloaded ? (
+              {installSource === 'managed' ? null : canSelfInstall && updateStatus?.downloaded ? (
                 <Button
                   onClick={handleInstallUpdate}
                   icon={ArrowDownCircle}
                 >
                   <Tx k="settings.updates.installRestart" fallback="Install & Restart" />
                 </Button>
-              ) : updateStatus?.available && !updateStatus.downloading ? (
+              ) : canSelfInstall && updateStatus?.available && !updateStatus.downloading ? (
                 <Button
                   onClick={handleDownloadUpdate}
                   icon={Download}
@@ -192,6 +195,28 @@ export default function UpdatesSection() {
                   }}
                 />
               </p>
+            </div>
+          )}
+
+          {installSource === 'manual' && (
+            <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
+              <p className="text-text-primary font-medium">
+                <Tx k="settings.updates.manual" fallback="Updates have to be downloaded manually." />
+              </p>
+              <p>
+                <Tx
+                  k="settings.updates.manualUnsignedExplanation"
+                  fallback="The macOS build is ad-hoc signed rather than notarized, so macOS will not let Grimoire replace itself in place. Grimoire can still tell you when a new version is out."
+                />
+              </p>
+              <a
+                href="https://github.com/Slush97/grimoire/releases/latest"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-block font-mono text-text-primary underline underline-offset-2 hover:text-accent transition-colors"
+              >
+                <Tx k="settings.updates.manualDownloadLink" fallback="Download the latest release" />
+              </a>
             </div>
           )}
 
