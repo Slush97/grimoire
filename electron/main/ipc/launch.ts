@@ -13,6 +13,7 @@ import {
 } from '../services/launch';
 import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
 import { healLockerVpks } from '../services/lockerVpk';
+import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
 import {
@@ -176,5 +177,14 @@ export async function runStartupRecovery(): Promise<void> {
         await healLockerVpks(deadlockPath);
     } catch (err) {
         console.error('[launch] Locker VPK heal failed:', err);
+    }
+
+    // Replay downloads land in whichever mod folder gameinfo lists first, so the
+    // links that keep them decompressible have to exist before the user plays,
+    // not only after they happen to press Fix Configuration.
+    try {
+        ensureReplayFolderLink(deadlockPath);
+    } catch (err) {
+        console.error('[launch] Replay folder link failed:', err);
     }
 }
