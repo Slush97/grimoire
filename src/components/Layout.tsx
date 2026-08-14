@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, X } from 'lucide-react';
 import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
 import SyncIndicator from './SyncIndicator';
@@ -36,6 +36,9 @@ export default function Layout() {
   const [loading, setLoading] = useState(true);
   const [gameinfoAlert, setGameinfoAlert] = useState<string | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
+  // Dismissal is keyed on the message so a different gameinfo problem still
+  // surfaces after the user hides the current one.
+  const [dismissedGameinfoAlert, setDismissedGameinfoAlert] = useState<string | null>(null);
   // Normal one-click download progress is handled by DownloadQueueIndicator.
   // This only catches failures before a download can be queued.
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
@@ -299,7 +302,7 @@ export default function Layout() {
       <DiscordPresence />
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {gameinfoAlert && (
+        {gameinfoAlert && gameinfoAlert !== dismissedGameinfoAlert && (
           <div className="sticky top-0 z-40 border-b border-yellow-500/30 bg-yellow-500/10 backdrop-blur-sm">
             <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">
               <AlertTriangle className="h-5 w-5 text-yellow-400" />
@@ -313,6 +316,15 @@ export default function Layout() {
                 <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
                   {t('layout.openSettings')}
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setDismissedGameinfoAlert(gameinfoAlert)}
+                  aria-label={t('layout.hideGameinfoBanner')}
+                  title={t('layout.hideGameinfoBannerShort')}
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-yellow-200/70 transition-colors hover:bg-white/10 hover:text-yellow-100 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>

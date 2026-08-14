@@ -50,6 +50,8 @@ import type {
     UnmergeModResult,
     ExtractMergeSourceResult,
     AddMergeSourcesResult,
+    MergeSourceReplacement,
+    ReplaceMergeSourcesResult,
 } from '../../../src/types/mod';
 
 const DEADLOCK_STEAM_APP_ID = 1422450;
@@ -1220,6 +1222,287 @@ async function addMergeSourcesLocked(
             }
         }
         mergeTrace(`add-sources FAILED merge=${oldManifest.id}: ${String(err)}`);
+        throw err;
+    }
+}
+
+/**
+ * Swap one or more absorbed sources for freshly downloaded replacements and
+ * rebuild the merge in its current slot. This is what makes a merged mod
+ * updatable: a source's GameBanana file gets replaced by its author, the
+ * renderer downloads the new file as a normal standalone mod, and this hands
+ * the merge a new leaf in the old one's place.
+ *
+ * Every replacement inherits the OLD snapshot's priorityAtMergeTime and
+ * enabledAtMergeTime. That is what keeps the rebuilt VPK's internal collision
+ * order byte-for-byte equivalent to the original (vpkmerge is last-input-wins
+ * over a descending-priority argv) and what lets a later unmerge restore each
+ * source to the enabled state the user actually had.
+ *
+ * All replacements are applied in ONE rebuild. Calling this per source would
+ * rewrite the whole merged VPK once per source.
+ *
+ * The old source VPKs are deleted only after the atomic swap succeeds, so a
+ * failed rebuild leaves both the merge and the old sources exactly as found.
+ */
+export async function replaceMergeSources(
+    deadlockPath: string,
+    mergedModId: string,
+    replacements: MergeSourceReplacement[],
+    options: AddMergeSourcesOptions = {}
+): Promise<ReplaceMergeSourcesResult> {
+    if (replacements.length === 0) throw new Error('Select at least one source to update.');
+    const oldNames = replacements.map((r) => r.oldFileName);
+    if (new Set(oldNames).size !== oldNames.length) {
+        throw new Error('The same source was selected more than once.');
+    }
+    const newIds = replacements.map((r) => r.newModId);
+    if (new Set(newIds).size !== newIds.length) {
+        throw new Error('The same replacement mod was selected more than once.');
+    }
+    return runExclusiveModMutation(() =>
+        replaceMergeSourcesLocked(deadlockPath, mergedModId, replacements, options)
+    );
+}
+
+async function replaceMergeSourcesLocked(
+    deadlockPath: string,
+    mergedModId: string,
+    replacements: MergeSourceReplacement[],
+    options: AddMergeSourcesOptions
+): Promise<ReplaceMergeSourcesResult> {
+    const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
+
+    const target = installed.find((mod) => mod.id === mergedModId);
+    if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
+    const targetMeta = getModMetadata(target.metaKey);
+    if (!targetMeta?.merged) {
+        throw new Error(`"${targetMeta?.modName || target.name}" is not a merged mod.`);
+    }
+    const oldManifest = targetMeta.merged;
+
+    // Validate every replacement against the manifest and the install list
+    // before anything on disk moves.
+    const replacedByFileName = new Map<string, Mod>();
+    for (const { oldFileName, newModId } of replacements) {
+        const oldSnapshot = oldManifest.sources.find((s) => s.fileName === oldFileName);
+        if (!oldSnapshot) {
+            throw new Error(`"${oldFileName}" is not a source of this merge.`);
+        }
+        const replacement = installed.find((mod) => mod.id === newModId);
+        if (!replacement) throw new Error(`Replacement mod not found (id: ${newModId}).`);
+        if (replacement.id === target.id) {
+            throw new Error('A merge cannot replace one of its own sources with itself.');
+        }
+        const replacementMeta = getModMetadata(replacement.metaKey);
+        if (replacementMeta?.merged) {
+            throw new Error(
+                `"${replacementMeta.modName || replacement.name}" is a merged mod and can't be used as a source.`
+            );
+        }
+        replacedByFileName.set(oldFileName, replacement);
+    }
+
+    // Resolve the whole existing source list first. Replacements are excluded
+    // from the candidate pool so a legacy filename-only manifest entry can't
+    // claim the freshly downloaded VPK as one of the surviving sources.
+    const replacementIds = new Set(Array.from(replacedByFileName.values(), (mod) => mod.id));
+    const locator = makeSourceLocator(
+        installed.filter((mod) => mod.id !== target.id && !replacementIds.has(mod.id))
+    );
+
+    // The old VPKs being swapped out, resolved so they can be deleted after the
+    // rebuild. Missing-on-disk is tolerated here: the replacement supplies the
+    // content either way, and there is simply nothing left to clean up.
+    const retiredMods: Mod[] = [];
+    const pending: LocatedMergeSource[] = [];
+    // Which pending entries are the swapped-in replacements, tracked by entry
+    // identity rather than mod id: disabling a replacement below renames its
+    // VPK, and the id is an md5 of the metaKey, so every id captured here would
+    // go stale the moment the entry's `mod` is reassigned.
+    const replacedEntries = new Set<LocatedMergeSource>();
+    const missingSources: string[] = [];
+
+    for (const source of oldManifest.sources) {
+        const replacement = replacedByFileName.get(source.fileName);
+        if (replacement) {
+            const retired = await locator.locate(source);
+            if (retired) retiredMods.push(retired);
+            const replacementMeta = getModMetadata(replacement.metaKey);
+            const identity = await resolveVpkIdentity(replacement.path);
+            const entry: LocatedMergeSource = {
+                mod: replacement,
+                snapshot: {
+                    fileName: replacement.fileName,
+                    modName: replacementMeta?.modName || replacement.name,
+                    thumbnailUrl: replacementMeta?.thumbnailUrl ?? source.thumbnailUrl,
+                    gameBananaId: replacementMeta?.gameBananaId ?? replacement.gameBananaId,
+                    gameBananaFileId:
+                        replacementMeta?.gameBananaFileId ?? replacement.gameBananaFileId,
+                    section: replacementMeta?.sourceSection ?? replacement.sourceSection,
+                    // Inherited, NOT taken from the replacement's current slot:
+                    // the download landed in whatever pakNN was free, which says
+                    // nothing about where this source belongs in the merge.
+                    enabledAtMergeTime: source.enabledAtMergeTime,
+                    priorityAtMergeTime: source.priorityAtMergeTime,
+                    sha256AtMergeTime: identity.sha256,
+                },
+                vpkIndex: replacementMeta?.vpkIndex,
+            };
+            pending.push(entry);
+            replacedEntries.add(entry);
+            continue;
+        }
+        const onDisk = await locator.locate(source);
+        if (!onDisk) {
+            missingSources.push(source.fileName);
+            continue;
+        }
+        const identity = await resolveVpkIdentity(onDisk.path);
+        pending.push({
+            mod: onDisk,
+            snapshot: {
+                ...source,
+                fileName: onDisk.fileName,
+                sha256AtMergeTime: source.sha256AtMergeTime || identity.sha256,
+            },
+            vpkIndex: getModMetadata(onDisk.metaKey)?.vpkIndex,
+        });
+    }
+
+    if (missingSources.length > 0) {
+        const missing = Array.from(new Set(missingSources));
+        throw new Error(
+            `Can't update this merge: ${missing.join(', ')} `
+            + `${missing.length === 1 ? 'is' : 'are'} no longer on disk. `
+            + 'The merge was left unchanged. Unmerge first to recover the missing sources.'
+        );
+    }
+
+    if (pending.length < 2) {
+        throw new Error("Can't rebuild the merge: too few source VPKs remain on disk.");
+    }
+
+    // Both the merge and any enabled replacement will move below. Refuse before
+    // touching disk when the running game has one of them loaded.
+    assertCanMoveLoadedGameMods([
+        target,
+        ...pending.filter((source) => source.mod.enabled).map((source) => source.mod),
+    ]);
+
+    const targetDir = dirname(target.path);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    const disabledForRollback: Mod[] = [];
+    let swapped = false;
+
+    try {
+        // A freshly downloaded replacement installs ENABLED into a live pakNN
+        // slot. Move it out before building, tracking it for rollback so a
+        // pre-swap failure leaves the user's load order untouched.
+        for (const source of pending) {
+            if (!source.mod.enabled) continue;
+            const disabled = await disableModUnlocked(deadlockPath, source.mod.id);
+            disabledForRollback.push(disabled);
+            source.mod = disabled;
+            source.snapshot.fileName = disabled.fileName;
+        }
+
+        const ordered = [...pending].sort(
+            (a, b) => b.snapshot.priorityAtMergeTime - a.snapshot.priorityAtMergeTime
+        );
+        const args: string[] = [];
+        if (options.strict) args.push('--strict');
+        args.push(buildPath, ...ordered.map((source) => source.mod.path));
+
+        mergeTrace(
+            `replace-sources start merge=${oldManifest.id} key=${target.metaKey}: `
+            + `${replacements.length} swapped -> ${basename(buildPath)}`
+        );
+        await runVpkmerge(args);
+        await verifyVpkOutput(buildPath);
+
+        const rebuiltOriginal = await computeOriginalIdentity(buildPath);
+        const snapshots = ordered.map((source) => source.snapshot);
+        const portable = buildPortableForSources(
+            ordered.map((source) => source.mod),
+            targetMeta.modName || target.name,
+            snapshots
+        );
+        const newManifest: MergedModInfo = {
+            id: oldManifest.id,
+            createdAt: oldManifest.createdAt,
+            shareCode: encodeShareCode(JSON.stringify(portable)),
+            sources: snapshots,
+        };
+
+        // Embed before the swap so sidecar and in-VPK provenance advance as a
+        // unit. An embed or parity failure leaves the original merge untouched.
+        await embedMergeIdentity(
+            buildPath,
+            targetMeta.modName || target.name,
+            newManifest.createdAt,
+            rebuiltOriginal,
+            ordered.map((source) => ({
+                title: source.snapshot.modName,
+                identity: { sha256: source.snapshot.sha256AtMergeTime },
+                gamebananaId: source.snapshot.gameBananaId,
+                gamebananaFileId: source.snapshot.gameBananaFileId,
+                section: source.snapshot.section,
+                priorityAtMergeTime: source.snapshot.priorityAtMergeTime,
+                enabledAtMergeTime: source.snapshot.enabledAtMergeTime,
+                fileNameAtMergeTime: source.snapshot.fileName,
+                vpkIndex: source.vpkIndex,
+            }))
+        );
+        await verifyVpkOutput(buildPath);
+
+        await fs.rename(buildPath, target.path);
+        swapped = true;
+        setModMetadata(target.metaKey, {
+            modName: targetMeta.modName,
+            thumbnailUrl: targetMeta.thumbnailUrl,
+            sha256: rebuiltOriginal.sha256,
+            merged: newManifest,
+        });
+
+        // Only now is the old content redundant. Best-effort: the merge is
+        // already correct, and a leftover disabled VPK is cosmetic next to
+        // failing an update that actually landed.
+        const retiredFileNames: string[] = [];
+        for (const retired of retiredMods) {
+            try {
+                await fs.unlink(retired.path);
+                removeModMetadata(retired.metaKey);
+                retiredFileNames.push(retired.fileName);
+            } catch (err) {
+                console.error(`[modMerger] Failed to remove retired source ${retired.fileName}:`, err);
+            }
+        }
+
+        mergeTrace(
+            `replace-sources done merge=${oldManifest.id} key=${target.metaKey}: ${describeSources(snapshots)}`
+        );
+        return {
+            merged: newManifest,
+            replacedFileNames: pending
+                .filter((source) => replacedEntries.has(source))
+                .map((source) => source.snapshot.fileName),
+            retiredFileNames,
+        };
+    } catch (err) {
+        if (!swapped) {
+            try { await fs.unlink(buildPath); } catch { /* best-effort temp cleanup */ }
+            // Reverse order minimizes load-slot churn when several were enabled.
+            for (const disabled of disabledForRollback.reverse()) {
+                try {
+                    await enableModUnlocked(deadlockPath, disabled.id);
+                } catch (restoreErr) {
+                    console.error(`[modMerger] Failed to restore ${disabled.fileName} after replace-source failure:`, restoreErr);
+                }
+            }
+        }
+        mergeTrace(`replace-sources FAILED merge=${oldManifest.id}: ${String(err)}`);
         throw err;
     }
 }
