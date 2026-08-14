@@ -162,9 +162,14 @@ const replacement = {
     size: 12,
     installedAt: '2026-02-01',
 };
+// What disableModUnlocked hands back. The id MUST differ from `replacement`'s:
+// disable renames the VPK into .disabled/, and a mod id is an md5 of its
+// metaKey (generateModId in mods.ts), so a moved mod is never the same id.
+// Reusing the id here would let code that re-identifies a source by its
+// pre-disable id keep passing in the test and fail in production.
 const disabledReplacement = {
     ...replacement,
-    id: 'replacement',
+    id: 'replacement-disabled',
     fileName: 'source-a-v2_dir.vpk',
     path: '/game/addons/.disabled/source-a-v2_dir.vpk',
     metaKey: 'source-a-v2_dir.vpk',

@@ -1317,6 +1317,11 @@ async function replaceMergeSourcesLocked(
     // content either way, and there is simply nothing left to clean up.
     const retiredMods: Mod[] = [];
     const pending: LocatedMergeSource[] = [];
+    // Which pending entries are the swapped-in replacements, tracked by entry
+    // identity rather than mod id: disabling a replacement below renames its
+    // VPK, and the id is an md5 of the metaKey, so every id captured here would
+    // go stale the moment the entry's `mod` is reassigned.
+    const replacedEntries = new Set<LocatedMergeSource>();
     const missingSources: string[] = [];
 
     for (const source of oldManifest.sources) {
@@ -1326,7 +1331,7 @@ async function replaceMergeSourcesLocked(
             if (retired) retiredMods.push(retired);
             const replacementMeta = getModMetadata(replacement.metaKey);
             const identity = await resolveVpkIdentity(replacement.path);
-            pending.push({
+            const entry: LocatedMergeSource = {
                 mod: replacement,
                 snapshot: {
                     fileName: replacement.fileName,
@@ -1344,7 +1349,9 @@ async function replaceMergeSourcesLocked(
                     sha256AtMergeTime: identity.sha256,
                 },
                 vpkIndex: replacementMeta?.vpkIndex,
-            });
+            };
+            pending.push(entry);
+            replacedEntries.add(entry);
             continue;
         }
         const onDisk = await locator.locate(source);
@@ -1479,7 +1486,7 @@ async function replaceMergeSourcesLocked(
         return {
             merged: newManifest,
             replacedFileNames: pending
-                .filter((source) => replacementIds.has(source.mod.id))
+                .filter((source) => replacedEntries.has(source))
                 .map((source) => source.snapshot.fileName),
             retiredFileNames,
         };
