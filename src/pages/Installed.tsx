@@ -2190,6 +2190,7 @@ export default function Installed() {
       // Replacement downloads land disabled with fresh metadata. Restore both
       // enabled state and the user's Global priority-root placement after
       // reloading. Match by GB ids because local ids change on reinstall.
+      let restoreFailureMessage: string | null = null;
       if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
         await loadMods();
         const newMods = useAppStore
@@ -2210,11 +2211,20 @@ export default function Installed() {
           const summary = restoreFailures
             .map((failure) => `${failure.action}: ${String(failure.error)}`)
             .join('; ');
-          throw new Error(t('installed.updateAll.restoreStateFailed', { details: summary }));
+          restoreFailureMessage = t('installed.updateAll.restoreStateFailed', { details: summary });
         }
       }
 
-      closeModDetails();
+      // A restore failure is NOT an update failure: the new file is installed
+      // and only its enabled/Global state is off. Throwing here would report a
+      // succeeded update as a failed one and skip the refresh below, so keep
+      // the overlay open on the explanation instead and always reconcile the
+      // store with what actually landed on disk.
+      if (restoreFailureMessage) {
+        setDetailsError(restoreFailureMessage);
+      } else {
+        closeModDetails();
+      }
       loadMods();
     } catch (err) {
       setDetailsError(String(err));
