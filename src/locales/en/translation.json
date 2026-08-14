@@ -739,7 +739,10 @@
       "downloading": "Downloading update...",
       "whatsNewIn": "What's New in",
       "released": "Released {{date}}",
-      "noReleaseNotes": "No release notes available."
+      "noReleaseNotes": "No release notes available.",
+      "manual": "Updates have to be downloaded manually.",
+      "manualUnsignedExplanation": "The macOS build is ad-hoc signed rather than notarized, so macOS will not let Grimoire replace itself in place. Grimoire can still tell you when a new version is out.",
+      "manualDownloadLink": "Download the latest release"
     },
     "appearance": {
       "accentNamed": "Use {{name}} accent color",
@@ -2633,7 +2636,10 @@
     "whatsNew": "What's new",
     "releasesCount": "({{count}} releases)",
     "noReleaseNotesForThisVersion": "No release notes for this version.",
-    "deliveredViaGithub": "Updates are delivered automatically through GitHub Releases. Click Check for Updates to look now."
+    "deliveredViaGithub": "Updates are delivered automatically through GitHub Releases. Click Check for Updates to look now.",
+    "manualDownloadRequired": "Download updates manually on macOS.",
+    "manualUnsignedExplanation": "The macOS build is ad-hoc signed rather than notarized, so macOS will not let Grimoire replace itself in place. Checking for updates still works.",
+    "manualDownloadLink": "Open the releases page"
   },
   "appUpdateBanner": {
     "readyToInstallVersion": "Grimoire {{version}} is ready to install",

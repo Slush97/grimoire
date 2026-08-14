@@ -4,12 +4,20 @@ import type { UpdateInfo } from 'electron-updater';
 import { app, BrowserWindow } from 'electron';
 import log from 'electron-log';
 
-export type InstallSource = 'managed' | 'appimage' | 'standard';
+export type InstallSource = 'managed' | 'appimage' | 'standard' | 'manual';
 
 // Detect installs owned by a system package manager (apt/AUR/snap/flatpak).
 // In-app updates would fail on these because /opt and /usr are root-owned, so
 // we route those users to their package manager instead.
 export function getInstallSource(): InstallSource {
+    // The macOS build is ad-hoc signed: there is no Developer ID certificate,
+    // so the bundle carries no signing identity (`TeamIdentifier=not set`).
+    // Squirrel.Mac refuses to swap in an update whose identity does not match
+    // the running app's, so an in-app update would download and then fail at
+    // the install step. Checking still works and is worth doing, so this is a
+    // separate source from 'managed': we tell the user a version exists and
+    // send them to the download page. See docs/macos.md.
+    if (process.platform === 'darwin') return 'manual';
     if (process.platform === 'linux') {
         if (process.env.APPIMAGE) return 'appimage';
         const exec = process.execPath;
@@ -28,7 +36,16 @@ export function getInstallSource(): InstallSource {
 }
 
 const installSource = getInstallSource();
+// 'managed' is fully hands-off: the package manager owns the whole lifecycle,
+// so we do not even check. 'manual' can still check and report a new version,
+// it just cannot apply one in place.
 const updaterDisabled = installSource === 'managed';
+const canInstallInPlace = installSource !== 'managed' && installSource !== 'manual';
+
+/** Whether the in-app updater can actually apply an update on this install. */
+export function canSelfInstall(): boolean {
+    return canInstallInPlace;
+}
 
 // Configure logging
 autoUpdater.logger = log;
@@ -152,7 +169,10 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 }
 
 export async function downloadUpdate(): Promise<void> {
-    if (updaterDisabled) return;
+    // Not just updaterDisabled: downloading on a 'manual' install would hand
+    // Squirrel.Mac a payload it will refuse to install, so stop earlier and
+    // let the UI point at the download page instead.
+    if (!canInstallInPlace) return;
     try {
         await autoUpdater.downloadUpdate();
     } catch (error) {
@@ -162,7 +182,7 @@ export async function downloadUpdate(): Promise<void> {
 }
 
 export function quitAndInstall(): void {
-    if (updaterDisabled) return;
+    if (!canInstallInPlace) return;
     autoUpdater.quitAndInstall(false, true);
 }
 
