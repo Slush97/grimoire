@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from './common/forms';
+import { Tag } from './common/ui';
 
 interface Props {
   modName: string;
@@ -110,24 +111,19 @@ export default function PriorityEditor({
           startEdit(e);
         }
       }}
-      className="group/order-chip relative inline-flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md focus:outline-none"
+      className="group/order-chip relative inline-flex cursor-pointer items-center justify-center rounded-sm focus:outline-none before:absolute before:-inset-1"
       aria-label={t('installed.priorityEditor.chipAriaLabel', { value })}
     >
-      <span
-        // White number on a neutral dark scrim (overlay) or the standard input
-        // surface (inline), with a subtle grey border so it reads as a quiet
-        // card chip rather than an accent-highlighted control. Neutral greys keep
-        // it on-theme regardless of the user's accent hue. The overlay sits over
-        // arbitrary thumbnail art, so the number gets a hard black outline
-        // (text-shadow on all four corners) to stay legible over bright covers.
-        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
-          variant === 'overlay'
-            ? 'bg-black/70 [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
-            : 'bg-bg-tertiary'
-        }`}
+      <Tag
+        // The visible chip deliberately uses the same geometry, neutral tone,
+        // and image-safe overlay surface as the card's 18+ and state tags. The
+        // parent's pseudo-element keeps the larger click target without adding
+        // layout height (the old 28px wrapper pushed this tag below its peers).
+        variant={variant}
+        className="min-w-[28px] justify-center tabular-nums transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:text-text-primary group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40"
       >
         #{value}
-      </span>
+      </Tag>
       {!editing && (
         <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
           {t('installed.priorityEditor.loadOrder')}
