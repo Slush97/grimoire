@@ -8146,7 +8146,7 @@ function ModCard({
       ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
       : '';
   const chipMaxClass =
-    viewMode === 'compact' ? 'max-w-[152px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
+    viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
   const chipSizeClasses =
     viewMode === 'list'
       ? 'h-6 rounded-[7px] px-2 text-[11px]'
@@ -8206,9 +8206,9 @@ function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
     : 'text-[15px] font-medium leading-[18px] truncate';
-  // Grid footers stay single-line. The hover-only date can appear after the
-  // chips when there is room, but it must never wrap into a second line and
-  // resize the card.
+  // Grid footers stay single-line. Classification is deliberately limited to
+  // one hero identity plus one text label below, so resizing a card never
+  // changes *which* tags it shows.
   const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'h-7 flex-nowrap';
   // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
   // manual or auto global tag is visible here, not just in the Locker. A global
@@ -8217,18 +8217,17 @@ function ModCard({
   const cardGlobalLabel = cardGlobalType
     ? (GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType)
     : undefined;
-  // A globally-classified mod (HUD, Soul Containers, ...) already shows the
-  // Locker global chip, which makes the GameBanana category chip redundant: for
-  // HUD it was literally rendering "HUD" twice (category + global). Suppress the
-  // category chip whenever a global chip is present and let it stand in.
-  const showCategoryChip =
-    (viewMode !== 'compact' || !mod.lockerHero) && !cardGlobalType;
-  const compactBaseChipCount =
-    (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
-  const showGlobalChip = !!cardGlobalType && (!isCompact || compactBaseChipCount < 2);
-  const compactChipCount = compactBaseChipCount + (showGlobalChip ? 1 : 0);
-  const showNsfwChip = !!mod.nsfw && (!isCompact || compactChipCount < 2);
-  const showGroupChip = !!group && (!isCompact || compactChipCount + (showNsfwChip ? 1 : 0) < 2);
+  // One stable taxonomy model for every grid size:
+  //   1. the hero identity, when present (bare portrait);
+  //   2. either the Locker global type or the GameBanana category (one label).
+  // Global classification supersedes category because those labels are often
+  // identical (HUD/HUD). A hero category is represented by the portrait and
+  // therefore does not also need a text chip. Previously compact cards counted
+  // available slots and silently dropped later tags, which made the same mod
+  // appear to have different metadata as the size slider crossed a breakpoint.
+  const categoryHeroName = heroNameForLabel(mod.categoryName);
+  const cardHeroName = canonicalHeroName(mod.lockerHero) ?? categoryHeroName;
+  const cardTaxonomyLabel = cardGlobalLabel ?? (categoryHeroName ? undefined : mod.categoryName);
   // Enabled cards get their own copy: pinning only takes effect once the mod is
   // disabled, and the disabled section's "top of disabled mods" wording would be
   // a lie there.
@@ -8579,6 +8578,16 @@ function ModCard({
               </div>
             )}
               <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+              {mod.nsfw && (
+                <Tag
+                  tone="danger"
+                  variant="overlay"
+                  title={t('modThumbnail.nsfw')}
+                  className="uppercase tracking-wide"
+                >
+                  18+
+                </Tag>
+              )}
               {hasConflicts && (
                 <Tag
                   tone="warning"
@@ -8671,56 +8680,28 @@ function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
-              {mod.priorityMod && (
-                <MetaTextChip
-                  label={t('installed.priority.chip')}
-                  className={manualTagChipClasses}
-                  title={t('installed.priority.hint')}
-                />
-              )}
-              <LockerHeroChip
-                mod={mod}
-                manualTagChipClasses={manualTagChipClasses}
-                inferredTagChipClasses={inferredTagChipClasses}
-                iconClassName={tagIconClassName}
-                iconOnly
-              />
-              {showGlobalChip && cardGlobalLabel && (
-                <MetaTextChip
-                  label={cardGlobalLabel}
-                  className={metaChipClasses}
-                  title={`Locker: ${cardGlobalLabel}`}
-                />
-              )}
-              {showCategoryChip && mod.categoryName && heroNameForLabel(mod.categoryName) !== mod.lockerHero && (
-                <CategoryChip
-                  label={mod.categoryName}
-                  className={metaChipClasses}
-                  iconClassName={tagIconClassName}
-                  iconOnly
-                />
-              )}
-              {showNsfwChip && (
-                <MetaTextChip label="18+" className={dangerInlineChipClasses} />
-              )}
-              {showGroupChip && (
-                // Enabled/total variant count as a quiet icon + number (no accent,
-                // no border, no "files" label) so it reads as metadata, not a tag.
+              {cardHeroName && (
                 <span
-                  className="inline-flex flex-shrink-0 items-center gap-1 text-[11px] tabular-nums text-text-secondary"
-                  title={variantStatusTitle}
+                  className="inline-flex flex-shrink-0 items-center"
+                  title={mod.lockerHero
+                    ? `${lockerHeroSourceLabel(mod.lockerHeroSource)}: ${cardHeroName}`
+                    : `GameBanana category: ${cardHeroName}`}
                 >
-                  <Files className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-                  {variantStatusLabel}
+                  <HeroTagLabel
+                    heroName={cardHeroName}
+                    iconClassName={tagIconClassName}
+                    iconOnly
+                  />
                 </span>
               )}
-              {!isCompact && (
-                <span
-                  className="hidden flex-shrink-0 items-center pl-1.5 text-[11px] tabular-nums text-text-secondary/55 group-hover/card:inline-flex"
-                  title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
-                >
-                  {formatRelativeDate(mod.installedAt)}
-                </span>
+              {cardTaxonomyLabel && (
+                <MetaTextChip
+                  label={cardTaxonomyLabel}
+                  className={metaChipClasses}
+                  title={cardGlobalLabel
+                    ? `Locker: ${cardGlobalLabel}`
+                    : `GameBanana category: ${cardTaxonomyLabel}`}
+                />
               )}
             </div>
 
