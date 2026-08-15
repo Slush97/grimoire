@@ -2282,7 +2282,7 @@ export default function Installed() {
         for (const mod of replacementTargets) await deleteModApi(mod.id);
       }
 
-      await loadMods();
+      await loadMods({ force: true });
 
       // Replacement downloads land disabled with fresh metadata. Restore both
       // enabled state and the user's Global priority-root placement after
@@ -2313,7 +2313,7 @@ export default function Installed() {
 
       // Always reconcile the store with what actually landed on disk, even when
       // the state restore below failed.
-      await loadMods();
+      await loadMods({ force: true });
 
       // A restore failure is NOT an update failure: the new file is installed
       // and only its enabled/Global state is off. Throwing here would report a
@@ -2363,6 +2363,7 @@ export default function Installed() {
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
         vpkIndex: m.vpkIndex,
+        sha256: m.sha256,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
@@ -2573,6 +2574,8 @@ export default function Installed() {
             id: snapshot.oldId,
             gameBananaId: snapshot.gameBananaId,
             gameBananaFileId: snapshot.gameBananaFileId,
+            vpkIndex: snapshot.vpkIndex,
+            sha256: snapshot.sha256,
           }));
           const targetIds = findReplacementTargetIdsAfterInstall(
             installedAfterDownload,
@@ -2611,7 +2614,7 @@ export default function Installed() {
     // Refresh once so the new installs are in the store with their new ids,
     // then restore Global placement and enabled state. Match by GB ids; the
     // local mod id changes on reinstall.
-    await loadMods();
+    await loadMods({ force: true });
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
       if (!c.restoreEnabled.hadEnabled && !c.restoreGlobal.hadGlobal) continue;

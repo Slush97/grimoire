@@ -307,8 +307,9 @@ interface AppState {
    *  so background refreshes (e.g. on window focus) don't replace the
    *  page with the loading skeleton. Refreshes are silent by default once a
    *  library has loaded; pass `{ silent: false }` only for an explicit blocking
-   *  reload. */
-  loadMods: (opts?: { silent?: boolean }) => Promise<void>;
+   *  reload. Pass `{ force: true }` after a filesystem mutation so an older
+   *  in-flight scan cannot be reused. */
+  loadMods: (opts?: { silent?: boolean; force?: boolean }) => Promise<void>;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
   toggleMod: (modId: string) => Promise<boolean>;
@@ -453,7 +454,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ settings, settingsLoading: false });
       // Reload mods if path changed
       if (getActiveDeadlockPath(settings)) {
-        get().loadMods();
+        get().loadMods({ force: true });
       }
     } catch (err) {
       // A failed write deliberately leaves `settings` untouched, so the control
@@ -604,10 +605,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Load mods from backend.
   // Silent refreshes (window focus, etc.) skip the loading flag so the UI
-  // doesn't flash the skeleton over already-rendered content.
+  // doesn't flash the skeleton over already-rendered content. A forced refresh
+  // supersedes an older scan when a mutation or path change makes reuse unsafe.
   loadMods: (opts) => {
     const existing = modsLoadInFlight;
-    if (existing && existing.generation === modsGeneration) {
+    if (!opts?.force && existing && existing.generation === modsGeneration) {
       return existing.promise;
     }
 
@@ -684,7 +686,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // found". The desired state is whatever the folder already reflects, so
       // resync silently instead of dropping the whole page to the error screen.
       if (/Mod not found/.test(String(err))) {
-        get().loadMods({ silent: true });
+        get().loadMods({ silent: true, force: true });
         return false;
       }
       set({ modsError: String(err) });
@@ -753,7 +755,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
     }
   },
 
@@ -818,7 +820,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (err) {
         if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
         else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-        get().loadMods();
+        get().loadMods({ force: true });
         return { failures: plan.enableIds.length + plan.disableIds.length };
       }
     });
@@ -844,7 +846,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
       // The game-running lock is swallowed silently everywhere else (background
       // toggles), but a solo *launch* that does nothing needs a reason, so the
       // caller can surface it. Enable-cap already auto-toasts via modsNotice and
@@ -872,7 +874,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
       return { failures: enable.length + disable.length };
     }
   }),
@@ -913,7 +915,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Reconcile any partial batch progress, then preserve the rejection for
         // the initiating surface. The picker and card menus own contextual
         // errors; swallowing here made them close as if a failed move worked.
-        await get().loadMods({ silent: true });
+        await get().loadMods({ silent: true, force: true });
         throw err;
       }
     });

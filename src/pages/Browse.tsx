@@ -2596,7 +2596,7 @@ export default function Browse() {
         if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
         for (const target of replacementTargets) await deleteModApi(target.id);
       }
-      await loadMods();
+      await loadMods({ force: true });
 
       if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
         const replacements = useAppStore
@@ -2622,7 +2622,7 @@ export default function Browse() {
             }),
             { tone: 'warning', duration: 7000 },
           );
-          await loadMods();
+          await loadMods({ force: true });
         }
       }
     } catch (err) {

@@ -66,4 +66,23 @@ describe('appStore loadMods refreshes', () => {
     expect(useAppStore.getState().modsLoading).toBe(false);
     expect(publications).toBe(0);
   });
+
+  it('starts a fresh generation when a post-mutation reload is forced', async () => {
+    let resolveFirst!: (mods: Mod[]) => void;
+    let resolveSecond!: (mods: Mod[]) => void;
+    getMods
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+
+    const first = useAppStore.getState().loadMods();
+    const forced = useAppStore.getState().loadMods({ force: true });
+    expect(getMods).toHaveBeenCalledTimes(2);
+
+    resolveSecond([mod('after-mutation')]);
+    await forced;
+    resolveFirst([mod('stale')]);
+    await first;
+
+    expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['after-mutation']);
+  });
 });
