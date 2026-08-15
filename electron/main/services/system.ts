@@ -262,8 +262,9 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         };
     }
 
-    // The modded search paths are what redirect replay downloads into the addons
-    // folder, so this repair owns the link that keeps them decompressible. Runs
+    // The modded search paths are what redirect replay downloads into the first
+    // mod folder, so this repair owns the links that keep them decompressible
+    // (startup heals them too; see runStartupRecovery in ipc/launch.ts). Runs
     // before the already-configured early return: an install can have correct
     // search paths and still be missing the link. Best-effort, like the backup.
     try {
