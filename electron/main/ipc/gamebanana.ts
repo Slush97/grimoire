@@ -20,7 +20,7 @@ import {
     type GameBananaCollection,
     type GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, cancelDownloadTarget, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
 import type {
     BrowseModsArgs,
@@ -89,13 +89,18 @@ ipcMain.handle('get-current-download', () => {
 });
 
 // remove-from-queue (cancel a queued download)
-ipcMain.handle('remove-from-queue', (_, modId: number): boolean => {
-    return removeFromQueue(modId);
+ipcMain.handle('remove-from-queue', (_, modId: number, fileId?: number): boolean => {
+    return removeFromQueue(modId, fileId);
 });
 
 // cancel-active-download (abort the currently-running download)
 ipcMain.handle('cancel-active-download', (): boolean => {
     return cancelActiveDownload();
+});
+
+// cancel-download-target (exact optimistic/queued/active target)
+ipcMain.handle('cancel-download-target', (_, modId: number, fileId: number): boolean => {
+    return cancelDownloadTarget(modId, fileId);
 });
 
 // one-click-suspicious-response (renderer relays user's modal decision)

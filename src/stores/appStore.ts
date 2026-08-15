@@ -36,6 +36,13 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
 
+// A download completion event and the renderer action that awaited that same
+// download can both request a rescan in the same instant. Share the scan while
+// it is current so one install does not publish the same library state twice.
+// Mutations bump modsGeneration, which deliberately makes an older in-flight
+// scan ineligible for reuse.
+let modsLoadInFlight: { generation: number; promise: Promise<void> } | null = null;
+
 // Serialize mod enable/disable toggles. A mod's id is its filename, which the
 // main process renames on every enable/disable, so two toggles fired in the same
 // tick (rapid Locker clicking, the exact repro in #bugs "disabled a lot of them
@@ -298,8 +305,11 @@ interface AppState {
   /** Reload the installed-mods list from the main process.
    *  Pass `{ silent: true }` to refresh without toggling `modsLoading`,
    *  so background refreshes (e.g. on window focus) don't replace the
-   *  page with the loading skeleton. */
-  loadMods: (opts?: { silent?: boolean }) => Promise<void>;
+   *  page with the loading skeleton. Refreshes are silent by default once a
+   *  library has loaded; pass `{ silent: false }` only for an explicit blocking
+   *  reload. Pass `{ force: true }` after a filesystem mutation so an older
+   *  in-flight scan cannot be reused. */
+  loadMods: (opts?: { silent?: boolean; force?: boolean }) => Promise<void>;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
   toggleMod: (modId: string) => Promise<boolean>;
@@ -444,7 +454,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ settings, settingsLoading: false });
       // Reload mods if path changed
       if (getActiveDeadlockPath(settings)) {
-        get().loadMods();
+        get().loadMods({ force: true });
       }
     } catch (err) {
       // A failed write deliberately leaves `settings` untouched, so the control
@@ -595,28 +605,53 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Load mods from backend.
   // Silent refreshes (window focus, etc.) skip the loading flag so the UI
-  // doesn't flash the skeleton over already-rendered content.
-  loadMods: async (opts) => {
-    const silent = !!opts?.silent;
+  // doesn't flash the skeleton over already-rendered content. A forced refresh
+  // supersedes an older scan when a mutation or path change makes reuse unsafe.
+  loadMods: (opts) => {
+    const existing = modsLoadInFlight;
+    if (!opts?.force && existing && existing.generation === modsGeneration) {
+      return existing.promise;
+    }
+
+    const silent = opts?.silent ?? get().modsLoaded;
     const gen = ++modsGeneration;
     if (!silent) set({ modsLoading: true, modsError: null });
-    try {
-      const scanned = await api.getMods();
-      if (gen === modsGeneration) {
-        const mods = reconcileMods(get().mods, scanned);
-        set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
-      } else if (!silent) {
-        // Superseded by a newer load/mutation: drop the stale list, but still
-        // clear our own spinner so the page doesn't hang on it.
-        set({ modsLoading: false });
+    const promise = (async () => {
+      try {
+        const scanned = await api.getMods();
+        if (gen === modsGeneration) {
+          const state = get();
+          const mods = reconcileMods(state.mods, scanned);
+          if (silent) {
+            // Zustand notifies whole-store subscribers on every set(), even if
+            // every field value is unchanged. Avoid that no-op publication:
+            // it used to redraw the Installed grid after every duplicate
+            // completion/focus refresh.
+            if (mods !== state.mods || !state.modsLoaded || state.modsError !== null) {
+              set({ mods, modsLoaded: true, modsError: null });
+            }
+          } else {
+            set({ mods, modsLoaded: true, modsLoading: false });
+          }
+        } else if (!silent) {
+          // Superseded by a newer load/mutation: drop the stale list, but still
+          // clear our own spinner so the page doesn't hang on it.
+          set({ modsLoading: false });
+        }
+      } catch (err) {
+        if (gen === modsGeneration) {
+          set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
+        } else if (!silent) {
+          set({ modsLoading: false });
+        }
       }
-    } catch (err) {
-      if (gen === modsGeneration) {
-        set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
-      } else if (!silent) {
-        set({ modsLoading: false });
-      }
-    }
+    })();
+
+    modsLoadInFlight = { generation: gen, promise };
+    void promise.finally(() => {
+      if (modsLoadInFlight?.promise === promise) modsLoadInFlight = null;
+    });
+    return promise;
   },
 
   // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
@@ -651,7 +686,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // found". The desired state is whatever the folder already reflects, so
       // resync silently instead of dropping the whole page to the error screen.
       if (/Mod not found/.test(String(err))) {
-        get().loadMods({ silent: true });
+        get().loadMods({ silent: true, force: true });
         return false;
       }
       set({ modsError: String(err) });
@@ -720,7 +755,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
     }
   },
 
@@ -785,7 +820,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (err) {
         if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
         else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-        get().loadMods();
+        get().loadMods({ force: true });
         return { failures: plan.enableIds.length + plan.disableIds.length };
       }
     });
@@ -811,7 +846,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
       // The game-running lock is swallowed silently everywhere else (background
       // toggles), but a solo *launch* that does nothing needs a reason, so the
       // caller can surface it. Enable-cap already auto-toasts via modsNotice and
@@ -839,7 +874,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
+      get().loadMods({ force: true });
       return { failures: enable.length + disable.length };
     }
   }),
@@ -880,7 +915,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Reconcile any partial batch progress, then preserve the rejection for
         // the initiating surface. The picker and card menus own contextual
         // errors; swallowing here made them close as if a failed move worked.
-        await get().loadMods({ silent: true });
+        await get().loadMods({ silent: true, force: true });
         throw err;
       }
     });

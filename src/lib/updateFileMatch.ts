@@ -23,6 +23,17 @@ export interface InstalledVariantUpdateState {
   ignoreUpdates?: boolean;
 }
 
+export interface InstalledFileUpdateCandidate extends InstalledVariantUpdateState, UpdateMatchSignals {
+  id: string;
+}
+
+export interface FileUpdatePlan {
+  /** Current GameBanana file id -> stale local mod ids it supersedes. */
+  sourcesByTargetFileId: Map<number, string[]>;
+  /** Stale local mods whose replacement is ambiguous and needs user choice. */
+  unresolvedSourceIds: string[];
+}
+
 /**
  * True when any installed variant of `gameBananaId` points at a file id that is
  * no longer live on the mod page. An author who re-uploads a file gets a new
@@ -120,6 +131,74 @@ export function resolveUpdateTarget(
     return best.file;
   }
   return null;
+}
+
+/**
+ * Plan the per-file update actions shown in ModDetailsModal. Existing current
+ * siblings are valid destinations (updating can promote one without another
+ * download), while uninstalled targets are claimed once so unrelated stale
+ * variants are never silently collapsed into the same replacement.
+ */
+export function planFileUpdates(
+  gameBananaId: number,
+  files: GameBananaFile[],
+  installed: readonly InstalledFileUpdateCandidate[],
+): FileUpdatePlan {
+  const liveFiles = files.filter((file) => !file.isArchived);
+  const liveIds = new Set(liveFiles.map((file) => file.id));
+  const installedLiveIds = new Set(
+    installed
+      .filter(
+        (mod) =>
+          mod.gameBananaId === gameBananaId &&
+          typeof mod.gameBananaFileId === 'number' &&
+          liveIds.has(mod.gameBananaFileId),
+      )
+      .map((mod) => mod.gameBananaFileId!),
+  );
+  const stale = installed.filter(
+    (mod) =>
+      mod.gameBananaId === gameBananaId &&
+      typeof mod.gameBananaFileId === 'number' &&
+      mod.gameBananaFileId > 0 &&
+      !mod.ignoreUpdates &&
+      !liveIds.has(mod.gameBananaFileId),
+  );
+
+  const sourcesByTargetFileId = new Map<number, string[]>();
+  const unresolvedSourceIds: string[] = [];
+  const claimedUninstalledIds = new Set<number>();
+  const resolvedByOldFileId = new Map<number, number>();
+
+  for (const source of stale) {
+    const oldFileId = source.gameBananaFileId!;
+    let targetId = resolvedByOldFileId.get(oldFileId);
+    if (targetId === undefined) {
+      const match = resolveUpdateTarget(source, files, claimedUninstalledIds);
+      if (match) {
+        targetId = match.id;
+      } else if (
+        liveFiles.length === 1 &&
+        (installedLiveIds.has(liveFiles[0].id) || !claimedUninstalledIds.has(liveFiles[0].id))
+      ) {
+        targetId = liveFiles[0].id;
+      }
+      if (targetId !== undefined) {
+        resolvedByOldFileId.set(oldFileId, targetId);
+        if (!installedLiveIds.has(targetId)) claimedUninstalledIds.add(targetId);
+      }
+    }
+
+    if (targetId === undefined) {
+      unresolvedSourceIds.push(source.id);
+      continue;
+    }
+    const sources = sourcesByTargetFileId.get(targetId) ?? [];
+    sources.push(source.id);
+    sourcesByTargetFileId.set(targetId, sources);
+  }
+
+  return { sourcesByTargetFileId, unresolvedSourceIds };
 }
 
 /** Lowercase, strip punctuation, collapse whitespace. "Current/Max Health"

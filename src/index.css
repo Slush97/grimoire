@@ -480,6 +480,58 @@ body {
   stroke-width: 2;
 }
 
+/* Smooth card-download orbit. Two simple borders keep the animation on the
+   compositor and stay crisp at the 12–20px sizes used by Browse cards. */
+.browse-download-spinner {
+  position: relative;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  min-width: 12px;
+  min-height: 12px;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  color: currentColor;
+}
+
+.browse-download-spinner::before,
+.browse-download-spinner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: max(1.5px, 0.1em) solid currentColor;
+}
+
+.browse-download-spinner::before {
+  opacity: 0.18;
+}
+
+.browse-download-spinner::after {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  animation: browseDownloadOrbit 720ms linear infinite;
+  backface-visibility: hidden;
+  transform: translateZ(0) rotate(0deg);
+  will-change: transform;
+}
+
+.browse-download-spinner--large {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.browse-action-button-icon .browse-download-spinner {
+  width: clamp(12px, 4.8cqw, 15px);
+  height: clamp(12px, 4.8cqw, 15px);
+}
+
+.browse-download-badge {
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
 .browse-action-button-label {
   display: inline-flex;
   align-items: center;
@@ -695,6 +747,12 @@ body {
   100% {
     opacity: 0;
     transform: translateX(120%) skewX(-18deg);
+  }
+}
+
+@keyframes browseDownloadOrbit {
+  to {
+    transform: translateZ(0) rotate(360deg);
   }
 }
 
@@ -1506,6 +1564,7 @@ body {
   .mod-details-body--loading-previous .mod-details-navigation-skeleton,
   .skeleton-shimmer,
   .browse-action-button--downloading::after,
+  .browse-download-spinner::after,
   .browse-action-button--complete-pop,
   .browse-action-button--complete-pop::before,
   .browse-action-button-queue-value,

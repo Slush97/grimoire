@@ -206,10 +206,13 @@ export function getCurrentDownload(): DownloadQueueItem | null {
 }
 
 /**
- * Remove a mod from the queue (cancel before download starts)
+ * Remove one queued target (cancel before download starts). fileId remains
+ * optional for older callers that intentionally cancel the first row by mod.
  */
-export function removeFromQueue(modId: number): boolean {
-    const index = downloadQueue.findIndex(item => item.args.modId === modId);
+export function removeFromQueue(modId: number, fileId?: number): boolean {
+    const index = downloadQueue.findIndex(item =>
+        item.args.modId === modId && (fileId === undefined || item.args.fileId === fileId)
+    );
     if (index !== -1) {
         const removed = downloadQueue.splice(index, 1)[0];
         removed.reject(new Error('Cancelled by user'));
@@ -217,6 +220,14 @@ export function removeFromQueue(modId: number): boolean {
         return true;
     }
     return false;
+}
+
+/** Cancel one exact target regardless of whether it is queued or active. */
+export function cancelDownloadTarget(modId: number, fileId: number): boolean {
+    if (currentDownloadInfo?.modId === modId && currentDownloadInfo.fileId === fileId) {
+        return cancelActiveDownload();
+    }
+    return removeFromQueue(modId, fileId);
 }
 
 /**

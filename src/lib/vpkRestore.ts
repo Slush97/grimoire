@@ -54,6 +54,11 @@ export function shouldRestoreVpkEnabled(
   snapshot: EnabledVpkRestoreSnapshot
 ): boolean {
   if (!snapshot.hadEnabled) return false;
+  // An update can change archive topology (for example, V4 shipped several
+  // indexed VPKs while V5 consolidates them into one unindexed VPK). With only
+  // one possible replacement there is no ambiguity: preserve the coarse fact
+  // that the old install was enabled even when its old index cannot match.
+  if (candidates.length === 1) return true;
   const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
   const index = getVpkIndex(mod);
   if (hasIndexedCandidates) {
@@ -98,6 +103,9 @@ export function shouldRestoreVpkGlobal(
   snapshot: GlobalVpkRestoreSnapshot
 ): boolean {
   if (!snapshot.hadGlobal) return false;
+  // As with enabled state, a sole replacement is the unambiguous destination
+  // even if the author's new archive no longer carries the old VPK index.
+  if (candidates.length === 1) return !snapshot.ambiguous;
   const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
   const index = getVpkIndex(mod);
   if (hasIndexedCandidates) {
