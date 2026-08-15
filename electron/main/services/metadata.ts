@@ -171,7 +171,16 @@ export function loadMetadata(): ModMetadataMap {
         metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data };
         return data;
     } catch (error) {
+        // Returning {} here means every writer that follows treats "I could not
+        // read the sidecar" as "there is nothing in the sidecar", and the first
+        // one to save (setModMetadata on the next scan, or the startup
+        // backfillMissingMetadataHashes, which mints a hash-only row per VPK)
+        // commits that as fact. Copy the unreadable bytes aside first so the
+        // real content outlives the overwrite: a truncated file after an
+        // unclean shutdown, or a read that lost a race with antivirus, is then
+        // recoverable instead of being the same total loss by a slower route.
         console.warn('[Metadata] Failed to load metadata, returning empty:', error);
+        backupMetadataSidecar('unreadable');
         metadataCache = null;
         return {};
     }
@@ -198,6 +207,14 @@ export function saveMetadata(metadata: ModMetadataMap): void {
         try {
             if (existsSync(tempPath)) unlinkSync(tempPath);
         } catch { /* ignore */ }
+        // Drop the cache, do not leave it. loadMetadata hands its cached map out
+        // by reference and every mutating helper edits that object in place
+        // before calling us, so a failed write leaves the cache holding changes
+        // that never reached disk while its mtime/size still match the
+        // untouched file. The next unrelated save would then write those
+        // half-applied edits over the good file: one denied write during a
+        // prune, and the rows it wanted to drop are gone at the next toggle.
+        metadataCache = null;
         throw error;
     }
 }
@@ -377,6 +394,28 @@ export function removeModMetadata(fileName: string): void {
 export const deleteModMetadata = removeModMetadata;
 
 /**
+ * Every absolute path a metaKey can name, without creating anything.
+ *
+ * Deliberately raw joins: getAddonsPath / getDisabledPath / getGrimoirePath all
+ * mkdir their root on demand, which is exactly how a Deadlock folder that has
+ * stopped resolving comes back as a clean empty tree. A function whose whole
+ * job is to decide whether a file is really gone must not fabricate the folder
+ * it is looking in.
+ *
+ * metaKeyFor produces three shapes: `grimoire/<file>` for the priority root,
+ * `addonsN/<file>` for an overflow root, and a bare `<file>` otherwise, which
+ * can be sitting in either citadel/addons or citadel/addons/.disabled.
+ */
+function resolveMetaKeyPaths(deadlockPath: string, key: string): string[] {
+    const citadel = join(deadlockPath, 'game', 'citadel');
+    const slash = key.indexOf('/');
+    if (slash !== -1) {
+        return [join(citadel, key.slice(0, slash), key.slice(slash + 1))];
+    }
+    return [join(citadel, 'addons', key), join(citadel, 'addons', '.disabled', key)];
+}
+
+/**
  * Drop metadata entries whose VPK no longer exists on disk.
  *
  * Older versions of deleteMod removed the .vpk file but left metadata behind,
@@ -385,17 +424,56 @@ export const deleteModMetadata = removeModMetadata;
  * categoryName, thumbnail, etc. onto the new install (issue #26). Callers
  * pass the current valid set (metaKeys) so users with pre-existing orphans
  * self-heal the next time the mods list is scanned.
+ *
+ * A key missing from that set is a *candidate*, never a verdict. The scan can
+ * come back short for reasons that have nothing to do with the user deleting
+ * anything: getAddonFolderPaths falls back to base-only when citadel/ is
+ * unreadable (so every overflow-folder mod vanishes from the set at once),
+ * scanFolder skips any file whose stat throws (antivirus holding one VPK), and
+ * a path that stopped resolving scans as an empty tree. So confirm each
+ * candidate against disk before deleting its row, and keep the row whenever the
+ * file is there or we cannot tell.
  */
-export function pruneOrphanMetadata(validKeys: Set<string>): void {
+export function pruneOrphanMetadata(validKeys: Set<string>, deadlockPath: string): void {
     const metadata = loadMetadata();
     // Synthetic `locker:*` keys hold the Locker-managed selection sets (cards /
     // sounds), which live in citadel/grimoire and are NOT scanned filenames, so
     // they must never be treated as orphans.
-    const orphans = Object.keys(metadata).filter(
+    const candidates = Object.keys(metadata).filter(
         (key) => !key.startsWith('locker:') && !validKeys.has(key),
     );
+    if (candidates.length === 0) return;
+
+    const orphans = candidates.filter(
+        (key) => !resolveMetaKeyPaths(deadlockPath, key).some((path) => existsSync(path)),
+    );
+    const kept = candidates.length - orphans.length;
+    if (kept > 0) {
+        console.warn(
+            `[Metadata] ${kept} of ${candidates.length} prune candidates are still on disk; the scan missed them. Keeping their metadata.`
+        );
+    }
     if (orphans.length === 0) return;
 
+    // Last line of defence, for the case the check above cannot see: when the
+    // whole install is gone, every path misses and every row looks orphaned. A
+    // prune that empties a populated sidecar is never a self-heal. Deleting a
+    // mod drops its own row synchronously (deleteMod -> removeModMetadata), so
+    // orphans are always a minority left behind by an older version or an
+    // outside-Grimoire delete. The cost of keeping an orphan is one stale name
+    // on a recycled pakNN slot; the cost of the wipe is every name, GameBanana
+    // id, thumbnail and hero assignment the user has.
+    if (validKeys.size === 0) {
+        console.warn(
+            `[Metadata] Refusing to prune ${orphans.length} entries against an empty scan: that would clear the sidecar, and no mod list is worth that.`
+        );
+        return;
+    }
+
+    // Cheap insurance on the one operation here that destroys user data. Runs
+    // only on a real prune, which is rare (orphans are normally zero), and
+    // keeps the last 5.
+    backupMetadataSidecar('pre-prune');
     for (const key of orphans) {
         delete metadata[key];
     }

@@ -459,8 +459,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Download Queue
     getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
     getCurrentDownload: () => ipcRenderer.invoke('get-current-download'),
-    removeFromQueue: (modId: number) => ipcRenderer.invoke('remove-from-queue', modId),
+    removeFromQueue: (modId: number, fileId?: number) =>
+        ipcRenderer.invoke('remove-from-queue', modId, fileId),
     cancelActiveDownload: () => ipcRenderer.invoke('cancel-active-download'),
+    cancelDownloadTarget: (modId: number, fileId: number) =>
+        ipcRenderer.invoke('cancel-download-target', modId, fileId),
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);

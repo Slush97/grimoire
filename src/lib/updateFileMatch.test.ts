@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasPendingUpdate } from './updateFileMatch';
+import { hasPendingUpdate, planFileUpdates } from './updateFileMatch';
 import type { GameBananaFile } from '../types/gamebanana';
 
 const file = (id: number, fileName: string, isArchived = false): GameBananaFile => ({
@@ -83,5 +83,89 @@ describe('hasPendingUpdate', () => {
   it('treats an unloaded or fully archived file list as "unknown", not "outdated"', () => {
     expect(hasPendingUpdate(650634, [], [variant(1)])).toBe(false);
     expect(hasPendingUpdate(650634, [file(2, 'old.zip', true)], [variant(1)])).toBe(false);
+  });
+});
+
+describe('planFileUpdates', () => {
+  it('promotes an already-installed sole replacement for a stale sibling', () => {
+    const files = [file(1774719, 'freaky_hidout.zip')];
+    const installed = [
+      {
+        id: 'feet-v4',
+        gameBananaId: 677044,
+        gameBananaFileId: 1723227,
+        installedFileId: 1723227,
+        fileDescription: 'Feet in hub V4',
+        sourceFileName: 'feetinhubv4',
+      },
+      {
+        id: 'feet-v5',
+        gameBananaId: 677044,
+        gameBananaFileId: 1774719,
+        installedFileId: 1774719,
+      },
+    ];
+
+    const plan = planFileUpdates(677044, files, installed);
+    expect(plan.sourcesByTargetFileId.get(1774719)).toEqual(['feet-v4']);
+    expect(plan.unresolvedSourceIds).toEqual([]);
+  });
+
+  it('leaves a multi-file replacement unresolved when no candidate is confident', () => {
+    const files = [file(2, 'gold.zip'), file(3, 'silver.zip')];
+    const plan = planFileUpdates(10, files, [{
+      id: 'old',
+      gameBananaId: 10,
+      gameBananaFileId: 1,
+      installedFileId: 1,
+      sourceFileName: 'unrelated.zip',
+    }]);
+
+    expect(plan.sourcesByTargetFileId.size).toBe(0);
+    expect(plan.unresolvedSourceIds).toEqual(['old']);
+  });
+
+  it('marks only the matching replacement as an update, not alternate live variants', () => {
+    const files = [
+      { ...file(2, 'gold-v2.zip'), description: 'Gold' },
+      { ...file(3, 'silver-v2.zip'), description: 'Silver' },
+    ];
+    const plan = planFileUpdates(10, files, [{
+      id: 'old-gold',
+      gameBananaId: 10,
+      gameBananaFileId: 1,
+      installedFileId: 1,
+      fileDescription: 'Gold',
+    }]);
+
+    expect([...plan.sourcesByTargetFileId.keys()]).toEqual([2]);
+    expect(plan.sourcesByTargetFileId.has(3)).toBe(false);
+  });
+
+  it('keeps confident matches separate when another stale variant is unresolved', () => {
+    const files = [
+      { ...file(2, 'gold-v2.zip'), description: 'Gold' },
+      { ...file(3, 'silver-v2.zip'), description: 'Silver' },
+    ];
+    const plan = planFileUpdates(10, files, [
+      {
+        id: 'old-gold',
+        gameBananaId: 10,
+        gameBananaFileId: 1,
+        installedFileId: 1,
+        fileDescription: 'Gold',
+      },
+      {
+        id: 'unknown',
+        gameBananaId: 10,
+        gameBananaFileId: 4,
+        installedFileId: 4,
+        sourceFileName: 'unrelated.zip',
+      },
+    ]);
+
+    expect(plan.sourcesByTargetFileId.get(2)).toEqual(['old-gold']);
+    expect(plan.sourcesByTargetFileId.has(3)).toBe(false);
+    expect(plan.unresolvedSourceIds).toEqual(['unknown']);
   });
 });

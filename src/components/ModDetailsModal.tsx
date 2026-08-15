@@ -45,6 +45,7 @@ import { ArchivedTag, Button, IconButton } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import { showToast } from '../stores/toastStore';
+import { selectFileDownloadActivity, useDownloadActivity } from '../lib/downloadActivity';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -64,13 +65,6 @@ interface ModDetailsModalProps {
   /** Handler invoked when the user clicks the inline "Enable" pill. Receives
    *  the local mod id of the disabled install. */
   onEnableFile?: (modId: string) => void;
-  downloadingFileId: number | null;
-  /** GameBanana file ids for this mod that are queued behind the active
-   *  download. Their rows show a "Queued" state but other rows stay clickable,
-   *  so the user can line up several variants at once. */
-  queuedFileIds?: Set<number>;
-  extracting: boolean;
-  progress: { downloaded: number; total: number } | null;
   hideNsfwPreviews: boolean;
   dateAdded?: number;
   dateModified?: number;
@@ -82,6 +76,10 @@ interface ModDetailsModalProps {
   navigationDirection?: ModDetailsNavigationDirection;
   navigationLabel?: string;
   updateAvailable?: boolean;
+  /** Current file rows that are actual replacement destinations. Keeping this
+   *  separate from the mod-level badge prevents alternate variants from all
+   *  being mislabeled as updates. */
+  updateFileIds?: Set<number>;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
    *  installed-mod path; Browse leaves both undefined. */
@@ -128,10 +126,6 @@ function ModDetailsModal({
   activeFileIds = new Set<number>(),
   installedFileStates,
   onEnableFile,
-  downloadingFileId,
-  queuedFileIds = new Set<number>(),
-  extracting,
-  progress,
   hideNsfwPreviews,
   dateAdded,
   dateModified,
@@ -140,6 +134,7 @@ function ModDetailsModal({
   navigationDirection = 'next',
   navigationLabel,
   updateAvailable,
+  updateFileIds = new Set<number>(),
   ignoreUpdates,
   onToggleIgnoreUpdates,
   onClose,
@@ -156,6 +151,10 @@ function ModDetailsModal({
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  // One app-wide queue snapshot drives every host of this popup. This keeps
+  // Browse, Installed, and downloads started elsewhere in sync without each
+  // page trying to reconstruct active/queued/progress state independently.
+  const downloadActivity = useDownloadActivity();
   // Canonical GameBanana page for this submission. WiPs live under /wips, Sounds
   // under /sounds, etc., which section.toLowerCase()+'s' already yields.
   const gbUrl = `https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`;
@@ -457,8 +456,8 @@ function ModDetailsModal({
     // "Update". Archived files are never update targets (they're the old ones).
     // Both hosts set updateAvailable, so a file the author replaced reads the
     // same way whether you reach it from Installed or from Browse.
+    if (updateFileIds.has(fileId) && !archived) return t('profiles.actions.update');
     if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
-    if (updateAvailable && !archived) return t('profiles.actions.update');
     return t('modDetails.actions.install');
   };
 
@@ -553,26 +552,31 @@ function ModDetailsModal({
 
   const renderFileRow = (file: GameBananaFile, archived = false) => {
     const isInstalled = installedFileIds.has(file.id);
-    // Highlight the update *target* (the new, not-yet-installed current file),
-    // not the superseded file the user currently has, so the accent points at
-    // the row they should click to update. Archived files are never targets.
-    const isUpdate = !!updateAvailable && !isInstalled && !archived;
-    const isActive = activeFileIds.has(file.id);
-    const isDownloadingThis = downloadingFileId === file.id;
-    const isQueuedThis = queuedFileIds.has(file.id);
+    // Highlight the actual replacement target, not every uninstalled sibling.
+    // A target can already be installed: in that case Update promotes it and
+    // removes the stale predecessor without downloading a duplicate.
+    const isUpdate = updateFileIds.has(file.id) && !archived;
+    const installedFileState = installedFileStates?.get(file.id);
+    const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true;
+    const fileDownload = selectFileDownloadActivity(downloadActivity, mod.id, file.id);
+    const isDownloadingThis =
+      fileDownload.phase === 'starting' ||
+      fileDownload.phase === 'downloading' ||
+      fileDownload.phase === 'extracting';
+    const isQueuedThis = fileDownload.phase === 'queued';
     // Only this row's own download/queue state should lock its buttons. A
     // download in progress on a *different* file must leave this row clickable
     // so the user can queue several variants in one go.
     const isBusyThis = isDownloadingThis || isQueuedThis;
-    const installedFileState = installedFileStates?.get(file.id);
     const showEnablePill =
       !!installedFileState &&
       !installedFileState.enabled &&
       !!onEnableFile &&
       !isBusyThis;
     const showDeleteButton = !!installedFileState && !!onDeleteFile;
-    const pct = progress && progress.total > 0
-      ? Math.round((progress.downloaded / progress.total) * 100)
+    const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
+    const pct = fileProgress && fileProgress.total > 0
+      ? Math.round((fileProgress.downloaded / fileProgress.total) * 100)
       : null;
 
     return (
@@ -676,12 +680,18 @@ function ModDetailsModal({
             {isDownloadingThis ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                {extracting ? t('modDetails.status.extracting') : pct !== null ? `${pct}%` : t('modDetails.status.starting')}
+                {fileDownload.phase === 'extracting'
+                  ? t('modDetails.status.extracting')
+                  : pct !== null
+                    ? `${pct}%`
+                    : t('modDetails.status.starting')}
               </>
             ) : isQueuedThis ? (
               <>
                 <Clock className="w-4 h-4" />
-                {t('modDetails.status.queued')}
+                {fileDownload.phase === 'queued'
+                  ? `${t('modDetails.status.queued')} #${fileDownload.position}`
+                  : t('modDetails.status.queued')}
               </>
             ) : (
               <>
@@ -937,7 +947,7 @@ function ModDetailsModal({
             {updateAvailable && (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent border border-accent/40">
                 <Download className="w-2.5 h-2.5" />
-                Update
+                {t('profiles.actions.update')}
               </span>
             )}
             {installed && !updateAvailable && (
