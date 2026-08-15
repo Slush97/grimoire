@@ -8177,7 +8177,11 @@ function ModCard({
         : 'h-7 rounded-lg px-2.5 text-[12px]';
   const tagIconClassName =
     viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
-  const baseChipClasses = `inline-flex min-w-0 ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
+  // A compact text chip must retain enough width to show actual content; zero
+  // was technically valid to flexbox and produced the orphaned border seen on
+  // the smallest cards.
+  const chipMinClass = viewMode === 'compact' ? 'min-w-9' : 'min-w-0';
+  const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-white/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
   const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
@@ -8311,6 +8315,11 @@ function ModCard({
           onCreateNew={onCreateList}
         />
       )}
+      {onToggleFavorite && (
+        <MenuItem icon={Star} onSelect={onToggleFavorite}>
+          {favoriteLabel}
+        </MenuItem>
+      )}
       <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
         {t('installed.card.revealInFolder')}
       </MenuItem>
@@ -8426,7 +8435,11 @@ function ModCard({
 
   const actions = (
     <div className="ml-auto flex items-center gap-1">
-      {onToggleFavorite && (
+      {/* At compact size the direct favorite/delete buttons consumed 56px even
+          while transparent, squeezing the adjacent taxonomy chip down to a
+          one-pixel border. Both actions remain available from the kebab and
+          right-click menus; larger cards keep their faster hover affordances. */}
+      {onToggleFavorite && !isCompact && (
         <button
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
@@ -8443,7 +8456,7 @@ function ModCard({
           <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} />
         </button>
       )}
-      {!mod.merged && (
+      {!mod.merged && !isCompact && (
         <button
           type="button"
           onClick={(e) => {
@@ -8707,7 +8720,7 @@ function ModCard({
             onRename={onRenameLocal}
           />
           <div
-            className={`${isCompact ? 'mt-1.5 h-7' : 'mt-1'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3`}
+            className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
