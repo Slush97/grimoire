@@ -24,6 +24,7 @@ import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, 
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
+import { retargetProfileModSha } from '../services/profiles';
 import {
     detectUnknownModCacheMatches,
     detectUnknownModFilters,
@@ -1499,6 +1500,14 @@ ipcMain.handle(
                 freshSlot = true;
             }
 
+            // Captured before the copy replaces it: a REUSED slot keeps its
+            // fileName and metaKey but gets new bytes, so saved profile entries
+            // have to be moved onto the new hash below. A fresh slot is skipped
+            // deliberately: any sidecar entry still sitting there is an orphan
+            // of a deleted mod, and retargeting it would hand this import that
+            // dead mod's profile entries.
+            const previousSha = freshSlot ? undefined : getModMetadata(destMetaKey!)?.sha256;
+
             await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
@@ -1536,6 +1545,7 @@ ipcMain.handle(
                 },
                 destPath
             );
+            retargetProfileModSha(previousSha, getModMetadata(destMetaKey!)?.sha256);
 
             const mods = await scanMods(deadlockPath);
             return mods.map(enrichMod);
@@ -1655,6 +1665,11 @@ ipcMain.handle(
                 freshSlot = true;
             }
 
+            // Same capture as import-soul-container-glb: a reused slot keeps
+            // its fileName and metaKey but gets new bytes, a fresh one carries
+            // only orphan metadata worth ignoring.
+            const previousSha = freshSlot ? undefined : getModMetadata(destMetaKey!)?.sha256;
+
             await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
@@ -1691,6 +1706,7 @@ ipcMain.handle(
                 },
                 destPath
             );
+            retargetProfileModSha(previousSha, getModMetadata(destMetaKey!)?.sha256);
 
             const mods = await scanMods(deadlockPath);
             return mods.map(enrichMod);

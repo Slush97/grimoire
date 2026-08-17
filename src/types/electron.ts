@@ -1333,6 +1333,11 @@ export interface ProfileMod {
     /** Zero-based VPK index within a multi-VPK GameBanana file, assigned by
      *  ascending VPK size at install time. Omitted for normal single-VPK files. */
     vpkIndex?: number;
+    /** Canonical pre-imprint content hash of the mod's `_dir.vpk`. The primary
+     *  stable identifier for local (non-GameBanana) mods, which have no id pair
+     *  and whose fileName changes on every reorder. Optional: legacy profiles
+     *  and pre-backfill installs lack it. */
+    sha256?: string;
 }
 
 /** Profiles embed the same crosshair model the Crosshair tab edits. Saved
