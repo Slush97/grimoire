@@ -4784,12 +4784,13 @@ export default function Installed() {
 
       {/* The header row also carries the profiles control, so it renders even
           with nothing enabled: zero enabled mods is exactly the moment someone
-          wants to load a profile. A live search is the one case where it stays
-          hidden, because an empty result there is about the query, not about
-          the install. */}
-      {(visibleEnabled.length > 0 || !searchNeedle) && (
+          wants to load a profile. A live search or filter is the one case where
+          it stays hidden, because an empty result there is about the query or
+          filter, not about the install (and the no-matches empty state above
+          should not get a stray button row under it). */}
+      {(visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
-          <div className="flex items-baseline justify-between gap-3 mb-[14px]">
+          <div className="flex items-center justify-between gap-3 mb-[14px]">
             {visibleEnabled.length > 0 ? (
               <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
             ) : (

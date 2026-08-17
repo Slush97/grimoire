@@ -12,7 +12,7 @@
  * stable callback, and one JSX line.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Check, ChevronDown, ExternalLink, Layers, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Layers, Plus, Save, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -76,6 +76,14 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
   // clicks landing in the same tick would both read a stale `applyingId` of
   // null and queue two applies. A ref cannot be stale that way.
   const applyInFlightRef = useRef(false);
+  // Same shape for update and delete: their state flags render the busy UI,
+  // but only a ref is immune to two clicks landing in the same tick.
+  const updateInFlightRef = useRef(false);
+  const deleteInFlightRef = useRef(false);
+
+  // IPC errors arrive as Error objects whose String() form leads with
+  // "Error: "; strip that so toasts read as a sentence, not a stack line.
+  const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
   // Deleting a profile does not clear settings.activeProfileId, so the marker
   // can point at a profile that no longer exists. Resolve it by lookup and let
@@ -136,7 +144,7 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
     } catch (err) {
       // api.applyProfile already toasts the game-running case and rethrows, so
       // this must not add a second toast for it beyond the generic failure.
-      showToast(t('installed.profiles.applyFailed', { error: String(err) }), { tone: 'error' });
+      showToast(t('installed.profiles.applyFailed', { error: errText(err) }), { tone: 'error' });
     } finally {
       applyInFlightRef.current = false;
       setApplyingId(null);
@@ -161,14 +169,15 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
       onApplied();
       showToast(t('installed.profiles.savedToast', { name: created.name }), { tone: 'success' });
     } catch (err) {
-      showToast(t('installed.profiles.saveFailed', { error: String(err) }), { tone: 'error' });
+      showToast(t('installed.profiles.saveFailed', { error: errText(err) }), { tone: 'error' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleUpdate = async () => {
-    if (!activeProfile || updating) return;
+    if (!activeProfile || updateInFlightRef.current) return;
+    updateInFlightRef.current = true;
     setUpdating(true);
     try {
       // Pass the profile's existing crosshair straight back through. Update
@@ -178,26 +187,30 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
       await refresh();
       showToast(t('installed.profiles.updatedToast', { name: activeProfile.name }), { tone: 'success' });
     } catch (err) {
-      showToast(t('installed.profiles.saveFailed', { error: String(err) }), { tone: 'error' });
+      showToast(t('installed.profiles.saveFailed', { error: errText(err) }), { tone: 'error' });
     } finally {
+      updateInFlightRef.current = false;
       setUpdating(false);
     }
   };
 
   const handleDelete = async (profileId: string) => {
+    if (deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
     const doomed = profiles.find((p) => p.id === profileId);
     setDeletingId(profileId);
     try {
       await deleteProfile(profileId);
+      // Main leaves settings.activeProfileId pointing at the deleted profile,
+      // and refresh() re-reads that stale marker. The activeProfile lookup
+      // already resolves it to null, so the trigger falls back to the generic
+      // label without any local clearing.
       await refresh();
-      // Main leaves settings.activeProfileId pointing at the deleted profile.
-      // Clear it locally only: writing settings back from here would be a
-      // second source of truth for a marker the apply path owns.
-      if (profileId === activeProfileId) setActiveProfileId(null);
       showToast(t('installed.profiles.deletedToast', { name: doomed?.name ?? '' }), { tone: 'success' });
     } catch (err) {
-      showToast(t('installed.profiles.deleteFailed', { error: String(err) }), { tone: 'error' });
+      showToast(t('installed.profiles.deleteFailed', { error: errText(err) }), { tone: 'error' });
     } finally {
+      deleteInFlightRef.current = false;
       setDeletingId(null);
       setDeleteConfirmId(null);
     }
@@ -214,7 +227,7 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
             variant="secondary"
             size="sm"
             icon={Layers}
-            isLoading={!!applyingId}
+            isLoading={!!applyingId || updating || deletingId !== null}
             title={activeProfile ? activeProfile.name : t('installed.profiles.triggerHint')}
             className={`flex-shrink-0 ${className}`}
           >
@@ -238,7 +251,10 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
               <MenuItem key={profile.id} onSelect={() => void handleApply(profile.id)}>
                 {/* Fixed-width indicator slot so unticked rows line up with the
                     ticked one, same rhythm as MenuCheckboxItem. */}
-                <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className="flex min-w-0 items-center gap-2"
+                  aria-current={profile.id === activeProfileId ? 'true' : undefined}
+                >
                   <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {profile.id === activeProfileId && <Check className="h-3.5 w-3.5 text-accent" aria-hidden />}
                   </span>
@@ -278,7 +294,7 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
               {t('installed.profiles.deletePicker')}
             </MenuItem>
           )}
-          <MenuItem icon={ExternalLink} onSelect={() => navigate('/profiles')}>
+          <MenuItem icon={ArrowRight} onSelect={() => navigate('/profiles')}>
             {t('installed.profiles.manage')}
           </MenuItem>
         </MenuContent>
@@ -332,9 +348,10 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
           onClose={() => setDeletePickerOpen(false)}
           labelledBy="installed-delete-profile-title"
           size="sm"
-          // Blocked while a per-row confirmation is armed, so Escape answers the
-          // confirmation instead of yanking the list out from under it.
-          dismissable={deleteConfirmId === null}
+          // Blocked while a per-row confirmation is armed or a delete is in
+          // flight, so Escape answers the confirmation instead of yanking the
+          // list out from under it.
+          dismissable={deleteConfirmId === null && deletingId === null}
           panelClassName="flex max-h-[min(600px,calc(100vh-2rem))] flex-col overflow-hidden"
         >
           <ModalHeader
@@ -342,6 +359,7 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
             title={t('installed.profiles.deleteTitle')}
             onClose={() => setDeletePickerOpen(false)}
             closeLabel={t('common.actions.close')}
+            closeDisabled={deleteConfirmId !== null || deletingId !== null}
           />
           <div className="min-h-0 overflow-y-auto p-5">
             {profiles.length === 0 ? (
