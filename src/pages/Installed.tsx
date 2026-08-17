@@ -112,6 +112,7 @@ import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
+import { variantGroupKey } from '../lib/variantGroups';
 import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -217,8 +218,9 @@ const DROP_STATE_RESET_DELAY_MS = 160;
 const INITIAL_MOUNT_COUNT = 40;
 
 /**
- * Rows on the Installed page are either standalone mods or grouped files
- * sharing the same GameBanana mod (e.g. five preset VPKs from one skin pack).
+ * Rows on the Installed page are either standalone mods or grouped files that
+ * are variants of one mod (e.g. five preset VPKs from one skin pack, whether
+ * they came from a GameBanana submission or a locally imported archive).
  * Grouped entries collapse to a single card; the picker modal handles
  * per-file enable, rename, and delete actions.
  */
@@ -226,7 +228,12 @@ type ModEntry =
   | { kind: 'single'; mod: Mod; key: string }
   | {
       kind: 'group';
-      gameBananaId: number;
+      /** Shared grouping key from variantGroupKey ("gb:123" / "local:<uuid>").
+       *  The stable identity of the group across reconciles. */
+      groupKey: string;
+      /** Set only for GameBanana groups. Absent on local groups, which have no
+       *  mod page to open and nothing to check for updates. */
+      gameBananaId?: number;
       variants: Mod[];
       /** Enabled files in this group. Empty when the whole group is disabled. */
       enabledVariants: Mod[];
@@ -251,23 +258,24 @@ function modEntryKey(mod: Mod): string {
 }
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
-  const byGb = new Map<number, Mod[]>();
+  const byGroup = new Map<string, Mod[]>();
   const singles: Mod[] = [];
   for (const m of mods) {
-    if (typeof m.gameBananaId === 'number' && m.gameBananaId > 0) {
-      const arr = byGb.get(m.gameBananaId) ?? [];
+    const groupKey = variantGroupKey(m);
+    if (groupKey) {
+      const arr = byGroup.get(groupKey) ?? [];
       arr.push(m);
-      byGb.set(m.gameBananaId, arr);
+      byGroup.set(groupKey, arr);
     } else {
       singles.push(m);
     }
   }
-  // Singletons (only one mod for a given GB id) collapse back to single
-  // entries — the group concept only matters when there are 2+ variants.
-  for (const [gb, variants] of Array.from(byGb.entries())) {
+  // Singletons (only one mod for a given group key) collapse back to single
+  // entries: the group concept only matters when there are 2+ variants.
+  for (const [groupKey, variants] of Array.from(byGroup.entries())) {
     if (variants.length === 1) {
       singles.push(variants[0]);
-      byGb.delete(gb);
+      byGroup.delete(groupKey);
     }
   }
 
@@ -289,7 +297,7 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     const key = (baseKeyCounts.get(base) ?? 0) > 1 ? `${base}#${m.id}` : base;
     entries.push({ kind: 'single', mod: m, key });
   }
-  for (const [gameBananaId, variants] of byGb) {
+  for (const [groupKey, variants] of byGroup) {
     // Sort variants by current priority so drag-reorder lines up with the
     // user's mental model ("which slot is this in?") and the picker shows
     // them in the same order as the addons folder.
@@ -298,15 +306,22 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     const active = enabledVariants[0] ?? null;
     const primary = enabledVariants[0] ?? variants[0];
     const totalSize = variants.reduce((sum, v) => sum + v.size, 0);
+    // Only GameBanana groups carry an id: it gates the mod-page and update
+    // affordances, which a local group has no source for.
+    const gameBananaId =
+      typeof primary.gameBananaId === 'number' && primary.gameBananaId > 0
+        ? primary.gameBananaId
+        : undefined;
     entries.push({
       kind: 'group',
+      groupKey,
       gameBananaId,
       variants,
       enabledVariants,
       active,
       primary,
       totalSize,
-      key: `group:${gameBananaId}`,
+      key: `group:${groupKey}`,
     });
   }
   return entries;
@@ -358,10 +373,13 @@ function entryInstalledAt(entry: ModEntry): string {
   );
 }
 
-/** A locally imported mod has no GameBanana id. Group entries are always
- *  GameBanana (they're keyed by a shared GameBanana mod id). */
+/** A locally imported mod has no GameBanana id. Groups can be local too: a
+ *  multi-VPK archive import is linked by a local group id and carries no
+ *  gameBananaId, so a group without one is local by the same rule. */
 function entryIsLocal(entry: ModEntry): boolean {
-  return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
+  return entry.kind === 'single'
+    ? typeof entry.mod.gameBananaId !== 'number'
+    : entry.gameBananaId === undefined;
 }
 
 const OTHER_TAG_KEY = 'other';
@@ -558,7 +576,8 @@ interface InstalledEntryCardProps {
   favorite: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
-  onOpenPicker: (gameBananaId: number) => void;
+  /** Opens the variant picker for a group, by its shared grouping key. */
+  onOpenPicker: (groupKey: string) => void;
   onToggle: (entry: ModEntry) => void;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
@@ -710,7 +729,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       soundVolume={soundVolume}
       updateAvailable={updateAvailable}
       entryKey={entry.key}
-      onOpenDetails={() => onOpenPicker(entry.gameBananaId)}
+      onOpenDetails={() => onOpenPicker(entry.groupKey)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
@@ -745,7 +764,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           variant.sourceFileName ??
           variant.fileName
         ),
-        onOpenPicker: () => onOpenPicker(entry.gameBananaId),
+        onOpenPicker: () => onOpenPicker(entry.groupKey),
       }}
     />
   );
@@ -1278,7 +1297,10 @@ export default function Installed() {
   // GB id of the group whose picker is open, or null. The actual entry is
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
-  const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
+  // Open variant picker, held by the group's shared grouping key (see
+  // variantGroupKey): "gb:<id>" for GameBanana groups, "local:<uuid>" for
+  // locally imported multi-VPK archives.
+  const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
@@ -3159,7 +3181,7 @@ export default function Installed() {
     if (group.enabledVariants.length > 0) {
       await setGroupEnabled(group, false);
     } else {
-      setPickerGroupId(group.gameBananaId);
+      setPickerGroupId(group.groupKey);
     }
   };
 
@@ -3510,8 +3532,8 @@ export default function Installed() {
     if (mod.merged) setMergedContentsMod(mod);
     else if (mod.gameBananaId) void openModDetails(mod);
   });
-  const openEntryPicker = useStableCallback((gameBananaId: number) => {
-    setPickerGroupId(gameBananaId);
+  const openEntryPicker = useStableCallback((groupKey: string) => {
+    setPickerGroupId(groupKey);
   });
   // Open an artist's page inside Grimoire by entering Browse's artist mode (the
   // grid scoped to that submitter), the same surface the artist card in a mod's
@@ -4997,7 +5019,7 @@ export default function Installed() {
         // picker reflect immediately. If the group has disappeared (all
         // files deleted or moved), auto-close the picker.
         const liveEntry = allEntries.find(
-          (e) => e.kind === 'group' && e.gameBananaId === pickerGroupId
+          (e) => e.kind === 'group' && e.groupKey === pickerGroupId
         ) as Extract<ModEntry, { kind: 'group' }> | undefined;
         if (!liveEntry) {
           // Defer close to avoid setState during render warnings.
@@ -5019,8 +5041,12 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
+        // Local groups have no upstream to check, so they never flag updates.
+        const groupGbId = liveEntry.gameBananaId;
         const variantsWithUpdate = new Set(
-          liveEntry.variants.filter((v) => updatesAvailable.has(v.id)).map((v) => v.id),
+          groupGbId
+            ? liveEntry.variants.filter((v) => updatesAvailable.has(v.id)).map((v) => v.id)
+            : [],
         );
         return (
           <VariantPickerModal
@@ -5046,8 +5072,8 @@ export default function Installed() {
             }
             variantsWithUpdate={variantsWithUpdate}
             onUpdateGroup={
-              variantsWithUpdate.size > 0
-                ? () => handleUpdateGroup(liveEntry.gameBananaId)
+              groupGbId && variantsWithUpdate.size > 0
+                ? () => handleUpdateGroup(groupGbId)
                 : undefined
             }
             isUpdating={!!updateAllProgress}
@@ -7396,9 +7422,10 @@ interface ModCardProps {
   onToggleList?: (listId: string) => void;
   onCreateList?: () => void;
   entryKey?: string;
-  /** Present when this card represents grouped files from the same
-   *  GameBanana mod. Swaps the filename meta for an enabled/total count and
-   *  routes the card-body click to the picker modal. */
+  /** Present when this card represents grouped files that are variants of one
+   *  mod (a GameBanana submission, or a locally imported multi-VPK archive).
+   *  Swaps the filename meta for an enabled/total count and routes the
+   *  card-body click to the picker modal. */
   group?: {
     variantCount: number;
     /** Enabled file labels for this group. Empty when fully disabled. */

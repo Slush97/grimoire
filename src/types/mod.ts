@@ -635,6 +635,11 @@ export interface Mod {
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
+  /** Opaque id linking several locally imported VPKs as variants of one mod.
+   *  The local analogue of gameBananaId for grouping only: no provenance, no
+   *  meaning outside this install. Undefined for GameBanana mods and for
+   *  standalone local imports. See variantGroupKey in src/lib/variantGroups.ts. */
+  localGroupId?: string;
   /** Hero this mod belongs to in the Locker, by canonical hero name. Set
    *  automatically at download time for Sound mods (inferHeroFromTitle) or
    *  manually via the Locker's "Tag hero" affordance. Takes precedence over

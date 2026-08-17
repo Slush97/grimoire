@@ -1,4 +1,5 @@
 import { ipcMain, shell } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
 import { extname, basename, join, resolve, sep } from 'path';
 import { tmpdir } from 'os';
@@ -262,6 +263,7 @@ function enrichMod(mod: Mod): WireMod {
             variantLabel: metadata.variantLabel,
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
+            localGroupId: metadata.localGroupId,
             lockerHero,
             lockerHeroSource,
             globalType: globalType ?? undefined,
@@ -1107,6 +1109,25 @@ ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string
  * `thumbnailFetchTargets` rather than fired here, so the network work happens
  * after the lock is released.
  */
+/** Filename stem of a source VPK, used as the honest `sourceFileName` fallback
+ *  for locally imported mods (GameBanana downloads get theirs from the file
+ *  record). Empty stems collapse to undefined so the label chain skips them. */
+function localSourceFileStem(fileName: string): string | undefined {
+    const stem = fileName.replace(/\.vpk$/i, '').trim();
+    return stem.length > 0 ? stem : undefined;
+}
+
+/** Turn a source filename stem into a readable variant label ("galaxy_rem_gold"
+ *  becomes "Galaxy Rem Gold"). Mirrors the archive-folder prettifier used for
+ *  GameBanana multi-variant downloads. */
+function prettifyLocalVariant(stem: string): string {
+    return stem
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 async function importCustomModSource(
     deadlockPath: string,
     args: ImportCustomModArgs,
@@ -1149,6 +1170,13 @@ async function importCustomModSource(
         }
     }
 
+    // A multi-VPK archive is one mod shipped as several interchangeable files,
+    // so link its members with a freshly minted local group id: the Installed
+    // page collapses them into one variant card exactly like a multi-file
+    // GameBanana submission. The id is grouping state only (no provenance, no
+    // meaning outside this install). A single-VPK import stays standalone.
+    const localGroupId = sourceVpks.length > 1 ? randomUUID() : undefined;
+
     try {
         // Imports install ENABLED, so reserve a slot via the overflow-aware
         // allocator: it fills base addons first and spills into an overflow
@@ -1169,11 +1197,19 @@ async function importCustomModSource(
             // otherwise stick to the new local mod and visually merge it with
             // unrelated mods.
             removeModMetadata(destMetaKey);
-            const stampedName = sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName;
+            // Grouped members all carry the SAME name (the card title comes from
+            // the group's primary) and are told apart by their variant label
+            // instead of the old "(N)" suffix.
+            const stampedName = trimmedName;
+            const sourceFileName = localSourceFileStem(sourceVpks[i].fileName);
             await setModMetadataWithHash(destMetaKey, {
                 modName: stampedName,
                 thumbnailUrl: thumbnailDataUrl,
                 nsfw: !!nsfw,
+                sourceFileName,
+                localGroupId,
+                variantLabel:
+                    localGroupId && sourceFileName ? prettifyLocalVariant(sourceFileName) : undefined,
             }, destPath);
 
             // ADOPTION: the just-copied VPK may already carry a Grimoire
