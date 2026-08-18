@@ -362,6 +362,27 @@ describe('buildProfileModResolver', () => {
       expect(b.mod?.id).toBe('copy1');
     });
 
+    // Grouping local mods as variants is a display concern (localGroupId), and
+    // profile resolution must stay blind to it: each file is still its own
+    // entry, resolved by its own content hash.
+    it('resolves grouped local variants independently by hash', () => {
+      const current = [
+        mod({ id: 'red', fileName: 'pak04_dir.vpk', localGroupId: 'group-1' }),
+        mod({ id: 'blue', fileName: 'pak05_dir.vpk', localGroupId: 'group-1' }),
+      ];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'red.vpk': { sha256: SHA_A }, 'blue.vpk': { sha256: SHA_B } })
+      );
+      // Both saved under slots that have since been reshuffled.
+      const red = resolve(pm({ fileName: 'pak11_dir.vpk', sha256: SHA_A }));
+      const blue = resolve(pm({ fileName: 'pak12_dir.vpk', sha256: SHA_B }));
+      expect(red.mod?.id).toBe('red');
+      expect(red.via).toBe('hash');
+      expect(blue.mod?.id).toBe('blue');
+      expect(blue.via).toBe('hash');
+    });
+
     it('prefers the hash match over the unrelated mod now in the saved slot', () => {
       // The headline regression: applying the profile used to enable `other`
       // simply because it inherited pak07_dir.vpk.

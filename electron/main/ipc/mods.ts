@@ -62,7 +62,8 @@ import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '.
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import { planLocalVariantGroup, type LocalVariantGroupMember } from '../services/localVariantGroup';
+import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
@@ -780,8 +781,96 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
+        // A rename inside a local variant group renames the GROUP: every member
+        // shares one name (the card title is whichever member happens to be
+        // primary, so a half-renamed group would show a different title as
+        // files are toggled). Only the name fans out; thumbnail and NSFW stay
+        // per file, exactly as they are for a GameBanana group.
+        const groupId = getModMetadata(target.metaKey)?.localGroupId;
+        if (groupId) {
+            for (const sibling of all) {
+                if (sibling.id === target.id) continue;
+                const meta = getModMetadata(sibling.metaKey);
+                if (meta?.localGroupId !== groupId || meta?.modName === trimmed) continue;
+                setModMetadata(sibling.metaKey, { modName: trimmed });
+                await refreshEmbedAfterMetadataChange(
+                    deadlockPath,
+                    sibling.id,
+                    sibling.metaKey,
+                    sibling.path
+                );
+            }
+        }
+
         await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
+    }
+);
+
+/**
+ * set-local-variant-group - make several locally imported VPKs variants of one
+ * mod, or take one back out.
+ *
+ * The write side of the grouping Phase 0 introduced: `localGroupId` is the
+ * local analogue of a GameBanana submission id, and this is the only handler
+ * that mints or clears one after import time. The plan (who is eligible, whose
+ * name the group takes, which group has to be dissolved) is computed by the
+ * pure planLocalVariantGroup so it can be unit tested; this handler is the
+ * scan / write / refresh shell around it.
+ *
+ * LOCKING: the scan and the writes run as one exclusive mod mutation, so a
+ * concurrent toggle cannot rename a pakNN file (and migrate its sidecar) in
+ * between and leave the writes addressed to a stale metaKey. The embed refresh
+ * runs AFTER the lock is released: imprintOneMod takes the same non-reentrant
+ * lock itself, so calling it from inside would deadlock.
+ */
+ipcMain.handle(
+    'set-local-variant-group',
+    async (
+        _,
+        modIds: string[],
+        target: LocalVariantGroupTarget
+    ): Promise<SetLocalVariantGroupResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+
+        const { groupId, renamed } = await runExclusiveModMutation(async () => {
+            const all = await scanMods(deadlockPath);
+            const members: LocalVariantGroupMember[] = all.map((mod) => {
+                const meta = getModMetadata(mod.metaKey);
+                return {
+                    id: mod.id,
+                    metaKey: mod.metaKey,
+                    // scanMods derives `name` from the filename; the sidecar is
+                    // what the UI actually shows, so prefer it.
+                    name: meta?.modName ?? mod.name,
+                    gameBananaId: meta?.gameBananaId,
+                    localGroupId: meta?.localGroupId,
+                };
+            });
+
+            const plan = planLocalVariantGroup(members, modIds ?? [], target, randomUUID);
+            const renamedMods: Mod[] = [];
+            for (const write of plan.writes) {
+                setModMetadata(write.metaKey, {
+                    localGroupId: write.localGroupId,
+                    ...(write.modName ? { modName: write.modName } : {}),
+                });
+                if (!write.modName) continue;
+                const mod = all.find((candidate) => candidate.id === write.id);
+                if (mod) renamedMods.push(mod);
+            }
+            return { groupId: plan.groupId, renamed: renamedMods };
+        });
+
+        for (const mod of renamed) {
+            await refreshEmbedAfterMetadataChange(deadlockPath, mod.id, mod.metaKey, mod.path);
+        }
+
+        const mods = await scanMods(deadlockPath);
+        return { groupId, mods: mods.map(enrichMod) };
     }
 );
 
@@ -1133,7 +1222,7 @@ async function importCustomModSource(
     args: ImportCustomModArgs,
     thumbnailFetchTargets: AdoptedThumbnailTarget[]
 ): Promise<number> {
-    const { vpkPath, name, thumbnailDataUrl, nsfw } = args;
+    const { vpkPath, name, thumbnailDataUrl, nsfw, localGroupId: joinGroupId } = args;
 
     if (!vpkPath || !existsSync(vpkPath)) {
         throw new Error('File not found');
@@ -1175,7 +1264,12 @@ async function importCustomModSource(
     // page collapses them into one variant card exactly like a multi-file
     // GameBanana submission. The id is grouping state only (no provenance, no
     // meaning outside this install). A single-VPK import stays standalone.
-    const localGroupId = sourceVpks.length > 1 ? randomUUID() : undefined;
+    //
+    // An import addressed to an existing group ("Add variant") overrides both
+    // rules: every VPK joins that group, INCLUDING a lone one, which is the
+    // whole point of the affordance. The caller passes the group's name as
+    // `name`, so the members stay name-unified without a second write.
+    const localGroupId = joinGroupId?.trim() || (sourceVpks.length > 1 ? randomUUID() : undefined);
 
     try {
         // Imports install ENABLED, so reserve a slot via the overflow-aware
@@ -1202,6 +1296,12 @@ async function importCustomModSource(
             // instead of the old "(N)" suffix.
             const stampedName = trimmedName;
             const sourceFileName = localSourceFileStem(sourceVpks[i].fileName);
+            // Label seed: the author's own folder inside the archive when there
+            // is one ("Gold/skin.vpk" reads as "Gold"), which is how GameBanana
+            // multi-variant downloads are labelled too, falling back to the VPK
+            // filename stem. Ungrouped imports get no label at all: the card
+            // title already says everything about a standalone mod.
+            const variantSeed = sourceVpks[i].archiveFolder || sourceFileName;
             await setModMetadataWithHash(destMetaKey, {
                 modName: stampedName,
                 thumbnailUrl: thumbnailDataUrl,
@@ -1209,7 +1309,7 @@ async function importCustomModSource(
                 sourceFileName,
                 localGroupId,
                 variantLabel:
-                    localGroupId && sourceFileName ? prettifyLocalVariant(sourceFileName) : undefined,
+                    localGroupId && variantSeed ? prettifyLocalVariant(variantSeed) : undefined,
             }, destPath);
 
             // ADOPTION: the just-copied VPK may already carry a Grimoire

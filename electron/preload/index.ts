@@ -47,6 +47,7 @@ import type {
     SaveDialogOptions,
     ImportCustomModsBatchArgs,
     ImportCustomModsProgress,
+    LocalVariantGroupTarget,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
     ImportSpiritUrnGlbArgs,
@@ -138,6 +139,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('list-unknown-mod-files', modId),
     editLocalMod: (modId: string, args: EditLocalModArgs) =>
         ipcRenderer.invoke('edit-local-mod', modId, args),
+    setLocalVariantGroup: (modIds: string[], target: LocalVariantGroupTarget) =>
+        ipcRenderer.invoke('set-local-variant-group', modIds, target),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
     setModLockerHero: (modId: string, heroName: string | null) =>

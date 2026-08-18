@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
-import type { ImportCustomModArgs, ImportCustomModResult } from '../types/electron';
+import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
@@ -337,6 +337,12 @@ interface AppState {
   /** Drop the solo-restore snapshot without touching enablement. */
   clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
+  /** Group local mods as variants of one mod, or take them back out. Resolves
+   *  with the group they now share (null after a clear). */
+  setLocalVariantGroup: (
+    modIds: string[],
+    target: LocalVariantGroupTarget
+  ) => Promise<string | null>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
   /** Mark a mod Global (priority root) or clear it. Moves the VPK, so it goes
@@ -904,9 +910,33 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {
     const updated = await api.editLocalMod(modId, args);
+    // Renaming a member of a local variant group renames the whole group in
+    // main, so mirror that here instead of leaving the siblings on their old
+    // name until the next scan (the group card title reads from whichever
+    // member is primary).
+    const groupId = updated.localGroupId;
     set({
-      mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+      mods: get().mods.map((m) => {
+        if (m.id === modId) return updated;
+        if (!groupId || m.localGroupId !== groupId || m.name === updated.name) return m;
+        return { ...m, name: updated.name };
+      }),
     });
+  },
+
+  setLocalVariantGroup: async (modIds, target) => {
+    try {
+      const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
+      // The handler returns the full list (memberships and the unified name can
+      // touch mods outside `modIds`), so adopt it wholesale and bump the
+      // generation like every other whole-list mutation.
+      modsGeneration++;
+      set({ mods });
+      return groupId;
+    } catch (err) {
+      set({ modsError: String(err) });
+      throw err;
+    }
   },
 
   setModLockerHero: async (modId: string, heroName: string | null) => {

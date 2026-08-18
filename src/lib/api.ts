@@ -27,6 +27,8 @@ import type {
   ImportCustomModResult,
   ImportCustomModsBatchResult,
   ImportCustomModsProgress,
+  LocalVariantGroupTarget,
+  SetLocalVariantGroupResult,
 } from '../types/electron';
 import { parseFeModel, type ClothModel } from './feModel';
 import { showToast } from '../stores/toastStore';
@@ -155,6 +157,16 @@ export async function listUnknownModFiles(modId: string): Promise<UnknownModFile
 
 export async function editLocalMod(modId: string, args: EditLocalModArgs): Promise<Mod> {
   return window.electronAPI.editLocalMod(modId, args);
+}
+
+/** Group locally imported VPKs as variants of one mod, or take them back out.
+ *  `{ mode: 'mint' }` returns the freshly minted group id, which is what the
+ *  "add a variant to a standalone local mod" flow feeds to the import. */
+export async function setLocalVariantGroup(
+  modIds: string[],
+  target: LocalVariantGroupTarget
+): Promise<SetLocalVariantGroupResult> {
+  return window.electronAPI.setLocalVariantGroup(modIds, target);
 }
 
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {
@@ -485,7 +497,7 @@ export function onImportCustomModsProgress(
   return window.electronAPI.onImportCustomModsProgress(callback);
 }
 
-export type { ImportCustomModArgs, ImportCustomModResult, ImportCustomModsBatchResult, ImportCustomModsProgress };
+export type { ImportCustomModArgs, ImportCustomModResult, ImportCustomModsBatchResult, ImportCustomModsProgress, LocalVariantGroupTarget, SetLocalVariantGroupResult };
 
 /** Build a soul-container override VPK from a user GLB and install it as a
  *  tracked local mod. Returns the full enriched mod list after install. */
