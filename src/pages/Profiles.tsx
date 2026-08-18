@@ -94,7 +94,17 @@ function getProfileModGroups(
     // and split into two file:<fileName> groups, inflating the displayed
     // count by one per stranded sibling.
     const gbId = profileMod.gameBananaId ?? mod?.gameBananaId;
-    const localKey = sha ? `sha:${sha}` : `file:${profileMod.fileName}`;
+    // A local variant group collapses into one row with N variants, the same
+    // shape a GameBanana submission gets. DISPLAY ONLY: the group id is
+    // per-install state that never reaches the portable profile, so it is read
+    // off the resolved installed mod, and profile resolution stays sha-based
+    // (an entry whose mod is not installed simply falls back to its own hash).
+    const localGroupId = mod?.localGroupId;
+    const localKey = localGroupId
+      ? `localgroup:${localGroupId}`
+      : sha
+        ? `sha:${sha}`
+        : `file:${profileMod.fileName}`;
     const key = gbId ? `gamebanana:${gbId}` : localKey;
     const group = groups.get(key) ?? {
       key,

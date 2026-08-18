@@ -1373,6 +1373,11 @@
       "mergeMinHint": "Select 2+ mods to merge",
       "mergeCombineHint_one": "Combine {{count}} mod into one VPK",
       "mergeCombineHint_other": "Combine {{count}} mods into one VPK",
+      "groupVariants": "Group",
+      "groupVariantsMinHint": "Select 2+ local mods to group as variants",
+      "groupVariantsLocalHint": "Only local mods can be grouped as variants. GameBanana mods already group by their mod page.",
+      "groupVariantsHint_one": "Show {{count}} mod as one card with switchable files",
+      "groupVariantsHint_other": "Show {{count}} mods as one card with switchable files",
       "tag": "Tag",
       "tagEmptyHint": "Select mods to tag for the Locker",
       "tagCountHint_one": "Tag {{count}} mod for a hero or General category in the Locker",
@@ -1405,6 +1410,8 @@
       "moreActions": "More actions",
       "moreActionsFor": "More actions for {{name}}",
       "edit": "Edit",
+      "addVariant": "Add variant",
+      "ungroupVariants": "Ungroup variants",
       "viewDetails": "View details",
       "viewAuthorPage": "View author's page",
       "fixUnknownMatch": "Fix unknown match",
@@ -1496,7 +1503,22 @@
       "someFailed_one": "{{count}} file could not be imported. It is still listed below with the reason.",
       "someFailed_other": "{{count}} files could not be imported. They are still listed below with the reason.",
       "failedToast_one": "{{count}} file could not be imported: {{error}}",
-      "failedToast_other": "{{count}} files could not be imported. First error: {{error}}"
+      "failedToast_other": "{{count}} files could not be imported. First error: {{error}}",
+      "addVariantsTitle": "Add Variants to {{name}}",
+      "addVariantsHelp": "Drop .vpk files or archives to add them to {{name}} as extra files you can switch between. They keep the mod name and are told apart by their own file names.",
+      "variantNamesHint": "These files join the mod as variants. Each one keeps its own file name.",
+      "addVariantCount_one": "Add {{count}} variant",
+      "addVariantCount_other": "Add {{count}} variants",
+      "addedVariantsToast_one": "Added {{count}} variant",
+      "addedVariantsToast_other": "Added {{count}} variants"
+    },
+    "variants": {
+      "grouped_one": "Grouped {{count}} mod as variants",
+      "grouped_other": "Grouped {{count}} mods as variants",
+      "ungrouped_one": "Ungrouped {{count}} file",
+      "ungrouped_other": "Ungrouped {{count}} files",
+      "detached": "Removed the file from the group",
+      "groupFailed": "Could not change the variant group: {{error}}"
     }
   },
   "locker": {
@@ -2744,7 +2766,11 @@
     "renameFile": "Rename file",
     "saving": "Saving...",
     "filesEnabled": "{{enabled}} of {{total}} files enabled",
-    "openModPage": "Open the GameBanana mod page"
+    "openModPage": "Open the GameBanana mod page",
+    "addVariant": "Add variant",
+    "addVariantHint": "Import another .vpk or archive as a variant of this mod",
+    "detachVariant": "Remove from group",
+    "detachVariantHint": "Keep this file installed, but stop treating it as a variant of this mod"
   },
   "imageContextMenu": {
     "image": "Image",
