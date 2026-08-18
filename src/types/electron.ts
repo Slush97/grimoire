@@ -238,6 +238,32 @@ export interface PerformanceLatestInfo {
     error: string | null;
 }
 
+/** One version a preset's upstream has published, for the full-history
+ *  browser. A row is only a pointer: nothing is fetched until it is picked. */
+export interface PerformanceRemoteVersion {
+    /** The upstream handle: a tag name ('v4.2') or a short commit sha. */
+    ref: string;
+    /** The version identity a pin/apply of this row would use (tag with any
+     *  leading 'v' stripped, or the short sha). */
+    version: string;
+    /** Full commit sha when the listing knows it (commit-versioned sources);
+     *  tag refs resolve at fetch time instead. */
+    commit: string | null;
+    /** yyyy-mm-dd. */
+    date: string;
+    /** Human handle where upstream provides one: the release title, or the
+     *  commit subject line for sources that version in prose. */
+    label: string | null;
+    /** Already fetched, gated, and cached locally (appliable offline). */
+    cached?: boolean;
+}
+
+export interface PerformanceRemoteVersionList {
+    /** Newest first. Empty on error. */
+    versions: PerformanceRemoteVersion[];
+    error: string | null;
+}
+
 export interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
@@ -1002,6 +1028,12 @@ export interface ElectronAPI {
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
     getPerformanceLatestInfo: (presetId: string) => Promise<PerformanceLatestInfo>;
     checkPerformanceLatest: (presetId: string, force?: boolean) => Promise<PerformanceLatestInfo>;
+    listPerformanceRemoteVersions: (presetId: string) => Promise<PerformanceRemoteVersionList>;
+    fetchPerformanceRemoteVersion: (
+        presetId: string,
+        ref: string,
+        commit?: string | null
+    ) => Promise<PerformanceLatestInfo>;
     openPerformanceConfigFile: () => Promise<void>;
     listEditorCandidates: () => Promise<EditorCandidate[]>;
     openModsFolder: () => Promise<void>;

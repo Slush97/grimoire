@@ -942,6 +942,20 @@ export async function checkPerformanceLatest(
   return window.electronAPI.checkPerformanceLatest(presetId, force);
 }
 
+export async function listPerformanceRemoteVersions(
+  presetId: string
+): Promise<PerformanceRemoteVersionList> {
+  return window.electronAPI.listPerformanceRemoteVersions(presetId);
+}
+
+export async function fetchPerformanceRemoteVersion(
+  presetId: string,
+  ref: string,
+  commit?: string | null
+): Promise<PerformanceLatestInfo> {
+  return window.electronAPI.fetchPerformanceRemoteVersion(presetId, ref, commit);
+}
+
 export async function openPerformanceConfigFile(): Promise<void> {
   return window.electronAPI.openPerformanceConfigFile();
 }
@@ -1103,7 +1117,7 @@ export function conflictPairKey(a: string, b: string): string {
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
 export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, PerformancePresetSummary, PerformanceLatestInfo, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, PerformancePresetSummary, PerformanceLatestInfo, PerformanceRemoteVersionList, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

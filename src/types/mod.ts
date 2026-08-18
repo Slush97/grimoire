@@ -1220,6 +1220,11 @@ export interface AppSettings {
    *  means creator defaults (visibility/camera on, developer tools off); an
    *  explicit empty list means the user disabled every optional setting. */
   performanceConfigOptIns?: Record<string, string[]>;
+  /** A historical upstream version the user pinned from the full-history
+   *  browser, per preset id. The version names a release held in the
+   *  main-process fetch cache; ref and date are display metadata. Cleared when
+   *  the user picks a bundled version instead. */
+  performanceConfigRemotePins?: Record<string, { version: string; ref: string; date: string }>;
   /** Track the newest upstream release of the selected preset instead of the
    *  newest bundled one: the card fetches upstream (GitHub) on demand and
    *  Apply writes the fetched release, falling back to bundled data when

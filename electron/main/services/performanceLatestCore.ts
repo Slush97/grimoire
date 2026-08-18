@@ -67,11 +67,20 @@ export interface LatestRelease {
 }
 
 interface LatestCacheFile {
-    /** Newest known release per preset id. */
+    /** Newest known release per preset id (the tracked latest). */
     byPreset: Record<string, LatestRelease>;
     /** Last successful upstream check per preset id (ISO), for throttling. */
     checkedAt: Record<string, string>;
+    /** Historical releases fetched on demand, per preset id, most recently
+     *  fetched first. What lets a user pin an old upstream version and keep
+     *  applying it offline: the built release persists here. */
+    history: Record<string, LatestRelease[]>;
 }
+
+/** Fetched historical releases kept per preset. Generous, because an evicted
+ *  release that a user still has pinned degrades to the bundled newest on the
+ *  next apply; the cap only exists to stop the cache growing without bound. */
+const HISTORY_CAP = 32;
 
 const CACHE_FILENAME = 'performance-latest.json';
 
@@ -87,12 +96,13 @@ export function readLatestCache(dir: string): LatestCacheFile {
             return {
                 byPreset: parsed.byPreset ?? {},
                 checkedAt: parsed.checkedAt ?? {},
+                history: parsed.history ?? {},
             };
         }
     } catch {
         // Missing or corrupt cache reads as empty; the next check rebuilds it.
     }
-    return { byPreset: {}, checkedAt: {} };
+    return { byPreset: {}, checkedAt: {}, history: {} };
 }
 
 export function writeLatestCache(dir: string, cache: LatestCacheFile): void {
@@ -107,6 +117,21 @@ export function writeLatestCache(dir: string, cache: LatestCacheFile): void {
 
 export function getCachedLatest(dir: string, presetId: string): LatestRelease | null {
     return readLatestCache(dir).byPreset[presetId] ?? null;
+}
+
+export function getCachedHistory(dir: string, presetId: string): LatestRelease[] {
+    return readLatestCache(dir).history[presetId] ?? [];
+}
+
+/** Record a historical fetch, deduplicating by version (a refetch replaces the
+ *  old entry and moves it to the front). */
+export function upsertHistory(dir: string, release: LatestRelease): void {
+    const cache = readLatestCache(dir);
+    const rest = (cache.history[release.presetId] ?? []).filter(
+        (r) => r.version !== release.version
+    );
+    cache.history[release.presetId] = [release, ...rest].slice(0, HISTORY_CAP);
+    writeLatestCache(dir, cache);
 }
 
 /** How stale a successful check may be before the next one hits the network
@@ -230,17 +255,24 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
     };
 }
 
-/** Resolve a preset at a version the bundle does not know, from the cache.
- *  Used for markers written by a track-latest apply. */
+/** Resolve a preset at a version the bundle does not know, from the cache:
+ *  the tracked latest (which alone answers the 'latest' sentinel), then the
+ *  fetched historical releases. Used for markers written by a track-latest or
+ *  pinned-historical apply. */
 export function resolveCachedPreset(
     dir: string,
     presetId: string,
     version: string | null | undefined
 ): PerformancePreset | null {
     const cached = getCachedLatest(dir, presetId);
-    if (!cached) return null;
-    if (version !== 'latest' && version !== cached.version) return null;
-    return latestAsPreset(cached);
+    if (cached && (version === 'latest' || version === cached.version)) {
+        return latestAsPreset(cached);
+    }
+    if (version && version !== 'latest') {
+        const historical = getCachedHistory(dir, presetId).find((r) => r.version === version);
+        if (historical) return latestAsPreset(historical);
+    }
+    return null;
 }
 
 /** True when applying `release` would write the same body the newest bundled

@@ -7,6 +7,10 @@ interface VersionPickerProps {
   versions: PerformancePresetVersion[];
   /** The release the user has picked. Newest when they have not picked one. */
   selected: string;
+  /** A historical upstream version pinned from the full-history browser; shown
+   *  as an extra option while it is the selection (its body lives in the
+   *  main-process fetch cache, not in the bundle). */
+  remotePinned?: { version: string; ref: string; date: string } | null;
   onSelect: (version: string) => void;
   disabled?: boolean;
 }
@@ -18,7 +22,8 @@ interface VersionPickerProps {
  * a release that gains frames on one machine can lose them on another (or break
  * something outright, as OptiLock v4.2 did with Doorman's door). Bundling the
  * previous releases means "the update made it worse" has an answer that does not
- * depend on the user hunting down an old gameinfo.gi by hand.
+ * depend on the user hunting down an old gameinfo.gi by hand; the full-history
+ * browser extends the same answer to every version upstream ever published.
  *
  * The field stays visible even when a preset bundles a single release (the
  * common case: byte-identical releases are collapsed at generation time). It
@@ -28,12 +33,14 @@ interface VersionPickerProps {
 export default function VersionPicker({
   versions,
   selected,
+  remotePinned,
   onSelect,
   disabled,
 }: VersionPickerProps) {
   const { t } = useTranslation();
   const newest = versions[0].version;
-  const rollbackAvailable = versions.length > 1;
+  const pinnedActive = !!remotePinned && remotePinned.version === selected;
+  const rollbackAvailable = versions.length > 1 || pinnedActive;
 
   return (
     <FormField
@@ -45,6 +52,14 @@ export default function VersionPicker({
         disabled={disabled || !rollbackAvailable}
         onChange={(e) => onSelect(e.target.value)}
       >
+        {pinnedActive && (
+          <option value={remotePinned.version}>
+            {t('performance.version.optionRemote', {
+              ref: remotePinned.ref,
+              date: remotePinned.date,
+            })}
+          </option>
+        )}
         {versions.map((entry) => (
           // The date is not decoration: upstream tag names do not reliably sort
           // into release order (OptiLock tagged v4.0d after v4.1), so the name

@@ -23,6 +23,7 @@ import EditorPickerModal from './EditorPickerModal';
 import PresetPicker from './PresetPicker';
 import PresetSummary from './PresetSummary';
 import VersionPicker from './VersionPicker';
+import VersionHistoryModal from './VersionHistoryModal';
 import GameplayOptIns from './GameplayOptIns';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
@@ -157,6 +158,7 @@ export default function PerformanceConfigCard() {
   const [latest, setLatest] = useState<PerformanceLatestInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -172,18 +174,28 @@ export default function PerformanceConfigCard() {
     '';
   const selected = presets.find((p) => p.id === selectedId) ?? null;
 
-  // Which bundled release of that preset to write. A saved pin naming a release
-  // this build no longer bundles falls back to the newest rather than erroring:
-  // the history window slides on every upstream bump, so an old pin aging out is
-  // expected, not a fault.
+  // A historical upstream version pinned from the full-history browser. Only
+  // meaningful while the saved version selection actually names it.
+  const remotePin = settings?.performanceConfigRemotePins?.[selectedId] ?? null;
+
+  // Which release of that preset to write: a bundled one, or a remote-pinned
+  // historical one (whose body lives in the main-process fetch cache). A saved
+  // pin naming a release this build no longer bundles falls back to the newest
+  // rather than erroring: the history window slides on every upstream bump, so
+  // an old pin aging out is expected, not a fault.
   const selectedVersion = useMemo(() => {
     if (!selected) return '';
     const saved = settings?.performanceConfigVersions?.[selectedId];
-    return selected.versions.some((v) => v.version === saved)
-      ? saved!
-      : selected.versions[0].version;
-  }, [settings?.performanceConfigVersions, selectedId, selected]);
+    if (saved && selected.versions.some((v) => v.version === saved)) return saved;
+    if (saved && remotePin?.version === saved) return saved;
+    return selected.versions[0].version;
+  }, [settings?.performanceConfigVersions, selectedId, selected, remotePin]);
 
+  // For a remote-pinned historical version this falls back to the newest
+  // bundled release, whose opt-in list stands in for the pinned one's (the
+  // sets are near-identical across releases, and the apply filters the chosen
+  // keys against the release it actually writes, so a mismatch cannot inject
+  // anything).
   const selectedRelease =
     selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
 
@@ -293,7 +305,39 @@ export default function PerformanceConfigCard() {
     const next = { ...(settings.performanceConfigVersions ?? {}) };
     if (version === selected.versions[0].version) delete next[selectedId];
     else next[selectedId] = version;
-    await saveSettings({ ...settings, performanceConfigVersions: next });
+    // Any bundled pick supersedes a remote-pinned historical version.
+    const pins = { ...(settings.performanceConfigRemotePins ?? {}) };
+    if (pins[selectedId]?.version !== version) delete pins[selectedId];
+    await saveSettings({
+      ...settings,
+      performanceConfigVersions: next,
+      performanceConfigRemotePins: pins,
+    });
+  };
+
+  // Pin a historical upstream version fetched (and gated + cached) by the
+  // main process. It rides the same settings slot as a bundled rollback, plus
+  // display metadata so the picker can name it while it is active.
+  const onPickRemoteVersion = async (version: string, ref: string, date: string) => {
+    if (!settings) return;
+    setHistoryOpen(false);
+    if (selected?.versions.some((v) => v.version === version)) {
+      // The fetch resolved to a release we bundle (byte-identical content
+      // reuses the bundled identity): treat it as a plain bundled pick.
+      await onSelectVersion(version);
+      return;
+    }
+    await saveSettings({
+      ...settings,
+      performanceConfigVersions: {
+        ...(settings.performanceConfigVersions ?? {}),
+        [selectedId]: version,
+      },
+      performanceConfigRemotePins: {
+        ...(settings.performanceConfigRemotePins ?? {}),
+        [selectedId]: { version, ref, date },
+      },
+    });
   };
 
   const onChangeOptIns = async (keys: string[]) => {
@@ -502,11 +546,25 @@ export default function PerformanceConfigCard() {
               <VersionPicker
                 versions={selected.versions}
                 selected={selectedVersion}
+                remotePinned={remotePin}
                 onSelect={(version) => void onSelectVersion(version)}
                 disabled={busy}
               />
             )}
           </div>
+
+          {selected && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                disabled={busy}
+                className="text-xs text-accent hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('performance.history.browse')}
+              </button>
+            </div>
+          )}
 
           {selected && selectedRelease && (
             <PresetSummary
@@ -678,6 +736,20 @@ export default function PerformanceConfigCard() {
         <EditorPickerModal
           onClose={() => setPickerOpen(false)}
           onChoose={(editorPath) => void onChooseEditor(editorPath)}
+        />
+      )}
+      {historyOpen && selected && (
+        <VersionHistoryModal
+          preset={selected}
+          selectedVersion={selectedVersion}
+          onClose={() => setHistoryOpen(false)}
+          onPickBundled={(version) => {
+            setHistoryOpen(false);
+            void onSelectVersion(version);
+          }}
+          onPickRemote={(info) =>
+            void onPickRemoteVersion(info.version ?? '', info.ref ?? info.version ?? '', info.date ?? '')
+          }
         />
       )}
     </Card>

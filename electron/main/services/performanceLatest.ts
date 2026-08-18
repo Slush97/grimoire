@@ -21,17 +21,23 @@ import {
 } from './performanceConfigData';
 import {
     buildLatestRelease,
+    getCachedHistory,
     getCachedLatest,
     isCheckFresh,
     latestMatchesBundledNewest,
     readLatestCache,
     resolveCachedPreset,
+    upsertHistory,
     writeLatestCache,
     type LatestRelease,
 } from './performanceLatestCore';
 import { setExtraPresetResolver } from './performanceConfig';
 import { githubRateLimiter } from './rateLimiter';
-import type { PerformanceLatestInfo } from '../../../src/types/electron';
+import type {
+    PerformanceLatestInfo,
+    PerformanceRemoteVersion,
+    PerformanceRemoteVersionList,
+} from '../../../src/types/electron';
 
 const FETCH_TIMEOUT_MS = 20_000;
 // Identifies the client to GitHub, which rejects UA-less API requests. Static
@@ -152,6 +158,124 @@ function toInfo(presetId: string, cached: LatestRelease | null, error?: string):
 /** What the cache already knows, without touching the network. */
 export function getPerformanceLatestInfo(presetId: string): PerformanceLatestInfo {
     return toInfo(presetId, getCachedLatest(cacheDir(), presetId));
+}
+
+/** Everything upstream has ever published for `presetId`, newest first: the
+ *  release list for tag-published sources, the config file's own commit
+ *  history for sources without tags. This is the browsing list only; nothing
+ *  is fetched or built until the user picks one. */
+export async function listPerformanceRemoteVersions(
+    presetId: string
+): Promise<PerformanceRemoteVersionList> {
+    if (!PRESETS.some((p) => p.id === presetId)) {
+        return { versions: [], error: `Unknown preset id: ${presetId}` };
+    }
+    const family = getFamily(presetId);
+    const repo = family.upstream.repo;
+    const dir = cacheDir();
+    const cachedVersions = new Set([
+        ...getCachedHistory(dir, presetId).map((r) => r.version),
+        ...(getCachedLatest(dir, presetId) ? [getCachedLatest(dir, presetId)!.version] : []),
+    ]);
+    try {
+        let versions: PerformanceRemoteVersion[];
+        if (family.releases[0].refKind === 'tag') {
+            const releases = (await githubJson(
+                `https://api.github.com/repos/${repo}/releases?per_page=100`
+            )) as Array<{
+                tag_name: string;
+                name: string | null;
+                published_at: string | null;
+                draft: boolean;
+                prerelease: boolean;
+            }>;
+            versions = releases
+                .filter((r) => !r.draft)
+                .map((r) => ({
+                    ref: r.tag_name,
+                    version: r.tag_name.replace(/^v/, ''),
+                    commit: null, // resolved at fetch time; listing stays one API call
+                    date: (r.published_at ?? '').slice(0, 10),
+                    label: r.name && r.name !== r.tag_name ? r.name : null,
+                }));
+        } else {
+            const commits = (await githubJson(
+                `https://api.github.com/repos/${repo}/commits?path=${encodeURIComponent(family.upstream.path)}&per_page=100`
+            )) as Array<{
+                sha: string;
+                commit: { message: string; author?: { date?: string }; committer?: { date?: string } };
+            }>;
+            versions = commits.map((c) => ({
+                ref: c.sha.slice(0, 8),
+                version: c.sha.slice(0, 8),
+                commit: c.sha,
+                date: (c.commit.author?.date ?? c.commit.committer?.date ?? '').slice(0, 10),
+                // The commit subject is the only version prose these sources
+                // have ("2.9 update"), so it is the row's human handle.
+                label: c.commit.message.split('\n')[0].slice(0, 100) || null,
+            }));
+        }
+        for (const v of versions) v.cached = cachedVersions.has(v.version) || undefined;
+        return { versions, error: null };
+    } catch (err) {
+        return { versions: [], error: err instanceof Error ? err.message : String(err) };
+    }
+}
+
+/** Fetch, gate, and cache one specific historical upstream version, so the
+ *  user can pin it. `commit` comes from the listing for commit-versioned
+ *  sources; tag refs resolve here. Historical fetches try every path the file
+ *  has lived at (upstreams rename their config folders across releases). */
+export async function fetchPerformanceRemoteVersion(
+    presetId: string,
+    ref: string,
+    commit?: string | null
+): Promise<PerformanceLatestInfo> {
+    const dir = cacheDir();
+    if (!PRESETS.some((p) => p.id === presetId)) {
+        return toInfo(presetId, null, `Unknown preset id: ${presetId}`);
+    }
+    const family = getFamily(presetId);
+    const refKind = family.releases[0].refKind;
+    try {
+        const sha = commit ?? (await resolveTag(family.upstream.repo, ref));
+        const date = await commitDate(family.upstream.repo, sha);
+        const baselineHead = await latestCommitFor(BASELINE.repo, BASELINE.path);
+        const baselineText = await fetchRaw(BASELINE.repo, baselineHead.sha, BASELINE.path);
+
+        let configText: string | null = null;
+        let lastError = '';
+        for (const path of family.upstream.paths) {
+            try {
+                configText = await fetchRaw(family.upstream.repo, sha, path);
+                break;
+            } catch (err) {
+                lastError = err instanceof Error ? err.message : String(err);
+            }
+        }
+        if (configText === null) {
+            return toInfo(presetId, null, `No config file at any known path: ${lastError}`);
+        }
+
+        const built = buildLatestRelease({
+            presetId,
+            refKind,
+            ref,
+            commit: sha,
+            date,
+            baselineCommit: baselineHead.sha,
+            baselineText,
+            configText,
+            now: new Date(),
+        });
+        if (!built.ok) {
+            return toInfo(presetId, null, `Version ${ref} was rejected: ${built.error}`);
+        }
+        upsertHistory(dir, built.release);
+        return toInfo(presetId, built.release);
+    } catch (err) {
+        return toInfo(presetId, null, err instanceof Error ? err.message : String(err));
+    }
 }
 
 /** Resolve and fetch the newest upstream release of `presetId`, updating the

@@ -54,6 +54,10 @@ export interface PresetUpstream {
     url: string;
     /** Path of the source config inside the upstream repo. */
     path: string;
+    /** Every path this file has lived at, current first. Upstreams rename
+     *  their config folders across releases, so fetching a historical
+     *  version tries these in order. */
+    paths: string[];
     /** Human-facing upstream version (a git tag where one exists). */
     ref: string;
     /** Whether `ref` is a real git tag or a version stated in prose. */
@@ -226,6 +230,7 @@ const SqookyDefault: PerformancePresetFamily = {
         repo: 'Sqooky/OptimizationLock',
         url: 'https://github.com/Sqooky/OptimizationLock',
         path: 'Sqooky\'s .gi/gameinfo.gi',
+        paths: ['Sqooky\'s .gi/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptimizationLock by Sqooky and contributors',
     },
@@ -1167,6 +1172,7 @@ const SqookyTesting: PerformancePresetFamily = {
         repo: 'Sqooky/OptimizationLock',
         url: 'https://github.com/Sqooky/OptimizationLock',
         path: 'test_cfg/gameinfo.gi',
+        paths: ['test_cfg/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptimizationLock by Sqooky and contributors',
     },
@@ -2267,6 +2273,7 @@ const BootMaxFps: PerformancePresetFamily = {
         repo: 'Sqooky/OptimizationLock',
         url: 'https://github.com/Sqooky/OptimizationLock',
         path: 'boot\'s maxium fps config/gameinfo.gi',
+        paths: ['boot\'s maxium fps config/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptimizationLock by Sqooky and contributors',
     },
@@ -2720,6 +2727,7 @@ const KaizuMinSpec: PerformancePresetFamily = {
         repo: 'Sqooky/OptimizationLock',
         url: 'https://github.com/Sqooky/OptimizationLock',
         path: 'kaizuchanerus minimum spec/gameinfo.gi',
+        paths: ['kaizuchanerus minimum spec/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptimizationLock by Sqooky and contributors',
     },
@@ -3839,6 +3847,7 @@ const OptilockFps: PerformancePresetFamily = {
         repo: 'dacooderr/OptiLock',
         url: 'https://github.com/dacooderr/OptiLock',
         path: 'OptiLock FPS Config (Recommended)/gameinfo.gi',
+        paths: ['OptiLock FPS Config (Recommended)/gameinfo.gi', 'OptiLock FPS Preset/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptiLock by dacooder and contributors',
     },
@@ -5324,6 +5333,7 @@ const OptilockMax: PerformancePresetFamily = {
         repo: 'dacooderr/OptiLock',
         url: 'https://github.com/dacooderr/OptiLock',
         path: 'OptiLock Potato Config/gameinfo.gi',
+        paths: ['OptiLock Potato Config/gameinfo.gi', 'OptiLock Max FPS Preset/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptiLock by dacooder and contributors',
     },

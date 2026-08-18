@@ -228,6 +228,10 @@ function emit(manifest, presets) {
     L.push(`    url: string;`);
     L.push(`    /** Path of the source config inside the upstream repo. */`);
     L.push(`    path: string;`);
+    L.push(`    /** Every path this file has lived at, current first. Upstreams rename`);
+    L.push(`     *  their config folders across releases, so fetching a historical`);
+    L.push(`     *  version tries these in order. */`);
+    L.push(`    paths: string[];`);
     L.push(`    /** Human-facing upstream version (a git tag where one exists). */`);
     L.push(`    ref: string;`);
     L.push(`    /** Whether \`ref\` is a real git tag or a version stated in prose. */`);
@@ -334,6 +338,7 @@ function emit(manifest, presets) {
         L.push(`        repo: ${q(p.upstream.repo)},`);
         L.push(`        url: ${q(p.upstream.url)},`);
         L.push(`        path: ${q(p.upstream.path)},`);
+        L.push(`        paths: [${p.upstream.paths.map(q).join(', ')}],`);
         L.push(`        license: ${q(p.upstream.license)},`);
         L.push(`        credit: ${q(p.upstream.credit)},`);
         L.push(`    },`);
@@ -539,6 +544,7 @@ async function main() {
                 repo: source.repo,
                 url: source.url,
                 path: entry.path,
+                paths: [...new Set([entry.path, ...Object.values(entry.pathByRef ?? {})])],
                 license: source.license,
                 credit: source.credit,
             },

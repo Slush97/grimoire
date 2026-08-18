@@ -8,11 +8,13 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import {
     buildLatestRelease,
+    getCachedHistory,
     getCachedLatest,
     isCheckFresh,
     latestAsPreset,
     readLatestCache,
     resolveCachedPreset,
+    upsertHistory,
     writeLatestCache,
     type BuildLatestInput,
     type LatestRelease,
@@ -209,6 +211,7 @@ describe('cache round-trip and resolution', () => {
         writeLatestCache(dir, {
             byPreset: { [r.presetId]: r },
             checkedAt: { [r.presetId]: '2026-08-18T12:00:00Z' },
+            history: {},
         });
         expect(getCachedLatest(dir, r.presetId)).toEqual(r);
         expect(isCheckFresh(dir, r.presetId, new Date('2026-08-18T12:04:00Z'))).toBe(true);
@@ -217,14 +220,41 @@ describe('cache round-trip and resolution', () => {
     });
 
     it('reads a missing or corrupt cache as empty', () => {
-        expect(readLatestCache(dir)).toEqual({ byPreset: {}, checkedAt: {} });
+        expect(readLatestCache(dir)).toEqual({ byPreset: {}, checkedAt: {}, history: {} });
         writeFileSync(join(dir, 'performance-latest.json'), '{not json', 'utf-8');
-        expect(readLatestCache(dir)).toEqual({ byPreset: {}, checkedAt: {} });
+        expect(readLatestCache(dir)).toEqual({ byPreset: {}, checkedAt: {}, history: {} });
+    });
+
+    it('keeps fetched historical releases and resolves pins from them', () => {
+        const r = release();
+        const older: LatestRelease = {
+            ...r,
+            version: '11111111',
+            ref: '11111111',
+            commit: '1111111111111111111111111111111111111111',
+        };
+        upsertHistory(dir, r);
+        upsertHistory(dir, older);
+        expect(getCachedHistory(dir, r.presetId).map((x) => x.version)).toEqual([
+            '11111111',
+            r.version,
+        ]);
+        // A refetch replaces its old entry and moves it to the front.
+        upsertHistory(dir, { ...r });
+        expect(getCachedHistory(dir, r.presetId).map((x) => x.version)).toEqual([
+            r.version,
+            '11111111',
+        ]);
+        // Pins resolve from history alone (no tracked-latest entry needed)...
+        expect(resolveCachedPreset(dir, r.presetId, '11111111')?.version).toBe('11111111');
+        // ...but the 'latest' sentinel never does: it means "what the last
+        // check said was newest", which history cannot answer.
+        expect(resolveCachedPreset(dir, r.presetId, 'latest')).toBeNull();
     });
 
     it("resolves the 'latest' sentinel and the release's own version, nothing else", () => {
         const r = release();
-        writeLatestCache(dir, { byPreset: { [r.presetId]: r }, checkedAt: {} });
+        writeLatestCache(dir, { byPreset: { [r.presetId]: r }, checkedAt: {}, history: {} });
         expect(resolveCachedPreset(dir, r.presetId, 'latest')?.version).toBe(r.version);
         expect(resolveCachedPreset(dir, r.presetId, r.version)?.version).toBe(r.version);
         expect(resolveCachedPreset(dir, r.presetId, '2.8.2')).toBeNull();
@@ -264,7 +294,11 @@ describe('applying a tracked latest release', () => {
 
         const built = buildLatestRelease(input());
         if (!built.ok) throw new Error(built.error);
-        writeLatestCache(cacheDir, { byPreset: { [built.release.presetId]: built.release }, checkedAt: {} });
+        writeLatestCache(cacheDir, {
+            byPreset: { [built.release.presetId]: built.release },
+            checkedAt: {},
+            history: {},
+        });
         setExtraPresetResolver((id, version) => resolveCachedPreset(cacheDir, id, version));
     });
 
@@ -314,6 +348,26 @@ describe('applying a tracked latest release', () => {
         const removed = removePerformanceConfig(gameRoot);
         expect(removed.state).toBe('not-applied');
         expect(read()).toBe(original);
+    });
+
+    it('applies a pinned historical version resolved from the history cache', () => {
+        const built = buildLatestRelease(input());
+        if (!built.ok) throw new Error(built.error);
+        const historical: typeof built.release = {
+            ...built.release,
+            version: 'aa11bb22',
+            ref: 'aa11bb22',
+            commit: 'aa11bb22aa11bb22aa11bb22aa11bb22aa11bb22',
+        };
+        upsertHistory(cacheDir, historical);
+
+        const applied = applyPerformanceConfig(gameRoot, {
+            presetId: 'sqooky-default',
+            version: 'aa11bb22',
+        });
+        expect(applied.state).toBe('applied');
+        expect(applied.appliedVersion).toBe('aa11bb22');
+        expect(read()).toContain('preset=sqooky-default vaa11bb22 @aa11bb22aa11');
     });
 
     it('falls back to the bundled newest release when the cache has nothing', () => {
