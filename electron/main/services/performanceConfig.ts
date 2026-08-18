@@ -30,10 +30,45 @@ import type {
 import {
     DEFAULT_PRESET_ID,
     getPreset,
+    hasVersion,
     PRESETS,
     type PerformancePreset,
     type SectionOp,
 } from './performanceConfigData';
+
+/** Resolves a preset at a version the bundle does not know. The track-latest
+ *  path (performanceLatest.ts) registers one that reads its fetch cache, so a
+ *  marker written by a track-latest apply still resolves to the exact
+ *  definition that wrote the file; without that, harvesting would fall back to
+ *  the bundled definition and treat the whole delta as drift. A hook rather
+ *  than an import keeps this module free of electron so its tests stay plain. */
+export type ExtraPresetResolver = (
+    presetId: string,
+    version: string | null | undefined
+) => PerformancePreset | null;
+
+let extraPresetResolver: ExtraPresetResolver | null = null;
+
+export function setExtraPresetResolver(resolver: ExtraPresetResolver | null): void {
+    extraPresetResolver = resolver;
+}
+
+/** Resolve a preset at a version: bundled releases first, then whatever the
+ *  extra resolver knows (the track-latest cache), then the bundled fallback
+ *  behavior getPreset already implements (newest release). The sentinel
+ *  version 'latest' never names a bundled release, so it reaches the extra
+ *  resolver and means "the newest fetched upstream release". */
+function resolvePreset(
+    presetId: string | null | undefined,
+    version?: string | null
+): PerformancePreset {
+    const id = presetId ?? DEFAULT_PRESET_ID;
+    if (version && !hasVersion(id, version)) {
+        const extra = extraPresetResolver?.(id, version);
+        if (extra && extra.id === id) return extra;
+    }
+    return getPreset(presetId, version === 'latest' ? null : version);
+}
 
 const MARKER = 'grimoire-perf';
 // The BEGIN marker is the authoritative record of what is in the file: which
@@ -417,7 +452,7 @@ export function applyPerformanceConfig(
         return status('error', 'gameinfo.gi not found. Configure your Deadlock path first.');
     }
 
-    const preset = getPreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version);
+    const preset = resolvePreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version);
     const optIns = (opts?.optIns ?? creatorDefaultOptIns(preset)).filter((key) =>
         preset.optIn.some((control) => control.key === key)
     );
@@ -438,8 +473,9 @@ export function applyPerformanceConfig(
         // Resolve the applied preset at the version its own marker records, not
         // at the newest one we bundle. Overrides are harvested against it, so
         // reading a rolled-back file with the newest definition would attribute
-        // every difference between the two releases to the user.
-        const appliedPreset = applied ? getPreset(applied[1], applied[2]) : null;
+        // every difference between the two releases to the user. A version the
+        // bundle does not know may still resolve from the track-latest cache.
+        const appliedPreset = applied ? resolvePreset(applied[1], applied[2]) : null;
         const switching = appliedPreset !== null && appliedPreset.id !== preset.id;
 
         // Hand edits are harvested against the preset that is actually in the
@@ -840,7 +876,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             // back to an older release and then got wiped by a game update
             // should be offered their release back, not quietly moved to the
             // newest one they had already rejected.
-            const wipedPreset = getPreset(wipedId, wipedSidecar.version);
+            const wipedPreset = resolvePreset(wipedId, wipedSidecar.version);
             if (restorable) {
                 return status(
                     'wiped',

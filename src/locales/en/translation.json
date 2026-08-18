@@ -2891,6 +2891,17 @@
       "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",
       "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}."
     },
+    "trackLatest": {
+      "label": "Track latest upstream",
+      "description": "Apply the newest release straight from the config author's GitHub repo, instead of waiting for a Grimoire update. Falls back to the bundled release when offline.",
+      "checking": "Checking the config's repo for its newest release...",
+      "available": "Newest upstream release: {{ref}} ({{date}}).",
+      "upToDate": "Upstream matches the bundled release v{{version}}.",
+      "withheld_one": " {{count}} new upstream setting is held back until it has been reviewed.",
+      "withheld_other": " {{count}} new upstream settings are held back until they have been reviewed.",
+      "staleNote": " Could not check for something newer just now; this is the last release fetched.",
+      "unreachable": "Could not reach the config's repo. The bundled release will be applied instead."
+    },
     "moreActions": "More actions"
   },
   "lockerOverrides": {

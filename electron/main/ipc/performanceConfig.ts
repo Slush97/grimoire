@@ -11,9 +11,16 @@ import {
     resetPerformanceConfigOverrides,
     restorePerformanceConfigBackup,
 } from '../services/performanceConfig';
+// Importing the service also registers its preset resolver with
+// performanceConfig, so markers written by a track-latest apply resolve.
+import {
+    checkPerformanceLatest,
+    getPerformanceLatestInfo,
+} from '../services/performanceLatest';
 import type {
     EditorCandidate,
     PerformanceConfigStatus,
+    PerformanceLatestInfo,
     PerformancePresetSummary,
 } from '../../../src/types/electron';
 
@@ -84,6 +91,25 @@ ipcMain.handle(
             getActiveDeadlockPath(),
             selection(presetId, optIns, version)
         );
+    }
+);
+
+// get-performance-latest-info (what the track-latest cache already knows; no
+// network)
+ipcMain.handle(
+    'get-performance-latest-info',
+    (_event, presetId: string): PerformanceLatestInfo => {
+        return getPerformanceLatestInfo(String(presetId));
+    }
+);
+
+// check-performance-latest (resolve + fetch the newest upstream release of a
+// preset and cache it; throttled inside the service, network only here and
+// only on user actions)
+ipcMain.handle(
+    'check-performance-latest',
+    (_event, presetId: string, force?: boolean): Promise<PerformanceLatestInfo> => {
+        return checkPerformanceLatest(String(presetId), force === true);
     }
 );
 

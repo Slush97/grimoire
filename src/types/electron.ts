@@ -211,6 +211,33 @@ export interface PerformanceConfigStatus {
     message: string;
 }
 
+/** What is known about the newest upstream release of a performance preset,
+ *  from the track-latest fetch cache. All-null data fields mean no check has
+ *  ever succeeded for this preset. */
+export interface PerformanceLatestInfo {
+    presetId: string;
+    /** Version identity of the newest fetched release: the upstream tag for
+     *  tag-published sources, the short commit sha for sources that publish
+     *  no tags. What Apply writes into the gameinfo.gi marker. */
+    version: string | null;
+    ref: string | null;
+    refKind: 'tag' | 'prose' | null;
+    commit: string | null;
+    /** Upstream commit date, yyyy-mm-dd. */
+    date: string | null;
+    /** ISO timestamp of the fetch that produced the cached release. */
+    fetchedAt: string | null;
+    /** Gameplay-shaped upstream keys held back because nobody has classified
+     *  them yet; they are never written. */
+    withheldCount: number;
+    /** The fetched latest is byte-identical to this bundled (human-reviewed)
+     *  release version; the card can say "up to date" instead of offering it. */
+    matchesBundled: string | null;
+    /** Fetch or validation failure. The cached fields above may still be
+     *  populated from an earlier successful check. */
+    error: string | null;
+}
+
 export interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
@@ -973,6 +1000,8 @@ export interface ElectronAPI {
         version?: string | null
     ) => Promise<PerformanceConfigStatus>;
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
+    getPerformanceLatestInfo: (presetId: string) => Promise<PerformanceLatestInfo>;
+    checkPerformanceLatest: (presetId: string, force?: boolean) => Promise<PerformanceLatestInfo>;
     openPerformanceConfigFile: () => Promise<void>;
     listEditorCandidates: () => Promise<EditorCandidate[]>;
     openModsFolder: () => Promise<void>;

@@ -84,6 +84,15 @@ export const steamCommunityRateLimiter = new RateLimiter({
     burstSize: 3,
 });
 
+// GitHub (api.github.com + raw.githubusercontent.com) rate limiter: 1 request
+// per second. Used by the performance track-latest checks, which run only on
+// user actions and make 3-5 requests per check; unauthenticated GitHub API
+// allows 60/hour per IP, so slow and polite is the only sane budget.
+export const githubRateLimiter = new RateLimiter({
+    maxRequestsPerSecond: 1,
+    burstSize: 5,
+});
+
 // Grimoire Social API rate limiter: 5 requests per second.
 // Defensive client-side throttle. The worker enforces strict per-action
 // limits (publish 1/10min via DO, like 30/min via RL API, etc.) on its

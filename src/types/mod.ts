@@ -1220,6 +1220,14 @@ export interface AppSettings {
    *  means creator defaults (visibility/camera on, developer tools off); an
    *  explicit empty list means the user disabled every optional setting. */
   performanceConfigOptIns?: Record<string, string[]>;
+  /** Track the newest upstream release of the selected preset instead of the
+   *  newest bundled one: the card fetches upstream (GitHub) on demand and
+   *  Apply writes the fetched release, falling back to bundled data when
+   *  offline. Undefined = on (the presets exist to mirror living community
+   *  configs); explicit false = only ever apply the reviewed bundled
+   *  releases. A per-preset version pin in `performanceConfigVersions` beats
+   *  tracking: an explicit rollback is the stronger, deliberate choice. */
+  performanceTrackLatest?: boolean;
   /** Editor binary used to open gameinfo.gi for hand edits. null = the OS
    *  default app; undefined = never chosen, so the picker is shown first.
    *  (.gi maps to text/plain, which often resolves to a word processor, so
