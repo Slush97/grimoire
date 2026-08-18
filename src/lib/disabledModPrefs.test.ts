@@ -49,6 +49,23 @@ describe('modPreferenceKey', () => {
       'mod:pak01_local'
     );
   });
+
+  // The Installed page derives a group entry's key from its PRIMARY, which is
+  // whichever member is currently enabled. A local variant group therefore has
+  // to key off the group id: the per-file sha would move the key every time the
+  // user switched variants, losing the card's star and list membership.
+  it('shares one key across the variants of a local group', () => {
+    const red = { id: 'pak04_dir', localGroupId: 'uuid-1', sha256: 'aaa' };
+    const blue = { id: 'pak05_dir', localGroupId: 'uuid-1', sha256: 'bbb' };
+    expect(modPreferenceKey(red)).toBe('localgroup:uuid-1');
+    expect(modPreferenceKey(blue)).toBe(modPreferenceKey(red));
+  });
+
+  it('still prefers the GameBanana id over a stray local group id', () => {
+    expect(modPreferenceKey({ id: 'a', gameBananaId: 42, localGroupId: 'uuid-1' })).toBe(
+      'gamebanana:42'
+    );
+  });
 });
 
 describe('storage keys', () => {
