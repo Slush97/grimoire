@@ -277,4 +277,124 @@ describe('buildProfileModResolver', () => {
     expect(r.mod).toBeUndefined();
     expect(r.via).toBe('miss');
   });
+
+  // Local mods carry no GameBanana ids, so before sha256 their only identity was
+  // the pakNN_ slot they happened to occupy, which every profile switch and
+  // reorder rewrites.
+  describe('local mods resolved by content hash', () => {
+    const SHA_A = 'a'.repeat(64);
+    const SHA_B = 'b'.repeat(64);
+
+    it('finds a local mod that was renamed since the profile was saved', () => {
+      const current = [mod({ id: 'local', fileName: 'glamorous_geist_dir.vpk' })];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'local.vpk': { sha256: SHA_A } })
+      );
+      const r = resolve(pm({ fileName: 'pak07_dir.vpk', sha256: SHA_A }));
+      expect(r.mod?.id).toBe('local');
+      expect(r.via).toBe('hash');
+    });
+
+    // Two known hashes that disagree at the same fileName means the slot was
+    // reused, so the fallback is refused. The other reading of that shape is a
+    // mod rebuilt in place (merge add/replace/extract, soul-container and
+    // spirit-urn re-import all keep fileName + slot + metaKey while restamping
+    // the hash), which the resolver cannot tell apart from here. Those callers
+    // move the saved profile entries onto the new hash themselves, via
+    // profiles.ts retargetProfileModSha, so a rebuilt mod resolves on 'hash'
+    // and never reaches this branch. See profileShaRetarget.test.ts.
+    it('refuses a different local mod that took over the saved slot', () => {
+      const current = [mod({ id: 'other', fileName: 'pak07_dir.vpk' })];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'other.vpk': { sha256: SHA_B } })
+      );
+      const r = resolve(pm({ fileName: 'pak07_dir.vpk', sha256: SHA_A }));
+      expect(r.mod).toBeUndefined();
+      expect(r.via).toBe('refused-crossmatch');
+      expect(r.via === 'refused-crossmatch' && r.candidateFileName).toBe('pak07_dir.vpk');
+    });
+
+    it('leaves legacy hash-less entries on the fileName fallback', () => {
+      const current = [mod({ id: 'local', fileName: 'my_mod.vpk' })];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'local.vpk': { sha256: SHA_A } })
+      );
+      const r = resolve(pm({ fileName: 'my_mod.vpk' }));
+      expect(r.mod?.id).toBe('local');
+      expect(r.via).toBe('fileName');
+    });
+
+    it('falls back to fileName when the installed mod has no hash yet', () => {
+      // Pre-backfill install: the profile knows its hash, the sidecar doesn't.
+      const current = [mod({ id: 'local', fileName: 'my_mod.vpk' })];
+      const resolve = buildProfileModResolver(current, metaLookup({}));
+      const r = resolve(pm({ fileName: 'my_mod.vpk', sha256: SHA_A }));
+      expect(r.mod?.id).toBe('local');
+      expect(r.via).toBe('fileName');
+    });
+
+    it('misses cleanly when the content changed and the fileName moved too', () => {
+      const current = [mod({ id: 'local', fileName: 'pak09_dir.vpk' })];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'local.vpk': { sha256: SHA_B } })
+      );
+      const r = resolve(pm({ fileName: 'pak07_dir.vpk', sha256: SHA_A }));
+      expect(r.mod).toBeUndefined();
+      expect(r.via).toBe('miss');
+    });
+
+    it('never assigns one byte-identical copy to two profile entries', () => {
+      const current = [
+        mod({ id: 'copy0', fileName: 'pak01_dir.vpk' }),
+        mod({ id: 'copy1', fileName: 'pak02_dir.vpk' }),
+      ];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'copy0.vpk': { sha256: SHA_A }, 'copy1.vpk': { sha256: SHA_A } })
+      );
+      const a = resolve(pm({ fileName: 'pak01_dir.vpk', sha256: SHA_A }));
+      const b = resolve(pm({ fileName: 'pak02_dir.vpk', sha256: SHA_A }));
+      expect(a.mod?.id).toBe('copy0');
+      expect(b.mod?.id).toBe('copy1');
+    });
+
+    it('prefers the hash match over the unrelated mod now in the saved slot', () => {
+      // The headline regression: applying the profile used to enable `other`
+      // simply because it inherited pak07_dir.vpk.
+      const current = [
+        mod({ id: 'other', fileName: 'pak07_dir.vpk' }),
+        mod({ id: 'local', fileName: 'pak12_dir.vpk' }),
+      ];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({ 'other.vpk': { sha256: SHA_B }, 'local.vpk': { sha256: SHA_A } })
+      );
+      const r = resolve(pm({ fileName: 'pak07_dir.vpk', sha256: SHA_A }));
+      expect(r.mod?.id).toBe('local');
+      expect(r.via).toBe('hash');
+    });
+
+    it('still prefers GameBanana stable ids when the entry also carries a hash', () => {
+      const current = [
+        mod({ id: 'gb', fileName: 'pak03_dir.vpk' }),
+        mod({ id: 'local', fileName: 'pak04_dir.vpk' }),
+      ];
+      const resolve = buildProfileModResolver(
+        current,
+        metaLookup({
+          'gb.vpk': { gameBananaId: 10, gameBananaFileId: 20, sha256: SHA_B },
+          'local.vpk': { sha256: SHA_A },
+        })
+      );
+      const r = resolve(
+        pm({ fileName: 'x.vpk', gameBananaId: 10, gameBananaFileId: 20, sha256: SHA_A })
+      );
+      expect(r.mod?.id).toBe('gb');
+      expect(r.via).toBe('stable');
+    });
+  });
 });

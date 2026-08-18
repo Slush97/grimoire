@@ -33,6 +33,7 @@ import {
     type ModinfoMergeSource,
 } from './modinfoFormat';
 import { encodeShareCode } from './portableProfile';
+import { retargetProfileModSha } from './profiles';
 import {
     assertCanMoveLoadedGameMod,
     assertCanMoveLoadedGameMods,
@@ -1201,6 +1202,10 @@ async function addMergeSourcesLocked(
             sha256: rebuiltOriginal.sha256,
             merged: newManifest,
         });
+        // The merge kept its fileName and slot but not its bytes: move saved
+        // profile entries onto the new hash or profile apply would read the
+        // mismatch as a reused slot and turn the merge off.
+        retargetProfileModSha(targetMeta.sha256, rebuiltOriginal.sha256);
         mergeTrace(
             `add-sources done merge=${oldManifest.id} key=${target.metaKey}: ${describeSources(snapshots)}`
         );
@@ -1465,6 +1470,9 @@ async function replaceMergeSourcesLocked(
             sha256: rebuiltOriginal.sha256,
             merged: newManifest,
         });
+        // Same in-place rebuild as add-sources: saved profile entries have to
+        // follow the merge onto its new hash.
+        retargetProfileModSha(targetMeta.sha256, rebuiltOriginal.sha256);
 
         // Only now is the old content redundant. Best-effort: the merge is
         // already correct, and a leftover disabled VPK is cosmetic next to
@@ -1672,6 +1680,9 @@ async function extractMergeSourceLocked(
         sha256,
         merged: newManifest,
     });
+    // The rebuilt merge keeps its fileName and slot, so saved profile entries
+    // must be moved onto the new hash to stay resolvable.
+    retargetProfileModSha(meta.sha256, sha256);
     mergeTrace(`rebuild done merge=${manifest.id} key=${target.metaKey}: ${describeSources(remainingSnapshots)}`);
 
     // Pass 2: re-embed the self-identifying entries with the UPDATED remaining

@@ -153,6 +153,7 @@ import {
 import { CreateModListModal, ModListSubmenu } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { FilterCheckList } from '../components/installed/FilterCheckList';
+import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -863,6 +864,15 @@ export default function Installed() {
   // Entry the "New list" dialog was opened from, so creating also files it.
   const [creatingListFor, setCreatingListFor] = useState<ModEntry | null>(null);
   const [managingLists, setManagingLists] = useState(false);
+
+  // Applying (or saving) a profile from the header control changes what is
+  // enabled behind the page's back: there is no event or subscription to hear
+  // it on. The force flag is required because loadMods no-ops on a generation
+  // guard otherwise, and settings carry the active-profile marker.
+  const handleProfileApplied = useCallback(() => {
+    void loadMods({ force: true });
+    void loadSettings();
+  }, [loadMods, loadSettings]);
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
@@ -4772,12 +4782,23 @@ export default function Installed() {
         </div>
       )}
 
-      {visibleEnabled.length > 0 && (
+      {/* The header row also carries the profiles control, so it renders even
+          with nothing enabled: zero enabled mods is exactly the moment someone
+          wants to load a profile. A live search or filter is the one case where
+          it stays hidden, because an empty result there is about the query or
+          filter, not about the install (and the no-matches empty state above
+          should not get a stray button row under it). */}
+      {(visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
-          <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
+          <div className="flex items-center justify-between gap-3 mb-[14px]">
+            {visibleEnabled.length > 0 ? (
+              <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
+            ) : (
+              <span />
+            )}
+            <InstalledProfilesMenu onApplied={handleProfileApplied} />
           </div>
-          {renderSortableSection('enabled')}
+          {visibleEnabled.length > 0 && renderSortableSection('enabled')}
         </div>
       )}
 

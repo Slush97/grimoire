@@ -1,6 +1,28 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useBackdropDismiss } from './useBackdropDismiss';
+
+// Stack of currently-open modals, in opening order. Stacked dialogs (a
+// confirmation over a picker) each install window-level key handlers; without
+// this, both fire on every keypress: the lower Tab trap yanks focus out of
+// the upper dialog (pinning forward-Tab on one control), and a single Escape
+// closes both. Only the topmost modal may handle keys.
+const openModalStack: symbol[] = [];
+
+function useModalStackEntry(open: boolean): () => boolean {
+    const idRef = useRef<symbol | null>(null);
+    if (idRef.current === null) idRef.current = Symbol('modal');
+    const id = idRef.current;
+    useEffect(() => {
+        if (!open) return;
+        openModalStack.push(id);
+        return () => {
+            const index = openModalStack.indexOf(id);
+            if (index !== -1) openModalStack.splice(index, 1);
+        };
+    }, [open, id]);
+    return useCallback(() => openModalStack[openModalStack.length - 1] === id, [id]);
+}
 
 // Standard modal shell: portal to body, dimmed backdrop, Escape and
 // backdrop-click dismissal, focus hand-off into the panel and restore on
@@ -55,6 +77,7 @@ export function Modal({
     const [mounted, setMounted] = useState(open);
     // Render-time adjustment so opening re-mounts on the same commit.
     if (open && !mounted) setMounted(true);
+    const isTopmost = useModalStackEntry(open);
 
     useEffect(() => {
         if (open) return;
@@ -66,12 +89,15 @@ export function Modal({
         if (!open || !dismissable) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
+            // A dialog stacked above this one owns the keyboard; letting the
+            // lower handler run too would close both on a single Escape.
+            if (!isTopmost()) return;
             e.preventDefault();
             onClose();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, dismissable, onClose]);
+    }, [open, dismissable, onClose, isTopmost]);
 
     // Trap Tab focus inside the panel while open. The WAI-ARIA dialog pattern
     // (and Radix Dialog) keeps focus within a modal dialog; without this, Tab
@@ -80,6 +106,10 @@ export function Modal({
         if (!open) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key !== 'Tab') return;
+            // Only the topmost dialog traps Tab. A lower trap firing first
+            // sees focus "escaped" (it is in the dialog above) and steals it
+            // back, which pins forward-Tab onto one control up there.
+            if (!isTopmost()) return;
             const panel = panelRef.current;
             if (!panel) return;
             const focusable = panel.querySelectorAll<HTMLElement>(
@@ -110,7 +140,7 @@ export function Modal({
         };
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [open]);
+    }, [open, isTopmost]);
 
     useEffect(() => {
         if (!open) return;

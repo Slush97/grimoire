@@ -15,6 +15,7 @@ export type VpkIndexMeta = {
     gameBananaId?: number;
     gameBananaFileId?: number;
     vpkIndex?: number;
+    sha256?: string;
 };
 export type MetaLookup = (metaKey: string) => VpkIndexMeta | undefined;
 
@@ -121,7 +122,7 @@ export function dedupeEnabledForProfile<T extends { metaKey: string; fileName: s
  *  fileName cross-match case that was the cause of the
  *  "Profile apply misrecognizing mods to turn on" bug. */
 export type ResolvedMatch =
-    | { mod: Mod; via: 'stable' | 'fileName' }
+    | { mod: Mod; via: 'stable' | 'hash' | 'fileName' }
     | { mod: undefined; via: 'miss' | 'refused-crossmatch'; candidateFileName?: string };
 
 /**
@@ -131,7 +132,10 @@ export type ResolvedMatch =
  * `vpkIndex`) so a mod can be found after a fileName change. Multi-VPK
  * siblings use the size-sorted index assigned at download time instead of a
  * content hash, so profile apply can still survive a redownload/update that
- * changes the VPK bytes but keeps the archive's relative VPK shape. Falls back
+ * changes the VPK bytes but keeps the archive's relative VPK shape. Local mods
+ * have no id pair, so they resolve on the canonical pre-imprint `sha256` from
+ * the metadata sidecar, which survives the reorder/profile-switch renames that
+ * make their fileName worthless. Falls back
  * to fileName ONLY when neither the profile entry nor the candidate currentMod carry ids: this keeps
  * local-to-local fileName matching working for custom mods, while refusing to
  * cross-match a legacy stable-id-less profile entry to an unrelated
@@ -150,6 +154,7 @@ export function buildProfileModResolver(
     const byFileName = new Map<string, typeof currentMods[number]>();
     const byGbFile = new Map<string, Array<typeof currentMods[number]>>();
     const byGbMod = new Map<number, Array<typeof currentMods[number]>>();
+    const bySha = new Map<string, Array<typeof currentMods[number]>>();
     const vpkIndexByModId = new Map<string, number | undefined>();
     const metaByFileName = new Map<string, VpkIndexMeta | undefined>();
     const inferredVpkIndexes = inferMissingVpkIndexes(currentMods, getMeta);
@@ -161,6 +166,15 @@ export function buildProfileModResolver(
         const fileId = meta?.gameBananaFileId;
         const vpkIndex = normalizeVpkIndex(meta?.vpkIndex) ?? inferredVpkIndexes.get(mod.metaKey);
         vpkIndexByModId.set(mod.id, vpkIndex);
+        const sha = typeof meta?.sha256 === 'string' ? meta.sha256.toLowerCase() : undefined;
+        if (sha) {
+            const shaMatches = bySha.get(sha);
+            if (shaMatches) {
+                shaMatches.push(mod);
+            } else {
+                bySha.set(sha, [mod]);
+            }
+        }
         if (typeof gbId === 'number') {
             const modMatches = byGbMod.get(gbId);
             if (modMatches) {
@@ -182,7 +196,7 @@ export function buildProfileModResolver(
     const claimed = new Set<string>();
     const take = (
         mod: typeof currentMods[number] | undefined,
-        via: 'stable' | 'fileName'
+        via: 'stable' | 'hash' | 'fileName'
     ): ResolvedMatch | undefined => {
         if (!mod || claimed.has(mod.id)) return undefined;
         claimed.add(mod.id);
@@ -240,6 +254,18 @@ export function buildProfileModResolver(
             }
         }
 
+        // Content hash: the only stable identity a local mod has. Prefer a
+        // candidate that still sits at the saved fileName so two byte-identical
+        // copies keep their original pairing.
+        const profileSha = typeof pm.sha256 === 'string' ? pm.sha256.toLowerCase() : undefined;
+        if (profileSha) {
+            const shaCandidates = (bySha.get(profileSha) ?? []).filter((mod) => !claimed.has(mod.id));
+            const shaPick =
+                shaCandidates.find((mod) => mod.fileName === pm.fileName) ?? shaCandidates[0];
+            const shaMatch = take(shaPick, 'hash');
+            if (shaMatch) return shaMatch;
+        }
+
         const fallback = byFileName.get(pm.fileName);
         if (!fallback || claimed.has(fallback.id)) {
             return { mod: undefined, via: 'miss' };
@@ -255,7 +281,14 @@ export function buildProfileModResolver(
         const candidateHasStableIds =
             typeof candidateMeta?.gameBananaId === 'number' &&
             typeof candidateMeta?.gameBananaFileId === 'number';
-        if (profileHasStableIds || candidateHasStableIds) {
+        // Same reasoning for content hashes: if both sides know their hash and
+        // the hashes disagree, the slot has been reused by a different local
+        // mod. Entries without a hash (legacy profiles, pre-backfill installs)
+        // are unaffected and keep the fileName fallback.
+        const candidateSha =
+            typeof candidateMeta?.sha256 === 'string' ? candidateMeta.sha256.toLowerCase() : undefined;
+        const shaMismatch = profileSha !== undefined && candidateSha !== undefined && profileSha !== candidateSha;
+        if (profileHasStableIds || candidateHasStableIds || shaMismatch) {
             return {
                 mod: undefined,
                 via: 'refused-crossmatch',

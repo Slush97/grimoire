@@ -8,7 +8,7 @@ import {
     disableModUnlocked,
     reorderModsUnlocked,
 } from './mods';
-import { getModMetadata } from './metadata';
+import { getModMetadata, loadMetadata } from './metadata';
 import {
     normalizeVpkIndex,
     inferMissingVpkIndexes as resolverInferMissingVpkIndexes,
@@ -98,6 +98,69 @@ function saveProfiles(profiles: Profile[]): void {
     }
 }
 
+/**
+ * Repoint every saved profile entry from one content hash to another.
+ *
+ * Several flows rebuild a local mod's VPK in place (merge add/replace/extract,
+ * soul-container and spirit-urn re-import): the fileName, load slot and metaKey
+ * survive, but the bytes and therefore the stamped `sha256` change. Local mods
+ * carry no GameBanana id pair, so a saved profile's only handle on them is that
+ * hash. Without this retarget the resolver would see the profile's old hash
+ * disagree with the rebuilt candidate's new one, refuse the fileName fallback
+ * as a slot reuse, and silently disable a mod the user never touched.
+ *
+ * Edge: two byte-identical local mods share a hash. Every call site re-stamps
+ * the rebuilt mod's sidecar row to the new hash BEFORE calling this, so a row
+ * still carrying the old hash means such a twin is installed. Retargeting then
+ * would drag the twin's profile entries onto a hash it does not have, and the
+ * next apply would refuse their fileName fallback and silently disable a mod
+ * the user never touched. In that case skip the retarget: the rebuilt mod's
+ * own entries degrade to the logged refused-crossmatch (pre-existing worst
+ * case), and the next profile save heals them.
+ */
+export function retargetProfileModSha(oldSha: string | undefined, newSha: string | undefined): void {
+    if (!oldSha || !newSha) return;
+    const from = oldSha.toLowerCase();
+    const to = newSha.toLowerCase();
+    if (from === to) return;
+
+    // Best-effort: a retarget failure must never fail the rebuild that
+    // triggered it. Worst case is the pre-existing refused-crossmatch.
+    try {
+        const twins = Object.values(loadMetadata()).filter(
+            (meta) => meta?.sha256?.toLowerCase() === from
+        ).length;
+        if (twins > 0) {
+            console.warn(
+                `[profiles] skipped sha retarget ${from.slice(0, 12)} -> ${to.slice(0, 12)}: ` +
+                `${twins} installed mod(s) still carry the old hash (byte-identical twin)`
+            );
+            return;
+        }
+        const profiles = loadProfiles();
+        let changed = 0;
+        for (const profile of profiles) {
+            for (const profileMod of profile.mods ?? []) {
+                if (profileMod.sha256?.toLowerCase() === from) {
+                    profileMod.sha256 = to;
+                    changed++;
+                }
+            }
+        }
+        if (changed === 0) return;
+        saveProfiles(profiles);
+        console.log(
+            `[profiles] retargeted ${changed} entr${changed === 1 ? 'y' : 'ies'}: ` +
+            `${from.slice(0, 12)} -> ${to.slice(0, 12)}`
+        );
+    } catch (error) {
+        console.warn(
+            `[profiles] failed to retarget sha ${from.slice(0, 12)} -> ${to.slice(0, 12)}:`,
+            error
+        );
+    }
+}
+
 // The profile <-> installed-mod matching logic (index inference, dedupe, the
 // resolver) lives in profileResolver.ts so it can be unit-tested without the
 // main-process graph. These binders inject the real metadata sidecar reader so
@@ -170,6 +233,9 @@ function toProfileMod(
     if (typeof meta?.gameBananaId === 'number') out.gameBananaId = meta.gameBananaId;
     if (typeof meta?.gameBananaFileId === 'number') out.gameBananaFileId = meta.gameBananaFileId;
     if (vpkIndex !== undefined) out.vpkIndex = vpkIndex;
+    // The canonical pre-imprint hash is the only stable identity a local mod
+    // has, since its fileName is just whatever pakNN_ slot it occupies today.
+    if (typeof meta?.sha256 === 'string' && meta.sha256) out.sha256 = meta.sha256.toLowerCase();
     return out;
 }
 
@@ -226,13 +292,6 @@ export async function createProfileFromGameBananaIds(
  * Only saves enabled mods - disabled mods are not included
  */
 export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
-    const profiles = loadProfiles();
-    const index = profiles.findIndex(p => p.id === profileId);
-
-    if (index === -1) {
-        throw new Error(`Profile not found: ${profileId}`);
-    }
-
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -243,6 +302,18 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
+
+    // Load AFTER every await: retargetProfileModSha (triggered by merge
+    // rebuilds and re-imports) does a synchronous load-modify-save of
+    // profiles.json, so a copy loaded before the scan could clobber a retarget
+    // that landed mid-await, silently reverting other profiles' entries to a
+    // dead hash. From here to saveProfiles there must be no awaits.
+    const profiles = loadProfiles();
+    const index = profiles.findIndex(p => p.id === profileId);
+
+    if (index === -1) {
+        throw new Error(`Profile not found: ${profileId}`);
+    }
 
     const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
     profiles[index] = {
@@ -313,6 +384,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     // abort the rest of the apply. renameWithRetry in mods.ts already clears the
     // transient case; a genuinely stuck file is logged and skipped.
     let stableHits = 0;
+    let hashHits = 0;
     let fileNameHits = 0;
     let unmatched = 0;
     let refusedCrossmatches = 0;
@@ -341,6 +413,12 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
                         `[profiles] resolve stable: ${describeProfileMod(profileMod)} ` +
                         `-> ${resolution.mod.fileName}`
                     );
+                } else if (resolution.via === 'hash') {
+                    hashHits++;
+                    console.log(
+                        `[profiles] resolve hash: ${describeProfileMod(profileMod)} ` +
+                        `-> ${resolution.mod.fileName}`
+                    );
                 } else {
                     fileNameHits++;
                     console.log(
@@ -365,8 +443,8 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         }
 
         console.log(
-            `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
-            `${refusedCrossmatches} refused, ${unmatched} unmatched`
+            `[profiles] resolution summary: ${stableHits} stable, ${hashHits} hash, ` +
+            `${fileNameHits} fileName, ${refusedCrossmatches} refused, ${unmatched} unmatched`
         );
 
         assertCanMoveLoadedGameMods(currentMods.filter((mod) => {

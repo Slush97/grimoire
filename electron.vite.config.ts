@@ -124,6 +124,12 @@ export default defineConfig(({ mode }) => {
         server: {
             host: '127.0.0.1',
             port: 5173,
+            watch: {
+                // The flatpak-builder ostree cache contains symlink loops
+                // (udev/watch) that crash chokidar with ELOOP, killing the dev
+                // server moments after it binds :5173.
+                ignored: ['**/.flatpak-builder/**', '**/dist/**', '**/release/**'],
+            },
         },
     },
     };
