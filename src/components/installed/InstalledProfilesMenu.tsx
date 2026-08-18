@@ -35,6 +35,7 @@ import {
   deleteProfile,
   getProfiles,
   getSettings,
+  isGameRunningModLockError,
   updateProfile,
 } from '../../lib/api';
 import type { Profile } from '../../lib/api';
@@ -142,9 +143,11 @@ export function InstalledProfilesMenu({ onApplied, className = '' }: InstalledPr
         showToast(t('installed.profiles.appliedToast', { name: profile.name }), { tone: 'success' });
       }
     } catch (err) {
-      // api.applyProfile already toasts the game-running case and rethrows, so
-      // this must not add a second toast for it beyond the generic failure.
-      showToast(t('installed.profiles.applyFailed', { error: errText(err) }), { tone: 'error' });
+      // api.applyProfile already toasts the game-running case and rethrows;
+      // adding the generic failure on top would show the same message twice.
+      if (!isGameRunningModLockError(err)) {
+        showToast(t('installed.profiles.applyFailed', { error: errText(err) }), { tone: 'error' });
+      }
     } finally {
       applyInFlightRef.current = false;
       setApplyingId(null);

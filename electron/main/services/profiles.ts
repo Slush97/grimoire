@@ -277,13 +277,6 @@ export async function createProfileFromGameBananaIds(
  * Only saves enabled mods - disabled mods are not included
  */
 export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
-    const profiles = loadProfiles();
-    const index = profiles.findIndex(p => p.id === profileId);
-
-    if (index === -1) {
-        throw new Error(`Profile not found: ${profileId}`);
-    }
-
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -294,6 +287,18 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
+
+    // Load AFTER every await: retargetProfileModSha (triggered by merge
+    // rebuilds and re-imports) does a synchronous load-modify-save of
+    // profiles.json, so a copy loaded before the scan could clobber a retarget
+    // that landed mid-await, silently reverting other profiles' entries to a
+    // dead hash. From here to saveProfiles there must be no awaits.
+    const profiles = loadProfiles();
+    const index = profiles.findIndex(p => p.id === profileId);
+
+    if (index === -1) {
+        throw new Error(`Profile not found: ${profileId}`);
+    }
 
     const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
     profiles[index] = {

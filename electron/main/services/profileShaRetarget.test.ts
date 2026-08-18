@@ -19,15 +19,31 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const h = vi.hoisted(() => ({ userData: '' }));
+const h = vi.hoisted(() => ({ userData: '', midScan: undefined as (() => void) | undefined }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 // lockerVpk -> launch asks the real process table whether Deadlock is running.
 vi.mock('./launch', () => ({
   isDeadlockRunning: async () => false,
   readStash: async () => null,
 }));
+// updateProfile's only awaits: an inert scan (with a hook so a test can land a
+// retarget inside the await window) and an inert autoexec read.
+vi.mock('./mods', () => ({
+  scanMods: async () => {
+    h.midScan?.();
+    return [];
+  },
+  runExclusiveModMutation: async <T>(fn: () => Promise<T>) => fn(),
+  enableModUnlocked: async () => {},
+  disableModUnlocked: async () => {},
+  reorderModsUnlocked: async () => {},
+}));
+vi.mock('./autoexec', () => ({
+  readAutoexec: () => ({ commands: [] }),
+  writeAutoexec: () => {},
+}));
 
-import { retargetProfileModSha } from './profiles';
+import { retargetProfileModSha, updateProfile } from './profiles';
 import type { Profile } from '../../../src/types/electron';
 
 const SHA_A = 'a'.repeat(64);
@@ -57,6 +73,7 @@ function profile(id: string, mods: Array<{ fileName: string; sha256?: string; ga
 
 beforeEach(() => {
   h.userData = mkdtempSync(join(tmpdir(), 'grimoire-retarget-'));
+  h.midScan = undefined;
 });
 
 describe('retargetProfileModSha', () => {
@@ -114,6 +131,23 @@ describe('retargetProfileModSha', () => {
     retargetProfileModSha(SHA_A, SHA_A.toUpperCase());
 
     expect(existsSync(profilesPath())).toBe(false);
+  });
+
+  it('survives an update-profile save racing the retarget', async () => {
+    // updateProfile is the one profiles.json writer with awaits before its
+    // save. If it loaded the file before those awaits, a retarget landing
+    // mid-scan would be clobbered by the stale copy on save, silently
+    // reverting OTHER profiles' entries to a dead hash.
+    seed([
+      profile('updated', [{ fileName: 'pak01_dir.vpk', sha256: SHA_C }]),
+      profile('other', [{ fileName: 'pak07_dir.vpk', sha256: SHA_A }]),
+    ]);
+    h.midScan = () => retargetProfileModSha(SHA_A, SHA_B);
+
+    await updateProfile('/unused', 'updated');
+
+    const other = read().find((p) => p.id === 'other');
+    expect(other?.mods[0].sha256).toBe(SHA_B);
   });
 
   it('never throws, so a retarget failure cannot fail the rebuild', () => {

@@ -79,7 +79,16 @@ function getProfileModGroups(
     // installed mod. The fileName lookup stays as the only path for legacy
     // entries saved before sha256 was recorded.
     const sha = profileMod.sha256?.toLowerCase();
-    const mod = (sha ? modBySha.get(sha) : undefined) ?? modByFileName.get(profileMod.fileName);
+    let mod = sha ? modBySha.get(sha) : undefined;
+    if (!mod) {
+      const candidate = modByFileName.get(profileMod.fileName);
+      const candidateSha = candidate?.sha256?.toLowerCase();
+      // Mirror the resolver's refused-crossmatch: when both sides know their
+      // hash and the hashes disagree, the saved slot was reused by a different
+      // mod, and showing the interloper's name would display a mod the apply
+      // refuses to enable. Either side lacking a hash keeps the fallback.
+      if (!(sha && candidateSha && sha !== candidateSha)) mod = candidate;
+    }
     // Prefer the saved stable id over the live scan: a multi-VPK pair whose
     // pakNN_ prefix shifted since save would otherwise miss in modByFileName
     // and split into two file:<fileName> groups, inflating the displayed

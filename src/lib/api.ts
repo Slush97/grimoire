@@ -38,7 +38,7 @@ import i18n from '../i18n';
 // toast is translated separately.
 const GAME_RUNNING_NOTICE = 'Game is running';
 
-function isGameRunningModLockError(err: unknown): boolean {
+export function isGameRunningModLockError(err: unknown): boolean {
   return String(err).includes(GAME_RUNNING_NOTICE);
 }
 
