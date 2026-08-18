@@ -2578,10 +2578,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             one control that stays visible while the switch is
                             armed; the hover-only kebab/delete extend leftward. */}
                         {/* Shown on a custom tab too: the key it writes is the
-                            same flat pool key, and the planner still re-rolls
-                            the mod in its HOME group (its hero, or its
-                            classification bucket). A category is never a
-                            shuffle group of its own. */}
+                            same shufflePoolKey (axis-qualified for bucket
+                            mods), and the planner still re-rolls the mod in
+                            its HOME group (its hero, or its classification
+                            bucket). A category is never a shuffle group of
+                            its own. */}
                         {shufflePinned ? (
                           <ShuffleAlwaysOnBadge
                             name={mod.name}

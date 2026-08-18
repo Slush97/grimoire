@@ -613,6 +613,57 @@ describe('planRandomization', () => {
       expect(plan.disableIds).not.toContain('hud-keep');
     });
 
+    // The exception to the pool-limited sweep: a prop-container bucket IS a
+    // slot (the game shows one Soul Container / Spirit Urn, and the Locker's
+    // selectGlobalMod force-disables the rest of the type on selection). Two
+    // survivors would override the same prop and the lower pakNN wins, so the
+    // shuffle's pick could be invisible in-game.
+    it('clears a non-pooled enabled Soul Container when the bucket re-rolls', () => {
+      const globalBuckets = new Map<GlobalModType, Mod[]>([
+        [
+          'soul-container',
+          [
+            // Enabled but never opted in: the user's current pick.
+            mod({ id: 'soul-keep', gameBananaId: 1, globalType: 'soul-container', enabled: true, priority: 1 }),
+            mod({ id: 'soul-b', gameBananaId: 2, globalType: 'soul-container', enabled: false, priority: 2 }),
+          ],
+        ],
+      ]);
+      const plan = planRandomization({
+        heroSkins: new Map(),
+        heroIds: [],
+        globalBuckets,
+        included: new Set(['bucket:soul-container:gamebanana:2']),
+        rng: fixedRng(0),
+      });
+      expect(plan.enableIds).toEqual(['soul-b']);
+      expect(plan.disableIds).toEqual(['soul-keep']);
+    });
+
+    it('still never disables a Global mod inside a prop-container bucket', () => {
+      const globalBuckets = new Map<GlobalModType, Mod[]>([
+        [
+          'spirit-urn',
+          [
+            mod({ id: 'urn-global', gameBananaId: 1, globalType: 'spirit-urn', enabled: true, priorityMod: true }),
+            mod({ id: 'urn-a', gameBananaId: 2, globalType: 'spirit-urn', enabled: true, priority: 1 }),
+            mod({ id: 'urn-b', gameBananaId: 3, globalType: 'spirit-urn', enabled: false, priority: 2 }),
+          ],
+        ],
+      ]);
+      const plan = planRandomization({
+        heroSkins: new Map(),
+        heroIds: [],
+        globalBuckets,
+        included: new Set(['bucket:spirit-urn:gamebanana:3']),
+        rng: fixedRng(0),
+      });
+      expect(plan.enableIds).toEqual(['urn-b']);
+      // The whole-bucket sweep clears the non-pooled member but never the
+      // priority-root one.
+      expect(plan.disableIds).toEqual(['urn-a']);
+    });
+
     it('reads bucket members under the axis-qualified key only', () => {
       // The bare key is the hero axis. A bucket that answered to it would be
       // armed by an opt-in the user made on a completely different card.
@@ -1002,6 +1053,18 @@ describe('prunePoolKeysForMod', () => {
     const pinned = mod({ id: 'g', gameBananaId: 1, priorityMod: true });
     const sibling = mod({ id: 's', gameBananaId: 1 });
     expect(prunePoolKeysForMod(new Set(['gamebanana:1']), pinned, [pinned, sibling])).toBeNull();
+  });
+
+  it('prunes a pinned hero skin despite a classified sibling of the same submission', () => {
+    // The sibling pools under its qualified bucket key only; its bare
+    // shuffleSkinKey is a key nothing uses, so it must not keep the pinned
+    // skin's hero-axis key alive (stale badge + silent re-entry on unpin).
+    const pinned = mod({ id: 'skin', gameBananaId: 1, priorityMod: true });
+    const bucketSibling = mod({ id: 'hud', gameBananaId: 1, globalType: 'hud' });
+    const included = new Set(['gamebanana:1', 'bucket:hud:gamebanana:1']);
+    expect(prunePoolKeysForMod(included, pinned, [pinned, bucketSibling])).toEqual(
+      new Set(['bucket:hud:gamebanana:1'])
+    );
   });
 
   it('ignores other pinned mods when deciding a key is still claimed', () => {

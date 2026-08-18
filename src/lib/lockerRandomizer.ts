@@ -7,6 +7,7 @@ import {
   groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
+  isPropContainerType,
   type LockerSkin,
 } from './lockerUtils';
 
@@ -195,11 +196,15 @@ export function prunePoolKeysForMod(
   );
   if (candidates.length === 0) return null;
   // Every key still claimed by a mod that is not pinned. The pinned mod itself
-  // is skipped by that same rule, so it never keeps its own key alive.
+  // is skipped by that same rule, so it never keeps its own key alive. Only
+  // shufflePoolKey counts as a claim: it IS the key the sibling pools under
+  // (bare for hero-axis mods, axis-qualified for bucket mods). Adding a bucket
+  // sibling's bare shuffleSkinKey too would let a classified sibling of the
+  // same submission keep a pinned hero skin's key alive, which is exactly the
+  // stale-badge / silent-re-entry pair this function exists to prevent.
   const claimed = new Set<string>();
   for (const other of allMods) {
     if (other.priorityMod) continue;
-    claimed.add(shuffleSkinKey(other));
     claimed.add(shufflePoolKey(other));
   }
   const removable = candidates.filter((key) => !claimed.has(key));
@@ -304,8 +309,11 @@ export interface RandomizePlanOptions {
    * shuffle group: one pick among the opted-in mods, every OTHER POOLED member
    * goes off, and Global (priority root) mods are neither picked nor disabled.
    * The sweep stops at the pool because multi-toggle is a supported bucket
-   * state, unlike a hero's single skin slot. Omitted (the default) keeps the
-   * shuffle hero-only, which is what pre-existing callers expect.
+   * state, unlike a hero's single skin slot. Exception: the prop-container
+   * buckets (Soul Containers, Spirit Urns) fill one in-game slot each, so
+   * their sweep clears the whole bucket like a hero re-roll. Omitted (the
+   * default) keeps the shuffle hero-only, which is what pre-existing callers
+   * expect.
    */
   globalBuckets?: ReadonlyMap<GlobalModType, Mod[]>;
   /** Per-skin variant preference. Unset (the default) keeps already-enabled
@@ -357,9 +365,18 @@ type ShuffleGroupScope = 'hero' | 'bucket';
  * hold for buckets without a second copy of the algorithm.
  *
  * The two axes differ in exactly one place, the disable sweep (see below): a
- * hero shows one skin, while a bucket legitimately runs several mods at once.
+ * hero shows one skin, while most buckets legitimately run several mods at
+ * once. `singleSlot` widens a bucket's sweep back to the whole group for the
+ * types that, like a hero, fill exactly one in-game slot (Soul Containers,
+ * Spirit Urns): the Locker's own toggle path force-disables the rest of the
+ * type, and the shuffle must not undo that invariant.
  */
-function planShuffleGroup(mods: Mod[], ctx: GroupPlanContext, scope: ShuffleGroupScope): boolean {
+function planShuffleGroup(
+  mods: Mod[],
+  ctx: GroupPlanContext,
+  scope: ShuffleGroupScope,
+  { singleSlot = scope === 'hero' }: { singleSlot?: boolean } = {}
+): boolean {
   const { included, variants, rng, avoidCurrent, enableIds, disableIds } = ctx;
   // Bucket members are pooled under an axis-qualified key so a hero-card opt-in
   // (or variant choice) on the same submission cannot arm this group.
@@ -431,13 +448,16 @@ function planShuffleGroup(mods: Mod[], ctx: GroupPlanContext, scope: ShuffleGrou
     // collisions right up until the next launch turned it off.
     if (mod.priorityMod) continue;
     if (!mod.enabled || chosenVariantIds.has(mod.id)) continue;
-    // A hero shows exactly one skin, so a hero re-roll clears the whole slot,
-    // pooled or not. A bucket is different: running several of its mods at once
-    // is a supported state (two complementary HUD tweaks, both always on), so
-    // pooling one of them must not turn off companions the user never opted in.
-    // The sweep there is limited to the pool, which is precisely the set the
-    // user handed to the shuffle.
-    if (scope === 'bucket' && !included.has(poolKeyOf(mod))) continue;
+    // A single-slot group (a hero's skin pile, or a prop-container bucket
+    // where the game shows exactly one Soul Container / Spirit Urn) clears the
+    // whole slot on re-roll, pooled or not: two survivors would override the
+    // same asset and whichever holds the lower pakNN wins, making the pick
+    // invisible in-game. Multi-toggle buckets are different: running several
+    // of their mods at once is a supported state (two complementary HUD
+    // tweaks, both always on), so pooling one of them must not turn off
+    // companions the user never opted in. Their sweep is limited to the pool,
+    // which is precisely the set the user handed to the shuffle.
+    if (!singleSlot && !included.has(poolKeyOf(mod))) continue;
     disableIds.push(mod.id);
     changed = true;
   }
@@ -491,9 +511,9 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
   // sequence it always did. The plan reports no per-bucket change list on
   // purpose: nothing consumes changedHeroes today, so growing the return shape
   // would only break callers that compare a whole plan.
-  for (const mods of globalBuckets?.values() ?? []) {
+  for (const [type, mods] of globalBuckets?.entries() ?? []) {
     if (mods.length === 0) continue;
-    planShuffleGroup(mods, ctx, 'bucket');
+    planShuffleGroup(mods, ctx, 'bucket', { singleSlot: isPropContainerType(type) });
   }
 
   return { enableIds, disableIds, changedHeroes };

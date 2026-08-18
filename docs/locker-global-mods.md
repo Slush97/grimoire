@@ -147,12 +147,21 @@ id, and nothing consumes the field today.
 ### The one place the two axes differ: the disable sweep
 
 A hero shows exactly **one** skin, so a hero re-roll clears the whole slot: every
-enabled non-chosen member of the group goes off, pooled or not. A bucket is not
-a slot. Running several of its mods at once is a supported state (two
+enabled non-chosen member of the group goes off, pooled or not. Most buckets are
+not slots. Running several of their mods at once is a supported state (two
 complementary HUD tweaks, both always on), so a bucket re-roll only turns off its
 **pooled** members. Pooling one HUD mod must never silently disable an always-on
 companion the user never opted in. `planShuffleGroup` takes the axis as a `scope`
 argument for exactly this; the Global rules above are unaffected either way.
+
+Exception: the two prop-container buckets (Soul Containers, Spirit Urns) ARE
+slots. The game shows one of each, and the Locker's own toggle path
+(`selectGlobalMod`) force-disables the rest of the type on selection. Their
+re-roll therefore sweeps the whole bucket like a hero re-roll (the `singleSlot`
+option, derived from `isPropContainerType` in `planRandomization`): sparing a
+non-pooled enabled container would leave two VPKs overriding the same prop, and
+whichever holds the lower pakNN wins, so the shuffle's pick could be invisible
+in-game.
 
 ### Pool keys are axis-qualified
 
@@ -181,7 +190,10 @@ card shows a non-interactive pin: invisible, still counted by the toolbar badge,
 and quietly re-entering the mod into the shuffle the moment it is unpinned. Both
 axis keys are considered (a mod can have been pooled before it was classified),
 and a key another **live non-priority** mod still maps to is kept: that sibling's
-opt-in is not ours to cancel.
+opt-in is not ours to cancel. A sibling claims only its own `shufflePoolKey`
+(bare for hero-axis mods, qualified for bucket mods): a bucket sibling's bare
+`shuffleSkinKey` is a key nothing pools under, so it must not keep a pinned hero
+skin's key alive.
 
 Unpinning does **not** restore the key. Re-opting in is one click on a control
 that is visible again, and silently resurrecting a choice the user cannot see is

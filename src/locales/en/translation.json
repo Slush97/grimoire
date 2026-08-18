@@ -1505,18 +1505,18 @@
     },
     "randomize": {
       "onLaunch": "Shuffle on launch",
-      "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen mods is equipped per hero and per General category. Add mods to the pool with the shuffle button on each card.",
+      "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen mods is equipped per hero and per General group. Add mods to the pool with the shuffle button on each card.",
       "addToShuffle": "Add {{name}} to the shuffle",
       "removeFromShuffle": "Remove {{name}} from the shuffle",
       "alwaysOn": "{{name}} is Global: it always stays on, so the shuffle never re-rolls it.",
-    "bulk": {
-      "add": "Shuffle all",
-      "remove": "Remove all",
-      "addHint_one": "Add this category's {{count}} shuffleable mod to the pool. Each one still re-rolls in its own hero or General group.",
-      "addHint_other": "Add this category's {{count}} shuffleable mods to the pool. Each one still re-rolls in its own hero or General group.",
-      "removeHint_one": "Remove this category's {{count}} pooled mod from the shuffle.",
-      "removeHint_other": "Remove this category's {{count}} pooled mods from the shuffle."
-    },
+      "bulk": {
+        "add": "Shuffle all",
+        "remove": "Remove all",
+        "addHint_one": "Add this category's {{count}} shuffleable mod to the pool. Each one still re-rolls in its own hero or General group.",
+        "addHint_other": "Add this category's {{count}} shuffleable mods to the pool. Each one still re-rolls in its own hero or General group.",
+        "removeHint_one": "Remove this category's {{count}} pooled mod from the shuffle.",
+        "removeHint_other": "Remove this category's {{count}} pooled mods from the shuffle."
+      },
       "inPool": "In shuffle",
       "variantChoiceFor": "Choose the shuffle variant for {{name}}",
       "defaultVariant": "Keep current files",
