@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveImportVariantGroupIds } from './importVariantGroups';
+import {
+  resolveImportVariantGroupIds,
+  resolvePersistedImportVariantGroupIds,
+} from './importVariantGroups';
 
 describe('resolveImportVariantGroupIds', () => {
   it('mints one id for every item sharing a batch key', () => {
@@ -36,5 +39,25 @@ describe('resolveImportVariantGroupIds', () => {
       { localGroupId: '' },
     ], mint)).toEqual([undefined, undefined, undefined]);
     expect(mint).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolvePersistedImportVariantGroupIds', () => {
+  it('gives an early failed row the group created by a later batch row', () => {
+    expect(
+      resolvePersistedImportVariantGroupIds(
+        ['shared-group', 'shared-group'],
+        new Set(['shared-group'])
+      )
+    ).toEqual(['shared-group', 'shared-group']);
+  });
+
+  it('drops a freshly minted id when no source in that group persisted', () => {
+    expect(
+      resolvePersistedImportVariantGroupIds(
+        ['rolled-back', undefined],
+        new Set()
+      )
+    ).toEqual([undefined, undefined]);
   });
 });

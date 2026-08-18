@@ -31,8 +31,8 @@ export type VariantChoice = 'random' | { fileId: number };
 
 /**
  * Stable identity for a skin used by the shuffle for the opt-in pool. Prefers
- * the GameBanana archive id, then the local variant group id, then the content
- * hash, then the volatile mod id.
+ * an explicit local variant group, then the GameBanana archive id, then the
+ * content hash, then the volatile mod id.
  *
  * The key MUST be shared by every variant of a skin: callers read it off
  * `skin.primary`, and the primary is whichever variant is currently enabled.
@@ -48,11 +48,11 @@ export type VariantChoice = 'random' | { fileId: number };
  * content-addressed and survives the rename.
  */
 export function shuffleSkinKey(mod: Mod): string {
-  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
-    return `gamebanana:${mod.gameBananaId}`;
-  }
   if (mod.localGroupId) {
     return `localgroup:${mod.localGroupId}`;
+  }
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    return `gamebanana:${mod.gameBananaId}`;
   }
   if (mod.sha256) {
     return `sha256:${mod.sha256}`;

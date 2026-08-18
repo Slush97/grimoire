@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { planLocalVariantGroup, type LocalVariantGroupMember } from './localVariantGroup';
+import {
+  planLocalVariantGroup,
+  resolveLocalVariantGroupProfile,
+  type LocalVariantGroupMember,
+} from './localVariantGroup';
 
 /** Minimal member; metaKey defaults to `<id>.vpk` like the real scan. */
 function member(over: Partial<LocalVariantGroupMember> & { id: string }): LocalVariantGroupMember {
@@ -42,6 +46,24 @@ describe('planLocalVariantGroup', () => {
     expect(() => planLocalVariantGroup(all, ['a', 'gb'], { mode: 'mint' }, mint)).toThrow(
       /Only local mods/
     );
+  });
+
+  it('keeps an adopted GameBanana identity editable inside an explicit local group', () => {
+    const all = [
+      member({ id: 'a', localGroupId: 'local', gameBananaId: 42 }),
+      member({ id: 'b', localGroupId: 'local' }),
+    ];
+    const plan = planLocalVariantGroup(all, ['a'], { mode: 'clear' }, mint);
+    expect(plan.writes).toEqual([
+      { id: 'a', metaKey: 'a.vpk', localGroupId: undefined, modName: undefined },
+      { id: 'b', metaKey: 'b.vpk', localGroupId: undefined },
+    ]);
+  });
+
+  it('rejects merged outputs even when invoked outside the renderer', () => {
+    const all = [member({ id: 'merge', merged: true }), member({ id: 'local' })];
+    expect(() => planLocalVariantGroup(all, ['merge', 'local'], { mode: 'mint' }, mint))
+      .toThrow(/Merged outputs cannot be grouped/);
   });
 
   it('ignores a non-positive GameBanana id', () => {
@@ -135,5 +157,63 @@ describe('planLocalVariantGroup', () => {
     const all = [member({ id: 'a', localGroupId: '' }), member({ id: 'b' })];
     const plan = planLocalVariantGroup(all, ['a'], { mode: 'clear' }, mint);
     expect(plan.writes).toEqual([]);
+  });
+
+  it('propagates a known Locker hero to an unclassified group member', () => {
+    const all = [
+      member({
+        id: 'a',
+        lockerHero: 'Lady Geist',
+        lockerHeroSource: 'manual',
+        globalType: null,
+        globalTypeClassifierVersion: 3,
+      }),
+      member({ id: 'b' }),
+    ];
+    const plan = planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint);
+    expect(plan.writes[1].classification).toEqual({
+      lockerHero: 'Lady Geist',
+      lockerHeroSource: 'manual',
+      lockerHeroVpkChecked: undefined,
+      globalType: null,
+      globalTypeClassifierVersion: 3,
+    });
+  });
+
+  it('rejects conflicting Locker classifications before producing writes', () => {
+    const all = [
+      member({ id: 'a', lockerHero: 'Lady Geist' }),
+      member({ id: 'b', lockerHero: 'Ivy' }),
+    ];
+    expect(() => planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint))
+      .toThrow(/same Locker hero or Global classification/);
+  });
+
+  it('rejects mixed priority-root placement', () => {
+    const all = [member({ id: 'a', priorityMod: true }), member({ id: 'b' })];
+    expect(() => planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint))
+      .toThrow(/same Global priority-folder setting/);
+  });
+
+  it('resolves a stable Global profile for add-to-group imports', () => {
+    expect(resolveLocalVariantGroupProfile([
+      member({
+        id: 'a',
+        localGroupId: 'g',
+        globalType: 'hud',
+        globalTypeClassifierVersion: 4,
+        priorityMod: true,
+      }),
+      member({ id: 'b', localGroupId: 'g', priorityMod: true }),
+    ])).toEqual({
+      priorityMod: true,
+      classification: {
+        globalType: 'hud',
+        globalTypeClassifierVersion: 4,
+        lockerHero: undefined,
+        lockerHeroSource: undefined,
+        lockerHeroVpkChecked: undefined,
+      },
+    });
   });
 });

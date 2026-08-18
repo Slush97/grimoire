@@ -6,7 +6,8 @@ import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { showToast } from './toastStore';
-import { buildHeroList } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
+import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
@@ -15,10 +16,17 @@ import {
   readStoredShuffleIncluded,
   readStoredShuffleOnLaunch,
   readStoredShuffleVariants,
+  shufflePoolKey,
   writeStoredShuffleIncluded,
   writeStoredShuffleVariants,
   type VariantChoice,
 } from '../lib/lockerRandomizer';
+import {
+  createStableKeyMigrationPlan,
+  migrateStoredStableKeyPreferences,
+  type StableKeyMigrationPlan,
+} from '../lib/stableKeyMigration';
+import { migrateLockerImageSurface } from '../lib/lockerImageMigration';
 
 // Cache entry with timestamp for TTL support
 interface CacheEntry<T> {
@@ -82,6 +90,91 @@ function reconcileMods(prev: Mod[], next: Mod[]): Mod[] {
     return m;
   });
   return unchanged ? prev : merged;
+}
+
+function formerStandalonePreferenceKey(mod: Mod): string[] {
+  return mod.localGroupId ? [modPreferenceKey({ ...mod, localGroupId: undefined })] : [];
+}
+
+function formerStandaloneLockerKey(mod: Mod): string[] {
+  return mod.localGroupId ? [getLockerSkinKey({ ...mod, localGroupId: undefined })] : [];
+}
+
+function stablePreferencePlans(before: readonly Mod[], after: readonly Mod[]) {
+  const preferencePlan = createStableKeyMigrationPlan({
+    before,
+    after,
+    keyOf: modPreferenceKey,
+    legacyKeysOf: formerStandalonePreferenceKey,
+  });
+  const shufflePlan = createStableKeyMigrationPlan({
+    before,
+    after,
+    keyOf: shufflePoolKey,
+    legacyKeysOf: (mod) =>
+      mod.localGroupId
+        ? [shufflePoolKey({ ...mod, localGroupId: undefined })]
+        : [],
+  });
+  return { preferencePlan, shufflePlan };
+}
+
+function lockerImagePlan(before: readonly Mod[], after: readonly Mod[]) {
+  return createStableKeyMigrationPlan({
+    before,
+    after,
+    keyOf: getLockerSkinKey,
+    legacyKeysOf: formerStandaloneLockerKey,
+  });
+}
+
+function hasKeyMoves(plan: StableKeyMigrationPlan): boolean {
+  return [...plan.destinationsBySource].some(([source, destinations]) =>
+    destinations.some((destination) => destination !== source)
+  );
+}
+
+async function migrateLockerImagePreferences(plan: StableKeyMigrationPlan): Promise<void> {
+  if (!hasKeyMoves(plan)) return;
+  await migrateLockerImageSurface(
+    'card',
+    plan,
+    {
+      loadImages: api.getLockerModImages,
+      loadFlags: api.getLockerModImageFlags,
+      loadEdit: api.getLockerModImageEdit,
+      storeImage: api.setLockerModImage,
+      storeFlag: api.setLockerModImageHideName,
+      storeEdit: api.setLockerModImageEdit,
+      removeImage: api.removeLockerModImage,
+    }
+  );
+  await migrateLockerImageSurface(
+    'thumbnail',
+    plan,
+    {
+      loadImages: api.getLockerModThumbnails,
+      loadFlags: api.getLockerModThumbnailFlags,
+      loadEdit: api.getLockerModImageEdit,
+      storeImage: api.setLockerModThumbnail,
+      storeFlag: api.setLockerModThumbnailHideName,
+      storeEdit: api.setLockerModImageEdit,
+      removeImage: api.removeLockerModThumbnail,
+    }
+  );
+  await migrateLockerImageSurface(
+    'background',
+    plan,
+    {
+      loadImages: api.getLockerModBackgrounds,
+      loadFlags: api.getLockerModBackgroundFlags,
+      loadEdit: api.getLockerModImageEdit,
+      storeImage: api.setLockerModBackground,
+      storeFlag: api.setLockerModBackgroundHideName,
+      storeEdit: api.setLockerModImageEdit,
+      removeImage: api.removeLockerModBackground,
+    }
+  );
 }
 
 // Browse-page UI state. Kept in the store (not local component state) so it
@@ -480,6 +573,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Issue #208: per-mod (per-skin) Locker view image overrides (display only).
   loadLockerModImages: async () => {
     try {
+      // Locker mounts its image and mod loaders in sibling effects. On a direct
+      // startup the image request used to win that race, build an empty legacy
+      // migration plan, and publish old keys for the whole session. Await the
+      // shared initial scan so migration and the maps below use canonical mods.
+      if (!get().modsLoaded) await get().loadMods();
+      // Canonicalize the old GameBanana-first key used by builds predating
+      // explicit local-group precedence. This also handles users who upgrade
+      // without performing another grouping mutation first.
+      await migrateLockerImagePreferences(lockerImagePlan([], get().mods));
       const [images, flags, backgrounds, bgFlags, thumbnails, thumbFlags] = await Promise.all([
         api.getLockerModImages(),
         api.getLockerModImageFlags(),
@@ -631,16 +733,38 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (gen === modsGeneration) {
           const state = get();
           const mods = reconcileMods(state.mods, scanned);
+          const plans = stablePreferencePlans([], scanned);
+          const migrated = migrateStoredStableKeyPreferences(
+            plans.preferencePlan,
+            plans.shufflePlan
+          );
           if (silent) {
             // Zustand notifies whole-store subscribers on every set(), even if
             // every field value is unchanged. Avoid that no-op publication:
             // it used to redraw the Installed grid after every duplicate
             // completion/focus refresh.
-            if (mods !== state.mods || !state.modsLoaded || state.modsError !== null) {
-              set({ mods, modsLoaded: true, modsError: null });
+            if (
+              mods !== state.mods ||
+              !state.modsLoaded ||
+              state.modsError !== null ||
+              migrated.changed
+            ) {
+              set({
+                mods,
+                modsLoaded: true,
+                modsError: null,
+                shuffleIncluded: migrated.shuffleIncluded,
+                shuffleVariants: migrated.shuffleVariants,
+              });
             }
           } else {
-            set({ mods, modsLoaded: true, modsLoading: false });
+            set({
+              mods,
+              modsLoaded: true,
+              modsLoading: false,
+              shuffleIncluded: migrated.shuffleIncluded,
+              shuffleVariants: migrated.shuffleVariants,
+            });
           }
         } else if (!silent) {
           // Superseded by a newer load/mutation: drop the stale list, but still
@@ -926,12 +1050,40 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setLocalVariantGroup: async (modIds, target) => {
     try {
+      const before = get().mods;
       const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
+      const plans = stablePreferencePlans(before, mods);
+      const migrated = migrateStoredStableKeyPreferences(
+        plans.preferencePlan,
+        plans.shufflePlan
+      );
       // The handler returns the full list (memberships and the unified name can
       // touch mods outside `modIds`), so adopt it wholesale and bump the
       // generation like every other whole-list mutation.
       modsGeneration++;
-      set({ mods });
+      set({
+        mods,
+        shuffleIncluded: migrated.shuffleIncluded,
+        shuffleVariants: migrated.shuffleVariants,
+      });
+      try {
+        await migrateLockerImagePreferences(lockerImagePlan(before, mods));
+        // The maps may already be loaded when grouping is invoked from Locker.
+        // Refreshing is cheap compared with the image copies and keeps all
+        // mounted surfaces on the canonical key immediately.
+        if (
+          Object.keys(get().lockerModImages).length > 0 ||
+          Object.keys(get().lockerModBackgrounds).length > 0 ||
+          Object.keys(get().lockerModThumbnails).length > 0
+        ) {
+          await get().loadLockerModImages();
+        }
+      } catch (imageError) {
+        // Group membership already committed in main. Image migration is
+        // auxiliary-first and source-last, so failure leaves the old preference
+        // recoverable; do not reject an otherwise successful grouping action.
+        console.error('Failed to migrate Locker image preferences', imageError);
+      }
       return groupId;
     } catch (err) {
       set({ modsError: String(err) });

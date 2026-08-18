@@ -1375,6 +1375,7 @@
       "mergeCombineHint_other": "Combine {{count}} mods into one VPK",
       "groupVariants": "Group",
       "groupVariantsMinHint": "Select 2+ local mods to group as variants",
+      "groupVariantsMergedHint": "Merged mods cannot be grouped as variants. Unmerge them first.",
       "groupVariantsLocalHint": "Only local mods can be grouped as variants. GameBanana mods already group by their mod page.",
       "groupVariantsHint_one": "Show {{count}} mod as one card with switchable files",
       "groupVariantsHint_other": "Show {{count}} mods as one card with switchable files",

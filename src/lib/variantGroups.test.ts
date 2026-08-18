@@ -23,9 +23,9 @@ describe('variantGroupKey', () => {
     expect(variantGroupKey(mod({ id: 'b', gameBananaId: 123, gameBananaFileId: 9 }))).toBe('gb:123');
   });
 
-  it('prefers the GameBanana id when a mod somehow carries both', () => {
+  it('prefers an explicit local group over adopted GameBanana identity', () => {
     const key = variantGroupKey(mod({ id: 'a', gameBananaId: 42, localGroupId: 'uuid-1' }));
-    expect(key).toBe('gb:42');
+    expect(key).toBe('local:uuid-1');
   });
 
   it('groups local imports by their local group id', () => {

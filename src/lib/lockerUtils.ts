@@ -386,11 +386,11 @@ export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType 
  * deliberately distinct so the namespaces cannot collide.
  */
 export function getLockerSkinKey(mod: Mod): string {
-  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
-    return `gamebanana:${mod.gameBananaId}`;
-  }
   if (mod.localGroupId) {
     return `localgroup:${mod.localGroupId}`;
+  }
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    return `gamebanana:${mod.gameBananaId}`;
   }
   return `mod:${mod.id}`;
 }

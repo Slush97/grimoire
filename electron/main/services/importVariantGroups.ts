@@ -32,3 +32,18 @@ export function resolveImportVariantGroupIds(
         return minted;
     });
 }
+
+/**
+ * Retry handles are decided after the whole batch, not when each row fails.
+ * An early source can fail before a later source with the same batch key
+ * creates the group; looking only at failure-time state would make the retry
+ * mint a second group and split the user's variants.
+ */
+export function resolvePersistedImportVariantGroupIds(
+    resolvedGroupIds: readonly (string | undefined)[],
+    persistedGroupIds: ReadonlySet<string>
+): Array<string | undefined> {
+    return resolvedGroupIds.map((groupId) =>
+        groupId && persistedGroupIds.has(groupId) ? groupId : undefined
+    );
+}

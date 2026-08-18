@@ -23,7 +23,8 @@ type DisabledModIdentity = Pick<Mod, 'id' | 'gameBananaId' | 'sha256' | 'localGr
  * group and a singleton from that same submission intentionally share a key, so
  * the preference survives the entry changing between grouped and ungrouped.
  *
- * A local variant group shares one key the same way, and for a sharper reason:
+ * An explicit local variant group wins even when imported metadata also carries
+ * a GameBanana id, and shares one key for a sharper reason:
  * the page derives an entry's key from the group's PRIMARY, which is whichever
  * member happens to be enabled. Falling through to the per-file sha256 would
  * move the key every time the user switched variants, silently dropping the
@@ -36,11 +37,11 @@ type DisabledModIdentity = Pick<Mod, 'id' | 'gameBananaId' | 'sha256' | 'localGr
  * form is volatile, because mod.id is derived from the pakNN filename.
  */
 export function modPreferenceKey(mod: DisabledModIdentity): string {
-  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
-    return `gamebanana:${mod.gameBananaId}`;
-  }
   if (mod.localGroupId) {
     return `localgroup:${mod.localGroupId}`;
+  }
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    return `gamebanana:${mod.gameBananaId}`;
   }
   if (mod.sha256) {
     return `sha256:${mod.sha256}`;

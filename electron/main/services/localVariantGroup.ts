@@ -1,4 +1,5 @@
 import type { LocalVariantGroupTarget } from '../../../src/types/electron';
+import type { GlobalModType, LockerHeroSource } from '../../../src/types/mod';
 
 /**
  * The pure half of local variant grouping (see the `set-local-variant-group`
@@ -21,6 +22,26 @@ export interface LocalVariantGroupMember {
     /** Positive only for GameBanana mods, which group by submission id. */
     gameBananaId?: number;
     localGroupId?: string;
+    lockerHero?: string;
+    lockerHeroSource?: LockerHeroSource;
+    lockerHeroVpkChecked?: boolean;
+    globalType?: GlobalModType | null;
+    globalTypeClassifierVersion?: number;
+    priorityMod?: boolean;
+    merged?: boolean;
+}
+
+export interface LocalVariantGroupClassification {
+    lockerHero: string | undefined;
+    lockerHeroSource: LockerHeroSource | undefined;
+    lockerHeroVpkChecked: boolean | undefined;
+    globalType: GlobalModType | null;
+    globalTypeClassifierVersion: number | undefined;
+}
+
+export interface LocalVariantGroupProfile {
+    classification?: LocalVariantGroupClassification;
+    priorityMod: boolean;
 }
 
 /** One sidecar merge-write. Fields left undefined are not touched. */
@@ -32,6 +53,8 @@ export interface LocalVariantGroupWrite {
     localGroupId: string | undefined;
     /** Present only when this member has to adopt the group's name. */
     modName?: string;
+    /** Present when an unclassified member must inherit the group's Locker axis. */
+    classification?: LocalVariantGroupClassification;
 }
 
 export interface LocalVariantGroupPlan {
@@ -40,21 +63,101 @@ export interface LocalVariantGroupPlan {
     writes: LocalVariantGroupWrite[];
 }
 
-/** A GameBanana mod already groups by submission id, so it can never carry a
- *  local group id (see variantGroupKey in src/lib/variantGroups.ts). */
-function isGameBananaMod(member: LocalVariantGroupMember): boolean {
-    return typeof member.gameBananaId === 'number' && member.gameBananaId > 0;
+/** A normal GameBanana install groups by submission id. An explicitly-local
+ * group is different: re-import adoption may legitimately discover GB
+ * provenance after its localGroupId was minted, and that must not make the
+ * group impossible to edit or clear. */
+function isGameBananaOnlyMod(member: LocalVariantGroupMember): boolean {
+    return (
+        typeof member.gameBananaId === 'number' &&
+        member.gameBananaId > 0 &&
+        !currentGroupOf(member)
+    );
 }
 
 function currentGroupOf(member: LocalVariantGroupMember): string | undefined {
     return member.localGroupId && member.localGroupId.length > 0 ? member.localGroupId : undefined;
 }
 
+function classificationKey(member: LocalVariantGroupMember): string | undefined {
+    if (member.globalType) return `global:${member.globalType}`;
+    const hero = member.lockerHero?.trim();
+    return hero ? `hero:${hero.toLocaleLowerCase()}` : undefined;
+}
+
+/** Resolve the fields that must be identical across one logical card.
+ * Unclassified members inherit a known peer's Locker axis. Two positive but
+ * different classifications are refused: silently relabelling an Ivy VPK as
+ * Geist (or a HUD as a hero skin) would be worse than declining the grouping.
+ * Priority-root placement is never inferred/rewritten here because it entails
+ * a filesystem move; mixed placement is therefore rejected before metadata is
+ * touched. */
+export function resolveLocalVariantGroupProfile(
+    members: readonly LocalVariantGroupMember[]
+): LocalVariantGroupProfile {
+    if (members.length === 0) return { priorityMod: false };
+
+    const priority = !!members[0].priorityMod;
+    const placementConflict = members.find((member) => !!member.priorityMod !== priority);
+    if (placementConflict) {
+        throw new Error(
+            'Variants must use the same Global priority-folder setting before they can be grouped'
+        );
+    }
+
+    const classified = members.filter((member) => classificationKey(member));
+    const keys = new Set(classified.map((member) => classificationKey(member)));
+    if (keys.size > 1) {
+        throw new Error('Variants must use the same Locker hero or Global classification');
+    }
+    const owner = classified[0];
+    if (!owner) return { priorityMod: priority };
+
+    if (owner.globalType) {
+        return {
+            priorityMod: priority,
+            classification: {
+                globalType: owner.globalType,
+                globalTypeClassifierVersion: owner.globalTypeClassifierVersion,
+                lockerHero: undefined,
+                lockerHeroSource: undefined,
+                lockerHeroVpkChecked: undefined,
+            },
+        };
+    }
+
+    return {
+        priorityMod: priority,
+        classification: {
+            globalType: null,
+            globalTypeClassifierVersion: owner.globalTypeClassifierVersion,
+            lockerHero: owner.lockerHero?.trim(),
+            lockerHeroSource: owner.lockerHeroSource,
+            lockerHeroVpkChecked: owner.lockerHeroVpkChecked,
+        },
+    };
+}
+
+function needsClassification(
+    member: LocalVariantGroupMember,
+    classification: LocalVariantGroupClassification
+): boolean {
+    return (
+        member.lockerHero !== classification.lockerHero ||
+        member.lockerHeroSource !== classification.lockerHeroSource ||
+        member.lockerHeroVpkChecked !== classification.lockerHeroVpkChecked ||
+        member.globalType !== classification.globalType ||
+        member.globalTypeClassifierVersion !== classification.globalTypeClassifierVersion
+    );
+}
+
 /**
  * Plan the sidecar writes for one grouping request.
  *
  * Rules, in order:
- *  1. Every listed id must exist, and none may be a GameBanana mod.
+ *  1. Every listed id must exist. Standalone GameBanana installs and merged
+ *     outputs are ineligible; a local-group member that later adopted GB
+ *     provenance remains eligible so the explicit group can be edited.
  *  2. Grouping unifies `modName` across the group, because the card title is
  *     the primary's name and the primary changes as files are toggled. An
  *     existing member of the joined group owns the name; otherwise the first
@@ -84,11 +187,15 @@ export function planLocalVariantGroup(
         if (!member) throw new Error(`Mod not found: ${id}`);
         return member;
     });
-    const offender = targets.find(isGameBananaMod);
+    const offender = targets.find(isGameBananaOnlyMod);
     if (offender) {
         throw new Error(
             `Only local mods can be grouped as variants (${offender.name} came from GameBanana)`
         );
+    }
+    const merged = targets.find((member) => member.merged);
+    if (merged) {
+        throw new Error(`Merged outputs cannot be grouped as variants (${merged.name})`);
     }
 
     let groupId: string | null;
@@ -108,17 +215,30 @@ export function planLocalVariantGroup(
         ? all.find((member) => !targetIds.has(member.id) && currentGroupOf(member) === groupId)
               ?.name ?? targets[0].name
         : undefined;
+    // Existing members lead on a join: their established manual/classifier
+    // provenance is the group profile. A fresh mint has no existing members,
+    // so the caller's target order remains authoritative.
+    const existingGroupMembers = groupId
+        ? all.filter(
+              (member) => !targetIds.has(member.id) && currentGroupOf(member) === groupId
+          )
+        : [];
+    const groupedMembers = groupId ? [...existingGroupMembers, ...targets] : [];
+    const groupProfile = groupId ? resolveLocalVariantGroupProfile(groupedMembers) : undefined;
 
     const writes: LocalVariantGroupWrite[] = [];
-    for (const member of targets) {
+    for (const member of groupId ? groupedMembers : targets) {
         const groupChanged = currentGroupOf(member) !== (groupId ?? undefined);
-        const nameChanged = !!groupName && member.name !== groupName;
-        if (!groupChanged && !nameChanged) continue;
+        const nameChanged = targetIds.has(member.id) && !!groupName && member.name !== groupName;
+        const classification = groupProfile?.classification;
+        const classificationChanged = !!classification && needsClassification(member, classification);
+        if (!groupChanged && !nameChanged && !classificationChanged) continue;
         writes.push({
             id: member.id,
             metaKey: member.metaKey,
             localGroupId: groupId ?? undefined,
             modName: nameChanged ? groupName : undefined,
+            ...(classificationChanged ? { classification } : {}),
         });
     }
 

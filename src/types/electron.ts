@@ -319,6 +319,20 @@ export interface SetLocalVariantGroupResult {
     mods: Mod[];
 }
 
+/**
+ * Reattach a freshly downloaded GameBanana replacement to the explicit local
+ * variant group its still-installed source belongs to. Main validates the
+ * source and replacement provenance; this is intentionally separate from the
+ * user-facing grouping API so ordinary GameBanana mods remain ineligible.
+ */
+export interface RestoreLocalVariantGroupReplacementArgs {
+    sourceModId: string;
+    sourceGameBananaFileId: number;
+    replacementModIds: string[];
+    expectedGameBananaId: number;
+    replacementGameBananaFileId: number;
+}
+
 /** Batch local import: one entry per picked file, imported in array order. */
 export interface ImportCustomModsBatchArgs {
     items: ImportCustomModArgs[];
@@ -799,6 +813,9 @@ export interface ElectronAPI {
         modIds: string[],
         target: LocalVariantGroupTarget
     ) => Promise<SetLocalVariantGroupResult>;
+    restoreLocalVariantGroupReplacement: (
+        args: RestoreLocalVariantGroupReplacementArgs
+    ) => Promise<void>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;

@@ -5,19 +5,19 @@ import type { Mod } from '../types/mod';
  * which installed files are variants of the same mod?
  *
  * Two files group together when they answer this with the same string.
- * GameBanana mods group by their submission id (several files from one mod
- * page). Locally imported mods have no submission, so they group by the opaque
- * `localGroupId` minted when a multi-VPK archive is imported. Anything else
- * (a standalone local import) returns null and stays a single card.
+ * An explicit local group is authoritative, including for a locally imported
+ * VPK whose embedded metadata identifies a GameBanana submission. Without an
+ * explicit group, GameBanana mods group by submission id (several files from
+ * one mod page). Anything else returns null and stays a single card.
  *
  * The `gb:` / `local:` prefixes keep the two namespaces from ever colliding.
  */
 export function variantGroupKey(mod: Mod): string | null {
-  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
-    return `gb:${mod.gameBananaId}`;
-  }
   if (mod.localGroupId) {
     return `local:${mod.localGroupId}`;
+  }
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    return `gb:${mod.gameBananaId}`;
   }
   return null;
 }

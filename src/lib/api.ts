@@ -28,6 +28,7 @@ import type {
   ImportCustomModsBatchResult,
   ImportCustomModsProgress,
   LocalVariantGroupTarget,
+  RestoreLocalVariantGroupReplacementArgs,
   SetLocalVariantGroupResult,
 } from '../types/electron';
 import { parseFeModel, type ClothModel } from './feModel';
@@ -167,6 +168,12 @@ export async function setLocalVariantGroup(
   target: LocalVariantGroupTarget
 ): Promise<SetLocalVariantGroupResult> {
   return window.electronAPI.setLocalVariantGroup(modIds, target);
+}
+
+export async function restoreLocalVariantGroupReplacement(
+  args: RestoreLocalVariantGroupReplacementArgs
+): Promise<void> {
+  return window.electronAPI.restoreLocalVariantGroupReplacement(args);
 }
 
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {
@@ -497,7 +504,7 @@ export function onImportCustomModsProgress(
   return window.electronAPI.onImportCustomModsProgress(callback);
 }
 
-export type { ImportCustomModArgs, ImportCustomModResult, ImportCustomModsBatchResult, ImportCustomModsProgress, LocalVariantGroupTarget, SetLocalVariantGroupResult };
+export type { ImportCustomModArgs, ImportCustomModResult, ImportCustomModsBatchResult, ImportCustomModsProgress, LocalVariantGroupTarget, RestoreLocalVariantGroupReplacementArgs, SetLocalVariantGroupResult };
 
 /** Build a soul-container override VPK from a user GLB and install it as a
  *  tracked local mod. Returns the full enriched mod list after install. */

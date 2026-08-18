@@ -64,9 +64,9 @@ describe('shuffleSkinKey', () => {
     expect(shuffleSkinKey(blue)).toBe(shuffleSkinKey(red));
   });
 
-  it('still prefers the GameBanana id over a stray local group id', () => {
+  it('prefers an explicit local group over adopted GameBanana identity', () => {
     expect(shuffleSkinKey(mod({ id: 'e', gameBananaId: 42, localGroupId: 'uuid-1' }))).toBe(
-      'gamebanana:42'
+      'localgroup:uuid-1'
     );
   });
 });
