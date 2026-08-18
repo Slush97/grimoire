@@ -289,6 +289,10 @@ export interface ImportCustomModArgs {
      *  a group joins it rather than collapsing it. Omitted for a normal import,
      *  where a multi-VPK archive still mints its own group id. */
     localGroupId?: string;
+    /** Groups sources within this one batch without letting the renderer mint
+     *  persistent ids. Main maps equal non-empty keys to one random UUID. The
+     *  key itself is request-local and is never written to metadata. */
+    localGroupBatchKey?: string;
 }
 
 /**
@@ -326,6 +330,9 @@ export interface ImportCustomModResult {
     ok: boolean;
     /** Mod slots this source produced (an archive can yield several). */
     imported: number;
+    /** Resolved local group id when this source was imported as a variant.
+     *  Returned even on failure so a retry joins files that already landed. */
+    localGroupId?: string;
     error?: string;
 }
 

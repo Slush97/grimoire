@@ -37,6 +37,7 @@ import {
 import { downloadMod } from '../services/download';
 import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
+import { resolveImportVariantGroupIds } from '../services/importVariantGroups';
 import {
     mergeMods,
     unmergeMod,
@@ -1420,22 +1421,28 @@ ipcMain.handle(
         const thumbnailFetchTargets: AdoptedThumbnailTarget[] = [];
         const results: ImportCustomModResult[] = [];
         const total = items.length;
+        // Batch keys are renderer-local handles, never persistent identity.
+        // Resolve them once before the loop so every selected source shares a
+        // main-minted UUID, and echo it in results for partial-failure retries.
+        const localGroupIds = resolveImportVariantGroupIds(items, randomUUID);
         const report = (progress: ImportCustomModsProgress): void => {
             if (!event.sender.isDestroyed()) event.sender.send('import-custom-mods-progress', progress);
         };
 
         for (let index = 0; index < total; index++) {
             const item = items[index];
+            const localGroupId = localGroupIds[index];
+            const resolvedItem = { ...item, localGroupId };
             report({ index, total, vpkPath: item.vpkPath, phase: 'importing' });
             try {
                 const imported = await runExclusiveModMutation(() =>
-                    importCustomModSource(deadlockPath, item, thumbnailFetchTargets)
+                    importCustomModSource(deadlockPath, resolvedItem, thumbnailFetchTargets)
                 );
-                results.push({ vpkPath: item.vpkPath, ok: true, imported });
+                results.push({ vpkPath: item.vpkPath, ok: true, imported, localGroupId });
                 report({ index, total, vpkPath: item.vpkPath, phase: 'done', imported });
             } catch (err) {
                 const error = err instanceof Error ? err.message : String(err);
-                results.push({ vpkPath: item.vpkPath, ok: false, imported: 0, error });
+                results.push({ vpkPath: item.vpkPath, ok: false, imported: 0, localGroupId, error });
                 console.warn(`[mods] Batch import failed for ${item.vpkPath}: ${error}`);
                 report({ index, total, vpkPath: item.vpkPath, phase: 'failed', error });
             }

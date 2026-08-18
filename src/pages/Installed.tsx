@@ -8509,6 +8509,12 @@ function ModCard({
     : favorite
       ? t('installed.card.removeDisabledFavorite', { name: mod.name })
       : t('installed.card.addDisabledFavorite', { name: mod.name });
+  // Context-menu actions should scan like actions, not tooltips. Keep the
+  // longer placement explanation on the card button's title/aria label, while
+  // the right-click and kebab menus use the same concise wording as Locker.
+  const favoriteMenuLabel = favorite
+    ? t('installed.card.unfavorite')
+    : t('installed.card.favorite');
 
   // One canonical list of card actions, mounted twice: once under the
   // right-click (context) root wrapping the whole card, once under the
@@ -8576,7 +8582,7 @@ function ModCard({
       )}
       {onToggleFavorite && (
         <MenuItem icon={Star} onSelect={onToggleFavorite}>
-          {favoriteLabel}
+          {favoriteMenuLabel}
         </MenuItem>
       )}
       <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
