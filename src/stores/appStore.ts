@@ -9,12 +9,13 @@ import { showToast } from './toastStore';
 import { buildHeroList } from '../lib/lockerUtils';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
-  SHUFFLE_INCLUDED_KEY,
   SHUFFLE_ON_LAUNCH_KEY,
   planLaunchShuffle,
+  prunePoolKeysForMod,
   readStoredShuffleIncluded,
   readStoredShuffleOnLaunch,
   readStoredShuffleVariants,
+  writeStoredShuffleIncluded,
   writeStoredShuffleVariants,
   type VariantChoice,
 } from '../lib/lockerRandomizer';
@@ -320,6 +321,8 @@ interface AppState {
   reorderMods: (orderedIds: string[]) => Promise<void>;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
+  /** Add or remove many shuffle keys at once (bulk category action). */
+  setShuffleIncluded: (skinKeys: readonly string[], included: boolean) => void;
   /** Store an explicit per-skin variant policy, or clear it back to the unset
    *  default (keep the currently loaded files) with null. */
   setShuffleVariant: (skinKey: string, choice: VariantChoice | null) => void;
@@ -770,7 +773,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = new Set(get().shuffleIncluded);
     if (next.has(skinKey)) next.delete(skinKey);
     else next.add(skinKey);
-    try { localStorage.setItem(SHUFFLE_INCLUDED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    writeStoredShuffleIncluded(next);
+    set({ shuffleIncluded: next });
+  },
+
+  // Bulk include/exclude for a whole card set (the Locker's per-category
+  // "Shuffle all" / "Remove all"). One state update and one storage write for
+  // the batch, through the same writer the single-card toggle uses.
+  setShuffleIncluded: (skinKeys: readonly string[], included: boolean) => {
+    if (skinKeys.length === 0) return;
+    const current = get().shuffleIncluded;
+    const next = new Set(current);
+    for (const key of skinKeys) {
+      if (included) next.add(key);
+      else next.delete(key);
+    }
+    // Nothing moved: skip the write so an already-satisfied bulk click does not
+    // churn storage or re-render every card that reads the pool.
+    if (next.size === current.size) return;
+    writeStoredShuffleIncluded(next);
     set({ shuffleIncluded: next });
   },
 
@@ -910,7 +931,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     await enqueueToggle(async () => {
       try {
         const updated = await api.setModPriorityFolder(modId, priority);
-        set({ mods: get().mods.map((m) => (m.id === modId ? updated : m)) });
+        const mods = get().mods.map((m) => (m.id === modId ? updated : m));
+        // Pinning retires the mod's shuffle opt-in. Its card swaps the toggle
+        // for the always-on pin, so a key left behind would be invisible yet
+        // still counted, and unpinning would put the mod back in the shuffle
+        // without the user asking. Unpinning does not restore it: opting back
+        // in is one click on a control that is visible again.
+        const prunedPool = priority
+          ? prunePoolKeysForMod(get().shuffleIncluded, updated, mods)
+          : null;
+        if (prunedPool) {
+          writeStoredShuffleIncluded(prunedPool);
+          set({ mods, shuffleIncluded: prunedPool });
+        } else {
+          set({ mods });
+        }
       } catch (err) {
         // Reconcile any partial batch progress, then preserve the rejection for
         // the initiating surface. The picker and card menus own contextual
