@@ -8,7 +8,7 @@ import {
     disableModUnlocked,
     reorderModsUnlocked,
 } from './mods';
-import { getModMetadata } from './metadata';
+import { getModMetadata, loadMetadata } from './metadata';
 import {
     normalizeVpkIndex,
     inferMissingVpkIndexes as resolverInferMissingVpkIndexes,
@@ -109,9 +109,14 @@ function saveProfiles(profiles: Profile[]): void {
  * disagree with the rebuilt candidate's new one, refuse the fileName fallback
  * as a slot reuse, and silently disable a mod the user never touched.
  *
- * Accepted edge: two byte-identical local mods share a hash, so rebuilding one
- * retargets the profile entries of both. Obscure, and self-healing on the next
- * profile save.
+ * Edge: two byte-identical local mods share a hash. Every call site re-stamps
+ * the rebuilt mod's sidecar row to the new hash BEFORE calling this, so a row
+ * still carrying the old hash means such a twin is installed. Retargeting then
+ * would drag the twin's profile entries onto a hash it does not have, and the
+ * next apply would refuse their fileName fallback and silently disable a mod
+ * the user never touched. In that case skip the retarget: the rebuilt mod's
+ * own entries degrade to the logged refused-crossmatch (pre-existing worst
+ * case), and the next profile save heals them.
  */
 export function retargetProfileModSha(oldSha: string | undefined, newSha: string | undefined): void {
     if (!oldSha || !newSha) return;
@@ -122,6 +127,16 @@ export function retargetProfileModSha(oldSha: string | undefined, newSha: string
     // Best-effort: a retarget failure must never fail the rebuild that
     // triggered it. Worst case is the pre-existing refused-crossmatch.
     try {
+        const twins = Object.values(loadMetadata()).filter(
+            (meta) => meta?.sha256?.toLowerCase() === from
+        ).length;
+        if (twins > 0) {
+            console.warn(
+                `[profiles] skipped sha retarget ${from.slice(0, 12)} -> ${to.slice(0, 12)}: ` +
+                `${twins} installed mod(s) still carry the old hash (byte-identical twin)`
+            );
+            return;
+        }
         const profiles = loadProfiles();
         let changed = 0;
         for (const profile of profiles) {

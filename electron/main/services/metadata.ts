@@ -247,6 +247,14 @@ export function setModMetadata(fileName: string, data: ModMetadata): void {
  * the original). Hashing live bytes here would re-stamp an imprinted file's
  * identity to post-imprint bytes and break every record on the original axis
  * (sha256AtMergeTime, sha256AtApplyTime, absorbed-source hiding).
+ *
+ * INVARIANT: `sha256` is also how saved profiles identify local mods, and the
+ * resolver refuses a fileName fallback when the stored and candidate hashes
+ * disagree (profileResolver.ts, refused-crossmatch). Any flow that re-stamps
+ * the hash of an EXISTING non-Locker VPK in place (same fileName/slot, new
+ * bytes) must call retargetProfileModSha(oldSha, newSha) afterwards, or
+ * profile apply will silently stop enabling that mod. Flows that allocate a
+ * fresh slot, and Locker-managed VPKs (excluded from profiles), are exempt.
  */
 export async function setModMetadataWithHash(
     fileName: string,

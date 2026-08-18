@@ -133,6 +133,25 @@ describe('retargetProfileModSha', () => {
     expect(existsSync(profilesPath())).toBe(false);
   });
 
+  it('skips the retarget while a byte-identical twin still carries the old hash', () => {
+    // Every call site re-stamps the rebuilt mod's sidecar row BEFORE the
+    // retarget, so a row still on the old hash is a different installed mod
+    // with identical bytes. Moving its entries onto the new hash would make
+    // the next apply refuse their fileName fallback and silently disable a
+    // mod the user never touched; leaving everything put degrades to the
+    // logged refused-crossmatch instead.
+    writeFileSync(
+      join(h.userData, 'mod-metadata.json'),
+      JSON.stringify({ 'pak08_dir.vpk': { modName: 'twin', sha256: SHA_A } }),
+      'utf-8'
+    );
+    seed([profile('p1', [{ fileName: 'pak07_dir.vpk', sha256: SHA_A }])]);
+
+    retargetProfileModSha(SHA_A, SHA_B);
+
+    expect(read()[0].mods[0].sha256).toBe(SHA_A);
+  });
+
   it('survives an update-profile save racing the retarget', async () => {
     // updateProfile is the one profiles.json writer with awaits before its
     // save. If it loaded the file before those awaits, a retarget landing
