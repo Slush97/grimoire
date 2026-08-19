@@ -3,11 +3,11 @@
     "grimoire-social": {
       "flake": false,
       "locked": {
-        "lastModified": 1779261108,
-        "narHash": "sha256-f+wUZOR7dqigxd/IZtay1BrLS5rcSnaDage3NXxqsPE=",
+        "lastModified": 1785648456,
+        "narHash": "sha256-AR2rTNDuge19t+VAqL/I6dmB8f5niIqINmNnRL70k94=",
         "owner": "Slush97",
         "repo": "grimoire-social",
-        "rev": "efffe0b92a49d6cc8d82406d6fc163c2fd3662a5",
+        "rev": "e97a59d7cd55fc1ae1e11a56ca2fde5305de9c4f",
         "type": "github"
       },
       "original": {
@@ -18,11 +18,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1785454630,
-        "narHash": "sha256-LQy14TZp77TwbQf40gg1V3jo8FwJG0jGDkAH+zRHqg8=",
+        "lastModified": 1787070829,
+        "narHash": "sha256-vXNVDVtvfiQuXthP0NHPFdNvvMTkGpx0UP8oddIWbNk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1559d3daa3ecc813a650b79375ea61b6741b8746",
+        "rev": "0ae2bc1419c3f345984c2629e72e7a631820fa4d",
         "type": "github"
       },
       "original": {

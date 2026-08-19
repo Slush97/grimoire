@@ -1,0 +1,63 @@
+name: Nix
+
+# The from-source Nix package vendors the pnpm store as a fixed-output
+# derivation, so nix/grimoire.nix carries a hash of the whole dependency set.
+# Every pnpm-lock.yaml change invalidates it, and nothing in CI noticed until
+# a downstream build failed with "hash mismatch in fixed-output derivation".
+# This job rebuilds that store on the PR that moves the lockfile, so the hash
+# is bumped in the same change that breaks it.
+#
+# The full `nix build .#grimoire` (electron-vite + electron-builder + a
+# better-sqlite3 rebuild) is deliberately not run here: it costs far more
+# runner time than the failure it would catch, which is Electron API drift
+# rather than lockfile drift.
+
+on:
+  pull_request:
+    paths:
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      # .npmrc and pnpm-workspace.yaml steer resolution, so they can move
+      # the fetched store without the lockfile changing shape.
+      - '.npmrc'
+      - 'pnpm-workspace.yaml'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'nix/**'
+      - '.github/workflows/nix.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      # .npmrc and pnpm-workspace.yaml steer resolution, so they can move
+      # the fetched store without the lockfile changing shape.
+      - '.npmrc'
+      - 'pnpm-workspace.yaml'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'nix/**'
+      - '.github/workflows/nix.yml'
+  workflow_dispatch:
+
+jobs:
+  pnpm-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout grimoire
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      # Catches eval-level rot: a nixpkgs attribute that disappeared
+      # (pnpm_9 and Electron majors both get dropped), a syntax error, or a
+      # devShell that no longer evaluates. No derivation is built.
+      - name: Evaluate flake
+        run: nix flake check --no-build
+
+      # The actual guard. Fails with the correct replacement hash in the
+      # error when nix/grimoire.nix has gone stale.
+      - name: Build vendored pnpm store
+        run: nix build --no-link .#grimoire.pnpmDeps
