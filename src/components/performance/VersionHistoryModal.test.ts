@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { PerformanceRemoteVersion } from '../../types/electron';
-import { performanceHistoryRowCopy } from '../../lib/performanceHistory';
+import type { PerformancePresetVersion, PerformanceRemoteVersion } from '../../types/electron';
+import {
+  bundledPerformanceVersionFor,
+  performanceHistoryRowCopy,
+} from '../../lib/performanceHistory';
 
 function entry(label: string | null, ref = '96ff42d1'): PerformanceRemoteVersion {
   return {
@@ -32,5 +35,23 @@ describe('performanceHistoryRowCopy', () => {
       primary: 'be2d3889',
       detail: 'minor documentation update',
     });
+  });
+});
+
+describe('bundledPerformanceVersionFor', () => {
+  it('matches a prose history row by the commit that touched its config path', () => {
+    const remote = entry('2.9 update', '9c3517c7');
+    const bundled: PerformancePresetVersion = {
+      version: '2.9',
+      ref: '2.9',
+      refKind: 'prose',
+      commit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
+      historyCommit: remote.commit!,
+      date: '2026-08-17',
+      settingCount: 282,
+      optIn: [],
+    };
+
+    expect(bundledPerformanceVersionFor(remote, [bundled])).toBe('2.9');
   });
 });

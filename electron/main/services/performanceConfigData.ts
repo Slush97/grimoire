@@ -80,6 +80,9 @@ export interface PresetRelease {
     refKind: 'tag' | 'prose';
     /** Immutable pin. This, not `ref`, is what was fetched. */
     commit: string;
+    /** Last commit at or before the pin that touched this preset's file.
+     *  Prose history is path-scoped, so this is its row identity. */
+    historyCommit: string;
     /** Upstream release date, yyyy-mm-dd. Tag names do not reliably sort
      *  into release order, so this is what the picker shows to disambiguate. */
     date: string;
@@ -240,6 +243,7 @@ const SqookyDefault: PerformancePresetFamily = {
             ref: '2.9',
             refKind: 'prose',
             commit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
+            historyCommit: 'ca74b464b16d4c2e2eee38d8a23b67efd98e4975',
             date: '2026-08-17',
             sha256: 'b31825fea70a48412b304b5f3dd06c24d5c29d9feb98d559d337eaef928457f3',
             sectionOps: [
@@ -549,6 +553,7 @@ const SqookyDefault: PerformancePresetFamily = {
             ref: '2.8.2',
             refKind: 'prose',
             commit: 'a7ba9d63dc6bb660208374ba2f18955e77042442',
+            historyCommit: 'a7ba9d63dc6bb660208374ba2f18955e77042442',
             date: '2026-08-02',
             sha256: '6c3753fabda7c724a01c9a9747e4a14c8618fe3815ecddae929623252e60db5c',
             sectionOps: [
@@ -866,6 +871,7 @@ const SqookyDefault: PerformancePresetFamily = {
             ref: '2.7',
             refKind: 'prose',
             commit: '271befb5cf9f8c9431da81e39ea4147895604d3e',
+            historyCommit: '271befb5cf9f8c9431da81e39ea4147895604d3e',
             date: '2026-07-25',
             sha256: 'c34801cc66cdd93e3dc0bfea275c98fa9c2a3cc29ee17a1f0397314a2310aeca',
             sectionOps: [
@@ -1182,6 +1188,7 @@ const SqookyTesting: PerformancePresetFamily = {
             ref: '2.9',
             refKind: 'prose',
             commit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
+            historyCommit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
             date: '2026-08-17',
             sha256: '362c7c577c37f821cf9f484f4505c7a21afecc014e3064e77798ede620189d55',
             sectionOps: [
@@ -1528,6 +1535,7 @@ const SqookyTesting: PerformancePresetFamily = {
             ref: '2.8.2',
             refKind: 'prose',
             commit: 'a7ba9d63dc6bb660208374ba2f18955e77042442',
+            historyCommit: '43c6aca8583524e87e54977ed963aebc0e89b678',
             date: '2026-08-02',
             sha256: '7cb2c5d0f7100d90e6f4ddd4fa8b067533d2bcd3a520ebe936fec75263c4084b',
             sectionOps: [
@@ -1895,6 +1903,7 @@ const SqookyTesting: PerformancePresetFamily = {
             ref: '2.7',
             refKind: 'prose',
             commit: '271befb5cf9f8c9431da81e39ea4147895604d3e',
+            historyCommit: '48383a17d0cb00927dd8713fe0a6b04c4b218f5a',
             date: '2026-07-25',
             sha256: 'b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf',
             sectionOps: [
@@ -2283,6 +2292,7 @@ const BootMaxFps: PerformancePresetFamily = {
             ref: '2.9',
             refKind: 'prose',
             commit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
+            historyCommit: '91ca1cb14f4e8fcbb77d310d09fd6683edab68dc',
             date: '2026-08-17',
             sha256: '6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5',
             // Byte-identical upstream in 2.8.2, 2.7, collapsed into this entry.
@@ -2737,6 +2747,7 @@ const KaizuMinSpec: PerformancePresetFamily = {
             ref: '2.9',
             refKind: 'prose',
             commit: '96ff42d1db29ca9fe44afb3df749fa763bb87b87',
+            historyCommit: '528ded17e7b89480fe1b896615099e4fa3511676',
             date: '2026-08-17',
             sha256: '16e9e739b90941543f2fabeea8161fd15327df5f16d812377fbd2bf4e75a98a4',
             sectionOps: [
@@ -2999,6 +3010,7 @@ const KaizuMinSpec: PerformancePresetFamily = {
             ref: '2.8.2',
             refKind: 'prose',
             commit: 'a7ba9d63dc6bb660208374ba2f18955e77042442',
+            historyCommit: '068f6d01b7920675e2360a7fca4f120dd07c05bd',
             date: '2026-08-02',
             sha256: 'e4be5933e6f24de0c368c77957dd7579ef8e2e8169fe4e9740977c09db08fa68',
             sectionOps: [
@@ -3430,6 +3442,7 @@ const KaizuMinSpec: PerformancePresetFamily = {
             ref: '2.7',
             refKind: 'prose',
             commit: '271befb5cf9f8c9431da81e39ea4147895604d3e',
+            historyCommit: '983d51a5c7567be9e6efbdd445304e51146793c5',
             date: '2026-07-25',
             sha256: 'f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9',
             sectionOps: [
@@ -3857,6 +3870,7 @@ const OptilockFps: PerformancePresetFamily = {
             ref: 'v4.6',
             refKind: 'tag',
             commit: '6caab13036711d09ae439b4de4406bdb9972e148',
+            historyCommit: '6caab13036711d09ae439b4de4406bdb9972e148',
             date: '2026-08-15',
             sha256: 'ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8',
             sectionOps: [
@@ -4280,6 +4294,7 @@ const OptilockFps: PerformancePresetFamily = {
             ref: 'v4.2',
             refKind: 'tag',
             commit: 'fdfce93a95db176c539d3dbcb601238e181008b9',
+            historyCommit: 'fdfce93a95db176c539d3dbcb601238e181008b9',
             date: '2026-07-15',
             sha256: '34873789e25b552829cff843b111b7c5f7f3127651a31d6e3f7fd1d67a2e1291',
             sectionOps: [
@@ -4799,6 +4814,7 @@ const OptilockFps: PerformancePresetFamily = {
             ref: 'v4.0d',
             refKind: 'tag',
             commit: '465590a35d8d47d84b78031837fa209f5a2b5ce7',
+            historyCommit: '465590a35d8d47d84b78031837fa209f5a2b5ce7',
             date: '2026-07-12',
             sha256: 'a0017f99282415dc027a687fdf01b06de707d6d28c5fbd161339493db4f1f618',
             sectionOps: [
@@ -5343,6 +5359,7 @@ const OptilockMax: PerformancePresetFamily = {
             ref: 'v4.6',
             refKind: 'tag',
             commit: '6caab13036711d09ae439b4de4406bdb9972e148',
+            historyCommit: '6caab13036711d09ae439b4de4406bdb9972e148',
             date: '2026-08-15',
             sha256: '5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703',
             sectionOps: [
@@ -5876,6 +5893,7 @@ const OptilockMax: PerformancePresetFamily = {
             ref: 'v4.2',
             refKind: 'tag',
             commit: 'fdfce93a95db176c539d3dbcb601238e181008b9',
+            historyCommit: 'fdfce93a95db176c539d3dbcb601238e181008b9',
             date: '2026-07-15',
             sha256: '69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326',
             // Byte-identical upstream in v4.0d, collapsed into this entry.

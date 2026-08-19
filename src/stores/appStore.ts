@@ -212,6 +212,10 @@ export interface BrowseUiState {
   // (GameBanana Generic_Submitter filter) and Browse shows an artist banner.
   // Session-only; carries display fields so the banner needs no extra fetch.
   submitter?: BrowseArtistRef;
+  /** Narrow exception for a trusted navigation that deliberately opens an
+   *  artist even when they are hidden. It must equal `submitter.id`; ordinary
+   *  artist navigation clears it automatically in `setBrowseUi`. */
+  hiddenCreatorOverrideId?: number;
 }
 
 export interface BrowseArtistRef {
@@ -1224,7 +1228,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // a time without restating the rest. layout + sort also mirror to
   // localStorage so they persist across app restarts.
   setBrowseUi: (partial: Partial<BrowseUiState>) => {
-    set({ browseUi: { ...get().browseUi, ...partial } });
+    const next = { ...get().browseUi, ...partial };
+    // An override belongs to the exact navigation that supplied it. Any
+    // ordinary submitter change must drop it so a later Installed/Browse link
+    // cannot accidentally reveal a creator the user chose to hide.
+    if (
+      Object.prototype.hasOwnProperty.call(partial, 'submitter') &&
+      !Object.prototype.hasOwnProperty.call(partial, 'hiddenCreatorOverrideId')
+    ) {
+      next.hiddenCreatorOverrideId = undefined;
+    }
+    set({ browseUi: next });
     try {
       if (partial.layout !== undefined) {
         localStorage.setItem(LAYOUT_KEY, partial.layout);

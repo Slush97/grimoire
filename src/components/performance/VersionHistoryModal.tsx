@@ -4,7 +4,10 @@ import { CircleAlert, HardDriveDownload, Loader2, Package } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { ModalHeader } from '../common/ui';
 import { fetchPerformanceRemoteVersion, listPerformanceRemoteVersions } from '../../lib/api';
-import { performanceHistoryRowCopy } from '../../lib/performanceHistory';
+import {
+  bundledPerformanceVersionFor,
+  performanceHistoryRowCopy,
+} from '../../lib/performanceHistory';
 import type {
   PerformanceLatestInfo,
   PerformancePresetSummary,
@@ -44,9 +47,7 @@ export default function VersionHistoryModal({
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const bundledVersionFor = (entry: PerformanceRemoteVersion) =>
-    preset.versions.find(
-      (version) => version.version === entry.version || (!!entry.commit && version.commit === entry.commit)
-    )?.version;
+    bundledPerformanceVersionFor(entry, preset.versions);
 
   useEffect(() => {
     let cancelled = false;

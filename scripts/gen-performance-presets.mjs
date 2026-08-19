@@ -100,6 +100,26 @@ async function commitDate(repo, commit) {
     return (await res.json()).commit.author.date.slice(0, 10);
 }
 
+// A prose "release" pin is a repository snapshot, but the history modal lists
+// only commits that touched one preset's file. Resolve the last such commit at
+// the snapshot so the renderer can identify bundled rows without fetching
+// every historical file or guessing from commit-message prose.
+async function lastPathCommit(repo, commit, path) {
+    const query = new URLSearchParams({ sha: commit, path, per_page: '1' });
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits?${query}`, GH);
+    if (!res.ok) {
+        fail(
+            `Could not resolve path history for ${repo}@${commit.slice(0, 8)} ${path} ` +
+                `(${res.status})`
+        );
+    }
+    const commits = await res.json();
+    if (!Array.isArray(commits) || !commits[0]?.sha) {
+        fail(`No path history for ${repo}@${commit.slice(0, 8)} ${path}`);
+    }
+    return commits[0].sha;
+}
+
 // A source pinned with refKind 'tag' claims, in the UI, that the preset comes
 // from a published release. Tags are mutable, so that claim can quietly become
 // false. The commit is still what we fetch and the sha256 still gates content:
@@ -254,6 +274,9 @@ function emit(manifest, presets) {
     L.push(`    refKind: 'tag' | 'prose';`);
     L.push(`    /** Immutable pin. This, not \`ref\`, is what was fetched. */`);
     L.push(`    commit: string;`);
+    L.push(`    /** Last commit at or before the pin that touched this preset's file.`);
+    L.push(`     *  Prose history is path-scoped, so this is its row identity. */`);
+    L.push(`    historyCommit: string;`);
     L.push(`    /** Upstream release date, yyyy-mm-dd. Tag names do not reliably sort`);
     L.push(`     *  into release order, so this is what the picker shows to disambiguate. */`);
     L.push(`    date: string;`);
@@ -350,6 +373,7 @@ function emit(manifest, presets) {
             L.push(`            ref: ${q(r.ref)},`);
             L.push(`            refKind: ${q(r.refKind)},`);
             L.push(`            commit: ${q(r.commit)},`);
+            L.push(`            historyCommit: ${q(r.historyCommit)},`);
             L.push(`            date: ${q(r.date)},`);
             L.push(`            sha256: ${q(r.sha256)},`);
             if (r.supersedes.length) {
@@ -512,6 +536,11 @@ async function main() {
                 continue;
             }
 
+            const historyCommit =
+                source.refKind === 'prose'
+                    ? await lastPathCommit(source.repo, release.commit, path)
+                    : release.commit;
+
             const label = source.releases.length > 1 ? `${entry.id}@${release.ref}` : entry.id;
             const { sectionOps, convars, optIn } = diffAgainstBaseline(
                 baseline,
@@ -527,6 +556,7 @@ async function main() {
                 ref: release.ref,
                 refKind: source.refKind,
                 commit: release.commit,
+                historyCommit,
                 date: release.date,
                 sha256: expected,
                 supersedes: [],

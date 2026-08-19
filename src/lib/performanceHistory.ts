@@ -1,6 +1,21 @@
-import type { PerformanceRemoteVersion } from '../types/electron';
+import type { PerformancePresetVersion, PerformanceRemoteVersion } from '../types/electron';
 
 const PROSE_VERSION = /\b(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[a-z]\d*)?)\b/i;
+
+/** Match a path-scoped history row to a bundled release. A prose release's
+ * repository pin may be newer than the last commit that touched this specific
+ * config, so `historyCommit` is the authoritative row identity. */
+export function bundledPerformanceVersionFor(
+  entry: PerformanceRemoteVersion,
+  versions: readonly PerformancePresetVersion[]
+): string | undefined {
+  return versions.find(
+    (version) =>
+      version.version === entry.version ||
+      (!!entry.commit &&
+        (version.historyCommit === entry.commit || version.commit === entry.commit))
+  )?.version;
+}
 
 /** Sqooky does not publish tags, but release commits conventionally start with
  *  a version ("2.9.1 release", "2.9 update"). Prefer that human version in

@@ -224,7 +224,11 @@ export default function PerformanceConfigCard() {
   const viewSqookyInBrowse = () => {
     // This affordance says "Mods", so do not inherit a previously selected
     // Sound/WiP section when entering the artist page from Settings.
-    setBrowseUi({ submitter: SQOOKY_ARTIST, section: 'Mod' });
+    setBrowseUi({
+      submitter: SQOOKY_ARTIST,
+      section: 'Mod',
+      hiddenCreatorOverrideId: SQOOKY_ARTIST.id,
+    });
     navigate('/browse');
   };
 

@@ -142,6 +142,9 @@ export interface PerformancePresetVersion {
     /** Whether `ref` is a real git tag or a version stated in prose. */
     refKind: 'tag' | 'prose';
     commit: string;
+    /** Last commit at or before the release pin that touched this preset's
+     *  source file. Prose version history is scoped to that path. */
+    historyCommit: string;
     /** Upstream release date, yyyy-mm-dd. Shown because upstream tag names do
      *  not reliably sort into release order (OptiLock tagged v4.0d after v4.1),
      *  so the name alone cannot tell a user which release is older. */
