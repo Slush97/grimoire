@@ -65,6 +65,11 @@ export function localVariantSelectionEligibility(
  * id on a merged output. Keeping that output standalone preserves access to
  * its merge-management and recovery actions instead of hiding it in the
  * variant picker.
+ *
+ * This deliberately excludes merged outputs from GameBanana grouping too,
+ * which plain variantGroupKey (and the pre-variant Installed page) did not.
+ * Inert today (merge outputs carry no submission id), but if one ever did,
+ * nesting it in a GB variant card would hide the same actions.
  */
 export function installedVariantGroupKey(mod: Mod): string | null {
   return mod.merged ? null : variantGroupKey(mod);

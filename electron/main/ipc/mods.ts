@@ -880,7 +880,7 @@ ipcMain.handle(
             throw new Error('No Deadlock path configured');
         }
 
-        const { groupId, renamed } = await runExclusiveModMutation(async () => {
+        const { groupId, renamed, snapshot } = await runExclusiveModMutation(async () => {
             const all = await scanMods(deadlockPath);
             const members: LocalVariantGroupMember[] = all.map(toLocalVariantGroupMember);
 
@@ -895,23 +895,41 @@ ipcMain.handle(
                               GLOBAL_CLASSIFIER_VERSION,
                       }
                     : {};
-                setModMetadata(write.metaKey, {
+                const data = {
                     localGroupId: write.localGroupId,
                     ...(write.modName ? { modName: write.modName } : {}),
                     ...classification,
-                });
-                if (!write.modName) continue;
+                };
                 const mod = all.find((candidate) => candidate.id === write.id);
+                if (write.localGroupId && mod && !getModMetadata(write.metaKey)?.sha256) {
+                    // A grouped member with no stored hash would fall back to
+                    // the volatile `mod:<slot>` form as its standalone
+                    // preference key (see modPreferenceKey). That key is
+                    // regenerated as a legacy migration edge on every startup,
+                    // so if the slot were later recycled by an unrelated mod,
+                    // that mod's preferences would be unioned into this group.
+                    // Stamping the content hash pins the legacy key to this
+                    // file instead.
+                    await setModMetadataWithHash(write.metaKey, data, mod.path);
+                } else {
+                    setModMetadata(write.metaKey, data);
+                }
+                if (!write.modName) continue;
                 if (mod) renamedMods.push(mod);
             }
-            return { groupId: plan.groupId, renamed: renamedMods };
+            // Build the response inside the lock so the returned list reflects
+            // exactly the state these writes were made against; a concurrent
+            // toggle can no longer rename a slot between commit and scan.
+            return { groupId: plan.groupId, renamed: renamedMods, snapshot: await scanMods(deadlockPath) };
         });
 
         for (const mod of renamed) {
             await refreshEmbedAfterMetadataChange(deadlockPath, mod.id, mod.metaKey, mod.path);
         }
 
-        const mods = await scanMods(deadlockPath);
+        // The embed refresh rewrites VPK bytes (and re-stamps identity), so a
+        // rename invalidates the locked snapshot; only then re-scan.
+        const mods = renamed.length > 0 ? await scanMods(deadlockPath) : snapshot;
         return { groupId, mods: mods.map(enrichMod) };
     }
 );
@@ -1436,7 +1454,7 @@ async function importCustomModSource(
     // `name`, so the members stay name-unified without a second write.
     const localGroupId = joinGroupId?.trim() || (sourceVpks.length > 1 ? randomUUID() : undefined);
     let groupProfile: LocalVariantGroupProfile | undefined;
-    const importWrites: LocalImportTransactionWrite<ModMetadata>[] = [];
+    const importWrites: LocalImportTransactionWrite[] = [];
     const thumbnailStart = thumbnailFetchTargets.length;
 
     try {
@@ -1459,17 +1477,12 @@ async function importCustomModSource(
                 ? await allocatePriorityVpkPath(deadlockPath)
                 : await allocateEnabledVpkPath(deadlockPath);
             const destMetaKey = metaKeyFor(destPath);
-            const previousMetadata = getModMetadata(destMetaKey);
 
             await copyIntoModSlot(sourceVpks[i].path, destPath, true);
             // Record only after we successfully claimed/copied the slot. If
             // reserveOutputSlot reports EEXIST, the file belongs to somebody
             // else and rollback must never unlink it.
-            importWrites.push({
-                destPath,
-                metaKey: destMetaKey,
-                previousMetadata: previousMetadata ? { ...previousMetadata } : undefined,
-            });
+            importWrites.push({ destPath, metaKey: destMetaKey });
 
             // Scrub any orphan metadata at this slot before writing.
             // setModMetadata merges into the existing entry, so stale fields
@@ -1591,10 +1604,7 @@ async function importCustomModSource(
             thumbnailStart,
             {
                 removeFile: (path) => fs.unlink(path),
-                restoreMetadata: (metaKey, previousMetadata) => {
-                    removeModMetadata(metaKey);
-                    if (previousMetadata) setModMetadata(metaKey, previousMetadata);
-                },
+                clearMetadata: (metaKey) => removeModMetadata(metaKey),
             }
         );
         if (rollbackFailures.length > 0) {
