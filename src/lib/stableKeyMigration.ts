@@ -290,6 +290,24 @@ export function migrateStoredStableKeyPreferences(
   const oldIncluded = readStoredShuffleIncluded();
   const oldVariants = readStoredShuffleVariants();
 
+  // This runs on every mod scan (loadMods is a hot path). With no edges in
+  // either plan (the common case: no local variant groups installed), every
+  // migrate call below is an identity map, so skip the per-collection deep
+  // comparisons and return the stored state as-is.
+  if (preferencePlan.destinationsBySource.size === 0 && shufflePlan.destinationsBySource.size === 0) {
+    return {
+      changed: false,
+      detail: {
+        disabledFavorites: oldFavorites,
+        disabledOrder: [...oldOrder],
+        modLists: oldLists,
+        lockerCategories: oldCategories,
+      },
+      shuffleIncluded: oldIncluded,
+      shuffleVariants: oldVariants,
+    };
+  }
+
   const disabledFavorites = migrateKeySet(oldFavorites, preferencePlan);
   const disabledOrder = migrateKeyOrder(oldOrder, preferencePlan);
   const modLists = migrateMemberships(oldLists, preferencePlan);

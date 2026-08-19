@@ -170,7 +170,9 @@ describe('appStore local variant preference migration', () => {
     expect(api.setLockerModThumbnailHideName).toHaveBeenCalledWith('localgroup:group-1', true);
     expect(api.setLockerModBackgroundHideName).toHaveBeenCalledWith('localgroup:group-1', true);
     expect(api.removeLockerModImage).toHaveBeenCalledWith('mod:a');
-    expect(api.removeLockerModImage).toHaveBeenCalledWith('mod:b');
+    // mod:b holds no image on any surface, so no removal round trip is spent
+    // on it.
+    expect(api.removeLockerModImage).not.toHaveBeenCalledWith('mod:b');
     expect(api.removeLockerModThumbnail).toHaveBeenCalledWith('mod:a');
     expect(api.removeLockerModBackground).toHaveBeenCalledWith('mod:a');
   });

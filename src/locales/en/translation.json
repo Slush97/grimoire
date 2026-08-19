@@ -1377,6 +1377,8 @@
       "groupVariantsMinHint": "Select 2+ local mods to group as variants",
       "groupVariantsMergedHint": "Merged mods cannot be grouped as variants. Unmerge them first.",
       "groupVariantsLocalHint": "Only local mods can be grouped as variants. GameBanana mods already group by their mod page.",
+      "groupVariantsPlacementHint": "Variants must share the same Global load setting. Toggle Global on or off to match before grouping.",
+      "groupVariantsClassificationHint": "Variants must share the same Locker hero or Global classification.",
       "groupVariantsHint_one": "Show {{count}} mod as one card with switchable files",
       "groupVariantsHint_other": "Show {{count}} mods as one card with switchable files",
       "tag": "Tag",
@@ -1528,7 +1530,10 @@
       "ungrouped_one": "Ungrouped {{count}} file",
       "ungrouped_other": "Ungrouped {{count}} files",
       "detached": "Removed the file from the group",
-      "groupFailed": "Could not change the variant group: {{error}}"
+      "groupFailed": "Could not change the variant group: {{error}}",
+      "createGroupFailed": "Could not create the variant group",
+      "updateRestoreFailed": "Could not safely preserve the local variant group during this update",
+      "updateRestoreGlobalFailed": "Could not safely preserve the Global local variant group during this update"
     }
   },
   "locker": {

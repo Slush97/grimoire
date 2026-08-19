@@ -258,6 +258,13 @@ type ModEntry =
       key: string;
     };
 
+/** Electron prefixes ipcRenderer.invoke rejections with the channel name;
+ *  strip it so toasts show only the main-process message. */
+function toastErrorMessage(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  return detail.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+}
+
 function modEntryKey(mod: Mod): string {
   if (typeof mod.gameBananaId === 'number' && typeof mod.gameBananaFileId === 'number') {
     return `single:gb:${mod.gameBananaId}:${mod.gameBananaFileId}`;
@@ -2402,7 +2409,7 @@ export default function Installed() {
         fileId,
       );
       if (groupedReplacement && !localGroupRestore) {
-        throw new Error('Could not safely preserve the local variant group during this update');
+        throw new Error(t('installed.variants.updateRestoreFailed'));
       }
       // A Global local group must stay wholly in the priority folder. Move the
       // fresh files first (the existing restore operation owns filesystem
@@ -2426,7 +2433,7 @@ export default function Installed() {
           fileId,
         );
         if (!localGroupRestore) {
-          throw new Error('Could not safely preserve the Global local variant group during this update');
+          throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
         }
       }
       if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
@@ -2488,7 +2495,7 @@ export default function Installed() {
       // The error dialog below only renders when no mod is loaded, and the
       // overlay now stays open through the install, so a failure has to be
       // surfaced as a toast or it would be swallowed entirely.
-      showToast(String(err), { tone: 'error', duration: 6000 });
+      showToast(toastErrorMessage(err), { tone: 'error', duration: 6000 });
     } finally {
       releaseDownloadRequest(detailsMod.id, fileId);
     }
@@ -2742,7 +2749,7 @@ export default function Installed() {
             batch.fileId,
           );
           if (groupedReplacement && !localGroupRestore) {
-            throw new Error('Could not safely preserve the local variant group during this update');
+            throw new Error(t('installed.variants.updateRestoreFailed'));
           }
           if (localGroupRestore && restoreGlobal.allGlobal) {
             const replacementIds = new Set(localGroupRestore.replacementModIds);
@@ -2761,7 +2768,7 @@ export default function Installed() {
               batch.fileId,
             );
             if (!localGroupRestore) {
-              throw new Error('Could not safely preserve the Global local variant group during this update');
+              throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
             }
           }
           if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
@@ -2936,7 +2943,10 @@ export default function Installed() {
       showToast(t('installed.variants.grouped', { count: targets.length }), { tone: 'success' });
       exitSelectMode();
     } catch (err) {
-      showToast(t('installed.variants.groupFailed', { error: String(err) }), { tone: 'error' });
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
     }
   };
 
@@ -3887,7 +3897,7 @@ export default function Installed() {
     let groupId = target.groupId;
     if (!groupId) {
       groupId = await setLocalVariantGroup(target.modIds, { mode: 'mint' });
-      if (!groupId) throw new Error('Could not create the variant group');
+      if (!groupId) throw new Error(t('installed.variants.createGroupFailed'));
       // Remember it: the dialog stays open on a partial failure, and the retry
       // must land in this group rather than mint a second one.
       const minted = groupId;
@@ -3942,7 +3952,10 @@ export default function Installed() {
       await setLocalVariantGroup(entry.variants.map((v) => v.id), { mode: 'clear' });
       showToast(t('installed.variants.ungrouped', { count }), { tone: 'success' });
     } catch (err) {
-      showToast(t('installed.variants.groupFailed', { error: String(err) }), { tone: 'error' });
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
     }
   });
   // Detach ONE file from a group. Main dissolves the group when this would
@@ -3952,7 +3965,10 @@ export default function Installed() {
       await setLocalVariantGroup([variant.id], { mode: 'clear' });
       showToast(t('installed.variants.detached'), { tone: 'success' });
     } catch (err) {
-      showToast(t('installed.variants.groupFailed', { error: String(err) }), { tone: 'error' });
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
     }
   });
   const tagEntryLocker = useStableCallback(async (entry: ModEntry, heroName: string | null) => {
@@ -5716,7 +5732,11 @@ export default function Installed() {
                     ? t('installed.select.groupVariantsMinHint')
                     : groupSelectionEligibility.reason === 'merged'
                       ? t('installed.select.groupVariantsMergedHint')
-                      : t('installed.select.groupVariantsLocalHint')
+                      : groupSelectionEligibility.reason === 'placement'
+                        ? t('installed.select.groupVariantsPlacementHint')
+                        : groupSelectionEligibility.reason === 'classification'
+                          ? t('installed.select.groupVariantsClassificationHint')
+                          : t('installed.select.groupVariantsLocalHint')
                 }
               >
                 {t('installed.select.groupVariants')}

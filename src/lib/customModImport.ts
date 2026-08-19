@@ -69,5 +69,5 @@ export function resolveImportedVariantLabel(
   const fallback = variantSeed ? deriveVariantLabel(variantSeed) : undefined;
   if (!requested) return fallback;
   if (memberCount <= 1) return requested;
-  return `${requested} — ${fallback || `Variant ${memberIndex + 1}`}`;
+  return `${requested}: ${fallback || `Variant ${memberIndex + 1}`}`;
 }

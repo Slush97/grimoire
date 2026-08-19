@@ -63,10 +63,10 @@ describe('local variant labels', () => {
 
   it('keeps archive members distinct beneath a custom prefix', () => {
     expect(resolveImportedVariantLabel('Season Pack', 'no_beard', 2, 0)).toBe(
-      'Season Pack — No Beard'
+      'Season Pack: No Beard'
     );
     expect(resolveImportedVariantLabel('Season Pack', undefined, 2, 1)).toBe(
-      'Season Pack — Variant 2'
+      'Season Pack: Variant 2'
     );
   });
 

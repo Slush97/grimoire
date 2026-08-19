@@ -798,6 +798,20 @@ async function allocatePrioritySlot(deadlockPath: string): Promise<AllocatedSlot
 }
 
 /**
+ * Reserve a destination for a NEW mod imported straight into the priority root
+ * (a variant joining a Global local variant group). Mirrors
+ * allocateEnabledVpkPath: the running-game snapshot is synced first, and the
+ * slot scan reuses folderPakNumbers so a slot occupied only by chunk files
+ * still counts as taken. Reserves nothing on disk; see allocateEnabledVpkPath
+ * for the copy-before-next-allocate contract.
+ */
+export async function allocatePriorityVpkPath(deadlockPath: string): Promise<string> {
+    await syncRunningGameModSnapshotFromMods(await scanMods(deadlockPath));
+    const { folder, fileName } = await allocatePrioritySlot(deadlockPath);
+    return join(folder, fileName);
+}
+
+/**
  * Move a mod into or out of the priority root (the "Global" affordance).
  *
  * The metadata flag is the source of truth rather than the current folder,

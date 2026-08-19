@@ -165,4 +165,43 @@ describe('Locker image stable-key migration', () => {
     expect(state.flags['localgroup:g']).toBeUndefined();
     expect(state.calls).toEqual(['remove']);
   });
+
+  it('copies but never deletes a preserved source key', async () => {
+    const adoptedMod: TestMod = { ...groupedMod, key: 'localgroup:g' };
+    const plan = createStableKeyMigrationPlan({
+      before: [],
+      after: [adoptedMod],
+      keyOf: (mod) => mod.key,
+      legacyKeysOf: () => ['gamebanana:42'],
+    });
+    const state = memoryIo();
+    delete state.images['mod:a'];
+    delete state.flags['mod:a'];
+    delete state.edits['mod:a'];
+    // Art that may belong to a currently uninstalled GameBanana mod.
+    state.images['gamebanana:42'] = 'data:image/png;base64,gb';
+
+    await migrateLockerImageSurface('card', plan, state.io, {
+      preserveSource: (source) => source.startsWith('gamebanana:'),
+    });
+
+    expect(state.images).toEqual({
+      'gamebanana:42': 'data:image/png;base64,gb',
+      'localgroup:g': 'data:image/png;base64,gb',
+    });
+    expect(state.calls).not.toContain('remove');
+  });
+
+  it('does not re-issue removals for already clean source keys', async () => {
+    const state = memoryIo();
+
+    await migrateLockerImageSurface('card', movePlan(), state.io);
+    expect(state.calls).toContain('remove');
+    state.calls.length = 0;
+
+    // The same plan is rebuilt on every load; a source with nothing left in
+    // it must not cost a removal round trip each time.
+    await migrateLockerImageSurface('card', movePlan(), state.io);
+    expect(state.calls).toEqual([]);
+  });
 });

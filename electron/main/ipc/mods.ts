@@ -15,11 +15,11 @@ import {
     setModsEnabledBatch,
     setModPriorityFolder,
     allocateEnabledVpkPath,
+    allocatePriorityVpkPath,
     runExclusiveModMutation,
-    PRIORITY_LIMIT_MESSAGE,
     type Mod,
 } from '../services/mods';
-import { metaKeyFor, isValidDeadlockPath, getGrimoirePath, PRIORITY_FIRST_SLOT } from '../services/deadlock';
+import { metaKeyFor, isValidDeadlockPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata, type ModMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
@@ -1374,15 +1374,6 @@ async function installedLocalVariantGroupProfile(
     };
 }
 
-async function allocatePriorityImportPath(deadlockPath: string): Promise<string> {
-    const root = getGrimoirePath(deadlockPath);
-    for (let slot = PRIORITY_FIRST_SLOT; slot <= 99; slot++) {
-        const candidate = join(root, `pak${String(slot).padStart(2, '0')}_dir.vpk`);
-        if (!existsSync(candidate)) return candidate;
-    }
-    throw new Error(PRIORITY_LIMIT_MESSAGE);
-}
-
 async function importCustomModSource(
     deadlockPath: string,
     args: ImportCustomModArgs,
@@ -1465,7 +1456,7 @@ async function importCustomModSource(
         // multi-VPK archive lands in distinct slots.
         for (let i = 0; i < sourceVpks.length; i++) {
             const destPath = groupProfile?.priorityMod
-                ? await allocatePriorityImportPath(deadlockPath)
+                ? await allocatePriorityVpkPath(deadlockPath)
                 : await allocateEnabledVpkPath(deadlockPath);
             const destMetaKey = metaKeyFor(destPath);
             const previousMetadata = getModMetadata(destMetaKey);

@@ -97,6 +97,40 @@ describe('localVariantSelectionEligibility', () => {
       ])
     ).toEqual({ eligible: false, reason: 'gamebanana' });
   });
+
+  it('rejects mixed Global priority-folder placement like the main-process planner', () => {
+    expect(
+      localVariantSelectionEligibility([
+        mod({ id: 'global', priorityMod: true }),
+        mod({ id: 'plain' }),
+      ])
+    ).toEqual({ eligible: false, reason: 'placement' });
+  });
+
+  it('rejects two definite but different Locker classifications', () => {
+    expect(
+      localVariantSelectionEligibility([
+        mod({ id: 'ivy', lockerHero: 'Ivy' }),
+        mod({ id: 'geist', lockerHero: 'Lady Geist' }),
+      ])
+    ).toEqual({ eligible: false, reason: 'classification' });
+    expect(
+      localVariantSelectionEligibility([
+        mod({ id: 'hud', globalType: 'hud' }),
+        mod({ id: 'ivy', lockerHero: 'Ivy' }),
+      ])
+    ).toEqual({ eligible: false, reason: 'classification' });
+  });
+
+  it('lets an unclassified mod inherit a classified peer, matching hero case-insensitively', () => {
+    expect(
+      localVariantSelectionEligibility([
+        mod({ id: 'ivy', lockerHero: 'Ivy' }),
+        mod({ id: 'ivy2', lockerHero: 'ivy ' }),
+        mod({ id: 'unclassified' }),
+      ])
+    ).toEqual({ eligible: true });
+  });
 });
 
 describe('installedVariantGroupKey', () => {

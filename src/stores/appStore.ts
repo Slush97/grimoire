@@ -134,7 +134,10 @@ function hasKeyMoves(plan: StableKeyMigrationPlan): boolean {
   );
 }
 
-async function migrateLockerImagePreferences(plan: StableKeyMigrationPlan): Promise<void> {
+async function migrateLockerImagePreferences(
+  plan: StableKeyMigrationPlan,
+  options: { preserveSource?: (source: string) => boolean } = {}
+): Promise<void> {
   if (!hasKeyMoves(plan)) return;
   await migrateLockerImageSurface(
     'card',
@@ -147,7 +150,8 @@ async function migrateLockerImagePreferences(plan: StableKeyMigrationPlan): Prom
       storeFlag: api.setLockerModImageHideName,
       storeEdit: api.setLockerModImageEdit,
       removeImage: api.removeLockerModImage,
-    }
+    },
+    options
   );
   await migrateLockerImageSurface(
     'thumbnail',
@@ -160,7 +164,8 @@ async function migrateLockerImagePreferences(plan: StableKeyMigrationPlan): Prom
       storeFlag: api.setLockerModThumbnailHideName,
       storeEdit: api.setLockerModImageEdit,
       removeImage: api.removeLockerModThumbnail,
-    }
+    },
+    options
   );
   await migrateLockerImageSurface(
     'background',
@@ -173,7 +178,8 @@ async function migrateLockerImagePreferences(plan: StableKeyMigrationPlan): Prom
       storeFlag: api.setLockerModBackgroundHideName,
       storeEdit: api.setLockerModImageEdit,
       removeImage: api.removeLockerModBackground,
-    }
+    },
+    options
   );
 }
 
@@ -580,8 +586,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!get().modsLoaded) await get().loadMods();
       // Canonicalize the old GameBanana-first key used by builds predating
       // explicit local-group precedence. This also handles users who upgrade
-      // without performing another grouping mutation first.
-      await migrateLockerImagePreferences(lockerImagePlan([], get().mods));
+      // without performing another grouping mutation first. With no real
+      // before-topology, a legacy `gamebanana:<id>` source may belong to a
+      // currently uninstalled mod, so those keys are copied but never deleted
+      // here. `mod:<id>` keys name this mod's own slot and stay removable.
+      await migrateLockerImagePreferences(lockerImagePlan([], get().mods), {
+        preserveSource: (source) => source.startsWith('gamebanana:'),
+      });
       const [images, flags, backgrounds, bgFlags, thumbnails, thumbFlags] = await Promise.all([
         api.getLockerModImages(),
         api.getLockerModImageFlags(),
