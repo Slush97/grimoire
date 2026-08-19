@@ -58,9 +58,13 @@ stdenv.mkDerivation (finalAttrs: {
     postUnpack = siblingPostUnpack;
     inherit pnpm;
     # The hash changes when pnpm-lock.yaml, the pinned pnpm major,
-    # fetcherVersion, or social-types' package.json change.
+    # fetcherVersion, or social-types' package.json change. Refresh it with
+    #   nix build --no-link .#grimoire.pnpmDeps
+    # and copy the "got:" value from the mismatch. The Nix workflow
+    # (.github/workflows/nix.yml) runs that build on every PR that touches
+    # pnpm-lock.yaml, so a stale hash fails CI instead of downstream users.
     fetcherVersion = 4;
-    hash = "sha256-1KfyeNRXK441zLpScEDi+fXw9+XpZYOyeoExG4nZuwY=";
+    hash = "sha256-crXSQwOoecPtxlgzf+I2i35VPwTB6cEXWz2zx+esvBI=";
   };
 
   nativeBuildInputs = [
