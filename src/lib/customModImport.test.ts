@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   VPK_IMPORT_RE,
   deriveModNameFromPath,
+  deriveVariantLabel,
   fileNameOf,
   pathDedupeKey,
+  resolveImportedVariantLabel,
 } from './customModImport';
 
 describe('deriveModNameFromPath', () => {
@@ -46,6 +48,30 @@ describe('deriveModNameFromPath', () => {
 
   it('returns an empty string when nothing survives the strip', () => {
     expect(deriveModNameFromPath('_dir.vpk')).toBe('');
+  });
+});
+
+describe('local variant labels', () => {
+  it('formats the existing filename fallback for display', () => {
+    expect(deriveVariantLabel('pak66_dir (1).vpk')).toBe('Pak66 Dir (1)');
+    expect(deriveVariantLabel('no_beard')).toBe('No Beard');
+  });
+
+  it('uses an exact custom name for a single VPK', () => {
+    expect(resolveImportedVariantLabel('Gold', 'pak66_dir', 1, 0)).toBe('Gold');
+  });
+
+  it('keeps archive members distinct beneath a custom prefix', () => {
+    expect(resolveImportedVariantLabel('Season Pack', 'no_beard', 2, 0)).toBe(
+      'Season Pack — No Beard'
+    );
+    expect(resolveImportedVariantLabel('Season Pack', undefined, 2, 1)).toBe(
+      'Season Pack — Variant 2'
+    );
+  });
+
+  it('preserves the generated fallback when no custom name is entered', () => {
+    expect(resolveImportedVariantLabel(undefined, 'pak66_dir', 1, 0)).toBe('Pak66 Dir');
   });
 });
 

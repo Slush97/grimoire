@@ -70,6 +70,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import { assertCompatibleLocalVariantClassifications, planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
 import { planLocalVariantReplacementRestore } from '../services/localVariantReplacement';
+import { resolveImportedVariantLabel } from '../../../src/lib/customModImport';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, RestoreLocalVariantGroupReplacementArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
@@ -1293,17 +1294,6 @@ function localSourceFileStem(fileName: string): string | undefined {
     return stem.length > 0 ? stem : undefined;
 }
 
-/** Turn a source filename stem into a readable variant label ("galaxy_rem_gold"
- *  becomes "Galaxy Rem Gold"). Mirrors the archive-folder prettifier used for
- *  GameBanana multi-variant downloads. */
-function prettifyLocalVariant(stem: string): string {
-    return stem
-        .replace(/[_-]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function blankLocalVariantClassification(): NonNullable<LocalVariantGroupProfile['classification']> {
     return {
         lockerHero: undefined,
@@ -1399,7 +1389,14 @@ async function importCustomModSource(
     thumbnailFetchTargets: AdoptedThumbnailTarget[],
     requireExistingGroup = false
 ): Promise<number> {
-    const { vpkPath, name, thumbnailDataUrl, nsfw, localGroupId: joinGroupId } = args;
+    const {
+        vpkPath,
+        name,
+        variantLabel: requestedVariantLabel,
+        thumbnailDataUrl,
+        nsfw,
+        localGroupId: joinGroupId,
+    } = args;
 
     if (!vpkPath || !existsSync(vpkPath)) {
         throw new Error('File not found');
@@ -1507,8 +1504,14 @@ async function importCustomModSource(
                 sourceFileName,
                 localGroupId,
                 priorityMod: groupProfile?.priorityMod ? true : undefined,
-                variantLabel:
-                    localGroupId && variantSeed ? prettifyLocalVariant(variantSeed) : undefined,
+                variantLabel: localGroupId
+                    ? resolveImportedVariantLabel(
+                          requestedVariantLabel,
+                          variantSeed,
+                          sourceVpks.length,
+                          i
+                      )
+                    : undefined,
             }, destPath);
 
             // ADOPTION: the just-copied VPK may already carry a Grimoire

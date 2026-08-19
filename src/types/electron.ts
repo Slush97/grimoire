@@ -282,6 +282,9 @@ export interface SaveDialogOptions {
 export interface ImportCustomModArgs {
     vpkPath: string;
     name: string;
+    /** Optional user-facing name for this variant source. Exact for a bare VPK;
+     *  used as a prefix when an archive expands into several VPK members. */
+    variantLabel?: string;
     thumbnailDataUrl?: string;
     nsfw?: boolean;
     /** Join this existing local variant group instead of standing alone. Every

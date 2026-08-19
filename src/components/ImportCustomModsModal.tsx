@@ -33,6 +33,7 @@ import {
   VPK_IMPORT_EXTS,
   VPK_IMPORT_RE,
   deriveModNameFromPath,
+  deriveVariantLabel,
   fileNameOf,
   pathDedupeKey,
 } from '../lib/customModImport';
@@ -43,6 +44,8 @@ interface ImportRow {
   /** Identity AND dedupe key: one row per source file, so the path is both. */
   path: string;
   name: string;
+  /** Optional name written to the grouped variant picker. */
+  variantLabel: string;
   /** The current name came from the user typing, not from a parse/peek fill. */
   nameTouched: boolean;
   imagePath: string;
@@ -73,6 +76,10 @@ interface ImportCustomModsModalProps {
 const newRow = (path: string): ImportRow => ({
   path,
   name: deriveModNameFromPath(path),
+  // Bare VPKs map one-to-one to picker rows, so make the current generated
+  // label directly editable. Archives stay blank because one source can expand
+  // into several members; typing there intentionally supplies a shared prefix.
+  variantLabel: path.toLowerCase().endsWith('.vpk') ? deriveVariantLabel(path) : '',
   nameTouched: false,
   imagePath: '',
   thumbnailDataUrl: '',
@@ -333,6 +340,7 @@ export default function ImportCustomModsModal({
             : groupAsVariants
               ? variantGroupName.trim()
               : row.name.trim(),
+          variantLabel: usesSharedName ? row.variantLabel?.trim() || undefined : undefined,
           thumbnailDataUrl: row.thumbnailDataUrl || undefined,
           nsfw: row.nsfw,
           localGroupId: groupAsVariants ? variantGroupId ?? undefined : undefined,
@@ -580,7 +588,19 @@ export default function ImportCustomModsModal({
                         className={nameMissing ? 'ring-1 ring-state-danger/60' : ''}
                       />
                     )}
-                    <div className={`flex flex-wrap items-center gap-1.5 ${usesSharedName ? '' : 'mt-1'}`}>
+                    {usesSharedName && (
+                      <Input
+                        inputSize="sm"
+                        value={row.variantLabel ?? deriveVariantLabel(row.path)}
+                        onChange={(e) => patchRow(row.path, { variantLabel: e.target.value })}
+                        placeholder={deriveVariantLabel(row.path)}
+                        disabled={submitting}
+                        aria-label={t('installed.batchImport.variantNameFor', {
+                          file: fileNameOf(row.path),
+                        })}
+                      />
+                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span className="truncate font-mono text-[11px] text-text-secondary" title={row.path}>
                         {fileNameOf(row.path)}
                       </span>
