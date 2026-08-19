@@ -17,16 +17,18 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, Badge, Button, IconButton } from '../common/ui';
+import { Card, Badge, Button, IconButton, Toggle } from '../common/ui';
 import { AnchoredPopover } from '../common/AnchoredPopover';
 import EditorPickerModal from './EditorPickerModal';
 import PresetPicker from './PresetPicker';
 import PresetSummary from './PresetSummary';
 import VersionPicker from './VersionPicker';
+import VersionHistoryModal from './VersionHistoryModal';
 import GameplayOptIns from './GameplayOptIns';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
   applyPerformanceConfig,
+  checkPerformanceLatest,
   getPerformanceConfigStatus,
   listPerformancePresets,
   openPerformanceConfigFile,
@@ -34,7 +36,11 @@ import {
   resetPerformanceConfigOverrides,
   restorePerformanceConfigBackup,
 } from '../../lib/api';
-import type { PerformanceConfigStatus, PerformancePresetSummary } from '../../types/electron';
+import type {
+  PerformanceConfigStatus,
+  PerformanceLatestInfo,
+  PerformancePresetSummary,
+} from '../../types/electron';
 
 const SQOOKY_KOFI_URL = 'https://ko-fi.com/sqooky';
 /** Presets sourced from this repo get the in-app artist link for its author. */
@@ -62,20 +68,26 @@ function performanceStatusMessage(
   presets: PerformancePresetSummary[],
   /** The user deliberately pinned an older release, so "a newer one exists" is
    *  not news to them. The rollback gets its own quieter line instead. */
-  pinnedOlder = false
+  pinnedOlder = false,
+  /** With upstream tracking on, "newest" is the fetched upstream release, not
+   *  the newest bundled one; passing it keeps the outdated-nag honest in both
+   *  directions (no nag when the applied release IS the fetched latest, a nag
+   *  when upstream moved past what is applied). */
+  newestKnownVersion?: string
 ): string {
   const overrideCount = status.overrideCount ?? 0;
+  const newest = newestKnownVersion ?? status.bundledVersion;
   const appliedName =
     presets.find((p) => p.id === status.appliedPresetId)?.name ?? status.appliedPresetId ?? '';
   switch (status.state) {
     case 'applied': {
       const base =
-        pinnedOlder || status.appliedVersion === status.bundledVersion
+        pinnedOlder || status.appliedVersion === newest
           ? t('performance.status.applied', { preset: appliedName, version: status.appliedVersion })
           : t('performance.status.appliedOutdated', {
               preset: appliedName,
               version: status.appliedVersion,
-              latest: status.bundledVersion,
+              latest: newest,
             });
       const overrideNote = overrideCount
         ? t('performance.status.overrideNote', { count: overrideCount })
@@ -143,8 +155,10 @@ export default function PerformanceConfigCard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<PerformanceConfigStatus | null>(null);
   const [presets, setPresets] = useState<PerformancePresetSummary[]>([]);
+  const [latest, setLatest] = useState<PerformanceLatestInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -160,20 +174,35 @@ export default function PerformanceConfigCard() {
     '';
   const selected = presets.find((p) => p.id === selectedId) ?? null;
 
-  // Which bundled release of that preset to write. A saved pin naming a release
-  // this build no longer bundles falls back to the newest rather than erroring:
-  // the history window slides on every upstream bump, so an old pin aging out is
-  // expected, not a fault.
+  // A historical upstream version pinned from the full-history browser. Only
+  // meaningful while the saved version selection actually names it.
+  const remotePin = settings?.performanceConfigRemotePins?.[selectedId] ?? null;
+
+  // Which release of that preset to write: a bundled one, or a remote-pinned
+  // historical one (whose body lives in the main-process fetch cache). A saved
+  // pin naming a release this build no longer bundles falls back to the newest
+  // rather than erroring: the history window slides on every upstream bump, so
+  // an old pin aging out is expected, not a fault.
   const selectedVersion = useMemo(() => {
     if (!selected) return '';
     const saved = settings?.performanceConfigVersions?.[selectedId];
-    return selected.versions.some((v) => v.version === saved)
-      ? saved!
-      : selected.versions[0].version;
-  }, [settings?.performanceConfigVersions, selectedId, selected]);
+    if (saved && selected.versions.some((v) => v.version === saved)) return saved;
+    if (saved && remotePin?.version === saved) return saved;
+    return selected.versions[0].version;
+  }, [settings?.performanceConfigVersions, selectedId, selected, remotePin]);
 
+  // For a remote-pinned historical version this falls back to the newest
+  // bundled release, whose opt-in list stands in for the pinned one's (the
+  // sets are near-identical across releases, and the apply filters the chosen
+  // keys against the release it actually writes, so a mismatch cannot inject
+  // anything).
   const selectedRelease =
     selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
+
+  // Track the newest upstream release rather than the newest bundled one.
+  // Default on: these presets exist to mirror living community configs. An
+  // explicit version pin (rollback) still beats tracking below.
+  const trackLatest = settings?.performanceTrackLatest !== false;
 
   const selectedOptIns = useMemo(() => {
     if (!selectedRelease) return [];
@@ -221,6 +250,29 @@ export default function PerformanceConfigCard() {
       .catch(() => setPresets([]));
   }, [refresh]);
 
+  // Ask upstream what its newest release is, once settings are loaded and only
+  // while tracking is on. The main process throttles repeat checks, so preset
+  // switches within a session are mostly cache reads. Keyed on booleans, not
+  // the settings object, so unrelated settings saves do not re-trigger it.
+  const settingsLoaded = !!settings;
+  useEffect(() => {
+    if (!settingsLoaded || !trackLatest || !selectedId) {
+      setLatest(null);
+      return;
+    }
+    let stale = false;
+    void checkPerformanceLatest(selectedId)
+      .then((info) => {
+        if (!stale) setLatest(info);
+      })
+      .catch(() => {
+        if (!stale) setLatest(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [settingsLoaded, trackLatest, selectedId]);
+
   // Re-check when the window regains focus so hand edits made in an external
   // editor show up as the "edited" badge without a restart.
   useEffect(() => {
@@ -253,7 +305,39 @@ export default function PerformanceConfigCard() {
     const next = { ...(settings.performanceConfigVersions ?? {}) };
     if (version === selected.versions[0].version) delete next[selectedId];
     else next[selectedId] = version;
-    await saveSettings({ ...settings, performanceConfigVersions: next });
+    // Any bundled pick supersedes a remote-pinned historical version.
+    const pins = { ...(settings.performanceConfigRemotePins ?? {}) };
+    if (pins[selectedId]?.version !== version) delete pins[selectedId];
+    await saveSettings({
+      ...settings,
+      performanceConfigVersions: next,
+      performanceConfigRemotePins: pins,
+    });
+  };
+
+  // Pin a historical upstream version fetched (and gated + cached) by the
+  // main process. It rides the same settings slot as a bundled rollback, plus
+  // display metadata so the picker can name it while it is active.
+  const onPickRemoteVersion = async (version: string, ref: string, date: string) => {
+    if (!settings) return;
+    setHistoryOpen(false);
+    if (selected?.versions.some((v) => v.version === version)) {
+      // The fetch resolved to a release we bundle (byte-identical content
+      // reuses the bundled identity): treat it as a plain bundled pick.
+      await onSelectVersion(version);
+      return;
+    }
+    await saveSettings({
+      ...settings,
+      performanceConfigVersions: {
+        ...(settings.performanceConfigVersions ?? {}),
+        [selectedId]: version,
+      },
+      performanceConfigRemotePins: {
+        ...(settings.performanceConfigRemotePins ?? {}),
+        [selectedId]: { version, ref, date },
+      },
+    });
   };
 
   const onChangeOptIns = async (keys: string[]) => {
@@ -262,6 +346,13 @@ export default function PerformanceConfigCard() {
       ...settings,
       performanceConfigOptIns: { ...settings.performanceConfigOptIns, [selectedId]: keys },
     });
+  };
+
+  const onToggleTrackLatest = async (on: boolean) => {
+    if (!settings) return;
+    // The check effect reacts to the flag flipping on; flipping it off clears
+    // the fetched info so the card talks about bundled releases again.
+    await saveSettings({ ...settings, performanceTrackLatest: on });
   };
 
   const openFile = async () => {
@@ -297,12 +388,42 @@ export default function PerformanceConfigCard() {
   const willSwitch = applied && status?.appliedPresetId !== selectedId;
   // The user deliberately chose an older release. This suppresses the
   // "reapply to update" nag: they already know a newer one exists, that is
-  // precisely what they rolled back from.
+  // precisely what they rolled back from. It also beats upstream tracking: a
+  // rollback is the stronger, deliberate choice.
   const pinnedOlder = !!selected && selectedVersion !== selected.versions[0].version;
+  // Tracking is in force and upstream holds something newer than the bundle:
+  // the next apply writes the fetched release instead of a bundled one. When
+  // the fetched file is byte-identical to the newest bundled release, the
+  // bundled (human-reviewed) identity is the better thing to write and show.
+  const latestUsable = trackLatest && !pinnedOlder && !!latest?.version && !latest?.matchesBundled;
+  // The version the next apply would write.
+  const targetVersion = latestUsable ? latest!.version! : selectedVersion;
   // Same preset, different release than the file holds: a reapply is needed to
   // write it, just like a pending creator-setting change.
   const pendingVersion =
-    applied && !willSwitch && !!selectedVersion && status?.appliedVersion !== selectedVersion;
+    applied && !willSwitch && !!targetVersion && status?.appliedVersion !== targetVersion;
+
+  // Apply, with upstream tracking folded in: re-check right before writing so
+  // a stale cache never decides what lands in gameinfo.gi. Within the main
+  // process's throttle window the check is a cache read, so the common case
+  // costs nothing. Offline (or with nothing fetched yet) this falls back to
+  // the bundled release, which is the designed degradation.
+  const onApply = async () => {
+    setBusy(true);
+    try {
+      let version = selectedVersion;
+      if (trackLatest && !pinnedOlder) {
+        const info = await checkPerformanceLatest(selectedId).catch(() => null);
+        if (info) setLatest(info);
+        if (info?.version && !info.matchesBundled) version = 'latest';
+      }
+      setStatus(await applyPerformanceConfig(selectedId, selectedOptIns, version));
+    } catch {
+      void refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
   // Toggling a creator setting only records the choice; nothing reaches gameinfo.gi
   // until the next apply. Compare what the file says was written (the sidecar,
   // via status) with what is selected now, so a pending change is visible
@@ -336,7 +457,7 @@ export default function PerformanceConfigCard() {
       t('performance.switchNote', { current: appliedName, next: selected?.name ?? '' })
     );
   }
-  if (pendingVersion) pendingNotes.push(t('performance.version.pending', { version: selectedVersion }));
+  if (pendingVersion) pendingNotes.push(t('performance.version.pending', { version: targetVersion }));
   if (pendingOptIns > 0) pendingNotes.push(t('performance.optIn.pending', { count: pendingOptIns }));
 
   // Actions that operate on the file rather than on the config: rarely used,
@@ -385,6 +506,23 @@ export default function PerformanceConfigCard() {
   const look = status ? statusLook(status) : null;
   const badge = status ? statusBadge(status, t) : null;
 
+  // One sentence about what tracking currently knows: still checking, what the
+  // newest upstream release is, that upstream matches the bundle, or that the
+  // repo is unreachable (with the bundled fallback spelled out).
+  const latestLine = !trackLatest
+    ? null
+    : !latest
+      ? t('performance.trackLatest.checking')
+      : latest.matchesBundled
+        ? t('performance.trackLatest.upToDate', { version: latest.matchesBundled })
+        : latest.version
+          ? t('performance.trackLatest.available', { ref: latest.ref, date: latest.date }) +
+            (latest.withheldCount > 0
+              ? t('performance.trackLatest.withheld', { count: latest.withheldCount })
+              : '') +
+            (latest.error ? t('performance.trackLatest.staleNote') : '')
+          : t('performance.trackLatest.unreachable');
+
   return (
     <Card
       title={t('settings.experimental.performanceConfig')}
@@ -408,11 +546,25 @@ export default function PerformanceConfigCard() {
               <VersionPicker
                 versions={selected.versions}
                 selected={selectedVersion}
+                remotePinned={remotePin}
                 onSelect={(version) => void onSelectVersion(version)}
                 disabled={busy}
               />
             )}
           </div>
+
+          {selected && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                disabled={busy}
+                className="text-xs text-accent hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('performance.history.browse')}
+              </button>
+            </div>
+          )}
 
           {selected && selectedRelease && (
             <PresetSummary
@@ -446,6 +598,21 @@ export default function PerformanceConfigCard() {
           )}
         </div>
 
+        <div className="space-y-1">
+          <Toggle
+            checked={trackLatest}
+            onChange={(on) => void onToggleTrackLatest(on)}
+            label={t('performance.trackLatest.label')}
+            description={t('performance.trackLatest.description')}
+            disabled={busy}
+          />
+          {latestLine && (
+            // Indent past the switch (w-11 + gap-3) so the line reads as part
+            // of the toggle's description column.
+            <p className="pl-14 text-xs text-text-secondary">{latestLine}</p>
+          )}
+        </div>
+
         {selectedRelease && (
           <GameplayOptIns
             controls={selectedRelease.optIn}
@@ -462,7 +629,13 @@ export default function PerformanceConfigCard() {
                 {look && <look.Icon className={`w-4 h-4 mt-0.5 shrink-0 ${look.tone}`} aria-hidden="true" />}
                 <span>
                   {status
-                    ? performanceStatusMessage(status, t, presets, pinnedOlder)
+                    ? performanceStatusMessage(
+                        status,
+                        t,
+                        presets,
+                        pinnedOlder,
+                        latestUsable ? latest!.version! : undefined
+                      )
                     : t('performance.checkingGameinfo')}
                 </span>
               </p>
@@ -489,9 +662,7 @@ export default function PerformanceConfigCard() {
                 </Button>
               )}
               <Button
-                onClick={() =>
-                  run(() => applyPerformanceConfig(selectedId, selectedOptIns, selectedVersion))
-                }
+                onClick={() => void onApply()}
                 isLoading={busy}
                 icon={wiped || willSwitch ? RefreshCw : undefined}
                 variant={canRestore ? 'secondary' : 'primary'}
@@ -565,6 +736,20 @@ export default function PerformanceConfigCard() {
         <EditorPickerModal
           onClose={() => setPickerOpen(false)}
           onChoose={(editorPath) => void onChooseEditor(editorPath)}
+        />
+      )}
+      {historyOpen && selected && (
+        <VersionHistoryModal
+          preset={selected}
+          selectedVersion={selectedVersion}
+          onClose={() => setHistoryOpen(false)}
+          onPickBundled={(version) => {
+            setHistoryOpen(false);
+            void onSelectVersion(version);
+          }}
+          onPickRemote={(info) =>
+            void onPickRemoteVersion(info.version ?? '', info.ref ?? info.version ?? '', info.date ?? '')
+          }
         />
       )}
     </Card>

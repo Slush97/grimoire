@@ -398,6 +398,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         version?: string | null
     ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version),
     restorePerformanceConfigBackup: () => ipcRenderer.invoke('restore-performance-config-backup'),
+    getPerformanceLatestInfo: (presetId: string) =>
+        ipcRenderer.invoke('get-performance-latest-info', presetId),
+    checkPerformanceLatest: (presetId: string, force?: boolean) =>
+        ipcRenderer.invoke('check-performance-latest', presetId, force),
+    listPerformanceRemoteVersions: (presetId: string) =>
+        ipcRenderer.invoke('list-performance-remote-versions', presetId),
+    fetchPerformanceRemoteVersion: (presetId: string, ref: string, commit?: string | null) =>
+        ipcRenderer.invoke('fetch-performance-remote-version', presetId, ref, commit),
     openPerformanceConfigFile: () => ipcRenderer.invoke('open-performance-config-file'),
     listEditorCandidates: () => ipcRenderer.invoke('list-editor-candidates'),
     openModsFolder: () => ipcRenderer.invoke('open-mods-folder'),

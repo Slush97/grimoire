@@ -19,6 +19,16 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The parse/diff/classify logic is shared with the runtime "track latest"
+// path (performanceLatest.ts), so the app applies exactly the rules the
+// bundled presets were built with. The package script runs this file through
+// tsx so importing the shared TypeScript module also works on the repository's
+// documented Node 20+ development baseline.
+import {
+    classificationFromManifest,
+    generatePresetBody,
+    parseConfig,
+} from '../electron/main/services/performancePresetGen.ts';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SCRIPT_DIR, '..');
@@ -139,162 +149,24 @@ function verifyReleaseOrder(manifest) {
 }
 
 // ---------------------------------------------------------------------------
-// gameinfo.gi parsing
-//
-// Valve KV: `Name` on its own line (or trailing) followed by `{ ... }` for
-// sections, `key "value"` for entries, `//` for comments. We only need active
-// (uncommented) entries and the section path each one sits under. Paths are
-// relative to the inside of the root GameInfo block, matching the paths the
-// patcher's findSectionByPath expects.
+// Diff (shared logic in performancePresetGen.ts; this wrapper turns runtime
+// "withhold" problems into the build-time hard failures they must be here)
 // ---------------------------------------------------------------------------
 
-const ENTRY_RE = /^"?([A-Za-z_][\w.]*)"?[ \t]+("[^"]*"|[^\s/]+)/;
-// A commented-out entry, e.g. `//GpuImplicitRendererManifest "1"` or the
-// unquoted `//DisallowGameInfoConditionals 1`. These files are dense with
-// prose comments, so the shape is kept tight: the value must be quoted or a
-// number/bool token, and nothing may follow but another comment. That rejects
-// `// r_shadows is a great convar` (value "is") while accepting real entries.
-// Callers additionally require the key to exist in the stock baseline.
-const COMMENTED_ENTRY_RE =
-    /^"?([A-Za-z_][\w.]*)"?[ \t]+(?:"([^"]*)"|(-?[0-9.]+|true|false))[ \t]*(?:\/\/.*)?$/i;
-
-function parseConfig(text) {
-    const entries = new Map(); // "path/key" -> { path, key, value, order }
-    const commented = new Set(); // "path/key" the config explicitly comments out
-    const stack = [];
-    let pending = null;
-    let order = 0;
-
-    const lines = text.split(/\r?\n/);
-    for (const raw of lines) {
-        const commentAt = raw.indexOf('//');
-        const line = (commentAt >= 0 ? raw.slice(0, commentAt) : raw).trim();
-
-        // Commented-out entries are how these configs express "delete this
-        // stock key"; record them against the section we are currently in.
-        if (commentAt >= 0 && !line) {
-            const m = COMMENTED_ENTRY_RE.exec(raw.slice(commentAt + 2).trim());
-            if (m) commented.add([...stack.slice(1), m[1]].join('/'));
+function diffAgainstBaseline(baselineParsed, configParsed, classification, unclassifiedSink) {
+    const body = generatePresetBody(baselineParsed, configParsed, classification);
+    for (const problem of body.problems) {
+        if (problem.kind === 'misplaced-opt-in') {
+            fail(
+                `Opt-in key ${problem.key} appears under section ${problem.where || 'GameInfo'}, ` +
+                    `not ConVars. OptInControl has no path field, so this cannot be applied safely.`
+            );
         }
-        if (!line) continue;
-
-        // Braces can be alone on a line or trail the section name.
-        let rest = line;
-        while (rest.length) {
-            if (rest.startsWith('{')) {
-                stack.push(pending ?? '');
-                pending = null;
-                rest = rest.slice(1).trim();
-                continue;
-            }
-            if (rest.startsWith('}')) {
-                stack.pop();
-                rest = rest.slice(1).trim();
-                continue;
-            }
-            const brace = rest.indexOf('{');
-            const close = rest.indexOf('}');
-            const cut = [brace, close].filter((i) => i >= 0).sort((a, b) => a - b)[0];
-            const chunk = (cut === undefined ? rest : rest.slice(0, cut)).trim();
-            rest = cut === undefined ? '' : rest.slice(cut);
-
-            if (!chunk) continue;
-            const m = ENTRY_RE.exec(chunk);
-            if (m && /^"?[A-Za-z_][\w.]*"?[ \t]+\S/.test(chunk)) {
-                // Drop the root GameInfo level from the recorded path.
-                const path = stack.slice(1);
-                const key = m[1];
-                const value = m[2].replace(/^"|"$/g, '');
-                const id = [...path, key].join('/');
-                // Later duplicates win: that is the last value the engine parses.
-                entries.set(id, { path, key, value, order: entries.get(id)?.order ?? order++ });
-            } else {
-                pending = chunk.replace(/^"|"$/g, '');
-            }
-        }
+        // Unclassified gameplay-shaped keys are aggregated across every preset
+        // and release so the failure message lists all of them at once.
+        unclassifiedSink(problem.key);
     }
-    return { entries, commented };
-}
-
-// ---------------------------------------------------------------------------
-// Diff
-// ---------------------------------------------------------------------------
-
-function pathExcluded(path, excludedSections) {
-    return excludedSections.some((ex) => ex.every((seg, i) => path[i] === seg));
-}
-
-function diffAgainstBaseline(baselineParsed, configParsed, manifest) {
-    const baseline = baselineParsed.entries;
-    const { entries: config, commented } = configParsed;
-    const excludedSections = manifest.exclude.sections;
-    const excludedKeys = new Set(manifest.exclude.keys.map((item) => item.key));
-    const optInGroup = new Map(manifest.optIn.keys.map((k) => [k.key, k.group]));
-
-    const sectionOps = [];
-    const convars = [];
-    const optIn = [];
-
-    const included = (entry) =>
-        !pathExcluded(entry.path, excludedSections) && !excludedKeys.has(entry.key);
-
-    // Root-level keys (directly inside GameInfo) carry an empty parsed path.
-    // Emit them under ['GameInfo'] so the patcher resolves a real section
-    // rather than falling back to a whole-file scan.
-    const opPath = (path) => (path.length ? path : ['GameInfo']);
-
-    // Changed / added keys.
-    for (const entry of [...config.values()].sort((a, b) => a.order - b.order)) {
-        if (!included(entry)) continue;
-        const base = baseline.get([...entry.path, entry.key].join('/'));
-        if (base && base.value === entry.value) continue;
-
-        if (optInGroup.has(entry.key)) {
-            // The patcher applies opt-ins through the ConVars path. Every
-            // classified key is a convar today; if upstream ever sets one in an
-            // engine section, fail rather than silently apply it to the wrong
-            // place (OptInControl would need a path first).
-            if (!(entry.path.length === 1 && entry.path[0] === 'ConVars')) {
-                fail(
-                    `Opt-in key ${entry.key} appears under section ${entry.path.join('/') || 'GameInfo'}, ` +
-                        `not ConVars. OptInControl has no path field, so this cannot be applied safely.`
-                );
-            }
-            optIn.push({ key: entry.key, value: entry.value, group: optInGroup.get(entry.key) });
-            continue;
-        }
-        if (entry.path.length === 1 && entry.path[0] === 'ConVars') {
-            convars.push([entry.key, entry.value]);
-        } else {
-            sectionOps.push({ path: opPath(entry.path), key: entry.key, value: entry.value });
-        }
-    }
-
-    // Deliberate deletions: a stock key the config comments out. Mere absence
-    // is NOT a deletion. Several of these configs are partial or derived files
-    // that simply never mention large parts of the stock gameinfo.gi, and
-    // treating that as intent would comment out unrelated engine keys (Valve's
-    // PGIVersion content hash among them). Excluded inside ConVars, where a
-    // config's block is additive by construction.
-    for (const id of commented) {
-        const base = baseline.get(id);
-        if (!base || !included(base)) continue;
-        if (base.path.length === 1 && base.path[0] === 'ConVars') continue;
-        if (optInGroup.has(base.key)) continue;
-        if (config.has(id)) continue; // commented in one place, still active in another
-        sectionOps.push({ path: opPath(base.path), key: base.key, remove: true });
-    }
-
-    // Stable order: section ops grouped by path, removals last within a path.
-    sectionOps.sort((a, b) => {
-        const pa = a.path.join('/');
-        const pb = b.path.join('/');
-        if (pa !== pb) return pa < pb ? -1 : 1;
-        if (!!a.remove !== !!b.remove) return a.remove ? 1 : -1;
-        return a.key < b.key ? -1 : 1;
-    });
-
-    return { sectionOps, convars, optIn };
+    return body;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +195,8 @@ function emit(manifest, presets) {
     L.push(`//`);
     L.push(`// Upstream licensing: the preset values below are derived from GPL-3.0`);
     L.push(`// projects, credited per preset in \`upstream\`.`);
+    L.push(``);
+    L.push(`import type { PresetGenClassification } from './performancePresetGen';`);
     L.push(``);
     L.push(`/** One key edit inside a gameinfo.gi section. \`remove: true\` comments the`);
     L.push(` *  existing line out (engine falls back to its built-in default), matching`);
@@ -354,6 +228,10 @@ function emit(manifest, presets) {
     L.push(`    url: string;`);
     L.push(`    /** Path of the source config inside the upstream repo. */`);
     L.push(`    path: string;`);
+    L.push(`    /** Every path this file has lived at, current first. Upstreams rename`);
+    L.push(`     *  their config folders across releases, so fetching a historical`);
+    L.push(`     *  version tries these in order. */`);
+    L.push(`    paths: string[];`);
     L.push(`    /** Human-facing upstream version (a git tag where one exists). */`);
     L.push(`    ref: string;`);
     L.push(`    /** Whether \`ref\` is a real git tag or a version stated in prose. */`);
@@ -379,6 +257,10 @@ function emit(manifest, presets) {
     L.push(`    /** Upstream release date, yyyy-mm-dd. Tag names do not reliably sort`);
     L.push(`     *  into release order, so this is what the picker shows to disambiguate. */`);
     L.push(`    date: string;`);
+    L.push(`    /** sha256 of the upstream source file this release was generated from.`);
+    L.push(`     *  Lets the track-latest path recognize a fetched file as identical to`);
+    L.push(`     *  a bundled release and reuse its version identity. */`);
+    L.push(`    sha256: string;`);
     L.push(`    sectionOps: SectionOp[];`);
     L.push(`    convars: ReadonlyArray<readonly [string, string]>;`);
     L.push(`    optIn: OptInControl[];`);
@@ -419,12 +301,30 @@ function emit(manifest, presets) {
     L.push(`    optIn: OptInControl[];`);
     L.push(`}`);
     L.push(``);
-    L.push(`/** Baseline the diffs were computed against, for provenance. */`);
+    L.push(`/** Baseline the diffs were computed against, for provenance. The repo and`);
+    L.push(` *  path also tell the track-latest path where a fresh baseline lives. */`);
     L.push(`export const BASELINE = {`);
     L.push(`    repo: ${q(manifest.baseline.repo)},`);
     L.push(`    commit: ${q(manifest.baseline.commit)},`);
     L.push(`    path: ${q(manifest.baseline.path)},`);
     L.push(`} as const;`);
+    L.push(``);
+    L.push(`/** The classification tables the bundled presets were generated with, so`);
+    L.push(` *  the runtime track-latest path applies exactly the same rules (excluded`);
+    L.push(` *  sections/keys, opt-in split, unclassified-key withholding). */`);
+    L.push(`export const CLASSIFICATION: PresetGenClassification = {`);
+    const emitList = (name, items, mapper) => {
+        L.push(`    ${name}: [`);
+        for (const item of items) L.push(`        ${mapper(item)},`);
+        L.push(`    ],`);
+    };
+    emitList('excludeSections', manifest.exclude.sections, (s) => `[${s.map(q).join(', ')}]`);
+    emitList('excludeKeys', manifest.exclude.keys, (k) => q(k.key));
+    emitList('excludePatterns', manifest.exclude.patterns ?? [], (p) => q(p.pattern));
+    emitList('optInKeys', manifest.optIn.keys, (k) => `{ key: ${q(k.key)}, group: ${q(k.group)} }`);
+    emitList('optInPatterns', manifest.optIn.patterns ?? [], q);
+    emitList('allowInBody', manifest.optIn.allowInBody ?? [], (k) => q(k.key));
+    L.push(`};`);
     L.push(``);
 
     for (const p of presets) {
@@ -438,6 +338,7 @@ function emit(manifest, presets) {
         L.push(`        repo: ${q(p.upstream.repo)},`);
         L.push(`        url: ${q(p.upstream.url)},`);
         L.push(`        path: ${q(p.upstream.path)},`);
+        L.push(`        paths: [${p.upstream.paths.map(q).join(', ')}],`);
         L.push(`        license: ${q(p.upstream.license)},`);
         L.push(`        credit: ${q(p.upstream.credit)},`);
         L.push(`    },`);
@@ -450,6 +351,7 @@ function emit(manifest, presets) {
             L.push(`            refKind: ${q(r.refKind)},`);
             L.push(`            commit: ${q(r.commit)},`);
             L.push(`            date: ${q(r.date)},`);
+            L.push(`            sha256: ${q(r.sha256)},`);
             if (r.supersedes.length) {
                 L.push(
                     `            // Byte-identical upstream in ${r.supersedes.join(', ')}, collapsed into this entry.`
@@ -548,6 +450,12 @@ function emit(manifest, presets) {
 const camel = (id) =>
     id.replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase()).replace(/^./, (c) => c.toUpperCase());
 
+// Upstreams rename their config folders across releases (OptiLock v4.6 moved
+// both presets). `path` is where the file lives NOW (and is what the runtime
+// track-latest fetch uses); `pathByRef` pins the historical location for the
+// older bundled releases that predate a rename.
+const pathFor = (entry, ref) => entry.pathByRef?.[ref] ?? entry.path;
+
 async function main() {
     const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8'));
 
@@ -568,6 +476,10 @@ async function main() {
     const baseline = parseConfig(baselineText);
     console.log(`\n  baseline: ${baseline.entries.size} stock keys\n`);
 
+    const classification = classificationFromManifest(manifest);
+    // key -> "preset@release" labels, aggregated so one failure lists them all.
+    const unclassified = new Map();
+
     const presets = [];
     for (const entry of manifest.presets) {
         const source = manifest.sources[entry.source];
@@ -587,8 +499,9 @@ async function main() {
                         `  content gate silently stops covering that version.`
                 );
             }
-            const text = await fetchAt(source.repo, release.commit, entry.path);
-            verify(text, expected, `${entry.id} (${entry.path}) at ${release.ref}`);
+            const path = pathFor(entry, release.ref);
+            const text = await fetchAt(source.repo, release.commit, path);
+            verify(text, expected, `${entry.id} (${path}) at ${release.ref}`);
 
             // Collapse a release whose upstream file is byte-identical to the
             // newer one already recorded: offering both would be two picker
@@ -599,10 +512,15 @@ async function main() {
                 continue;
             }
 
+            const label = source.releases.length > 1 ? `${entry.id}@${release.ref}` : entry.id;
             const { sectionOps, convars, optIn } = diffAgainstBaseline(
                 baseline,
                 parseConfig(text),
-                manifest
+                classification,
+                (key) => {
+                    if (!unclassified.has(key)) unclassified.set(key, []);
+                    if (!unclassified.get(key).includes(label)) unclassified.get(key).push(label);
+                }
             );
             releases.push({
                 version: release.ref.replace(/^v/, ''),
@@ -626,6 +544,7 @@ async function main() {
                 repo: source.repo,
                 url: source.url,
                 path: entry.path,
+                paths: [...new Set([entry.path, ...Object.values(entry.pathByRef ?? {})])],
                 license: source.license,
                 credit: source.credit,
             },
@@ -664,26 +583,12 @@ async function main() {
         }
     }
 
-    // The list above is only as good as the last hand-audit of six upstream
-    // files. These patterns are what make it hold across a `--refresh`: a key
-    // that looks like a visibility or framing setting has to be classified on
-    // purpose before it can ship in a preset body.
-    const patterns = (manifest.optIn.patterns ?? []).map((p) => new RegExp(p, 'i'));
-    const allowedInBody = new Set((manifest.optIn.allowInBody ?? []).map((k) => k.key));
-    const unclassified = new Map(); // key -> "preset@release" labels
-    for (const p of presets) {
-        for (const r of p.releases) {
-            for (const key of [
-                ...r.convars.map(([k]) => k),
-                ...r.sectionOps.map((op) => op.key),
-            ]) {
-                if (allowedInBody.has(key) || !patterns.some((re) => re.test(key))) continue;
-                if (!unclassified.has(key)) unclassified.set(key, []);
-                const label = p.releases.length > 1 ? `${p.id}@${r.ref}` : p.id;
-                if (!unclassified.get(key).includes(label)) unclassified.get(key).push(label);
-            }
-        }
-    }
+    // The opt-in list is only as good as the last hand-audit of six upstream
+    // files. The pattern check (now inside generatePresetBody) is what makes it
+    // hold across a `--refresh`: a key that looks like a visibility or framing
+    // setting has to be classified on purpose before it can ship in a preset
+    // body. At build time an unclassified key is a hard failure; the runtime
+    // track-latest path withholds it instead.
     if (unclassified.size) {
         const list = [...unclassified]
             .map(([key, ids]) => `    ${key}  (${ids.join(', ')})`)
@@ -801,7 +706,9 @@ async function refreshPins(manifest, target) {
         const source = manifest.sources[entry.source];
         const hashes = {};
         for (const release of source.releases) {
-            hashes[release.ref] = sha256(await fetchAt(source.repo, release.commit, entry.path));
+            hashes[release.ref] = sha256(
+                await fetchAt(source.repo, release.commit, pathFor(entry, release.ref))
+            );
         }
         entry.sha256 = hashes;
     }

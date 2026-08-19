@@ -32,7 +32,7 @@
   "baseline": {
     "$comment": "Stock gameinfo.gi. Every preset is stored as a diff against this, which is what lets Grimoire patch in place instead of replacing the user's file.",
     "repo": "Sqooky/OptimizationLock",
-    "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442",
+    "commit": "96ff42d1db29ca9fe44afb3df749fa763bb87b87",
     "path": "clean gameinfo.gi/gameinfo.gi",
     "sha256": "0ba6d49dab17a428f210bb2413af8d3b9724064aab091eb52aea124c3902936b"
   },
@@ -44,9 +44,21 @@
       "credit": "OptimizationLock by Sqooky and contributors",
       "refKind": "prose",
       "releases": [
-        { "ref": "2.8.2", "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442", "date": "2026-08-02" },
-        { "ref": "2.7", "commit": "271befb5cf9f8c9431da81e39ea4147895604d3e", "date": "2026-07-25" },
-        { "ref": "2.6.3", "commit": "8778ea4a8a75f83eeb8c104d7085041015bae0ba", "date": "2026-07-14" }
+        {
+          "ref": "2.9",
+          "commit": "96ff42d1db29ca9fe44afb3df749fa763bb87b87",
+          "date": "2026-08-17"
+        },
+        {
+          "ref": "2.8.2",
+          "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442",
+          "date": "2026-08-02"
+        },
+        {
+          "ref": "2.7",
+          "commit": "271befb5cf9f8c9431da81e39ea4147895604d3e",
+          "date": "2026-07-25"
+        }
       ],
       "$comment": "Upstream publishes no git tags or releases; each 'ref' is the version stated in that release's commit message and in the config's own header comment. Pins are the commit SHAs. The newest release is also the baseline pin. If Sqooky starts tagging, switch refKind to 'tag' and pin the tags' resolved SHAs."
     },
@@ -57,9 +69,21 @@
       "credit": "OptiLock by dacooder and contributors",
       "refKind": "tag",
       "releases": [
-        { "ref": "v4.2", "commit": "fdfce93a95db176c539d3dbcb601238e181008b9", "date": "2026-07-15" },
-        { "ref": "v4.0d", "commit": "465590a35d8d47d84b78031837fa209f5a2b5ce7", "date": "2026-07-12" },
-        { "ref": "v4.1", "commit": "4c872ed13f775a3c654ebeb88230a087e7d26a20", "date": "2026-07-11" }
+        {
+          "ref": "v4.6",
+          "commit": "6caab13036711d09ae439b4de4406bdb9972e148",
+          "date": "2026-08-15"
+        },
+        {
+          "ref": "v4.2",
+          "commit": "fdfce93a95db176c539d3dbcb601238e181008b9",
+          "date": "2026-07-15"
+        },
+        {
+          "ref": "v4.0d",
+          "commit": "465590a35d8d47d84b78031837fa209f5a2b5ce7",
+          "date": "2026-07-12"
+        }
       ],
       "$comment": "ORDER IS BY DATE, NOT NAME: dacooder tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so rolling back one step from v4.2 lands on v4.0d. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. Tags older than v4.1 are not offered because the preset paths churn (v4.0 and v4.0a-c are each missing one of the two preset files). Tag v4.2 resolved to this commit on 2026-07-29, rechecked 2026-08-03. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. KNOWN ISSUE: one day after tagging v4.2, upstream commit 40788927 flipped r_render_portals back to \"true\" in the FPS preset because \"false\" broke Doorman's door. That fix is on main but not in any release, so a tag-pinned refresh cannot pick it up. Rather than pin past the tag (which would make the card claim a release the code is not from), r_render_portals is excluded outright below, so Grimoire never writes either value and the engine default stands. Drop that exclusion once upstream tags a release containing the fix."
     }
@@ -73,9 +97,9 @@
       "source": "optimizationlock",
       "path": "Sqooky's .gi/gameinfo.gi",
       "sha256": {
+        "2.9": "b31825fea70a48412b304b5f3dd06c24d5c29d9feb98d559d337eaef928457f3",
         "2.8.2": "6c3753fabda7c724a01c9a9747e4a14c8618fe3815ecddae929623252e60db5c",
-        "2.7": "c34801cc66cdd93e3dc0bfea275c98fa9c2a3cc29ee17a1f0397314a2310aeca",
-        "2.6.3": "a3198f66ca0208fb9b0eebafce4220c1315d9be935b8e36bcc80ac59c9d36df7"
+        "2.7": "c34801cc66cdd93e3dc0bfea275c98fa9c2a3cc29ee17a1f0397314a2310aeca"
       },
       "author": "Sqooky"
     },
@@ -86,9 +110,9 @@
       "source": "optimizationlock",
       "path": "test_cfg/gameinfo.gi",
       "sha256": {
+        "2.9": "362c7c577c37f821cf9f484f4505c7a21afecc014e3064e77798ede620189d55",
         "2.8.2": "7cb2c5d0f7100d90e6f4ddd4fa8b067533d2bcd3a520ebe936fec75263c4084b",
-        "2.7": "b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf",
-        "2.6.3": "d6ec0183cad8ef8d36fee65e48394f4abe742b7edfe13775e8ef252b6075fc2b"
+        "2.7": "b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf"
       },
       "author": "Sqooky",
       "unstable": true
@@ -100,9 +124,9 @@
       "source": "optimizationlock",
       "path": "boot's maxium fps config/gameinfo.gi",
       "sha256": {
+        "2.9": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
         "2.8.2": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
-        "2.7": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
-        "2.6.3": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5"
+        "2.7": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5"
       },
       "author": "boot"
     },
@@ -113,9 +137,9 @@
       "source": "optimizationlock",
       "path": "kaizuchanerus minimum spec/gameinfo.gi",
       "sha256": {
+        "2.9": "16e9e739b90941543f2fabeea8161fd15327df5f16d812377fbd2bf4e75a98a4",
         "2.8.2": "e4be5933e6f24de0c368c77957dd7579ef8e2e8169fe4e9740977c09db08fa68",
-        "2.7": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9",
-        "2.6.3": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9"
+        "2.7": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9"
       },
       "author": "kaizuchanerus"
     },
@@ -124,11 +148,18 @@
       "name": "OptiLock FPS",
       "tier": "competitive",
       "source": "optilock",
-      "path": "OptiLock FPS Preset/gameinfo.gi",
+      "path": "OptiLock FPS Config (Recommended)/gameinfo.gi",
+      "$comment": "v4.6 renamed the folder (v4.2 'OptiLock FPS Preset' -> v4.4 'OptiLock Balanced FPS Preset' -> v4.6 'OptiLock FPS Config (Recommended)'); lineage verified by content similarity (0.90 vs 0.80 against the alternatives). pathByRef pins the old location for bundled pre-rename releases.",
+      "pathByRef": {
+        "v4.4": "OptiLock Balanced FPS Preset/gameinfo.gi",
+        "v4.2": "OptiLock FPS Preset/gameinfo.gi",
+        "v4.1": "OptiLock FPS Preset/gameinfo.gi",
+        "v4.0d": "OptiLock FPS Preset/gameinfo.gi"
+      },
       "sha256": {
+        "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
         "v4.2": "34873789e25b552829cff843b111b7c5f7f3127651a31d6e3f7fd1d67a2e1291",
-        "v4.0d": "a0017f99282415dc027a687fdf01b06de707d6d28c5fbd161339493db4f1f618",
-        "v4.1": "a85979525d87e8de59aedb6400034428b9d27898add87131d2ff0e755cc877d3"
+        "v4.0d": "a0017f99282415dc027a687fdf01b06de707d6d28c5fbd161339493db4f1f618"
       },
       "author": "dacooder"
     },
@@ -137,24 +168,52 @@
       "name": "OptiLock Max FPS",
       "tier": "maximum",
       "source": "optilock",
-      "path": "OptiLock Max FPS Preset/gameinfo.gi",
+      "path": "OptiLock Potato Config/gameinfo.gi",
+      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections.",
+      "pathByRef": {
+        "v4.2": "OptiLock Max FPS Preset/gameinfo.gi",
+        "v4.1": "OptiLock Max FPS Preset/gameinfo.gi",
+        "v4.0d": "OptiLock Max FPS Preset/gameinfo.gi"
+      },
       "sha256": {
+        "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703",
         "v4.2": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326",
-        "v4.0d": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326",
-        "v4.1": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326"
+        "v4.0d": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326"
       },
       "author": "dacooder"
     }
   ],
   "exclude": {
     "$comment": "Never emitted into a preset, whatever upstream sets.",
+    "patterns": [
+      {
+        "pattern": "^(host_)?timescale$",
+        "why": "Changes game speed, not render cost. Insurance against upstream accidents: on 2026-08-17 Sqooky pushed a timescale change to main by mistake ('wasn't supposed to push timescale'). The bundled pins would catch that at refresh review; the runtime track-latest path has no reviewer, so this pattern is its guardrail."
+      },
+      {
+        "pattern": "^sv_cheats$",
+        "why": "Cheat gate, not a performance setting. Same insurance class as timescale: no legitimate fps config sets it, so any appearance is an upstream mistake we must not forward."
+      }
+    ],
     "sections": [
-      ["FileSystem"],
-      ["Hammer"],
-      ["pulse"],
-      ["ResourceCompiler"],
-      ["ContentBuilder"],
-      ["SteamAudio"]
+      [
+        "FileSystem"
+      ],
+      [
+        "Hammer"
+      ],
+      [
+        "pulse"
+      ],
+      [
+        "ResourceCompiler"
+      ],
+      [
+        "ContentBuilder"
+      ],
+      [
+        "SteamAudio"
+      ]
     ],
     "keys": [
       {
@@ -179,7 +238,7 @@
       },
       {
         "key": "r_render_portals",
-        "why": "OptiLock v4.2's FPS preset sets this to false, which breaks Doorman's door. Upstream fixed it to true one day after tagging (commit 40788927) but has published no release containing the fix, so a tag-pinned refresh cannot reach it. Excluding costs nothing: the stock gameinfo.gi never sets the key, and the two presets that do set it write true, which is the engine default. Remove this once a release carries the fix."
+        "why": "OptiLock v4.2's FPS preset sets this to false, which breaks Doorman's door. Upstream fixed it (v4.6 dropped the key entirely), but v4.2 stays bundled for rollback, so the exclusion must outlive it: remove this only when no bundled release sets the key."
       },
       {
         "key": "DistanceField",
@@ -211,6 +270,7 @@
       "devtools": "Developer and testing tools"
     },
     "patterns": [
+      "timescale",
       "outline",
       "glow",
       "see_thru",
@@ -223,6 +283,10 @@
       "citadel_unit_status_"
     ],
     "allowInBody": [
+      {
+        "key": "cl_phys_timescale",
+        "why": "Caught by the timescale pattern, but every bundled preset sets it to \"1\", which is normal physics speed (upstream's own comment: '1=Normal physics'); the authors keep the knob visible for hand-tuning. Writing the normal value changes nothing the player sees. Reclassify if any release ships a value other than 1."
+      },
       {
         "key": "debug_draw_enable",
         "why": "Every preset sets it to false, i.e. turns debug drawing OFF. That removes rendering cost and cannot reveal anything the player could not already see."
@@ -241,14 +305,38 @@
       }
     ],
     "keys": [
-      { "key": "citadel_player_outline_enemies", "group": "visibility" },
-      { "key": "citadel_trooper_outline_enabled", "group": "visibility" },
-      { "key": "citadel_trooper_friendly_glow_disabled", "group": "visibility" },
-      { "key": "citadel_trooper_glow_disabled", "group": "visibility" },
-      { "key": "citadel_player_glow_disabled", "group": "visibility" },
-      { "key": "citadel_boss_glow_disabled", "group": "visibility" },
-      { "key": "citadel_unit_status_allies_see_thru_walls", "group": "visibility" },
-      { "key": "citadel_unit_status_allies_see_thru_walls_max_distance", "group": "visibility" },
+      {
+        "key": "citadel_player_outline_enemies",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_trooper_outline_enabled",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_trooper_friendly_glow_disabled",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_trooper_glow_disabled",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_player_glow_disabled",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_boss_glow_disabled",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_unit_status_allies_see_thru_walls",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_unit_status_allies_see_thru_walls_max_distance",
+        "group": "visibility"
+      },
       {
         "key": "citadel_unit_status_use_new",
         "group": "visibility",
@@ -289,26 +377,91 @@
         "group": "visibility",
         "why": "Scales the health bar. The author's own comment says it LOWERS performance and they set it anyway for readability, which makes it the clearest case in the family of a look preference rather than a frame-rate setting."
       },
-      { "key": "cl_glow_brightness", "group": "visibility" },
-      { "key": "r_citadel_outlines", "group": "visibility" },
-      { "key": "r_citadel_npr_outlines", "group": "visibility" },
-      { "key": "r_citadel_npr_outlines_max_dist", "group": "visibility" },
-      { "key": "r_citadel_glow_health_bars", "group": "visibility" },
-      { "key": "r_citadel_selection_outline2_alpha", "group": "visibility" },
-      { "key": "r_citadel_selection_outline2_offset", "group": "visibility" },
-      { "key": "r_citadel_selection_outline2_width", "group": "visibility" },
-      { "key": "r_citadel_npr_force_solid_outline", "group": "visibility" },
-      { "key": "citadel_player_glow_from_teammate_vision_max_range", "group": "visibility" },
-      { "key": "r_aspectratio", "group": "camera" },
-      { "key": "citadel_camera_hero_fov", "group": "camera" },
-      { "key": "default_fov", "group": "camera" },
-      { "key": "viewmodel_fov", "group": "camera" },
-      { "key": "citadel_camera_pitch_max", "group": "camera" },
-      { "key": "citadel_camera_pitch_min", "group": "camera" },
-      { "key": "citadel_hideout_enable_testing_tools", "group": "devtools" },
-      { "key": "movement_stats_debug_draw", "group": "devtools" },
-      { "key": "citadel_orb_debug_draw_state", "group": "devtools" },
-      { "key": "music_hideout_debug_enabled", "group": "devtools" }
+      {
+        "key": "r_particle_timescale",
+        "group": "visibility",
+        "why": "Speeds up particle simulation so effects visibly end sooner than they actually last; Sqooky's own comment names the Infernus ult desync and he commented it out of his config in 2.9, while OptiLock still ships 1.1. How long an ult LOOKS active is gameplay information, so it stays an explicit per-user choice. Was riding silently in the OptiLock bodies until the timescale pattern caught it."
+      },
+      {
+        "key": "cl_glow_brightness",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_outlines",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_npr_outlines",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_npr_outlines_max_dist",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_glow_health_bars",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_selection_outline2_alpha",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_selection_outline2_offset",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_selection_outline2_width",
+        "group": "visibility"
+      },
+      {
+        "key": "r_citadel_npr_force_solid_outline",
+        "group": "visibility"
+      },
+      {
+        "key": "citadel_player_glow_from_teammate_vision_max_range",
+        "group": "visibility"
+      },
+      {
+        "key": "r_aspectratio",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_camera_hero_fov",
+        "group": "camera"
+      },
+      {
+        "key": "default_fov",
+        "group": "camera"
+      },
+      {
+        "key": "viewmodel_fov",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_camera_pitch_max",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_camera_pitch_min",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_hideout_enable_testing_tools",
+        "group": "devtools"
+      },
+      {
+        "key": "movement_stats_debug_draw",
+        "group": "devtools"
+      },
+      {
+        "key": "citadel_orb_debug_draw_state",
+        "group": "devtools"
+      },
+      {
+        "key": "music_hideout_debug_enabled",
+        "group": "devtools"
+      }
     ]
   }
 }

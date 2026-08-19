@@ -2889,7 +2889,32 @@
       "option": "{{ref}} ({{date}})",
       "optionNewest": "{{ref}} ({{date}}, newest)",
       "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",
-      "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}."
+      "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}.",
+      "optionRemote": "{{ref}} ({{date}}, from history)"
+    },
+    "trackLatest": {
+      "label": "Track latest upstream",
+      "description": "Apply the newest release straight from the config author's GitHub repo, instead of waiting for a Grimoire update. Falls back to the bundled release when offline.",
+      "checking": "Checking the config's repo for its newest release...",
+      "available": "Newest upstream release: {{ref}} ({{date}}).",
+      "upToDate": "Upstream matches the bundled release v{{version}}.",
+      "withheld_one": " {{count}} new upstream setting is held back until it has been reviewed.",
+      "withheld_other": " {{count}} new upstream settings are held back until they have been reviewed.",
+      "staleNote": " Could not check for something newer just now; this is the last release fetched.",
+      "unreachable": "Could not reach the config's repo. The bundled release will be applied instead."
+    },
+    "history": {
+      "browse": "Full version history",
+      "title": "Version history",
+      "subtitle": "Everything {{repo}} has published, newest first. Older versions are fetched on demand and pass the same safety checks as the newest one.",
+      "loading": "Loading versions from the config's repo...",
+      "listFailed": "Could not load the version list. Check your connection and try again.",
+      "fetchFailed": "Could not fetch that version.",
+      "empty": "No published versions found.",
+      "bundled": "bundled",
+      "bundledHint": "Ships with Grimoire; applies without a network connection.",
+      "downloaded": "downloaded",
+      "downloadedHint": "Already fetched and cached; applies without a network connection."
     },
     "moreActions": "More actions"
   },
