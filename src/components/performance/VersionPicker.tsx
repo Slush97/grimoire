@@ -43,10 +43,7 @@ export default function VersionPicker({
   const rollbackAvailable = versions.length > 1 || pinnedActive;
 
   return (
-    <FormField
-      label={t('performance.version.label')}
-      hint={rollbackAvailable ? t('performance.version.hint') : undefined}
-    >
+    <FormField label={t('performance.version.label')}>
       <Select
         value={selected}
         disabled={disabled || !rollbackAvailable}

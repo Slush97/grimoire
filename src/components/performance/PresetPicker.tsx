@@ -29,7 +29,7 @@ export default function PresetPicker({
       <Select value={selected.id} disabled={disabled} onChange={(e) => onSelect(e.target.value)}>
         {presets.map((preset) => (
           <option key={preset.id} value={preset.id}>
-            {preset.name} ({t(`performance.preset.tier.${preset.tier}`)})
+            {preset.name}
           </option>
         ))}
       </Select>

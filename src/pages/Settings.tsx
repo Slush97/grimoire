@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Beaker,
   Download,
+  Gauge,
   Globe,
   HardDrive,
   LifeBuoy,
@@ -26,9 +27,11 @@ import PrivacySection from '../components/settings/sections/PrivacySection';
 import ExperimentalSection from '../components/settings/sections/ExperimentalSection';
 import MaintenanceSection from '../components/settings/sections/MaintenanceSection';
 import SupportSection from '../components/settings/sections/SupportSection';
+import PerformanceConfigCard from '../components/performance/PerformanceConfigCard';
 
 type SectionId =
   | 'game'
+  | 'performance'
   | 'appearance'
   | 'preferences'
   | 'privacy'
@@ -59,6 +62,7 @@ export default function Settings() {
       label: <Tx k="settings.nav.groups.game" fallback="Game" />,
       items: [
         { id: 'game', label: <Tx k="settings.nav.game" fallback="Game setup" />, icon: HardDrive },
+        { id: 'performance', label: <Tx k="performance.title" fallback="Performance" />, icon: Gauge },
       ],
     },
     {
@@ -111,6 +115,7 @@ export default function Settings() {
 
         <div className="min-w-0 flex-1 space-y-6">
           {section === 'game' && <GameSection />}
+          {section === 'performance' && <PerformanceConfigCard />}
           {section === 'appearance' && <AppearanceSection />}
           {section === 'preferences' && <PreferencesSection />}
           {section === 'privacy' && <PrivacySection />}
@@ -120,9 +125,7 @@ export default function Settings() {
             </Card>
           )}
           {section === 'updates' && <UpdatesSection />}
-          {section === 'experimental' && (
-            <ExperimentalSection onShowPerformanceConfig={() => setActiveSection('game')} />
-          )}
+          {section === 'experimental' && <ExperimentalSection />}
           {section === 'maintenance' && <MaintenanceSection />}
           {section === 'support' && <SupportSection />}
         </div>

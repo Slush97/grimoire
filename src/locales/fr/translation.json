@@ -827,8 +827,6 @@
       "fixUnknownMods": "Corriger les mods inconnus",
       "vpkImprint": "Marquer les mods installées",
       "deadworksServers": "Serveurs Deadworks",
-      "performanceConfig": "Config Performance",
-      "performanceConfigWhere": "Ouvrir ses options dans Configuration du jeu",
       "foundry": "Forge"
     },
     "support": {
@@ -899,8 +897,7 @@
       "contributeSalts": "Partagez les clés de rediffusion que Steam met déjà en cache pour les parties que vous regardez en jeu. N'envoie que l'ID de partie, le cluster serveur et deux clés de téléchargement : aucun ID de compte, aucun nom d'utilisateur, rien sur vous ou vos mods.",
       "fixUnknown": "Faire correspondre les VPK locaux inconnus avec GameBanana pour récupérer les noms et vignettes. Peut atteindre les limites de requêtes sur les grandes bibliothèques.",
       "vpkImprint": "Ajoute une empreinte d'identification à chaque nouveau mod installé pour le reconnaître hors ligne. Ajoute un bouton « Marquer les mods installées » sur la page \"Installés\".",
-      "deadworks": "Ajoute un onglet Serveurs pour parcourir et rejoindre les serveurs communautaires Deadworks. Téléchargement de contenu requis avant de se connecter.",
-      "performanceConfig": "Boost FPS en un clic en utilisant le préréglage communautaire de Sqooky. Les mods continuent de fonctionner. Peut être supprimé à tout moment."
+      "deadworks": "Ajoute un onglet Serveurs pour parcourir et rejoindre les serveurs communautaires Deadworks. Téléchargement de contenu requis avant de se connecter."
     },
     "privacy": {
       "noHiddenCreators": "Aucun créateur n'est masqué pour le moment."
@@ -2673,8 +2670,8 @@
     }
   },
   "performance": {
+    "title": "Performance",
     "statusReadError": "Impossible de lire le statut de gameinfo.gi. Vérifiez votre chemin Deadlock dans les Paramètres.",
-    "cardDescription": "Préréglage FPS communautaire de Sqooky (OptimizationLock), appliqué sans toucher à vos mods.",
     "checkingGameinfo": "Vérification de gameinfo.gi...",
     "badge": {
       "applied": "Appliqué v{{version}}",
@@ -2709,16 +2706,14 @@
       "systemDefaultHint": "Ce avec quoi votre systeme ouvre les fichiers texte",
       "browse": "Rechercher une application..."
     },
-    "creditSqooky": "Parcourez les <sqooky>mods de Sqooky</sqooky> ou <kofi>offrez-lui un café</kofi>.",
-    "shadowsHint": "La carte semble sombre ? Réglez les ombres en jeu sur Moyen ou Bas.",
     "switchTo": "Passer à {{preset}}",
     "switchNote": "L'application remplace {{current}} par {{next}}. Vos ajustements enregistrés pour {{current}} sont conservés au cas où vous y reviendriez.",
     "preset": {
       "label": "Préréglage",
+      "authorMods": "Mods",
       "meta_one": "{{count}} paramètre, par {{author}}",
       "meta_other": "{{count}} paramètres, par {{author}}",
       "unstable": "Cette configuration est expérimentale. Des instabilités sont à prévoir.",
-      "credit": "Valeurs issues de {{credit}}, sous licence {{license}}.",
       "pinnedTag": "Fixé à la version {{ref}}",
       "pinnedCommit": "Fixé à la version {{ref}} (aucun tag git publié)",
       "tier": {
@@ -2753,7 +2748,6 @@
     },
     "version": {
       "label": "Version",
-      "hint": "Revenez en arrière si une version plus récente fonctionne moins bien. Vos ajustements sont conservés.",
       "option": "{{ref}} ({{date}})",
       "optionNewest": "{{ref}} ({{date}}, plus récente)",
       "pending": "Version modifiée pour la v{{version}}. Réappliquez pour l'écrire dans gameinfo.gi.",

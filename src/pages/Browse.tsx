@@ -1884,10 +1884,14 @@ export default function Browse() {
 
       // Remote fallback paths cannot express a negative submitter filter in
       // GameBanana's API. Filter defensively here; normal browsing routes to
-      // the local catalog above so pagination remains full and accurate.
-      enrichedRecords = enrichedRecords.filter(
-        (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
-      );
+      // the local catalog above so pagination remains full and accurate. An
+      // explicit artist page is a deliberate override: filtering that artist
+      // produces the contradictory "11 mods" header with an empty grid.
+      if (!submitter) {
+        enrichedRecords = enrichedRecords.filter(
+          (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
+        );
+      }
 
       if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
         return;
@@ -2931,7 +2935,7 @@ export default function Browse() {
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
   const displayMods = useMemo(() => {
-    let nextMods = hiddenCreatorIdSet.size > 0
+    let nextMods = !submitter && hiddenCreatorIdSet.size > 0
       ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
     if (settings?.hideOutdatedMods) {
@@ -2956,7 +2960,7 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw, hiddenCreatorIdSet]);
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw, hiddenCreatorIdSet, submitter]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -3077,15 +3081,6 @@ export default function Browse() {
     await updateHiddenCreators((current) => current.filter((entry) => entry.id !== creator.id));
     showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
   });
-
-  // Artist mode can be entered from Installed as well as Browse. If that
-  // submitter is already hidden, return to the normal catalog instead of
-  // presenting an empty artist page that cannot explain why it is empty.
-  useEffect(() => {
-    if (submitter?.id && hiddenCreatorIdSet.has(submitter.id)) {
-      setBrowseUi({ submitter: undefined });
-    }
-  }, [submitter?.id, hiddenCreatorIdSet, setBrowseUi]);
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =

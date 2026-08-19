@@ -832,8 +832,6 @@
       "fixUnknownMods": "Fix Unknown Mods",
       "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
-      "performanceConfig": "Performance Config",
-      "performanceConfigWhere": "Open its controls in Game setup",
       "foundry": "Door Stuck"
     },
     "support": {
@@ -942,8 +940,7 @@
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, two download keys, and a fixed \"grimoire\" client tag: no account id, no player name, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "vpkImprint": "Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have.",
-      "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
-      "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
+      "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting."
     },
     "privacy": {
       "noHiddenCreators": "No creators are hidden right now."
@@ -2846,8 +2843,8 @@
     }
   },
   "performance": {
+    "title": "Performance",
     "statusReadError": "Could not read gameinfo.gi status. Check your Deadlock path in Settings.",
-    "cardDescription": "Community fps presets for Deadlock, applied onto gameinfo.gi without touching your mods.",
     "checkingGameinfo": "Checking gameinfo.gi...",
     "badge": {
       "applied": "Applied v{{version}}",
@@ -2882,16 +2879,14 @@
       "systemDefaultHint": "Whatever your OS opens text files with",
       "browse": "Browse for an application..."
     },
-    "creditSqooky": "Browse <sqooky>Sqooky's mods</sqooky> or <kofi>buy them a coffee</kofi>.",
-    "shadowsHint": "Map looks dark? Set in-game shadows to Medium or Low.",
     "switchTo": "Switch to {{preset}}",
     "switchNote": "Applying replaces {{current}} with {{next}}. Your saved tweaks for {{current}} are kept in case you switch back.",
     "preset": {
       "label": "Preset",
+      "authorMods": "Mods",
       "meta_one": "{{count}} setting, by {{author}}",
       "meta_other": "{{count}} settings, by {{author}}",
       "unstable": "Upstream labels this config experimental and changes it often. Expect rough edges.",
-      "credit": "Values from {{credit}}, licensed {{license}}.",
       "pinnedTag": "Pinned to release {{ref}}",
       "pinnedCommit": "Pinned to upstream {{ref}} (no git tag published)",
       "tier": {
@@ -2926,7 +2921,6 @@
     },
     "version": {
       "label": "Version",
-      "hint": "Roll back if a newer release runs worse. Your tweaks carry over.",
       "option": "{{ref}} ({{date}})",
       "optionNewest": "{{ref}} ({{date}}, newest)",
       "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",

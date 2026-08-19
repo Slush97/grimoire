@@ -16,7 +16,6 @@ import { Badge, Button, Card } from '../../common/ui';
 import { Input } from '../../common/forms';
 import { ConfirmModal } from '../../common/PageComponents';
 import Tx from '../../translation/Tx';
-import PerformanceConfigCard from '../../performance/PerformanceConfigCard';
 
 // Game paths and the gameinfo.gi wiring that makes mods load at all.
 export default function GameSection() {
@@ -326,8 +325,6 @@ export default function GameSection() {
           )}
         </div>
       </Card>
-
-      {settings?.experimentalPerformanceConfig && <PerformanceConfigCard />}
 
       <ConfirmModal
         isOpen={openGameinfoConfirm}

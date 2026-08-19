@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation, Trans } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -148,9 +148,9 @@ function statusBadge(
   }
 }
 
-// Settings card for the bundled performance presets (experimental). Applies a
-// selected community fps config onto gameinfo.gi in place, shows whether a game
-// update wiped it, and credits the upstream project the preset came from.
+// Settings card for the bundled performance presets. Applies a selected
+// community fps config onto gameinfo.gi in place, shows whether a game update
+// wiped it, and credits the upstream project the preset came from.
 export default function PerformanceConfigCard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<PerformanceConfigStatus | null>(null);
@@ -222,7 +222,9 @@ export default function PerformanceConfigCard() {
   }, [settings?.performanceConfigOptIns, selectedId, selectedRelease]);
 
   const viewSqookyInBrowse = () => {
-    setBrowseUi({ submitter: SQOOKY_ARTIST });
+    // This affordance says "Mods", so do not inherit a previously selected
+    // Sound/WiP section when entering the artist page from Settings.
+    setBrowseUi({ submitter: SQOOKY_ARTIST, section: 'Mod' });
     navigate('/browse');
   };
 
@@ -505,6 +507,16 @@ export default function PerformanceConfigCard() {
 
   const look = status ? statusLook(status) : null;
   const badge = status ? statusBadge(status, t) : null;
+  // A healthy, current apply is completely described by the badge. Keep the
+  // longer sentence only when it adds a warning or other actionable context.
+  const appliedStatusNeedsDetail =
+    applied &&
+    (!!status?.handEdited ||
+      (status?.overrideCount ?? 0) > 0 ||
+      (!pinnedOlder &&
+        !!status?.appliedVersion &&
+        status.appliedVersion !== (latestUsable ? latest?.version : status.bundledVersion)));
+  const showStatusDetail = !status || !applied || appliedStatusNeedsDetail;
 
   // One sentence about what tracking currently knows: still checking, what the
   // newest upstream release is, that upstream matches the bundle, or that the
@@ -525,15 +537,14 @@ export default function PerformanceConfigCard() {
 
   return (
     <Card
-      title={t('settings.experimental.performanceConfig')}
+      title={t('performance.title')}
       icon={Gauge}
       className="lg:col-span-2"
-      description={t('performance.cardDescription')}
-      action={badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+      contentClassName="p-0"
     >
-      <div className="space-y-5">
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+      <div className="divide-y divide-white/5">
+        <section className="p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
             {presets.length > 0 && (
               <PresetPicker
                 presets={presets}
@@ -554,12 +565,12 @@ export default function PerformanceConfigCard() {
           </div>
 
           {selected && (
-            <div className="flex justify-end">
+            <div className="mt-2 flex justify-end">
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
                 disabled={busy}
-                className="text-xs text-accent hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="shrink-0 cursor-pointer text-left text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50 sm:text-right"
               >
                 {t('performance.history.browse')}
               </button>
@@ -567,67 +578,70 @@ export default function PerformanceConfigCard() {
           )}
 
           {selected && selectedRelease && (
-            <PresetSummary
-              preset={selected}
-              release={selectedRelease}
-              creditSlot={
-                selected.upstream.repo === SQOOKY_REPO ? (
-                  <Trans
-                    i18nKey="performance.creditSqooky"
-                    components={{
-                      sqooky: (
-                        <button
-                          type="button"
-                          onClick={viewSqookyInBrowse}
-                          className="text-accent hover:underline"
-                        />
-                      ),
-                      kofi: (
-                        <a
-                          href={SQOOKY_KOFI_URL}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-accent hover:underline"
-                        />
-                      ),
-                    }}
-                  />
-                ) : null
+            <div className="mt-4">
+              <PresetSummary
+                preset={selected}
+                release={selectedRelease}
+                creditSlot={
+                  selected.upstream.repo === SQOOKY_REPO ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={viewSqookyInBrowse}
+                        className="text-accent hover:underline"
+                      >
+                        {t('performance.preset.authorMods')}
+                      </button>
+                      <a
+                        href={SQOOKY_KOFI_URL}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="ml-3 text-accent hover:underline"
+                      >
+                        Ko-fi
+                      </a>
+                    </>
+                  ) : null
+                }
+              />
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4 p-5">
+          <div className="space-y-1.5">
+            <Toggle
+              checked={trackLatest}
+              onChange={(on) => void onToggleTrackLatest(on)}
+              label={
+                <span title={t('performance.trackLatest.description')}>
+                  {t('performance.trackLatest.label')}
+                </span>
               }
+              disabled={busy}
+            />
+            {latestLine && <p className="pl-14 text-xs text-text-secondary">{latestLine}</p>}
+          </div>
+
+          {selectedRelease && (
+            <GameplayOptIns
+              controls={selectedRelease.optIn}
+              selected={selectedOptIns}
+              onChange={(keys) => void onChangeOptIns(keys)}
+              disabled={busy}
             />
           )}
-        </div>
+        </section>
 
-        <div className="space-y-1">
-          <Toggle
-            checked={trackLatest}
-            onChange={(on) => void onToggleTrackLatest(on)}
-            label={t('performance.trackLatest.label')}
-            description={t('performance.trackLatest.description')}
-            disabled={busy}
-          />
-          {latestLine && (
-            // Indent past the switch (w-11 + gap-3) so the line reads as part
-            // of the toggle's description column.
-            <p className="pl-14 text-xs text-text-secondary">{latestLine}</p>
-          )}
-        </div>
-
-        {selectedRelease && (
-          <GameplayOptIns
-            controls={selectedRelease.optIn}
-            selected={selectedOptIns}
-            onChange={(keys) => void onChangeOptIns(keys)}
-            disabled={busy}
-          />
-        )}
-
-        <div className="border-t border-white/5 pt-4 space-y-3">
+        <section className="space-y-4 bg-bg-tertiary/15 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-2">
-              <p className="flex items-start gap-2 text-sm text-text-secondary">
-                {look && <look.Icon className={`w-4 h-4 mt-0.5 shrink-0 ${look.tone}`} aria-hidden="true" />}
-                <span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {look && <look.Icon className={`h-4 w-4 shrink-0 ${look.tone}`} aria-hidden="true" />}
+                {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+              </div>
+              {showStatusDetail && (
+                <p className="mt-2 text-sm text-text-secondary">
                   {status
                     ? performanceStatusMessage(
                         status,
@@ -637,17 +651,17 @@ export default function PerformanceConfigCard() {
                         latestUsable ? latest!.version! : undefined
                       )
                     : t('performance.checkingGameinfo')}
-                </span>
-              </p>
+                </p>
+              )}
               {pinnedOlder && !pendingVersion && (
-                <p className="text-xs text-text-secondary">
+                <p className="mt-2 text-xs text-text-secondary">
                   {t('performance.version.pinned', {
                     version: selectedVersion,
                     latest: selected?.versions[0].version ?? '',
                   })}
                 </p>
               )}
-              {openError && <p className="text-xs text-state-danger">{openError}</p>}
+              {openError && <p className="mt-2 text-xs text-state-danger">{openError}</p>}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -729,8 +743,7 @@ export default function PerformanceConfigCard() {
             </div>
           )}
 
-          <p className="text-xs text-text-secondary/70">{t('performance.shadowsHint')}</p>
-        </div>
+        </section>
       </div>
       {pickerOpen && (
         <EditorPickerModal
