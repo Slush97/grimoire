@@ -151,6 +151,7 @@
       "path": "OptiLock FPS Config (Recommended)/gameinfo.gi",
       "$comment": "v4.6 renamed the folder (v4.2 'OptiLock FPS Preset' -> v4.4 'OptiLock Balanced FPS Preset' -> v4.6 'OptiLock FPS Config (Recommended)'); lineage verified by content similarity (0.90 vs 0.80 against the alternatives). pathByRef pins the old location for bundled pre-rename releases.",
       "pathByRef": {
+        "v4.4": "OptiLock Balanced FPS Preset/gameinfo.gi",
         "v4.2": "OptiLock FPS Preset/gameinfo.gi",
         "v4.1": "OptiLock FPS Preset/gameinfo.gi",
         "v4.0d": "OptiLock FPS Preset/gameinfo.gi"

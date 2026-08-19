@@ -37,9 +37,9 @@ import {
  *  to the bundled PresetRelease that the patcher cannot tell them apart. */
 export interface LatestRelease {
     presetId: string;
-    /** Version string written into the gameinfo.gi marker (charset [\w.]+).
-     *  A tag-pinned source uses the tag with any leading 'v' stripped; a
-     *  prose source (no tags to name a version) uses the short commit sha. */
+    /** Version string written into the gameinfo.gi marker. A tag-pinned source
+     *  uses the tag with any leading 'v' stripped; a prose source (no tags to
+     *  name a version) uses the short commit sha. */
     version: string;
     /** Human-facing ref: the tag itself, or the short sha for prose sources. */
     ref: string;
@@ -148,8 +148,10 @@ export function isCheckFresh(dir: string, presetId: string, now: Date): boolean 
 
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf-8').digest('hex');
 
-/** The version string a runtime release writes into the marker. Must satisfy
- *  the marker charset ([\w.]+). */
+/** The version string a runtime release writes into the marker. Git ref names
+ *  can contain punctuation such as '-' and '/', so the marker parser treats
+ *  the commit delimiter (` @<sha>`) as the boundary instead of restricting
+ *  this value to a smaller synthetic charset. */
 function versionFor(refKind: 'tag' | 'prose', ref: string, commit: string): string {
     return refKind === 'tag' ? ref.replace(/^v/, '') : commit.slice(0, 8);
 }

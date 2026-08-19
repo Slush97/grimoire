@@ -148,10 +148,10 @@ describe('buildLatestRelease gates', () => {
 
     it('names tag releases by the tag and dodges collisions with bundled versions', () => {
         const tagged = buildLatestRelease(
-            input({ presetId: 'optilock-fps', refKind: 'tag', ref: 'v9.9' })
+            input({ presetId: 'optilock-fps', refKind: 'tag', ref: 'v9.9-beta.1' })
         );
         expect(tagged.ok).toBe(true);
-        if (tagged.ok) expect(tagged.release.version).toBe('9.9');
+        if (tagged.ok) expect(tagged.release.version).toBe('9.9-beta.1');
 
         // v4.2 is a bundled optilock-fps release; different content under the
         // same tag must not impersonate it.
@@ -161,7 +161,6 @@ describe('buildLatestRelease gates', () => {
         expect(colliding.ok).toBe(true);
         if (colliding.ok) {
             expect(colliding.release.version).toBe('4.2.abcdef01');
-            expect(colliding.release.version).toMatch(/^[\w.]+$/);
         }
     });
 
@@ -368,6 +367,36 @@ describe('applying a tracked latest release', () => {
         expect(applied.state).toBe('applied');
         expect(applied.appliedVersion).toBe('aa11bb22');
         expect(read()).toContain('preset=sqooky-default vaa11bb22 @aa11bb22aa11');
+    });
+
+    it('recognizes and reapplies a tracked tag whose version contains punctuation', () => {
+        const built = buildLatestRelease(
+            input({ refKind: 'tag', ref: 'v9.9-beta.1', commit: 'bb11cc22'.repeat(5) })
+        );
+        if (!built.ok) throw new Error(built.error);
+        writeLatestCache(cacheDir, {
+            byPreset: { [built.release.presetId]: built.release },
+            checkedAt: {},
+            history: {},
+        });
+
+        const original = read();
+        const applied = applyPerformanceConfig(gameRoot, {
+            presetId: 'sqooky-default',
+            version: 'latest',
+        });
+        expect(applied.appliedVersion).toBe('9.9-beta.1');
+        expect(getPerformanceConfigStatus(gameRoot).state).toBe('applied');
+
+        const reapplied = applyPerformanceConfig(gameRoot, {
+            presetId: 'sqooky-default',
+            version: 'latest',
+        });
+        expect(reapplied.state).toBe('applied');
+        expect(read().match(/Grimoire Performance Config BEGIN/g)).toHaveLength(1);
+
+        expect(removePerformanceConfig(gameRoot).state).toBe('not-applied');
+        expect(read()).toBe(original);
     });
 
     it('falls back to the bundled newest release when the cache has nothing', () => {

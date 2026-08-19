@@ -216,9 +216,10 @@ export interface PerformanceConfigStatus {
  *  ever succeeded for this preset. */
 export interface PerformanceLatestInfo {
     presetId: string;
-    /** Version identity of the newest fetched release: the upstream tag for
-     *  tag-published sources, the short commit sha for sources that publish
-     *  no tags. What Apply writes into the gameinfo.gi marker. */
+    /** Version identity of the newest fetched release: the upstream tag with
+     *  any leading `v` removed for tag-published sources, or the short commit
+     *  sha for sources that publish no tags. What Apply writes into the
+     *  gameinfo.gi marker. */
     version: string | null;
     ref: string | null;
     refKind: 'tag' | 'prose' | null;

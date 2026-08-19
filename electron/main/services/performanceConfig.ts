@@ -79,7 +79,7 @@ const MARKER = 'grimoire-perf';
 // The `@commit` group is optional so markers written before it existed still
 // parse; a missing commit reads as "cannot prove it matches".
 const BEGIN_RE =
-    /Grimoire Performance Config BEGIN \(preset=([\w-]+) v([\w.]+)(?: @([0-9a-f]{6,40}))?\)/;
+    /Grimoire Performance Config BEGIN \(preset=([\w-]+) v(.+?)(?: @([0-9a-f]{6,40}))?\)/;
 const GAMEINFO_BACKUP_SUFFIX = '.grimoire-bak';
 // Applied-state sidecar, stored next to gameinfo.gi (game updates replace
 // gameinfo.gi but leave foreign files alone). Owned by the main process only,

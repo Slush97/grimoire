@@ -3847,7 +3847,7 @@ const OptilockFps: PerformancePresetFamily = {
         repo: 'dacooderr/OptiLock',
         url: 'https://github.com/dacooderr/OptiLock',
         path: 'OptiLock FPS Config (Recommended)/gameinfo.gi',
-        paths: ['OptiLock FPS Config (Recommended)/gameinfo.gi', 'OptiLock FPS Preset/gameinfo.gi'],
+        paths: ['OptiLock FPS Config (Recommended)/gameinfo.gi', 'OptiLock Balanced FPS Preset/gameinfo.gi', 'OptiLock FPS Preset/gameinfo.gi'],
         license: 'GPL-3.0',
         credit: 'OptiLock by dacooder and contributors',
     },

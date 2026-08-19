@@ -21,9 +21,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The parse/diff/classify logic is shared with the runtime "track latest"
 // path (performanceLatest.ts), so the app applies exactly the rules the
-// bundled presets were built with. Node 23.6+ runs .ts imports natively via
-// type stripping; this script is dev-machine-only (never CI), where that
-// holds.
+// bundled presets were built with. The package script runs this file through
+// tsx so importing the shared TypeScript module also works on the repository's
+// documented Node 20+ development baseline.
 import {
     classificationFromManifest,
     generatePresetBody,
