@@ -63,6 +63,11 @@ export interface LocalVariantGroupPlan {
     writes: LocalVariantGroupWrite[];
 }
 
+type LocalVariantClassificationFields = Pick<
+    LocalVariantGroupMember,
+    'lockerHero' | 'globalType'
+>;
+
 /** A normal GameBanana install groups by submission id. An explicitly-local
  * group is different: re-import adoption may legitimately discover GB
  * provenance after its localGroupId was minted, and that must not make the
@@ -79,10 +84,26 @@ function currentGroupOf(member: LocalVariantGroupMember): string | undefined {
     return member.localGroupId && member.localGroupId.length > 0 ? member.localGroupId : undefined;
 }
 
-function classificationKey(member: LocalVariantGroupMember): string | undefined {
+function classificationKey(member: LocalVariantClassificationFields): string | undefined {
     if (member.globalType) return `global:${member.globalType}`;
     const hero = member.lockerHero?.trim();
     return hero ? `hero:${hero.toLocaleLowerCase()}` : undefined;
+}
+
+/** Reject two definite but different Locker axes. An unclassified VPK may
+ * inherit the established group profile, but a known Ivy/Geist or hero/Global
+ * mismatch must not be silently relabelled merely because it arrived through
+ * the import path instead of the installed-mod grouping path. */
+export function assertCompatibleLocalVariantClassifications(
+    established: LocalVariantClassificationFields | undefined,
+    candidate: LocalVariantClassificationFields | undefined
+): void {
+    if (!established || !candidate) return;
+    const establishedKey = classificationKey(established);
+    const candidateKey = classificationKey(candidate);
+    if (establishedKey && candidateKey && establishedKey !== candidateKey) {
+        throw new Error('Variants must use the same Locker hero or Global classification');
+    }
 }
 
 /** Resolve the fields that must be identical across one logical card.
@@ -106,11 +127,10 @@ export function resolveLocalVariantGroupProfile(
     }
 
     const classified = members.filter((member) => classificationKey(member));
-    const keys = new Set(classified.map((member) => classificationKey(member)));
-    if (keys.size > 1) {
-        throw new Error('Variants must use the same Locker hero or Global classification');
-    }
     const owner = classified[0];
+    for (const member of classified.slice(1)) {
+        assertCompatibleLocalVariantClassifications(owner, member);
+    }
     if (!owner) return { priorityMod: priority };
 
     if (owner.globalType) {

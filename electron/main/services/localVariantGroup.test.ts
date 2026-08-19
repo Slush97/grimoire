@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  assertCompatibleLocalVariantClassifications,
   planLocalVariantGroup,
   resolveLocalVariantGroupProfile,
   type LocalVariantGroupMember,
@@ -215,5 +216,25 @@ describe('planLocalVariantGroup', () => {
         lockerHeroVpkChecked: undefined,
       },
     });
+  });
+});
+
+describe('assertCompatibleLocalVariantClassifications', () => {
+  it('rejects a definite imported classification that conflicts with the group', () => {
+    expect(() =>
+      assertCompatibleLocalVariantClassifications(
+        { lockerHero: 'Lady Geist', globalType: null },
+        { lockerHero: 'Ivy', globalType: null },
+      )
+    ).toThrow(/same Locker hero or Global classification/);
+  });
+
+  it('allows an unclassified imported VPK to inherit the established profile', () => {
+    expect(() =>
+      assertCompatibleLocalVariantClassifications(
+        { lockerHero: 'Lady Geist', globalType: null },
+        { lockerHero: undefined, globalType: null },
+      )
+    ).not.toThrow();
   });
 });

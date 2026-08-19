@@ -68,7 +68,7 @@ import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '.
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import { planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
+import { assertCompatibleLocalVariantClassifications, planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
 import { planLocalVariantReplacementRestore } from '../services/localVariantReplacement';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, RestoreLocalVariantGroupReplacementArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
@@ -772,49 +772,54 @@ ipcMain.handle(
             throw new Error('A name is required');
         }
 
-        const all = await scanMods(deadlockPath);
-        const target = all.find((m) => m.id === modId);
-        if (!target) {
-            throw new Error(`Mod not found: ${modId}`);
-        }
-        const existing = getModMetadata(target.metaKey) ?? {};
-        if (
-            typeof existing.gameBananaId === 'number' &&
-            existing.gameBananaId > 0 &&
-            !existing.localGroupId
-        ) {
-            throw new Error('Only local mods can be renamed');
-        }
-
-        await setModMetadataWithHash(target.metaKey, {
-            modName: trimmed,
-            thumbnailUrl: args.thumbnailDataUrl,
-            nsfw: !!args.nsfw,
-        }, target.path);
-
-        // A rename inside a local variant group renames the GROUP: every member
-        // shares one name (the card title is whichever member happens to be
-        // primary, so a half-renamed group would show a different title as
-        // files are toggled). Only the name fans out; thumbnail and NSFW stay
-        // per file, exactly as they are for a GameBanana group.
-        const groupId = getModMetadata(target.metaKey)?.localGroupId;
-        if (groupId) {
-            for (const sibling of all) {
-                if (sibling.id === target.id) continue;
-                const meta = getModMetadata(sibling.metaKey);
-                if (meta?.localGroupId !== groupId || meta?.modName === trimmed) continue;
-                setModMetadata(sibling.metaKey, { modName: trimmed });
-                await refreshEmbedAfterMetadataChange(
-                    deadlockPath,
-                    sibling.id,
-                    sibling.metaKey,
-                    sibling.path
-                );
+        // Scan and write every sibling while holding the same mutation lock as
+        // enable/disable/reorder. Embed refreshes intentionally happen after
+        // release because imprintOneMod acquires this non-reentrant lock itself.
+        // Keeping the whole fan-out in one critical section prevents a toggle
+        // from migrating a later sibling's sidecar between this scan and write.
+        const { updated, refresh } = await runExclusiveModMutation(async () => {
+            const all = await scanMods(deadlockPath);
+            const target = all.find((m) => m.id === modId);
+            if (!target) {
+                throw new Error(`Mod not found: ${modId}`);
             }
-        }
+            const existing = getModMetadata(target.metaKey) ?? {};
+            if (
+                typeof existing.gameBananaId === 'number' &&
+                existing.gameBananaId > 0 &&
+                !existing.localGroupId
+            ) {
+                throw new Error('Only local mods can be renamed');
+            }
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
-        return enrichMod(target);
+            await setModMetadataWithHash(target.metaKey, {
+                modName: trimmed,
+                thumbnailUrl: args.thumbnailDataUrl,
+                nsfw: !!args.nsfw,
+            }, target.path);
+
+            const refreshMods: Mod[] = [target];
+            // A rename inside a local variant group renames the GROUP: every
+            // member shares one name (the card title is whichever member is
+            // primary). Thumbnail and NSFW remain per file, like GB groups.
+            const groupId = getModMetadata(target.metaKey)?.localGroupId;
+            if (groupId) {
+                for (const sibling of all) {
+                    if (sibling.id === target.id) continue;
+                    const meta = getModMetadata(sibling.metaKey);
+                    if (meta?.localGroupId !== groupId || meta?.modName === trimmed) continue;
+                    setModMetadata(sibling.metaKey, { modName: trimmed });
+                    refreshMods.push(sibling);
+                }
+            }
+
+            return { updated: enrichMod(target), refresh: refreshMods };
+        });
+
+        for (const mod of refresh) {
+            await refreshEmbedAfterMetadataChange(deadlockPath, mod.id, mod.metaKey, mod.path);
+        }
+        return updated;
     }
 );
 
@@ -1327,7 +1332,12 @@ function classifyImportedLocalVariant(
         };
     }
 
-    let lockerHero = inferHeroFromTitle(metadata?.categoryName || metadata?.modName || '');
+    // Provenance is authoritative when adoption supplied it. Otherwise inspect
+    // the VPK before falling back to the shared user-entered group name: using
+    // that name first would classify every newly-added file as the existing
+    // group hero and make the conflict guard below incapable of spotting an
+    // Ivy VPK accidentally added to a Geist group.
+    let lockerHero = inferHeroFromTitle(metadata?.categoryName || '');
     let lockerHeroSource: LockerHeroSource | undefined = lockerHero ? 'title' : undefined;
     if (!lockerHero) {
         try {
@@ -1339,6 +1349,10 @@ function classifyImportedLocalVariant(
         } catch (err) {
             console.warn(`[mods] Local variant hero classification failed for ${vpkPath}:`, err);
         }
+    }
+    if (!lockerHero) {
+        lockerHero = inferHeroFromTitle(metadata?.modName || '');
+        lockerHeroSource = lockerHero ? 'title' : undefined;
     }
     return {
         ...blankLocalVariantClassification(),
@@ -1521,13 +1535,21 @@ async function importCustomModSource(
             // members inherit it so one logical card cannot split across hero,
             // General, or priority-root sections.
             if (localGroupId) {
-                groupProfile ??= {
-                    priorityMod: false,
-                    classification: classifyImportedLocalVariant(
-                        destPath,
-                        getModMetadata(destMetaKey)
-                    ),
-                };
+                const importedClassification = classifyImportedLocalVariant(
+                    destPath,
+                    getModMetadata(destMetaKey)
+                );
+                if (groupProfile?.classification) {
+                    assertCompatibleLocalVariantClassifications(
+                        groupProfile.classification,
+                        importedClassification
+                    );
+                } else {
+                    groupProfile = {
+                        priorityMod: groupProfile?.priorityMod ?? false,
+                        classification: importedClassification,
+                    };
+                }
                 setModMetadata(destMetaKey, {
                     ...groupProfile.classification,
                     priorityMod: groupProfile.priorityMod ? true : undefined,
