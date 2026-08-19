@@ -1999,6 +1999,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
 
+  // Empty tabs should read as a compact card in the pane, not as a wide banner.
+  // `my-auto` centers the card in the space below the tab heading, while the
+  // small upward translation compensates for that heading so the card remains
+  // visually centered in the pane as a whole.
+  const emptyTabClass =
+    'my-auto flex min-h-60 w-full max-w-md -translate-y-5 self-center flex-col items-center justify-center gap-3 rounded-xl border border-white/15 bg-bg-secondary/70 px-8 py-10 text-center shadow-2xl shadow-black/25 backdrop-blur-md';
+
   // Where each visible card shuffles, asked once per card. A custom tab mixes
   // hero skins, classified mods and non-shuffleable ones, so the affordance is
   // decided per mod (shuffleGroupKind) rather than per tab.
@@ -2254,7 +2261,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
       <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
         <div
           key={activeType}
-          className={`space-y-4 p-6 ${isPropContainer ? '' : 'animate-fade-in'}`}
+          className={`flex min-h-full flex-col gap-4 p-6 ${isPropContainer ? '' : 'animate-fade-in'}`}
         >
           {activeType ? (
             <>
@@ -2317,7 +2324,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 )}
               </div>
               {activeMods.length === 0 && isPropContainer ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className={emptyTabClass}>
                   {activeType === 'spirit-urn' ? (
                     <Box className="h-8 w-8 text-white/40" />
                   ) : (
@@ -2338,7 +2345,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 </div>
               ) : activeMods.length === 0 && isPriorityTab ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className={emptyTabClass}>
                   <ArrowUpToLine className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">{t('locker.globalPicker.empty')}</p>
                   <button
@@ -2353,7 +2360,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               ) : activeMods.length === 0 && activeCategoryId !== null ? (
                 // A category the user just made is empty by definition, so its
                 // empty state is the bulk picker rather than a Browse hint.
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className={emptyTabClass}>
                   <FolderPlus className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.categories.tabEmpty', {
@@ -2372,7 +2379,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               ) : activeMods.length === 0 ? (
                 // Non-prop types can't be imported, so the empty state just
                 // points the user at Browse instead of an import button.
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                <div className={emptyTabClass}>
                   <Layers className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.global.typeEmpty', {
