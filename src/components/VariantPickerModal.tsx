@@ -30,6 +30,8 @@ import {
     Download,
     ExternalLink,
     Files,
+    FilePlus,
+    Unlink,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
@@ -60,6 +62,12 @@ interface Props {
     onRenameVariant: (variant: Mod, label: string) => Promise<void> | void;
     /** Optional - open the GameBanana details modal for this mod. */
     onOpenModDetails?: () => void;
+    /** Optional - import more local VPKs as variants of this mod. Passed only
+     *  for local groups (a GameBanana group's files come from its submission). */
+    onAddVariant?: () => void;
+    /** Optional - take one file back out of the group. It stays installed and
+     *  enabled, it just stops being a variant of this mod. Local groups only. */
+    onDetachVariant?: (variant: Mod) => Promise<void> | void;
     /** Local mod ids that have a newer version available on GameBanana.
      *  Drives the per-row "Update" stamp and the group-level Update button. */
     variantsWithUpdate?: Set<string>;
@@ -119,8 +127,11 @@ function SortableVariantRow({
 }
 
 /**
- * Variant picker for grouped mods. Shown when a card represents multiple
- * VPKs sharing a GameBanana mod id. Any combination can be enabled.
+ * Variant picker for grouped mods. Shown when a card represents multiple VPKs
+ * that are variants of one mod: files from one GameBanana submission, or local
+ * imports sharing a group id. Any combination can be enabled. The add and
+ * detach affordances are passed only for local groups, whose membership is the
+ * user's to edit.
  */
 export default function VariantPickerModal({
     modName,
@@ -132,6 +143,8 @@ export default function VariantPickerModal({
     onDeleteVariant,
     onRenameVariant,
     onOpenModDetails,
+    onAddVariant,
+    onDetachVariant,
     variantsWithUpdate,
     onUpdateGroup,
     isUpdating = false,
@@ -215,6 +228,16 @@ export default function VariantPickerModal({
         }
     };
 
+    const handleDetach = async (variant: Mod) => {
+        if (pending || editing || !onDetachVariant) return;
+        setPending(`detach:${variant.id}`);
+        try {
+            await onDetachVariant(variant);
+        } finally {
+            setPending(null);
+        }
+    };
+
     const handleDelete = async (variant: Mod) => {
         if (pending || editing) return;
         setPending(`delete:${variant.id}`);
@@ -283,6 +306,7 @@ export default function VariantPickerModal({
         const isActive = v.enabled;
         const isPending = pending === v.id;
         const isDeletePending = pending === `delete:${v.id}`;
+        const isDetachPending = pending === `detach:${v.id}`;
         const isEditing = !overlay && editing?.id === v.id;
         const isRenamePending = pending === `rename:${v.id}`;
         const canMoveUp = idx > 0;
@@ -460,6 +484,22 @@ export default function VariantPickerModal({
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
+                        {onDetachVariant && (
+                            <button
+                                type="button"
+                                onClick={() => handleDetach(v)}
+                                disabled={overlay || !!pending}
+                                className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                                title={t('variantPicker.detachVariantHint')}
+                                aria-label={t('variantPicker.detachVariant')}
+                            >
+                                {isDetachPending ? (
+                                    <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <Unlink className="w-4 h-4" />
+                                )}
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => handleDelete(v)}
@@ -565,6 +605,18 @@ export default function VariantPickerModal({
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        {onAddVariant && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={FilePlus}
+                                onClick={onAddVariant}
+                                disabled={isUpdating || !!pending}
+                                title={t('variantPicker.addVariantHint')}
+                            >
+                                {t('variantPicker.addVariant')}
+                            </Button>
+                        )}
                         {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
                             <Button
                                 variant="primary"

@@ -91,6 +91,10 @@ import {
   type LockerCategory,
 } from '../lib/lockerCategories';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
+import {
+  STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
+  type StableKeyPreferencesMigratedDetail,
+} from '../lib/stableKeyMigration';
 import { showToast } from '../stores/toastStore';
 import {
   appendHeroTypeaheadCharacter,
@@ -535,6 +539,28 @@ export default function Locker() {
   // (placement): filing a mod only groups it for browsing, and nothing here ever
   // enables, disables, moves, or reorders anything.
   const [lockerCategories, setLockerCategories] = useState(readStoredLockerCategories);
+  useEffect(() => {
+    const handleStableKeyPreferencesMigrated = (
+      event: CustomEvent<StableKeyPreferencesMigratedDetail>
+    ) => {
+      setLockerCategories(
+        event.detail.lockerCategories.map((category) => ({
+          ...category,
+          keys: [...category.keys],
+        }))
+      );
+    };
+    window.addEventListener(
+      STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
+      handleStableKeyPreferencesMigrated
+    );
+    return () => {
+      window.removeEventListener(
+        STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
+        handleStableKeyPreferencesMigrated
+      );
+    };
+  }, []);
   const [categoryPickerId, setCategoryPickerId] = useState<string | null>(null);
   // { modId } when the "New category..." dialog was opened from a card's kebab,
   // so the created category can be filed with that mod straight away.

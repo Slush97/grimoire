@@ -16,20 +16,30 @@ import type { Mod } from '../types/mod';
 export const DISABLED_FAVORITES_KEY = 'installedDisabledFavorites';
 export const DISABLED_ORDER_KEY = 'installedDisabledOrder';
 
-type DisabledModIdentity = Pick<Mod, 'id' | 'gameBananaId' | 'sha256'>;
+type DisabledModIdentity = Pick<Mod, 'id' | 'gameBananaId' | 'sha256' | 'localGroupId'>;
 
 /**
  * Persisted identity for an Installed entry, in either section. A GameBanana
  * group and a singleton from that same submission intentionally share a key, so
  * the preference survives the entry changing between grouped and ungrouped.
  *
+ * An explicit local variant group wins even when imported metadata also carries
+ * a GameBanana id, and shares one key for a sharper reason:
+ * the page derives an entry's key from the group's PRIMARY, which is whichever
+ * member happens to be enabled. Falling through to the per-file sha256 would
+ * move the key every time the user switched variants, silently dropping the
+ * card out of its lists and losing its star.
+ *
  * The key is also stable across the enabled/disabled boundary: the GameBanana id
- * is immutable, sha256 is content-addressed (the metadata sidecar carries it
- * across the pakNN rename that enabling/disabling performs), and only the
- * last-resort `mod:<id>` form is volatile, because mod.id is derived from the
- * pakNN filename.
+ * is immutable, the local group id is minted once and carried by the sidecar,
+ * sha256 is content-addressed (the metadata sidecar carries it across the pakNN
+ * rename that enabling/disabling performs), and only the last-resort `mod:<id>`
+ * form is volatile, because mod.id is derived from the pakNN filename.
  */
 export function modPreferenceKey(mod: DisabledModIdentity): string {
+  if (mod.localGroupId) {
+    return `localgroup:${mod.localGroupId}`;
+  }
   if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
     return `gamebanana:${mod.gameBananaId}`;
   }

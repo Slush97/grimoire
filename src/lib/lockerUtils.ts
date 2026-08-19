@@ -377,10 +377,22 @@ export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType 
   return undefined;
 }
 
+/**
+ * Grouping key for a Locker skin card. GameBanana mods group by submission id;
+ * locally imported multi-VPK archives group by their minted local group id (see
+ * variantGroupKey in lib/variantGroups.ts, the shared grouping authority). A
+ * standalone local mod falls back to its own id, which is volatile across
+ * rescans but never groups it with anything else. The three prefixes are
+ * deliberately distinct so the namespaces cannot collide.
+ */
 export function getLockerSkinKey(mod: Mod): string {
-  return typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0
-    ? `gamebanana:${mod.gameBananaId}`
-    : `mod:${mod.id}`;
+  if (mod.localGroupId) {
+    return `localgroup:${mod.localGroupId}`;
+  }
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    return `gamebanana:${mod.gameBananaId}`;
+  }
+  return `mod:${mod.id}`;
 }
 
 /**

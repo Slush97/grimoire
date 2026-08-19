@@ -70,6 +70,7 @@ import {
   ArrowUpToLine,
   ImageDown,
   Link,
+  Unlink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -89,8 +90,8 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef, GameBananaFile } from '../types/gamebanana';
@@ -105,6 +106,7 @@ import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import VariantPickerModal from '../components/VariantPickerModal';
+import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
@@ -112,9 +114,18 @@ import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
+import {
+  canJoinLocalVariantGroup,
+  installedVariantGroupKey,
+  localVariantSelectionEligibility,
+} from '../lib/localVariantEligibility';
 import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
+import {
+  STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
+  type StableKeyPreferencesMigratedDetail,
+} from '../lib/stableKeyMigration';
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { formatBytes } from '../lib/formatBytes';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
@@ -128,6 +139,7 @@ import {
 } from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
 import { findReplacementTargetIdsAfterInstall } from '../lib/replacementCleanup';
+import { planLocalVariantUpdateRestore } from '../lib/localVariantUpdateRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
@@ -217,8 +229,9 @@ const DROP_STATE_RESET_DELAY_MS = 160;
 const INITIAL_MOUNT_COUNT = 40;
 
 /**
- * Rows on the Installed page are either standalone mods or grouped files
- * sharing the same GameBanana mod (e.g. five preset VPKs from one skin pack).
+ * Rows on the Installed page are either standalone mods or grouped files that
+ * are variants of one mod (e.g. five preset VPKs from one skin pack, whether
+ * they came from a GameBanana submission or a locally imported archive).
  * Grouped entries collapse to a single card; the picker modal handles
  * per-file enable, rename, and delete actions.
  */
@@ -226,7 +239,12 @@ type ModEntry =
   | { kind: 'single'; mod: Mod; key: string }
   | {
       kind: 'group';
-      gameBananaId: number;
+      /** Shared grouping key from variantGroupKey ("gb:123" / "local:<uuid>").
+       *  The stable identity of the group across reconciles. */
+      groupKey: string;
+      /** Set only for GameBanana groups. Absent on local groups, which have no
+       *  mod page to open and nothing to check for updates. */
+      gameBananaId?: number;
       variants: Mod[];
       /** Enabled files in this group. Empty when the whole group is disabled. */
       enabledVariants: Mod[];
@@ -240,6 +258,13 @@ type ModEntry =
       key: string;
     };
 
+/** Electron prefixes ipcRenderer.invoke rejections with the channel name;
+ *  strip it so toasts show only the main-process message. */
+function toastErrorMessage(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  return detail.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+}
+
 function modEntryKey(mod: Mod): string {
   if (typeof mod.gameBananaId === 'number' && typeof mod.gameBananaFileId === 'number') {
     return `single:gb:${mod.gameBananaId}:${mod.gameBananaFileId}`;
@@ -251,23 +276,24 @@ function modEntryKey(mod: Mod): string {
 }
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
-  const byGb = new Map<number, Mod[]>();
+  const byGroup = new Map<string, Mod[]>();
   const singles: Mod[] = [];
   for (const m of mods) {
-    if (typeof m.gameBananaId === 'number' && m.gameBananaId > 0) {
-      const arr = byGb.get(m.gameBananaId) ?? [];
+    const groupKey = installedVariantGroupKey(m);
+    if (groupKey) {
+      const arr = byGroup.get(groupKey) ?? [];
       arr.push(m);
-      byGb.set(m.gameBananaId, arr);
+      byGroup.set(groupKey, arr);
     } else {
       singles.push(m);
     }
   }
-  // Singletons (only one mod for a given GB id) collapse back to single
-  // entries — the group concept only matters when there are 2+ variants.
-  for (const [gb, variants] of Array.from(byGb.entries())) {
+  // Singletons (only one mod for a given group key) collapse back to single
+  // entries: the group concept only matters when there are 2+ variants.
+  for (const [groupKey, variants] of Array.from(byGroup.entries())) {
     if (variants.length === 1) {
       singles.push(variants[0]);
-      byGb.delete(gb);
+      byGroup.delete(groupKey);
     }
   }
 
@@ -289,7 +315,7 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     const key = (baseKeyCounts.get(base) ?? 0) > 1 ? `${base}#${m.id}` : base;
     entries.push({ kind: 'single', mod: m, key });
   }
-  for (const [gameBananaId, variants] of byGb) {
+  for (const [groupKey, variants] of byGroup) {
     // Sort variants by current priority so drag-reorder lines up with the
     // user's mental model ("which slot is this in?") and the picker shows
     // them in the same order as the addons folder.
@@ -298,15 +324,23 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     const active = enabledVariants[0] ?? null;
     const primary = enabledVariants[0] ?? variants[0];
     const totalSize = variants.reduce((sum, v) => sum + v.size, 0);
+    // Preserve primary provenance for mod-page affordances. Whether membership
+    // is user-managed comes from the authoritative group key, not this id: an
+    // explicit local group may legitimately contain an adopted GameBanana VPK.
+    const gameBananaId =
+      typeof primary.gameBananaId === 'number' && primary.gameBananaId > 0
+        ? primary.gameBananaId
+        : undefined;
     entries.push({
       kind: 'group',
+      groupKey,
       gameBananaId,
       variants,
       enabledVariants,
       active,
       primary,
       totalSize,
-      key: `group:${gameBananaId}`,
+      key: `group:${groupKey}`,
     });
   }
   return entries;
@@ -358,10 +392,13 @@ function entryInstalledAt(entry: ModEntry): string {
   );
 }
 
-/** A locally imported mod has no GameBanana id. Group entries are always
- *  GameBanana (they're keyed by a shared GameBanana mod id). */
+/** Whether membership/name are user-managed. Explicit local identity wins over
+ * adopted GameBanana provenance, matching variantGroupKey and the main process. */
 function entryIsLocal(entry: ModEntry): boolean {
-  return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
+  return entry.kind === 'single'
+    ? !!entry.mod.localGroupId ||
+        !(typeof entry.mod.gameBananaId === 'number' && entry.mod.gameBananaId > 0)
+    : entry.groupKey.startsWith('local:');
 }
 
 const OTHER_TAG_KEY = 'other';
@@ -558,12 +595,17 @@ interface InstalledEntryCardProps {
   favorite: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
-  onOpenPicker: (gameBananaId: number) => void;
+  /** Opens the variant picker for a group, by its shared grouping key. */
+  onOpenPicker: (groupKey: string) => void;
   onToggle: (entry: ModEntry) => void;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
+  /** Open the add-variants import dialog for a local entry. */
+  onAddVariant: (entry: ModEntry) => void;
+  /** Dissolve a local variant group (every member becomes its own card). */
+  onUngroupVariants: (entry: ModEntry) => Promise<void>;
   /** Open the imprint details modal for a mod whose wire `imprinted` flag is
    *  true. Externally-imprinted files without the local flag simply do not get
    *  the menu entry: the flag is the cheap client hint, and the modal's empty
@@ -619,6 +661,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onAddVariant,
+  onUngroupVariants,
   onViewImprint,
   onTagLocker,
   onTagGlobal,
@@ -654,8 +698,13 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
-        onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
-        onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
+        onEditLocal={entryIsLocal(entry) ? () => onEditLocal(mod) : undefined}
+        onRenameLocal={
+          entryIsLocal(entry) ? (newName) => onRenameLocal(mod, newName) : undefined
+        }
+        // A local mod can adopt variants: the first add mints the group. A
+        // merged VPK is excluded, like it is from the GameBanana link flow.
+        onAddVariant={canJoinLocalVariantGroup(mod) ? () => onAddVariant(entry) : undefined}
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onTagLocker={(heroName) => onTagLocker(entry, heroName)}
         onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
@@ -664,7 +713,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           // Any local (unlinked, non-merged) mod can search GameBanana and
           // link, not just ones flagged "unknown": naming a local mod via
           // Edit Local clears isUnknown but it still has no GameBanana source.
-          entryIsLocal(entry) && !mod.merged ? () => onFixUnknown(mod) : undefined
+          entryIsLocal(entry) &&
+          !mod.merged &&
+          !(typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0)
+            ? () => onFixUnknown(mod)
+            : undefined
         }
         fixingUnknown={fixingUnknown}
         loadPosition={loadPosition}
@@ -710,7 +763,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       soundVolume={soundVolume}
       updateAvailable={updateAvailable}
       entryKey={entry.key}
-      onOpenDetails={() => onOpenPicker(entry.gameBananaId)}
+      onOpenDetails={() => onOpenPicker(entry.groupKey)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
@@ -718,6 +771,20 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onSoloLaunch={() => onSoloLaunch(entry)}
       soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
+      // A local group is the user's own construction, so it can be renamed,
+      // extended and dissolved from the card. A GameBanana group can do none of
+      // those: its files and its name come from the submission. Renaming the
+      // primary renames every member (main fans the name out).
+      onEditLocal={entryIsLocal(entry) ? () => onEditLocal(entry.primary) : undefined}
+      onRenameLocal={
+        entryIsLocal(entry) ? (newName) => onRenameLocal(entry.primary, newName) : undefined
+      }
+      onAddVariant={
+        entryIsLocal(entry) && entry.variants.every(canJoinLocalVariantGroup)
+          ? () => onAddVariant(entry)
+          : undefined
+      }
+      onUngroupVariants={entryIsLocal(entry) ? () => void onUngroupVariants(entry) : undefined}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
       onSetPriority={(priority) => onSetPriority(entry, priority)}
@@ -745,7 +812,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           variant.sourceFileName ??
           variant.fileName
         ),
-        onOpenPicker: () => onOpenPicker(entry.gameBananaId),
+        onOpenPicker: () => onOpenPicker(entry.groupKey),
       }}
     />
   );
@@ -847,10 +914,12 @@ export default function Installed() {
     deleteMod,
     reorderMods,
     editLocalMod,
+    setLocalVariantGroup,
     setModLockerHero,
     setModGlobalType,
     setModPriorityFolder,
     setVariantLabel,
+    importCustomMods,
     soundVolume,
     setInstalledScrollTop,
     setBrowseUi,
@@ -861,6 +930,21 @@ export default function Installed() {
   // User-authored lists (see lib/modLists.ts). Purely an organization axis:
   // membership never changes what is enabled, only which cards are shown.
   const [modLists, setModLists] = useState(readStoredModLists);
+  // Grouping changes a standalone mod's stable key (sha256 -> localgroup) and
+  // splitting does the reverse. The store migrates localStorage atomically,
+  // then signals this mounted page so its component-local mirrors update in
+  // the same interaction instead of waiting for a remount.
+  useEffect(() => {
+    const handleMigration = (
+      event: CustomEvent<StableKeyPreferencesMigratedDetail>
+    ) => {
+      setDisabledFavorites(new Set(event.detail.disabledFavorites));
+      setDisabledOrder([...event.detail.disabledOrder]);
+      setModLists(event.detail.modLists.map((list) => ({ ...list, keys: [...list.keys] })));
+    };
+    window.addEventListener(STABLE_KEY_PREFERENCES_MIGRATED_EVENT, handleMigration);
+    return () => window.removeEventListener(STABLE_KEY_PREFERENCES_MIGRATED_EVENT, handleMigration);
+  }, []);
   // Entry the "New list" dialog was opened from, so creating also files it.
   const [creatingListFor, setCreatingListFor] = useState<ModEntry | null>(null);
   const [managingLists, setManagingLists] = useState(false);
@@ -1278,12 +1362,28 @@ export default function Installed() {
   // GB id of the group whose picker is open, or null. The actual entry is
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
-  const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
+  // Open variant picker, held by the group's shared grouping key (see
+  // variantGroupKey): "gb:<id>" for GameBanana groups, "local:<uuid>" for
+  // locally imported multi-VPK archives.
+  const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
   // on the page's buttons.
   const setImportOpen = useAppStore((s) => s.setBatchImportOpen);
+  // Target of the "Add variant" dialog, which IS hosted here (unlike the plain
+  // batch import): it can only be opened from a card, so the page always has
+  // mods and can never early-return out from under it. `groupId` is null for a
+  // standalone local mod, whose group is minted on the first successful add.
+  const [addVariantTarget, setAddVariantTarget] = useState<{
+    modIds: string[];
+    groupId: string | null;
+    modName: string;
+    /** Set once this dialog minted the group, so a retry after a partial
+     *  failure joins the same group instead of minting another, and closing
+     *  without a single file landing can undo the mint. */
+    mintedGroupId?: string;
+  } | null>(null);
   const [unknownFilterGuess, setUnknownFilterGuess] = useState<{
     mod: Mod;
     loading: boolean;
@@ -2279,19 +2379,65 @@ export default function Installed() {
           !replacementTargets.some((target) => target.id === mod.id),
       );
       if (!isDownloadRequestPending(detailsMod.id, fileId)) return;
+      let installedBeforeCleanup: typeof mods;
+      let targetIds: string[];
       if (!replacementAlreadyInstalled) {
         await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
         await loadMods();
-        const installedAfterDownload = useAppStore.getState().mods;
-        const targetIds = findReplacementTargetIdsAfterInstall(
-          installedAfterDownload,
+        installedBeforeCleanup = useAppStore.getState().mods;
+        targetIds = findReplacementTargetIdsAfterInstall(
+          installedBeforeCleanup,
           replacementTargets,
           fileId,
         );
-        for (const targetId of targetIds) await deleteModApi(targetId);
       } else {
-        for (const mod of replacementTargets) await deleteModApi(mod.id);
+        installedBeforeCleanup = useAppStore.getState().mods;
+        targetIds = replacementTargets.map((mod) => mod.id);
       }
+
+      // A GameBanana update is normally forbidden from entering a local
+      // variant group. The narrow restore IPC proves this is a replacement for
+      // a still-installed adopted member, then copies that group's established
+      // identity before the source is deleted. If the mapping is ambiguous,
+      // keep the old source rather than split the card and orphan preferences.
+      const groupedReplacement = replacementTargets.some((target) => !!target.localGroupId);
+      let localGroupRestore = planLocalVariantUpdateRestore(
+        replacementTargets,
+        installedBeforeCleanup,
+        targetIds,
+        detailsMod.id,
+        fileId,
+      );
+      if (groupedReplacement && !localGroupRestore) {
+        throw new Error(t('installed.variants.updateRestoreFailed'));
+      }
+      // A Global local group must stay wholly in the priority folder. Move the
+      // fresh files first (the existing restore operation owns filesystem
+      // placement), then recompute because that move changes local mod ids.
+      // Main refuses to stamp group metadata until placement matches, so a
+      // failed move leaves the still-installed source and its preferences safe.
+      if (localGroupRestore && restoreGlobal.allGlobal) {
+        const replacementIds = new Set(localGroupRestore.replacementModIds);
+        for (const replacement of installedBeforeCleanup) {
+          if (replacementIds.has(replacement.id) && !replacement.priorityMod) {
+            await setModPriorityFolder(replacement.id, true);
+          }
+        }
+        await loadMods({ force: true });
+        installedBeforeCleanup = useAppStore.getState().mods;
+        localGroupRestore = planLocalVariantUpdateRestore(
+          replacementTargets,
+          installedBeforeCleanup,
+          targetIds,
+          detailsMod.id,
+          fileId,
+        );
+        if (!localGroupRestore) {
+          throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
+        }
+      }
+      if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
+      for (const targetId of targetIds) await deleteModApi(targetId);
 
       await loadMods({ force: true });
 
@@ -2349,7 +2495,7 @@ export default function Installed() {
       // The error dialog below only renders when no mod is loaded, and the
       // overlay now stays open through the install, so a failure has to be
       // surfaced as a toast or it would be swallowed entirely.
-      showToast(String(err), { tone: 'error', duration: 6000 });
+      showToast(toastErrorMessage(err), { tone: 'error', duration: 6000 });
     } finally {
       releaseDownloadRequest(detailsMod.id, fileId);
     }
@@ -2379,6 +2525,7 @@ export default function Installed() {
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
         wasGlobal: !!m.priorityMod,
+        localGroupId: m.localGroupId,
         fileDescription: m.fileDescription,
         sourceFileName: m.sourceFileName,
       }));
@@ -2593,6 +2740,38 @@ export default function Installed() {
             cleanupTargets,
             batch.fileId,
           );
+          const groupedReplacement = batch.snapshots.some((snapshot) => !!snapshot.localGroupId);
+          let localGroupRestore = planLocalVariantUpdateRestore(
+            batch.snapshots,
+            installedAfterDownload,
+            targetIds,
+            batch.gameBananaId,
+            batch.fileId,
+          );
+          if (groupedReplacement && !localGroupRestore) {
+            throw new Error(t('installed.variants.updateRestoreFailed'));
+          }
+          if (localGroupRestore && restoreGlobal.allGlobal) {
+            const replacementIds = new Set(localGroupRestore.replacementModIds);
+            for (const replacement of installedAfterDownload) {
+              if (replacementIds.has(replacement.id) && !replacement.priorityMod) {
+                await setModPriorityFolder(replacement.id, true);
+              }
+            }
+            await loadMods({ force: true });
+            const installedAfterPriorityRestore = useAppStore.getState().mods;
+            localGroupRestore = planLocalVariantUpdateRestore(
+              batch.snapshots,
+              installedAfterPriorityRestore,
+              targetIds,
+              batch.gameBananaId,
+              batch.fileId,
+            );
+            if (!localGroupRestore) {
+              throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
+            }
+          }
+          if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
           for (const targetId of targetIds) await deleteModApi(targetId);
           completed.push({
             gameBananaId: batch.gameBananaId,
@@ -2686,10 +2865,11 @@ export default function Installed() {
    * Update every flagged variant within one grouped mod. Invoked from the
    * variant picker so the user doesn't have to bounce out to the mod page.
    */
-  const handleUpdateGroup = async (gameBananaId: number) => {
+  const handleUpdateGroup = async (variantIds: readonly string[]) => {
+    const groupIds = new Set(variantIds);
     setUpdateAllError(null);
     await runUpdate(
-      mods.filter((m) => m.gameBananaId === gameBananaId && updatesAvailable.has(m.id)),
+      mods.filter((m) => groupIds.has(m.id) && updatesAvailable.has(m.id)),
     );
   };
 
@@ -2748,6 +2928,27 @@ export default function Installed() {
   const selectedMods = mods.filter((m) => selectedIds.has(m.id));
   const selectedEnabledCount = selectedMods.filter((m) => m.enabled).length;
   const selectedDisabledCount = selectedMods.length - selectedEnabledCount;
+  // Grouping as variants is local-only. Merged outputs also stay standalone:
+  // their card is the only route to contents, unmerge, and share-code recovery.
+  const groupSelectionEligibility = localVariantSelectionEligibility(selectedMods);
+  const canGroupSelectionAsVariants = groupSelectionEligibility.eligible;
+
+  // Make the selection one mod with N variants. Every member adopts the first
+  // one's name (main does that), so the group card has a coherent title.
+  const handleBulkGroupVariants = async () => {
+    if (!canGroupSelectionAsVariants) return;
+    const targets = selectedMods.map((m) => m.id);
+    try {
+      await setLocalVariantGroup(targets, { mode: 'mint' });
+      showToast(t('installed.variants.grouped', { count: targets.length }), { tone: 'success' });
+      exitSelectMode();
+    } catch (err) {
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
+    }
+  };
 
   const handleBulkEnable = async () => {
     // Snapshot the work list before the loop so the progress total stays
@@ -3159,7 +3360,7 @@ export default function Installed() {
     if (group.enabledVariants.length > 0) {
       await setGroupEnabled(group, false);
     } else {
-      setPickerGroupId(group.gameBananaId);
+      setPickerGroupId(group.groupKey);
     }
   };
 
@@ -3510,8 +3711,8 @@ export default function Installed() {
     if (mod.merged) setMergedContentsMod(mod);
     else if (mod.gameBananaId) void openModDetails(mod);
   });
-  const openEntryPicker = useStableCallback((gameBananaId: number) => {
-    setPickerGroupId(gameBananaId);
+  const openEntryPicker = useStableCallback((groupKey: string) => {
+    setPickerGroupId(groupKey);
   });
   // Open an artist's page inside Grimoire by entering Browse's artist mode (the
   // grid scoped to that submitter), the same surface the artist card in a mod's
@@ -3673,6 +3874,102 @@ export default function Installed() {
       thumbnailDataUrl: mod.thumbnailUrl,
       nsfw: mod.nsfw,
     });
+  });
+
+  // LOCAL VARIANT GROUPS
+  //
+  // Grouping is derived from `localGroupId` (see lib/variantGroups.ts), so the
+  // grid regroups on its own once main has written the sidecars: none of these
+  // handlers touch entry state.
+  const openAddVariant = useStableCallback((entry: ModEntry) => {
+    const members = entry.kind === 'group' ? entry.variants : [entry.mod];
+    setAddVariantTarget({
+      modIds: members.map((m) => m.id),
+      // Null for a standalone mod: importVariantsIntoGroup mints the group at
+      // import time, so a dialog the user cancels leaves no stray id behind.
+      groupId: members[0]?.localGroupId ?? null,
+      modName: entry.kind === 'group' ? entry.primary.name : entry.mod.name,
+    });
+  });
+  const importVariantsIntoGroup = useStableCallback(async (items: ImportCustomModArgs[]) => {
+    const target = addVariantTarget;
+    if (!target) return [];
+    let groupId = target.groupId;
+    if (!groupId) {
+      groupId = await setLocalVariantGroup(target.modIds, { mode: 'mint' });
+      if (!groupId) throw new Error(t('installed.variants.createGroupFailed'));
+      // Remember it: the dialog stays open on a partial failure, and the retry
+      // must land in this group rather than mint a second one.
+      const minted = groupId;
+      setAddVariantTarget((prev) =>
+        prev ? { ...prev, groupId: minted, mintedGroupId: minted } : prev
+      );
+    }
+    // Every row joins the group under the group's name; the per-file label
+    // comes from the archive folder or filename, stamped by the import itself.
+    return importCustomMods(
+      items.map((item) => ({ ...item, name: target.modName, localGroupId: groupId }))
+    );
+  });
+  // Closing without a single file landing undoes a mint from this dialog: the
+  // lone member would otherwise keep a group id nothing else shares (harmless
+  // on screen, since a one-member group renders as a plain card, but it is
+  // state the user never asked for).
+  const closeAddVariant = useStableCallback(() => {
+    const target = addVariantTarget;
+    setAddVariantTarget(null);
+    if (!target?.mintedGroupId) return;
+    // Read the store, not this render's `mods`: a successful import closes the
+    // dialog immediately after updating the store, before React has re-rendered
+    // this page, and the stale list would look like nothing joined.
+    const members = useAppStore
+      .getState()
+      .mods.filter((m) => m.localGroupId === target.mintedGroupId);
+    if (members.length !== 1) return;
+    void setLocalVariantGroup([members[0].id], { mode: 'clear' }).catch(() => {
+      // Best effort: the id is invisible either way.
+    });
+  });
+  const reportVariantImport = useStableCallback((results: ImportCustomModResult[]) => {
+    const imported = results.reduce((total, r) => total + (r.ok ? r.imported : 0), 0);
+    const failed = results.filter((r) => !r.ok);
+    if (imported > 0) {
+      showToast(t('installed.batchImport.addedVariantsToast', { count: imported }), {
+        tone: 'success',
+      });
+    }
+    if (failed.length > 0) {
+      showToast(
+        t('installed.batchImport.failedToast', { count: failed.length, error: failed[0].error ?? '' }),
+        { tone: 'error', duration: 9000 }
+      );
+    }
+  });
+  const ungroupEntry = useStableCallback(async (entry: ModEntry) => {
+    if (entry.kind !== 'group') return;
+    const count = entry.variants.length;
+    try {
+      await setLocalVariantGroup(entry.variants.map((v) => v.id), { mode: 'clear' });
+      showToast(t('installed.variants.ungrouped', { count }), { tone: 'success' });
+    } catch (err) {
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
+    }
+  });
+  // Detach ONE file from a group. Main dissolves the group when this would
+  // leave a single member behind, so no orphan id lingers.
+  const detachVariant = useStableCallback(async (variant: Mod) => {
+    try {
+      await setLocalVariantGroup([variant.id], { mode: 'clear' });
+      showToast(t('installed.variants.detached'), { tone: 'success' });
+    } catch (err) {
+      showToast(
+        t('installed.variants.groupFailed', { error: toastErrorMessage(err) }),
+        { tone: 'error' }
+      );
+    }
   });
   const tagEntryLocker = useStableCallback(async (entry: ModEntry, heroName: string | null) => {
     if (entry.kind === 'group') {
@@ -4153,6 +4450,8 @@ export default function Installed() {
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
+    onAddVariant: openAddVariant,
+    onUngroupVariants: ungroupEntry,
     onViewImprint: viewEntryImprint,
     onTagLocker: tagEntryLocker,
     onTagGlobal: tagEntryGlobal,
@@ -4991,13 +5290,24 @@ export default function Installed() {
         />
       )}
 
+      {/* Add variants to an existing local mod. The same batch-import dialog
+          as the toolbar's, minus the per-row name: the group owns the name. */}
+      {addVariantTarget && (
+        <ImportCustomModsModal
+          addToGroup={{ modName: addVariantTarget.modName }}
+          onClose={closeAddVariant}
+          onImport={importVariantsIntoGroup}
+          onFinished={reportVariantImport}
+        />
+      )}
+
       {(() => {
         if (pickerGroupId === null) return null;
         // Derive the live entry from current mods so deletes inside the
         // picker reflect immediately. If the group has disappeared (all
         // files deleted or moved), auto-close the picker.
         const liveEntry = allEntries.find(
-          (e) => e.kind === 'group' && e.gameBananaId === pickerGroupId
+          (e) => e.kind === 'group' && e.groupKey === pickerGroupId
         ) as Extract<ModEntry, { kind: 'group' }> | undefined;
         if (!liveEntry) {
           // Defer close to avoid setState during render warnings.
@@ -5019,8 +5329,16 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
+        const localGroup = liveEntry.groupKey.startsWith('local:');
         const variantsWithUpdate = new Set(
-          liveEntry.variants.filter((v) => updatesAvailable.has(v.id)).map((v) => v.id),
+          liveEntry.variants
+            .filter(
+              (variant) =>
+                typeof variant.gameBananaId === 'number' &&
+                variant.gameBananaId > 0 &&
+                updatesAvailable.has(variant.id)
+            )
+            .map((variant) => variant.id),
         );
         return (
           <VariantPickerModal
@@ -5044,10 +5362,22 @@ export default function Installed() {
                   }
                 : undefined
             }
+            // Membership is only editable for local groups: a GameBanana group
+            // is defined by its submission, not by the user. Adding closes the
+            // picker (one modal at a time); the card reopens it.
+            onAddVariant={
+              localGroup
+                ? () => {
+                    setPickerGroupId(null);
+                    openAddVariant(liveEntry);
+                  }
+                : undefined
+            }
+            onDetachVariant={localGroup ? (variant) => detachVariant(variant) : undefined}
             variantsWithUpdate={variantsWithUpdate}
             onUpdateGroup={
               variantsWithUpdate.size > 0
-                ? () => handleUpdateGroup(liveEntry.gameBananaId)
+                ? () => handleUpdateGroup(liveEntry.variants.map((variant) => variant.id))
                 : undefined
             }
             isUpdating={!!updateAllProgress}
@@ -5385,6 +5715,32 @@ export default function Installed() {
                 }
               >
                 {t('installed.select.merge')}{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
+              </Button>
+              {/* Group as variants: one card, N interchangeable files. Unlike
+                  Merge, nothing is rebuilt or combined; the files stay separate
+                  and independently toggleable. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!canGroupSelectionAsVariants}
+                icon={Files}
+                onClick={handleBulkGroupVariants}
+                title={
+                  groupSelectionEligibility.eligible
+                    ? t('installed.select.groupVariantsHint', { count: selectedMods.length })
+                    : groupSelectionEligibility.reason === 'minimum'
+                    ? t('installed.select.groupVariantsMinHint')
+                    : groupSelectionEligibility.reason === 'merged'
+                      ? t('installed.select.groupVariantsMergedHint')
+                      : groupSelectionEligibility.reason === 'placement'
+                        ? t('installed.select.groupVariantsPlacementHint')
+                        : groupSelectionEligibility.reason === 'classification'
+                          ? t('installed.select.groupVariantsClassificationHint')
+                          : t('installed.select.groupVariantsLocalHint')
+                }
+              >
+                {t('installed.select.groupVariants')}
+                {canGroupSelectionAsVariants ? ` (${selectedMods.length})` : ''}
               </Button>
               <div className="relative" ref={tagMenuRef}>
                 <Button
@@ -7356,6 +7712,11 @@ interface ModCardProps {
   /** Inline rename of a local mod's name (double-click the title). Undefined
    *  for GameBanana-sourced mods, which can't be renamed. */
   onRenameLocal?: (newName: string) => Promise<void>;
+  /** Import more local VPKs as variants of this mod. Local cards only: a
+   *  GameBanana mod's files come from its submission. */
+  onAddVariant?: () => void;
+  /** Dissolve this local variant group. Passed only on local GROUP cards. */
+  onUngroupVariants?: () => void;
   /** Open the imprint details modal. Passed only when the mod's wire
    *  `imprinted` flag is true (the parent gates on it); shown in the card's
    *  right-click menu. */
@@ -7396,9 +7757,10 @@ interface ModCardProps {
   onToggleList?: (listId: string) => void;
   onCreateList?: () => void;
   entryKey?: string;
-  /** Present when this card represents grouped files from the same
-   *  GameBanana mod. Swaps the filename meta for an enabled/total count and
-   *  routes the card-body click to the picker modal. */
+  /** Present when this card represents grouped files that are variants of one
+   *  mod (a GameBanana submission, or a locally imported multi-VPK archive).
+   *  Swaps the filename meta for an enabled/total count and routes the
+   *  card-body click to the picker modal. */
   group?: {
     variantCount: number;
     /** Enabled file labels for this group. Empty when fully disabled. */
@@ -8018,6 +8380,8 @@ function ModCard({
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onAddVariant,
+  onUngroupVariants,
   onViewImprint,
   onTagLocker,
   onTagGlobal,
@@ -8283,12 +8647,20 @@ function ModCard({
     : favorite
       ? t('installed.card.removeDisabledFavorite', { name: mod.name })
       : t('installed.card.addDisabledFavorite', { name: mod.name });
+  // Context-menu actions should scan like actions, not tooltips. Keep the
+  // longer placement explanation on the card button's title/aria label, while
+  // the right-click and kebab menus use the same concise wording as Locker.
+  const favoriteMenuLabel = favorite
+    ? t('installed.card.unfavorite')
+    : t('installed.card.favorite');
 
   // One canonical list of card actions, mounted twice: once under the
   // right-click (context) root wrapping the whole card, once under the
   // dropdown root on the three-dot button. Only one of the two is open at a
   // time, so this renders once in practice.
-  const hasTopActions = !!onEditLocal || !!onOpenDetails || !!onViewAuthor || !!cardImageSource;
+  const hasTopActions =
+    !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
+    || !!cardImageSource;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
@@ -8297,6 +8669,16 @@ function ModCard({
       {onEditLocal && (
         <MenuItem icon={Pencil} onSelect={onEditLocal}>
           {t('installed.card.edit')}
+        </MenuItem>
+      )}
+      {onAddVariant && (
+        <MenuItem icon={FilePlus} onSelect={onAddVariant}>
+          {t('installed.card.addVariant')}
+        </MenuItem>
+      )}
+      {onUngroupVariants && (
+        <MenuItem icon={Unlink} onSelect={onUngroupVariants}>
+          {t('installed.card.ungroupVariants')}
         </MenuItem>
       )}
       {onOpenDetails && (
@@ -8338,7 +8720,7 @@ function ModCard({
       )}
       {onToggleFavorite && (
         <MenuItem icon={Star} onSelect={onToggleFavorite}>
-          {favoriteLabel}
+          {favoriteMenuLabel}
         </MenuItem>
       )}
       <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>

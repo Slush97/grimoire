@@ -282,8 +282,58 @@ export interface SaveDialogOptions {
 export interface ImportCustomModArgs {
     vpkPath: string;
     name: string;
+    /** Optional user-facing name for this variant source. Exact for a bare VPK;
+     *  used as a prefix when an archive expands into several VPK members. */
+    variantLabel?: string;
     thumbnailDataUrl?: string;
     nsfw?: boolean;
+    /** Join this existing local variant group instead of standing alone. Every
+     *  VPK this source yields gets the id, so a SINGLE-vpk source imported into
+     *  a group joins it rather than collapsing it. Omitted for a normal import,
+     *  where a multi-VPK archive still mints its own group id. */
+    localGroupId?: string;
+    /** Groups sources within this one batch without letting the renderer mint
+     *  persistent ids. Main maps equal non-empty keys to one random UUID. The
+     *  key itself is request-local and is never written to metadata. */
+    localGroupBatchKey?: string;
+}
+
+/**
+ * What `setLocalVariantGroup` should do with the mods it is handed.
+ *
+ * A discriminated shape rather than a nullable id, so "mint a fresh group" is
+ * not spelled as a magic string a real group id could collide with, and so uuid
+ * minting stays in ONE place (the main process). The minted id comes back in
+ * the result, which is what the "add a variant to a standalone local mod" flow
+ * hands to the import that follows.
+ */
+export type LocalVariantGroupTarget =
+    /** Mint a fresh group id and put every listed mod in it. */
+    | { mode: 'mint' }
+    /** Put every listed mod into an existing group. */
+    | { mode: 'join'; groupId: string }
+    /** Take every listed mod out of whatever group it is in. */
+    | { mode: 'clear' };
+
+export interface SetLocalVariantGroupResult {
+    /** The group every listed mod now belongs to, or null after a clear. */
+    groupId: string | null;
+    /** The full enriched mod list after the change. */
+    mods: Mod[];
+}
+
+/**
+ * Reattach a freshly downloaded GameBanana replacement to the explicit local
+ * variant group its still-installed source belongs to. Main validates the
+ * source and replacement provenance; this is intentionally separate from the
+ * user-facing grouping API so ordinary GameBanana mods remain ineligible.
+ */
+export interface RestoreLocalVariantGroupReplacementArgs {
+    sourceModId: string;
+    sourceGameBananaFileId: number;
+    replacementModIds: string[];
+    expectedGameBananaId: number;
+    replacementGameBananaFileId: number;
 }
 
 /** Batch local import: one entry per picked file, imported in array order. */
@@ -297,6 +347,9 @@ export interface ImportCustomModResult {
     ok: boolean;
     /** Mod slots this source produced (an archive can yield several). */
     imported: number;
+    /** Resolved local group id when this source was imported as a variant.
+     *  Returned even on failure so a retry joins files that already landed. */
+    localGroupId?: string;
     error?: string;
 }
 
@@ -759,6 +812,13 @@ export interface ElectronAPI {
     associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
     listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
     editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
+    setLocalVariantGroup: (
+        modIds: string[],
+        target: LocalVariantGroupTarget
+    ) => Promise<SetLocalVariantGroupResult>;
+    restoreLocalVariantGroupReplacement: (
+        args: RestoreLocalVariantGroupReplacementArgs
+    ) => Promise<void>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;

@@ -31,7 +31,15 @@ export type VariantChoice = 'random' | { fileId: number };
 
 /**
  * Stable identity for a skin used by the shuffle for the opt-in pool. Prefers
- * the GameBanana archive id, then the content hash, then the volatile mod id.
+ * an explicit local variant group, then the GameBanana archive id, then the
+ * content hash, then the volatile mod id.
+ *
+ * The key MUST be shared by every variant of a skin: callers read it off
+ * `skin.primary`, and the primary is whichever variant is currently enabled.
+ * That is exactly what the shuffle changes, so a per-file key would drop a
+ * multi-variant skin out of its own pool the first time it was re-rolled. A
+ * local variant group is therefore keyed by its group id, the same way a
+ * GameBanana submission is keyed by its archive id.
  *
  * We deliberately do NOT reuse getLockerSkinKey: its `mod:<id>` fallback keys
  * off mod.id, which is derived from the pakNN filename and changes every time a
@@ -40,6 +48,9 @@ export type VariantChoice = 'random' | { fileId: number };
  * content-addressed and survives the rename.
  */
 export function shuffleSkinKey(mod: Mod): string {
+  if (mod.localGroupId) {
+    return `localgroup:${mod.localGroupId}`;
+  }
   if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
     return `gamebanana:${mod.gameBananaId}`;
   }

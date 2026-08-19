@@ -7,13 +7,14 @@ import {
   Fingerprint,
   FilePlus,
   ImagePlus,
+  Layers3,
   Loader2,
   Plus,
   UploadCloud,
   X,
 } from 'lucide-react';
 import { Modal } from './common/Modal';
-import { Button, IconButton, ModalHeader, Tag } from './common/ui';
+import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from './common/ui';
 import { Input } from './common/forms';
 import {
   onImportCustomModsProgress,
@@ -32,6 +33,7 @@ import {
   VPK_IMPORT_EXTS,
   VPK_IMPORT_RE,
   deriveModNameFromPath,
+  deriveVariantLabel,
   fileNameOf,
   pathDedupeKey,
 } from '../lib/customModImport';
@@ -42,6 +44,8 @@ interface ImportRow {
   /** Identity AND dedupe key: one row per source file, so the path is both. */
   path: string;
   name: string;
+  /** Optional name written to the grouped variant picker. */
+  variantLabel: string;
   /** The current name came from the user typing, not from a parse/peek fill. */
   nameTouched: boolean;
   imagePath: string;
@@ -60,11 +64,22 @@ interface ImportCustomModsModalProps {
   /** Fired once after a batch, with every source's outcome, so the host can
    *  toast a summary. Failed rows stay listed in the dialog either way. */
   onFinished?: (results: ImportCustomModResult[]) => void;
+  /** Add-variants mode: every file imported here becomes another variant of an
+   *  existing local mod instead of a mod of its own. The group owns the name,
+   *  so the per-row name field is hidden and every item is submitted under
+   *  `modName`. The host's `onImport` is what attaches the group id (and mints
+   *  the group when the target is still a standalone mod), which keeps uuid
+   *  minting out of this dialog. */
+  addToGroup?: { modName: string };
 }
 
 const newRow = (path: string): ImportRow => ({
   path,
   name: deriveModNameFromPath(path),
+  // Bare VPKs map one-to-one to picker rows, so make the current generated
+  // label directly editable. Archives stay blank because one source can expand
+  // into several members; typing there intentionally supplies a shared prefix.
+  variantLabel: path.toLowerCase().endsWith('.vpk') ? deriveVariantLabel(path) : '',
   nameTouched: false,
   imagePath: '',
   thumbnailDataUrl: '',
@@ -86,12 +101,18 @@ const newRow = (path: string): ImportRow => ({
  * the button retries exactly what's left. That retry only holds because this
  * dialog is hosted by Layout, not by Installed: mounting it under a page that
  * early-returns on an empty mod list would unmount it the moment a first-ever
- * import made the list non-empty, taking the failed rows with it.
+ * import made the list non-empty, taking the failed rows with it. (The
+ * add-variants instance is hosted by Installed instead, which is safe: it can
+ * only be opened from a card, so the page always has mods.)
+ *
+ * With `addToGroup`, the same dialog adds variants to an existing local mod:
+ * same picking, dropping and retry behavior, minus the per-row name field.
  */
 export default function ImportCustomModsModal({
   onClose,
   onImport,
   onFinished,
+  addToGroup,
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
   const platform = window.electronAPI.platform;
@@ -99,6 +120,11 @@ export default function ImportCustomModsModal({
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groupAsVariants, setGroupAsVariants] = useState(false);
+  const [variantGroupName, setVariantGroupName] = useState('');
+  // Main returns the UUID it minted. Keep it across a partial-failure retry so
+  // the remaining files join the members that already landed.
+  const [variantGroupId, setVariantGroupId] = useState<string | null>(null);
   // Row paths in submit order, so a progress event's index maps back to a row.
   const submittedPathsRef = useRef<string[]>([]);
 
@@ -264,7 +290,37 @@ export default function ImportCustomModsModal({
   };
 
   const allNsfw = rows.length > 0 && rows.every((row) => row.nsfw);
-  const unnamedCount = rows.filter((row) => row.name.trim().length === 0).length;
+  const toggleVariantImport = () => {
+    if (submitting || addToGroup) return;
+    setGroupAsVariants((enabled) => {
+      const next = !enabled;
+      if (next && !variantGroupName.trim()) {
+        setVariantGroupName(rows[0]?.name.trim() ?? '');
+      }
+      return next;
+    });
+  };
+  const removeRow = (path: string) => {
+    const remaining = rows.filter((row) => row.path !== path);
+    setRows(remaining);
+    // Before anything has landed, one source does not need an explicit batch
+    // group. After a partial failure, keep the mode armed even if one retry row
+    // remains: it must rejoin the already-imported member via variantGroupId.
+    if (remaining.length < 2 && !variantGroupId) setGroupAsVariants(false);
+  };
+  const clearRows = () => {
+    setRows([]);
+    setError(null);
+    if (!variantGroupId) setGroupAsVariants(false);
+  };
+  const usesSharedName = !!addToGroup || groupAsVariants;
+  // In add-variants mode the group's name covers every row, so a row can never
+  // be unnamed and nothing blocks the submit.
+  const unnamedCount = addToGroup
+    ? 0
+    : groupAsVariants
+      ? (variantGroupName.trim().length === 0 ? 1 : 0)
+    : rows.filter((row) => row.name.trim().length === 0).length;
   const canSubmit = rows.length > 0 && unnamedCount === 0 && !submitting;
 
   const handleSubmit = async () => {
@@ -279,11 +335,24 @@ export default function ImportCustomModsModal({
       const results = await onImport(
         batch.map((row) => ({
           vpkPath: row.path,
-          name: row.name.trim(),
+          name: addToGroup
+            ? addToGroup.modName
+            : groupAsVariants
+              ? variantGroupName.trim()
+              : row.name.trim(),
+          variantLabel: usesSharedName ? row.variantLabel?.trim() || undefined : undefined,
           thumbnailDataUrl: row.thumbnailDataUrl || undefined,
           nsfw: row.nsfw,
+          localGroupId: groupAsVariants ? variantGroupId ?? undefined : undefined,
+          localGroupBatchKey:
+            groupAsVariants && !variantGroupId ? 'import-modal-variant-group' : undefined,
         }))
       );
+
+      if (groupAsVariants) {
+        const resolvedGroupId = results.find((result) => result.localGroupId)?.localGroupId;
+        if (resolvedGroupId) setVariantGroupId(resolvedGroupId);
+      }
 
       const failed = new Map<string, string | undefined>();
       results.forEach((result, index) => {
@@ -338,7 +407,11 @@ export default function ImportCustomModsModal({
       panelClassName="flex max-h-[85vh] flex-col overflow-hidden"
     >
       <ModalHeader
-        title={t('installed.batchImport.title')}
+        title={
+          addToGroup
+            ? t('installed.batchImport.addVariantsTitle', { name: addToGroup.modName })
+            : t('installed.batchImport.title')
+        }
         titleId="import-custom-mods-title"
         subtitle={rows.length > 0 ? t('installed.batchImport.fileCount', { count: rows.length }) : undefined}
         onClose={onClose}
@@ -361,7 +434,11 @@ export default function ImportCustomModsModal({
         }}
         onDrop={handleDrop}
       >
-        <p className="text-xs leading-5 text-text-secondary">{t('installed.batchImport.help')}</p>
+        <p className="text-xs leading-5 text-text-secondary">
+          {addToGroup
+            ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
+            : t('installed.batchImport.help')}
+        </p>
 
         {rows.length === 0 ? (
           <div
@@ -394,7 +471,9 @@ export default function ImportCustomModsModal({
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-text-secondary">
-                {t('installed.batchImport.namesHint')}
+                {usesSharedName
+                  ? t('installed.batchImport.variantNamesHint')
+                  : t('installed.batchImport.namesHint')}
               </span>
               <div className="flex items-center gap-2">
                 <Button variant="secondary" size="sm" icon={Plus} onClick={pickFiles} disabled={submitting}>
@@ -414,7 +493,7 @@ export default function ImportCustomModsModal({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => { setRows([]); setError(null); }}
+                  onClick={clearRows}
                   disabled={submitting}
                 >
                   {t('installed.batchImport.clearAll')}
@@ -422,9 +501,48 @@ export default function ImportCustomModsModal({
               </div>
             </div>
 
+            {!addToGroup && (rows.length > 1 || groupAsVariants) && (
+              <div className="rounded-lg border border-border bg-bg-tertiary/40 p-3">
+                <button
+                  type="button"
+                  className="peer flex w-full items-start gap-2.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-pressed={groupAsVariants}
+                  onClick={toggleVariantImport}
+                  disabled={submitting || (!!variantGroupId && groupAsVariants)}
+                >
+                  <CheckboxMark checked={groupAsVariants} className="mt-0.5" />
+                  <Layers3 className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-text-primary">
+                      {t('installed.batchImport.importAsVariants')}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-text-secondary">
+                      {t('installed.batchImport.importAsVariantsHelp')}
+                    </span>
+                  </span>
+                </button>
+                {groupAsVariants && (
+                  <label className="mt-3 block border-t border-border pt-3">
+                    <span className="mb-1 block text-xs font-medium text-text-secondary">
+                      {t('installed.batchImport.variantGroupName')}
+                    </span>
+                    <Input
+                      inputSize="sm"
+                      value={variantGroupName}
+                      onChange={(e) => setVariantGroupName(e.target.value)}
+                      placeholder={t('installed.batchImport.variantGroupNamePlaceholder')}
+                      disabled={submitting}
+                      aria-invalid={!variantGroupName.trim() || undefined}
+                      className={!variantGroupName.trim() ? 'ring-1 ring-state-danger/60' : ''}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+
             <ul className="space-y-1.5">
               {rows.map((row) => {
-                const nameMissing = row.name.trim().length === 0;
+                const nameMissing = !usesSharedName && row.name.trim().length === 0;
                 return (
                 <li
                   key={row.path}
@@ -456,16 +574,32 @@ export default function ImportCustomModsModal({
                   </button>
 
                   <div className="min-w-0 flex-1">
-                    <Input
-                      inputSize="sm"
-                      value={row.name}
-                      onChange={(e) => patchRow(row.path, { name: e.target.value, nameTouched: true })}
-                      placeholder={t('installed.import.modNamePlaceholder')}
-                      disabled={submitting}
-                      aria-label={t('installed.batchImport.nameFor', { file: fileNameOf(row.path) })}
-                      aria-invalid={nameMissing || undefined}
-                      className={nameMissing ? 'ring-1 ring-state-danger/60' : ''}
-                    />
+                    {/* Add-variants mode has no name to edit: the group owns it,
+                        and the file name below is what tells the rows apart. */}
+                    {!usesSharedName && (
+                      <Input
+                        inputSize="sm"
+                        value={row.name}
+                        onChange={(e) => patchRow(row.path, { name: e.target.value, nameTouched: true })}
+                        placeholder={t('installed.import.modNamePlaceholder')}
+                        disabled={submitting}
+                        aria-label={t('installed.batchImport.nameFor', { file: fileNameOf(row.path) })}
+                        aria-invalid={nameMissing || undefined}
+                        className={nameMissing ? 'ring-1 ring-state-danger/60' : ''}
+                      />
+                    )}
+                    {usesSharedName && (
+                      <Input
+                        inputSize="sm"
+                        value={row.variantLabel ?? deriveVariantLabel(row.path)}
+                        onChange={(e) => patchRow(row.path, { variantLabel: e.target.value })}
+                        placeholder={deriveVariantLabel(row.path)}
+                        disabled={submitting}
+                        aria-label={t('installed.batchImport.variantNameFor', {
+                          file: fileNameOf(row.path),
+                        })}
+                      />
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span className="truncate font-mono text-[11px] text-text-secondary" title={row.path}>
                         {fileNameOf(row.path)}
@@ -515,7 +649,7 @@ export default function ImportCustomModsModal({
                     icon={X}
                     size="sm"
                     label={t('installed.batchImport.removeFile', { file: fileNameOf(row.path) })}
-                    onClick={() => setRows((prev) => prev.filter((r) => r.path !== row.path))}
+                    onClick={() => removeRow(row.path)}
                     disabled={submitting}
                   />
                 </li>
@@ -549,9 +683,13 @@ export default function ImportCustomModsModal({
           isLoading={submitting}
           className="!px-10 !py-1.5"
         >
-          {rows.length > 1
-            ? t('installed.batchImport.importCount', { count: rows.length })
-            : t('profiles.actions.import')}
+          {addToGroup
+            ? t('installed.batchImport.addVariantCount', { count: rows.length })
+            : groupAsVariants
+              ? t('installed.batchImport.importVariantCount', { count: rows.length })
+            : rows.length > 1
+              ? t('installed.batchImport.importCount', { count: rows.length })
+              : t('profiles.actions.import')}
         </Button>
         {unnamedCount > 0 && (
           <span className="text-[11px] text-state-danger">

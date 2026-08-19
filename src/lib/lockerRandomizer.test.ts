@@ -53,6 +53,22 @@ describe('shuffleSkinKey', () => {
   it('ignores a zero/absent gameBananaId', () => {
     expect(shuffleSkinKey(mod({ id: 'd', gameBananaId: 0, sha256: 'x' }))).toBe('sha256:x');
   });
+
+  // Callers key off skin.primary, and the primary is whichever variant is
+  // enabled: the one thing the shuffle changes. A per-file sha would move the
+  // key on the first re-roll and drop the skin out of its own pool.
+  it('shares one key across the variants of a local group', () => {
+    const red = mod({ id: 'red', localGroupId: 'uuid-1', sha256: 'aaa' });
+    const blue = mod({ id: 'blue', localGroupId: 'uuid-1', sha256: 'bbb' });
+    expect(shuffleSkinKey(red)).toBe('localgroup:uuid-1');
+    expect(shuffleSkinKey(blue)).toBe(shuffleSkinKey(red));
+  });
+
+  it('prefers an explicit local group over adopted GameBanana identity', () => {
+    expect(shuffleSkinKey(mod({ id: 'e', gameBananaId: 42, localGroupId: 'uuid-1' }))).toBe(
+      'localgroup:uuid-1'
+    );
+  });
 });
 
 describe('shufflePoolKey', () => {

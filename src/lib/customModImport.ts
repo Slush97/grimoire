@@ -42,3 +42,32 @@ export function deriveModNameFromPath(p: string): string {
     .replace(/[_-]+/g, ' ')
     .trim();
 }
+
+/** Filename/folder fallback shown for one member of a local variant group. */
+export function deriveVariantLabel(value: string): string {
+  return fileNameOf(value)
+    .replace(/\.(zip|7z|rar|vpk)$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+/**
+ * Resolve a user-entered source label into per-VPK labels. A bare VPK gets the
+ * exact requested name. If an archive expands into several VPKs, retain each
+ * member's honest folder/filename label beneath the requested source prefix so
+ * the picker never ends up with several indistinguishable rows.
+ */
+export function resolveImportedVariantLabel(
+  requestedLabel: string | undefined,
+  variantSeed: string | undefined,
+  memberCount: number,
+  memberIndex: number,
+): string | undefined {
+  const requested = requestedLabel?.trim();
+  const fallback = variantSeed ? deriveVariantLabel(variantSeed) : undefined;
+  if (!requested) return fallback;
+  if (memberCount <= 1) return requested;
+  return `${requested}: ${fallback || `Variant ${memberIndex + 1}`}`;
+}
