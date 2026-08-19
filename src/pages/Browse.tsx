@@ -1162,10 +1162,11 @@ export default function Browse() {
   const hiddenCreatorsStamp = useMemo(() => hiddenCreatorIdsStamp(hiddenCreators), [hiddenCreators]);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter } = browseUi;
+  const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
   // Artist mode: the grid is scoped to one submitter's mods and Browse shows an
   // artist banner instead of the normal search/filter header.
   const artistMode = !!submitter;
+  const allowHiddenSubmitter = !!submitter?.id && submitter.id === hiddenCreatorOverrideId;
   const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
   const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
   const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
@@ -1207,7 +1208,7 @@ export default function Browse() {
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
+  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const initialCache = browseSession && browseSession.stamp === initialFilterStamp
     ? browseSession
     : null;
@@ -1254,7 +1255,7 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${hiddenCreatorsStamp}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}` : null
   );
   // Monotonic guard for browse/search requests. Filter changes and newer
   // requests invalidate older responses so they cannot append stale pages into
@@ -1573,7 +1574,7 @@ export default function Browse() {
   // Category and hero names resolve asynchronously with their category trees.
   // Keep both in the request identity so an early id-only local query cannot
   // suppress the corrected name-based query when either tree arrives.
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${selectedHeroName ?? ''}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${selectedHeroName ?? ''}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -1735,7 +1736,7 @@ export default function Browse() {
     return () => {
       const ui = useAppStore.getState().browseUi;
       const liveHiddenCreators = useAppStore.getState().settings?.hiddenCreators ?? [];
-      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}|${hiddenCreatorIdsStamp(liveHiddenCreators)}`;
+      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}|${ui.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorIdsStamp(liveHiddenCreators)}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
       // unhelpfully. Clear instead so the next mount starts fresh.
@@ -1789,7 +1790,7 @@ export default function Browse() {
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort, hiddenCreatorsStamp]);
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort, hiddenCreatorOverrideId, hiddenCreatorsStamp]);
 
   // The single most useful line for diagnosing "my filters do nothing": which
   // backend the current filter set routes to, and when it routes remote, which
@@ -1884,10 +1885,13 @@ export default function Browse() {
 
       // Remote fallback paths cannot express a negative submitter filter in
       // GameBanana's API. Filter defensively here; normal browsing routes to
-      // the local catalog above so pagination remains full and accurate.
-      enrichedRecords = enrichedRecords.filter(
-        (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
-      );
+      // the local catalog above so pagination remains full and accurate. Only
+      // trusted entry points may deliberately reveal one hidden artist.
+      if (!allowHiddenSubmitter) {
+        enrichedRecords = enrichedRecords.filter(
+          (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
+        );
+      }
 
       if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
         return;
@@ -1946,6 +1950,7 @@ export default function Browse() {
     fetchFilterStamp,
     useLocalSearch,
     submitter,
+    allowHiddenSubmitter,
     hiddenCreatorIdSet,
   ]);
 
@@ -2931,7 +2936,7 @@ export default function Browse() {
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
   const displayMods = useMemo(() => {
-    let nextMods = hiddenCreatorIdSet.size > 0
+    let nextMods = !allowHiddenSubmitter && hiddenCreatorIdSet.size > 0
       ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
     if (settings?.hideOutdatedMods) {
@@ -2956,7 +2961,7 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw, hiddenCreatorIdSet]);
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw, hiddenCreatorIdSet, allowHiddenSubmitter]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -3078,14 +3083,18 @@ export default function Browse() {
     showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
   });
 
-  // Artist mode can be entered from Installed as well as Browse. If that
-  // submitter is already hidden, return to the normal catalog instead of
-  // presenting an empty artist page that cannot explain why it is empty.
+  // Artist mode can be entered from Installed as well as Browse. Respect the
+  // hidden-creator setting unless this exact navigation supplied the narrow
+  // trusted override used by the Performance credit link.
   useEffect(() => {
-    if (submitter?.id && hiddenCreatorIdSet.has(submitter.id)) {
+    if (
+      submitter?.id &&
+      hiddenCreatorIdSet.has(submitter.id) &&
+      !allowHiddenSubmitter
+    ) {
       setBrowseUi({ submitter: undefined });
     }
-  }, [submitter?.id, hiddenCreatorIdSet, setBrowseUi]);
+  }, [submitter?.id, hiddenCreatorIdSet, allowHiddenSubmitter, setBrowseUi]);
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =

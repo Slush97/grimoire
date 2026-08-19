@@ -47,7 +47,7 @@ export default function PresetSummary({ preset, release, creditSlot }: PresetSum
     : t('performance.preset.pinnedCommit', { ref: release.ref });
 
   return (
-    <div className="space-y-1.5">
+    <div className="border-t border-white/5 pt-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={TIER_VARIANT[preset.tier]}>
           {t(`performance.preset.tier.${preset.tier}`)}
@@ -60,35 +60,34 @@ export default function PresetSummary({ preset, release, creditSlot }: PresetSum
         </span>
       </div>
 
-      <p className="text-xs text-text-secondary">
+      <p className="mt-2 text-xs text-text-secondary">
         {t(`performance.preset.tierBlurb.${preset.tier}`)}
       </p>
 
       {preset.unstable && (
-        <p className="text-xs text-state-warning flex items-start gap-1.5">
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-state-warning">
           <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
           <span>{t('performance.preset.unstable')}</span>
         </p>
       )}
 
-      <p className="text-[11px] leading-relaxed text-text-secondary/80">
-        {t('performance.preset.credit', {
-          credit: preset.upstream.credit,
-          license: preset.upstream.license,
-        })}{' '}
-        {creditSlot}{' '}
-        <a
-          href={`${preset.upstream.url}/tree/${release.commit}`}
-          target="_blank"
-          rel="noreferrer noopener"
-          title={pinLabel}
-          className="text-accent hover:underline inline-flex items-center gap-1 align-middle font-mono"
-        >
-          <PinIcon className="w-3 h-3" aria-hidden="true" />
-          {release.commit.slice(0, 8)}
-          <ExternalLink className="w-3 h-3" aria-hidden="true" />
-        </a>
-      </p>
+      <div className="mt-2 flex flex-col gap-1.5 text-[11px] text-text-secondary/70 sm:flex-row sm:items-center sm:justify-between">
+        <span>{preset.upstream.credit} · {preset.upstream.license}</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary/80">
+          {creditSlot && <span>{creditSlot}</span>}
+          <a
+            href={`${preset.upstream.url}/tree/${release.commit}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={pinLabel}
+            className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
+          >
+            <PinIcon className="w-3 h-3" aria-hidden="true" />
+            {release.commit.slice(0, 8)}
+            <ExternalLink className="w-3 h-3" aria-hidden="true" />
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

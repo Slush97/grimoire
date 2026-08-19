@@ -776,6 +776,7 @@ export function listPerformancePresets(): PerformancePresetSummary[] {
             ref: release.ref,
             refKind: release.refKind,
             commit: release.commit,
+            historyCommit: release.historyCommit,
             date: release.date,
             settingCount: release.convars.length + release.sectionOps.length,
             optIn: release.optIn.map((control) => ({

@@ -4,6 +4,10 @@ import { CircleAlert, HardDriveDownload, Loader2, Package } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { ModalHeader } from '../common/ui';
 import { fetchPerformanceRemoteVersion, listPerformanceRemoteVersions } from '../../lib/api';
+import {
+  bundledPerformanceVersionFor,
+  performanceHistoryRowCopy,
+} from '../../lib/performanceHistory';
 import type {
   PerformanceLatestInfo,
   PerformancePresetSummary,
@@ -42,7 +46,8 @@ export default function VersionHistoryModal({
   const [fetchingRef, setFetchingRef] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const bundled = new Set(preset.versions.map((v) => v.version));
+  const bundledVersionFor = (entry: PerformanceRemoteVersion) =>
+    bundledPerformanceVersionFor(entry, preset.versions);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,8 +67,9 @@ export default function VersionHistoryModal({
 
   const pick = async (entry: PerformanceRemoteVersion) => {
     setFetchError(null);
-    if (bundled.has(entry.version)) {
-      onPickBundled(entry.version);
+    const bundledVersion = bundledVersionFor(entry);
+    if (bundledVersion) {
+      onPickBundled(bundledVersion);
       return;
     }
     setFetchingRef(entry.ref);
@@ -107,8 +113,10 @@ export default function VersionHistoryModal({
           <p className="px-2 py-4 text-sm text-text-secondary">{t('performance.history.empty')}</p>
         )}
         {versions?.map((entry) => {
-          const isBundled = bundled.has(entry.version);
-          const isSelected = entry.version === selectedVersion;
+          const bundledVersion = bundledVersionFor(entry);
+          const row = performanceHistoryRowCopy(entry, bundledVersion);
+          const isBundled = !!bundledVersion;
+          const isSelected = (bundledVersion ?? entry.version) === selectedVersion;
           const isFetching = fetchingRef === entry.ref;
           return (
             <button
@@ -122,12 +130,15 @@ export default function VersionHistoryModal({
                   : 'border-transparent hover:bg-bg-tertiary'
               } ${fetchingRef !== null && !isFetching ? 'opacity-50' : ''}`}
             >
-              <span className="shrink-0 font-mono text-sm text-text-primary w-24 truncate">
-                {entry.ref}
+              <span
+                className="w-24 shrink-0 truncate font-mono text-sm text-text-primary"
+                title={entry.commit ?? entry.ref}
+              >
+                {row.primary}
               </span>
               <span className="shrink-0 text-xs text-text-secondary w-20">{entry.date}</span>
               <span className="min-w-0 flex-1 truncate text-xs text-text-secondary">
-                {entry.label ?? ''}
+                {row.detail ?? ''}
               </span>
               <span className="shrink-0 flex items-center gap-1.5">
                 {isFetching && (
