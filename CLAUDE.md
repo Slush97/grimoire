@@ -100,6 +100,7 @@ Design docs and references live in `docs/`:
 - `locker-global-mods.md` - "Global" mods: the `citadel/grimoire` priority root that outranks every other mod. Read before touching grimoire-folder handling, the `modLoadOrder` helpers, or the shuffle planner. Covers the deliberate split between `globalType` (classification, labelled "General") and `priorityMod` (placement, labelled "Global").
 - `macos.md` - Why macOS needs a CrossOver bottle, how Steam roots are discovered there, and how launching differs. Read before touching `steamRoots.ts`, `bottleLaunch.ts`, or any per-platform Steam path list. Covers why the three old hardcoded path lists were collapsed into one module, and why the shipped mac build is arm64-only and cannot auto-update.
 - `deadworks-servers.md` - The Deadworks server browser: relay data flow, content provisioning, and (critically) how the deadworks content path is woven into grimoire's canonical `gameinfo.gi` block so Fix Configuration never erases it. Read before touching `deadworksServers.ts`, `ipc/servers.ts`, or the gameinfo handling in `system.ts`/`deadlock.ts`.
+- `mod-platform-scoping.md` - Scoping study for hosting our own mod platform as a GameBanana alternative: the index/vault/platform product split, Cloudflare stack, cost model, DMCA and content governance, phased plan with kill criteria. Read before any work on a second mod source, a `ModSource` abstraction, or the `(source, id)` catalog migration.
 
 ## Companion Service: grimoire-social
 
