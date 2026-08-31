@@ -9,6 +9,46 @@ export const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 export const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
 export const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
 
+/** Outcome of classifying an external file drop against the supported mod types. */
+export interface DroppedModFiles {
+  /** Disk paths of supported files, in the order they were dropped. */
+  paths: string[];
+  /** Names of files whose extension we do not import. */
+  rejectedNames: string[];
+  /** Supported files with no on-disk path (see `classifyDroppedModFiles`). */
+  unresolvedCount: number;
+}
+
+/**
+ * Split a dropped file list into importable paths, unsupported names, and files
+ * that resolve to no path at all. The path resolver is injected so this stays a
+ * pure function the app-wide drop controller and the import modal can share.
+ *
+ * An empty resolved path is almost always a file dragged out of Windows' built-in
+ * zip viewer (a virtual shell file with nothing behind it), which is why those are
+ * counted separately: the caller tells the user to drag the archive instead.
+ */
+export function classifyDroppedModFiles(
+  files: readonly File[],
+  getPathForFile: (file: File) => string,
+): DroppedModFiles {
+  const paths: string[] = [];
+  const rejectedNames: string[] = [];
+  let unresolvedCount = 0;
+
+  for (const file of files) {
+    if (!VPK_IMPORT_RE.test(file.name)) {
+      rejectedNames.push(file.name);
+      continue;
+    }
+    const path = getPathForFile(file);
+    if (path) paths.push(path);
+    else unresolvedCount++;
+  }
+
+  return { paths, rejectedNames, unresolvedCount };
+}
+
 /** The filename part of a path, for either separator style. */
 export function fileNameOf(p: string): string {
   return p.split(/[\\/]/).pop() ?? p;

@@ -31,12 +31,13 @@ import type {
 import {
   IMAGE_EXTS,
   VPK_IMPORT_EXTS,
-  VPK_IMPORT_RE,
+  classifyDroppedModFiles,
   deriveModNameFromPath,
   deriveVariantLabel,
   fileNameOf,
   pathDedupeKey,
 } from '../lib/customModImport';
+import { useAppStore } from '../stores/appStore';
 
 type RowStatus = 'pending' | 'importing' | 'done' | 'failed';
 
@@ -71,6 +72,14 @@ interface ImportCustomModsModalProps {
    *  the group when the target is still a standalone mod), which keeps uuid
    *  minting out of this dialog. */
   addToGroup?: { modName: string };
+  /** Paths handed over by the app-wide drop controller. Staged as rows on
+   *  arrival, then acknowledged through `onConsumedPaths`. */
+  pendingPaths?: string[];
+  onConsumedPaths?: (paths: string[]) => void;
+  /** Lets the host mirror submission state (the app-wide controller rejects
+   *  drops while a batch is running). Unused by the add-variants instance,
+   *  which ignores drops on its own while submitting. */
+  onSubmittingChange?: (submitting: boolean) => void;
 }
 
 const newRow = (path: string): ImportRow => ({
@@ -113,6 +122,9 @@ export default function ImportCustomModsModal({
   onImport,
   onFinished,
   addToGroup,
+  pendingPaths,
+  onConsumedPaths,
+  onSubmittingChange,
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
   const platform = window.electronAPI.platform;
@@ -208,6 +220,30 @@ export default function ImportCustomModsModal({
     [platform]
   );
 
+  // Stage paths dropped anywhere in the app. addPaths owns the dedupe and the
+  // row defaults, and the peek effect above keys off rows, so files arriving
+  // after mount get imprint recognition with no extra wiring.
+  useEffect(() => {
+    if (!pendingPaths?.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- rows stay editable, so incoming paths cannot be derived during render
+    addPaths(pendingPaths);
+    onConsumedPaths?.(pendingPaths);
+  }, [pendingPaths, addPaths, onConsumedPaths]);
+
+  useEffect(() => {
+    onSubmittingChange?.(submitting);
+  }, [submitting, onSubmittingChange]);
+
+  // Add-variants mode is itself a VPK drop target, so the app-wide controller
+  // must stand down for as long as this instance is mounted.
+  const ownsModDrops = !!addToGroup;
+  useEffect(() => {
+    if (!ownsModDrops) return;
+    const { setSuppressGlobalModDrop } = useAppStore.getState();
+    setSuppressGlobalModDrop(true);
+    return () => setSuppressGlobalModDrop(false);
+  }, [ownsModDrops]);
+
   const pickFiles = async () => {
     if (submitting) return;
     const picked = await showOpenDialogMulti({
@@ -218,6 +254,9 @@ export default function ImportCustomModsModal({
     addPaths(picked);
   };
 
+  // Live for the add-variants instance. The batch instance rarely sees this:
+  // the app-wide controller claims supported files in the capture phase and
+  // hands them over as pendingPaths instead.
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -226,23 +265,13 @@ export default function ImportCustomModsModal({
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length === 0) return;
 
-    const paths: string[] = [];
-    const rejected: string[] = [];
-    let unresolved = 0;
-    for (const file of files) {
-      if (!VPK_IMPORT_RE.test(file.name)) {
-        rejected.push(file.name);
-        continue;
-      }
-      // No real on-disk path: almost always a file dragged out of Windows'
-      // built-in zip viewer (a virtual shell file). Point them at the zip itself.
-      const path = window.electronAPI.getDroppedFilePath(file);
-      if (!path) unresolved++;
-      else paths.push(path);
-    }
+    const { paths, rejectedNames, unresolvedCount } = classifyDroppedModFiles(files, (file) =>
+      window.electronAPI.getDroppedFilePath(file)
+    );
 
-    if (unresolved > 0) setError(t('installed.import.dropUnresolved'));
-    else if (rejected.length > 0) setError(t('installed.import.expectedVpk', { name: rejected[0] }));
+    if (unresolvedCount > 0) setError(t('installed.import.dropUnresolved'));
+    else if (rejectedNames.length > 0)
+      setError(t('installed.import.expectedVpk', { name: rejectedNames[0] }));
     else setError(null);
     addPaths(paths);
   };

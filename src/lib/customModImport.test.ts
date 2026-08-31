@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   VPK_IMPORT_RE,
+  classifyDroppedModFiles,
   deriveModNameFromPath,
   deriveVariantLabel,
   fileNameOf,
@@ -108,5 +109,71 @@ describe('VPK_IMPORT_RE', () => {
     for (const name of ['a.png', 'a.vpk.txt', 'a.tar.gz', 'vpk']) {
       expect(VPK_IMPORT_RE.test(name)).toBe(false);
     }
+  });
+});
+
+describe('classifyDroppedModFiles', () => {
+  /** Only `.name` is read by the parser; the resolver keys off it too. */
+  const dropped = (...names: string[]) => names.map((name) => ({ name }) as File);
+  const resolveUnder = (dir: string) => (file: File) => `${dir}/${file.name}`;
+
+  it('accepts a vpk and every supported archive, case-insensitively', () => {
+    const files = dropped('a.vpk', 'b.VPK', 'c.zip', 'd.7z', 'e.RaR');
+    const result = classifyDroppedModFiles(files, resolveUnder('/drop'));
+    expect(result.paths).toEqual([
+      '/drop/a.vpk',
+      '/drop/b.VPK',
+      '/drop/c.zip',
+      '/drop/d.7z',
+      '/drop/e.RaR',
+    ]);
+    expect(result.rejectedNames).toEqual([]);
+    expect(result.unresolvedCount).toBe(0);
+  });
+
+  it('rejects unsupported files by name and resolves none of them', () => {
+    const resolve = (file: File) => `/drop/${file.name}`;
+    const result = classifyDroppedModFiles(dropped('notes.txt', 'thumb.png'), resolve);
+    expect(result.paths).toEqual([]);
+    expect(result.rejectedNames).toEqual(['notes.txt', 'thumb.png']);
+    expect(result.unresolvedCount).toBe(0);
+  });
+
+  it('keeps the supported files from a mixed drop', () => {
+    const files = dropped('skin.vpk', 'readme.md', 'bundle.zip', 'cover.jpg');
+    const result = classifyDroppedModFiles(files, resolveUnder('/drop'));
+    expect(result.paths).toEqual(['/drop/skin.vpk', '/drop/bundle.zip']);
+    expect(result.rejectedNames).toEqual(['readme.md', 'cover.jpg']);
+    expect(result.unresolvedCount).toBe(0);
+  });
+
+  it('counts supported files that resolve to no on-disk path', () => {
+    const files = dropped('real.vpk', 'virtual.vpk', 'alsoVirtual.zip');
+    const result = classifyDroppedModFiles(files, (file) =>
+      file.name === 'real.vpk' ? '/drop/real.vpk' : ''
+    );
+    expect(result.paths).toEqual(['/drop/real.vpk']);
+    expect(result.rejectedNames).toEqual([]);
+    expect(result.unresolvedCount).toBe(2);
+  });
+
+  it('preserves the source order of the drop', () => {
+    const files = dropped('z.vpk', 'a.zip', 'm.rar');
+    const result = classifyDroppedModFiles(files, resolveUnder('C:\\Downloads'));
+    expect(result.paths).toEqual([
+      'C:\\Downloads/z.vpk',
+      'C:\\Downloads/a.zip',
+      'C:\\Downloads/m.rar',
+    ]);
+  });
+
+  it('handles an empty file list without calling the resolver', () => {
+    let calls = 0;
+    const result = classifyDroppedModFiles([], () => {
+      calls++;
+      return '/never';
+    });
+    expect(result).toEqual({ paths: [], rejectedNames: [], unresolvedCount: 0 });
+    expect(calls).toBe(0);
   });
 });

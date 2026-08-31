@@ -2762,6 +2762,10 @@
     "openSettings": "Open settings",
     "hideGameinfoBanner": "Hide gameinfo banner until next launch",
     "hideGameinfoBannerShort": "Hide until next launch",
+    "modDrop": {
+      "indicator": "Drop VPKs or archives to import",
+      "busy": "An import is already running. Wait for it to finish, then drop those files again."
+    },
     "suspicious": {
       "title": "Suspicious files detected",
       "installAnyway": "Install anyway",

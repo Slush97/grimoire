@@ -8,6 +8,7 @@ import * as api from '../lib/api';
 import { showToast } from './toastStore';
 import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
+import { pathDedupeKey } from '../lib/customModImport';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
@@ -362,6 +363,22 @@ interface AppState {
   // made the list non-empty.
   batchImportOpen: boolean;
 
+  // Paths handed to the batch dialog by an app-wide file drop, waiting to be
+  // turned into editable rows. Short-lived: the dialog stages them and then
+  // acknowledges them through consumeBatchImportPaths. Row state itself stays
+  // inside the dialog.
+  batchImportPendingPaths: string[];
+
+  // Whether the batch dialog is mid-submission. The app-wide drop controller
+  // rejects drops while set rather than queueing files that reconciliation
+  // would discard when the batch finishes.
+  batchImportBusy: boolean;
+
+  // Set by the add-variants instance of ImportCustomModsModal for its mounted
+  // lifetime. While set, the app-wide drop controller yields supported mod
+  // drops to that modal's own drop zone instead of opening the batch dialog.
+  suppressGlobalModDrop: boolean;
+
   // Display name of the hero currently open in the Locker (e.g. "Abrams"), or
   // null. Published by the Locker page and read by DiscordPresence so Rich
   // Presence can show the viewed hero. Renderer-only, never persisted.
@@ -471,7 +488,13 @@ interface AppState {
   // Browse session cache (loaded mods + scroll position)
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
   setInstalledScrollTop: (scrollTop: number) => void;
-  setBatchImportOpen: (open: boolean) => void;
+  /** Open the batch dialog, appending any dropped paths not already queued. */
+  openBatchImport: (paths?: string[]) => void;
+  /** Acknowledge paths the dialog has staged as rows. */
+  consumeBatchImportPaths: (paths: string[]) => void;
+  setBatchImportBusy: (busy: boolean) => void;
+  closeBatchImport: () => void;
+  setSuppressGlobalModDrop: (suppress: boolean) => void;
   setLockerHeroName: (name: string | null) => void;
   loadLockerModImages: () => Promise<void>;
   /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
@@ -527,6 +550,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   browseSession: null,
   installedScrollTop: 0,
   batchImportOpen: false,
+  batchImportPendingPaths: [],
+  batchImportBusy: false,
+  suppressGlobalModDrop: false,
   lockerHeroName: null,
   lockerModImages: {},
   lockerHideHeroName: {},
@@ -1264,8 +1290,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ installedScrollTop: Math.max(0, scrollTop) });
   },
 
-  setBatchImportOpen: (open: boolean) => {
-    set({ batchImportOpen: open });
+  openBatchImport: (paths?: string[]) => {
+    if (!paths?.length) {
+      set({ batchImportOpen: true });
+      return;
+    }
+    set((state) => {
+      const platform = window.electronAPI.platform;
+      const seen = new Set(state.batchImportPendingPaths.map((p) => pathDedupeKey(p, platform)));
+      const added = paths.filter((p) => {
+        const key = pathDedupeKey(p, platform);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return {
+        batchImportOpen: true,
+        batchImportPendingPaths: added.length
+          ? [...state.batchImportPendingPaths, ...added]
+          : state.batchImportPendingPaths,
+      };
+    });
+  },
+
+  // Functional so a drop that lands between the dialog reading pending paths
+  // and acknowledging them survives: only the named paths are removed.
+  consumeBatchImportPaths: (paths: string[]) => {
+    if (!paths.length) return;
+    set((state) => {
+      const platform = window.electronAPI.platform;
+      const consumed = new Set(paths.map((p) => pathDedupeKey(p, platform)));
+      return {
+        batchImportPendingPaths: state.batchImportPendingPaths.filter(
+          (p) => !consumed.has(pathDedupeKey(p, platform)),
+        ),
+      };
+    });
+  },
+
+  setBatchImportBusy: (busy: boolean) => {
+    set({ batchImportBusy: busy });
+  },
+
+  closeBatchImport: () => {
+    set({ batchImportOpen: false, batchImportPendingPaths: [], batchImportBusy: false });
+  },
+
+  setSuppressGlobalModDrop: (suppress: boolean) => {
+    set({ suppressGlobalModDrop: suppress });
   },
 
   setLockerHeroName: (name: string | null) => {
