@@ -1,18 +1,21 @@
 /**
  * DMM -> Grimoire migration planner (pure). Combines DMM's two local sources
- * into an ordered list of "adopt this VPK with this metadata" instructions that
- * the Electron orchestration (electron/main/services/dmmMigration.ts) executes
- * by copying the file into Grimoire's addons layout and writing the metadata
- * sidecar. No re-download, no DMM cloud.
+ * into an ordered list of "adopt this VPK with this metadata" instructions. The
+ * DMM reader (electron/main/services/modInterchange/dmmReader.ts) turns the
+ * plan into a manager-neutral interchange document, which the interchange
+ * importer then adopts. No re-download, no DMM cloud.
  *
  * Authority split:
  *  - `.dmm.json` (DmmManifest) is the authority for WHICH VPK files are on disk,
- *    their enabled state, and load order. It is the addons-folder manifest.
- *  - `state.json` (DmmState, indexed by submission id) enriches each mod with
- *    the GameBanana file id, name, source filename, and thumbnail.
+ *    their enabled state, shard, and load order. It is the addons-folder manifest.
+ *  - `state.json` (DmmState, indexed by DMM id) enriches each mod with the
+ *    GameBanana file id, name, author, source filename, and thumbnail.
  *
  * When `.dmm.json` is absent we synthesize an equivalent manifest from a
  * state.json profile (manifestFromDmmProfile) so the same planner drives both.
+ *
+ * DMM ids come in three shapes: `123` (GameBanana mod), `snd-123` (GameBanana
+ * sound) and `local-<uuid>` (added from disk). All three are planned.
  *
  * Hero is deliberately NOT carried into the plan: DMM stores a lowercase
  * codename ("vyper") that does not map 1:1 to Grimoire's canonical hero names,
@@ -25,26 +28,59 @@ import {
   parseDmmState,
   selectDmmProfile,
   indexDmmStateBySubmission,
+  indexDmmStateByRemoteId,
   type DmmStateMod,
   type DmmStateProfile,
 } from './dmmState';
 
+/** DMM's mod ids: `123` (GameBanana mod), `snd-123` (GameBanana sound) or
+ *  `local-<uuid>` (a mod the user added from disk). */
+export type DmmModIdentity =
+  | { kind: 'mod' | 'sound'; dmmId: string; submissionId: number }
+  | { kind: 'local'; dmmId: string; localId: string };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseDmmModId(key: string): DmmModIdentity | null {
+  const gb = key.match(/^(snd-)?([1-9]\d*)$/);
+  if (gb) {
+    const submissionId = Number(gb[2]);
+    if (!Number.isSafeInteger(submissionId)) return null;
+    return { kind: gb[1] ? 'sound' : 'mod', dmmId: key, submissionId };
+  }
+  if (key.startsWith('local-') && UUID_RE.test(key.slice(6))) {
+    return { kind: 'local', dmmId: key, localId: key.slice(6).toLowerCase() };
+  }
+  return null;
+}
+
 export interface DmmAdoptionEntry {
-  /** GameBanana submission id. */
+  /** DMM's own id for the mod (`123`, `snd-123`, `local-<uuid>`). */
+  dmmId: string;
+  kind: DmmModIdentity['kind'];
+  /** GameBanana submission id; 0 for local mods, which have none. */
   submissionId: number;
+  /** DMM's UUID for local mods. */
+  localId?: string;
+  /** DMM shard the enabled VPKs live in (1 = the profile folder). */
+  shard: number;
   /** GameBanana file id when recoverable from state.json; else undefined
    *  (Grimoire treats undefined as "unknown version" for update detection). */
   fileId?: number;
   modName?: string;
+  author?: string;
+  description?: string;
   categoryName?: string;
   thumbnailUrl?: string;
   /** Label fallback: stem of the source archive/download filename. */
   sourceFileName?: string;
+  /** Original VPK names the user picked in DMM (mod-store fallback). */
+  selectedVpkNames?: string[];
   enabled: boolean;
   /** Grimoire load-order priority (lower loads first). */
   priority: number;
   /** On-disk VPK basenames belonging to this mod, ALL of which are adopted and
-   *  tagged with this submission id (a DMM mod may ship several VPKs). Contested
+   *  tagged with this mod's identity (a DMM mod may ship several VPKs). Contested
    *  files (also listed by another mod through stale DMM bookkeeping) are removed
    *  here and awarded to a single owner, so two mods never fight over one slot. */
   vpkFiles: string[];
@@ -65,6 +101,10 @@ export interface DmmAdoptionOptions {
    *  data records no filename for a mod (some installs leave installedVpks
    *  empty for the actively-loaded `<submissionId>_*.vpk` files in addons). */
   extraVpkBySubmission?: Map<number, string[]>;
+  /** Same fallback keyed by DMM id, which also covers sound and local mods. */
+  extraVpkByDmmId?: Map<string, string[]>;
+  /** state.json lookup by DMM id (covers sound and local mods). */
+  stateByDmmId?: Map<string, DmmStateMod>;
 }
 
 /** Recover a GameBanana submission id from a DMM-style on-disk VPK name like
@@ -74,6 +114,14 @@ export function submissionIdFromVpkName(fileName: string): number | null {
   if (!m) return null;
   const id = Number(m[1]);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** Recover DMM's mod id from a parked `<dmmId>_<name>.vpk` file name, for
+ *  every id shape (`123_`, `snd-123_`, `local-<uuid>_`). Null otherwise. */
+export function dmmIdFromVpkName(fileName: string): string | null {
+  const underscore = fileName.indexOf('_');
+  if (underscore < 1 || !/\.vpk$/i.test(fileName)) return null;
+  return parseDmmModId(fileName.slice(0, underscore))?.dmmId ?? null;
 }
 
 function stripArchiveExt(name: string): string {
@@ -93,12 +141,11 @@ export function planDmmAdoption(
   const manifestEntries = Object.entries(manifest.mods ?? {});
   const isStr = (v: unknown): v is string => typeof v === 'string' && !!v;
 
-  // Compute the trailing priority for order-less mods over kept (numeric) keys
-  // only, so a skipped local mod doesn't reserve an empty slot.
+  // Compute the trailing priority for order-less mods over kept (valid) keys
+  // only, so a skipped mod doesn't reserve an empty slot.
   let maxOrder = -1;
   for (const [key, e] of manifestEntries) {
-    const id = Number(key);
-    if (Number.isInteger(id) && id > 0 && e && typeof e.order === 'number') {
+    if (parseDmmModId(key) && e && typeof e.order === 'number') {
       maxOrder = Math.max(maxOrder, e.order);
     }
   }
@@ -107,9 +154,11 @@ export function planDmmAdoption(
   // First pass: resolve each mod's full set of live on-disk VPK files. A DMM mod
   // can ship several VPKs (its `currentVpks`/`disabledVpks` list has >1 entry),
   // and ALL of them belong to that one mod, so the whole set is carried (not just
-  // the first) to be adopted together under one submission id.
+  // the first) to be adopted together under one identity.
   interface Draft {
+    identity: DmmModIdentity;
     submissionId: number;
+    shard: number;
     enabled: boolean;
     priority: number;
     files: string[];
@@ -118,36 +167,62 @@ export function planDmmAdoption(
   }
   const drafts: Draft[] = [];
   for (const [key, rawEntry] of manifestEntries) {
-    const submissionId = Number(key);
-    if (!Number.isInteger(submissionId) || submissionId <= 0) {
+    const identity = parseDmmModId(key);
+    if (!identity) {
       warnings.push(`Skipped non-GameBanana mod: ${key}`);
       continue;
     }
+    const submissionId = identity.kind === 'local' ? 0 : identity.submissionId;
     const e = rawEntry ?? {};
     const enabled = e.enabled === true;
     const priority = typeof e.order === 'number' ? e.order : trailing++;
+    const shard =
+      typeof e.shard === 'number' && Number.isInteger(e.shard) && e.shard >= 1 ? e.shard : 1;
 
     // The mod's live files: its `currentVpks` live pakNN slots when enabled, its
     // `disabledVpks` parked "<modId>_<orig>.vpk" names when disabled. Fall back to
     // the cross list if DMM left the expected one empty (inconsistent state), then
-    // to the disk-scanned `<submissionId>_*.vpk` files for mods DMM recorded no
-    // filename for.
+    // to the disk-scanned `<id>_*.vpk` files for mods DMM recorded no filename for.
     const current = (e.currentVpks ?? []).filter(isStr);
     const disabled = (e.disabledVpks ?? []).filter(isStr);
     let files = enabled ? current : disabled;
     if (files.length === 0) files = enabled ? disabled : current;
-    if (files.length === 0) files = (options.extraVpkBySubmission?.get(submissionId) ?? []).slice();
+    if (files.length === 0) {
+      files = (
+        options.extraVpkByDmmId?.get(identity.dmmId) ??
+        (identity.kind === 'mod' ? options.extraVpkBySubmission?.get(submissionId) : undefined) ??
+        []
+      ).slice();
+    }
+
+    const info =
+      options.stateByDmmId?.get(identity.dmmId) ??
+      (identity.kind === 'mod' ? stateIndex?.get(submissionId) : undefined);
+    // Last resort: DMM's mod store keeps every downloaded VPK under its
+    // original name, so a mod whose addon files are gone can still come
+    // across. The reader resolves these names against the store folder.
+    if (files.length === 0 && info?.selectedVpkNames?.length) {
+      files = info.selectedVpkNames.slice();
+    }
 
     if (files.length === 0) {
-      warnings.push(`Skipped mod ${submissionId}: no VPK filename recorded on disk`);
+      warnings.push(`Skipped mod ${key}: no VPK filename recorded on disk`);
       continue;
     }
 
-    const info = stateIndex?.get(submissionId);
     const sourceFileNameRaw = info?.downloadFileName ?? (e.originalVpkNames ?? [])[0];
     const sourceFileName = sourceFileNameRaw ? stripArchiveExt(sourceFileNameRaw) : undefined;
 
-    drafts.push({ submissionId, enabled, priority, files, info, sourceFileName: sourceFileName || undefined });
+    drafts.push({
+      identity,
+      submissionId,
+      shard,
+      enabled,
+      priority,
+      files,
+      info,
+      sourceFileName: sourceFileName || undefined,
+    });
   }
 
   // Resolve contested files: the same on-disk VPK is sometimes listed by more
@@ -156,42 +231,56 @@ export function planDmmAdoption(
   // file to a single owner so two mods never get tagged onto one VPK. A single-
   // VPK mod almost always reflects the slot's current truth over a multi-VPK
   // pack's stale claim, so rank by fewest files first, then load order, then id
-  // for determinism.
+  // for determinism. Enabled files are keyed per shard: every shard has its
+  // own pak01.
   const ranked = [...drafts].sort(
-    (a, b) => a.files.length - b.files.length || a.priority - b.priority || a.submissionId - b.submissionId
+    (a, b) =>
+      a.files.length - b.files.length ||
+      a.priority - b.priority ||
+      a.submissionId - b.submissionId ||
+      a.identity.dmmId.localeCompare(b.identity.dmmId)
   );
-  const owner = new Map<string, number>();
+  const slotKey = (d: Draft, f: string) => `${d.enabled ? d.shard : 0}:${f.toLowerCase()}`;
+  const owner = new Map<string, string>();
   for (const d of ranked) {
     for (const f of d.files) {
-      const k = f.toLowerCase();
-      if (!owner.has(k)) owner.set(k, d.submissionId);
+      const k = slotKey(d, f);
+      if (!owner.has(k)) owner.set(k, d.identity.dmmId);
     }
   }
 
   const entries: DmmAdoptionEntry[] = [];
   for (const d of drafts) {
-    const vpkFiles = d.files.filter((f) => owner.get(f.toLowerCase()) === d.submissionId);
+    const vpkFiles = d.files.filter((f) => owner.get(slotKey(d, f)) === d.identity.dmmId);
     if (vpkFiles.length === 0) {
       warnings.push(
-        `Skipped mod ${d.submissionId}: its VPK(s) are already claimed by another mod (stale DMM data)`
+        `Skipped mod ${d.identity.dmmId}: its VPK(s) are already claimed by another mod (stale DMM data)`
       );
       continue;
     }
-    if (d.info?.fileId !== undefined) resolvedFileIdCount++;
+    const isLocal = d.identity.kind === 'local';
+    if (!isLocal && d.info?.fileId !== undefined) resolvedFileIdCount++;
     entries.push({
+      dmmId: d.identity.dmmId,
+      kind: d.identity.kind,
       submissionId: d.submissionId,
-      fileId: d.info?.fileId,
+      localId: d.identity.kind === 'local' ? d.identity.localId : undefined,
+      shard: d.shard,
+      fileId: isLocal ? undefined : d.info?.fileId,
       modName: d.info?.name,
+      author: d.info?.author,
+      description: d.info?.description,
       categoryName: d.info?.category,
       thumbnailUrl: d.info?.thumbnailUrl,
       sourceFileName: d.sourceFileName,
+      selectedVpkNames: d.info?.selectedVpkNames,
       enabled: d.enabled,
       priority: d.priority,
       vpkFiles,
     });
   }
 
-  const unresolved = entries.length - resolvedFileIdCount;
+  const unresolved = entries.filter((e) => e.kind !== 'local').length - resolvedFileIdCount;
   if (unresolved > 0) {
     warnings.push(
       `${unresolved} mod(s) imported without a pinned GameBanana file id ` +
@@ -213,7 +302,7 @@ export function planDmmAdoption(
 export function manifestFromDmmProfile(profile: DmmStateProfile): DmmManifest {
   const mods: NonNullable<DmmManifest['mods']> = {};
   for (const mod of profile.mods) {
-    if (!Number.isInteger(mod.submissionId) || mod.submissionId <= 0) continue;
+    if (!parseDmmModId(mod.remoteId)) continue;
     const enabled = profile.enabledMods[mod.remoteId] === true;
     mods[mod.remoteId] = {
       enabled,
@@ -240,8 +329,8 @@ export type DmmEnrichment = 'state.json' | 'manifest-only';
 /**
  * Full tiered decision logic, end to end, from raw file contents. Pure (no
  * file I/O), so the entire scan/preview path is unit-testable. The Electron
- * orchestration reads the two files off disk and calls this; everything after
- * is plain mapping.
+ * reader reads the two files off disk and calls this; everything after is
+ * plain mapping.
  *
  * Tiers, in order of preference:
  *  - `.dmm.json` present  -> it is the on-disk authority; state.json (if any)
@@ -257,9 +346,11 @@ export function composeDmmAdoptionPlan(
     profileId?: string;
     profileName?: string;
     extraVpkBySubmission?: Map<number, string[]>;
+    extraVpkByDmmId?: Map<string, string[]>;
   } = {}
 ): { plan: DmmAdoptionPlan; enrichment: DmmEnrichment } {
   let stateIndex: Map<number, DmmStateMod> | null = null;
+  let stateByDmmId: Map<string, DmmStateMod> | undefined;
   let stateProfile: DmmStateProfile | null = null;
   let stateProfileName: string | undefined;
 
@@ -268,10 +359,12 @@ export function composeDmmAdoptionPlan(
       const state = parseDmmState(stateJson);
       stateProfile = selectDmmProfile(state, opts.profileId);
       stateIndex = indexDmmStateBySubmission(state, stateProfile);
+      stateByDmmId = indexDmmStateByRemoteId(state, stateProfile);
       stateProfileName = stateProfile?.name;
     } catch {
       // Unreadable state.json: degrade to manifest-only enrichment.
       stateIndex = null;
+      stateByDmmId = undefined;
       stateProfile = null;
     }
   }
@@ -280,6 +373,8 @@ export function composeDmmAdoptionPlan(
   const planOpts: DmmAdoptionOptions = {
     profileName,
     extraVpkBySubmission: opts.extraVpkBySubmission,
+    extraVpkByDmmId: opts.extraVpkByDmmId,
+    stateByDmmId,
   };
 
   if (manifestJson) {
@@ -297,9 +392,9 @@ export function composeDmmAdoptionPlan(
   throw new Error('No DMM data: neither a .dmm.json manifest nor a usable state.json profile.');
 }
 
-// --- Wire types shared by main, preload, and renderer (kept pure here) ---
+// --- Wire types shared by main and tests (kept pure here) ---
 
-/** Request shape for the scan/migrate IPC. `deadlockPath` is resolved in the
+/** Request shape for a DMM migration. `deadlockPath` is resolved in the
  *  main process from settings, so it is not part of the request. */
 export interface DmmMigrationRequest {
   /** Folder holding DMM's VPKs (+ optionally `.dmm.json`). Omit for the common
@@ -327,6 +422,9 @@ export interface DmmMigrationRequest {
 export type DmmMigrationMode = 'in-place' | 'copy';
 
 export interface DmmMigrationPreviewEntry {
+  /** Interchange key of the entry. */
+  key: string;
+  /** GameBanana submission id; 0 for local mods. */
   submissionId: number;
   modName?: string;
   enabled: boolean;
@@ -336,6 +434,8 @@ export interface DmmMigrationPreviewEntry {
 }
 
 export interface DmmMigrationAdopted {
+  key: string;
+  /** GameBanana submission id; 0 for local mods. */
   submissionId: number;
   fileId?: number;
   modName?: string;
@@ -346,6 +446,8 @@ export interface DmmMigrationAdopted {
 }
 
 export interface DmmMigrationSkip {
+  key: string;
+  /** GameBanana submission id; 0 for local mods. */
   submissionId: number;
   reason: string;
 }
@@ -363,9 +465,16 @@ export interface DmmMigrationReport {
   warnings: string[];
 }
 
+/** Interchange key for a planned entry. */
+export function interchangeKeyForEntry(entry: Pick<DmmAdoptionEntry, 'kind' | 'submissionId' | 'localId'>): string {
+  if (entry.kind === 'local') return `local:${entry.localId}`;
+  return `gamebanana:${entry.kind}:${entry.submissionId}`;
+}
+
 /** Project a plan into the preview rows shown before migrating. */
 export function planToPreview(plan: DmmAdoptionPlan): DmmMigrationPreviewEntry[] {
   return plan.entries.map((e) => ({
+    key: interchangeKeyForEntry(e),
     submissionId: e.submissionId,
     modName: e.modName,
     enabled: e.enabled,

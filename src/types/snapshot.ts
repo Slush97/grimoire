@@ -2,7 +2,7 @@
  *  operations that overwrite installed mods (update from Browse,
  *  apply-profile swap, the DMM import's batch identity write). `manual` is
  *  the "Snapshot now" button. */
-export type SnapshotTrigger = 'pre-update' | 'pre-apply-profile' | 'pre-dmm-import' | 'manual';
+export type SnapshotTrigger = 'pre-update' | 'pre-apply-profile' | 'pre-dmm-import' | 'pre-mod-import' | 'manual';
 
 /** Summary used by the list view. Keeps the wire small when the user has
  *  accumulated many snapshots — the full PortableProfile only crosses the

@@ -11,9 +11,18 @@ describe('parseDmmManifest', () => {
   });
 
   it('rejects an unknown future major version', () => {
-    expect(() => parseDmmManifest(JSON.stringify({ version: 2, mods: {} }))).toThrow(
-      /Unsupported .dmm.json version: 2/
+    expect(() => parseDmmManifest(JSON.stringify({ version: 4, mods: {} }))).toThrow(
+      /Unsupported .dmm.json version: 4/
     );
+  });
+
+  it('accepts the sharded v2 and v3 manifests current DMM writes', () => {
+    for (const version of [2, 3]) {
+      const manifest = parseDmmManifest(
+        JSON.stringify({ version, mods: { '1': { enabled: true, shard: 2, currentVpks: ['pak01_dir.vpk'] } } })
+      );
+      expect(manifest.mods?.['1'].shard).toBe(2);
+    }
   });
 
   it('accepts a missing version and missing mods', () => {

@@ -76,7 +76,13 @@ import type {
 } from '../../src/types/electron';
 import type { AppearanceSurface } from '../../src/types/mod';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
-import type { DmmMigrationRequest } from '../../src/lib/dmmMigration';
+import type {
+    InterchangeDocument,
+    InterchangeExportSelection,
+    InterchangeImportSelection,
+    InterchangeProgress,
+    InterchangeSourceRequest,
+} from '../../src/lib/modInterchange';
 import type {
     ProfileSort,
     PublishRequest,
@@ -99,10 +105,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => ipcRenderer.invoke('get-settings'),
     setSettings: (settings: AppSettings) => ipcRenderer.invoke('set-settings', settings),
 
-    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
-    dmmMigrate: {
-        scan: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:scan', req),
-        execute: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:execute', req),
+    // Mod transfer between mod managers (neutral interchange format; no cloud)
+    interchange: {
+        sources: () => ipcRenderer.invoke('interchange:sources'),
+        read: (req: InterchangeSourceRequest) => ipcRenderer.invoke('interchange:read', req),
+        import: (req: { document: InterchangeDocument; selection: InterchangeImportSelection }) =>
+            ipcRenderer.invoke('interchange:import', req),
+        export: (req: { destinationDir: string; selection: InterchangeExportSelection }) =>
+            ipcRenderer.invoke('interchange:export', req),
+        onProgress: (callback: (progress: InterchangeProgress) => void) => {
+            const listener = (_: unknown, progress: InterchangeProgress) => callback(progress);
+            ipcRenderer.on('interchange:progress', listener);
+            return () => ipcRenderer.removeListener('interchange:progress', listener);
+        },
     },
 
     // Discord Rich Presence (opt-in; talks only to the local Discord client)
