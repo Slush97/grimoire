@@ -2036,7 +2036,10 @@
       "posingWithMods": "Posing {{hero}} with {{count}} active mods...",
       "cannotPose": "This hero can't be posed in 3D yet.",
       "pauseSpin": "Pause spin",
-      "resumeSpin": "Resume spin"
+      "resumeSpin": "Resume spin",
+      "physics": "Physics preview",
+      "physicsHint": "Experimental cloth and accessory motion",
+      "physicsUnavailable": "Physics is unavailable for this model."
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"

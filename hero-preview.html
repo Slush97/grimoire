@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grimoire physics preview</title>
+  </head>
+  <body>
+    <header class="flex flex-wrap items-center gap-4 border-b border-white/10 bg-black/30 px-5 py-3 text-sm">
+      <strong>Grimoire viewer</strong>
+      <label>Hero <select id="hero-case" class="ml-2 rounded bg-neutral-800 px-2 py-1" disabled></select></label>
+      <label>Physics data
+        <select id="physics-data" class="ml-2 rounded bg-neutral-800 px-2 py-1">
+          <option value="normal">Normal</option>
+          <option value="delayed">Delayed</option>
+          <option value="missing">Missing</option>
+        </select>
+      </label>
+      <a id="testbed-link" href="/cloth-preview.html" class="text-amber-200 underline">Physics testbed</a>
+    </header>
+    <p id="viewer-status" role="status" class="px-5 py-2 text-xs text-white/60">Loading exported cases...</p>
+    <main id="hero-viewer" class="relative mx-auto h-[calc(100vh-6rem)] min-h-80 max-w-4xl"></main>
+    <script type="module" src="/src/dev/heroPreview.tsx"></script>
+  </body>
+</html>

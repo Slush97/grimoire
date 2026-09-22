@@ -1,8 +1,3 @@
-// Rigged (animated, skinned) preview is gated off for now: the idle clip is WIP
-// and too many heroes fall back to a default A-pose, so the static `--pose` menu
-// pose stays the default. Cloth remains off in released builds.
-const USE_RIGGED_PREVIEW: boolean = false;
-
 export interface HeroPoseDevFlags {
   unified: boolean;
   celV2: boolean;
@@ -40,7 +35,7 @@ export function resolveHeroPoseRenderFeatures(
     celV2Enabled: flags.celV2,
     clothPreviewEnabled,
     bloomEnabled: flags.bloom,
-    riggedPreviewEnabled: USE_RIGGED_PREVIEW || clothPreviewEnabled,
+    riggedPreviewEnabled: clothPreviewEnabled,
     source2ShaderHintsEnabled: unifiedEnabled,
     nprDebugEnabled: flags.nprDebug,
     source2SkipNpr: unifiedEnabled && !trippySpriteActive,

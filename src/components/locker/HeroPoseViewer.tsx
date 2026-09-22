@@ -56,11 +56,9 @@ import type { TrippyPreview } from '../../stores/trippyPreviewStore';
 /**
  * Live 3D preview of a hero's menu pose for the Locker's per-hero view.
  *
- * The GLB is a static posed still produced on demand by the bundled
- * `vpkmerge model export --pose` (exportHeroPose) and served from the user's
- * library via the privileged `grimoire-hero:` scheme. It carries no skeleton,
- * skin, or clips and has the toon-outline / glow halo shells stripped, so it
- * loads as plain meshes (no SkinnedMesh, no skin-strip needed here).
+ * Defaults to a static menu pose. Physics preview loads an animated rig and
+ * its matching cloth sidecar. Both are exported on demand by vpkmerge and
+ * served from the user's cache through the `grimoire-hero:` scheme.
  *
  * Interactive: drag to orbit, scroll to zoom. Loading stays on the custom
  * GLTFLoader helper because Source 2 morphic texture resolution needs the live
@@ -888,7 +886,10 @@ export default function HeroPoseViewer({
     writePreviewFlag(storageKey, value);
     setDevFlags((current) => ({ ...current, [key]: value }));
   }, []);
-  const activeRenderFlags = import.meta.env.DEV ? devFlags : RELEASE_RENDER_FLAGS;
+  const activeRenderFlags = {
+    ...(import.meta.env.DEV ? devFlags : RELEASE_RENDER_FLAGS),
+    cloth: devFlags.cloth,
+  };
   const effectPreviewEnabled = import.meta.env.DEV ? devFlags.effects : USE_EFFECT_PREVIEW;
 
   // The pose GLB has no weapon mesh, so a weapons-only paint has nothing to show
@@ -944,9 +945,8 @@ export default function HeroPoseViewer({
 
     (async () => {
       try {
-        // --- Attempt 1: rigged (animated, skinned) glb. Gated OFF for now: the
-        //     idle anim is WIP and too many heroes fall back to A-pose, so the
-        //     static --pose menu pose (Attempt 2) is the default. ---
+        // Physics opts into the animated rig. Missing clips or failed exports
+        // fall back to the standard static menu pose.
         if (features.riggedPreviewEnabled) {
           try {
             let rig = await getRiggedHeroPose(heroName, skinSources);
@@ -1074,18 +1074,47 @@ export default function HeroPoseViewer({
     };
   }, [heroName, effectPreviewEnabled]);
 
+  const physicsControl = (
+    <div className="absolute bottom-3 right-3 z-10 flex max-w-60 flex-col items-end gap-2">
+      {scene && features.clothPreviewEnabled && (!rigged || !clothModel) && (
+        <p role="status" className="rounded bg-black/70 px-2 py-1 text-right text-xs text-white/80">
+          {t('locker.pose.physicsUnavailable')}
+        </p>
+      )}
+      <button
+        type="button"
+        aria-pressed={devFlags.cloth}
+        title={t('locker.pose.physicsHint')}
+        onClick={() => setDevFlag('cloth', 'grimoire.preview.cloth', !devFlags.cloth)}
+        className={`rounded px-3 py-1.5 text-xs transition-colors ${devFlags.cloth
+          ? 'bg-amber-300/90 text-black hover:bg-amber-200'
+          : 'bg-black/60 text-white hover:bg-black/80'}`}
+      >
+        {t('locker.pose.physics')}
+      </button>
+    </div>
+  );
+
   if (failed) {
-    return <HeroPoseFailureState message={t('locker.pose.cannotPose')} />;
+    return (
+      <>
+        <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
+        {physicsControl}
+      </>
+    );
   }
 
   if (!scene) {
     return (
-      <HeroPoseLoadingState
-        generating={generating}
-        heroName={heroName}
-        skinSourceCount={skinSources.length}
-        t={t}
-      />
+      <>
+        <HeroPoseLoadingState
+          generating={generating}
+          heroName={heroName}
+          skinSourceCount={skinSources.length}
+          t={t}
+        />
+        {physicsControl}
+      </>
     );
   }
 
@@ -1159,6 +1188,7 @@ export default function HeroPoseViewer({
       >
         {spinPaused ? t('locker.pose.resumeSpin') : t('locker.pose.pauseSpin')}
       </button>
+      {physicsControl}
       {import.meta.env.DEV && (
         <DevViewerControls
           devFlags={devFlags}
@@ -1243,10 +1273,6 @@ function DevViewerControls({
             value: devFlags.matDebug,
             onChange: (value: boolean) =>
               setDevFlag('matDebug', 'grimoire.preview.matDebug', value),
-          },
-          Cloth: {
-            value: devFlags.cloth,
-            onChange: (value: boolean) => setDevFlag('cloth', 'grimoire.preview.cloth', value),
           },
         },
         { collapsed: true }
