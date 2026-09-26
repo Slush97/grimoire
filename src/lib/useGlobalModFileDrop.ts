@@ -72,6 +72,10 @@ export function useGlobalModFileDrop(): boolean {
       // Nothing importable: let images, audio and models reach their own zones.
       if (paths.length === 0 && unresolvedCount === 0) return;
       e.stopPropagation();
+      // The zone under the pointer never sees this drop, so its own onDrop can't
+      // clear its drag highlight. A synthetic dragleave does, and carries no
+      // dataTransfer so the depth counter above ignores it.
+      e.target?.dispatchEvent(new DragEvent('dragleave', { bubbles: true }));
 
       // Staging into a batch that is mid-submission would lose the files when
       // the finished rows are reconciled, so say so instead of swallowing them.
