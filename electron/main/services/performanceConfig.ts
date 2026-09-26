@@ -311,8 +311,13 @@ function presetKeyIndex(
     convars: ReadonlyArray<readonly [string, string]>
 ): Map<string, { okey: string; value: string } | null> {
     const idx = new Map<string, { okey: string; value: string } | null>();
+    // An enabled opt-in arrives twice (from convars and from preset.optIn)
+    // under the same override key; only a key shared by different entries is
+    // ambiguous.
     const put = (bare: string, okey: string, value: string) => {
-        idx.set(bare, idx.has(bare) ? null : { okey, value });
+        const prev = idx.get(bare);
+        if (prev === undefined) idx.set(bare, { okey, value });
+        else if (prev !== null && prev.okey !== okey) idx.set(bare, null);
     };
     for (const [key, value] of convars) put(key, `ConVars/${key}`, value);
     for (const control of preset.optIn) put(control.key, `ConVars/${control.key}`, control.value);
@@ -507,12 +512,27 @@ export function applyPerformanceConfig(
         // harvestOverrides).
         if (applied && appliedPreset && !opts?.resetOverrides) {
             const appliedOptIns = sidecar?.optIns ?? [];
-            saved[appliedPreset.id] = harvestOverrides(
-                content,
-                appliedPreset,
-                effectiveConvars(appliedPreset, appliedOptIns),
-                readMarker(applied)
+            // A toggled-off opt-in has no line in the file, so the harvest
+            // cannot see its banked value. Hold it so toggling back on restores it.
+            const offKeys = new Set(
+                appliedPreset.optIn
+                    .map((control) => control.key)
+                    .filter((key) => !appliedOptIns.includes(key))
             );
+            const held = Object.fromEntries(
+                Object.entries(saved[appliedPreset.id] ?? {}).filter(
+                    ([okey]) => okey.startsWith('ConVars/') && offKeys.has(okey.slice('ConVars/'.length))
+                )
+            );
+            saved[appliedPreset.id] = {
+                ...held,
+                ...harvestOverrides(
+                    content,
+                    appliedPreset,
+                    effectiveConvars(appliedPreset, appliedOptIns),
+                    readMarker(applied)
+                ),
+            };
         }
         let overrides: Overrides = {};
         if (!opts?.resetOverrides) {
@@ -643,10 +663,7 @@ export function applyPerformanceConfig(
             overridesByPreset: saved,
         });
 
-        const kept = Object.keys(overrides).filter((okey) => {
-            const key = okey.slice('ConVars/'.length);
-            return !(okey.startsWith('ConVars/') && optInKeys.has(key) && !presetConvarKeys.has(key));
-        }).length;
+        const kept = Object.keys(overrides).length;
         const keptNote = kept ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.` : '';
         const switchNote = switching ? ` Replaced ${appliedPreset.name}.` : '';
         const note = skipped.length
