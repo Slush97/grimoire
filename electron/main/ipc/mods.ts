@@ -24,6 +24,7 @@ import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetada
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
+import { inferHeroFromVoVpk, needsModSectionVoHeroCheck } from '../services/voHeroInference';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
 import { retargetProfileModSha } from '../services/profiles';
@@ -234,6 +235,16 @@ function enrichMod(mod: Mod): WireMod {
             const resolved = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
             lockerHero = resolved.lockerHero;
             lockerHeroSource = resolved.lockerHeroSource;
+        } else if (needsModSectionVoHeroCheck(metadata, globalType)) {
+            let inferred: string | null = null;
+            try {
+                inferred = inferHeroFromVoVpk(mod.path);
+            } catch (err) {
+                console.warn(`[enrichMod] VPK VO hero inference failed for ${mod.fileName}:`, err);
+            }
+            lockerHero = inferred ?? undefined;
+            lockerHeroSource = inferred ? 'vpk' : undefined;
+            setModMetadata(mod.metaKey, { lockerHero, lockerHeroSource, lockerHeroVpkChecked: true });
         }
         // Per-ability sound footprint. Same lazy + persist + null-sentinel
         // pattern as globalType, and it shares the cached VPK parse, so the two
@@ -301,8 +312,8 @@ function enrichMod(mod: Mod): WireMod {
  * yet classified at the current version, abilitySounds never checked, a Sound
  * mod with no hero tag yet (the parse only happens when title inference fails,
  * which we don't pre-compute; a wasted warm parse is harmless), or an unknown
- * mod whose tree hasn't been hero-checked. Every positive persists to
- * metadata, so this is a first-scan-only cost per mod.
+ * or heroless 'Mod'-section mod whose tree hasn't been hero-checked. Every
+ * positive persists to metadata, so this is a first-scan-only cost per mod.
  */
 function needsVpkParseForEnrich(mod: Mod): boolean {
     const metadata = getModMetadata(mod.metaKey);
@@ -315,6 +326,7 @@ function needsVpkParseForEnrich(mod: Mod): boolean {
         !metadata.gameBananaId &&
         !(typeof metadata.modName === 'string' && metadata.modName.trim().length > 0);
     if (isUnknown && !metadata.lockerHero && !metadata.lockerHeroVpkChecked) return true;
+    if (needsModSectionVoHeroCheck(metadata, metadata.globalType)) return true;
     return false;
 }
 
