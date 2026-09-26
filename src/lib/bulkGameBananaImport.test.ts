@@ -78,6 +78,20 @@ describe('classifyGameBananaImportInput', () => {
     expect(result.result.items).toHaveLength(2);
   });
 
+  it('keeps item links from a mixed paste and reports the collection link as skipped', () => {
+    const result = classifyGameBananaImportInput(`
+      https://gamebanana.com/mods/2
+      https://gamebanana.com/collections/123
+    `);
+
+    expect(result.kind).toBe('links');
+    if (result.kind !== 'links') throw new Error('Expected links');
+    expect(result.result.items).toEqual([
+      { id: 2, section: 'Mod', url: 'https://gamebanana.com/mods/2' },
+    ]);
+    expect(result.result.invalidInputs).toEqual(['https://gamebanana.com/collections/123']);
+  });
+
   it('reports input containing neither a collection nor item links as invalid', () => {
     expect(classifyGameBananaImportInput('https://gamebanana.com/members/123').kind).toBe('invalid');
   });

@@ -77,8 +77,13 @@ export function parseBulkGameBananaLinks(input: string): BulkGameBananaParseResu
 
 /** Decide which existing import workflow owns a single shared paste field. */
 export function classifyGameBananaImportInput(input: string): GameBananaImportInput {
-  const collectionId = parseCollectionId(input);
-  if (collectionId !== null) return { kind: 'collection', collectionId };
+  // Only a lone token can be a collection: parseCollectionId is unanchored and
+  // would otherwise swallow a mixed paste, silently dropping every item link.
+  const tokens = input.split(/[\s,]+/).filter(Boolean);
+  if (tokens.length === 1) {
+    const collectionId = parseCollectionId(tokens[0]);
+    if (collectionId !== null) return { kind: 'collection', collectionId };
+  }
 
   const result = parseBulkGameBananaLinks(input);
   return result.items.length > 0 ? { kind: 'links', result } : { kind: 'invalid', result };
