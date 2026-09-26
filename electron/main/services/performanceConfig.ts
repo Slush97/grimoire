@@ -626,7 +626,10 @@ export function applyPerformanceConfig(
             overridesByPreset: saved,
         });
 
-        const kept = Object.keys(overrides).length;
+        const kept = Object.keys(overrides).filter((okey) => {
+            const key = okey.slice('ConVars/'.length);
+            return !(okey.startsWith('ConVars/') && optInKeys.has(key) && !presetConvarKeys.has(key));
+        }).length;
         const keptNote = kept ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.` : '';
         const switchNote = switching ? ` Replaced ${appliedPreset.name}.` : '';
         const note = skipped.length

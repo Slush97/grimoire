@@ -680,8 +680,9 @@ describe('toggled-off opt-ins with a banked override', () => {
         // A game update wiped the file, so the banked overrides are re-layered as is.
         write(STOCK);
 
-        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        const result = applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
         expect(activeHas(read(), control.key)).toBe(false);
         expect(activeHas(read(), 'my_own_convar')).toBe(true);
+        expect(result.message).toContain('Kept 1 of your override.');
     });
 });
