@@ -632,6 +632,7 @@ export default function PerformanceConfigCard() {
               controls={selectedRelease.optIn}
               selected={selectedOptIns}
               onChange={(keys) => void onChangeOptIns(keys)}
+              fileValues={status?.state === 'applied' ? status.optInFileValues : undefined}
               disabled={busy}
             />
           )}

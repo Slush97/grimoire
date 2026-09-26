@@ -2928,6 +2928,8 @@
       "count": "{{enabled}} of {{count}} enabled",
       "description": "The creator's visibility and camera settings are included by default. Turn off anything you do not want. Developer and testing tools stay off unless you enable them.",
       "presetValue": "This preset sets it to {{value}}",
+      "fileValue": "Set to {{value}} in gameinfo.gi (preset value: {{preset}})",
+      "strayValue": "Still in gameinfo.gi as {{value}}. Reapply to remove it.",
       "pending_one": "{{count}} gameplay setting changed. Reapply to write it to gameinfo.gi.",
       "pending_other": "{{count}} gameplay settings changed. Reapply to write them to gameinfo.gi.",
       "group": {

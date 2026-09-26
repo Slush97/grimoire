@@ -257,6 +257,22 @@ function entryKey(line: string): string | null {
 const quote = (v: string) => `"${v.replace(/^"|"$/g, '')}"`;
 const unquote = (v: string) => v.replace(/^"|"$/g, '');
 
+// The value each of `keys` currently has in the file's ConVars section, for
+// keys with an active (uncommented) entry.
+function convarValues(content: string, keys: string[]): Record<string, string> {
+    const range = findSectionByPath(content, ['ConVars']);
+    if (!range) return {};
+    const wanted = new Set(keys);
+    const values: Record<string, string> = {};
+    for (const line of content.slice(range.bodyStart, range.bodyEnd).split('\n')) {
+        const key = entryKey(line);
+        if (!key || !wanted.has(key)) continue;
+        const entry = matchEntryLine(line, key);
+        if (entry) values[key] = unquote(entry.value);
+    }
+    return values;
+}
+
 // ---------------------------------------------------------------------------
 // Overrides: harvest hand edits so they survive reapply and wipes
 // ---------------------------------------------------------------------------
@@ -862,6 +878,10 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 // from an unrelated preset would be a lie.
                 bundledVersion: newestVersion ?? begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
+                optInFileValues: convarValues(
+                    content,
+                    resolvePreset(appliedId, begin[2]).optIn.map((control) => control.key)
+                ),
                 handEdited,
                 overrideCount,
                 message: handEdited

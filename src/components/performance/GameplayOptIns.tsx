@@ -12,6 +12,9 @@ interface GameplayOptInsProps {
   /** Creator convar keys currently included for this preset. */
   selected: string[];
   onChange: (keys: string[]) => void;
+  /** What each opt-in key is actually set to in gameinfo.gi right now, so a
+   *  hand edit or a line left behind is visible instead of the preset value. */
+  fileValues?: Record<string, string>;
   disabled?: boolean;
 }
 
@@ -29,6 +32,7 @@ export default function GameplayOptIns({
   controls,
   selected,
   onChange,
+  fileValues,
   disabled,
 }: GameplayOptInsProps) {
   const { t } = useTranslation();
@@ -41,6 +45,16 @@ export default function GameplayOptIns({
     if (on) next.add(key);
     else next.delete(key);
     onChange(controls.filter((c) => next.has(c.key)).map((c) => c.key));
+  };
+
+  const describe = (control: PerformanceOptIn) => {
+    const inFile = fileValues?.[control.key];
+    if (inFile === undefined) return t('performance.optIn.presetValue', { value: control.value });
+    if (!enabled.has(control.key)) return t('performance.optIn.strayValue', { value: inFile });
+    if (inFile !== control.value) {
+      return t('performance.optIn.fileValue', { value: inFile, preset: control.value });
+    }
+    return t('performance.optIn.presetValue', { value: control.value });
   };
 
   const groups = GROUP_ORDER.map((group) => ({
@@ -89,7 +103,7 @@ export default function GameplayOptIns({
                   onChange={(on) => toggle(control.key, on)}
                   disabled={disabled}
                   label={<span className="font-mono text-xs">{control.key}</span>}
-                  description={t('performance.optIn.presetValue', { value: control.value })}
+                  description={describe(control)}
                 />
               ))}
             </div>

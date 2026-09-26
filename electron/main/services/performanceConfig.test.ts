@@ -686,3 +686,27 @@ describe('toggled-off opt-ins with a banked override', () => {
         expect(result.message).toContain('Kept 1 of your override.');
     });
 });
+
+describe('opt-in values reported from the file', () => {
+    const preset = PRESETS.find((p) => p.optIn.length)!;
+    const control = preset.optIn[0];
+    const edited = control.value === '3.3' ? '4.4' : '3.3';
+
+    it('reports what gameinfo.gi actually holds, including hand edits', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        expect(getPerformanceConfigStatus(gameRoot).optInFileValues?.[control.key]).toBe(control.value);
+
+        write(
+            read().replace(
+                new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)$`, 'm'),
+                `$1"${edited}"$3`
+            )
+        );
+        expect(getPerformanceConfigStatus(gameRoot).optInFileValues?.[control.key]).toBe(edited);
+    });
+
+    it('omits opt-ins that are not in the file', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(getPerformanceConfigStatus(gameRoot).optInFileValues).not.toHaveProperty(control.key);
+    });
+});
