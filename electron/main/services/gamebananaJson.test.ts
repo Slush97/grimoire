@@ -18,6 +18,12 @@ describe('parseGameBananaJson', () => {
         });
     });
 
+    it('skips a warning that itself contains brackets', () => {
+        const text =
+            "<br />\nNotice: Undefined index [file] in $arr['images'] on line 12\n" + '{"_aRecords": []}';
+        expect(parseGameBananaJson(text)).toEqual({ _aRecords: [] });
+    });
+
     it('still throws on genuinely non-JSON bodies', () => {
         expect(() => parseGameBananaJson('<html><body>502 Bad Gateway</body></html>')).toThrow(SyntaxError);
         expect(() => parseGameBananaJson('Fatal error: {oops} not json')).toThrow(SyntaxError);
