@@ -202,9 +202,9 @@ export interface PerformanceConfigStatus {
     bundledVersion: string;
     /** Opt-in convar keys the last apply wrote. */
     appliedOptIns?: string[];
-    /** The value each opt-in key actually has in gameinfo.gi right now (keys
-     *  without an active entry are absent). Hand edits show up here. */
-    optInFileValues?: Record<string, string>;
+    /** Current values of the active ConVars lines Grimoire manages in
+     *  gameinfo.gi, hand edits included. */
+    managedConvarValues?: Record<string, string>;
     /** Applied, but the file no longer matches what Grimoire wrote (hand edits). */
     handEdited?: boolean;
     /** Saved user deviations from the preset (hand edits harvested on reapply,

@@ -687,26 +687,34 @@ describe('toggled-off opt-ins with a banked override', () => {
     });
 });
 
-describe('opt-in values reported from the file', () => {
+describe('managed convar values reported from the file', () => {
     const preset = PRESETS.find((p) => p.optIn.length)!;
     const control = preset.optIn[0];
     const edited = control.value === '3.3' ? '4.4' : '3.3';
+    const editValue = (content: string) =>
+        content.replace(
+            new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)`, 'm'),
+            `$1"${edited}"$3`
+        );
 
     it('reports what gameinfo.gi actually holds, including hand edits', () => {
         applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
-        expect(getPerformanceConfigStatus(gameRoot).optInFileValues?.[control.key]).toBe(control.value);
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(control.value);
 
-        write(
-            read().replace(
-                new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)$`, 'm'),
-                `$1"${edited}"$3`
-            )
-        );
-        expect(getPerformanceConfigStatus(gameRoot).optInFileValues?.[control.key]).toBe(edited);
+        write(editValue(read()));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(edited);
     });
 
-    it('omits opt-ins that are not in the file', () => {
+    it('reads CRLF files (Windows)', () => {
+        write(STOCK_CRLF);
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        write(editValue(read()));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(edited);
+    });
+
+    it('leaves out keys that are absent or outside the Grimoire block', () => {
         applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
-        expect(getPerformanceConfigStatus(gameRoot).optInFileValues).not.toHaveProperty(control.key);
+        write(read().replace(/ConVars\s*\{/, (m) => `${m}\n\t\t${control.key} "${edited}"`));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues).not.toHaveProperty(control.key);
     });
 });

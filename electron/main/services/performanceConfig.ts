@@ -257,18 +257,19 @@ function entryKey(line: string): string | null {
 const quote = (v: string) => `"${v.replace(/^"|"$/g, '')}"`;
 const unquote = (v: string) => v.replace(/^"|"$/g, '');
 
-// The value each of `keys` currently has in the file's ConVars section, for
-// keys with an active (uncommented) entry.
-function convarValues(content: string, keys: string[]): Record<string, string> {
+// Current values of the active ConVars lines Grimoire manages (tagged with the
+// marker), so Reapply can actually change every line reported here. Lines the
+// user owns outside the block are left out on purpose.
+function managedConvarValues(content: string): Record<string, string> {
     const range = findSectionByPath(content, ['ConVars']);
     if (!range) return {};
-    const wanted = new Set(keys);
     const values: Record<string, string> = {};
-    for (const line of content.slice(range.bodyStart, range.bodyEnd).split('\n')) {
+    for (const raw of content.slice(range.bodyStart, range.bodyEnd).split('\n')) {
+        const line = raw.replace(/\r$/, '');
+        if (!line.includes(`// ${MARKER}`)) continue;
         const key = entryKey(line);
-        if (!key || !wanted.has(key)) continue;
-        const entry = matchEntryLine(line, key);
-        if (entry) values[key] = unquote(entry.value);
+        const entry = key ? matchEntryLine(line, key) : null;
+        if (key && entry) values[key] = unquote(entry.value);
     }
     return values;
 }
@@ -878,10 +879,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 // from an unrelated preset would be a lie.
                 bundledVersion: newestVersion ?? begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
-                optInFileValues: convarValues(
-                    content,
-                    resolvePreset(appliedId, begin[2]).optIn.map((control) => control.key)
-                ),
+                managedConvarValues: managedConvarValues(content),
                 handEdited,
                 overrideCount,
                 message: handEdited
