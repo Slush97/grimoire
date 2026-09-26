@@ -2704,6 +2704,7 @@
     },
     "comments": {
       "empty": "No comments yet",
+      "unavailable": "Comments unavailable.",
       "showing": "Showing {{shown}} of {{total}}"
     },
     "audio": {

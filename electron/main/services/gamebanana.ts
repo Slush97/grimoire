@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
+import { parseGameBananaJson } from './gamebananaJson';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
@@ -351,7 +352,7 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
             }
 
             try {
-                return JSON.parse(text) as T;
+                return parseGameBananaJson<T>(text);
             } catch (err) {
                 console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
                 throw new Error(`GameBanana API returned invalid JSON: ${err}`);
