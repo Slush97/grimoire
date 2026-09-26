@@ -1370,7 +1370,7 @@ export default function Installed() {
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
   // on the page's buttons.
-  const setImportOpen = useAppStore((s) => s.setBatchImportOpen);
+  const openBatchImport = useAppStore((s) => s.openBatchImport);
   // Target of the "Add variant" dialog, which IS hosted here (unlike the plain
   // batch import): it can only be opened from a card, so the page always has
   // mods and can never early-return out from under it. `groupId` is null for a
@@ -4534,7 +4534,7 @@ export default function Installed() {
               <Button onClick={() => navigate('/browse')} icon={Search}>
                 {t('installed.actions.browseMods')}
               </Button>
-              <Button variant="secondary" onClick={() => setImportOpen(true)} icon={FilePlus}>
+              <Button variant="secondary" onClick={() => openBatchImport()} icon={FilePlus}>
                 {t('installed.actions.importCustomMod')}
               </Button>
             </div>
@@ -4914,7 +4914,7 @@ export default function Installed() {
             </div>
             <Button
               variant="secondary"
-              onClick={() => setImportOpen(true)}
+              onClick={() => openBatchImport()}
               icon={FilePlus}
               className="!px-2.5"
               aria-label={t('installed.actions.addCustomMod')}

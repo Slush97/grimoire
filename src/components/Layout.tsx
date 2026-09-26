@@ -69,7 +69,10 @@ export default function Layout() {
   // non-empty mid-batch, which would unmount the dialog and throw away the rows
   // a partly-failed batch still needs in order to retry just the leftovers.
   const batchImportOpen = useAppStore((s) => s.batchImportOpen);
-  const setBatchImportOpen = useAppStore((s) => s.setBatchImportOpen);
+  const batchImportPendingPaths = useAppStore((s) => s.batchImportPendingPaths);
+  const consumeBatchImportPaths = useAppStore((s) => s.consumeBatchImportPaths);
+  const setBatchImportBusy = useAppStore((s) => s.setBatchImportBusy);
+  const closeBatchImport = useAppStore((s) => s.closeBatchImport);
   const importCustomMods = useAppStore((s) => s.importCustomMods);
   useEffect(() => {
     loadStoreSettings();
@@ -420,9 +423,12 @@ export default function Layout() {
       )}
       {batchImportOpen && (
         <ImportCustomModsModal
-          onClose={() => setBatchImportOpen(false)}
+          onClose={closeBatchImport}
           onImport={importCustomMods}
           onFinished={reportBatchImport}
+          pendingPaths={batchImportPendingPaths}
+          onConsumedPaths={consumeBatchImportPaths}
+          onSubmittingChange={setBatchImportBusy}
         />
       )}
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
