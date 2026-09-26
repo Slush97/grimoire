@@ -567,12 +567,15 @@ export function applyPerformanceConfig(
             }
         }
         // The user's own convars (added inside the marked block by hand and
-        // harvested as overrides) ride along in the injected block.
+        // harvested as overrides) ride along in the injected block. Opt-in keys
+        // never do: an override banked for one (a hand edit, or a stale sidecar
+        // that predates optIns) must not resurrect it while it is toggled off.
         const presetConvarKeys = new Set(convars.map(([key]) => key));
+        const optInKeys = new Set(preset.optIn.map((control) => control.key));
         for (const [okey, override] of Object.entries(overrides)) {
             if (!okey.startsWith('ConVars/') || override.value === undefined) continue;
             const key = okey.slice('ConVars/'.length);
-            if (presetConvarKeys.has(key)) continue;
+            if (presetConvarKeys.has(key) || optInKeys.has(key)) continue;
             if (existingKeys.has(key)) {
                 content = applyOp(content, { path: ['ConVars'], key, value: override.value })!;
             } else {

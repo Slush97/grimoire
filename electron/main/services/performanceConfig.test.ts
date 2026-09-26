@@ -640,3 +640,48 @@ describe('opt-ins without a sidecar', () => {
         expect(sidecar().overridesByPreset).toBeUndefined();
     });
 });
+
+describe('toggled-off opt-ins with a banked override', () => {
+    const preset = PRESETS.find((p) => p.optIn.length)!;
+    const control = preset.optIn[0];
+    const edited = control.value === '3.3' ? '4.4' : '3.3';
+
+    it('does not write a hand-edited opt-in once it is toggled off (sidecar predates optIns)', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        write(
+            read().replace(
+                new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)$`, 'm'),
+                `$1"${edited}"$3`
+            )
+        );
+        const older = sidecar();
+        delete older.optIns;
+        writeFileSync(sidecarPath, JSON.stringify(older), 'utf-8');
+
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(activeHas(read(), control.key)).toBe(false);
+    });
+
+    it('does not write a banked opt-in override while the opt-in is off, but keeps user convars', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        writeFileSync(
+            sidecarPath,
+            JSON.stringify({
+                ...sidecar(),
+                overridesByPreset: {
+                    [preset.id]: {
+                        [`ConVars/${control.key}`]: { value: edited },
+                        'ConVars/my_own_convar': { value: '3' },
+                    },
+                },
+            }),
+            'utf-8'
+        );
+        // A game update wiped the file, so the banked overrides are re-layered as is.
+        write(STOCK);
+
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(activeHas(read(), control.key)).toBe(false);
+        expect(activeHas(read(), 'my_own_convar')).toBe(true);
+    });
+});
