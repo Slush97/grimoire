@@ -2422,6 +2422,8 @@
     "addMods": "Add mods",
     "addModsDescription": "Choose installed standalone mods to rebuild into this merge. Added originals stay in the disabled folder.",
     "noEligibleMods": "No eligible standalone mods are installed.",
+    "searchMods": "Search mods",
+    "noMatchingMods": "No eligible mods match that search.",
     "addingMods": "Adding...",
     "addSelected_one": "Add {{count}} mod",
     "addSelected_other": "Add {{count}} mods",
