@@ -103,7 +103,7 @@ const sessionMocks = vi.hoisted(() => ({
 }));
 vi.mock('./gameSessionMods', () => sessionMocks);
 const vpkMocks = vi.hoisted(() => ({
-    parseVpkDirectory: vi.fn((path: string) => [
+    parseVpkDirectoryCached: vi.fn((path: string) => [
         `materials/${path.split('/').pop()}.vmat_c`,
         'readme.txt',
     ]),
@@ -199,7 +199,7 @@ const oldManifest = {
 };
 beforeEach(() => {
     vi.clearAllMocks();
-    vpkMocks.parseVpkDirectory.mockReset();
+    vpkMocks.parseVpkDirectoryCached.mockReset();
     processMocks.exitCodes.length = 0;
     processMocks.spawnArgs.length = 0;
     embeddedRecords.length = 0;
@@ -282,7 +282,7 @@ describe('addMergeSources', () => {
     });
 
     it('refuses a strict rebuild on a real shared file without invoking vpkmerge', async () => {
-        vpkMocks.parseVpkDirectory.mockImplementation(() => ['materials/shared.vmat_c', 'readme.txt']);
+        vpkMocks.parseVpkDirectoryCached.mockImplementation(() => ['materials/shared.vmat_c', 'readme.txt']);
 
         await expect(
             addMergeSources('/game', target.id, [addition.id], { strict: true })

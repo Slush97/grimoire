@@ -101,7 +101,7 @@ const sessionMocks = vi.hoisted(() => ({
 }));
 vi.mock('./gameSessionMods', () => sessionMocks);
 vi.mock('./vpk', () => ({
-    parseVpkDirectory: vi.fn((path: string) => [
+    parseVpkDirectoryCached: vi.fn((path: string) => [
         `materials/${path.split('/').pop()}.vmat_c`,
         'readme.txt',
     ]),

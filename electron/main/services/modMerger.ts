@@ -16,7 +16,7 @@ import {
 } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { resolveVpkIdentity, type OriginalIdentity } from './vpkIdentity';
-import { parseVpkDirectory, parseVpkEntryStats } from './vpk';
+import { parseVpkDirectoryCached, parseVpkEntryStats } from './vpk';
 import { IGNORED_CONFLICT_FILES } from './conflicts';
 import {
     computeOriginalIdentity,
@@ -463,7 +463,7 @@ export function assertNoStrictCollisions(vpkPaths: string[]): void {
     const seen = new Set<string>();
     const collisions = new Set<string>();
     for (const vpkPath of vpkPaths) {
-        for (const entry of new Set(parseVpkDirectory(vpkPath) ?? [])) {
+        for (const entry of new Set(parseVpkDirectoryCached(vpkPath) ?? [])) {
             const fileName = entry.toLowerCase().split('/').pop() ?? '';
             if (IGNORED_CONFLICT_FILES.has(fileName)) continue;
             if (seen.has(entry)) collisions.add(entry);
