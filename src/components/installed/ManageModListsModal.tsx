@@ -1,12 +1,12 @@
 /**
- * Rename and delete Installed lists.
+ * Rename, delete, and bulk enable/disable Installed lists.
  *
  * Deleting a list only forgets the grouping: the mods themselves are never
  * touched. That is worth saying in the UI, because a list of mods with a
  * delete button next to it reads as destructive when it isn't.
  */
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../common/Modal';
 import { Button, IconButton, ModalHeader } from '../common/ui';
@@ -21,16 +21,21 @@ interface ManageModListsModalProps {
   /** Returns false when the name was rejected (blank, or already in use). */
   onRename: (id: string, name: string) => boolean;
   onDelete: (id: string) => void;
+  onSetEnabled: (id: string, enabled: boolean) => void;
+  /** In-flight bulk toggle, shared with the select bar so only one runs at a time. */
+  progress: { verb: string; done: number; total: number } | null;
 }
 
 interface ListRowProps {
   list: ModList;
   count: number;
+  busy: boolean;
   onRename: (id: string, name: string) => boolean;
   onDelete: (id: string) => void;
+  onSetEnabled: (id: string, enabled: boolean) => void;
 }
 
-function ListRow({ list, count, onRename, onDelete }: ListRowProps) {
+function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled }: ListRowProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(list.name);
   const [rejected, setRejected] = useState(false);
@@ -80,6 +85,22 @@ function ListRow({ list, count, onRename, onDelete }: ListRowProps) {
         <span className="flex-shrink-0 whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {t('installed.lists.memberCount', { count })}
         </span>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy || count === 0}
+          onClick={() => onSetEnabled(list.id, true)}
+        >
+          {t('installed.lists.enableAll')}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy || count === 0}
+          onClick={() => onSetEnabled(list.id, false)}
+        >
+          {t('installed.lists.disableAll')}
+        </Button>
         {confirmingDelete ? (
           <div className="flex flex-shrink-0 items-center gap-1">
             <Button size="sm" variant="danger" onClick={() => onDelete(list.id)}>
@@ -116,6 +137,8 @@ export function ManageModListsModal({
   onClose,
   onRename,
   onDelete,
+  onSetEnabled,
+  progress,
 }: ManageModListsModalProps) {
   const { t } = useTranslation();
 
@@ -134,6 +157,14 @@ export function ManageModListsModal({
         closeLabel={t('common.actions.close')}
       />
       <div className="min-h-0 overflow-y-auto p-5">
+        {progress && (
+          <p className="mb-3 flex items-center gap-2 text-sm tabular-nums text-text-primary">
+            <Loader2 className="h-4 w-4 animate-spin text-accent" />
+            {progress.verb === 'Disabling'
+              ? t('installed.lists.disabling', { done: progress.done, total: progress.total })
+              : t('installed.lists.enabling', { done: progress.done, total: progress.total })}
+          </p>
+        )}
         {lists.length === 0 ? (
           <p className="text-sm text-text-secondary">{t('installed.lists.emptyHint')}</p>
         ) : (
@@ -143,8 +174,10 @@ export function ManageModListsModal({
                 key={list.id}
                 list={list}
                 count={counts.get(list.id) ?? 0}
+                busy={!!progress}
                 onRename={onRename}
                 onDelete={onDelete}
+                onSetEnabled={onSetEnabled}
               />
             ))}
           </ul>
