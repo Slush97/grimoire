@@ -24,7 +24,6 @@ import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetada
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
-import { inferHeroFromVoVpk, needsModSectionVoHeroCheck } from '../services/voHeroInference';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
 import { retargetProfileModSha } from '../services/profiles';
@@ -130,8 +129,8 @@ async function copyIntoModSlot(
 /**
  * Resolve a mod's Locker global type, classifying from the VPK tree when it has
  * not been classified yet OR when an older classifier version produced a stale
- * `null` ("not global") result. A positive type is left untouched: it may be a
- * manual override, and re-running can't improve a confident hit. Runs for mods
+ * `null` ("not global") result. A positive type is left untouched (except a
+ * stale 'icons', below): it may be a manual override. Runs for mods
  * with no metadata row too (a VPK dropped straight into citadel/addons), so
  * locally added HUD / Soul Container mods get tagged like downloaded ones.
  * Persists the result + classifier version so later scans skip the re-parse.
@@ -142,8 +141,11 @@ function resolveGlobalType(
 ): import('../../../src/types/mod').GlobalModType | null {
     const current = metadata?.globalType;
     const stamped = metadata?.globalTypeClassifierVersion ?? 0;
+    // Classifier v3 and earlier filed single-hero card packs as 'icons' (see
+    // heroImageHeroes in vpk.ts), so a stale 'icons' result is re-run too.
     const needsClassify =
-        current === undefined || (current === null && stamped < GLOBAL_CLASSIFIER_VERSION);
+        current === undefined ||
+        ((current === null || current === 'icons') && stamped < GLOBAL_CLASSIFIER_VERSION);
     if (!needsClassify) return current;
     let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
     try {
@@ -235,16 +237,6 @@ function enrichMod(mod: Mod): WireMod {
             const resolved = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
             lockerHero = resolved.lockerHero;
             lockerHeroSource = resolved.lockerHeroSource;
-        } else if (needsModSectionVoHeroCheck(metadata, globalType)) {
-            let inferred: string | null = null;
-            try {
-                inferred = inferHeroFromVoVpk(mod.path);
-            } catch (err) {
-                console.warn(`[enrichMod] VPK VO hero inference failed for ${mod.fileName}:`, err);
-            }
-            lockerHero = inferred ?? undefined;
-            lockerHeroSource = inferred ? 'vpk' : undefined;
-            setModMetadata(mod.metaKey, { lockerHero, lockerHeroSource, lockerHeroVpkChecked: true });
         }
         // Per-ability sound footprint. Same lazy + persist + null-sentinel
         // pattern as globalType, and it shares the cached VPK parse, so the two
@@ -312,21 +304,20 @@ function enrichMod(mod: Mod): WireMod {
  * yet classified at the current version, abilitySounds never checked, a Sound
  * mod with no hero tag yet (the parse only happens when title inference fails,
  * which we don't pre-compute; a wasted warm parse is harmless), or an unknown
- * or heroless 'Mod'-section mod whose tree hasn't been hero-checked. Every
- * positive persists to metadata, so this is a first-scan-only cost per mod.
+ * mod whose tree hasn't been hero-checked. Every positive persists to
+ * metadata, so this is a first-scan-only cost per mod.
  */
 function needsVpkParseForEnrich(mod: Mod): boolean {
     const metadata = getModMetadata(mod.metaKey);
     const globalTypeStamped = metadata?.globalTypeClassifierVersion ?? 0;
     if (metadata?.globalType === undefined) return true;
-    if (metadata.globalType === null && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
+    if ((metadata.globalType === null || metadata.globalType === 'icons') && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
     if (metadata.abilitySounds === undefined) return true;
     if (!metadata.lockerHero && metadata.sourceSection === 'Sound') return true;
     const isUnknown =
         !metadata.gameBananaId &&
         !(typeof metadata.modName === 'string' && metadata.modName.trim().length > 0);
     if (isUnknown && !metadata.lockerHero && !metadata.lockerHeroVpkChecked) return true;
-    if (needsModSectionVoHeroCheck(metadata, metadata.globalType)) return true;
     return false;
 }
 

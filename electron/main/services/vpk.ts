@@ -1,4 +1,5 @@
 import { openSync, readSync, closeSync, existsSync, statSync, fstatSync } from 'fs';
+import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { heroForSoundCodename } from './heroSoundCodenames';
 import { parseVpksInWorkers } from './workers';
 import type { GlobalModType } from '../../../src/types/mod';
@@ -780,19 +781,24 @@ const ANNOUNCER_PATTERN = /(?:^|\/)sounds\/mods\//i;
  * counting the `backgrounds` folder as a hero would wrongly tip a single-hero
  * mod over into the multi-hero "pack" bucket.
  *
- * We only need the cardinality, never the display name: a file set spanning
- * many heroes is a global icon pack; a single hero's cards/portraits belong to
- * that hero.
+ * Valve names files in those subfolders inconsistently: one Vindicta card pack
+ * ships `hornet_card_psd`, `backgrounds/vindicta_bg_psd` and
+ * `hero_names/vindicta.vsvg_c`. So each token is resolved to a hero (codename
+ * first, then display name) before counting, or that single-hero pack reads as
+ * three heroes. Unresolved tokens still count as themselves.
+ *
+ * Only the cardinality matters: a file set spanning many heroes is a global
+ * icon pack; a single hero's cards/portraits belong to that hero.
  */
-function heroImageCodenames(paths: string[]): Set<string> {
-    const codenames = new Set<string>();
+function heroImageHeroes(paths: string[]): Set<string> {
+    const heroes = new Set<string>();
     for (const p of paths) {
         if (!HERO_IMAGE_PREFIX.test(p)) continue;
         const basename = p.split('/').pop() ?? '';
-        const codename = basename.toLowerCase().split('_')[0];
-        if (codename) codenames.add(codename);
+        const token = basename.toLowerCase().split('_')[0].split('.')[0];
+        if (token) heroes.add(heroForSoundCodename(token) ?? inferHeroFromTitle(token) ?? token);
     }
-    return codenames;
+    return heroes;
 }
 
 /**
@@ -812,7 +818,7 @@ function heroImageCodenames(paths: string[]): Set<string> {
  * an older version, so pattern improvements (e.g. new HUD paths) reach
  * already-installed mods without a manual retag or a metadata migration.
  */
-export const GLOBAL_CLASSIFIER_VERSION = 3;
+export const GLOBAL_CLASSIFIER_VERSION = 4;
 
 export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.length === 0) return null;
@@ -838,7 +844,7 @@ export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (hasUrn) return 'spirit-urn';
     if (paths.some((p) => HIDEOUT_PATTERN.test(p))) return 'hideout';
 
-    const heroImages = heroImageCodenames(paths);
+    const heroImages = heroImageHeroes(paths);
     if (heroImages.size >= 2) return 'icons'; // multi-hero pack = global
     if (heroImages.size === 1) return null; // one hero = that hero's content
 
