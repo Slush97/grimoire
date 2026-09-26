@@ -5288,7 +5288,9 @@ export default function Installed() {
         <ManageModListsModal
           lists={modLists}
           counts={listCounts}
-          onClose={() => setManagingLists(false)}
+          onClose={() => {
+            if (!bulkProgress) setManagingLists(false);
+          }}
           onRename={renameModList}
           onDelete={deleteModList}
           onSetEnabled={setModListEnabled}
