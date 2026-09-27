@@ -12,6 +12,7 @@ import {
 } from '../../../lib/api';
 import { getActiveDeadlockPath } from '../../../lib/appSettings';
 import { showToast } from '../../../stores/toastStore';
+import { useGameinfoStore } from '../../../stores/gameinfoStore';
 import { Badge, Button, Card } from '../../common/ui';
 import { Input } from '../../common/forms';
 import { ConfirmModal } from '../../common/PageComponents';
@@ -147,6 +148,7 @@ export default function GameSection() {
       setGameinfoConfigured(false);
     } finally {
       setIsFixingGameinfo(false);
+      void useGameinfoStore.getState().recheck();
     }
   };
 

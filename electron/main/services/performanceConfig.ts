@@ -759,6 +759,22 @@ export function removePerformanceConfig(deadlockPath: string | null): Performanc
     }
 }
 
+/** Put back what a game update wiped: the preset, release and optional
+ *  settings the sidecar recorded, not whatever the Settings card has selected
+ *  now. Anything other than a patchable wipe is returned untouched. */
+export function reapplyWipedPerformanceConfig(
+    deadlockPath: string | null
+): PerformanceConfigStatus {
+    const current = getPerformanceConfigStatus(deadlockPath);
+    if (current.state !== 'wiped' || current.canRestoreBackup) return current;
+    const sidecar = readAppliedState(getGameinfoPath(deadlockPath!))!;
+    return applyPerformanceConfig(deadlockPath, {
+        presetId: sidecar.presetId,
+        version: sidecar.version,
+        optIns: sidecar.optIns,
+    });
+}
+
 /** Restore gameinfo.gi from the Grimoire backup (.grimoire-bak), the pristine
  *  pre-apply copy shared with fixGameinfo. Recovery for an emptied or corrupt
  *  file the preset can no longer patch; after restoring, Apply runs normally.

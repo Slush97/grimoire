@@ -126,6 +126,7 @@ ipcMain.handle('get-gameinfo-status', (): GameinfoStatus => {
         return {
             configured: false,
             missing: false,
+            reason: 'not-found',
             message: 'No Deadlock path configured',
             candidates: [],
         };
@@ -168,6 +169,7 @@ ipcMain.handle('fix-gameinfo', async (): Promise<GameinfoStatus> => {
         return {
             configured: false,
             missing: false,
+            reason: 'not-found',
             message: 'No Deadlock path configured',
             candidates: [],
         };

@@ -910,11 +910,11 @@ export async function cleanupAddons(): Promise<{
   return window.electronAPI.cleanupAddons();
 }
 
-export async function getGameinfoStatus(): Promise<{ configured: boolean; message: string; missing: boolean; candidates: string[] }> {
+export async function getGameinfoStatus(): Promise<GameinfoStatus> {
   return window.electronAPI.getGameinfoStatus();
 }
 
-export async function fixGameinfo(): Promise<{ configured: boolean; message: string; missing: boolean; candidates: string[] }> {
+export async function fixGameinfo(): Promise<GameinfoStatus> {
   return window.electronAPI.fixGameinfo();
 }
 
@@ -944,6 +944,10 @@ export async function resetPerformanceConfigOverrides(
   version?: string | null
 ): Promise<PerformanceConfigStatus> {
   return window.electronAPI.resetPerformanceConfigOverrides(presetId, optIns, version);
+}
+
+export async function reapplyWipedPerformanceConfig(): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.reapplyWipedPerformanceConfig();
 }
 
 export async function restorePerformanceConfigBackup(): Promise<PerformanceConfigStatus> {
@@ -1136,7 +1140,7 @@ export function conflictPairKey(a: string, b: string): string {
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
 export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, PerformancePresetSummary, PerformanceLatestInfo, PerformanceRemoteVersionList, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
+import type { GameinfoStatus, Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, PerformancePresetSummary, PerformanceLatestInfo, PerformanceRemoteVersionList, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

@@ -2767,8 +2767,9 @@
   },
   "layout": {
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
-    "gameinfoIssue": "gameinfo.gi issue:",
     "fixNow": "Fix now",
+    "perfWiped": "A game update removed your performance config.",
+    "perfRestored": "Performance config restored.",
     "openSettings": "Open settings",
     "hideGameinfoBanner": "Hide gameinfo banner until next launch",
     "hideGameinfoBannerShort": "Hide until next launch",
@@ -2782,6 +2783,13 @@
       "body": "<name>{{modName}}</name> contains files that aren't typical for a Deadlock mod:",
       "andMore": "...and {{count}} more",
       "extractsNote": "Grimoire only extracts <code>.vpk</code> files: these won't be installed even if you continue. Review the mod's GameBanana page if anything looks off."
+    },
+    "gameinfo": {
+      "modsOff": "Your mods aren't loading. A game update or another mod manager changed Deadlock's config.",
+      "modsAndPerfOff": "Your mods aren't loading and your performance config was removed. A game update or another mod manager changed Deadlock's config.",
+      "notFound": "Grimoire can't find Deadlock's config file. Check the game folder in Settings.",
+      "unrepairable": "Grimoire couldn't repair Deadlock's config. Verify the game files in Steam, then try again.",
+      "error": "Grimoire couldn't read Deadlock's config. Check the game folder in Settings."
     }
   },
   "variantPicker": {
@@ -2862,50 +2870,18 @@
   "performance": {
     "title": "Performance",
     "statusReadError": "Could not read gameinfo.gi status. Check your Deadlock path in Settings.",
-    "checkingGameinfo": "Checking gameinfo.gi...",
-    "badge": {
-      "applied": "Applied v{{version}}",
-      "appliedEdited": "Applied v{{version}} (edited)",
-      "wiped": "Wiped by game update",
-      "error": "Error",
-      "notApplied": "Not applied"
-    },
-    "status": {
-      "applied": "{{preset}} v{{version}} is applied.",
-      "appliedOutdated": "{{preset}} v{{version}} is applied; v{{latest}} is available (reapply to update).",
-      "overrideNote_one": " Keeping {{count}} of your override.",
-      "overrideNote_other": " Keeping {{count}} of your overrides.",
-      "handEditedNote": " The file has manual edits: Reapply folds them into your overrides.",
-      "wipedRestorable": "gameinfo.gi is empty or corrupt. Restore the Grimoire backup (or verify game files in Steam), then reapply.",
-      "wiped": "A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.",
-      "wipedRestoreNote_one": " Your {{count}} saved override will be restored too.",
-      "wipedRestoreNote_other": " Your {{count}} saved overrides will be restored too.",
-      "notApplied": "Performance config is not applied."
-    },
-    "restoreBackup": "Restore Backup",
-    "reapply": "Reapply",
-    "reapplyConfig": "Reapply Config",
-    "applyConfig": "Apply Config",
-    "editFile": "Edit File",
+    "restoreBackup": "Restore backup",
+    "editFile": "Edit the file by hand",
     "changeEditor": "Change editor",
-    "resetOverrides": "Reset Overrides",
     "editor": {
       "chooseTitle": "Choose an editor application",
       "title": "Open gameinfo.gi with",
-      "description": "Pick the editor for config tweaks. Grimoire remembers this; the gear button next to Edit File switches it later.",
+      "description": "Pick the app for editing the config by hand. Grimoire remembers it, and you can change it later under Advanced.",
       "systemDefaultHint": "Whatever your OS opens text files with",
       "browse": "Browse for an application..."
     },
-    "switchTo": "Switch to {{preset}}",
-    "switchNote": "Applying replaces {{current}} with {{next}}. Your saved tweaks for {{current}} are kept in case you switch back.",
     "preset": {
-      "label": "Preset",
       "authorMods": "Mods",
-      "meta_one": "{{count}} setting, by {{author}}",
-      "meta_other": "{{count}} settings, by {{author}}",
-      "unstable": "Upstream labels this config experimental and changes it often. Expect rough edges.",
-      "pinnedTag": "Pinned to release {{ref}}",
-      "pinnedCommit": "Pinned to upstream {{ref}} (no git tag published)",
       "tier": {
         "balanced": "Balanced",
         "preview": "Preview",
@@ -2915,50 +2891,43 @@
         "potato": "Potato"
       },
       "tierBlurb": {
-        "balanced": "A solid all-round gain that keeps the game looking close to normal. Start here.",
+        "balanced": "A solid all-round gain that keeps the game looking close to normal.",
         "preview": "The author's in-progress tuning. Newer changes, less testing.",
         "competitive": "Tuned for ranked play: strips visual noise while keeping the game readable.",
         "aggressive": "Trades noticeable visual quality for a large frame-rate gain.",
         "maximum": "Pushes settings as far as they go. The game will look distinctly worse.",
         "potato": "For very low-end machines. Expect the game to look rough."
-      }
+      },
+      "recommended": "Recommended",
+      "experimental": "Experimental"
     },
     "optIn": {
-      "title": "Creator gameplay settings",
-      "count": "{{enabled}} of {{count}} enabled",
+      "title": "Gameplay settings from the author",
+      "count": "({{enabled}} of {{count}} on)",
       "description": "The creator's visibility and camera settings are included by default. Turn off anything you do not want. Developer and testing tools stay off unless you enable them.",
-      "presetValue": "This preset sets it to {{value}}",
-      "fileValue": "Set to {{value}} in gameinfo.gi (preset value: {{preset}})",
-      "strayValue": "Still in gameinfo.gi as {{value}}. Reapply to remove it.",
-      "pending_one": "{{count}} gameplay setting changed. Reapply to write it to gameinfo.gi.",
-      "pending_other": "{{count}} gameplay settings changed. Reapply to write them to gameinfo.gi.",
       "group": {
         "visibility": "Enemy and unit visibility",
         "camera": "Camera and field of view",
         "devtools": "Developer and testing tools"
-      }
+      },
+      "variable": "Variable",
+      "value": "Value",
+      "include": "Include",
+      "authorValue": "Author's value: {{value}}",
+      "stray": "Still in the file as {{value}}"
     },
     "version": {
       "label": "Version",
       "option": "{{ref}} ({{date}})",
       "optionNewest": "{{ref}} ({{date}}, newest)",
-      "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",
-      "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}.",
       "optionRemote": "{{ref}} ({{date}}, from history)"
     },
     "trackLatest": {
-      "label": "Track latest upstream",
-      "description": "Apply the newest release straight from the config author's GitHub repo, instead of waiting for a Grimoire update. Falls back to the bundled release when offline.",
-      "checking": "Checking the config's repo for its newest release...",
-      "available": "Newest upstream release: {{ref}} ({{date}}).",
-      "upToDate": "Upstream matches the bundled release v{{version}}.",
-      "withheld_one": " {{count}} new upstream setting is held back until it has been reviewed.",
-      "withheld_other": " {{count}} new upstream settings are held back until they have been reviewed.",
-      "staleNote": " Could not check for something newer just now; this is the last release fetched.",
-      "unreachable": "Could not reach the config's repo. The bundled release will be applied instead."
+      "label": "Always use the newest version",
+      "description": "Grimoire checks the config author's GitHub for updates. Offline, it uses the version bundled with Grimoire."
     },
     "history": {
-      "browse": "Full version history",
+      "browse": "See every published version",
       "title": "Version history",
       "subtitle": "Everything {{repo}} has published, newest first. Older versions are fetched on demand and pass the same safety checks as the newest one.",
       "loading": "Loading versions from the config's repo...",
@@ -2970,7 +2939,23 @@
       "downloaded": "downloaded",
       "downloadedHint": "Already fetched and cached; applies without a network connection."
     },
-    "moreActions": "More actions"
+    "description": "Community configs that raise your frame rate by trimming Deadlock's graphics settings.",
+    "on": "On",
+    "off": "Off",
+    "presetsLabel": "Performance config",
+    "switched": "Switched to {{preset}}.",
+    "notice": {
+      "wiped": "A game update removed your performance config.",
+      "damaged": "Your game's config file is empty or damaged. Restore the backup Grimoire made, or verify game files in Steam.",
+      "update": "A newer version of this config is available.",
+      "handEdited": "Includes changes you made to the file by hand."
+    },
+    "restore": "Restore",
+    "update": "Update",
+    "advanced": "Advanced",
+    "resetOverrides_one": "Discard {{count}} manual edit",
+    "resetOverrides_other": "Discard {{count}} manual edits",
+    "source": "Source"
   },
   "lockerOverrides": {
     "volume": "Volume",

@@ -7,6 +7,7 @@ import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
     listPerformancePresets,
+    reapplyWipedPerformanceConfig,
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
     restorePerformanceConfigBackup,
@@ -142,6 +143,12 @@ ipcMain.handle(
         );
     }
 );
+
+// reapply-wiped-performance-config (the gameinfo banner's one-click repair
+// after a game update)
+ipcMain.handle('reapply-wiped-performance-config', (): PerformanceConfigStatus => {
+    return reapplyWipedPerformanceConfig(getActiveDeadlockPath());
+});
 
 // restore-performance-config-backup (recover an emptied/corrupt gameinfo.gi
 // from the Grimoire backup, so Apply can run again)

@@ -407,6 +407,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         optIns?: string[],
         version?: string | null
     ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version),
+    reapplyWipedPerformanceConfig: () => ipcRenderer.invoke('reapply-wiped-performance-config'),
     restorePerformanceConfigBackup: () => ipcRenderer.invoke('restore-performance-config-backup'),
     getPerformanceLatestInfo: (presetId: string) =>
         ipcRenderer.invoke('get-performance-latest-info', presetId),

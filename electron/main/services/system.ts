@@ -46,6 +46,9 @@ function buildSearchPathsBlock(overflowFolderNames: string[], includeDeadworks: 
 
 export interface GameinfoStatus {
     configured: boolean;
+    /** Why, as a code the renderer can word for users; `message` stays the
+     *  technical detail. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];
@@ -172,6 +175,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         return {
             configured: false,
             missing: true,
+            reason: 'not-found',
             message: 'gameinfo.gi not found',
             candidates: findGameinfoCandidates(deadlockPath),
         };
@@ -205,6 +209,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
                 return {
                     configured: true,
                     missing: false,
+                    reason: 'ok',
                     message: 'Addon search paths are configured correctly',
                     candidates: [],
                 };
@@ -212,6 +217,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             return {
                 configured: false,
                 missing: false,
+                reason: 'mods-not-loaded',
                 message: `Mod folders are missing from gameinfo.gi (${missing.join(', ')}). Use Fix Configuration to restore them.`,
                 candidates: [],
             };
@@ -222,6 +228,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             return {
                 configured: false,
                 missing: false,
+                reason: 'mods-not-loaded',
                 message: 'Addon search paths are missing from gameinfo.gi',
                 candidates: [],
             };
@@ -233,6 +240,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         return {
             configured: false,
             missing: false,
+            reason: 'mods-not-loaded',
             message: 'gameinfo.gi has no usable SearchPaths section (it may have been altered by another mod manager). Use Fix Configuration to rebuild it.',
             candidates: findGameinfoCandidates(deadlockPath),
         };
@@ -240,6 +248,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         return {
             configured: false,
             missing: false,
+            reason: 'error',
             message: `Failed to read gameinfo.gi: ${err}`,
             candidates: [],
         };
@@ -257,6 +266,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         return {
             configured: false,
             missing: true,
+            reason: 'not-found',
             message: 'gameinfo.gi not found',
             candidates: findGameinfoCandidates(deadlockPath),
         };
@@ -296,6 +306,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
             return {
                 configured: true,
                 missing: false,
+                reason: 'ok',
                 message: 'Addon search paths were already configured',
                 candidates: [],
             };
@@ -314,6 +325,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
                 return {
                     configured: false,
                     missing: false,
+                    reason: 'unrepairable',
                     message: 'Could not find a FileSystem section to repair in gameinfo.gi. In Steam, verify the integrity of game files, then try again.',
                     candidates: findGameinfoCandidates(deadlockPath),
                 };
@@ -325,6 +337,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
             return {
                 configured: false,
                 missing: false,
+                reason: 'unrepairable',
                 message: 'The SearchPaths section in gameinfo.gi could not be parsed. In Steam, verify the integrity of game files, then try again.',
                 candidates: findGameinfoCandidates(deadlockPath),
             };
@@ -341,6 +354,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         return {
             configured: true,
             missing: false,
+            reason: 'ok',
             message: 'Successfully configured addon search paths',
             candidates: [],
         };
@@ -348,6 +362,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         return {
             configured: false,
             missing: false,
+            reason: 'error',
             message: `Failed to fix gameinfo.gi: ${err}`,
             candidates: [],
         };

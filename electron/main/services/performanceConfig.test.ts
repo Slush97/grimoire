@@ -16,6 +16,7 @@ import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
     listPerformancePresets,
+    reapplyWipedPerformanceConfig,
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
 } from './performanceConfig';
@@ -452,6 +453,34 @@ describe('game-update wipe recovery', () => {
 
         applyPerformanceConfig(gameRoot, { presetId: 'sqooky-default' });
         expect(read()).toMatch(new RegExp(`${key}\\s+"144"`));
+    });
+
+    // The banner's one-click repair must put back exactly what was there, even
+    // a rolled-back release with some optional settings turned off, not the
+    // newest release with creator defaults.
+    it('reapplies the wiped preset, release and opt-ins as recorded', () => {
+        const preset = PRESETS.find((p) => p.versions.length > 1 && p.versions[1].optIn.length > 1)!;
+        const release = preset.versions[1];
+        applyPerformanceConfig(gameRoot, {
+            presetId: preset.id,
+            version: release.version,
+            optIns: [release.optIn[0].key],
+        });
+        const before = read();
+
+        write(STOCK);
+        const status = reapplyWipedPerformanceConfig(gameRoot);
+
+        expect(status.state).toBe('applied');
+        expect(status.appliedPresetId).toBe(preset.id);
+        expect(status.appliedVersion).toBe(release.version);
+        expect(getPerformanceConfigStatus(gameRoot).appliedOptIns).toEqual([release.optIn[0].key]);
+        expect(read()).toBe(before);
+    });
+
+    it('leaves a file that was never wiped alone', () => {
+        expect(reapplyWipedPerformanceConfig(gameRoot).state).toBe('not-applied');
+        expect(read()).toBe(STOCK);
     });
 
     // Sidecars written before multi-preset support stored one flat override

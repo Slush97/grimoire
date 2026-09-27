@@ -111,6 +111,9 @@ export interface CleanupResult {
 
 export interface GameinfoStatus {
     configured: boolean;
+    /** Why, as a code the renderer can word for users; `message` stays the
+     *  technical detail. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];
@@ -1096,6 +1099,7 @@ export interface ElectronAPI {
         optIns?: string[],
         version?: string | null
     ) => Promise<PerformanceConfigStatus>;
+    reapplyWipedPerformanceConfig: () => Promise<PerformanceConfigStatus>;
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
     getPerformanceLatestInfo: (presetId: string) => Promise<PerformanceLatestInfo>;
     checkPerformanceLatest: (presetId: string, force?: boolean) => Promise<PerformanceLatestInfo>;
