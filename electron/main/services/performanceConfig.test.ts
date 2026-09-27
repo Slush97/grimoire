@@ -640,3 +640,140 @@ describe('opt-ins without a sidecar', () => {
         expect(sidecar().overridesByPreset).toBeUndefined();
     });
 });
+
+describe('toggled-off opt-ins with a banked override', () => {
+    const preset = PRESETS.find((p) => p.optIn.length)!;
+    const control = preset.optIn[0];
+    const edited = control.value === '3.3' ? '4.4' : '3.3';
+
+    it('does not write a hand-edited opt-in once it is toggled off (sidecar predates optIns)', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        write(
+            read().replace(
+                new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)$`, 'm'),
+                `$1"${edited}"$3`
+            )
+        );
+        const older = sidecar();
+        delete older.optIns;
+        writeFileSync(sidecarPath, JSON.stringify(older), 'utf-8');
+
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(activeHas(read(), control.key)).toBe(false);
+    });
+
+    it('does not write a banked opt-in override while the opt-in is off, but keeps user convars', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        writeFileSync(
+            sidecarPath,
+            JSON.stringify({
+                ...sidecar(),
+                overridesByPreset: {
+                    [preset.id]: {
+                        [`ConVars/${control.key}`]: { value: edited },
+                        'ConVars/my_own_convar': { value: '3' },
+                    },
+                },
+            }),
+            'utf-8'
+        );
+        // A game update wiped the file, so the banked overrides are re-layered as is.
+        write(STOCK);
+
+        const result = applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(activeHas(read(), control.key)).toBe(false);
+        expect(activeHas(read(), 'my_own_convar')).toBe(true);
+        expect(result.message).toContain('Kept 2 of your overrides.');
+    });
+});
+
+describe('managed convar values reported from the file', () => {
+    const preset = PRESETS.find((p) => p.optIn.length)!;
+    const control = preset.optIn[0];
+    const edited = control.value === '3.3' ? '4.4' : '3.3';
+    const editValue = (content: string) =>
+        content.replace(
+            new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)`, 'm'),
+            `$1"${edited}"$3`
+        );
+
+    it('reports what gameinfo.gi actually holds, including hand edits', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(control.value);
+
+        write(editValue(read()));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(edited);
+    });
+
+    it('reads CRLF files (Windows)', () => {
+        write(STOCK_CRLF);
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        write(editValue(read()));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key]).toBe(edited);
+    });
+
+    it('leaves out keys that are absent or outside the Grimoire block', () => {
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        write(read().replace(/ConVars\s*\{/, (m) => `${m}\n\t\t${control.key} "${edited}"`));
+        expect(getPerformanceConfigStatus(gameRoot).managedConvarValues).not.toHaveProperty(control.key);
+    });
+});
+
+describe('hand-edited opt-ins survive the toggle', () => {
+    const preset = PRESETS.find((p) => p.optIn.length)!;
+    const control = preset.optIn[0];
+    const edited = control.value === '3.3' ? '4.4' : '3.3';
+    const editValue = () =>
+        write(
+            read().replace(
+                new RegExp(`^(\\s*"?${control.key}"?\\s+)("[^"]*"|\\S+)(\\s*// grimoire-perf added)`, 'm'),
+                `$1"${edited}"$3`
+            )
+        );
+    const valueOf = () => getPerformanceConfigStatus(gameRoot).managedConvarValues?.[control.key];
+    const on = { presetId: preset.id, optIns: [control.key] };
+    const off = { presetId: preset.id, optIns: [] };
+
+    it('keeps a hand edit on an enabled opt-in across reapplies', () => {
+        applyPerformanceConfig(gameRoot, on);
+        editValue();
+        applyPerformanceConfig(gameRoot, on);
+        applyPerformanceConfig(gameRoot, on);
+        expect(valueOf()).toBe(edited);
+    });
+
+    it('holds the edit while toggled off and restores it when toggled back on', () => {
+        applyPerformanceConfig(gameRoot, on);
+        editValue();
+        applyPerformanceConfig(gameRoot, off);
+        expect(activeHas(read(), control.key)).toBe(false);
+        applyPerformanceConfig(gameRoot, off);
+        applyPerformanceConfig(gameRoot, on);
+        expect(valueOf()).toBe(edited);
+    });
+
+    it('keeps the held edit across a switch to another preset and back', () => {
+        const other = PRESETS.find((p) => p.id !== preset.id)!;
+        applyPerformanceConfig(gameRoot, on);
+        editValue();
+        applyPerformanceConfig(gameRoot, off);
+        applyPerformanceConfig(gameRoot, { presetId: other.id, optIns: [] });
+        applyPerformanceConfig(gameRoot, on);
+        expect(valueOf()).toBe(edited);
+    });
+
+    it('keeps a commented-out opt-in omitted after toggling off and on', () => {
+        applyPerformanceConfig(gameRoot, on);
+        write(
+            read().replace(
+                new RegExp(`^(\\s*)("?${control.key}"?\\s+("[^"]*"|\\S+)\\s*// grimoire-perf added)`, 'm'),
+                '$1// $2'
+            )
+        );
+        applyPerformanceConfig(gameRoot, on);
+        applyPerformanceConfig(gameRoot, off);
+        applyPerformanceConfig(gameRoot, off);
+        applyPerformanceConfig(gameRoot, on);
+        expect(activeHas(read(), control.key)).toBe(false);
+    });
+});
