@@ -1,18 +1,9 @@
 import { useEffect, useState } from 'react'
-import {
-    BarChart3,
-    Gamepad2,
-    Users2,
-    Trophy,
-    Users,
-    RefreshCw,
-    AlertCircle,
-    type LucideIcon,
-} from 'lucide-react'
+import { Users, RefreshCw, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '../components/common/ui'
+import { Button, SegmentedControl } from '../components/common/ui'
 import { Skeleton } from '../components/common/Skeleton'
-import { EmptyState } from '../components/common/PageComponents'
+import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents'
 import Tx from '../components/translation/Tx'
 import { usePlayerStore } from '../stores/stats/playerStore'
 import { useHeroStore } from '../stores/stats/heroStore'
@@ -30,11 +21,11 @@ type Tab = 'overview' | 'matches' | 'social' | 'leaderboard'
 // Refresh forces the pull regardless.
 const PROFILE_MAX_AGE_S = 30 * 60
 
-const TABS: { id: Tab; icon: LucideIcon; playerScoped: boolean }[] = [
-    { id: 'overview', icon: BarChart3, playerScoped: true },
-    { id: 'matches', icon: Gamepad2, playerScoped: true },
-    { id: 'social', icon: Users2, playerScoped: true },
-    { id: 'leaderboard', icon: Trophy, playerScoped: false },
+const TABS: { id: Tab; playerScoped: boolean }[] = [
+    { id: 'overview', playerScoped: true },
+    { id: 'matches', playerScoped: true },
+    { id: 'social', playerScoped: true },
+    { id: 'leaderboard', playerScoped: false },
 ]
 
 export default function Stats() {
@@ -80,19 +71,6 @@ export default function Stats() {
     }
 
     const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0]
-
-    const tabLabel = (id: Tab) => {
-        switch (id) {
-            case 'matches':
-                return t('stats.tabs.matches')
-            case 'social':
-                return t('stats.tabs.social')
-            case 'leaderboard':
-                return t('stats.tabs.leaderboard')
-            default:
-                return t('stats.tabs.overview')
-        }
-    }
 
     const renderTabLabel = (id: Tab) => {
         switch (id) {
@@ -157,56 +135,40 @@ export default function Stats() {
     }
 
     return (
-        <div className="flex flex-col h-full animate-fade-in">
-            <div className="px-6 py-3 border-b border-hl/5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    <BarChart3 className="w-6 h-6 text-accent shrink-0" />
-                    <h1 className="text-xl font-bold font-reaver tracking-wide truncate">
-                        <Tx k="stats.title" fallback="Deadlock Stats" />
-                    </h1>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <PlayerSelect />
-                    <Button variant="secondary" onClick={handleRefresh} icon={RefreshCw}>
-                        <Tx k="common.actions.refresh" fallback="Refresh" />
-                    </Button>
-                </div>
-            </div>
+        <PageLayout maxWidth="7xl">
+            <PageHeader
+                title={<Tx k="stats.title" fallback="Deadlock Stats" />}
+                action={
+                    <>
+                        <PlayerSelect />
+                        <Button variant="secondary" onClick={handleRefresh} icon={RefreshCw}>
+                            <Tx k="common.actions.refresh" fallback="Refresh" />
+                        </Button>
+                    </>
+                }
+            />
 
-            <div className="flex gap-1 px-4 py-2 border-b border-hl/5 overflow-x-auto">
-                {TABS.map((tabOption) => (
-                    <button
-                        key={tabOption.id}
-                        onClick={() => setActiveTab(tabOption.id)}
-                        aria-label={tabLabel(tabOption.id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-sm transition-colors text-sm whitespace-nowrap cursor-pointer ${
-                            activeTab === tabOption.id
-                                ? 'border border-accent/40 bg-accent/10 text-accent'
-                                : 'border border-transparent text-text-secondary hover:text-white hover:bg-hl/5'
-                        }`}
-                    >
-                        <tabOption.icon className="w-4 h-4" />
-                        {renderTabLabel(tabOption.id)}
-                    </button>
-                ))}
-            </div>
+            <SegmentedControl
+                options={TABS.map((tabOption) => ({ value: tabOption.id, label: renderTabLabel(tabOption.id) }))}
+                value={activeTab}
+                onChange={setActiveTab}
+                label={t('stats.title')}
+            />
 
-            <div className="flex-1 overflow-auto p-4">
-                <div className="max-w-7xl mx-auto">
-                    {tab.playerScoped
-                        ? renderPlayerScoped(() => {
-                              switch (tab.id) {
-                                  case 'matches':
-                                      return <MatchesTab />
-                                  case 'social':
-                                      return <SocialTab accountId={selectedAccountId!} />
-                                  default:
-                                      return <OverviewTab />
-                              }
-                          })
-                        : <LeaderboardTab />}
-                </div>
+            <div>
+                {tab.playerScoped
+                    ? renderPlayerScoped(() => {
+                          switch (tab.id) {
+                              case 'matches':
+                                  return <MatchesTab />
+                              case 'social':
+                                  return <SocialTab accountId={selectedAccountId!} />
+                              default:
+                                  return <OverviewTab />
+                          }
+                      })
+                    : <LeaderboardTab />}
             </div>
-        </div>
+        </PageLayout>
     )
 }

@@ -2157,6 +2157,9 @@
       "deleteSelectedSnapshotsTitle": "Delete Selected Snapshots",
       "deleteSelectedSnapshotsMessage_one": "Delete {{count}} snapshot? Your installed mods are unaffected. You won't be able to restore from the deleted snapshot later.",
       "deleteSelectedSnapshotsMessage_other": "Delete {{count}} snapshots? Your installed mods are unaffected. You won't be able to restore from the deleted snapshots later."
+    },
+    "header": {
+      "description": "Saved mod setups you can apply, share and restore."
     }
   },
   "social": {

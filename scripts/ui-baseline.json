@@ -217,9 +217,8 @@
     "em-dash": 2
   },
   "src/pages/Profiles.tsx": {
-    "raw-palette": 5,
-    "focus-ring": 2,
-    "em-dash": 2
+    "raw-palette": 3,
+    "focus-ring": 2
   },
   "src/pages/Servers.tsx": {
     "raw-palette": 7

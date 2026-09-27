@@ -4,7 +4,7 @@ import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Save, AlertTriangle, Fi
 import { getSettings } from '../lib/api';
 import { Card, Badge, Button, IconButton } from '../components/common/ui';
 import { Input } from '../components/common/forms';
-import { ConfirmModal, PageHeader } from '../components/common/PageComponents';
+import { ConfirmModal, PageHeader, PageLayout } from '../components/common/PageComponents';
 import CommandLibrary from '../components/autoexec/CommandLibrary';
 import LaunchOptionsCard from '../components/autoexec/LaunchOptionsCard';
 import Tx from '../components/translation/Tx';
@@ -116,7 +116,7 @@ export default function Autoexec() {
         // The old page nested four scroll containers, so the wheel did something
         // different depending on which pixel the pointer was over. Below xl the
         // columns stack and the page scrolls as one.
-        <div className="flex min-h-full flex-col gap-4 p-6 xl:h-full xl:min-h-0">
+        <PageLayout variant="split">
             <PageHeader
                 title={<Tx k="nav.autoexec" fallback="Autoexec" />}
                 description={
@@ -346,6 +346,6 @@ export default function Autoexec() {
                 confirmLabel={<Tx k="common.actions.clear" fallback="Clear" />}
                 variant="danger"
             />
-        </div>
+        </PageLayout>
     );
 }

@@ -9,7 +9,7 @@ import CrosshairPresetRail from '../components/crosshair/CrosshairPresetRail';
 import { renderCrosshairThumbnail } from '../components/crosshair/drawCrosshair';
 import { getSettings } from '../lib/api';
 import { Button, SegmentedControl } from '../components/common/ui';
-import { PageHeader } from '../components/common/PageComponents';
+import { PageHeader, PageLayout } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 
 // The in-game crosshair is authored in 1080p-reference px, scaled by screen
@@ -155,7 +155,7 @@ export default function Crosshair() {
         // Stage-first: the preview is the page, the controls sit beside it, and
         // nothing that changes the crosshair is more than a tab away. Below xl
         // the two stack and the page scrolls as one.
-        <div className="flex min-h-full flex-col gap-4 p-6 xl:h-full xl:min-h-0">
+        <PageLayout variant="split">
             <PageHeader
                 title={<Tx k="nav.crosshair" fallback="Crosshair" />}
                 description={
@@ -315,6 +315,6 @@ export default function Crosshair() {
                     <CrosshairControls />
                 </div>
             </div>
-        </div>
+        </PageLayout>
     );
 }

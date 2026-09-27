@@ -141,6 +141,8 @@ export function EmptyState({ icon: Icon, title, description, action, variant = '
 //   - `fill`: page fills the height and owns its own internal scroll regions
 //             (e.g. split panes). Pages that save/restore their own scroll
 //             position via a ref keep their bespoke container instead.
+//   - `split`: `fill` from xl up, `flow` below it, for two-column pages whose
+//             columns stack (and scroll as one) on narrow windows.
 // `maxWidth` centers and constrains the content column.
 // ============================================================================
 
@@ -159,13 +161,18 @@ const PAGE_WIDTHS: Record<PageWidth, string> = {
 interface PageLayoutProps {
     children: ReactNode;
     maxWidth?: PageWidth;
-    variant?: 'flow' | 'fill';
+    variant?: 'flow' | 'fill' | 'split';
     className?: string;
 }
 
 export function PageLayout({ children, maxWidth = 'none', variant = 'flow', className = '' }: PageLayoutProps) {
     const width = maxWidth === 'none' ? '' : `${PAGE_WIDTHS[maxWidth]} mx-auto w-full`;
-    const base = variant === 'fill' ? 'p-6 h-full flex flex-col min-h-0 overflow-hidden' : 'p-6 space-y-6';
+    const base =
+        variant === 'fill'
+            ? 'p-6 h-full flex flex-col min-h-0 overflow-hidden'
+            : variant === 'split'
+              ? 'p-6 min-h-full flex flex-col gap-4 xl:h-full xl:min-h-0'
+              : 'p-6 space-y-6';
     return <div className={`${base} ${width} ${className}`}>{children}</div>;
 }
 
