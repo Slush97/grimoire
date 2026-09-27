@@ -1013,6 +1013,8 @@ export interface PeekImprintResult {
   gamebananaId?: number;
   gamebananaFileId?: number;
   author?: string;
+  /** The recognized submission's art, from the local catalog mirror. */
+  thumbnailUrl?: string;
   kind: 'mod' | 'merge';
 }
 

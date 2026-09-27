@@ -179,6 +179,7 @@ export default function ImportCustomModsModal({
                   ...row,
                   recognized: result,
                   name: result.title && !row.nameTouched ? result.title : row.name,
+                  thumbnailDataUrl: row.thumbnailDataUrl || result.thumbnailUrl || '',
                 }
               : row
           )

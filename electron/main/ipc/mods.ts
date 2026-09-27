@@ -37,6 +37,7 @@ import {
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
+import { getModById } from '../services/modDatabase';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import {
     resolveImportVariantGroupIds,
@@ -2361,11 +2362,13 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
         if (modinfo.kind === 'merge') {
             return { title: modinfo.merge.title || modinfo.title, kind: 'merge' };
         }
+        const gamebananaId = modinfo.source?.gamebananaId;
         return {
             title: modinfo.title,
             author: modinfo.author,
-            gamebananaId: modinfo.source?.gamebananaId,
+            gamebananaId,
             gamebananaFileId: modinfo.source?.gamebananaFileId,
+            thumbnailUrl: catalogThumbnailUrl(gamebananaId),
             kind: 'mod',
         };
     }
@@ -2379,15 +2382,26 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
 
     const legacyGbId = embedded.gamebananaId ? Number(embedded.gamebananaId) : undefined;
     const legacyFileId = embedded.gamebananaFileId ? Number(embedded.gamebananaFileId) : undefined;
+    // A legacy merge companion is the only way a legacy embed could be a
+    // merge; readLegacyGrimoireMergeMeta's presence with a readable source
+    // list is the same signal classifyMissingMergeManifest uses elsewhere.
+    const kind = hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod';
+    const gamebananaId = legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined;
     return {
         title: embedded.title,
         author: embedded.author,
-        gamebananaId: legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined,
+        gamebananaId,
         gamebananaFileId:
             legacyFileId !== undefined && Number.isFinite(legacyFileId) ? legacyFileId : undefined,
-        // A legacy merge companion is the only way a legacy embed could be a
-        // merge; readLegacyGrimoireMergeMeta's presence with a readable source
-        // list is the same signal classifyMissingMergeManifest uses elsewhere.
-        kind: hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod',
+        thumbnailUrl: kind === 'mod' ? catalogThumbnailUrl(gamebananaId) : undefined,
+        kind,
     };
 });
+
+// Read from the local catalog mirror only, so peeking never touches the
+// network. A mod the catalog hasn't synced still gets its art from the
+// post-import fetch (fireAdoptedThumbnailFetches).
+function catalogThumbnailUrl(gamebananaId: number | undefined): string | undefined {
+    if (!gamebananaId) return undefined;
+    return getModById(gamebananaId)?.thumbnailUrl ?? undefined;
+}
