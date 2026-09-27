@@ -76,6 +76,15 @@
     "raw-palette": 7,
     "em-dash": 1
   },
+  "src/components/installed/unknown/UnknownFileList.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/installed/unknown/UnknownFixModals.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/installed/unknown/UnknownMatchPanel.tsx": {
+    "raw-palette": 14
+  },
   "src/components/locker/CardCropper.tsx": {
     "raw-palette": 3
   },
@@ -204,7 +213,6 @@
     "em-dash": 1
   },
   "src/pages/Installed.tsx": {
-    "raw-palette": 18,
     "focus-ring": 2,
     "em-dash": 11
   },
