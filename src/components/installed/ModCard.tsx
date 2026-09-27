@@ -19,7 +19,7 @@ import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
 import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
-import { heroNameForLabel } from './heroNames';
+import { heroNameForLabel } from '../../lib/heroNames';
 import { EMPTY_LIST_IDS } from './emptyIds';
 
 interface ModCardProps {

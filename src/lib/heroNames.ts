@@ -1,4 +1,4 @@
-import { HERO_NAMES } from '../../lib/lockerUtils';
+import { HERO_NAMES } from './lockerUtils';
 
 export function heroNameForLabel(label?: string): string | null {
   if (!label) return null;

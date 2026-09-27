@@ -196,6 +196,9 @@
   "src/lib/lockerUtils.ts": {
     "em-dash": 4
   },
+  "src/lib/modEntries.ts": {
+    "em-dash": 1
+  },
   "src/lib/performanceHistory.ts": {
     "em-dash": 1
   },
@@ -214,7 +217,7 @@
   },
   "src/pages/Installed.tsx": {
     "focus-ring": 2,
-    "em-dash": 11
+    "em-dash": 10
   },
   "src/pages/Locker.tsx": {
     "raw-hex": 1,
