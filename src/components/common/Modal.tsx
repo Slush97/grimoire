@@ -56,7 +56,7 @@ interface ModalProps {
     dismissable?: boolean;
     /** extra classes for the panel (layout like flex/max-h, or a width override) */
     panelClassName?: string;
-    /** extra classes for the backdrop (e.g. backdrop-blur-sm); don't stack bg-* utilities */
+    /** extra classes for the backdrop; don't stack bg-* utilities */
     backdropClassName?: string;
     children: ReactNode;
 }
@@ -162,8 +162,8 @@ export function Modal({
     return createPortal(
         <div
             ref={backdropRef}
-            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${
-                closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm ${
+                closing ? 'animate-overlay-out pointer-events-none' : 'animate-overlay-in'
             } ${backdropClassName}`}
             role="dialog"
             aria-modal="true"
@@ -172,11 +172,27 @@ export function Modal({
             <div
                 ref={panelRef}
                 tabIndex={-1}
-                className={`w-full ${SIZE_CLASSES[size]} bg-bg-secondary border border-border rounded-lg shadow-2xl outline-none ${panelClassName}`}
+                className={`modal-panel flex w-full flex-col overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-2xl outline-none ${
+                    closing ? 'animate-panel-out' : 'animate-panel-in'
+                } ${SIZE_CLASSES[size]} ${panelClassName}`}
             >
                 {children}
             </div>
         </div>,
         document.body
+    );
+}
+
+// The panel is a viewport-capped flex column, so a dialog is ModalHeader,
+// then ModalBody (the only part that scrolls), then an optional ModalFooter.
+export function ModalBody({ children, className = '' }: { children: ReactNode; className?: string }) {
+    return <div className={`min-h-0 flex-1 overflow-y-auto px-5 py-4 ${className}`}>{children}</div>;
+}
+
+export function ModalFooter({ children, className = '' }: { children: ReactNode; className?: string }) {
+    return (
+        <div className={`flex flex-shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3 ${className}`}>
+            {children}
+        </div>
     );
 }

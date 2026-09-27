@@ -1,6 +1,6 @@
-import { type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Loader2, type LucideIcon } from 'lucide-react';
-import { Modal } from './Modal';
+import { Modal, ModalBody, ModalFooter } from './Modal';
 import { Skeleton } from './Skeleton';
 import { Button } from './ui';
 import Tx from '../translation/Tx';
@@ -243,24 +243,21 @@ export function ConfirmModal({
     onConfirm,
     onCancel,
 }: ConfirmModalProps) {
+    const titleId = useId();
     return (
-        <Modal
-            open={isOpen}
-            onClose={onCancel}
-            labelledBy="confirm-modal-title"
-            size="sm"
-            panelClassName="p-6"
-        >
-            <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
-            <div className="text-text-secondary mb-4">{message}</div>
-            <div className="flex justify-end gap-3">
+        <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size="sm">
+            <ModalBody className="pt-5">
+                <h2 id={titleId} className="mb-2 font-reaver text-base font-semibold text-text-primary">{title}</h2>
+                <div className="text-sm text-text-secondary">{message}</div>
+            </ModalBody>
+            <ModalFooter>
                 <Button variant="secondary" onClick={onCancel}>
                     {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
                 </Button>
                 <Button variant={variant} onClick={onConfirm}>
                     {confirmLabel ?? <Tx k="common.actions.confirm" fallback="Confirm" />}
                 </Button>
-            </div>
+            </ModalFooter>
         </Modal>
     );
 }

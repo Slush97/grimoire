@@ -788,6 +788,7 @@ describe('hand-edited opt-ins survive the toggle', () => {
         editValue();
         applyPerformanceConfig(gameRoot, off);
         expect(activeHas(read(), control.key)).toBe(false);
+        expect(getPerformanceConfigStatus(gameRoot).savedConvarValues?.[control.key]).toBe(edited);
         applyPerformanceConfig(gameRoot, off);
         applyPerformanceConfig(gameRoot, on);
         expect(valueOf()).toBe(edited);

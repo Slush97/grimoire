@@ -1,5 +1,6 @@
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Loader2, X, type LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
 
 interface CardProps {
@@ -363,9 +364,14 @@ export function Button({
     };
 
     // A lone label goes in a cap-trimmed box so flex centering centers the
-    // letters (Radiance sits high in its line box). Multi-child content keeps
-    // the raw children so the gap between them still applies.
-    const content = Children.count(children) === 1 ? <span className="text-trim-cap">{children}</span> : children;
+    // letters (Radiance sits high in its line box). A fragment counts as one
+    // child but usually holds icon + label; wrapping it would stack the
+    // block-level svg above the text, so fragments and multi-child content
+    // stay raw and keep the flex gap.
+    const isFragment = isValidElement(children) && children.type === Fragment;
+    const content = Children.count(children) === 1 && !isFragment
+        ? <span className="text-trim-cap">{children}</span>
+        : children;
 
     return (
         <button
@@ -432,7 +438,8 @@ interface ModalHeaderProps {
     /** id wired to the Modal's labelledBy for aria-labelledby. */
     titleId?: string;
     subtitle?: ReactNode;
-    /** Tooltip for a truncated subtitle (e.g. the full mod name). */
+    /** Truncates the subtitle to one line with this as its tooltip (e.g. the
+     *  full mod name). Without it the subtitle wraps. */
     subtitleTitle?: string;
     onClose: () => void;
     closeLabel?: string;
@@ -453,14 +460,15 @@ export function ModalHeader({
     actions,
     className = '',
 }: ModalHeaderProps) {
+    const { t } = useTranslation();
     return (
-        <div className={`flex flex-shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4 ${className}`}>
-            <div className="min-w-0">
-                <h2 id={titleId} className="truncate text-lg font-semibold tracking-wide text-text-primary font-reaver">
+        <div className={`flex flex-shrink-0 items-start justify-between gap-3 px-5 pt-4 ${className}`}>
+            <div className="min-w-0 pt-1">
+                <h2 id={titleId} className="truncate font-reaver text-base font-semibold text-text-primary">
                     {title}
                 </h2>
                 {subtitle && (
-                    <p className="truncate text-xs text-text-secondary" title={subtitleTitle}>
+                    <p className={`mt-0.5 text-xs text-text-secondary ${subtitleTitle ? 'truncate' : ''}`} title={subtitleTitle}>
                         {subtitle}
                     </p>
                 )}
@@ -469,7 +477,7 @@ export function ModalHeader({
                 {actions}
                 <IconButton
                     icon={X}
-                    label={closeLabel ?? 'Close'}
+                    label={closeLabel ?? t('common.actions.close')}
                     onClick={onClose}
                     disabled={closeDisabled}
                 />

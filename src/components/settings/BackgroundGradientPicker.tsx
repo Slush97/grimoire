@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Ban, Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
@@ -11,8 +10,8 @@ import {
   sameGradient,
   type BackgroundGradient,
 } from '../../lib/backgroundGradient';
-import { Button, SegmentedControl } from '../common/ui';
-import { useBackdropDismiss } from '../common/useBackdropDismiss';
+import { Button, ModalHeader, SegmentedControl } from '../common/ui';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import Tx from '../translation/Tx';
 
 const CUSTOM_FALLBACK: BackgroundGradient = { from: '#8b5cf6', to: '#06b6d4' };
@@ -113,22 +112,7 @@ export default function BackgroundGradientPicker() {
     }
   }, [draft, saved, settings, saveSettings]);
 
-  useEffect(() => {
-    if (!pickerOpen) return;
-    // Escape commits, matching the accent picker directly above: both dismiss
-    // gestures keep the pick, and Cancel is the one explicit way to revert.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void commit();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [pickerOpen, commit]);
-
-  // Clicking the backdrop commits, matching the accent picker's gesture.
-  const backdropRef = useBackdropDismiss<HTMLDivElement>(
-    useCallback(() => void commit(), [commit]),
-    pickerOpen
-  );
+  const titleId = useId();
 
   return (
     <div>
@@ -185,70 +169,53 @@ export default function BackgroundGradientPicker() {
         </button>
       </div>
 
-      {pickerOpen && createPortal(
-        <div
-          ref={backdropRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-          role="presentation"
-        >
+      <Modal open={pickerOpen} onClose={cancel} labelledBy={titleId} size="none" panelClassName="max-w-sm">
+        <ModalHeader
+          title={<Tx k="settings.appearance.background.customTitle" fallback="Custom background glow" />}
+          titleId={titleId}
+          onClose={cancel}
+        />
+        <ModalBody className="space-y-4">
           <div
-            className="relative w-full max-w-sm overflow-hidden rounded-sm border border-hl/10 bg-bg-secondary p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('settings.appearance.background.custom')}
-          >
-            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <h3 className="mb-4 flex items-center gap-2 font-reaver text-lg font-semibold tracking-wide text-text-primary">
-              <Pipette className="h-4 w-4 text-accent" aria-hidden />
-              <Tx k="settings.appearance.background.customTitle" fallback="Custom background glow" />
-            </h3>
+            className="h-20 w-full rounded-sm border border-hl/10"
+            style={{ background: backgroundGradientPreviewCss(draft) }}
+            aria-hidden
+          />
 
-            <div className="space-y-4">
-              <div
-                className="h-20 w-full rounded-sm border border-hl/10"
-                style={{ background: backgroundGradientPreviewCss(draft) }}
-                aria-hidden
-              />
+          <SegmentedControl
+            options={[
+              { value: 'from', label: t('settings.appearance.background.topLeft') },
+              { value: 'to', label: t('settings.appearance.background.bottomRight') },
+            ]}
+            value={corner}
+            onChange={(value) => setCorner(value as 'from' | 'to')}
+          />
 
-              <SegmentedControl
-                options={[
-                  { value: 'from', label: t('settings.appearance.background.topLeft') },
-                  { value: 'to', label: t('settings.appearance.background.bottomRight') },
-                ]}
-                value={corner}
-                onChange={(value) => setCorner(value as 'from' | 'to')}
-              />
+          <HexColorPicker color={draft[corner]} onChange={updateDraft} style={{ width: '100%' }} />
 
-              <HexColorPicker color={draft[corner]} onChange={updateDraft} style={{ width: '100%' }} />
-
-              <div className="flex items-center gap-2">
-                <span
-                  className="block h-9 w-9 shrink-0 rounded-sm border border-hl/10"
-                  style={{ backgroundColor: draft[corner] }}
-                  aria-hidden
-                />
-                <span className="font-mono text-xs text-text-secondary">#</span>
-                <HexColorInput
-                  color={draft[corner]}
-                  onChange={updateDraft}
-                  className="flex-1 rounded-sm border border-hl/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="secondary" size="sm" onClick={cancel}>
-                  <Tx k="common.actions.cancel" fallback="Cancel" />
-                </Button>
-                <Button variant="primary" size="sm" onClick={() => void commit()}>
-                  <Tx k="common.actions.apply" fallback="Apply" />
-                </Button>
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="block h-9 w-9 shrink-0 rounded-sm border border-hl/10"
+              style={{ backgroundColor: draft[corner] }}
+              aria-hidden
+            />
+            <span className="font-mono text-xs text-text-secondary">#</span>
+            <HexColorInput
+              color={draft[corner]}
+              onChange={updateDraft}
+              className="flex-1 rounded-sm border border-hl/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
           </div>
-        </div>,
-        document.body
-      )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" size="sm" onClick={cancel}>
+            <Tx k="common.actions.cancel" fallback="Cancel" />
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => void commit()}>
+            <Tx k="common.actions.apply" fallback="Apply" />
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

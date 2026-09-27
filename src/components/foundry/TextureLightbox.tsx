@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { ImageOff, Loader2, X } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { ImageOff, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../common/Modal';
+import { ModalHeader } from '../common/ui';
 import { foundryFullImage } from '../../lib/api';
 import type { TextureGridItem } from '../../types/foundry';
 
@@ -23,6 +24,7 @@ interface TextureLightboxProps {
  */
 export default function TextureLightbox({ item, heroName, onClose }: TextureLightboxProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   // The full-res result is tagged with the path it belongs to, so `loading` and
   // `fullUrl` derive from whether it matches the open asset. This keeps the
   // effect free of synchronous resets (it only sets state in the async callback).
@@ -55,31 +57,22 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
     <Modal
       open={!!item}
       onClose={onClose}
+      labelledBy={titleId}
       size="none"
-      panelClassName="max-w-3xl flex flex-col"
+      panelClassName="max-w-3xl"
       backdropClassName="bg-black/80"
     >
       {item && (
         <>
-          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold capitalize text-text-primary" title={item.label}>
-                {item.label || t('foundry.lightbox.unnamed', '(unnamed)')}
-              </h2>
-              <p className="truncate text-xs text-text-secondary" title={item.path}>
-                {heroName ? `${heroName} · ` : ''}
-                {item.path}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 rounded-sm p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-              aria-label={t('common.actions.close', 'Close')}
-            >
-              <X size={18} />
-            </button>
-          </div>
+          <ModalHeader
+            title={<span className="capitalize">{item.label || t('foundry.lightbox.unnamed', '(unnamed)')}</span>}
+            titleId={titleId}
+            subtitle={`${heroName ? `${heroName} · ` : ''}${item.path}`}
+            subtitleTitle={item.path}
+            onClose={onClose}
+            closeLabel={t('common.actions.close', 'Close')}
+            className="pb-4"
+          />
 
           <div className="relative flex min-h-[280px] items-center justify-center bg-bg-tertiary p-6">
             {display ? (
@@ -101,7 +94,7 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
           </div>
 
           {dims && (
-            <div className="border-t border-border px-4 py-2 text-2xs text-text-secondary">
+            <div className="border-t border-border px-5 py-2 text-2xs text-text-secondary">
               {t('foundry.lightbox.nativeSize', 'Native size')}: {dims}
             </div>
           )}

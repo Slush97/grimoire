@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, AlertCircle, Crop, ZoomIn, RotateCcw } from 'lucide-react';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
+import { Button, ModalHeader } from '../common/ui';
 
 interface CardCropperProps {
   /** Source image to crop (any size), as a data URL. */
@@ -40,6 +41,7 @@ export default function CardCropper({
   onCrop,
 }: CardCropperProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const aspect = targetWidth / targetHeight;
   const viewW = aspect >= 1 ? BOX : Math.round(BOX * aspect);
   const viewH = aspect >= 1 ? Math.round(BOX / aspect) : BOX;
@@ -151,18 +153,15 @@ export default function CardCropper({
   };
 
   return (
-    <Modal onClose={onCancel} size="none" panelClassName="max-w-xl" labelledBy="card-cropper-title">
-      <div className="flex flex-col gap-4 p-5">
-        <div className="flex items-center gap-2">
-          <Crop className="h-4 w-4 text-accent" />
-          <h2 id="card-cropper-title" className="text-sm font-semibold text-text-primary">
-            {t('locker.crop.title', { variant: variantLabel })}
-          </h2>
-          <span className="ml-auto text-2xs tabular-nums text-text-secondary">
-            output {targetWidth} x {targetHeight}
-          </span>
-        </div>
-
+    <Modal onClose={onCancel} size="none" panelClassName="max-w-xl" labelledBy={titleId}>
+      <ModalHeader
+        title={t('locker.crop.title', { variant: variantLabel })}
+        titleId={titleId}
+        subtitle={<span className="tabular-nums">{t('locker.crop.outputSize', { width: targetWidth, height: targetHeight })}</span>}
+        onClose={onCancel}
+        closeLabel={t('common.actions.close')}
+      />
+      <ModalBody className="flex flex-col gap-4">
         {error ? (
           <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-state-danger">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -237,25 +236,15 @@ export default function CardCropper({
             </p>
           </>
         )}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary"
-          >
-            {t('common.actions.cancel')}
-          </button>
-          <button
-            type="button"
-            disabled={!img || !!error}
-            onClick={handleApply}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Crop className="h-3.5 w-3.5" /> {t('locker.crop.useCrop')}
-          </button>
-        </div>
-      </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onCancel}>
+          {t('common.actions.cancel')}
+        </Button>
+        <Button icon={Crop} disabled={!img || !!error} onClick={handleApply}>
+          {t('locker.crop.useCrop')}
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 }

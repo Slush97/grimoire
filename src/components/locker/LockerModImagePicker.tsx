@@ -388,8 +388,7 @@ export function LockerModImagePicker({
       onClose={onClose}
       labelledBy={titleId}
       size="none"
-      backdropClassName="backdrop-blur-sm"
-      panelClassName="flex max-h-[90vh] w-full max-w-3xl flex-col"
+      panelClassName="max-w-3xl"
     >
       <ModalHeader
         title={t('locker.modImage.title')}
@@ -407,7 +406,7 @@ export function LockerModImagePicker({
         }
       />
 
-      <div className="border-b border-border px-4 py-2.5">
+      <div className="border-b border-border px-5 pb-3 pt-4">
         <SegmentedControl
           options={tabOptions}
           value={tab}
@@ -416,7 +415,7 @@ export function LockerModImagePicker({
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
+      <div className="flex min-h-0 flex-1 gap-4 px-5 py-4">
         {/* Left pane: live crop adjuster, locked to the active tab's shape. Shown
             empty up front so the framing surface is previewed before a pick.
             Sized to the window by the cropper; scrolls itself only as a fallback

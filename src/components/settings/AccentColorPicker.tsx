@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { useAppStore } from '../../stores/appStore';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../../lib/accentColor';
-import { Button } from '../common/ui';
-import { useBackdropDismiss } from '../common/useBackdropDismiss';
+import { Button, ModalHeader } from '../common/ui';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import Tx from '../translation/Tx';
 
 const SWATCH_BASE =
@@ -54,21 +53,13 @@ export default function AccentColorPicker() {
     setCustomPickerOpen(true);
   };
 
-  useEffect(() => {
-    if (!customPickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void commitCustomDraft();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [customPickerOpen, commitCustomDraft]);
-
-  // Dismiss on backdrop click, but not when the gesture merely ends there
-  // (drag-selecting the hex field and releasing outside used to commit).
-  const customPickerBackdropRef = useBackdropDismiss<HTMLDivElement>(
-    useCallback(() => void commitCustomDraft(), [commitCustomDraft]),
-    customPickerOpen
-  );
+  const customPickerTitleId = useId();
+  // Dismissing (X, Escape, backdrop) cancels; only Apply saves.
+  const cancelCustomPicker = () => {
+    applyAccentColor(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
+    setCustomDraft(null);
+    setCustomPickerOpen(false);
+  };
 
   const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
   const isCustomActive = !ACCENT_PRESETS.some((p) => p.color.toLowerCase() === current);
@@ -125,64 +116,45 @@ export default function AccentColorPicker() {
         </button>
       </div>
 
-      {customPickerOpen && createPortal(
-        <div
-          ref={customPickerBackdropRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-          role="presentation"
-        >
-          <div
-            className="bg-bg-secondary border border-hl/10 rounded-sm p-6 w-full max-w-sm relative overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('settings.appearance.customAccentColor')}
-          >
-            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver mb-4 flex items-center gap-2">
-              <Pipette className="w-4 h-4 text-accent" />
-              <Tx k="settings.appearance.customAccent" fallback="Custom Accent" />
-            </h3>
-            <div className="space-y-4">
-              <HexColorPicker
-                color={customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR}
-                onChange={handleCustomDraft}
-                style={{ width: '100%' }}
-              />
-              <div className="flex items-center gap-2">
-                <span
-                  className="block w-9 h-9 rounded-sm border border-hl/10 shrink-0"
-                  style={{ backgroundColor: customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR }}
-                  aria-label={t('settings.appearance.selectedColorPreview')}
-                />
-                <span className="text-xs text-text-secondary font-mono">#</span>
-                <HexColorInput
-                  color={customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR}
-                  onChange={handleCustomDraft}
-                  className="flex-1 bg-bg-tertiary border border-hl/5 rounded-sm px-2 py-1.5 text-sm font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent uppercase"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    applyAccentColor(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
-                    setCustomDraft(null);
-                    setCustomPickerOpen(false);
-                  }}
-                >
-                  <Tx k="common.actions.cancel" fallback="Cancel" />
-                </Button>
-                <Button variant="primary" size="sm" onClick={() => void commitCustomDraft()}>
-                  <Tx k="common.actions.apply" fallback="Apply" />
-                </Button>
-              </div>
-            </div>
+      <Modal open={customPickerOpen} onClose={cancelCustomPicker} labelledBy={customPickerTitleId} size="none" panelClassName="max-w-sm">
+        <ModalHeader
+          title={<Tx k="settings.appearance.customAccent" fallback="Custom Accent" />}
+          titleId={customPickerTitleId}
+          onClose={cancelCustomPicker}
+        />
+        <ModalBody className="space-y-4">
+          <HexColorPicker
+            color={customDisplay}
+            onChange={handleCustomDraft}
+            style={{ width: '100%' }}
+          />
+          <div className="flex items-center gap-2">
+            <span
+              className="block w-9 h-9 rounded-sm border border-hl/10 shrink-0"
+              style={{ backgroundColor: customDisplay }}
+              aria-label={t('settings.appearance.selectedColorPreview')}
+            />
+            <span className="text-xs text-text-secondary font-mono">#</span>
+            <HexColorInput
+              color={customDisplay}
+              onChange={handleCustomDraft}
+              className="flex-1 bg-bg-tertiary border border-hl/5 rounded-sm px-2 py-1.5 text-sm font-mono text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent uppercase"
+            />
           </div>
-        </div>,
-        document.body
-      )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={cancelCustomPicker}
+          >
+            <Tx k="common.actions.cancel" fallback="Cancel" />
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => void commitCustomDraft()}>
+            <Tx k="common.actions.apply" fallback="Apply" />
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -109,12 +109,6 @@
   "src/components/locker/LockerImageCropper.tsx": {
     "raw-palette": 2
   },
-  "src/components/locker/SoulContainerImportModal.tsx": {
-    "raw-palette": 15
-  },
-  "src/components/locker/SpiritUrnImportModal.tsx": {
-    "raw-palette": 15
-  },
   "src/components/locker/TrippyPatternPicker.tsx": {
     "raw-palette": 1
   },
@@ -130,12 +124,6 @@
   },
   "src/components/servers/ConnectServerDialog.tsx": {
     "raw-palette": 2
-  },
-  "src/components/settings/AccentColorPicker.tsx": {
-    "focus-ring": 2
-  },
-  "src/components/settings/BackgroundGradientPicker.tsx": {
-    "focus-ring": 2
   },
   "src/components/settings/sections/GameSection.tsx": {
     "raw-palette": 2

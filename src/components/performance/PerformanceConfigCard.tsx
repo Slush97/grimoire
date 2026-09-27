@@ -487,6 +487,7 @@ export default function PerformanceConfigCard() {
               selected={selectedOptIns}
               onChange={(keys) => void onChangeOptIns(keys)}
               fileValues={applied ? status?.managedConvarValues : undefined}
+              savedValues={applied ? status?.savedConvarValues : undefined}
               disabled={busy}
             />
 

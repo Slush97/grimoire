@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, X, Download, CheckCircle2, AlertTriangle, Play } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Loader2, Download, CheckCircle2, AlertTriangle, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../common/ui';
-import { Modal } from '../common/Modal';
+import { Button, ModalHeader } from '../common/ui';
+import { Modal, ModalBody } from '../common/Modal';
 import Tx from '../translation/Tx';
 import {
   deadworksConnect,
@@ -45,6 +45,7 @@ function renderStatusLabel(status: DeadworksConnectProgress['status']) {
 
 export default function ConnectServerDialog({ server, onClose }: Props) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [progress, setProgress] = useState<DeadworksConnectProgress | null>(null);
   const [phase, setPhase] = useState<Phase>('working');
   const [messageKey, setMessageKey] = useState<MessageKey>('preparing');
@@ -100,24 +101,19 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
   return (
     <Modal
       onClose={onClose}
-      labelledBy="connect-server-title"
+      labelledBy={titleId}
       size="sm"
       dismissable={phase !== 'working'}
-      backdropClassName="backdrop-blur-sm"
     >
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 id="connect-server-title" className="font-reaver text-lg tracking-wide text-text-primary truncate">{server.name}</h2>
-          <button
-            onClick={onClose}
-            disabled={phase === 'working'}
-            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label={t('common.actions.close')}
-          >
-            <X size={18} />
-          </button>
-        </div>
+        <ModalHeader
+          title={server.name}
+          titleId={titleId}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          closeDisabled={phase === 'working'}
+        />
 
-        <div className="px-5 py-5">
+        <ModalBody className="pb-5">
           {phase === 'working' && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 text-text-primary">
@@ -188,7 +184,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
               </Button>
             </div>
           )}
-        </div>
+        </ModalBody>
     </Modal>
   );
 }

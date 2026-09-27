@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileArchive, Check, X } from 'lucide-react';
+import { FileArchive, Check } from 'lucide-react';
 import type { MultiVpkPickData } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
-import { Modal } from './common/Modal';
+import { Modal, ModalBody, ModalFooter } from './common/Modal';
+import { Button, ModalHeader } from './common/ui';
 
 interface Props {
     data: MultiVpkPickData;
@@ -28,6 +29,7 @@ interface Props {
  */
 export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props) {
     const { t } = useTranslation();
+    const titleId = useId();
     const [selected, setSelected] = useState<Set<string>>(() => new Set(data.vpkFileNames));
 
     const allSelected = selected.size === data.vpkFileNames.length;
@@ -49,22 +51,14 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
     };
 
     return (
-        <Modal onClose={onCancel} labelledBy="multi-vpk-pick-title" size="md">
-                <div className="flex items-center justify-between p-5 border-b border-border">
-                    <h3 id="multi-vpk-pick-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
-                        <FileArchive className="w-5 h-5" />
-                        {t('multiVpk.title')}
-                    </h3>
-                    <button
-                        onClick={onCancel}
-                        className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-                        aria-label={t('common.actions.close')}
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="p-5 space-y-4">
+        <Modal onClose={onCancel} labelledBy={titleId} size="md">
+            <ModalHeader
+                title={t('multiVpk.title')}
+                titleId={titleId}
+                onClose={onCancel}
+                closeLabel={t('common.actions.close')}
+            />
+                <ModalBody className="space-y-4">
                     <p className="text-sm text-text-secondary">
                         <span className="font-medium text-text-primary">{data.modName}</span> contains{' '}
                         {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">.vpk</code> files.
@@ -125,24 +119,20 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                             );
                         })}
                     </div>
-                </div>
+                </ModalBody>
 
-                <div className="flex justify-end gap-3 p-5 border-t border-border">
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-hl/10 transition-colors cursor-pointer"
-                    >
+                <ModalFooter>
+                    <Button variant="secondary" onClick={onCancel}>
                         {t('multiVpk.cancelInstall')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        icon={Check}
                         onClick={() => onConfirm(Array.from(selected))}
                         disabled={selected.size === 0}
-                        className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                        <Check className="w-4 h-4" />
                         {selected.size > 0 ? t('multiVpk.installCount', { count: selected.size }) : t('multiVpk.install')}
-                    </button>
-                </div>
+                    </Button>
+                </ModalFooter>
         </Modal>
     );
 }

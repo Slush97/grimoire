@@ -1,5 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Suspense, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import * as THREE from 'three';
@@ -19,7 +18,6 @@ import {
   RotateCw,
   Shuffle,
   UploadCloud,
-  X,
 } from 'lucide-react';
 import { exportHeroPose, exportSoulContainerGlb, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
 import { loadGltfPreview, parseGltfPreview } from '../../lib/loadGltfPreview';
@@ -27,6 +25,8 @@ import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD
 import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
 import { FormField, Input } from '../common/forms';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
+import { Button, ModalHeader } from '../common/ui';
 import SoulImportPreview from './SoulImportPreview';
 import { SOUL_BACKDROP_COUNT } from './soulBackdrops';
 import { disposeScene } from './soulModel';
@@ -98,6 +98,7 @@ export default function SoulContainerImportModal({
   initialGlbPath = '',
 }: SoulContainerImportModalProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const toggleMod = useAppStore((s) => s.toggleMod);
   const [glbPath, setGlbPath] = useState<string>(initialGlbPath);
   const [name, setName] = useState<string>(initialGlbPath ? deriveNameFromPath(initialGlbPath) : '');
@@ -379,382 +380,378 @@ export default function SoulContainerImportModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <Ghost className="w-5 h-5" />
-            {t('locker.soulImport.title')}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy={titleId}
+      size="none"
+      // Escape or a stray backdrop click would throw away the loaded model and
+      // its orientation; only the X closes this one.
+      dismissable={false}
+      panelClassName="max-w-3xl"
+    >
+      <ModalHeader title={t('locker.soulImport.title')} titleId={titleId} onClose={onClose} closeDisabled={submitting || exporting} />
 
-        <div className="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Left: source picker + live preview */}
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.fields.source')}
-              </label>
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={glbPath ? t('locker.soulImport.dropzone.ariaSelected', { path: glbPath }) : t('locker.soulImport.dropzone.ariaBrowse')}
-                onClick={pickGlb}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    void pickGlb();
-                  }
-                }}
-                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragActive(true); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
-                onDrop={handleDrop}
-                className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  dragActive
-                    ? 'border-accent bg-accent/10'
-                    : glbPath
-                      ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
-                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
-                }`}
-              >
-                <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
-                {glbPath ? (
-                  <span className="text-sm text-text-primary font-medium truncate max-w-full">
-                    {glbPath.split(/[\\/]/).pop()}
-                  </span>
-                ) : (
-                  <span className="text-sm text-text-primary font-medium">
-                    {t('locker.soulImport.dropzone.prompt')}
-                  </span>
+      <ModalBody className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {/* Left: source picker + live preview */}
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">
+              {t('locker.soulImport.fields.source')}
+            </label>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={glbPath ? t('locker.soulImport.dropzone.ariaSelected', { path: glbPath }) : t('locker.soulImport.dropzone.ariaBrowse')}
+              onClick={pickGlb}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void pickGlb();
+                }
+              }}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
+              onDrop={handleDrop}
+              className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                dragActive
+                  ? 'border-accent bg-accent/10'
+                  : glbPath
+                    ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
+                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
+              }`}
+            >
+              <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
+              {glbPath ? (
+                <span className="text-sm text-text-primary font-medium truncate max-w-full">
+                  {glbPath.split(/[\\/]/).pop()}
+                </span>
+              ) : (
+                <span className="text-sm text-text-primary font-medium">
+                  {t('locker.soulImport.dropzone.prompt')}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Preview surface: kept square so the orb and the hero-scale view
+              read consistently and the canvas never stretches. */}
+          <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
+            {scene ? (
+              <Suspense fallback={null}>
+                <SoulImportPreview
+                  scene={scene}
+                  orientMode="y-up"
+                  rotate={[0, 0, 0]}
+                  showVanilla={showVanilla}
+                  spinning={spinning}
+                  backdropIndex={backdropIndex}
+                  heroScene={showHero ? heroScene : null}
+                  captureRef={captureRef}
+                />
+              </Suspense>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs text-text-secondary">
+                {!glbPath && (
+                  <>
+                    <Ghost className="w-8 h-8 text-text-secondary/40" aria-hidden />
+                    <span>{t('locker.soulImport.dropzone.previewEmpty')}</span>
+                  </>
                 )}
               </div>
-            </div>
-
-            {/* Preview surface: kept square so the orb and the hero-scale view
-                read consistently and the canvas never stretches. */}
-            <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
-              {scene ? (
-                <Suspense fallback={null}>
-                  <SoulImportPreview
-                    scene={scene}
-                    orientMode="y-up"
-                    rotate={[0, 0, 0]}
-                    showVanilla={showVanilla}
-                    spinning={spinning}
-                    backdropIndex={backdropIndex}
-                    heroScene={showHero ? heroScene : null}
-                    captureRef={captureRef}
-                  />
-                </Suspense>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs text-text-secondary">
-                  {!glbPath && (
-                    <>
-                      <Ghost className="w-8 h-8 text-text-secondary/40" aria-hidden />
-                      <span>{t('locker.soulImport.dropzone.previewEmpty')}</span>
-                    </>
-                  )}
-                </div>
-              )}
-              {building && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <Loader2 className="w-6 h-6 animate-spin text-white/80" />
-                </div>
-              )}
-              {scene && (
-                <>
-                  {previewStats && (
-                    <span
-                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-2xs text-text-secondary"
-                      title={previewStats}
-                    >
-                      {previewStats}
-                    </span>
-                  )}
-
-                  {/* Top-right: playback only (pause + backdrop reroll). The view
-                      toggles live in the bottom bar to keep the top uncluttered. */}
-                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-2xs">
-                    <button
-                      type="button"
-                      onClick={() => setSpinning((s) => !s)}
-                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
-                      title={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
-                      aria-label={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
-                    >
-                      {spinning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={rerollBackdrop}
-                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
-                      title={t('locker.soulImport.preview.shuffleBackdrop')}
-                      aria-label={t('locker.soulImport.preview.shuffleBackdrop')}
-                    >
-                      <Shuffle className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Directional arrows over the preview. Up/down quarter-turn
-                      the pre-swizzle pitch (rotate X) to upright the mesh;
-                      left/right nudge the final-space facing yaw (the stable
-                      facing knob, distinct from the ambiguous Euler rotate). */}
-                  <button
-                    type="button"
-                    onClick={() => bumpAxis(0, 90)}
-                    className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
-                    aria-label={t('locker.soulImport.orient.tiltUp')}
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => bumpAxis(0, -90)}
-                    className="absolute bottom-9 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
-                    aria-label={t('locker.soulImport.orient.tiltDown')}
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => bumpYaw(-15)}
-                    className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
-                    aria-label={t('locker.soulImport.orient.turnLeft')}
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => bumpYaw(15)}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
-                    aria-label={t('locker.soulImport.orient.turnRight')}
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-
-                  {/* Bottom: resolved orientation label (left) + view toggles
-                      (right). Vanilla shell is hidden in hero mode (no effect). */}
-                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-2xs">
-                    <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
-                      {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
-                    </span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <label
-                        className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none"
-                        title={t('locker.soulImport.preview.heroScaleHint')}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={showHero}
-                          onChange={(e) => setShowHero(e.target.checked)}
-                          className="w-3 h-3 accent-accent cursor-pointer"
-                        />
-                        {heroLoading ? t('locker.soulImport.preview.heroScaleLoading') : t('locker.soulImport.preview.heroScale')}
-                      </label>
-                      {!showHero && (
-                        <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={showVanilla}
-                            onChange={(e) => setShowVanilla(e.target.checked)}
-                            className="w-3 h-3 accent-accent cursor-pointer"
-                          />
-                          {t('locker.soulImport.preview.vanillaShell')}
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Right: controls */}
-          <div className="space-y-4">
-            <FormField label={t('locker.soulImport.fields.name')} required>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('locker.soulImport.fields.namePlaceholder')}
-              />
-            </FormField>
-
-            {/* Orientation */}
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.orient.label')}</label>
-              <div className="grid grid-cols-4 gap-1.5 mb-2">
-                {ORIENT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setOrientMode(opt.value)}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      orientMode === opt.value
-                        ? 'border-accent/60 bg-accent/15 text-text-primary'
-                        : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
-                    }`}
-                  >
-                    {t(opt.labelKey)}
-                  </button>
-                ))}
+            )}
+            {building && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <Loader2 className="w-6 h-6 animate-spin text-white/80" />
               </div>
-
-              {/* Rotation nudges */}
-              <div className="space-y-1.5">
-                {(['X', 'Y', 'Z'] as const).map((axisLabel, axis) => (
-                  <div key={axisLabel} className="flex items-center gap-1.5">
-                    <span className="w-4 text-xs font-mono text-text-secondary">{axisLabel}</span>
-                    <button
-                      onClick={() => bumpAxis(axis as 0 | 1 | 2, -90)}
-                      className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
-                      aria-label={t('locker.soulImport.orient.rotateMinus', { axis: axisLabel })}
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => bumpAxis(axis as 0 | 1 | 2, 90)}
-                      className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
-                      aria-label={t('locker.soulImport.orient.rotatePlus', { axis: axisLabel })}
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                    </button>
-                    <input
-                      type="number"
-                      value={rotate[axis]}
-                      onChange={(e) => setAxis(axis as 0 | 1 | 2, parseFloat(e.target.value))}
-                      step={15}
-                      className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
-                      aria-label={t('locker.soulImport.orient.axisDegrees', { axis: axisLabel })}
-                    />
-                    <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
-                  </div>
-                ))}
-                <div className="flex gap-1.5 pt-0.5">
-                  <button
-                    onClick={() => bumpAxis(0, 180)}
-                    className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer"
+            )}
+            {scene && (
+              <>
+                {previewStats && (
+                  <span
+                    className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-2xs text-text-secondary"
+                    title={previewStats}
                   >
-                    {t('locker.soulImport.orient.flipVertical')}
+                    {previewStats}
+                  </span>
+                )}
+
+                {/* Top-right: playback only (pause + backdrop reroll). The view
+                    toggles live in the bottom bar to keep the top uncluttered. */}
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setSpinning((s) => !s)}
+                    className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                    title={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
+                    aria-label={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
+                  >
+                    {spinning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                   </button>
                   <button
-                    onClick={() => setRotate([0, 0, 0])}
-                    className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer flex items-center justify-center gap-1"
+                    type="button"
+                    onClick={rerollBackdrop}
+                    className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                    title={t('locker.soulImport.preview.shuffleBackdrop')}
+                    aria-label={t('locker.soulImport.preview.shuffleBackdrop')}
                   >
-                    <RefreshCw className="w-3 h-3" /> {t('common.actions.reset')}
+                    <Shuffle className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Facing: final-space yaw (the stable facing knob) + upright toggle */}
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.facing.label')}
-              </label>
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="range"
-                  min={-180}
-                  max={180}
-                  step={5}
-                  value={yaw}
-                  onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
-                  disabled={!upright}
-                  className="flex-1 accent-accent cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label={t('locker.soulImport.facing.label')}
-                />
-                <input
-                  type="number"
-                  value={yaw}
-                  onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
-                  step={15}
-                  disabled={!upright}
-                  className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent disabled:opacity-40"
-                  aria-label={t('locker.soulImport.facing.label')}
-                />
-                <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                {/* Directional arrows over the preview. Up/down quarter-turn
+                    the pre-swizzle pitch (rotate X) to upright the mesh;
+                    left/right nudge the final-space facing yaw (the stable
+                    facing knob, distinct from the ambiguous Euler rotate). */}
                 <button
                   type="button"
-                  onClick={() => setYaw(0)}
-                  disabled={!upright || yaw === 0}
-                  className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label={t('common.actions.reset')}
+                  onClick={() => bumpAxis(0, 90)}
+                  className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                  aria-label={t('locker.soulImport.orient.tiltUp')}
                 >
-                  <RefreshCw className="w-3 h-3" />
+                  <ArrowUp className="w-4 h-4" />
                 </button>
-              </div>
-              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={upright}
-                  onChange={(e) => setUpright(e.target.checked)}
-                  className="accent-accent cursor-pointer"
-                />
-                <span>{t('locker.soulImport.facing.upright')}</span>
-              </label>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => bumpAxis(0, -90)}
+                  className="absolute bottom-9 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                  aria-label={t('locker.soulImport.orient.tiltDown')}
+                >
+                  <ArrowDown className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => bumpYaw(-15)}
+                  className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                  aria-label={t('locker.soulImport.orient.turnLeft')}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => bumpYaw(15)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                  aria-label={t('locker.soulImport.orient.turnRight')}
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
 
-            {/* Glow */}
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.glow.label')}</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {GLOW_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setGlow(opt.value)}
-                    title={t(opt.hintKey)}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      glow === opt.value
-                        ? 'border-accent/60 bg-accent/15 text-text-primary'
-                        : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
-                    }`}
-                  >
-                    {t(opt.labelKey)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <FormField
-              label={
-                <>
-                  {t('locker.soulImport.fields.notes')}{' '}
-                  <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
-                </>
-              }
-            >
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t('locker.soulImport.fields.notesPlaceholder')}
-              />
-            </FormField>
-
-            <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={nsfw}
-                onChange={(e) => setNsfw(e.target.checked)}
-                className="w-4 h-4 accent-accent cursor-pointer"
-              />
-              {t('locker.soulImport.fields.nsfw')}
-            </label>
+                {/* Bottom: resolved orientation label (left) + view toggles
+                    (right). Vanilla shell is hidden in hero mode (no effect). */}
+                <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-2xs">
+                  <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
+                    {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label
+                      className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none"
+                      title={t('locker.soulImport.preview.heroScaleHint')}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showHero}
+                        onChange={(e) => setShowHero(e.target.checked)}
+                        className="w-3 h-3 accent-accent cursor-pointer"
+                      />
+                      {heroLoading ? t('locker.soulImport.preview.heroScaleLoading') : t('locker.soulImport.preview.heroScale')}
+                    </label>
+                    {!showHero && (
+                      <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={showVanilla}
+                          onChange={(e) => setShowVanilla(e.target.checked)}
+                          className="w-3 h-3 accent-accent cursor-pointer"
+                        />
+                        {t('locker.soulImport.preview.vanillaShell')}
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* High-poly + error notices, full width above the footer. The
-            "already enabled" conflict toast lives in the footer row itself. */}
-        <div className="px-5 space-y-3">
+        {/* Right: controls */}
+        <div className="space-y-4">
+          <FormField label={t('locker.soulImport.fields.name')} required>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('locker.soulImport.fields.namePlaceholder')}
+            />
+          </FormField>
+
+          {/* Orientation */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.orient.label')}</label>
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
+              {ORIENT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setOrientMode(opt.value)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    orientMode === opt.value
+                      ? 'border-accent/60 bg-accent/15 text-text-primary'
+                      : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
+                  }`}
+                >
+                  {t(opt.labelKey)}
+                </button>
+              ))}
+            </div>
+
+            {/* Rotation nudges */}
+            <div className="space-y-1.5">
+              {(['X', 'Y', 'Z'] as const).map((axisLabel, axis) => (
+                <div key={axisLabel} className="flex items-center gap-1.5">
+                  <span className="w-4 text-xs font-mono text-text-secondary">{axisLabel}</span>
+                  <button
+                    onClick={() => bumpAxis(axis as 0 | 1 | 2, -90)}
+                    className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.rotateMinus', { axis: axisLabel })}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => bumpAxis(axis as 0 | 1 | 2, 90)}
+                    className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.rotatePlus', { axis: axisLabel })}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+                  <input
+                    type="number"
+                    value={rotate[axis]}
+                    onChange={(e) => setAxis(axis as 0 | 1 | 2, parseFloat(e.target.value))}
+                    step={15}
+                    className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
+                    aria-label={t('locker.soulImport.orient.axisDegrees', { axis: axisLabel })}
+                  />
+                  <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                </div>
+              ))}
+              <div className="flex gap-1.5 pt-0.5">
+                <button
+                  onClick={() => bumpAxis(0, 180)}
+                  className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer"
+                >
+                  {t('locker.soulImport.orient.flipVertical')}
+                </button>
+                <button
+                  onClick={() => setRotate([0, 0, 0])}
+                  className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> {t('common.actions.reset')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Facing: final-space yaw (the stable facing knob) + upright toggle */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">
+              {t('locker.soulImport.facing.label')}
+            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="range"
+                min={-180}
+                max={180}
+                step={5}
+                value={yaw}
+                onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
+                disabled={!upright}
+                className="flex-1 accent-accent cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label={t('locker.soulImport.facing.label')}
+              />
+              <input
+                type="number"
+                value={yaw}
+                onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
+                step={15}
+                disabled={!upright}
+                className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent disabled:opacity-40"
+                aria-label={t('locker.soulImport.facing.label')}
+              />
+              <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+              <button
+                type="button"
+                onClick={() => setYaw(0)}
+                disabled={!upright || yaw === 0}
+                className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label={t('common.actions.reset')}
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={upright}
+                onChange={(e) => setUpright(e.target.checked)}
+                className="accent-accent cursor-pointer"
+              />
+              <span>{t('locker.soulImport.facing.upright')}</span>
+            </label>
+          </div>
+
+          {/* Glow */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.glow.label')}</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {GLOW_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setGlow(opt.value)}
+                  title={t(opt.hintKey)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    glow === opt.value
+                      ? 'border-accent/60 bg-accent/15 text-text-primary'
+                      : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
+                  }`}
+                >
+                  {t(opt.labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <FormField
+            label={
+              <>
+                {t('locker.soulImport.fields.notes')}{' '}
+                <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
+              </>
+            }
+          >
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t('locker.soulImport.fields.notesPlaceholder')}
+            />
+          </FormField>
+
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={nsfw}
+              onChange={(e) => setNsfw(e.target.checked)}
+              className="w-4 h-4 accent-accent cursor-pointer"
+            />
+            {t('locker.soulImport.fields.nsfw')}
+          </label>
+        </div>
+      </ModalBody>
+
+      {/* High-poly + error notices, pinned above the footer. The "already
+          enabled" conflict toast lives in the footer row itself. */}
+      {(highPoly || error) && (
+        <div className="flex-shrink-0 space-y-3 px-5 pb-3">
           {highPoly && (
-            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+            <div className="flex items-start gap-2 rounded-sm border border-state-warning/30 bg-state-warning/10 p-3 text-xs text-state-warning">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
               <span>
                 {t('locker.soulImport.preview.highPolyWarning', {
@@ -766,75 +763,66 @@ export default function SoulContainerImportModal({
           )}
 
           {error && (
-            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="rounded-sm border border-state-danger/30 bg-state-danger/10 p-2 text-sm text-state-danger">
               {error}
             </div>
           )}
         </div>
+      )}
 
-        <div className="flex items-center gap-3 p-5 border-t border-border mt-3">
-          {/* "Already enabled" conflict toast, inline on the left of the bottom
-              bar; the action buttons stay pinned right via ml-auto. */}
-          {existingSoulImports.length > 0 && (
-            <div
-              className="flex min-w-0 items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
-              title={t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
-            >
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate text-amber-200/90">{t('locker.soulImport.conflict.heading')}</span>
-              <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
-                <button
-                  onClick={() => setDisableExisting(true)}
-                  className={`px-2.5 py-1 text-2xs cursor-pointer transition-colors ${
-                    disableExisting
-                      ? 'bg-accent/25 text-text-primary'
-                      : 'text-amber-200/70 hover:bg-amber-500/10'
-                  }`}
-                >
-                  {t('locker.soulImport.conflict.disableCurrent')}
-                </button>
-                <button
-                  onClick={() => setDisableExisting(false)}
-                  className={`px-2.5 py-1 text-2xs cursor-pointer border-l border-amber-500/40 transition-colors ${
-                    !disableExisting
-                      ? 'bg-accent/25 text-text-primary'
-                      : 'text-amber-200/70 hover:bg-amber-500/10'
-                  }`}
-                >
-                  {t('locker.soulImport.conflict.keepBoth')}
-                </button>
-              </div>
+      <ModalFooter className="gap-3">
+        {/* "Already enabled" conflict toast, inline on the left of the bottom
+            bar; the action buttons stay pinned right via ml-auto. */}
+        {existingSoulImports.length > 0 && (
+          <div
+            className="flex min-w-0 items-center gap-2 rounded-sm border border-state-warning/30 bg-state-warning/10 px-3 py-2 text-xs text-state-warning"
+            title={t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{t('locker.soulImport.conflict.heading')}</span>
+            <div className="flex shrink-0 overflow-hidden rounded-sm border border-state-warning/40">
+              <button
+                onClick={() => setDisableExisting(true)}
+                className={`px-2.5 py-1 text-2xs cursor-pointer transition-colors ${
+                  disableExisting
+                    ? 'bg-accent/25 text-text-primary'
+                    : 'text-state-warning/80 hover:bg-state-warning/10'
+                }`}
+              >
+                {t('locker.soulImport.conflict.disableCurrent')}
+              </button>
+              <button
+                onClick={() => setDisableExisting(false)}
+                className={`px-2.5 py-1 text-2xs cursor-pointer border-l border-state-warning/40 transition-colors ${
+                  !disableExisting
+                    ? 'bg-accent/25 text-text-primary'
+                    : 'text-state-warning/80 hover:bg-state-warning/10'
+                }`}
+              >
+                {t('locker.soulImport.conflict.keepBoth')}
+              </button>
             </div>
-          )}
-          <div className="flex justify-end gap-3 ml-auto shrink-0">
-            <button
-              onClick={onClose}
-              disabled={submitting || exporting}
-              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {t('common.actions.cancel')}
-            </button>
-            <button
-              onClick={handleExport}
-              disabled={!canSubmit}
-              title={t('locker.soulImport.exportTitle')}
-              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {t('locker.soulImport.export')}
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {t('locker.soulImport.submit')}
-            </button>
           </div>
+        )}
+        <div className="ml-auto flex shrink-0 justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={submitting || exporting}>
+            {t('common.actions.cancel')}
+          </Button>
+          <Button
+            variant="secondary"
+            icon={Download}
+            isLoading={exporting}
+            onClick={handleExport}
+            disabled={!canSubmit}
+            title={t('locker.soulImport.exportTitle')}
+          >
+            {t('locker.soulImport.export')}
+          </Button>
+          <Button isLoading={submitting} onClick={handleSubmit} disabled={!canSubmit}>
+            {t('locker.soulImport.submit')}
+          </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+      </ModalFooter>
+    </Modal>
   );
 }

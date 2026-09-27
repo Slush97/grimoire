@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     DndContext,
@@ -29,12 +29,11 @@ import {
     AlertTriangle,
     Download,
     ExternalLink,
-    Files,
     FilePlus,
     Unlink,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
-import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
+import { ArchivedTag, Button, CheckboxMark, ModalHeader, Tag } from './common/ui';
 import { Input } from './common/forms';
 import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
@@ -152,6 +151,7 @@ export default function VariantPickerModal({
     onClose,
 }: Props) {
     const { t } = useTranslation();
+    const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
@@ -573,79 +573,66 @@ export default function VariantPickerModal({
     };
 
     return (
-        <Modal
-            onClose={onClose}
-            labelledBy="variant-picker-title"
-            size="none"
-            panelClassName="max-w-xl"
-        >
-                <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                        <Files className="h-5 w-5 flex-shrink-0 text-accent" aria-hidden="true" />
-                        <div className="min-w-0">
-                            <h3 id="variant-picker-title" className="text-base font-semibold text-text-primary truncate">
-                                {onOpenModDetails ? (
-                                    <button
-                                        type="button"
-                                        onClick={onOpenModDetails}
-                                        disabled={isUpdating}
-                                        title={t('variantPicker.openModPage')}
-                                        className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent disabled:cursor-default disabled:opacity-60"
-                                    >
-                                        <span className="min-w-0 truncate">{modName}</span>
-                                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-                                    </button>
-                                ) : (
-                                    modName
-                                )}
-                            </h3>
-                            <p className="text-xs text-text-secondary">
-                                {t('variantPicker.filesEnabled', { enabled: enabledCount, total: variants.length })}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        {onAddVariant && (
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                icon={FilePlus}
-                                onClick={onAddVariant}
-                                disabled={isUpdating || !!pending}
-                                title={t('variantPicker.addVariantHint')}
+        <Modal onClose={onClose} labelledBy={titleId} size="none" panelClassName="max-w-xl">
+                <ModalHeader
+                    titleId={titleId}
+                    title={
+                        onOpenModDetails ? (
+                            <button
+                                type="button"
+                                onClick={onOpenModDetails}
+                                disabled={isUpdating}
+                                title={t('variantPicker.openModPage')}
+                                className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent disabled:cursor-default disabled:opacity-60"
                             >
-                                {t('variantPicker.addVariant')}
-                            </Button>
-                        )}
-                        {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                icon={Download}
-                                isLoading={isUpdating}
-                                onClick={() => void onUpdateGroup()}
-                                title={
-                                    isUpdating
-                                        ? 'Update already in progress'
-                                        : `Re-download ${variantsWithUpdate.size} file${variantsWithUpdate.size === 1 ? '' : 's'} and restore their enabled state`
-                                }
-                            >
-                                {isUpdating && updateProgress
-                                    ? `Updating ${updateProgress.done}/${updateProgress.total}`
-                                    : `Update ${variantsWithUpdate.size}`}
-                            </Button>
-                        )}
-                        <button
-                            onClick={onClose}
-                            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
-                            aria-label={t('common.actions.close')}
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
+                                <span className="min-w-0 truncate">{modName}</span>
+                                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                            </button>
+                        ) : (
+                            modName
+                        )
+                    }
+                    subtitle={t('variantPicker.filesEnabled', { enabled: enabledCount, total: variants.length })}
+                    onClose={onClose}
+                    closeLabel={t('common.actions.close')}
+                    className="pb-3"
+                    actions={
+                        <>
+                            {onAddVariant && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={FilePlus}
+                                    onClick={onAddVariant}
+                                    disabled={isUpdating || !!pending}
+                                    title={t('variantPicker.addVariantHint')}
+                                >
+                                    {t('variantPicker.addVariant')}
+                                </Button>
+                            )}
+                            {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    icon={Download}
+                                    isLoading={isUpdating}
+                                    onClick={() => void onUpdateGroup()}
+                                    title={
+                                        isUpdating
+                                            ? t('variantPicker.updateInProgress')
+                                            : t('variantPicker.updateGroupHint', { count: variantsWithUpdate.size })
+                                    }
+                                >
+                                    {isUpdating && updateProgress
+                                        ? t('variantPicker.updatingProgress', { done: updateProgress.done, total: updateProgress.total })
+                                        : t('variantPicker.updateCount', { count: variantsWithUpdate.size })}
+                                </Button>
+                            )}
+                        </>
+                    }
+                />
 
-                <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
+                <div className="max-h-[60vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
                     {renderSortableVariantSection('enabled')}
                     {renderSortableVariantSection('disabled')}
                 </div>

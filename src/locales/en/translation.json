@@ -612,7 +612,7 @@
     },
     "header": {
       "description": "Resolve conflicts between installed mods",
-      "noActiveDescription": "No active conflicts — review or restore your ignored pairs below."
+      "noActiveDescription": "No active conflicts. Review or restore your ignored pairs below."
     },
     "ignored": {
       "clearTitle": "Restore conflict detection for every ignored pair",
@@ -650,6 +650,22 @@
     "view": {
       "grid": "Grid view",
       "list": "List view"
+    },
+    "explainer": {
+      "title": "How conflicts work",
+      "modA": "Mod A",
+      "modB": "Mod B",
+      "modAParts": "Hat and jacket",
+      "modBParts": "Hat and pants",
+      "inGame": "In game",
+      "hatFrom": "Hat from {{name}}",
+      "notAnError": "A conflict is not an error.",
+      "bothLoad": "The game still launches and both mods still load.",
+      "sharedFiles": "Two mods conflict when they replace the same file. Only that file is contested: the mod that loads first wins it, and everything else from both mods still shows up in game.",
+      "whatToDo": "Each pair below lists its shared files. Pick which mod wins, or ignore the pair if the game already looks right.",
+      "swap": "Swap load order",
+      "loadsFirst": "Loads first",
+      "loadsSecond": "Loads second"
     }
   },
   "hiddenCreators": {
@@ -748,7 +764,6 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
-      "customAccentColor": "Custom accent color",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
       "oled": {
@@ -1934,7 +1949,8 @@
       "useCrop": "Use crop",
       "boxHint": "Drag the box to move it, drag a corner to resize. The selection is locked to the surface's shape.",
       "selectionSize": "Selection size",
-      "resetCrop": "Reset selection"
+      "resetCrop": "Reset selection",
+      "outputSize": "output {{width}} x {{height}}"
     },
     "model": {
       "close3d": "Close 3D model",
@@ -2809,7 +2825,12 @@
     "addVariant": "Add variant",
     "addVariantHint": "Import another .vpk or archive as a variant of this mod",
     "detachVariant": "Remove from group",
-    "detachVariantHint": "Keep this file installed, but stop treating it as a variant of this mod"
+    "detachVariantHint": "Keep this file installed, but stop treating it as a variant of this mod",
+    "updateInProgress": "Update already in progress",
+    "updateGroupHint_one": "Re-download {{count}} file and restore its enabled state",
+    "updateGroupHint_other": "Re-download {{count}} files and restore their enabled state",
+    "updatingProgress": "Updating {{done}}/{{total}}",
+    "updateCount": "Update {{count}}"
   },
   "imageContextMenu": {
     "image": "Image",

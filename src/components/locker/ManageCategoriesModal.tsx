@@ -14,7 +14,7 @@
 import { useState, type FormEvent } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { Button, IconButton, ModalHeader } from '../common/ui';
 import { Input } from '../common/forms';
 import type { LockerCategory } from '../../lib/lockerCategories';
@@ -132,7 +132,7 @@ export function ManageCategoriesModal({
       onClose={onClose}
       labelledBy="manage-locker-categories-title"
       size="md"
-      panelClassName="flex max-h-[min(680px,calc(100vh-2rem))] flex-col overflow-hidden"
+      panelClassName="max-h-[min(680px,100%)]"
     >
       <ModalHeader
         titleId="manage-locker-categories-title"
@@ -141,7 +141,7 @@ export function ManageCategoriesModal({
         onClose={onClose}
         closeLabel={t('common.actions.close')}
       />
-      <div className="min-h-0 overflow-y-auto p-5">
+      <ModalBody>
         {categories.length === 0 ? (
           <p className="text-sm text-text-secondary">{t('locker.categories.emptyHint')}</p>
         ) : (
@@ -157,7 +157,7 @@ export function ManageCategoriesModal({
             ))}
           </ul>
         )}
-      </div>
+      </ModalBody>
     </Modal>
   );
 }
@@ -187,7 +187,7 @@ export function CreateCategoryModal({ modName, onClose, onCreate }: CreateCatego
 
   return (
     <Modal onClose={onClose} labelledBy="create-locker-category-title" size="sm">
-      <form onSubmit={submit}>
+      <form onSubmit={submit} className="flex min-h-0 flex-col">
         <ModalHeader
           titleId="create-locker-category-title"
           title={t('locker.categories.createTitle')}
@@ -196,7 +196,7 @@ export function CreateCategoryModal({ modName, onClose, onCreate }: CreateCatego
           onClose={onClose}
           closeLabel={t('common.actions.close')}
         />
-        <div className="p-5">
+        <ModalBody>
           <Input
             autoFocus
             value={name}
@@ -205,15 +205,15 @@ export function CreateCategoryModal({ modName, onClose, onCreate }: CreateCatego
             aria-label={t('locker.categories.nameLabel')}
             maxLength={80}
           />
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+        </ModalBody>
+        <ModalFooter>
           <Button type="button" variant="ghost" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>
           <Button type="submit" disabled={!trimmed}>
             {t('locker.categories.create')}
           </Button>
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
-import { Button } from '../common/ui';
+import { AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
+import { Button, ModalHeader } from '../common/ui';
 import { Input, Textarea, FormField } from '../common/forms';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { socialUpdateProfile, type SocialUpdateProfileResponse } from '../../lib/api';
 
 interface EditProfileDialogProps {
@@ -22,6 +22,7 @@ export default function EditProfileDialog({
   onSaved,
 }: EditProfileDialogProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -65,37 +66,20 @@ export default function EditProfileDialog({
   return (
     <Modal
       onClose={onClose}
-      labelledBy="edit-profile-title"
+      labelledBy={titleId}
       size="md"
       dismissable={!submitting}
-      panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-hl/10">
-          <div className="min-w-0">
-            <h2
-              id="edit-profile-title"
-              className="text-xl font-bold text-text-primary flex items-center gap-2"
-            >
-              <Pencil className="w-5 h-5 text-accent" />
-              {t('social.editProfile.editYourPost')}
-            </h2>
-            <p className="text-sm text-text-secondary mt-1">
-              {t('social.editProfile.modListStays')}
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              if (!submitting) onClose();
-            }}
-            disabled={submitting}
-            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <ModalHeader
+          title={t('social.editProfile.editYourPost')}
+          titleId={titleId}
+          subtitle={t('social.editProfile.modListStays')}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          closeDisabled={submitting}
+        />
 
-        <div className="p-6 space-y-4">
+        <ModalBody className="space-y-4">
           {saved ? (
             <div className="space-y-3">
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
@@ -106,9 +90,6 @@ export default function EditProfileDialog({
                     {t('social.editProfile.changesLiveOnDiscover')}
                   </div>
                 </div>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={onClose}>{t('common.actions.done')}</Button>
               </div>
             </div>
           ) : (
@@ -159,23 +140,29 @@ export default function EditProfileDialog({
                   <span>{submitError}</span>
                 </div>
               )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="ghost" onClick={onClose} disabled={submitting}>
-                  {t('common.actions.cancel')}
-                </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={!canSubmit}
-                  isLoading={submitting}
-                  icon={Pencil}
-                >
-                  {t('social.editProfile.saveChanges')}
-                </Button>
-              </div>
             </>
           )}
-        </div>
+        </ModalBody>
+
+        <ModalFooter>
+          {saved ? (
+            <Button onClick={onClose}>{t('common.actions.done')}</Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose} disabled={submitting}>
+                {t('common.actions.cancel')}
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={!canSubmit}
+                isLoading={submitting}
+                icon={Pencil}
+              >
+                {t('social.editProfile.saveChanges')}
+              </Button>
+            </>
+          )}
+        </ModalFooter>
     </Modal>
   );
 }

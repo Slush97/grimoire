@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppWindow, FolderOpen, MonitorCog, X } from 'lucide-react';
+import { AppWindow, FolderOpen, MonitorCog } from 'lucide-react';
 import { listEditorCandidates, showOpenDialog } from '../../lib/api';
 import type { EditorCandidate } from '../../types/electron';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody } from '../common/Modal';
+import { ModalHeader } from '../common/ui';
 
 interface Props {
   onClose: () => void;
@@ -18,6 +19,7 @@ interface Props {
 export default function EditorPickerModal({ onClose, onChoose }: Props) {
   const { t } = useTranslation();
   const [candidates, setCandidates] = useState<EditorCandidate[]>([]);
+  const titleId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -45,26 +47,15 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     'w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg border border-hl/10 bg-bg-tertiary hover:border-accent transition-colors cursor-pointer';
 
   return (
-    <Modal onClose={onClose} size="sm" labelledBy="editor-picker-title" panelClassName="p-5 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="editor-picker-title" className="text-base font-semibold text-text-primary">
-            {t('performance.editor.title')}
-          </h2>
-          <p className="text-xs text-text-secondary mt-1">
-            {t('performance.editor.description')}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('common.actions.close')}
-          className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-        >
-          <X className="w-4 h-4" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="space-y-2">
+    <Modal onClose={onClose} size="sm" labelledBy={titleId}>
+      <ModalHeader
+        title={t('performance.editor.title')}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+      />
+      <ModalBody className="space-y-2">
+        <p className="mb-3 text-xs text-text-secondary">{t('performance.editor.description')}</p>
         <button type="button" className={rowClass} onClick={() => onChoose(null)}>
           <MonitorCog className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
           <span className="min-w-0">
@@ -92,7 +83,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
           <FolderOpen className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
           <span className="block text-sm text-text-primary">{t('performance.editor.browse')}</span>
         </button>
-      </div>
+      </ModalBody>
     </Modal>
   );
 }

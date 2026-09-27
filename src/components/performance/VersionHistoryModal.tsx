@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CircleAlert, HardDriveDownload, Loader2, Package } from 'lucide-react';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody } from '../common/Modal';
 import { ModalHeader } from '../common/ui';
 import { fetchPerformanceRemoteVersion, listPerformanceRemoteVersions } from '../../lib/api';
 import {
@@ -96,7 +96,8 @@ export default function VersionHistoryModal({
         onClose={onClose}
         closeLabel={t('common.actions.close')}
       />
-      <div className="max-h-[60vh] overflow-y-auto p-3 space-y-1">
+      <ModalBody>
+        <div className="-mx-3 space-y-1">
         {versions === null && !listError && (
           <p className="flex items-center gap-2 px-2 py-4 text-sm text-text-secondary">
             <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -166,7 +167,8 @@ export default function VersionHistoryModal({
             </button>
           );
         })}
-      </div>
+        </div>
+      </ModalBody>
       {fetchError && (
         <p className="flex items-start gap-2 border-t border-border px-5 py-3 text-xs text-state-danger">
           <CircleAlert className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden="true" />

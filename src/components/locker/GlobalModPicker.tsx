@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpToLine, Check, Search, X } from 'lucide-react';
+import { ArrowUpToLine, Check, Search } from 'lucide-react';
 import type { Mod } from '../../types/mod';
-import { Modal } from '../common/Modal';
-import { Button } from '../common/ui';
+import { Modal, ModalFooter } from '../common/Modal';
+import { Button, ModalHeader } from '../common/ui';
 
 interface GlobalModPickerProps {
   /** Every installed mod. Ones already Global are filtered out here rather than
@@ -30,6 +30,7 @@ interface GlobalModPickerProps {
  */
 export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: GlobalModPickerProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -98,28 +99,18 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
       onClose={onClose}
       size="lg"
       dismissable={!busy}
-      labelledBy="global-mod-picker-title"
-      panelClassName="flex max-h-[80vh] flex-col"
+      labelledBy={titleId}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-border p-4">
-        <div className="min-w-0">
-          <h2 id="global-mod-picker-title" className="text-base font-semibold text-text-primary">
-            {t('locker.globalPicker.title')}
-          </h2>
-          <p className="mt-1 text-xs text-text-secondary">{t('locker.globalPicker.description')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          aria-label={t('common.actions.close')}
-          className="flex-shrink-0 rounded p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      <ModalHeader
+        title={t('locker.globalPicker.title')}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+        closeDisabled={busy}
+      />
 
-      <div className="border-b border-border p-4">
+      <div className="flex-shrink-0 space-y-3 border-b border-border px-5 pb-4 pt-2">
+        <p className="text-xs text-text-secondary">{t('locker.globalPicker.description')}</p>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
           <input
@@ -128,7 +119,7 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('locker.globalPicker.searchPlaceholder')}
-            className="w-full rounded-lg border border-border bg-bg-input py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none"
+            className="w-full rounded-sm border border-border bg-bg-input py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none"
           />
         </div>
       </div>
@@ -190,23 +181,21 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
       </div>
 
       {error && (
-        <p className="border-t border-border px-4 py-2 text-xs text-state-danger">{error}</p>
+        <p className="flex-shrink-0 border-t border-border px-5 py-2 text-xs text-state-danger">{error}</p>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-t border-border p-4">
-        <span className="text-xs text-text-secondary">
+      <ModalFooter>
+        <span className="mr-auto text-xs text-text-secondary">
           {t('locker.globalPicker.selectedCount', { count: selected.size })}
         </span>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button onClick={() => void confirm()} disabled={selected.size === 0 || busy}>
-            <ArrowUpToLine className="h-4 w-4" />
-            {busy ? t('locker.globalPicker.adding') : t('locker.globalPicker.add')}
-          </Button>
-        </div>
-      </div>
+        <Button variant="secondary" onClick={onClose} disabled={busy}>
+          {t('common.actions.cancel')}
+        </Button>
+        <Button onClick={() => void confirm()} disabled={selected.size === 0 || busy}>
+          <ArrowUpToLine className="h-4 w-4" />
+          {busy ? t('locker.globalPicker.adding') : t('locker.globalPicker.add')}
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 }

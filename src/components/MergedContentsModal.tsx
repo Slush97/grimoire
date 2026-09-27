@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, Plus, Search } from 'lucide-react';
+import { Layers, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, Plus, Search } from 'lucide-react';
 import type { Mod, MergedModSource } from '../types/mod';
 import type { MergeSourceUpdateOutcome, MergeSourceUpdateSkip } from '../lib/mergeSourceUpdate';
 import ModThumbnail from './ModThumbnail';
-import { Button, Tag } from './common/ui';
-import { Modal } from './common/Modal';
+import { Button, ModalHeader, Tag } from './common/ui';
+import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import { Input } from './common/forms';
 import { formatRelativeDate } from '../lib/dates';
 
@@ -45,6 +45,7 @@ export default function MergedContentsModal({
   onAddSources,
 }: Props) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [copied, setCopied] = useState(false);
   // The fileName of the source row currently being extracted, and the last
   // error surfaced by an extract.
@@ -156,26 +157,16 @@ export default function MergedContentsModal({
     : 0;
 
   return (
-    <Modal onClose={onClose} labelledBy="merged-contents-title" size="lg">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3
-            id="merged-contents-title"
-            className="text-lg font-semibold text-text-primary flex items-center gap-2 min-w-0"
-          >
-            <Layers className="w-5 h-5 text-text-secondary flex-shrink-0" />
-            <span className="truncate">{mod.name}</span>
-          </h3>
-          <button
-            onClick={onClose}
-            disabled={addingSources || busyFileName !== null}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Modal onClose={onClose} labelledBy={titleId} size="lg">
+        <ModalHeader
+          title={mod.name}
+          titleId={titleId}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          closeDisabled={addingSources || busyFileName !== null}
+        />
 
-        <div className="p-5 space-y-4">
+        <ModalBody className="space-y-4">
           <div className="flex gap-4">
             <div className="w-28 aspect-square flex-shrink-0 rounded-lg overflow-hidden border border-border bg-bg-tertiary">
               <ModThumbnail
@@ -426,9 +417,9 @@ export default function MergedContentsModal({
               </div>
             )}
           </div>
-        </div>
+        </ModalBody>
 
-        <div className="flex flex-wrap items-center gap-2 justify-end p-4 border-t border-border">
+        <ModalFooter className="flex-wrap">
           {canAdd && (
             <Button
               variant="secondary"
@@ -471,7 +462,7 @@ export default function MergedContentsModal({
           >
             {t('common.actions.close')}
           </Button>
-        </div>
+        </ModalFooter>
     </Modal>
   );
 }

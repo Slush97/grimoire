@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody } from '../common/Modal';
 import { Button, IconButton, ModalHeader } from '../common/ui';
 import { Input } from '../common/forms';
 import type { ModList } from '../../lib/modLists';
@@ -147,7 +147,7 @@ export function ManageModListsModal({
       onClose={onClose}
       labelledBy="manage-mod-lists-title"
       size="md"
-      panelClassName="flex max-h-[min(680px,calc(100vh-2rem))] flex-col overflow-hidden"
+      panelClassName="max-h-[min(680px,100%)]"
     >
       <ModalHeader
         titleId="manage-mod-lists-title"
@@ -156,7 +156,7 @@ export function ManageModListsModal({
         onClose={onClose}
         closeLabel={t('common.actions.close')}
       />
-      <div className="min-h-0 overflow-y-auto p-5">
+      <ModalBody>
         {progress && (
           <p className="mb-3 flex items-center gap-2 text-sm tabular-nums text-text-primary">
             <Loader2 className="h-4 w-4 animate-spin text-accent" />
@@ -182,7 +182,7 @@ export function ManageModListsModal({
             ))}
           </ul>
         )}
-      </div>
+      </ModalBody>
     </Modal>
   );
 }
