@@ -126,6 +126,12 @@ const DEFAULT_PER_PAGE = 36;
 // part-synced catalog returns misleadingly thin results, so the filters that
 // depend on it stay disabled until it is worth querying.
 const LOCAL_CACHE_MIN_ROWS = 100;
+const SEARCH_AUTO_APPLY_MIN_LENGTH = 3;
+
+function searchAutoApplies(query: string): boolean {
+  const length = query.trim().length;
+  return length === 0 || length >= SEARCH_AUTO_APPLY_MIN_LENGTH;
+}
 
 // Trace into main.log (and therefore into diagnostic reports). The renderer's
 // own console never reaches that file, so filter routing decisions were
@@ -1548,9 +1554,12 @@ export default function Browse() {
   // Debounce the search input: every keystroke previously fired a full FTS5
   // query + count + render, which felt slow even when the DB was fast. 250ms
   // is short enough that typing-to-results still feels responsive but long
-  // enough to absorb fast typing into a single request.
+  // enough to absorb fast typing into a single request. A 1-2 character query
+  // matches nearly everything, so it only applies on Enter (handleSearch).
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const searchPending = search !== debouncedSearch && searchAutoApplies(search);
   useEffect(() => {
+    if (!searchAutoApplies(search)) return;
     const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
   }, [search]);
@@ -2392,6 +2401,7 @@ export default function Browse() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setDebouncedSearch(search);
     setPage(1);
   };
 
@@ -3364,7 +3374,7 @@ export default function Browse() {
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                 {/* Inline spinner while debouncing or refetching with stale results.
                     Replaces the prior whole-grid skeleton flash on every keystroke. */}
-                {(search !== debouncedSearch || (loadingMore && page === 1)) && (
+                {(searchPending || (loadingMore && page === 1)) && (
                   <Loader2
                     className="w-4 h-4 mx-1 animate-spin text-text-secondary"
                     aria-label={t('browse.search.searching')}
@@ -3373,7 +3383,7 @@ export default function Browse() {
                 {search && (
                   <button
                     type="button"
-                    onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
+                    onClick={() => { setSearch(''); setDebouncedSearch(''); setPage(1); }}
                     className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
                     title={t('browse.search.clear')}
                   >

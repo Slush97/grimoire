@@ -1175,12 +1175,16 @@
       "namePlaceholder": "e.g. Ivy skins",
       "manage": "Manage",
       "manageTitle": "Manage lists",
-      "manageSubtitle": "Lists only group mods for browsing. Deleting one never deletes any mods.",
+      "manageSubtitle": "Deleting a list never deletes its mods.",
       "emptyHint": "No lists yet. Right-click a mod and choose Add to list.",
       "memberCount_one": "{{count}} mod",
       "memberCount_other": "{{count}} mods",
       "duplicateName": "Another list already uses that name.",
-      "deleteList": "Delete {{name}}"
+      "deleteList": "Delete {{name}}",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
+      "enabling": "Enabling {{done}}/{{total}}...",
+      "disabling": "Disabling {{done}}/{{total}}..."
     },
     "profiles": {
       "trigger": "Profiles",
