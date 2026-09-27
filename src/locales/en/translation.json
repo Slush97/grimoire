@@ -659,13 +659,14 @@
       "modBParts": "Hat and pants",
       "inGame": "In game",
       "hatFrom": "Hat from {{name}}",
-      "notAnError": "A conflict is not an error.",
-      "bothLoad": "The game still launches and both mods still load.",
-      "sharedFiles": "Two mods conflict when they replace the same file. Only that file is contested: the mod that loads first wins it, and everything else from both mods still shows up in game.",
-      "whatToDo": "Each pair below lists its shared files. Pick which mod wins, or ignore the pair if the game already looks right.",
+      "notAnError": "A conflict isn't an error.",
+      "bothLoad": "The game still starts, and both mods still load.",
+      "sharedFiles": "It just means two mods change the same thing. For that one thing, the mod that loads first wins. Everything else from both mods still shows up in game.",
+      "whatToDo": "Pick which mod should win, or ignore the conflict if the game already looks right.",
       "swap": "Swap load order",
       "loadsFirst": "Loads first",
-      "loadsSecond": "Loads second"
+      "loadsSecond": "Loads second",
+      "modelSwaps": "Model swaps are the exception. If both mods replace the same model (like two skins for one hero), only the first one shows up, and the second one most likely won't load at all."
     }
   },
   "hiddenCreators": {

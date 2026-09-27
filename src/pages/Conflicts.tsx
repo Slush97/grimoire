@@ -582,11 +582,17 @@ export default function Conflicts() {
             />
           }
           action={
-            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>
-              <Tx k="common.actions.refresh" fallback="Refresh" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setExplainerOpen(true)} icon={CircleHelp}>
+                {t('conflicts.explainer.title')}
+              </Button>
+              <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>
+                <Tx k="common.actions.refresh" fallback="Refresh" />
+              </Button>
+            </div>
           }
         />
+        <ConflictExplainer open={explainerOpen} onClose={() => setExplainerOpen(false)} />
       </div>
     );
   }

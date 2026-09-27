@@ -121,6 +121,7 @@ export default function ConflictExplainer({ open, onClose }: { open: boolean; on
             {t('conflicts.explainer.bothLoad')}
           </p>
           <p>{t('conflicts.explainer.sharedFiles')}</p>
+          <p>{t('conflicts.explainer.modelSwaps')}</p>
           <p>{t('conflicts.explainer.whatToDo')}</p>
         </div>
       </ModalBody>
