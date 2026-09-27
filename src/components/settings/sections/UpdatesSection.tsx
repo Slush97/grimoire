@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { ArrowDownCircle, Download, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ArrowDownCircle, Download, RefreshCw, Sparkles } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import { Badge, Button, Card } from '../../common/ui';
+import { Badge, Button, Card, ModalHeader } from '../../common/ui';
+import { Modal, ModalBody, ModalFooter } from '../../common/Modal';
 import Tx from '../../translation/Tx';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
@@ -47,6 +47,8 @@ export default function UpdatesSection() {
     } | null;
   } | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
+  const changelogTitleId = useId();
+  const closeChangelog = useCallback(() => setShowChangelog(false), []);
   const [installSource, setInstallSource] = useState<'managed' | 'appimage' | 'standard' | 'manual'>('standard');
   // See UpdateModal: 'managed' defers to the package manager, 'manual' (ad-hoc
   // signed macOS) can check but cannot apply an update in place.
@@ -237,84 +239,68 @@ export default function UpdatesSection() {
         </div>
       </Card>
 
-      {/* Changelog modal. Portaled to body like every other overlay in the app:
-          the shell it would otherwise render inside is its own stacking context,
-          which would sink a plain z-50 below the fixed status indicators. */}
-      {showChangelog && updateStatus?.updateInfo && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-bg-secondary border border-hl/10 rounded-sm w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in relative">
-            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <div className="flex items-center justify-between p-6 border-b border-hl/10">
-              <div>
-                <h2 className="text-xl font-bold">
-                  <Tx k="settings.updates.whatsNewIn" fallback="What's New in" />{' '}
-                  <ReleaseVersionLink version={updateStatus.updateInfo.version} />
-                </h2>
-                {updateStatus.updateInfo.releaseDate && (
-                  <p className="text-sm text-text-secondary mt-1">
-                    <Tx
-                      k="settings.updates.released"
-                      values={{ date: new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString() }}
-                      fallback={`Released ${new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}`}
-                    />
-                  </p>
-                )}
+      {showChangelog && updateStatus?.updateInfo && (
+        <Modal onClose={closeChangelog} labelledBy={changelogTitleId} size="lg">
+          <ModalHeader
+            titleId={changelogTitleId}
+            title={
+              <>
+                <Tx k="settings.updates.whatsNewIn" fallback="What's New in" />{' '}
+                <ReleaseVersionLink version={updateStatus.updateInfo.version} />
+              </>
+            }
+            subtitle={updateStatus.updateInfo.releaseDate && (
+              <Tx
+                k="settings.updates.released"
+                values={{ date: new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString() }}
+                fallback={`Released ${new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}`}
+              />
+            )}
+            onClose={closeChangelog}
+          />
+          <ModalBody>
+            {typeof updateStatus.updateInfo.releaseNotes === 'string' ? (
+              <div
+                className="prose prose-invert prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(updateStatus.updateInfo.releaseNotes) }}
+              />
+            ) : Array.isArray(updateStatus.updateInfo.releaseNotes) ? (
+              <div className="space-y-4">
+                {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
+                  <div key={idx}>
+                    <h3 className="font-semibold text-accent">
+                      <ReleaseVersionLink version={note.version} />
+                    </h3>
+                    {note.note && (
+                      <div
+                        className="prose prose-invert prose-sm max-w-none mt-1"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.note) }}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-              <button
-                onClick={() => setShowChangelog(false)}
-                className="p-2 rounded-sm hover:bg-hl/5 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[50vh]">
-              {typeof updateStatus.updateInfo.releaseNotes === 'string' ? (
-                <div
-                  className="prose prose-invert prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(updateStatus.updateInfo.releaseNotes) }}
-                />
-              ) : Array.isArray(updateStatus.updateInfo.releaseNotes) ? (
-                <div className="space-y-4">
-                  {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
-                    <div key={idx}>
-                      <h3 className="font-semibold text-accent">
-                        <ReleaseVersionLink version={note.version} />
-                      </h3>
-                      {note.note && (
-                        <div
-                          className="prose prose-invert prose-sm max-w-none mt-1"
-                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.note) }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-text-secondary">
-                  <Tx k="settings.updates.noReleaseNotes" fallback="No release notes available." />
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 p-6 border-t border-hl/10">
-              <Button
-                onClick={() => setShowChangelog(false)}
-                variant="secondary"
-              >
-                <Tx k="common.actions.close" fallback="Close" />
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowChangelog(false);
-                  handleDownloadUpdate();
-                }}
-                icon={Download}
-              >
-                <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
+            ) : (
+              <p className="text-text-secondary">
+                <Tx k="settings.updates.noReleaseNotes" fallback="No release notes available." />
+              </p>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={closeChangelog} variant="secondary">
+              <Tx k="common.actions.close" fallback="Close" />
+            </Button>
+            <Button
+              onClick={() => {
+                setShowChangelog(false);
+                handleDownloadUpdate();
+              }}
+              icon={Download}
+            >
+              <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </>
   );

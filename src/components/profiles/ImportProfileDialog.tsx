@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  X,
   Loader2,
   Download,
   CheckCircle2,
@@ -13,7 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { Button, CheckboxMark } from '../common/ui';
+import { Button, CheckboxMark, ModalHeader } from '../common/ui';
 import { Input, Textarea } from '../common/forms';
 import { Modal } from '../common/Modal';
 import ModThumbnail from '../ModThumbnail';
@@ -152,6 +151,7 @@ export default function ImportProfileDialog({
   onLikeWithoutSignIn,
 }: ImportProfileDialogProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   // In social mode the share code arrives via SocialProfileHeader's detail
   // fetch; the input is empty until then. In paste mode it's seeded from
   // initialInput as before.
@@ -678,30 +678,18 @@ export default function ImportProfileDialog({
   return (
     <Modal
       onClose={onClose}
-      labelledBy="import-profile-title"
+      labelledBy={titleId}
       size="none"
       dismissable={!importing}
-      panelClassName={`${socialProfileId ? 'max-w-5xl' : 'max-w-4xl'} max-h-[92vh] flex flex-col overflow-hidden`}
+      panelClassName={`${socialProfileId ? 'max-w-5xl' : 'max-w-4xl'} max-h-[92vh]`}
     >
-        <div className={`flex items-start justify-between ${parsed || socialProfileId ? 'px-4 sm:px-6 py-3' : 'p-4 sm:p-6'} border-b border-hl/10`}>
-          <div className="min-w-0">
-            <h2 id="import-profile-title" className="text-base sm:text-lg font-bold text-text-primary">
-              {t('importProfile.title')}
-            </h2>
-            {!parsed && !socialProfileId && (
-              <p className="hidden sm:block text-sm text-text-secondary mt-1">
-                {t('importProfile.description')}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <ModalHeader
+          title={t('importProfile.title')}
+          titleId={titleId}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          className="border-b border-hl/10 pb-3 sm:px-6"
+        />
 
         {(() => {
           // Wrap the existing body blocks (skeleton / input form / resolved)
@@ -754,6 +742,9 @@ export default function ImportProfileDialog({
 
         {showInputForm && (
           <div className="p-4 sm:p-6 border-b border-hl/10 space-y-3">
+            <p className="hidden sm:block text-sm text-text-secondary">
+              {t('importProfile.description')}
+            </p>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

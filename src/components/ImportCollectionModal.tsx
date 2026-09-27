@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  X,
   Loader2,
-  Library,
   Download,
   CheckCircle2,
   AlertTriangle,
@@ -20,7 +18,7 @@ import {
   createProfileFromGameBananaIds,
 } from '../lib/api';
 import { classifyGameBananaImportInput } from '../lib/bulkGameBananaImport';
-import { Button } from './common/ui';
+import { Button, ModalHeader } from './common/ui';
 import { Textarea } from './common/forms';
 import { Modal } from './common/Modal';
 import ModThumbnail from './ModThumbnail';
@@ -157,6 +155,7 @@ export default function ImportCollectionModal({
   onClose,
 }: ImportCollectionModalProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [input, setInput] = useState('');
   const [collection, setCollection] = useState<GameBananaCollection | null>(null);
   const [rows, setRows] = useState<ItemRow[]>([]);
@@ -793,37 +792,22 @@ export default function ImportCollectionModal({
   return (
     <Modal
       onClose={onClose}
-      labelledBy="import-collection-title"
+      labelledBy={titleId}
       size="xl"
       // Escape/backdrop close: but only when we're not mid-submission (don't
       // yank the modal out from under a running batch).
       dismissable={!submitting}
-      panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
     >
-        {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-hl/10">
-          <div className="min-w-0 flex items-start gap-3">
-            <Library className="w-6 h-6 text-accent flex-shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <h2 id="import-collection-title" className="text-xl font-bold text-text-primary">
-                {t('importCollection.title')}
-              </h2>
-              <p className="text-sm text-text-secondary mt-1">
-                {t('importCollection.pasteHint')}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <ModalHeader
+          title={t('importCollection.title')}
+          titleId={titleId}
+          subtitle={t('importCollection.pasteHint')}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+        />
 
         {/* Input */}
-        <div className="p-6 border-b border-hl/10">
+        <div className="border-b border-border px-5 pb-5 pt-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -1181,13 +1165,13 @@ export default function ImportCollectionModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-hl/10">
+        <div className="flex-shrink-0 border-t border-border">
           {/* Post-install prompt: only appears once every submitted item has
               reached a terminal state and at least one mod actually installed.
               Lets the user save the batch as a profile without making the
               decision up front. */}
           {batchSettled && installedBatchIds.length > 0 && (
-            <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-3 text-sm">
+            <div className="px-5 pt-3 pb-1 flex items-center justify-between gap-3 text-sm">
               <div className="text-text-secondary min-w-0 flex items-center gap-2">
                 <span className="text-text-primary font-medium">
                   {t('importCollection.saveAsProfilePrompt', { count: installedBatchIds.length })}
@@ -1229,7 +1213,7 @@ export default function ImportCollectionModal({
             </div>
           )}
 
-          <div className="p-4 flex items-center justify-between gap-3">
+          <div className="px-5 py-3 flex items-center justify-between gap-3">
             <div className="text-xs text-text-secondary">
               {submitting && counts.queued + counts.downloading === 0
                 ? t('importCollection.status.submitting')

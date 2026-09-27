@@ -8,7 +8,7 @@
 import { useState, type FormEvent } from 'react';
 import { ListPlus, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { Button, ModalHeader } from '../common/ui';
 import { Input } from '../common/forms';
 import {
@@ -83,7 +83,7 @@ export function CreateModListModal({ modName, onClose, onCreate }: CreateModList
 
   return (
     <Modal onClose={onClose} labelledBy="create-mod-list-title" size="sm">
-      <form onSubmit={submit}>
+      <form onSubmit={submit} className="flex min-h-0 flex-col">
         <ModalHeader
           titleId="create-mod-list-title"
           title={t('installed.lists.createTitle')}
@@ -92,7 +92,7 @@ export function CreateModListModal({ modName, onClose, onCreate }: CreateModList
           onClose={onClose}
           closeLabel={t('common.actions.close')}
         />
-        <div className="p-5">
+        <ModalBody>
           <Input
             autoFocus
             value={name}
@@ -101,15 +101,15 @@ export function CreateModListModal({ modName, onClose, onCreate }: CreateModList
             aria-label={t('installed.lists.nameLabel')}
             maxLength={80}
           />
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+        </ModalBody>
+        <ModalFooter>
           <Button type="button" variant="ghost" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>
           <Button type="submit" disabled={!trimmed}>
             {t('installed.lists.create')}
           </Button>
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

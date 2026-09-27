@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, AlertTriangle, Loader2, CheckCircle2, Globe } from 'lucide-react';
-import { Button } from '../common/ui';
+import { AlertTriangle, Loader2, CheckCircle2, Globe } from 'lucide-react';
+import { Button, ModalHeader } from '../common/ui';
 import { Input, Textarea, FormField } from '../common/forms';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import {
   exportPortableProfile,
   socialPublish,
@@ -43,6 +43,7 @@ export default function PublishDialog({
   onPublished,
 }: PublishDialogProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [title, setTitle] = useState(profileName);
   const [description, setDescription] = useState('');
   const [exportResult, setExportResult] = useState<PortableExportResult | null>(null);
@@ -99,32 +100,21 @@ export default function PublishDialog({
   return (
     <Modal
       onClose={onClose}
-      labelledBy="publish-profile-title"
+      labelledBy={titleId}
       size="md"
       dismissable={!submitting}
-      panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-hl/10">
-          <div className="min-w-0">
-            <h2 id="publish-profile-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
-              <Globe className="w-5 h-5 text-accent" />
-              {t('profiles.actions.publishToDiscover')}
-            </h2>
-            <p className="text-sm text-text-secondary mt-1 truncate" title={profileName}>
-              {profileName}
-            </p>
-          </div>
-          <button
-            onClick={() => { if (!submitting) onClose(); }}
-            disabled={submitting}
-            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <ModalHeader
+          title={t('profiles.actions.publishToDiscover')}
+          titleId={titleId}
+          subtitle={profileName}
+          subtitleTitle={profileName}
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          closeDisabled={submitting}
+        />
 
-        <div className="p-6 space-y-4">
+        <ModalBody className="space-y-4">
           {published ? (
             <div className="space-y-3">
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
@@ -135,9 +125,6 @@ export default function PublishDialog({
                     {t('social.publish.liveOnDiscover')}
                   </div>
                 </div>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={onClose}>{t('common.actions.done')}</Button>
               </div>
             </div>
           ) : (
@@ -243,23 +230,29 @@ export default function PublishDialog({
                   <span>{submitError}</span>
                 </div>
               )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="ghost" onClick={onClose} disabled={submitting}>
-                  {t('common.actions.cancel')}
-                </Button>
-                <Button
-                  onClick={handlePublish}
-                  disabled={!canSubmit}
-                  isLoading={submitting}
-                  icon={Globe}
-                >
-                  {t('social.publish.publish')}
-                </Button>
-              </div>
             </>
           )}
-        </div>
+        </ModalBody>
+
+        <ModalFooter>
+          {published ? (
+            <Button onClick={onClose}>{t('common.actions.done')}</Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose} disabled={submitting}>
+                {t('common.actions.cancel')}
+              </Button>
+              <Button
+                onClick={handlePublish}
+                disabled={!canSubmit}
+                isLoading={submitting}
+                icon={Globe}
+              >
+                {t('social.publish.publish')}
+              </Button>
+            </>
+          )}
+        </ModalFooter>
     </Modal>
   );
 }

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, FolderPlus, Search, X } from 'lucide-react';
+import { Check, FolderPlus, Search } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { modPreferenceKey } from '../../lib/disabledModPrefs';
-import { Modal } from '../common/Modal';
-import { Button } from '../common/ui';
+import { Modal, ModalFooter } from '../common/Modal';
+import { Button, ModalHeader } from '../common/ui';
 
 interface CategoryModPickerProps {
   /** Every installed mod. Ones already filed here are filtered out below rather
@@ -44,6 +44,7 @@ export function CategoryModPicker({
   onConfirm,
 }: CategoryModPickerProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -103,29 +104,17 @@ export function CategoryModPicker({
     <Modal
       onClose={onClose}
       size="lg"
-      labelledBy="category-mod-picker-title"
-      panelClassName="flex max-h-[80vh] flex-col"
+      labelledBy={titleId}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-border p-4">
-        <div className="min-w-0">
-          <h2 id="category-mod-picker-title" className="text-base font-semibold text-text-primary">
-            {t('locker.categories.pickerTitle', { name: categoryName })}
-          </h2>
-          <p className="mt-1 text-xs text-text-secondary">
-            {t('locker.categories.pickerDescription')}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('common.actions.close')}
-          className="flex-shrink-0 rounded-sm p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      <ModalHeader
+        title={t('locker.categories.pickerTitle', { name: categoryName })}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+      />
 
-      <div className="border-b border-border p-4">
+      <div className="flex-shrink-0 space-y-3 border-b border-border px-5 pb-4 pt-2">
+        <p className="text-xs text-text-secondary">{t('locker.categories.pickerDescription')}</p>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
           <input
@@ -201,20 +190,18 @@ export function CategoryModPicker({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border p-4">
-        <span className="text-xs text-text-secondary">
+      <ModalFooter>
+        <span className="mr-auto text-xs text-text-secondary">
           {t('locker.categories.selectedCount', { count: resolvableSelected.length })}
         </span>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button onClick={confirm} disabled={resolvableSelected.length === 0}>
-            <FolderPlus className="h-4 w-4" />
-            {t('locker.categories.add')}
-          </Button>
-        </div>
-      </div>
+        <Button variant="secondary" onClick={onClose}>
+          {t('common.actions.cancel')}
+        </Button>
+        <Button onClick={confirm} disabled={resolvableSelected.length === 0}>
+          <FolderPlus className="h-4 w-4" />
+          {t('locker.categories.add')}
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 }

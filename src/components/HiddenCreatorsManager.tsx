@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HiddenCreator } from '../types/mod';
-import { Modal } from './common/Modal';
+import { Modal, ModalBody } from './common/Modal';
 import { Button, ModalHeader } from './common/ui';
 
 interface HiddenCreatorsManagerProps {
@@ -85,7 +85,7 @@ export function HiddenCreatorsModal({ open, onClose, creators, onRemove }: Hidde
       onClose={onClose}
       labelledBy="hidden-creators-modal-title"
       size="md"
-      panelClassName="flex max-h-[min(680px,calc(100vh-2rem))] flex-col overflow-hidden"
+      panelClassName="max-h-[min(680px,100%)]"
     >
       <ModalHeader
         titleId="hidden-creators-modal-title"
@@ -93,9 +93,9 @@ export function HiddenCreatorsModal({ open, onClose, creators, onRemove }: Hidde
         subtitle={t('hiddenCreators.description')}
         onClose={onClose}
       />
-      <div className="min-h-0 overflow-y-auto p-5">
+      <ModalBody>
         <HiddenCreatorsManager creators={creators} onRemove={onRemove} />
-      </div>
+      </ModalBody>
     </Modal>
   );
 }

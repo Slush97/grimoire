@@ -24,7 +24,7 @@ import type { CropRect } from '../../types/electron';
 import { Button, ModalHeader, SegmentedControl, Toggle } from '../common/ui';
 import Tx from '../translation/Tx';
 import LockerImageCropper from '../locker/LockerImageCropper';
-import { Modal } from '../common/Modal';
+import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 
 // The launch buttons / volume bar are wide-and-short banners; frame custom
 // uploads to roughly that shape so the crop preview matches what's rendered.
@@ -567,12 +567,8 @@ export default function AppearanceArtSection() {
           size="sm"
           dismissable={!busy}
           labelledBy="appearance-art-modal-title"
-          backdropClassName="backdrop-blur-sm"
-          panelClassName="relative flex max-h-[90vh] flex-col overflow-hidden"
         >
-            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-
-            {/* Header (pinned). Close is disabled while busy to match the blocked
+            {/* Close is disabled while busy to match the blocked
                 Escape/backdrop (dismissable={!busy}). */}
             <ModalHeader
               title={t(editingConfig.labelKey, editingConfig.fallbackLabel)}
@@ -582,8 +578,7 @@ export default function AppearanceArtSection() {
               closeDisabled={busy}
             />
 
-            {/* Body (scrolls) */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
+            <ModalBody>
               {/* Source-kind tabs (selection only; nothing is saved until Apply) */}
               <SegmentedControl
                 className="mb-4"
@@ -666,7 +661,7 @@ export default function AppearanceArtSection() {
               )}
 
               {showCropper && (
-                <div className="space-y-3 pb-1">
+                <div className="space-y-3">
                   <LockerImageCropper
                     imageDataUrl={cropSource}
                     aspect={SURFACE_ASPECT}
@@ -696,20 +691,20 @@ export default function AppearanceArtSection() {
               )}
 
               {error && <p className="mt-3 text-xs text-state-danger">{error}</p>}
-            </div>
+            </ModalBody>
 
             {/* Footer (pinned). Framed images commit through the cropper's own
                 button; everything else (none, accent-glow default, hero with
                 calibrated framing) commits here. */}
             {showFooter && (
-              <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
-                <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
+              <ModalFooter>
+                <Button variant="secondary" onClick={close} disabled={busy}>
                   {t('common.actions.cancel')}
                 </Button>
-                <Button size="sm" onClick={() => void applyDraft()} disabled={busy}>
+                <Button onClick={() => void applyDraft()} disabled={busy}>
                   {t('common.actions.apply')}
                 </Button>
-              </div>
+              </ModalFooter>
             )}
         </Modal>
       )}

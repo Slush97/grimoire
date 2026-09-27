@@ -13,7 +13,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { Modal } from './common/Modal';
+import { Modal, ModalFooter } from './common/Modal';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from './common/ui';
 import { Input } from './common/forms';
 import {
@@ -433,7 +433,7 @@ export default function ImportCustomModsModal({
       labelledBy="import-custom-mods-title"
       size="xl"
       dismissable={!submitting}
-      panelClassName="flex max-h-[85vh] flex-col overflow-hidden"
+      panelClassName="max-h-[min(85vh,100%)]"
     >
       <ModalHeader
         title={
@@ -449,7 +449,7 @@ export default function ImportCustomModsModal({
       />
 
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4"
         onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!submitting) setDragActive(true); }}
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = submitting ? 'none' : 'copy'; if (!submitting) setDragActive(true); }}
         onDragLeave={(e) => {
@@ -703,14 +703,18 @@ export default function ImportCustomModsModal({
         )}
       </div>
 
-      <div className="flex flex-shrink-0 flex-col items-center gap-1.5 border-t border-border px-5 py-3">
+      <ModalFooter>
+        {unnamedCount > 0 && (
+          <span className="mr-auto text-2xs text-state-danger">
+            {t('installed.batchImport.unnamedBlocked', { count: unnamedCount })}
+          </span>
+        )}
         <Button
           variant="primary"
           icon={FilePlus}
           onClick={handleSubmit}
           disabled={!canSubmit}
           isLoading={submitting}
-          className="!px-10 !py-1.5"
         >
           {addToGroup
             ? t('installed.batchImport.addVariantCount', { count: rows.length })
@@ -720,12 +724,7 @@ export default function ImportCustomModsModal({
               ? t('installed.batchImport.importCount', { count: rows.length })
               : t('profiles.actions.import')}
         </Button>
-        {unnamedCount > 0 && (
-          <span className="text-2xs text-state-danger">
-            {t('installed.batchImport.unnamedBlocked', { count: unnamedCount })}
-          </span>
-        )}
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }

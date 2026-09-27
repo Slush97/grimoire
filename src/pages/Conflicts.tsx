@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe, Ban } from 'lucide-react';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe, Ban, CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getConflicts,
@@ -25,6 +25,7 @@ import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { modLoadOrder } from '../lib/lockerUtils';
 import { Button } from '../components/common/ui';
+import ConflictExplainer from '../components/conflicts/ConflictExplainer';
 import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
 import ConflictFileList from '../components/conflicts/ConflictFileList';
@@ -186,6 +187,7 @@ export default function Conflicts() {
   // the sequential ignoreConflict calls run so the user can't cancel
   // mid-iteration and leave the page in a partial state.
   const [ignoreAllConfirmOpen, setIgnoreAllConfirmOpen] = useState(false);
+  const [explainerOpen, setExplainerOpen] = useState(false);
   const [ignoringAll, setIgnoringAll] = useState(false);
   const [clearIgnoredConfirmOpen, setClearIgnoredConfirmOpen] = useState(false);
   const [clearingIgnored, setClearingIgnored] = useState(false);
@@ -603,7 +605,7 @@ export default function Conflicts() {
           conflicts.length === 0 ? (
             <Tx
               k="conflicts.header.noActiveDescription"
-              fallback="No active conflicts - review or restore your ignored pairs below."
+              fallback="No active conflicts. Review or restore your ignored pairs below."
             />
           ) : (
             <Tx
@@ -614,6 +616,9 @@ export default function Conflicts() {
         }
         action={
           <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setExplainerOpen(true)} icon={CircleHelp}>
+              {t('conflicts.explainer.title')}
+            </Button>
             {conflicts.length > 0 && (
               <ViewModeToggle
                 value={viewMode}
@@ -641,6 +646,8 @@ export default function Conflicts() {
         }
         className="mb-6"
       />
+
+      <ConflictExplainer open={explainerOpen} onClose={() => setExplainerOpen(false)} />
 
       {/* Empty active-conflict slot when every conflict has been dismissed.
           We don't redirect to the global empty state because the user still

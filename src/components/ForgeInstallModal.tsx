@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Modal } from './common/Modal';
+import { Modal, ModalBody, ModalFooter } from './common/Modal';
+import { Button } from './common/ui';
 import { formatBytes } from '../lib/formatBytes';
 import { getForgeBadgePath } from '../lib/assetPath';
 import type { ForgeInstallRequestData } from '../types/electron';
@@ -43,6 +44,7 @@ export default function ForgeInstallModal({
 }: ForgeInstallModalProps) {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const titleId = useId();
     const [armed, setArmed] = useState(false);
 
     useEffect(() => {
@@ -61,15 +63,8 @@ export default function ForgeInstallModal({
     };
 
     return (
-        <Modal
-            open
-            onClose={() => onRespond(false)}
-            labelledBy="forge-install-title"
-            size="sm"
-            panelClassName="relative overflow-hidden p-6"
-        >
-            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-
+        <Modal open onClose={() => onRespond(false)} labelledBy={titleId} size="sm">
+            <ModalBody className="pt-5">
             <div className="flex items-start gap-4">
                 <img
                     src={getForgeBadgePath()}
@@ -78,14 +73,11 @@ export default function ForgeInstallModal({
                     className="h-12 w-12 flex-shrink-0 rounded-sm border border-border object-cover"
                 />
                 <div className="min-w-0">
-                    <h3
-                        id="forge-install-title"
-                        className="text-lg font-semibold text-text-primary"
-                    >
+                    <h2 id={titleId} className="font-reaver text-base font-semibold text-text-primary">
                         {needsGamePath
                             ? t('forge.install.needsPathTitle')
                             : t('forge.install.title')}
-                    </h3>
+                    </h2>
                     <p className="text-xs text-text-secondary">
                         {t('forge.install.from', { origin: displayOrigin })}
                     </p>
@@ -93,7 +85,7 @@ export default function ForgeInstallModal({
             </div>
 
             {needsGamePath ? (
-                <p className="mt-4 text-text-secondary">{t('forge.install.needsPathBody')}</p>
+                <p className="mt-4 text-sm text-text-secondary">{t('forge.install.needsPathBody')}</p>
             ) : (
                 <>
                     <dl className="mt-4 space-y-2 rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-sm">
@@ -133,30 +125,20 @@ export default function ForgeInstallModal({
                 </>
             )}
 
-            <div className="mt-5 flex justify-end gap-3">
-                <button
-                    onClick={() => onRespond(false)}
-                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-hl/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
-                >
+            </ModalBody>
+
+            <ModalFooter>
+                <Button variant="secondary" onClick={() => onRespond(false)}>
                     {t('common.actions.cancel')}
-                </button>
+                </Button>
                 {needsGamePath ? (
-                    <button
-                        onClick={goToSettings}
-                        className="px-4 py-2 rounded-sm font-medium border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                    >
-                        {t('forge.install.openSettings')}
-                    </button>
+                    <Button onClick={goToSettings}>{t('forge.install.openSettings')}</Button>
                 ) : (
-                    <button
-                        onClick={() => onRespond(true)}
-                        disabled={!armed}
-                        className="px-4 py-2 rounded-sm font-medium border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
-                    >
+                    <Button onClick={() => onRespond(true)} disabled={!armed}>
                         {t('forge.install.confirm')}
-                    </button>
+                    </Button>
                 )}
-            </div>
+            </ModalFooter>
         </Modal>
     );
 }

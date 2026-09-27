@@ -144,8 +144,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
             dismissable={false}
             labelledBy="welcome-modal-title"
             size="none"
-            panelClassName="max-w-xl overflow-hidden animate-scale-in"
-            backdropClassName="backdrop-blur-sm"
+            panelClassName="max-w-xl"
         >
                 {/* Header */}
                 <div className="p-6 pb-4 text-center">
@@ -162,7 +161,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-5">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
                     {/* Step 1: Game Path */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
