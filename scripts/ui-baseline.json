@@ -47,6 +47,12 @@
   "src/components/WelcomeModal.tsx": {
     "raw-palette": 4
   },
+  "src/components/browse/BrowseModCard.tsx": {
+    "em-dash": 3
+  },
+  "src/components/browse/cardUtils.ts": {
+    "em-dash": 1
+  },
   "src/components/common/DynamicSelect.tsx": {
     "focus-ring": 2
   },
@@ -186,7 +192,7 @@
   "src/pages/Browse.tsx": {
     "raw-palette": 1,
     "focus-ring": 2,
-    "em-dash": 14
+    "em-dash": 10
   },
   "src/pages/Conflicts.tsx": {
     "raw-palette": 23,
