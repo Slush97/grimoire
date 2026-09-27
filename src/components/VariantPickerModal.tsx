@@ -325,7 +325,7 @@ export default function VariantPickerModal({
                 className={`relative flex items-center gap-3 rounded-lg border p-3 transition-colors ${
                     isActive
                         ? 'border-accent/40 bg-accent/5'
-                        : 'border-border bg-bg-tertiary hover:bg-white/5'
+                        : 'border-border bg-bg-tertiary hover:bg-hl/5'
                 } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-2xl ring-1 ring-accent/30' : ''}`}
             >
                 <button
@@ -433,7 +433,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={cancelRename}
                             disabled={!!pending}
-                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors cursor-pointer disabled:opacity-50"
                             title={t('common.actions.cancel')}
                             aria-label={t('profiles.actions.cancelRename')}
                         >

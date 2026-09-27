@@ -439,7 +439,7 @@ export function LockerHeroView({
                     ? 'cursor-default border-transparent opacity-40'
                     : isActive
                       ? 'border-accent/60 bg-accent/15 cursor-pointer'
-                      : 'border-transparent hover:bg-white/10 cursor-pointer'
+                      : 'border-transparent hover:bg-hl/10 cursor-pointer'
                 }`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />

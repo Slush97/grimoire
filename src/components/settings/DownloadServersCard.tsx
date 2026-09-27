@@ -263,7 +263,7 @@ export default function DownloadServersCard() {
                     : null}
                 </dd>
               </div>
-              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-l border-white/10 pl-4">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-l border-hl/10 pl-4">
                 <div className="min-w-0 flex-1 basis-48">
                   <dt className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
                     <a
@@ -324,7 +324,7 @@ export default function DownloadServersCard() {
               </div>
             </dl>
 
-            <section className="border-t border-white/5 pt-4">
+            <section className="border-t border-hl/5 pt-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-medium text-text-primary">
@@ -377,7 +377,7 @@ export default function DownloadServersCard() {
 
               {hasLocalResults ? (
                 <ul
-                  className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-px overflow-hidden rounded-sm border border-white/5 bg-white/5"
+                  className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-px overflow-hidden rounded-sm border border-hl/5 bg-hl/5"
                   aria-label={t('settings.downloadServers.localListLabel', {
                     defaultValue: 'Locally tested download servers',
                   })}

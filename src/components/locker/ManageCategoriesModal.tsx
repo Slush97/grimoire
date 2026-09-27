@@ -106,7 +106,7 @@ function CategoryRow({ category, count, onRename, onDelete }: CategoryRowProps) 
         )}
       </div>
       {rejected && (
-        <p className="mt-1 px-1 text-[11px] text-state-danger">
+        <p className="mt-1 px-1 text-2xs text-state-danger">
           {t('locker.categories.duplicateName')}
         </p>
       )}

@@ -160,19 +160,19 @@ export function CategoryModPicker({
                     className={`flex w-full items-center gap-3 rounded-sm border px-2.5 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                       isSelected
                         ? 'border-accent bg-accent/10'
-                        : 'border-transparent hover:border-white/10 hover:bg-bg-tertiary'
+                        : 'border-transparent hover:border-hl/10 hover:bg-bg-tertiary'
                     }`}
                   >
                     <span
                       className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border ${
                         isSelected
                           ? 'border-accent bg-accent text-accent-foreground'
-                          : 'border-white/25'
+                          : 'border-hl/25'
                       }`}
                     >
                       {isSelected && <Check className="h-3 w-3" />}
                     </span>
-                    <span className="h-9 w-16 flex-shrink-0 overflow-hidden rounded-sm border border-white/[0.08] bg-bg-tertiary">
+                    <span className="h-9 w-16 flex-shrink-0 overflow-hidden rounded-sm border border-hl/[0.08] bg-bg-tertiary">
                       {showArt && (
                         <img
                           src={mod.thumbnailUrl}
@@ -189,7 +189,7 @@ export function CategoryModPicker({
                       </span>
                     </span>
                     {!mod.enabled && (
-                      <span className="flex-shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
+                      <span className="flex-shrink-0 rounded-full border border-hl/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
                         {t('locker.categories.disabled')}
                       </span>
                     )}

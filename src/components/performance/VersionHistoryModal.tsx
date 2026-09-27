@@ -146,7 +146,7 @@ export default function VersionHistoryModal({
                 )}
                 {isBundled && (
                   <span
-                    className="inline-flex items-center gap-1 rounded-sm bg-white/5 px-1.5 py-0.5 text-[10px] text-text-secondary"
+                    className="inline-flex items-center gap-1 rounded-sm bg-hl/5 px-1.5 py-0.5 text-[10px] text-text-secondary"
                     title={t('performance.history.bundledHint')}
                   >
                     <Package className="w-3 h-3" aria-hidden="true" />
@@ -155,7 +155,7 @@ export default function VersionHistoryModal({
                 )}
                 {!isBundled && entry.cached && (
                   <span
-                    className="inline-flex items-center gap-1 rounded-sm bg-white/5 px-1.5 py-0.5 text-[10px] text-text-secondary"
+                    className="inline-flex items-center gap-1 rounded-sm bg-hl/5 px-1.5 py-0.5 text-[10px] text-text-secondary"
                     title={t('performance.history.downloadedHint')}
                   >
                     <HardDriveDownload className="w-3 h-3" aria-hidden="true" />

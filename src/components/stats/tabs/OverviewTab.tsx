@@ -152,7 +152,7 @@ export function OverviewTab() {
                             // pr-6 lines these up with the row columns: the body
                             // is inset 24px further than the header (scroll pr-1 +
                             // 10px scrollbar gutter + 10px row padding).
-                            <div className="flex items-center gap-4 pr-6 text-[11px] uppercase tracking-wider text-text-secondary">
+                            <div className="flex items-center gap-4 pr-6 text-2xs uppercase tracking-wider text-text-secondary">
                                 <span className="w-14 text-right">{t('stats.overview.games')}</span>
                                 <span className="w-14 text-right">{t('stats.overview.winPercent')}</span>
                                 <span className="w-14 text-right hidden sm:block">KDA</span>

@@ -22,7 +22,7 @@ import { ChevronDown, type LucideIcon } from 'lucide-react';
 // pickers (HeroSelect, DynamicSelect) intentionally stay separate.
 //
 // Canonical control surface (see docs/ui-conventions.md):
-//   bg-bg-tertiary border border-white/5 rounded-sm
+//   bg-bg-tertiary border border-hl/5 rounded-sm
 //   focus-visible:ring-2 focus-visible:ring-accent
 //   disabled:opacity-60 disabled:cursor-not-allowed
 // ============================================================================
@@ -30,7 +30,7 @@ import { ChevronDown, type LucideIcon } from 'lucide-react';
 type ControlSize = 'sm' | 'md';
 
 const CONTROL_BASE =
-    'w-full bg-bg-tertiary border border-white/5 rounded-sm text-text-primary text-sm ' +
+    'w-full bg-bg-tertiary border border-hl/5 rounded-sm text-text-primary text-sm ' +
     'placeholder:text-text-secondary/50 transition-colors ' +
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ' +
     'disabled:opacity-60 disabled:cursor-not-allowed';

@@ -392,17 +392,17 @@ export default function LockerImageCropper({
           ) : (
             <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-text-secondary">
               <ImagePlus className={`h-6 w-6 ${dropActive ? 'text-accent opacity-100' : 'opacity-70'}`} />
-              {emptyHint && <span className="text-[11px] leading-snug">{emptyHint}</span>}
+              {emptyHint && <span className="text-2xs leading-snug">{emptyHint}</span>}
             </div>
           )}
 
           {img && (
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               {/* Rule-of-thirds guides. */}
-              <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/25" />
-              <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/25" />
-              <div className="absolute top-1/3 left-0 right-0 h-px bg-white/25" />
-              <div className="absolute top-2/3 left-0 right-0 h-px bg-white/25" />
+              <div className="absolute left-1/3 top-0 bottom-0 w-px bg-hl/25" />
+              <div className="absolute left-2/3 top-0 bottom-0 w-px bg-hl/25" />
+              <div className="absolute top-1/3 left-0 right-0 h-px bg-hl/25" />
+              <div className="absolute top-2/3 left-0 right-0 h-px bg-hl/25" />
 
               {/* Name + gradient chrome preview (to scale with the frame). */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
@@ -456,7 +456,7 @@ export default function LockerImageCropper({
       </div>
 
       {img && (
-        <p className="text-center text-[11px] leading-snug text-text-secondary">
+        <p className="text-center text-2xs leading-snug text-text-secondary">
           {t('locker.crop.instructions')}
         </p>
       )}
@@ -473,14 +473,14 @@ export default function LockerImageCropper({
           onChange={(e) => applyZoom(Number(e.target.value))}
           className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-border accent-accent disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <span className="w-10 text-right text-[11px] tabular-nums text-text-secondary">{zoom.toFixed(1)}x</span>
+        <span className="w-10 text-right text-2xs tabular-nums text-text-secondary">{zoom.toFixed(1)}x</span>
         <button
           type="button"
           disabled={!img}
           onClick={reset}
           title={t('locker.crop.resetZoom')}
           aria-label={t('locker.crop.resetZoom')}
-          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </button>

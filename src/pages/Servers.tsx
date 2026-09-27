@@ -268,7 +268,7 @@ export default function Servers() {
               return (
                 <li
                   key={s.id}
-                  className="grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-white/[0.02] md:grid-cols-[1fr_140px_90px_90px_110px] md:items-center md:gap-3"
+                  className="grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-hl/[0.02] md:grid-cols-[1fr_140px_90px_90px_110px] md:items-center md:gap-3"
                 >
                   {/* name + status */}
                   <div className="flex min-w-0 items-center gap-2.5">

@@ -43,7 +43,7 @@ function GradientTile({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`${TILE_BASE} ${active ? 'border-accent/70' : 'border-white/10 hover:border-white/30'}`}
+      className={`${TILE_BASE} ${active ? 'border-accent/70' : 'border-hl/10 hover:border-hl/30'}`}
       style={{ background: gradient ? backgroundGradientPreviewCss(gradient) : 'var(--color-bg-primary)' }}
     >
       {children}
@@ -171,7 +171,7 @@ export default function BackgroundGradientPicker() {
           aria-label={t('settings.appearance.background.custom')}
           aria-pressed={isCustomActive}
           aria-haspopup="dialog"
-          className={`${TILE_BASE} ${isCustomActive ? 'border-accent/70' : 'border-white/10 hover:border-white/30'}`}
+          className={`${TILE_BASE} ${isCustomActive ? 'border-accent/70' : 'border-hl/10 hover:border-hl/30'}`}
           style={
             isCustomActive
               ? { background: backgroundGradientPreviewCss(saved) }
@@ -192,7 +192,7 @@ export default function BackgroundGradientPicker() {
           role="presentation"
         >
           <div
-            className="relative w-full max-w-sm overflow-hidden rounded-sm border border-white/10 bg-bg-secondary p-6 shadow-2xl"
+            className="relative w-full max-w-sm overflow-hidden rounded-sm border border-hl/10 bg-bg-secondary p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -206,7 +206,7 @@ export default function BackgroundGradientPicker() {
 
             <div className="space-y-4">
               <div
-                className="h-20 w-full rounded-sm border border-white/10"
+                className="h-20 w-full rounded-sm border border-hl/10"
                 style={{ background: backgroundGradientPreviewCss(draft) }}
                 aria-hidden
               />
@@ -224,7 +224,7 @@ export default function BackgroundGradientPicker() {
 
               <div className="flex items-center gap-2">
                 <span
-                  className="block h-9 w-9 shrink-0 rounded-sm border border-white/10"
+                  className="block h-9 w-9 shrink-0 rounded-sm border border-hl/10"
                   style={{ backgroundColor: draft[corner] }}
                   aria-hidden
                 />
@@ -232,7 +232,7 @@ export default function BackgroundGradientPicker() {
                 <HexColorInput
                   color={draft[corner]}
                   onChange={updateDraft}
-                  className="flex-1 rounded-sm border border-white/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="flex-1 rounded-sm border border-hl/5 bg-bg-tertiary px-2 py-1.5 font-mono text-sm uppercase text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
                 />
               </div>
 

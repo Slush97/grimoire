@@ -464,7 +464,7 @@ export function LockerOverridesModal({
                         >
                             <Icon className="h-4 w-4" />
                             {label}
-                            <span className="rounded-full bg-bg-tertiary px-1.5 text-[11px] tabular-nums text-text-secondary">
+                            <span className="rounded-full bg-bg-tertiary px-1.5 text-2xs tabular-nums text-text-secondary">
                                 {count}
                             </span>
                         </button>
@@ -527,7 +527,7 @@ export function LockerOverridesModal({
                                                     disabled={busy}
                                                     title={`Remove ${card.heroName} card`}
                                                     aria-label={`Remove ${card.heroName} card`}
-                                                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/85 ring-1 ring-white/15 backdrop-blur-sm transition-all hover:bg-red-500 hover:text-white hover:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                                                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/85 ring-1 ring-hl/15 backdrop-blur-sm transition-all hover:bg-red-500 hover:text-white hover:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                                                 >
                                                     {isRemoving ? (
                                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -544,7 +544,7 @@ export function LockerOverridesModal({
                                                     <div className="truncate text-sm font-semibold text-text-primary">
                                                         {card.heroName}
                                                     </div>
-                                                    <div className="truncate text-[11px] text-text-secondary">
+                                                    <div className="truncate text-2xs text-text-secondary">
                                                         {sourceLabel(card.modName ?? mod?.name, card.sourceFileName)}
                                                     </div>
                                                 </div>
@@ -705,7 +705,7 @@ export function LockerOverridesModal({
                                         >
                                             <HeroIcon heroName={color.heroName} />
                                             <span
-                                                className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-white/15"
+                                                className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-hl/15"
                                                 style={swatchStyle}
                                                 aria-hidden
                                             />
@@ -759,7 +759,7 @@ export function LockerOverridesModal({
                                         >
                                             <HeroIcon heroName={skin.heroName} />
                                             <span
-                                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-white/15"
+                                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-hl/15"
                                                 style={{ background: rainbowCss(0, 1, 1) }}
                                                 aria-hidden
                                             >

@@ -110,7 +110,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
           <button
             onClick={onClose}
             disabled={phase === 'working'}
-            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+            className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label={t('common.actions.close')}
           >
             <X size={18} />

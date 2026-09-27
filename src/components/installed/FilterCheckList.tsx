@@ -42,7 +42,7 @@ export function FilterCheckList({
   return (
     <div className="mt-3 border-t border-border pt-3">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+        <span className="text-2xs font-semibold uppercase tracking-wider text-text-secondary">
           {label}
         </span>
         <div className="flex items-center gap-2">
@@ -50,7 +50,7 @@ export function FilterCheckList({
             <button
               type="button"
               onClick={onClear}
-              className="text-[11px] text-accent hover:underline cursor-pointer"
+              className="text-2xs text-accent hover:underline cursor-pointer"
             >
               {t('common.actions.clear')}
             </button>
@@ -68,7 +68,7 @@ export function FilterCheckList({
               role="checkbox"
               aria-checked={checked}
               onClick={() => onToggle(option.key)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer"
             >
               <span
                 aria-hidden
@@ -79,7 +79,7 @@ export function FilterCheckList({
                 {checked && <Check className="h-3 w-3" />}
               </span>
               <span className="flex-1 truncate">{option.label}</span>
-              <span className="text-[11px] opacity-60">{option.count}</span>
+              <span className="text-2xs opacity-60">{option.count}</span>
             </button>
           );
         })}

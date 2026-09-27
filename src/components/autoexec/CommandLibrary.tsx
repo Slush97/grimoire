@@ -104,7 +104,7 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                           className={`group flex w-full items-start gap-3 rounded-sm border p-2.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                             added
                               ? 'cursor-default border-accent/20 bg-accent/5'
-                              : 'cursor-pointer border-white/5 bg-bg-tertiary/40 hover:border-accent/30 hover:bg-bg-tertiary'
+                              : 'cursor-pointer border-hl/5 bg-bg-tertiary/40 hover:border-accent/30 hover:bg-bg-tertiary'
                           }`}
                         >
                           <span className="min-w-0 flex-1">
@@ -118,7 +118,7 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                             <span className="mt-0.5 block text-xs leading-relaxed text-text-secondary">
                               <Tx k={cmd.descriptionKey} fallback={cmd.descriptionFallback} />
                             </span>
-                            <code className="mt-1.5 inline-block max-w-full truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-text-primary/70">
+                            <code className="mt-1.5 inline-block max-w-full truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-2xs text-text-primary/70">
                               {cmd.command}
                             </code>
                           </span>
@@ -128,7 +128,7 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
                             className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border transition-colors ${
                               added
                                 ? 'border-accent/30 text-accent'
-                                : 'border-white/10 text-text-secondary group-hover:border-accent/50 group-hover:text-accent'
+                                : 'border-hl/10 text-text-secondary group-hover:border-accent/50 group-hover:text-accent'
                             }`}
                           >
                             {added ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}

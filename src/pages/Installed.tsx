@@ -4648,7 +4648,7 @@ export default function Installed() {
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div
-        className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
+        className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
             : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
@@ -4732,7 +4732,7 @@ export default function Installed() {
                   ref={filterPanelRef}
                   className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans"
                 >
-                  <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
                   <div className="space-y-1">
@@ -4748,7 +4748,7 @@ export default function Installed() {
                         className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors cursor-pointer ${
                           sortMode === value
                             ? 'bg-accent/15 text-text-primary'
-                            : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                            : 'text-text-secondary hover:bg-hl/5 hover:text-text-primary'
                         }`}
                       >
                         <span>{label}</span>
@@ -4758,7 +4758,7 @@ export default function Installed() {
                   </div>
 
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                       {t('installed.filters.source')}
                     </div>
                     <div className="flex gap-1">
@@ -4777,10 +4777,10 @@ export default function Installed() {
                               )
                             }
                             aria-pressed={on}
-                            className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
+                            className={`flex-1 rounded-md border px-1.5 py-1 text-2xs transition-colors cursor-pointer ${
                               on
                                 ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
                             }`}
                           >
                             {label}
@@ -4792,7 +4792,7 @@ export default function Installed() {
                   </div>
 
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                       {t('installed.filters.status')}
                     </div>
                     <div className="flex gap-1">
@@ -4811,10 +4811,10 @@ export default function Installed() {
                               )
                             }
                             aria-pressed={on}
-                            className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
+                            className={`flex-1 rounded-md border px-1.5 py-1 text-2xs transition-colors cursor-pointer ${
                               on
                                 ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
                             }`}
                           >
                             {label}
@@ -4828,14 +4828,14 @@ export default function Installed() {
                   {heroOptions.length > 0 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                        <span className="text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                           {t('installed.filters.hero')}
                         </span>
                         {heroFilter !== 'all' && (
                           <button
                             type="button"
                             onClick={() => setHeroFilter('all')}
-                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                            className="text-2xs text-accent hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
                           </button>
@@ -4889,7 +4889,7 @@ export default function Installed() {
                         <button
                           type="button"
                           onClick={() => setManagingLists(true)}
-                          className="text-[11px] text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
+                          className="text-2xs text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
                         >
                           {t('installed.lists.manage')}
                         </button>
@@ -4908,7 +4908,7 @@ export default function Installed() {
                         setTagFilter([]);
                         setListFilter([]);
                       }}
-                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
+                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-2xs uppercase tracking-wider text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary cursor-pointer"
                     >
                       {t('common.actions.reset')}
                     </button>
@@ -4977,7 +4977,7 @@ export default function Installed() {
               />
               {viewMenuOpen && (
                 <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans [&_input]:font-sans">
-                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                  <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                     {t('installed.view.style')}
                   </div>
                   <ViewModeToggle
@@ -4991,7 +4991,7 @@ export default function Installed() {
                   />
 
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
                       {t('installed.view.cardSize')}
                     </div>
                     <div
@@ -5016,7 +5016,7 @@ export default function Installed() {
                       <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                     </div>
                     {layout === 'list' && (
-                      <p className="mt-1.5 text-[11px] text-text-secondary">
+                      <p className="mt-1.5 text-2xs text-text-secondary">
                         {t('installed.view.cardSizeGridOnly')}
                       </p>
                     )}
@@ -5043,7 +5043,7 @@ export default function Installed() {
             onClick={() => clearSoloRestore()}
             title={t('common.actions.dismiss')}
             aria-label={t('common.actions.dismiss')}
-            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md p-1 text-text-secondary hover:bg-hl/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -5121,10 +5121,10 @@ export default function Installed() {
                   ? t('installed.sections.sortCustomHint')
                   : t('installed.sections.sortAlphabeticalHint')
               }
-              className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+              className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-2xs font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
                 disabledAlphabetical
                   ? 'border-accent/40 bg-accent/10 text-accent'
-                  : 'border-white/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-white/20 hover:text-text-primary'
+                  : 'border-hl/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-hl/20 hover:text-text-primary'
               }`}
             >
               <ArrowDownAZ className="h-3.5 w-3.5" />
@@ -5932,10 +5932,10 @@ function UnknownFilterGuessModal({
       aria-labelledby="unknown-filter-title"
     >
       <div
-        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               {mod.isUnknown ? (
@@ -6040,10 +6040,10 @@ function BulkUnknownFixModal({
       aria-labelledby="bulk-unknown-title"
     >
       <div
-        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="bulk-unknown-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               <Wrench className="w-4 h-4 text-orange-400" />
@@ -6087,7 +6087,7 @@ function BulkUnknownFixModal({
         </div>
 
         <div className="grid min-h-0 grid-cols-[240px_1fr] flex-1">
-          <div className="border-r border-white/10 p-3 overflow-y-auto space-y-1.5">
+          <div className="border-r border-hl/10 p-3 overflow-y-auto space-y-1.5">
             {unknownMods.map((mod) => {
               const cached = cache[mod.id];
               const cachedMatch = cached?.crcMatch;
@@ -6119,14 +6119,14 @@ function BulkUnknownFixModal({
                   className={`w-full text-left rounded-md border px-3 py-2 transition-colors cursor-pointer ${
                     isSelected
                       ? 'bg-accent/10 border-accent/40'
-                      : 'bg-bg-tertiary/40 border-white/5 hover:bg-bg-tertiary hover:border-white/10'
+                      : 'bg-bg-tertiary/40 border-hl/5 hover:bg-bg-tertiary hover:border-hl/10'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-text-primary truncate">{mod.name}</span>
                     {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent flex-shrink-0" />}
                   </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] min-w-0">
+                  <div className="mt-0.5 flex items-center gap-2 text-2xs min-w-0">
                     <span className="font-mono text-text-tertiary truncate" title={mod.fileName}>{mod.fileName}</span>
                     <span className={`flex-shrink-0 ${statusTone}`}>{statusLabel}</span>
                   </div>
@@ -6286,7 +6286,7 @@ function UnknownMatchPanel({
       )}
 
       {/* Fallback: keep the file but give it a custom name/thumbnail. */}
-      <div className="rounded-md bg-bg-tertiary/40 border border-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-md bg-bg-tertiary/40 border border-hl/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-text-secondary">
           {t('installed.unknown.cantFindHint')}
         </span>
@@ -6297,12 +6297,12 @@ function UnknownMatchPanel({
 
       {/* Advanced, demoted: the heavy CRC auto-matcher. Carries an explicit
           rate-limit warning and never runs without a click. */}
-      <details className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+      <details className="rounded-md bg-bg-tertiary/40 border border-hl/5 overflow-hidden">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-text-secondary hover:text-text-primary flex items-center gap-2">
           <Beaker className="w-4 h-4 text-accent flex-shrink-0" />
           {t('installed.unknown.autoDetectSummary')}
         </summary>
-        <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-hl/5 pt-3">
           <div className="flex items-start gap-2 text-xs text-yellow-200/90 bg-yellow-500/10 border border-yellow-500/25 rounded-md p-2.5">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
             <span>
@@ -6311,7 +6311,7 @@ function UnknownMatchPanel({
           </div>
 
           {loading && (
-            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
                 <div className="min-w-0">
@@ -6350,7 +6350,7 @@ function UnknownMatchPanel({
           )}
 
           {result && match && !foundMatch && (
-            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 overflow-hidden">
+            <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 overflow-hidden">
               <div className="p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
@@ -6361,7 +6361,7 @@ function UnknownMatchPanel({
                     <p className="text-sm text-text-secondary mt-1">
                       {match.reason ?? t('installed.unknown.noArchiveMatched')}
                     </p>
-                    <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
+                    <div className="flex flex-wrap gap-2 mt-3 text-2xs text-text-tertiary">
                       <span>{t('installed.unknown.modsChecked', { count: match.checkedMods })}</span>
                       <span>{t('installed.unknown.filesChecked', { count: match.checkedFiles })}</span>
                       <span>{t('installed.unknown.bytesFetched', { bytes: match.bytesFetched.toLocaleString() })}</span>
@@ -6370,7 +6370,7 @@ function UnknownMatchPanel({
                 </div>
               </div>
               {autoMatchEnabled && (
-                <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+                <div className="border-t border-hl/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
                   <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRetry}>
                     {t('common.actions.retry')}
                   </Button>
@@ -6581,7 +6581,7 @@ function UnknownManualSearch({
   };
 
   return (
-    <div className="rounded-md bg-bg-tertiary/50 border border-white/5 p-4 space-y-3">
+    <div className="rounded-md bg-bg-tertiary/50 border border-hl/5 p-4 space-y-3">
       <div className="flex items-start gap-3">
         <Link2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
         <div className="text-sm text-text-secondary">
@@ -6599,12 +6599,12 @@ function UnknownManualSearch({
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           <span className="text-text-tertiary">{t('installed.unknown.fromFileTree')}</span>
           {mod.lockerHero && (
-            <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5">
+            <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-hl/10 px-2 py-0.5">
               <HeroTagLabel heroName={mod.lockerHero} iconClassName="h-4 w-4" />
             </span>
           )}
           {mod.globalType && (
-            <span className="rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5 text-text-secondary">
+            <span className="rounded-full bg-bg-primary/60 border border-hl/10 px-2 py-0.5 text-text-secondary">
               {GLOBAL_MOD_TYPE_LABELS[mod.globalType] ?? mod.globalType}
             </span>
           )}
@@ -6612,14 +6612,14 @@ function UnknownManualSearch({
       )}
 
       <div className="flex items-center gap-2">
-        <div className="flex rounded-md overflow-hidden border border-white/10 text-xs flex-shrink-0">
+        <div className="flex rounded-md overflow-hidden border border-hl/10 text-xs flex-shrink-0">
           {(['Mod', 'Sound'] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setSection(s)}
               className={`px-2.5 py-2 transition-colors cursor-pointer ${
-                section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-white/5'
+                section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-hl/5'
               }`}
             >
               {s === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds')}
@@ -6633,7 +6633,7 @@ function UnknownManualSearch({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('installed.unknown.searchPlaceholder')}
-            className="w-full bg-bg-primary border border-white/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
+            className="w-full bg-bg-primary border border-hl/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
           />
           {searching && (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-accent" />
@@ -6666,7 +6666,7 @@ function UnknownManualSearch({
               <div
                 key={gbMod.id}
                 className={`rounded-md border transition-colors ${
-                  isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-white/5 hover:border-white/15'
+                  isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-hl/5 hover:border-hl/15'
                 }`}
               >
                 <div className="flex items-center pr-2">
@@ -6680,13 +6680,13 @@ function UnknownManualSearch({
                       alt={gbMod.name}
                       nsfw={gbMod.nsfw}
                       hideNsfw
-                      className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
+                      className="w-16 h-11 rounded bg-bg-primary border border-hl/10 flex-shrink-0"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
                         {gbMod.name}
                       </div>
-                      <div className="text-[11px] text-text-tertiary truncate">
+                      <div className="text-2xs text-text-tertiary truncate">
                         {gbMod.rootCategory?.name ?? (section === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds'))} · #{gbMod.id}
                       </div>
                     </div>
@@ -6699,14 +6699,14 @@ function UnknownManualSearch({
                     rel="noopener noreferrer"
                     title={`Open ${gbMod.name} on GameBanana to download it directly`}
                     aria-label={`Open ${gbMod.name} on GameBanana`}
-                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-white/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
+                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-hl/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
                   >
                     <Banana className="w-4 h-4" />
                   </a>
                 </div>
 
                 {isSel && (
-                  <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
+                  <div className="border-t border-hl/5 px-2.5 py-2.5 space-y-2">
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
@@ -6835,7 +6835,7 @@ function FileTreeBranch({
               type="button"
               onClick={() => onToggle(node.path)}
               style={indent}
-              className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-text-primary hover:bg-white/5 cursor-pointer"
+              className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-text-primary hover:bg-hl/5 cursor-pointer"
             >
               {isOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
@@ -6924,7 +6924,7 @@ function UnknownFileList({
     });
 
   return (
-    <div className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+    <div className="rounded-md bg-bg-tertiary/40 border border-hl/5 overflow-hidden">
       <button
         type="button"
         onClick={toggleOpen}
@@ -6937,7 +6937,7 @@ function UnknownFileList({
       </button>
 
       {open && (
-        <div className="border-t border-white/5 px-4 py-3 space-y-3">
+        <div className="border-t border-hl/5 px-4 py-3 space-y-3">
           {loading && (
             <div className="flex items-center gap-2 text-sm text-text-tertiary">
               <Loader2 className="w-4 h-4 animate-spin text-accent" /> {t('installed.unknown.readingVpk')}
@@ -6951,11 +6951,11 @@ function UnknownFileList({
           )}
           {tree && tree.children.size > 0 && (
             <>
-              <div className="max-h-64 overflow-auto rounded-md border border-white/5 bg-bg-primary/40 py-1.5 text-xs font-mono">
+              <div className="max-h-64 overflow-auto rounded-md border border-hl/5 bg-bg-primary/40 py-1.5 text-xs font-mono">
                 <FileTreeBranch nodes={tree.children} depth={0} expanded={expanded} onToggle={toggleNode} />
               </div>
               {!full && (
-                <p className="text-[11px] text-text-tertiary">{t('installed.unknown.showingSample')}</p>
+                <p className="text-2xs text-text-tertiary">{t('installed.unknown.showingSample')}</p>
               )}
             </>
           )}
@@ -7000,11 +7000,11 @@ function ImprintReportList({ title, items }: {
 }) {
   if (items.length === 0) return null;
   return (
-    <details className="rounded-md border border-white/5 bg-bg-tertiary/40 overflow-hidden">
+    <details className="rounded-md border border-hl/5 bg-bg-tertiary/40 overflow-hidden">
       <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
         {title}
       </summary>
-      <ul className="divide-y divide-white/5 border-t border-white/5">
+      <ul className="divide-y divide-hl/5 border-t border-hl/5">
         {items.map((item) => (
           <li key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
             <span className="min-w-0 truncate text-sm text-text-primary" title={item.name}>{item.name}</span>
@@ -7075,7 +7075,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
             className="min-h-40"
           />
         ) : (
-          <div className="space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3">
+          <div className="space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3">
             <ImprintBucketLine count={eligible} label={t('installed.imprintAll.eligible', { count: eligible })} tone="accent" />
             <ImprintBucketLine count={counts.alreadyImprinted} label={t('installed.imprintAll.alreadyImprinted', { count: counts.alreadyImprinted })} />
             <ImprintBucketLine count={counts.blockedLoaded} label={t('installed.imprintAll.blockedLoaded', { count: counts.blockedLoaded })} tone="warning" />
@@ -7253,7 +7253,7 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
   };
 
   const sectionHeading = 'text-xs font-semibold uppercase tracking-wider text-text-tertiary';
-  const sectionBox = 'space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3';
+  const sectionBox = 'space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3';
 
   let body: ReactNode;
   if (error) {
@@ -7418,11 +7418,11 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
 
         {/* Same collapsible pattern as ImprintReportList: details/summary,
             collapsed by default so the sheet stays tidy. */}
-        <details className="overflow-hidden rounded-md border border-white/5 bg-bg-tertiary/40">
+        <details className="overflow-hidden rounded-md border border-hl/5 bg-bg-tertiary/40">
           <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
             {t('installed.imprintDetails.rawToggle')}
           </summary>
-          <pre className="max-h-64 overflow-auto border-t border-white/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
+          <pre className="max-h-64 overflow-auto border-t border-hl/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
             {details.rawAddonInfo}
           </pre>
         </details>
@@ -7516,7 +7516,7 @@ function UnknownEmbeddedCard({
               alt={match.modName ?? t('installed.unknown.gamebananaMod')}
               nsfw={match.nsfw}
               hideNsfw={hideNsfwPreviews}
-              className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+              className="w-24 h-16 rounded-md bg-bg-primary border border-hl/10 flex-shrink-0"
             />
           )}
           <div className="min-w-0 flex-1">
@@ -7601,7 +7601,7 @@ function UnknownMatchCard({
             alt={match.modName ?? t('installed.unknown.gamebananaMod')}
             nsfw={match.nsfw}
             hideNsfw={hideNsfwPreviews}
-            className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+            className="w-24 h-16 rounded-md bg-bg-primary border border-hl/10 flex-shrink-0"
           />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-state-success">
@@ -7882,7 +7882,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
+        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -7898,7 +7898,7 @@ function ModMediaPreview({
   }
 
   return (
-    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
+    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] ${mediaSpacingClasses}`}>
       <button
         type="button"
         onClick={(e) => {
@@ -8240,7 +8240,7 @@ function ModListRowContent({
             />
           </span>
         ) : (
-          <span className="inline-flex h-5 items-center rounded border border-white/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
+          <span className="inline-flex h-5 items-center rounded border border-hl/[0.06] bg-bg-tertiary/60 px-1.5 text-2xs font-semibold text-text-secondary/70">
             {t('installed.card.off')}
           </span>
         )}
@@ -8253,7 +8253,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
@@ -8295,7 +8295,7 @@ function ModListRowContent({
           className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary"
           onRename={onRenameLocal}
         />
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] leading-[24px] text-text-secondary">
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -8352,7 +8352,7 @@ function ModListRowContent({
       <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
         {isSound && (
           <div
-            className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-white/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
+            className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-hl/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
             data-card-action="true"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -8539,8 +8539,8 @@ function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-bg-tertiary border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
-      : 'bg-bg-tertiary/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-hl/[0.08] hover:border-hl/[0.14] hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 hover:border-hl/[0.14] hover:bg-bg-secondary hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
@@ -8564,7 +8564,7 @@ function ModCard({
     viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
   const chipSizeClasses =
     viewMode === 'list'
-      ? 'h-6 rounded-[7px] px-2 text-[11px]'
+      ? 'h-6 rounded-[7px] px-2 text-2xs'
       : viewMode === 'compact'
         ? 'h-[26px] rounded-lg px-2 text-[12px]'
         : 'h-7 rounded-lg px-2.5 text-[12px]';
@@ -8575,11 +8575,11 @@ function ModCard({
   // the smallest cards.
   const chipMinClass = viewMode === 'compact' ? 'min-w-9' : 'min-w-0';
   const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
-  const metaChipClasses = `${baseChipClasses} border border-white/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
+  const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
   const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
-  const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
+  const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
   // Hover-revealed card action. `pointer-events-none` while transparent is
   // load-bearing: opacity-0 alone still accepts clicks, so an unrevealed button
@@ -8599,7 +8599,7 @@ function ModCard({
     : hoverActionVisibilityClasses;
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
   const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
-    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-white/20'
+    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-hl/20'
   }`;
   const isList = viewMode === 'list';
   const isCompact = viewMode === 'compact';
@@ -8617,8 +8617,8 @@ function ModCard({
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
-    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
-    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-hl/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-hl/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
   const audioPlayerClassName = isCompact
     ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
     : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
@@ -8948,7 +8948,7 @@ function ModCard({
               button below it still receives the click. */}
           <div
             className={`absolute top-2 left-2 z-40 w-6 h-6 rounded-md border-2 transition-colors pointer-events-none flex items-center justify-center shadow-md ${
-              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-white/40'
+              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-hl/40'
             }`}
           >
             {selected && <Check className="w-4 h-4 text-accent-foreground" strokeWidth={3} />}
@@ -9079,7 +9079,7 @@ function ModCard({
                   variant="overlay"
                   icon={Layers}
                   title={t('installed.card.mergedTitle', { count: mod.merged.sources.length })}
-                  className="border-white/20 text-white/90"
+                  className="border-hl/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
@@ -9099,7 +9099,7 @@ function ModCard({
                   variant="overlay"
                   icon={Files}
                   title={variantStatusTitle}
-                  className="border-white/20 text-white/90 tabular-nums"
+                  className="border-hl/20 text-white/90 tabular-nums"
                 >
                   {variantStatusLabel}
                 </Tag>
@@ -9312,7 +9312,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
                 ? 'border-accent bg-accent/10'
                 : thumbnailDataUrl
                   ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
             }`}
           >
             <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
@@ -9534,7 +9534,7 @@ function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCusto
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
                     ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
               }`}
             >
               <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">

@@ -158,7 +158,7 @@ export default function Stats() {
 
     return (
         <div className="flex flex-col h-full animate-fade-in">
-            <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between gap-3">
+            <div className="px-6 py-3 border-b border-hl/5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                     <BarChart3 className="w-6 h-6 text-accent shrink-0" />
                     <h1 className="text-xl font-bold font-reaver tracking-wide truncate">
@@ -173,7 +173,7 @@ export default function Stats() {
                 </div>
             </div>
 
-            <div className="flex gap-1 px-4 py-2 border-b border-white/5 overflow-x-auto">
+            <div className="flex gap-1 px-4 py-2 border-b border-hl/5 overflow-x-auto">
                 {TABS.map((tabOption) => (
                     <button
                         key={tabOption.id}
@@ -182,7 +182,7 @@ export default function Stats() {
                         className={`flex items-center gap-2 px-4 py-2 rounded-sm transition-colors text-sm whitespace-nowrap cursor-pointer ${
                             activeTab === tabOption.id
                                 ? 'border border-accent/40 bg-accent/10 text-accent'
-                                : 'border border-transparent text-text-secondary hover:text-white hover:bg-white/5'
+                                : 'border border-transparent text-text-secondary hover:text-white hover:bg-hl/5'
                         }`}
                     >
                         <tabOption.icon className="w-4 h-4" />

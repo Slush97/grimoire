@@ -85,7 +85,7 @@ export default function AppUpdateBanner() {
               }}
               aria-label={t('appUpdateBanner.hideBannerUntilNextLaunch')}
               title={t('appUpdateBanner.hideUntilNextLaunch')}
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-hl/5 hover:text-text-primary cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>

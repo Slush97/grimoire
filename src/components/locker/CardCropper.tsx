@@ -158,7 +158,7 @@ export default function CardCropper({
           <h2 id="card-cropper-title" className="text-sm font-semibold text-text-primary">
             {t('locker.crop.title', { variant: variantLabel })}
           </h2>
-          <span className="ml-auto text-[11px] tabular-nums text-text-secondary">
+          <span className="ml-auto text-2xs tabular-nums text-text-secondary">
             output {targetWidth} x {targetHeight}
           </span>
         </div>
@@ -208,7 +208,7 @@ export default function CardCropper({
                 onChange={(e) => applyZoom(Number(e.target.value))}
                 className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-border accent-accent disabled:cursor-not-allowed"
               />
-              <span className="w-10 text-right text-[11px] tabular-nums text-text-secondary">
+              <span className="w-10 text-right text-2xs tabular-nums text-text-secondary">
                 {zoom.toFixed(1)}x
               </span>
               <button
@@ -216,14 +216,14 @@ export default function CardCropper({
                 disabled={!img}
                 onClick={() => applyZoom(1)}
                 title={t('locker.crop.resetZoom')}
-                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
             </div>
 
             {img && (img.naturalWidth < targetWidth || img.naturalHeight < targetHeight) && (
-              <p className="text-[11px] leading-snug text-amber-400/90">
+              <p className="text-2xs leading-snug text-amber-400/90">
                 {t('locker.crop.upscaleWarning', {
                   sourceWidth: img.naturalWidth,
                   sourceHeight: img.naturalHeight,
@@ -232,7 +232,7 @@ export default function CardCropper({
                 })}
               </p>
             )}
-            <p className="text-[11px] leading-snug text-text-secondary">
+            <p className="text-2xs leading-snug text-text-secondary">
               {t('locker.crop.instructions')}
             </p>
           </>
@@ -242,7 +242,7 @@ export default function CardCropper({
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary"
+            className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary"
           >
             {t('common.actions.cancel')}
           </button>

@@ -1788,7 +1788,7 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
         <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {t('locker.page.global')}
         </div>
-        <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+        <div className="text-2xs text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {isEmpty
             ? t('locker.page.globalEmptyHint')
             : t('locker.page.categoryCount', { count: typeCount })}
@@ -2004,7 +2004,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // small upward translation compensates for that heading so the card remains
   // visually centered in the pane as a whole.
   const emptyTabClass =
-    'my-auto flex min-h-60 w-full max-w-md -translate-y-5 self-center flex-col items-center justify-center gap-3 rounded-xl border border-white/15 bg-bg-secondary/70 px-8 py-10 text-center shadow-2xl shadow-black/25 backdrop-blur-md';
+    'my-auto flex min-h-60 w-full max-w-md -translate-y-5 self-center flex-col items-center justify-center gap-3 rounded-xl border border-hl/15 bg-bg-secondary/70 px-8 py-10 text-center shadow-2xl shadow-black/25 backdrop-blur-md';
 
   // Where each visible card shuffles, asked once per card. A custom tab mixes
   // hero skins, classified mods and non-shuffleable ones, so the affordance is
@@ -2064,7 +2064,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               >
                 <span
                   className={`flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-sm border ${
-                    isMember ? 'border-accent bg-accent text-accent-foreground' : 'border-white/25'
+                    isMember ? 'border-accent bg-accent text-accent-foreground' : 'border-hl/25'
                   }`}
                 >
                   {isMember && <Check className="h-2.5 w-2.5" />}
@@ -2110,7 +2110,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         type="button"
         onClick={() => setSelectedType(type)}
         className={`relative z-10 flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors ${
-          isActive ? '' : 'hover:bg-white/10'
+          isActive ? '' : 'hover:bg-hl/10'
         }`}
       >
         <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
@@ -2221,7 +2221,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           {/* The user's own categories, kept behind a divider so the rail reads
               as "what kind of mod", then "does it win", then "my piles". */}
           {categories.length > 0 && (
-            <div aria-hidden className="mx-3 my-1 h-px bg-white/10" />
+            <div aria-hidden className="mx-3 my-1 h-px bg-hl/10" />
           )}
           {categories.map((category) => renderTab(customTabId(category.id)))}
           <div className="relative z-10 mt-1 flex flex-col items-start gap-0.5">
@@ -2444,7 +2444,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       } ${
                         mod.enabled
                           ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
-                          : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+                          : 'border-hl/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-hl/[0.16] hover:text-text-primary'
                       } ${inShufflePool ? 'ring-2 ring-accent/45' : ''}`}
                     >
                       {/* Glass backdrop: a blurred copy of the cover art bleeds
@@ -2470,7 +2470,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           3D model over a frosted-glass panel so the environment
                           background shows through; other types keep a solid bg. */}
                       <div
-                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
+                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-hl/[0.08] ${
                           isPropContainer ? '' : 'bg-bg-tertiary'
                         }`}
                       >
@@ -2481,7 +2481,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             the retag kebab below) under the z-10 full-card toggle
                             and swallow the kebab's clicks. */}
                         {isPropContainer && (
-                          <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
+                          <div className="pointer-events-none absolute inset-0 bg-hl/[0.04] backdrop-blur-md" />
                         )}
                         {/* Prop containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
@@ -2585,7 +2585,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             }}
                             aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
                             title={t('locker.page.changeCategory')}
-                            className="absolute right-20 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            className="absolute right-20 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
@@ -2601,7 +2601,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           }}
                           aria-label={t('locker.global.deleteMod', { name: mod.name })}
                           title={t('locker.global.deleteMod', { name: mod.name })}
-                          className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                          className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-hl/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -2769,7 +2769,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 {priorityActionBusy ? t('installed.priority.busy') : t('installed.priority.clear')}
               </button>
               {priorityActionError && (
-                <p role="alert" className="px-2 py-1 text-[11px] text-state-danger">
+                <p role="alert" className="px-2 py-1 text-2xs text-state-danger">
                   {priorityActionError}
                 </p>
               )}
@@ -2971,7 +2971,7 @@ function HeroGalleryCard({
         }}
         aria-label={t('locker.page.browseHeroSkins', { hero: hero.name })}
         title={t('locker.page.browseHeroSkins', { hero: hero.name })}
-        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-white/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-hl/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
       >
         <ExternalLink className="h-3 w-3" />
       </button>
@@ -2987,7 +2987,7 @@ function HeroGalleryCard({
         className={`absolute right-2 top-2 z-20 flex items-center justify-center rounded-full border p-1 transition-opacity ${
           isFavorite
             ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300 opacity-100'
-            : 'border-white/30 bg-black/40 text-white/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/60'
+            : 'border-hl/30 bg-black/40 text-white/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/60'
         }`}
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
@@ -2999,7 +2999,7 @@ function HeroGalleryCard({
           outline. Filled vs outline reads at a glance without the accent color. */}
       {(facetKeys.length > 0 || inShufflePool) && (
         <div
-          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 ring-1 ring-inset ring-white/10 backdrop-blur-sm"
+          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 ring-1 ring-inset ring-hl/10 backdrop-blur-sm"
           title={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
           aria-label={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
         >

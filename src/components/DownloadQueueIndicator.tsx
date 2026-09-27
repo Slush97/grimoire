@@ -157,7 +157,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                 actually in flight) cancels the active fetch. */}
             {!isExpanded && (
                 <div
-                    className="group relative flex w-72 items-stretch overflow-hidden rounded-full border border-white/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
+                    className="group relative flex w-72 items-stretch overflow-hidden rounded-full border border-hl/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
                 >
                     <button
                         type="button"
@@ -176,7 +176,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentTooltip}>
                                 {currentFileName}
                             </div>
-                            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
+                            <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-text-secondary">
                                 <span className="tabular-nums">{progressPercentRounded}%</span>
                                 {currentSpeed > 0 && (
                                     <>
@@ -201,7 +201,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 e.stopPropagation();
                                 void handleCancelActive();
                             }}
-                            className="flex flex-shrink-0 items-center justify-center border-l border-white/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                            className="flex flex-shrink-0 items-center justify-center border-l border-hl/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
                             aria-label={t('downloadQueue.cancelDownload')}
                             title={t('downloadQueue.cancelDownload')}
                         >
@@ -210,7 +210,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                     )}
                     <span
                         aria-hidden
-                        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-white/5"
+                        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-hl/5"
                     >
                         <span
                             className="block h-full bg-accent transition-[width] duration-200 ease-out"
@@ -224,8 +224,8 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                 pill stays anchored to the corner. Shows full progress detail
                 + the queue. */}
             {isExpanded && (
-                <div className="w-80 rounded-2xl border border-white/10 bg-bg-secondary/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in">
-                    <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+                <div className="w-80 rounded-2xl border border-hl/10 bg-bg-secondary/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-hl/5 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Download className="h-4 w-4 text-accent" />
                             <span className="text-sm font-semibold text-text-primary">
@@ -236,7 +236,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                         <button
                             type="button"
                             onClick={() => setIsExpanded(false)}
-                            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary transition-colors cursor-pointer"
+                            className="rounded-md p-1 text-text-secondary hover:bg-hl/5 hover:text-text-primary transition-colors cursor-pointer"
                             aria-label={t('downloadQueue.collapse')}
                             title={t('downloadQueue.collapse')}
                         >
@@ -245,7 +245,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                     </div>
 
                     {queueState.currentDownload && (
-                        <div className="px-4 py-3 border-b border-white/5">
+                        <div className="px-4 py-3 border-b border-hl/5">
                             <div className="flex items-center gap-2">
                                 <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-accent" />
                                 <p
@@ -267,18 +267,18 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                     <X className="h-3.5 w-3.5" />
                                 </button>
                             </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hl/5">
                                 <div
                                     className="h-full rounded-full bg-gradient-to-r from-accent/80 to-accent transition-[width] duration-200 ease-out"
                                     style={{ width: `${progressPercent}%` }}
                                 />
                             </div>
                             {serverStatusText && (
-                                <p className="mt-1 truncate text-[11px] text-text-secondary" title={serverStatusText}>
+                                <p className="mt-1 truncate text-2xs text-text-secondary" title={serverStatusText}>
                                     {serverStatusText}
                                 </p>
                             )}
-                            <div className="mt-2 flex items-center justify-between text-[11px] text-text-secondary tabular-nums">
+                            <div className="mt-2 flex items-center justify-between text-2xs text-text-secondary tabular-nums">
                                 <span>
                                     {queueState.progress
                                         ? `${formatBytes(queueState.progress.downloaded)} / ${formatBytes(queueState.progress.total)}`
@@ -299,7 +299,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
 
                     {queueState.queue.length > 0 && (
                         <div className="px-4 py-2 max-h-56 overflow-y-auto">
-                            <p className="text-[11px] uppercase tracking-wider text-text-secondary mb-1">
+                            <p className="text-2xs uppercase tracking-wider text-text-secondary mb-1">
                                 <Tx
                                     k="downloadQueue.queuedHeader"
                                     values={{ count: queueState.queue.length }}
@@ -310,9 +310,9 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 {queueState.queue.map((item, index) => (
                                     <li
                                         key={`${item.modId}-${item.fileId}`}
-                                        className="group flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-white/5"
+                                        className="group flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-hl/5"
                                     >
-                                        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] tabular-nums text-text-secondary">
+                                        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-hl/5 text-[10px] tabular-nums text-text-secondary">
                                             {index + 1}
                                         </span>
                                         <span

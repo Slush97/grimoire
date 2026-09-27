@@ -292,7 +292,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-white/5 bg-bg-tertiary/30">
+                <div className="p-6 border-t border-hl/5 bg-bg-tertiary/30">
                     <Button
                         onClick={onComplete}
                         disabled={!canProceed}

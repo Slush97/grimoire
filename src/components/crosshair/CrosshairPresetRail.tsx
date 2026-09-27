@@ -56,8 +56,8 @@ export default function CrosshairPresetRail({
   };
 
   return (
-    <div className="rounded-sm border border-white/5 bg-bg-secondary/50 backdrop-blur-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-2.5">
+    <div className="rounded-sm border border-hl/5 bg-bg-secondary/50 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hl/5 px-4 py-2.5">
         <h3 className="font-reaver text-sm tracking-wide text-text-primary">
           <Tx
             k="crosshair.presets.savedTitle"
@@ -128,7 +128,7 @@ export default function CrosshairPresetRail({
               <div
                 key={preset.id}
                 className={`group relative h-24 w-24 shrink-0 overflow-hidden rounded-sm border bg-bg-tertiary transition-colors ${
-                  isActive ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
+                  isActive ? 'border-accent ring-1 ring-accent' : 'border-hl/5 hover:border-hl/20'
                 }`}
               >
                 <button

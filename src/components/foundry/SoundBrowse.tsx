@@ -345,7 +345,7 @@ function AbilitySlotIcon({ meta, slot }: { meta?: HeroAbilitySlot; slot: number 
         );
     }
     return (
-        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded bg-bg-tertiary text-[11px] font-semibold text-text-secondary">
+        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded bg-bg-tertiary text-2xs font-semibold text-text-secondary">
             {slot ?? '?'}
         </span>
     );
@@ -608,13 +608,13 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                     <p className="truncate text-sm text-text-primary" title={label}>
                         {label || event}
                     </p>
-                    <p className="truncate text-[11px] text-text-secondary" title={event}>
+                    <p className="truncate text-2xs text-text-secondary" title={event}>
                         {event}
                         {clips > 1 ? ` · ${clips} clips` : ''}
                     </p>
                 </div>
                 {seconds && (
-                    <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">
+                    <span className="shrink-0 text-2xs tabular-nums text-text-secondary">
                         {seconds}
                     </span>
                 )}
@@ -746,7 +746,7 @@ function SwapPanel({
     return (
         <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">
             <div className="mb-2 flex items-center justify-between">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-accent">
+                <p className="text-2xs font-medium uppercase tracking-wide text-accent">
                     <Tx k="foundry.sound.swap.title" fallback="Swap with your own audio" />
                 </p>
                 <button
@@ -836,7 +836,7 @@ function SwapPanel({
                 </button>
             </div>
 
-            <p className="mt-2 text-[11px] text-text-secondary">
+            <p className="mt-2 text-2xs text-text-secondary">
                 {clips > 1
                     ? t(
                           'foundry.sound.swap.poolNote',

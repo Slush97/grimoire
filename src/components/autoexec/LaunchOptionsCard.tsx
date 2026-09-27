@@ -149,7 +149,7 @@ export default function LaunchOptionsCard() {
                   </code>
                 </div>
                 {!isSaving && (
-                  <p className="text-[11px] text-text-secondary/70">
+                  <p className="text-2xs text-text-secondary/70">
                     <Tx
                       k="autoexec.launchOptions.savedWillOverwrite"
                       fallback="Your saved value will overwrite this on next grimoire launch."

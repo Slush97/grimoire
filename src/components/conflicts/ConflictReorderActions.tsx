@@ -79,7 +79,7 @@ export default function ConflictReorderActions({
   return (
     <div className="px-4 pb-4">
       <div
-        className="mb-1.5 flex items-center justify-center gap-1.5 text-[11px] text-text-tertiary"
+        className="mb-1.5 flex items-center justify-center gap-1.5 text-2xs text-text-tertiary"
         title={hint}
       >
         <ArrowDownUp className="w-3 h-3 flex-shrink-0" />

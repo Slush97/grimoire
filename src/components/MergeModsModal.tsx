@@ -165,7 +165,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                     key={group.key}
                     className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg-tertiary/60 text-sm"
                   >
-                    <span className="font-mono text-[11px] text-text-secondary tabular-nums w-6 text-right">
+                    <span className="font-mono text-2xs text-text-secondary tabular-nums w-6 text-right">
                       {String(group.mod.priority).padStart(2, '0')}
                     </span>
                     <span className="text-text-primary truncate" title={group.mod.name}>{group.mod.name}</span>
@@ -199,7 +199,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                             className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm transition-colors ${
                               isPicked
                                 ? 'bg-accent/10 border border-accent/40 text-text-primary'
-                                : 'border border-transparent text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                                : 'border border-transparent text-text-secondary hover:bg-hl/5 hover:text-text-primary'
                             }`}
                           >
                             <input
@@ -208,7 +208,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                               onChange={() => toggleVariantPick(group, variant.id)}
                               className="w-3.5 h-3.5 accent-accent cursor-pointer"
                             />
-                            <span className="font-mono text-[11px] text-text-secondary tabular-nums w-6 text-right">
+                            <span className="font-mono text-2xs text-text-secondary tabular-nums w-6 text-right">
                               {String(variant.priority).padStart(2, '0')}
                             </span>
                             <span className="truncate" title={variantLabelOf(variant)}>{variantLabelOf(variant)}</span>

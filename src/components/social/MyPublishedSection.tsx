@@ -172,14 +172,14 @@ export default function MyPublishedSection({
       )}
 
       {data && data.profiles.length > 0 && (
-        <ul className="divide-y divide-white/5 border border-white/10 rounded-lg bg-bg-secondary overflow-hidden">
+        <ul className="divide-y divide-hl/5 border border-hl/10 rounded-lg bg-bg-secondary overflow-hidden">
           {data.profiles.map((p) => {
             const confirming = confirmingId === p.id;
             const busy = deletingId === p.id;
             return (
               <li
                 key={p.id}
-                className="px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors"
+                className="px-4 py-3 flex items-center gap-3 hover:bg-hl/[0.02] transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <div

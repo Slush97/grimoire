@@ -572,7 +572,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-text-secondary/70">{t('locker.sounds.noSoundModForAbility')}</p>
+                  <p className="text-2xs text-text-secondary/70">{t('locker.sounds.noSoundModForAbility')}</p>
                 )}
               </div>
             );
@@ -581,7 +581,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
           {other.length > 0 && (
             <div className="rounded-md border border-border bg-bg-secondary/70 p-3 backdrop-blur-sm">
               <div className="mb-2 text-xs font-semibold text-text-primary">{t('locker.sounds.otherSounds')}</div>
-              <p className="mb-2 text-[11px] text-text-secondary/70">
+              <p className="mb-2 text-2xs text-text-secondary/70">
                 {t('locker.sounds.otherSoundsDescription')}
               </p>
               <div className="space-y-1.5">

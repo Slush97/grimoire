@@ -155,17 +155,17 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
                     className={`flex w-full items-center gap-3 rounded-lg border px-2.5 py-2 text-left transition-colors disabled:opacity-50 ${
                       isSelected
                         ? 'border-accent bg-accent/10'
-                        : 'border-transparent hover:border-white/10 hover:bg-bg-tertiary'
+                        : 'border-transparent hover:border-hl/10 hover:bg-bg-tertiary'
                     }`}
                   >
                     <span
                       className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                        isSelected ? 'border-accent bg-accent text-accent-foreground' : 'border-white/25'
+                        isSelected ? 'border-accent bg-accent text-accent-foreground' : 'border-hl/25'
                       }`}
                     >
                       {isSelected && <Check className="h-3 w-3" />}
                     </span>
-                    <span className="h-9 w-16 flex-shrink-0 overflow-hidden rounded border border-white/[0.08] bg-bg-tertiary">
+                    <span className="h-9 w-16 flex-shrink-0 overflow-hidden rounded border border-hl/[0.08] bg-bg-tertiary">
                       {showArt && (
                         <img src={mod.thumbnailUrl} alt="" className="h-full w-full object-cover" draggable={false} />
                       )}
@@ -177,7 +177,7 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
                       </span>
                     </span>
                     {!mod.enabled && (
-                      <span className="flex-shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
+                      <span className="flex-shrink-0 rounded-full border border-hl/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
                         {t('locker.globalPicker.disabled')}
                       </span>
                     )}

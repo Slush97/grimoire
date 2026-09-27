@@ -240,7 +240,7 @@ export default function TrippySkinPanel({
 
       {/* Runtime UV-scroll speed (how fast the paint flows in game). */}
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-text-secondary">
+        <span className="text-2xs font-medium text-text-secondary">
           {t('locker.trippy.scrollSpeed')}{' '}
           <span className="tabular-nums text-text-secondary/70">{pct(scroll)}%</span>
         </span>
@@ -257,7 +257,7 @@ export default function TrippySkinPanel({
       </label>
 
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium text-text-secondary">{t('locker.trippy.paint')}</span>
+        <span className="text-2xs font-medium text-text-secondary">{t('locker.trippy.paint')}</span>
         <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
           {(['all', 'body', 'weapons'] as const).map((target) => (
             <button
@@ -302,7 +302,7 @@ export default function TrippySkinPanel({
       </div>
 
       {busy && (
-        <p className="text-[11px] text-text-secondary/80">{t('locker.trippy.baking')}</p>
+        <p className="text-2xs text-text-secondary/80">{t('locker.trippy.baking')}</p>
       )}
 
       {actionError && (

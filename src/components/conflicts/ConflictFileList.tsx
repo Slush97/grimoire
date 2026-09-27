@@ -53,7 +53,7 @@ export default function ConflictFileList({
               <MenuTrigger asChild>
                 <li className="flex items-center gap-2 rounded data-[state=open]:bg-bg-tertiary/60">
                   <span
-                    className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary"
+                    className="min-w-0 flex-1 truncate font-mono text-2xs text-text-tertiary"
                     title={file}
                   >
                     {file}
@@ -64,7 +64,7 @@ export default function ConflictFileList({
                     disabled={busy}
                     title={t('conflicts.files.ignoreFileTitle')}
                     aria-label={t('conflicts.files.ignoreFileTitle')}
-                    className="inline-flex flex-shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                    className="inline-flex flex-shrink-0 items-center gap-1 rounded px-2 py-0.5 text-2xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                   >
                     <EyeOff className="h-3 w-3" />
                     <Tx k="conflicts.files.ignoreFile" fallback="Ignore" />

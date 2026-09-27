@@ -680,7 +680,7 @@ export default function Conflicts() {
                     {mod.thumbnailUrl ? (
                       <img src={mod.thumbnailUrl} alt={mod.name} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[11px] text-text-tertiary">
+                      <div className="flex h-full w-full items-center justify-center text-2xs text-text-tertiary">
                         <Tx k="conflicts.noPreview" fallback="No Preview" />
                       </div>
                     )}
@@ -1026,7 +1026,7 @@ export default function Conflicts() {
                   <ul className="divide-y divide-border/60">
                     {paths.map((p) => (
                       <li key={p} className="flex items-center gap-2 px-4 py-2">
-                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={p}>
+                        <span className="min-w-0 flex-1 truncate font-mono text-2xs text-text-tertiary" title={p}>
                           {p}
                         </span>
                         <button
@@ -1034,7 +1034,7 @@ export default function Conflicts() {
                           onClick={() => handleUnignoreFile(key, p)}
                           disabled={pendingPair === key}
                           title={t('conflicts.ignoredFiles.unignoreFileTitle')}
-                          className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                          className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-2xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                         >
                           <Eye className="h-3 w-3" />
                           <Tx k="conflicts.actions.unignore" fallback="Unignore" />
@@ -1061,7 +1061,7 @@ export default function Conflicts() {
           <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
             {ignoredFilesGlobal.map((file) => (
               <div key={file} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={file}>
+                <span className="min-w-0 flex-1 truncate font-mono text-2xs text-text-tertiary" title={file}>
                   {file}
                 </span>
                 <button
@@ -1116,7 +1116,7 @@ export default function Conflicts() {
                       <p className="truncate text-xs text-accent" title={variant}>{variant}</p>
                     )}
                     {m?.fileName && (
-                      <p className="truncate text-[11px] font-mono text-text-tertiary" title={m.fileName}>{m.fileName}</p>
+                      <p className="truncate text-2xs font-mono text-text-tertiary" title={m.fileName}>{m.fileName}</p>
                     )}
                   </div>
                   <button

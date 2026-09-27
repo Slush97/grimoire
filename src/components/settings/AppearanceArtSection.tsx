@@ -222,7 +222,7 @@ function SurfacePreview({
   // `none` renders the plain button (SurfaceBackdrop returns nothing), exactly as
   // the real button looks with art turned off.
   return (
-    <span className={`${base} bg-bg-tertiary ring-1 ring-white/10`} aria-hidden>
+    <span className={`${base} bg-bg-tertiary ring-1 ring-hl/10`} aria-hidden>
       <SurfaceBackdrop
         bg={bg}
         defaultSrc={config.defaultSrc!}
@@ -234,7 +234,7 @@ function SurfacePreview({
         <Icon className="relative z-10 ml-2 h-3.5 w-3.5 flex-shrink-0 text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]" />
       )}
       {config.innerLabelKey && (
-        <span className="relative z-10 ml-1.5 truncate text-[11px] font-semibold tracking-wide text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]">
+        <span className="relative z-10 ml-1.5 truncate text-2xs font-semibold tracking-wide text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]">
           {t(config.innerLabelKey)}
         </span>
       )}
@@ -504,7 +504,7 @@ export default function AppearanceArtSection() {
         }
       />
 
-      <div className="my-5 h-px bg-white/5" />
+      <div className="my-5 h-px bg-hl/5" />
 
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-text-primary">
@@ -598,7 +598,7 @@ export default function AppearanceArtSection() {
               {/* Preview header only when there's no cropper acting as the preview. */}
               {showFooter && (
                 <div className="mb-4">
-                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+                  <span className="mb-1 block text-2xs font-medium uppercase tracking-wide text-text-secondary">
                     {t('settings.appearance.art.preview')}
                   </span>
                   {/* A hero draft previews the live calibrated render, never a

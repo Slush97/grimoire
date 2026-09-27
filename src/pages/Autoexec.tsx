@@ -273,7 +273,7 @@ export default function Autoexec() {
                                             {commands.map((cmd, i) => (
                                                 <li
                                                     key={`managed-${i}-${cmd}`}
-                                                    className="group flex animate-fade-in items-center gap-2 rounded-sm border border-white/5 bg-bg-tertiary/50 p-2 transition-colors hover:border-white/15"
+                                                    className="group flex animate-fade-in items-center gap-2 rounded-sm border border-hl/5 bg-bg-tertiary/50 p-2 transition-colors hover:border-hl/15"
                                                 >
                                                     <code className="min-w-0 flex-1 truncate font-mono text-sm text-text-primary">
                                                         {cmd}
@@ -312,7 +312,7 @@ export default function Autoexec() {
                                                 {manualCommands.map((cmd, i) => (
                                                     <li
                                                         key={`manual-${i}-${cmd}`}
-                                                        className="flex animate-fade-in items-center gap-2 rounded-sm border border-dashed border-white/10 bg-bg-tertiary/20 p-2"
+                                                        className="flex animate-fade-in items-center gap-2 rounded-sm border border-dashed border-hl/10 bg-bg-tertiary/20 p-2"
                                                     >
                                                         <code className="min-w-0 flex-1 truncate font-mono text-sm text-text-secondary">
                                                             {cmd}

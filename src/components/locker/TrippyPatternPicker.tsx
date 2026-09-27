@@ -132,9 +132,9 @@ export default function TrippyPatternPicker({
         />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">{summary}</div>
-          {status && <div className="text-[11px] text-text-secondary">{status}</div>}
+          {status && <div className="text-2xs text-text-secondary">{status}</div>}
           {spriteFailed && (
-            <div className="text-[11px] text-amber-400/90">
+            <div className="text-2xs text-amber-400/90">
               {t('locker.trippyPattern.swatchUnavailable')}
             </div>
           )}
@@ -162,7 +162,7 @@ export default function TrippyPatternPicker({
 
       {/* Pattern strength: 0 keeps the original texture, 1 is full paint. */}
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-text-secondary">
+        <span className="text-2xs font-medium text-text-secondary">
           {t('locker.trippyPattern.intensity')}{' '}
           <span className="tabular-nums text-text-secondary/70">{pct(intensity)}%</span>
         </span>
@@ -180,7 +180,7 @@ export default function TrippyPatternPicker({
 
       {/* Phase: shifts the pattern/hue starting point. */}
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-text-secondary">
+        <span className="text-2xs font-medium text-text-secondary">
           {t('locker.trippyPattern.phase')}{' '}
           <span className="tabular-nums text-text-secondary/70">{pct(phase)}%</span>
         </span>

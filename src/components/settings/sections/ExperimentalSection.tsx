@@ -55,7 +55,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalCrosshair ?? false}
@@ -64,7 +64,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.crosshairDesignerDescription" fallback="Create custom crosshairs with a live preview." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalSocial ?? false}
@@ -73,7 +73,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalUnknownModMatching ?? false}
@@ -82,7 +82,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.fixUnknown" fallback="Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalVpkImprinting ?? false}
@@ -91,7 +91,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalDeadworksServers ?? false}
@@ -100,7 +100,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.deadworks" fallback="Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting." />}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <Toggle
             checked={settings?.experimentalFoundry ?? false}

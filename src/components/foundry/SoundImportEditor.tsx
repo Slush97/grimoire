@@ -349,11 +349,11 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
     }, [buffer]);
 
     if (decodeError) {
-        return <p className="mt-2 text-[11px] text-red-400">{decodeError}</p>;
+        return <p className="mt-2 text-2xs text-red-400">{decodeError}</p>;
     }
     if (!buffer) {
         return (
-            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-text-secondary">
+            <p className="mt-2 flex items-center gap-1.5 text-2xs text-text-secondary">
                 <Loader2 size={12} className="animate-spin" />
                 {t('foundry.sound.import.decoding', 'Reading audio...')}
             </p>
@@ -399,7 +399,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                 >
                     {playing ? <Pause size={14} /> : <Play size={14} className="translate-x-px" />}
                 </button>
-                <span className="text-[11px] tabular-nums text-text-secondary">
+                <span className="text-2xs tabular-nums text-text-secondary">
                     {fmt(startMs)} - {fmt(endMs)}
                     <span className="text-text-secondary/60"> ({fmt(endMs - startMs)})</span>
                 </span>
@@ -407,7 +407,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                     <button
                         type="button"
                         onClick={resetTrim}
-                        className="ml-auto flex items-center gap-1 text-[11px] text-text-secondary transition-colors hover:text-text-primary"
+                        className="ml-auto flex items-center gap-1 text-2xs text-text-secondary transition-colors hover:text-text-primary"
                         title={t('foundry.sound.import.resetTrim', 'Use the whole clip')}
                     >
                         <RotateCcw size={11} />
@@ -418,7 +418,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
 
             {/* Normalizer */}
             {targetClipPath && (
-                <label className="flex cursor-pointer items-center gap-2 text-[11px] text-text-secondary">
+                <label className="flex cursor-pointer items-center gap-2 text-2xs text-text-secondary">
                     <input
                         type="checkbox"
                         checked={normalize}

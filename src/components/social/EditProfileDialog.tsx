@@ -70,7 +70,7 @@ export default function EditProfileDialog({
       dismissable={!submitting}
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2
               id="edit-profile-title"
@@ -88,7 +88,7 @@ export default function EditProfileDialog({
               if (!submitting) onClose();
             }}
             disabled={submitting}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -125,7 +125,7 @@ export default function EditProfileDialog({
                     placeholder={t('social.editProfile.titlePlaceholder')}
                   />
                 </FormField>
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                <div className="text-2xs text-text-secondary mt-1 flex justify-end">
                   <span className={titleTooLong ? 'text-state-danger' : ''}>
                     {trimmedTitle.length}/80
                   </span>
@@ -146,7 +146,7 @@ export default function EditProfileDialog({
                     className="resize-none"
                   />
                 </FormField>
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                <div className="text-2xs text-text-secondary mt-1 flex justify-end">
                   <span className={descriptionTooLong ? 'text-state-danger' : ''}>
                     {trimmedDescription.length}/1000
                   </span>

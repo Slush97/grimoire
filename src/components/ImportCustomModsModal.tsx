@@ -484,7 +484,7 @@ export default function ImportCustomModsModal({
             className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-10 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
               dragActive
                 ? 'border-accent bg-accent/10'
-                : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-white/20 hover:bg-bg-tertiary'
+                : 'cursor-pointer border-border bg-bg-tertiary/40 hover:border-hl/20 hover:bg-bg-tertiary'
             }`}
           >
             <UploadCloud className="h-7 w-7 text-text-secondary" aria-hidden />
@@ -630,11 +630,11 @@ export default function ImportCustomModsModal({
                       />
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="truncate font-mono text-[11px] text-text-secondary" title={row.path}>
+                      <span className="truncate font-mono text-2xs text-text-secondary" title={row.path}>
                         {fileNameOf(row.path)}
                       </span>
                       {nameMissing && (
-                        <span className="text-[11px] text-state-danger">
+                        <span className="text-2xs text-state-danger">
                           {t('installed.batchImport.nameRequired')}
                         </span>
                       )}
@@ -652,7 +652,7 @@ export default function ImportCustomModsModal({
                         <Tag tone="neutral">{t('installed.batchImport.importedCount', { count: row.imported })}</Tag>
                       )}
                       {row.error && (
-                        <span className="text-[11px] text-state-danger">{row.error}</span>
+                        <span className="text-2xs text-state-danger">{row.error}</span>
                       )}
                     </div>
                   </div>
@@ -665,10 +665,10 @@ export default function ImportCustomModsModal({
                     disabled={submitting}
                     aria-pressed={row.nsfw}
                     title={t('installed.imageField.nsfw')}
-                    className={`flex-shrink-0 rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
+                    className={`flex-shrink-0 rounded-md border px-2 py-1 text-2xs font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
                       row.nsfw
                         ? 'border-accent/50 bg-accent/15 text-accent'
-                        : 'border-border text-text-secondary hover:border-white/20 hover:text-text-primary'
+                        : 'border-border text-text-secondary hover:border-hl/20 hover:text-text-primary'
                     }`}
                   >
                     {t('installed.imageField.nsfw')}
@@ -721,7 +721,7 @@ export default function ImportCustomModsModal({
               : t('profiles.actions.import')}
         </Button>
         {unnamedCount > 0 && (
-          <span className="text-[11px] text-state-danger">
+          <span className="text-2xs text-state-danger">
             {t('installed.batchImport.unnamedBlocked', { count: unnamedCount })}
           </span>
         )}

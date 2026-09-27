@@ -93,7 +93,7 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
               <ImageOff size={40} className="text-text-secondary/40" />
             )}
             {loading && (
-              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-sm bg-black/50 px-2 py-1 text-[11px] text-white/80">
+              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-sm bg-black/50 px-2 py-1 text-2xs text-white/80">
                 <Loader2 size={12} className="animate-spin" />
                 {t('foundry.lightbox.decoding', 'Decoding full size...')}
               </div>
@@ -101,7 +101,7 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
           </div>
 
           {dims && (
-            <div className="border-t border-border px-4 py-2 text-[11px] text-text-secondary">
+            <div className="border-t border-border px-4 py-2 text-2xs text-text-secondary">
               {t('foundry.lightbox.nativeSize', 'Native size')}: {dims}
             </div>
           )}

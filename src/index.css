@@ -101,6 +101,11 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
+  /* Highlight ink for translucent surface tints: hover fills, hairline
+     borders, bevels (`bg-hl/5`, `border-hl/10`). White on the dark theme, so
+     it renders identically to the old `white/N` tints, but it is one token a
+     future light theme can flip to dark ink. Never use it for text. */
+  --color-hl: #ffffff;
   /* Warm off-white for the Browse "readable" card title, deliberately softer
      than pure white. */
   --color-mod-title: #eee8df;
@@ -117,6 +122,11 @@
   --color-brand-discord: #5865F2;
   --color-brand-kofi: #FF5E5B;
   --color-brand-kofi-hover: #ff4542;
+
+  /* Type scale: 2xs (11) meta and labels, xs (12) secondary UI, sm (14) body,
+     base (16) emphasis, 2xl (24) page titles. Tailwind ships xs..2xl; 2xs is
+     the one step it lacks. */
+  --text-2xs: 11px;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;

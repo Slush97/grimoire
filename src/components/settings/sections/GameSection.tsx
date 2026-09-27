@@ -244,7 +244,7 @@ export default function GameSection() {
             </p>
           </div>
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
             <div>
@@ -321,7 +321,7 @@ export default function GameSection() {
 
           {activeDeadlockPath && (
             <>
-              <div className="h-px bg-white/5" />
+              <div className="h-px bg-hl/5" />
               <AutoexecSection gamePath={activeDeadlockPath} />
             </>
           )}

@@ -120,12 +120,12 @@ export default function PriorityEditor({
         // parent's pseudo-element keeps the larger click target without adding
         // layout height (the old 28px wrapper pushed this tag below its peers).
         variant={variant}
-        className="min-w-[28px] justify-center tabular-nums transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:text-text-primary group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40"
+        className="min-w-[28px] justify-center tabular-nums transition-colors duration-150 group-hover/order-chip:border-hl/35 group-hover/order-chip:text-text-primary group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-hl/40"
       >
         #{value}
       </Tag>
       {!editing && (
-        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-hl/10 bg-bg-primary/95 px-2 py-1 text-2xs font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
           {t('installed.priorityEditor.loadOrder')}
         </span>
       )}
@@ -162,7 +162,7 @@ export default function PriorityEditor({
               aria-invalid={!!error}
             />
           </span>
-          <span className="mt-2 block text-[11px] leading-4 text-text-secondary">
+          <span className="mt-2 block text-2xs leading-4 text-text-secondary">
             {t('installed.priorityEditor.lowerNumbersLoadFirst')}
           </span>
           {error && (

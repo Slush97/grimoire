@@ -1297,7 +1297,7 @@ function MaterialDebugPanel({ scene }: { scene: THREE.Object3D | null }) {
         const slots = Object.keys(morphic.texture_slots ?? {});
         const resolved = Object.keys(morphic.resolvedTextures ?? {});
         return (
-          <div key={name} className="mb-1.5 border-t border-white/20 pt-1">
+          <div key={name} className="mb-1.5 border-t border-hl/20 pt-1">
             <div className="text-amber-300">{name}</div>
             <div>
               schema v{morphic.schema_version ?? 1} - {morphic.shader} -{' '}

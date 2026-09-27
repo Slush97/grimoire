@@ -423,7 +423,7 @@ export default function SoulContainerImportModal({
                     ? 'border-accent bg-accent/10'
                     : glbPath
                       ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
-                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
                 }`}
               >
                 <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
@@ -474,7 +474,7 @@ export default function SoulContainerImportModal({
                 <>
                   {previewStats && (
                     <span
-                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-[11px] text-text-secondary"
+                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-2xs text-text-secondary"
                       title={previewStats}
                     >
                       {previewStats}
@@ -483,7 +483,7 @@ export default function SoulContainerImportModal({
 
                   {/* Top-right: playback only (pause + backdrop reroll). The view
                       toggles live in the bottom bar to keep the top uncluttered. */}
-                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[11px]">
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-2xs">
                     <button
                       type="button"
                       onClick={() => setSpinning((s) => !s)}
@@ -543,7 +543,7 @@ export default function SoulContainerImportModal({
 
                   {/* Bottom: resolved orientation label (left) + view toggles
                       (right). Vanilla shell is hidden in hero mode (no effect). */}
-                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-[11px]">
+                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-2xs">
                     <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
                       {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
                     </span>
@@ -634,7 +634,7 @@ export default function SoulContainerImportModal({
                       className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
                       aria-label={t('locker.soulImport.orient.axisDegrees', { axis: axisLabel })}
                     />
-                    <span className="text-[11px] text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                    <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
                   </div>
                 ))}
                 <div className="flex gap-1.5 pt-0.5">
@@ -680,7 +680,7 @@ export default function SoulContainerImportModal({
                   className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent disabled:opacity-40"
                   aria-label={t('locker.soulImport.facing.label')}
                 />
-                <span className="text-[11px] text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
                 <button
                   type="button"
                   onClick={() => setYaw(0)}
@@ -785,7 +785,7 @@ export default function SoulContainerImportModal({
               <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
                 <button
                   onClick={() => setDisableExisting(true)}
-                  className={`px-2.5 py-1 text-[11px] cursor-pointer transition-colors ${
+                  className={`px-2.5 py-1 text-2xs cursor-pointer transition-colors ${
                     disableExisting
                       ? 'bg-accent/25 text-text-primary'
                       : 'text-amber-200/70 hover:bg-amber-500/10'
@@ -795,7 +795,7 @@ export default function SoulContainerImportModal({
                 </button>
                 <button
                   onClick={() => setDisableExisting(false)}
-                  className={`px-2.5 py-1 text-[11px] cursor-pointer border-l border-amber-500/40 transition-colors ${
+                  className={`px-2.5 py-1 text-2xs cursor-pointer border-l border-amber-500/40 transition-colors ${
                     !disableExisting
                       ? 'bg-accent/25 text-text-primary'
                       : 'text-amber-200/70 hover:bg-amber-500/10'

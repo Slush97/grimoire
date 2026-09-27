@@ -67,7 +67,7 @@ export default function GameinfoBanner() {
             onClick={() => setDismissed(text)}
             aria-label={t('layout.hideGameinfoBanner')}
             title={t('layout.hideGameinfoBannerShort')}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <X className="h-4 w-4" />
           </button>

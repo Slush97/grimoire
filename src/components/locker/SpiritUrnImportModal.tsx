@@ -343,7 +343,7 @@ export default function SpiritUrnImportModal({
                     ? 'border-accent bg-accent/10'
                     : glbPath
                       ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
-                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
                 }`}
               >
                 <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
@@ -393,14 +393,14 @@ export default function SpiritUrnImportModal({
                 <>
                   {previewStats && (
                     <span
-                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-[11px] text-text-secondary"
+                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-2xs text-text-secondary"
                       title={previewStats}
                     >
                       {previewStats}
                     </span>
                   )}
 
-                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[11px]">
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-2xs">
                     <button
                       type="button"
                       onClick={() => setSpinning((s) => !s)}
@@ -440,7 +440,7 @@ export default function SpiritUrnImportModal({
                     <ArrowDown className="w-4 h-4" />
                   </button>
 
-                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-[11px]">
+                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-2xs">
                     <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
                       {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
                     </span>
@@ -506,7 +506,7 @@ export default function SpiritUrnImportModal({
                       className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
                       aria-label={t('locker.soulImport.orient.axisDegrees', { axis: axisLabel })}
                     />
-                    <span className="text-[11px] text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                    <span className="text-2xs text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
                   </div>
                 ))}
                 <div className="flex gap-1.5 pt-0.5">
@@ -551,7 +551,7 @@ export default function SpiritUrnImportModal({
                   className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
                   aria-label={t('locker.urnImport.size.label')}
                 />
-                <span className="text-[11px] text-text-secondary">{t('locker.urnImport.size.units')}</span>
+                <span className="text-2xs text-text-secondary">{t('locker.urnImport.size.units')}</span>
                 <button
                   type="button"
                   onClick={() => setSpan(DEFAULT_SPAN)}
@@ -562,7 +562,7 @@ export default function SpiritUrnImportModal({
                   <RefreshCw className="w-3 h-3" />
                 </button>
               </div>
-              <p className="text-[11px] text-text-secondary mb-2">{t('locker.urnImport.size.hint')}</p>
+              <p className="text-2xs text-text-secondary mb-2">{t('locker.urnImport.size.hint')}</p>
               <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -633,7 +633,7 @@ export default function SpiritUrnImportModal({
               <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
                 <button
                   onClick={() => setDisableExisting(true)}
-                  className={`px-2.5 py-1 text-[11px] cursor-pointer transition-colors ${
+                  className={`px-2.5 py-1 text-2xs cursor-pointer transition-colors ${
                     disableExisting
                       ? 'bg-accent/25 text-text-primary'
                       : 'text-amber-200/70 hover:bg-amber-500/10'
@@ -643,7 +643,7 @@ export default function SpiritUrnImportModal({
                 </button>
                 <button
                   onClick={() => setDisableExisting(false)}
-                  className={`px-2.5 py-1 text-[11px] cursor-pointer border-l border-amber-500/40 transition-colors ${
+                  className={`px-2.5 py-1 text-2xs cursor-pointer border-l border-amber-500/40 transition-colors ${
                     !disableExisting
                       ? 'bg-accent/25 text-text-primary'
                       : 'text-amber-200/70 hover:bg-amber-500/10'

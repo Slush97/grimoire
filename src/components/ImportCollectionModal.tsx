@@ -801,7 +801,7 @@ export default function ImportCollectionModal({
       panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
     >
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0 flex items-start gap-3">
             <Library className="w-6 h-6 text-accent flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
@@ -815,7 +815,7 @@ export default function ImportCollectionModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -823,7 +823,7 @@ export default function ImportCollectionModal({
         </div>
 
         {/* Input */}
-        <div className="p-6 border-b border-white/10">
+        <div className="p-6 border-b border-hl/10">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -898,7 +898,7 @@ export default function ImportCollectionModal({
           )}
 
           {rows.length > 0 && (
-            <div className="sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
+            <div className="sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-hl/5 z-10">
               <div className="px-6 py-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
@@ -927,7 +927,7 @@ export default function ImportCollectionModal({
                   type="button"
                   onClick={() => void handleToggleShowAllVariants()}
                   disabled={variantScanProgress !== null}
-                  className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                  className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-hl/10 text-text-secondary hover:text-text-primary hover:border-hl/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
                   title={t('importCollection.scanTitle')}
                 >
                   {variantScanProgress ? (
@@ -953,7 +953,7 @@ export default function ImportCollectionModal({
             </div>
           )}
 
-          <ul className="divide-y divide-white/5">
+          <ul className="divide-y divide-hl/5">
             {rows.map((row) => {
               const thumb = previewThumb(row.item.previewMedia);
               const nsfwSkipped = skipNsfw && row.item.nsfw && !row.skip;
@@ -1005,7 +1005,7 @@ export default function ImportCollectionModal({
                         {row.item.name}
                       </a>
                       <div className="text-xs text-text-secondary flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
-                        <span className="px-2 py-0.5 rounded-sm bg-white/5 border border-white/5 font-medium">
+                        <span className="px-2 py-0.5 rounded-sm bg-hl/5 border border-hl/5 font-medium">
                           {row.item.modelName}
                         </span>
                         {row.item.submitter && <span>by {row.item.submitter.name}</span>}
@@ -1018,7 +1018,7 @@ export default function ImportCollectionModal({
                           <button
                             type="button"
                             onClick={() => toggleVariants(row)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-text-secondary hover:text-text-primary hover:bg-white/5 cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-text-secondary hover:text-text-primary hover:bg-hl/5 cursor-pointer"
                             title={t('importCollection.chooseAVariant')}
                           >
                             {row.variantsOpen ? (
@@ -1117,7 +1117,7 @@ export default function ImportCollectionModal({
                       {!row.detailsLoading && !row.detailsError && row.details?.files && row.details.files.length > 0 && (
                         <>
                           {row.details.files.length > 1 && (
-                            <p className="text-[11px] text-text-tertiary mb-1.5">
+                            <p className="text-2xs text-text-tertiary mb-1.5">
                               {t('importCollection.variantHint')}
                             </p>
                           )}
@@ -1134,7 +1134,7 @@ export default function ImportCollectionModal({
                                   className={`flex items-center gap-2.5 px-3 py-2 rounded-sm cursor-pointer text-sm border ${
                                     isPicked
                                       ? 'bg-accent/10 border-accent/40 text-text-primary'
-                                      : 'border-transparent hover:bg-white/5 text-text-secondary'
+                                      : 'border-transparent hover:bg-hl/5 text-text-secondary'
                                   }`}
                                 >
                                   <input
@@ -1147,7 +1147,7 @@ export default function ImportCollectionModal({
                                     {file.fileName}
                                   </span>
                                   {file.isArchived && (
-                                    <span className="text-text-tertiary text-[11px] uppercase tracking-wide">archived</span>
+                                    <span className="text-text-tertiary text-2xs uppercase tracking-wide">archived</span>
                                   )}
                                   <span
                                     className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
@@ -1181,7 +1181,7 @@ export default function ImportCollectionModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-white/10">
+        <div className="border-t border-hl/10">
           {/* Post-install prompt: only appears once every submitted item has
               reached a terminal state and at least one mod actually installed.
               Lets the user save the batch as a profile without making the

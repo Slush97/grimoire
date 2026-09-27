@@ -653,7 +653,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                         bright: pct(brightness),
                       })}
               </div>
-              <div className="text-[11px] text-text-secondary">
+              <div className="text-2xs text-text-secondary">
                 {!applied
                   ? t('locker.colors.noRecolorApplied')
                   : !dirty
@@ -666,7 +666,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           {/* Hue slider over a rainbow track. In prism mode it rotates where the
               spectrum starts rather than picking one color. */}
           <label className="block space-y-1">
-            <span className="text-[11px] font-medium text-text-secondary">
+            <span className="text-2xs font-medium text-text-secondary">
               {mode === 'hue' ? t('locker.colors.hue') : t('locker.colors.rotation')}
             </span>
             <input
@@ -687,7 +687,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* Saturation slider: gray -> full chroma at the current hue */}
           <label className="block space-y-1">
-            <span className="text-[11px] font-medium text-text-secondary">
+            <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.saturation')}{' '}
               <span className="tabular-nums text-text-secondary/70">{pct(saturation)}%</span>
             </span>
@@ -708,7 +708,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* Brightness slider: dark -> light at the current hue */}
           <label className="block space-y-1">
-            <span className="text-[11px] font-medium text-text-secondary">
+            <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.brightness')}{' '}
               <span className="tabular-nums text-text-secondary/70">{pct(brightness)}%</span>
             </span>
@@ -772,7 +772,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                 </span>
                 <span>{t('locker.colors.sweepSpectrum')}</span>
               </label>
-              <p className="text-[11px] text-text-secondary/80">
+              <p className="text-2xs text-text-secondary/80">
                 {t('locker.colors.prismDescription', { hero: heroName })}
               </p>
             </div>
@@ -802,7 +802,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   disabled={busy}
                   onClick={() => setGradientPreset('custom')}
                   title={t('locker.colors.customGradient')}
-                  className={`flex h-7 items-center rounded border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed ${
+                  className={`flex h-7 items-center rounded border px-2 text-2xs font-medium transition-colors disabled:cursor-not-allowed ${
                     gradientPreset === 'custom'
                       ? 'border-text-primary text-text-primary ring-2 ring-accent/60'
                       : 'border-border text-text-secondary hover:text-text-primary'
@@ -859,7 +859,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                 </span>
                 <span>{t('locker.colors.sweepGradient')}</span>
               </label>
-              <p className="text-[11px] text-text-secondary/80">
+              <p className="text-2xs text-text-secondary/80">
                 {t('locker.colors.gradientDescription', { hero: heroName })}
               </p>
             </div>
@@ -898,7 +898,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* How the particles move at runtime. 'off' bakes a still paint. */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-text-secondary">
+            <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.animation')}
             </span>
             <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
@@ -916,7 +916,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             </div>
           </div>
           {trippyAnimStyle !== 'off' && (
-            <p className="text-[11px] text-text-secondary/70">
+            <p className="text-2xs text-text-secondary/70">
               {t('locker.colors.swatchAnimationHint')}
             </p>
           )}
@@ -924,7 +924,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           {/* Animation strength (how strongly the motion reads); off when static. */}
           {trippyAnimStyle !== 'off' && (
             <label className="block space-y-1">
-              <span className="text-[11px] font-medium text-text-secondary">
+              <span className="text-2xs font-medium text-text-secondary">
                 {t('locker.colors.animationStrength')}{' '}
                 <span className="tabular-nums text-text-secondary/70">{pct(trippyAnimIntensity)}%</span>
               </span>
@@ -943,7 +943,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* Which effect sets the paint touches. */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-text-secondary">
+            <span className="text-2xs font-medium text-text-secondary">
               {t('locker.colors.paint')}
             </span>
             <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
@@ -965,7 +965,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             </div>
           </div>
 
-          <p className="text-[11px] text-text-secondary/80">
+          <p className="text-2xs text-text-secondary/80">
             {t('locker.colors.trippyDescription', { hero: heroName })}
           </p>
         </div>
@@ -1023,7 +1023,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
       )}
 
       {busy && (
-        <p className="text-[11px] text-text-secondary/80">
+        <p className="text-2xs text-text-secondary/80">
           {t('locker.colors.bakingHint')}
         </p>
       )}

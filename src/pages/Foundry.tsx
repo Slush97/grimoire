@@ -146,7 +146,7 @@ export default function Foundry() {
           <ArrowLeft size={15} />
           <Tx k="foundry.backToHeroes" fallback="Heroes" />
         </button>
-        <span className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary/70">
+        <span className="px-2 pb-1 text-2xs font-semibold uppercase tracking-wide text-text-secondary/70">
           <Tx k="foundry.subtools.heading" fallback="Workshop" />
         </span>
         {SUBTOOLS.map((tool) => {

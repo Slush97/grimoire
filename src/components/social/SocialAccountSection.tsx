@@ -10,7 +10,7 @@ function KeyringNotice() {
   const { t } = useTranslation();
   return (
     <div
-      className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm border border-yellow-500/25 bg-yellow-500/[0.07] px-2.5 py-1.5 text-[11px] leading-tight text-yellow-100"
+      className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm border border-yellow-500/25 bg-yellow-500/[0.07] px-2.5 py-1.5 text-2xs leading-tight text-yellow-100"
       title={t('social.account.safeStorageUnencrypted')}
     >
       <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-yellow-300" />
@@ -78,11 +78,11 @@ export default function SocialAccountSection() {
               <img
                 src={status.user.avatar_url}
                 alt=""
-                className="w-12 h-12 rounded-full border border-white/10"
+                className="w-12 h-12 rounded-full border border-hl/10"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-white/10 flex items-center justify-center text-text-secondary">
+              <div className="w-12 h-12 rounded-full bg-bg-tertiary border border-hl/10 flex items-center justify-center text-text-secondary">
                 <Globe className="w-5 h-5" />
               </div>
             )}
@@ -103,7 +103,7 @@ export default function SocialAccountSection() {
             <KeyringNotice />
           )}
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-hl/5">
             <Button variant="secondary" icon={LogOut} onClick={logout} disabled={loading}>
               {t('social.account.signOut')}
             </Button>

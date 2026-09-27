@@ -189,7 +189,7 @@ export default function MergedContentsModal({
             </div>
             <div className="flex-1 min-w-0 space-y-1 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <Tag className="border-white/20 text-white/90" icon={Layers}>
+                <Tag className="border-hl/20 text-white/90" icon={Layers}>
                   {t('mergedContents.merged', { count: merged.sources.length })}
                 </Tag>
                 <span className="text-text-secondary text-xs">{t('mergedContents.created', { date: createdLabel })}</span>
@@ -221,7 +221,7 @@ export default function MergedContentsModal({
                 </div>
               )}
               {updateSkips.length > 0 && (
-                <ul className="text-amber-200/80 text-[11px] leading-relaxed pt-1 space-y-0.5">
+                <ul className="text-amber-200/80 text-2xs leading-relaxed pt-1 space-y-0.5">
                   {updateSkips.map((skip) => (
                     <li key={`${skip.modName}:${skip.reason}`}>
                       {t(`mergedContents.skipReason.${skip.reason}`, { modName: skip.modName })}
@@ -238,7 +238,7 @@ export default function MergedContentsModal({
                 {t('mergedContents.sources', { count: merged.sources.length })}
               </div>
               {canExtract && merged.sources.length === 2 && (
-                <div className="text-[11px] text-amber-400/90">
+                <div className="text-2xs text-amber-400/90">
                   {t('mergedContents.extractingDissolves')}
                 </div>
               )}
@@ -265,7 +265,7 @@ export default function MergedContentsModal({
                       <div className="text-sm text-text-primary truncate" title={src.modName}>
                         {src.modName}
                       </div>
-                      <div className="text-[11px] text-text-secondary font-mono truncate" title={src.fileName}>
+                      <div className="text-2xs text-text-secondary font-mono truncate" title={src.fileName}>
                         {src.fileName}
                       </div>
                     </div>
@@ -365,7 +365,7 @@ export default function MergedContentsModal({
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="text-sm text-text-primary truncate">{eligible.name}</div>
-                                <div className="text-[11px] text-text-secondary font-mono truncate">
+                                <div className="text-2xs text-text-secondary font-mono truncate">
                                   {eligible.fileName}
                                 </div>
                               </div>

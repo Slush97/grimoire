@@ -37,7 +37,7 @@ export default function SettingsNav({ groups, active, onSelect, label }: Setting
       <div className="space-y-5">
         {groups.map((group) => (
           <div key={group.id}>
-            <h2 className="mb-1.5 px-3 text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">
+            <h2 className="mb-1.5 px-3 text-2xs font-medium uppercase tracking-wider text-text-secondary/70">
               {group.label}
             </h2>
             <ul className="space-y-0.5">

@@ -75,7 +75,7 @@ export default function GameplayOptIns({
                 type="button"
                 onClick={() => toggleGroup(group)}
                 aria-expanded={expanded}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary transition-colors hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary transition-colors hover:bg-hl/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <ChevronRight
                   className={`h-4 w-4 shrink-0 text-text-secondary transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -99,7 +99,7 @@ export default function GameplayOptIns({
                       const on = enabled.has(control.key);
                       const inFile = fileValues?.[control.key];
                       return (
-                        <tr key={control.key} className="border-t border-white/5">
+                        <tr key={control.key} className="border-t border-hl/5">
                           <td className="px-3 py-2 font-mono text-xs text-text-primary break-all">{control.key}</td>
                           <td className="px-3 py-2 text-xs text-text-secondary">
                             {inFile !== undefined && !on ? (

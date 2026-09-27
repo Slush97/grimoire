@@ -42,7 +42,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
   };
 
   const rowClass =
-    'w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg border border-white/10 bg-bg-tertiary hover:border-accent transition-colors cursor-pointer';
+    'w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg border border-hl/10 bg-bg-tertiary hover:border-accent transition-colors cursor-pointer';
 
   return (
     <Modal onClose={onClose} size="sm" labelledBy="editor-picker-title" panelClassName="p-5 space-y-4">
@@ -59,7 +59,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
           type="button"
           onClick={onClose}
           aria-label={t('common.actions.close')}
-          className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+          className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
         >
           <X className="w-4 h-4" aria-hidden="true" />
         </button>

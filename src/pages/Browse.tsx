@@ -481,7 +481,7 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
       case 'info':
         return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
       default:
-        return 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm';
+        return 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm';
     }
   }
   switch (tone) {
@@ -492,7 +492,7 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
     case 'info':
       return 'border-state-info/25 bg-state-info/[0.08] text-state-info';
     default:
-      return 'border-white/[0.1] bg-white/[0.04] text-text-secondary';
+      return 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary';
   }
 }
 
@@ -578,7 +578,7 @@ function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadab
   return (
     <span
       title={chip.label}
-      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[11px] font-medium leading-none ${readableChipTone(
+      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-2xs font-medium leading-none ${readableChipTone(
         chip.tone,
         onImage
       )}`}
@@ -631,15 +631,15 @@ function BrowseReadableChipRow({
         <div className="group/hidden relative shrink-0">
           <span
             title={`${hiddenChips.length} more`}
-            className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11px] font-medium leading-none ${
+            className={`inline-flex h-6 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${
               onImage
-                ? 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm'
-                : 'border-white/[0.1] bg-white/[0.04] text-text-secondary'
+                ? 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm'
+                : 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary'
             }`}
           >
             +{hiddenChips.length}
           </span>
-          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-white/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
+          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-hl/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
             {hiddenChips.map((chip, index) => (
               <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} onImage={onImage} />
             ))}
@@ -3285,7 +3285,7 @@ export default function Browse() {
                   <span className="min-w-0 truncate text-lg font-bold text-text-primary">{submitter.name}</span>
                 )}
                 {_totalCount > 0 && (
-                  <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary border border-border">
+                  <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary border border-border">
                     {_totalCount.toLocaleString()} {_totalCount === 1 ? 'mod' : 'mods'}
                   </span>
                 )}
@@ -3308,7 +3308,7 @@ export default function Browse() {
                       title={link.label}
                       aria-label={link.label}
                       style={{ backgroundColor: color }}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-white/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-hl/10 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
                     >
                       <Icon className="h-4 w-4" />
                     </a>
@@ -3435,7 +3435,7 @@ export default function Browse() {
                   <Library className="w-4 h-4 text-text-secondary shrink-0" />
                   <div className="flex flex-col min-w-0">
                     <span>{t('browse.import.gamebanana')}</span>
-                    <span className="text-[11px] text-text-secondary truncate">{t('browse.import.gamebananaHint')}</span>
+                    <span className="text-2xs text-text-secondary truncate">{t('browse.import.gamebananaHint')}</span>
                   </div>
                 </button>
                 <button
@@ -3450,7 +3450,7 @@ export default function Browse() {
                   <Upload className="w-4 h-4 text-text-secondary shrink-0" />
                   <div className="flex flex-col min-w-0">
                     <span>{t('browse.import.grimoireProfile')}</span>
-                    <span className="text-[11px] text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
+                    <span className="text-2xs text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
                   </div>
                 </button>
               </AnchoredPopover>
@@ -3510,7 +3510,7 @@ export default function Browse() {
                   <div className={layout === 'list' ? 'opacity-45' : ''}>
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</span>
-                      <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
+                      <span className="inline-flex items-center gap-1 text-2xs text-text-tertiary">
                         <Grid3x3 className="h-3.5 w-3.5" />
                         {t('browse.viewOptions.gridOnly')}
                       </span>
@@ -3599,7 +3599,7 @@ export default function Browse() {
                       className="w-full justify-start px-2 text-text-primary"
                     >
                       <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
-                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
                         {hiddenCreators.length}
                       </span>
                     </Button>
@@ -3696,7 +3696,7 @@ export default function Browse() {
                     <SlidersHorizontal className="w-4 h-4" />
                     <span>{t('browse.filters.title')}</span>
                     {filterCount > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-2xs font-semibold flex items-center justify-center">
                         {filterCount}
                       </span>
                     )}
@@ -3779,7 +3779,7 @@ export default function Browse() {
                             ))}
                           </Select>
                           {heroCategoryId !== 'all' && (
-                            <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
+                            <span className="block text-2xs text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                           )}
                         </div>
                       )}
@@ -3793,7 +3793,7 @@ export default function Browse() {
                           are missing/broken" with no explanation. Render
                           them disabled and say why. */}
                       {!hasLocalCache && (
-                        <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[11px] text-text-secondary">
+                        <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-2xs text-text-secondary">
                           {catalogSyncing
                             ? t('browse.filters.catalogSyncing')
                             : t('browse.filters.catalogUnavailable')}
@@ -3831,7 +3831,7 @@ export default function Browse() {
                         {addedWithin === 'custom' && (
                           <div className="mt-2 grid grid-cols-2 gap-2">
                             <label className="block">
-                              <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
+                              <span className="block text-2xs text-text-tertiary mb-1">{t('browse.filters.from')}</span>
                               <input
                                 type="date"
                                 value={addedFrom}
@@ -3841,7 +3841,7 @@ export default function Browse() {
                               />
                             </label>
                             <label className="block">
-                              <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
+                              <span className="block text-2xs text-text-tertiary mb-1">{t('browse.filters.to')}</span>
                               <input
                                 type="date"
                                 value={addedTo}
@@ -4255,7 +4255,7 @@ function ReadableBrowseModCard({
       {shouldHideNsfw && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
           <AlertTriangle className="h-5 w-5" />
-          <span className="mt-1 text-[11px] font-semibold">{t('browse.card.nsfwHidden')}</span>
+          <span className="mt-1 text-2xs font-semibold">{t('browse.card.nsfwHidden')}</span>
         </div>
       )}
     </div>
@@ -4298,8 +4298,8 @@ function ReadableBrowseModCard({
           : downloading
             ? 'border-accent/40'
             : installed && !installedDisabled
-              ? 'border-white/[0.07] premium-card-glow-active'
-              : 'border-white/[0.07]'
+              ? 'border-hl/[0.07] premium-card-glow-active'
+              : 'border-hl/[0.07]'
       }`}
     >
       <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
@@ -4344,7 +4344,7 @@ function ReadableBrowseModCard({
 
         {showInlineAudioPreview && (
           <div
-            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-white/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
+            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-hl/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
               isMicro ? 'h-7' : 'h-[clamp(33px,12.8571cqw,41px)]'
             }`}
             onClick={(event) => event.stopPropagation()}
@@ -4363,7 +4363,7 @@ function ReadableBrowseModCard({
                   <button
                     type="button"
                     onClick={() => setShowVolumeSlider((value) => !value)}
-                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80 transition-colors hover:bg-hl/10 hover:text-white cursor-pointer"
                     title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
                     aria-expanded={showVolumeSlider}
@@ -4375,7 +4375,7 @@ function ReadableBrowseModCard({
                     )}
                   </button>
                   {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-hl/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
                       <input
                         type="range"
                         min={0}
@@ -4404,7 +4404,7 @@ function ReadableBrowseModCard({
                 {!isMicro && (
                   <>
                     <span className="flex-shrink-0 text-[10px] tabular-nums text-text-secondary">0:00</span>
-                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80">
+                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80">
                       <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
                     </span>
                   </>
@@ -4821,7 +4821,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             </div>
           )}
           <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-2xs' : 'text-xs'}`}>
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4892,7 +4892,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-white/10 px-3 py-2 shadow-lg">
+          <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-hl/10 px-3 py-2 shadow-lg">
             <div className="flex-1 min-w-0">
               {audioControlsActive ? (
                 <AudioPreviewPlayer
@@ -4912,7 +4912,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 </div>
               )}
             </div>
-            <div className="w-px h-5 bg-white/20 flex-shrink-0" />
+            <div className="w-px h-5 bg-hl/20 flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
@@ -4920,7 +4920,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   e.stopPropagation();
                   onVolumeChange(volume > 0 ? 0 : 1);
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/70 transition-colors hover:bg-hl/10 hover:text-white cursor-pointer"
                 title={volume > 0 ? 'Mute' : 'Unmute'}
                 aria-label={volume > 0 ? 'Mute' : 'Unmute'}
               >
@@ -4950,7 +4950,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           // than forcing them to the Installed tab.
           <button
             onClick={(e) => { e.stopPropagation(); onEnable(); }}
-            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs'}`}
+            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-2xs' : 'h-8 px-2.5 text-xs'}`}
             title={t('browse.actions.enableDisabledTitle')}
           >
             <Power className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
@@ -4969,7 +4969,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-2xs' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}

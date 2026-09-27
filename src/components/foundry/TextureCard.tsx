@@ -42,7 +42,7 @@ export default function TextureCard({ item, heroName, onOpen }: TextureCardProps
         <span className="truncate text-xs font-medium capitalize text-text-primary" title={item.label}>
           {item.label || '(unnamed)'}
         </span>
-        {heroName && <span className="truncate text-[11px] text-text-secondary">{heroName}</span>}
+        {heroName && <span className="truncate text-2xs text-text-secondary">{heroName}</span>}
       </div>
     </button>
   );

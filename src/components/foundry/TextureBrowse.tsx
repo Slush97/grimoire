@@ -179,7 +179,7 @@ export default function TextureBrowse({ heroes, heroNames }: TextureBrowseProps)
         />
       ) : (
         <div className="space-y-2">
-          <p className="text-[11px] text-text-secondary">
+          <p className="text-2xs text-text-secondary">
             {truncated
               ? t('foundry.texture.countCapped', 'Showing the first {{count}}. Refine your search to see more.', {
                   count: items.length,
@@ -199,12 +199,12 @@ export default function TextureBrowse({ heroes, heroNames }: TextureBrowseProps)
                     <span className="block truncate text-sm capitalize text-text-primary" title={entry.label}>
                       {entry.label || t('foundry.lightbox.unnamed', '(unnamed)')}
                     </span>
-                    <span className="block truncate text-[11px] text-text-secondary" title={entry.path}>
+                    <span className="block truncate text-2xs text-text-secondary" title={entry.path}>
                       {entry.path}
                     </span>
                   </span>
                   {entry.hero && (
-                    <span className="shrink-0 text-[11px] text-text-secondary/70">
+                    <span className="shrink-0 text-2xs text-text-secondary/70">
                       {heroNames.get(entry.hero) ?? entry.hero}
                     </span>
                   )}

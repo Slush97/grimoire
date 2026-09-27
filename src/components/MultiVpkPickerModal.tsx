@@ -96,7 +96,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                                     className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors cursor-pointer ${
                                         isChecked
                                             ? 'border-accent/40 bg-accent/5 text-text-primary'
-                                            : 'border-border bg-bg-tertiary text-text-secondary hover:bg-white/5'
+                                            : 'border-border bg-bg-tertiary text-text-secondary hover:bg-hl/5'
                                     }`}
                                 >
                                     <input
@@ -110,14 +110,14 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                                         {label ? (
                                             <>
                                                 <div className="text-sm font-medium truncate" title={label}>{label}</div>
-                                                <div className="font-mono text-[11px] text-text-secondary/80 truncate" title={vpk}>{vpk}</div>
+                                                <div className="font-mono text-2xs text-text-secondary/80 truncate" title={vpk}>{vpk}</div>
                                             </>
                                         ) : (
                                             <span className="font-mono text-xs truncate block" title={vpk}>{vpk}</span>
                                         )}
                                     </div>
                                     {sizeLabel && (
-                                        <span className="flex-shrink-0 rounded bg-bg-primary/70 px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary border border-white/5">
+                                        <span className="flex-shrink-0 rounded bg-bg-primary/70 px-1.5 py-0.5 text-2xs tabular-nums text-text-secondary border border-hl/5">
                                             {sizeLabel}
                                         </span>
                                     )}
@@ -130,7 +130,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                 <div className="flex justify-end gap-3 p-5 border-t border-border">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-hl/10 transition-colors cursor-pointer"
                     >
                         {t('multiVpk.cancelInstall')}
                     </button>

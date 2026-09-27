@@ -136,7 +136,7 @@ export default function ForgeInstallModal({
             <div className="mt-5 flex justify-end gap-3">
                 <button
                     onClick={() => onRespond(false)}
-                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-hl/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-hl/60"
                 >
                     {t('common.actions.cancel')}
                 </button>

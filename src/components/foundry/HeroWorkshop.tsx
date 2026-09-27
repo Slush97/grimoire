@@ -143,7 +143,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
                 className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer ${
                   isActive
                     ? 'border-accent/60 bg-accent/15'
-                    : 'border-transparent hover:bg-white/10'
+                    : 'border-transparent hover:bg-hl/10'
                 }`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />

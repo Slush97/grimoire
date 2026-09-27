@@ -332,7 +332,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 className={`group relative block w-full overflow-hidden rounded-[10px] border text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
                   isApplied
                     ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
-                    : 'border-white/[0.08] bg-bg-sunken/55 hover:border-white/[0.16]'
+                    : 'border-hl/[0.08] bg-bg-sunken/55 hover:border-hl/[0.16]'
                 } ${busySource !== null && !isBusy ? 'opacity-60' : 'cursor-pointer'}`}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
@@ -386,7 +386,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
           className={`space-y-3 rounded-[10px] border p-3 backdrop-blur-sm transition-[border-color,box-shadow] duration-200 ${
             customApplied
               ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
-              : 'border-white/[0.08] bg-bg-sunken/55'
+              : 'border-hl/[0.08] bg-bg-sunken/55'
           }`}
         >
           <div className="flex items-center justify-between gap-2">
@@ -404,7 +404,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               </span>
             )}
           </div>
-          <p className="text-[11px] leading-snug text-text-secondary">
+          <p className="text-2xs leading-snug text-text-secondary">
             {t('locker.cards.uploadInstructions')}
           </p>
 
@@ -446,7 +446,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                       aria-label={t('locker.cards.clearVariantImage', {
                         variant: VARIANT_LABEL[slot.variant] ?? slot.variant,
                       })}
-                      className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-white/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
+                      className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-hl/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -495,7 +495,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               disabled={exporting || customBusy || !hasPicks}
               onClick={handleExportCustom}
               title={t('locker.cards.exportVpkTitle')}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {exporting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -509,7 +509,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 type="button"
                 disabled={customBusy}
                 onClick={handleRevertCustom}
-                className="inline-flex cursor-pointer items-center rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex cursor-pointer items-center rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('locker.cards.revert')}
               </button>

@@ -98,7 +98,7 @@ function ShuffleVariantSelect({
           }}
           aria-label={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
           title={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
-          className="py-1 pl-2 pr-8 text-[11px]"
+          className="py-1 pl-2 pr-8 text-2xs"
         >
           <option value="default">{t('locker.randomize.defaultVariant')}</option>
           <option value="random">{t('locker.randomize.anyVariant')}</option>
@@ -232,11 +232,11 @@ function LoadOrderRow({
       className={`flex touch-none items-center gap-2.5 rounded-md border px-2 py-1.5 transition-colors ${
         isDragging
           ? 'z-10 cursor-grabbing border-accent/40 bg-bg-secondary opacity-95 shadow-lg shadow-black/40'
-          : 'cursor-grab border-white/[0.08] bg-bg-secondary/60 hover:border-white/[0.18] hover:bg-bg-secondary/80'
+          : 'cursor-grab border-hl/[0.08] bg-bg-secondary/60 hover:border-hl/[0.18] hover:bg-bg-secondary/80'
       }`}
     >
       <GripVertical className="h-4 w-4 flex-shrink-0 text-white/40" aria-hidden />
-      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-[11px] font-semibold tabular-nums text-accent">
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-2xs font-semibold tabular-nums text-accent">
         {position}
       </span>
       <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded bg-bg-tertiary">
@@ -333,10 +333,10 @@ export function SkinLoadOrderStrip({
   if (groups.length < 2) return null;
 
   return (
-    <div className="animate-drop-in rounded-lg border border-white/[0.08] bg-black/20 p-2.5 backdrop-blur-sm">
+    <div className="animate-drop-in rounded-lg border border-hl/[0.08] bg-black/20 p-2.5 backdrop-blur-sm">
       <div className="mb-2 px-0.5">
         <div className="text-xs font-semibold text-white">{t('locker.skins.loadOrder')}</div>
-        <div className="text-[11px] leading-snug text-white/60">
+        <div className="text-2xs leading-snug text-white/60">
           {t('locker.skins.loadOrderHint')}
         </div>
       </div>
@@ -442,8 +442,8 @@ function SkinGroupCard({
       ref={cardRef}
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
-          ? 'border-accent bg-white/[0.02] hover:bg-white/[0.04]'
-          : 'border-white/[0.08] bg-bg-secondary/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+          ? 'border-accent bg-hl/[0.02] hover:bg-hl/[0.04]'
+          : 'border-hl/[0.08] bg-bg-secondary/55 text-text-primary/75 hover:border-hl/[0.16] hover:text-text-primary'
       } ${isIncluded ? 'ring-2 ring-accent/45' : ''} ${variantsOpen ? 'z-20' : ''}`}
     >
       {/* Glass backdrop: a blurred copy of the cover art bleeds behind the
@@ -465,7 +465,7 @@ function SkinGroupCard({
       )}
 
       {/* Media: aspect-video cover, dimmed when the group is inactive. */}
-      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] bg-bg-tertiary">
+      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-hl/[0.08] bg-bg-tertiary">
         <div
           className={`h-full w-full transition-[filter,opacity] duration-200 ${
             groupActive ? '' : 'grayscale-[0.6] opacity-[0.7]'
@@ -623,7 +623,7 @@ function SkinGroupCard({
       {isMulti && (
         <>
           <div
-            className={`pointer-events-none mt-1 flex items-center gap-1 px-0.5 text-[11px] ${
+            className={`pointer-events-none mt-1 flex items-center gap-1 px-0.5 text-2xs ${
               enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
             }`}
           >
@@ -646,7 +646,7 @@ function SkinGroupCard({
           )}
           {variantsOpen && (
             <div
-              className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-white/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
+              className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-hl/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
               role="group"
               aria-label={t('locker.skins.variantToggles')}
               onMouseDown={(e) => e.stopPropagation()}
@@ -662,7 +662,7 @@ function SkinGroupCard({
                     }
                     aria-pressed={variant.enabled}
                     title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
-                    className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                    className={`max-w-full truncate rounded-full border px-2 py-0.5 text-2xs font-medium transition-colors cursor-pointer ${
                       variant.enabled
                         ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
                         : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
@@ -737,7 +737,7 @@ function SkinGroupRow({
     <div
       className={`group/row relative rounded-md border transition-colors ${
         groupActive
-          ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
+          ? 'border-accent/60 bg-hl/[0.04] backdrop-blur-sm'
           : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
       } ${isIncluded ? 'ring-2 ring-accent/45' : ''}`}
     >

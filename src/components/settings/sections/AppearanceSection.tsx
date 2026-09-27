@@ -35,15 +35,15 @@ export default function AppearanceSection() {
           label={<Tx k="settings.appearance.oled.title" fallback="OLED mode" />}
         />
 
-        <div className="my-5 h-px bg-white/5" />
+        <div className="my-5 h-px bg-hl/5" />
 
         <AccentColorPicker />
 
-        <div className="my-5 h-px bg-white/5" />
+        <div className="my-5 h-px bg-hl/5" />
 
         <BackgroundGradientPicker />
 
-        <div className="my-5 h-px bg-white/5" />
+        <div className="my-5 h-px bg-hl/5" />
 
         <AppearanceArtSection />
       </Card>
@@ -55,7 +55,7 @@ export default function AppearanceSection() {
             onChange={handleLanguageChange}
           />
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-hl/5" />
 
           <div>
             <label className="text-sm font-medium text-text-primary block">
@@ -67,7 +67,7 @@ export default function AppearanceSection() {
                 fallback="How upload and update dates are shown on mods and files."
               />
             </p>
-            <div className="inline-flex rounded-md border border-white/10 overflow-hidden">
+            <div className="inline-flex rounded-md border border-hl/10 overflow-hidden">
               {(['MM/DD/YYYY', 'DD/MM/YYYY'] as const).map((fmt, i) => {
                 const active = (settings?.dateFormat ?? 'MM/DD/YYYY') === fmt;
                 return (
@@ -75,11 +75,11 @@ export default function AppearanceSection() {
                     key={fmt}
                     onClick={() => handleDateFormatChange(fmt)}
                     className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                      i > 0 ? 'border-l border-white/10' : ''
+                      i > 0 ? 'border-l border-hl/10' : ''
                     } ${
                       active
                         ? 'bg-accent/20 text-text-primary'
-                        : 'bg-bg-tertiary text-text-secondary hover:bg-white/5'
+                        : 'bg-bg-tertiary text-text-secondary hover:bg-hl/5'
                     }`}
                   >
                     {fmt}

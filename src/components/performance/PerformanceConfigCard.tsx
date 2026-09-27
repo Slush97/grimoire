@@ -361,7 +361,7 @@ export default function PerformanceConfigCard() {
       }
     >
       {notice && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hl/5 px-5 py-3">
           <p
             className={`text-sm ${
               notice.tone === 'danger'
@@ -393,7 +393,7 @@ export default function PerformanceConfigCard() {
             <label
               key={preset.id}
               className={`flex gap-3 rounded-sm border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
-                checked ? 'border-accent bg-accent/5' : 'border-border hover:border-white/20'
+                checked ? 'border-accent bg-accent/5' : 'border-border hover:border-hl/20'
               } ${busy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
             >
               <input
@@ -440,7 +440,7 @@ export default function PerformanceConfigCard() {
         })}
       </div>
 
-      <div className="border-t border-white/5">
+      <div className="border-t border-hl/5">
         <button
           type="button"
           onClick={() => setAdvancedOpen((v) => !v)}

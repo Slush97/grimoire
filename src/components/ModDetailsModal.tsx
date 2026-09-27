@@ -741,7 +741,7 @@ function ModDetailsModal({
                   </span>
                 )}
               </span>
-              <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
+              <span className="flex-shrink-0 text-2xs leading-none text-text-tertiary">
                 ({archivedFiles.length})
               </span>
             </button>
@@ -1206,11 +1206,11 @@ function ModDetailsModal({
                             }`}
                           />
                           {imageHidden && (
-                            <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
+                            <div className="absolute inset-0 flex items-center justify-center text-2xs uppercase tracking-wide text-white/80 bg-black/40">
                               {t('modDetails.nsfw.previewHidden')}
                             </div>
                           )}
-                          <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-hl/10 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Maximize2 className="w-3.5 h-3.5" />
                           </span>
                         </button>
@@ -1220,7 +1220,7 @@ function ModDetailsModal({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
                               aria-label={t('modDetails.aria.previousImage')}
-                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer"
                             >
                               <ChevronLeft className="w-5 h-5" />
                             </button>
@@ -1228,11 +1228,11 @@ function ModDetailsModal({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToNext(); }}
                               aria-label={t('modDetails.aria.nextImage')}
-                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer"
                             >
                               <ChevronRight className="w-5 h-5" />
                             </button>
-                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
+                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-2xs border border-hl/10">
                               {idx + 1} / {images.length}
                             </div>
                           </>
@@ -1310,16 +1310,16 @@ function ModDetailsModal({
                           }`}
                         />
                         {imageHidden && (
-                          <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
+                          <div className="absolute inset-0 flex items-center justify-center text-2xs uppercase tracking-wide text-white/80 bg-black/40">
                             {t('modDetails.nsfw.previewHidden')}
                           </div>
                         )}
                         {images.length > 1 && (
-                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
+                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-2xs border border-hl/10">
                             {index + 1} / {images.length}
                           </div>
                         )}
-                        <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-hl/10 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Maximize2 className="w-3.5 h-3.5" />
                         </span>
                       </button>
@@ -1354,7 +1354,7 @@ function ModDetailsModal({
                     <Volume2 className="w-4 h-4 text-accent" />
                     <h3 className="font-medium text-sm text-text-primary">{t('modDetails.audio.preview')}</h3>
                   </div>
-                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
+                  <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-hl/10 p-1">
                     <AudioPreviewPlayer
                       src={audioPreviewUrl}
                       className="w-full"
@@ -1593,7 +1593,7 @@ function ModDetailsModal({
                               </span>
                             )}
                             {update.dateAdded > 0 && (
-                              <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-[11px] text-text-tertiary">
+                              <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-2xs text-text-tertiary">
                                 <Clock className="w-3 h-3" />
                                 {formatDate(update.dateAdded)}
                               </span>
@@ -1646,7 +1646,7 @@ function ModDetailsModal({
                     </span>
                   </h3>
                   {!commentsLoading && commentsTotalCount > comments.length && comments.length > 0 && (
-                    <span className="flex-shrink-0 text-[11px] text-text-tertiary">
+                    <span className="flex-shrink-0 text-2xs text-text-tertiary">
                       {t('modDetails.comments.showing', { shown: comments.length.toLocaleString(), total: commentsTotalCount.toLocaleString() })}
                     </span>
                   )}
@@ -1708,7 +1708,7 @@ function ModDetailsModal({
                               <span className="min-w-0 max-w-full truncate text-sm font-semibold text-text-primary" title={comment.poster.name}>
                                 {comment.poster.name}
                               </span>
-                              <span className="inline-flex flex-shrink-0 items-center gap-1 text-[11px] text-text-tertiary">
+                              <span className="inline-flex flex-shrink-0 items-center gap-1 text-2xs text-text-tertiary">
                                 <Clock className="h-3 w-3" />
                                 {formatDate(comment.dateAdded)}
                               </span>
@@ -1758,7 +1758,7 @@ function ModDetailsModal({
             type="button"
             onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
             aria-label={t('modDetails.aria.closeFullSizeView')}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
           >
             <X className="w-5 h-5" />
           </button>
@@ -1768,7 +1768,7 @@ function ModDetailsModal({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
                 aria-label={t('modDetails.aria.previousImage')}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
@@ -1776,11 +1776,11 @@ function ModDetailsModal({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToNext(); }}
                 aria-label={t('modDetails.aria.nextImage')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
-              <div className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white/90 text-xs border border-white/15">
+              <div className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white/90 text-xs border border-hl/15">
                 {currentImageIndex + 1} / {images.length}
               </div>
             </>

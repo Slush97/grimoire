@@ -104,7 +104,7 @@ export default function PublishDialog({
       dismissable={!submitting}
       panelClassName="flex flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-6 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="publish-profile-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Globe className="w-5 h-5 text-accent" />
@@ -117,7 +117,7 @@ export default function PublishDialog({
           <button
             onClick={() => { if (!submitting) onClose(); }}
             disabled={submitting}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-hl/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -192,7 +192,7 @@ export default function PublishDialog({
                     placeholder={t('social.publish.titlePlaceholder')}
                   />
                 </FormField>
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                <div className="text-2xs text-text-secondary mt-1 flex justify-end">
                   <span className={titleTooLong ? 'text-state-danger' : ''}>{trimmedTitle.length}/80</span>
                 </div>
               </div>
@@ -211,13 +211,13 @@ export default function PublishDialog({
                     className="resize-none"
                   />
                 </FormField>
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                <div className="text-2xs text-text-secondary mt-1 flex justify-end">
                   <span className={descriptionTooLong ? 'text-state-danger' : ''}>{trimmedDescription.length}/1000</span>
                 </div>
               </div>
 
               {!tosAccepted && (
-                <div className="bg-bg-tertiary border border-white/10 rounded-md p-3 text-xs text-text-secondary space-y-2">
+                <div className="bg-bg-tertiary border border-hl/10 rounded-md p-3 text-xs text-text-secondary space-y-2">
                   <p className="leading-relaxed">
                     {t('social.publish.tosBody')}
                   </p>

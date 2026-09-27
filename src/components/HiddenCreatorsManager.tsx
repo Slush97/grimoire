@@ -44,7 +44,7 @@ export function HiddenCreatorsManager({ creators, onRemove, className = '' }: Hi
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-text-primary">{creator.name}</div>
-            <div className="text-[11px] text-text-tertiary">
+            <div className="text-2xs text-text-tertiary">
               {t('hiddenCreators.gamebananaId', { id: creator.id })}
             </div>
           </div>
