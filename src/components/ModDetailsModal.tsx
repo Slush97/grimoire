@@ -227,6 +227,7 @@ function ModDetailsModal({
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
+  const [commentsError, setCommentsError] = useState(false);
   const [updates, setUpdates] = useState<GameBananaModUpdate[]>([]);
   const [updatesLoading, setUpdatesLoading] = useState(true);
   const [updatesTotalCount, setUpdatesTotalCount] = useState(0);
@@ -277,11 +278,13 @@ function ModDetailsModal({
     if (offline) {
       setComments([]);
       setCommentsTotalCount(0);
+      setCommentsError(false);
       setCommentsLoading(false);
       return;
     }
     let cancelled = false;
     setCommentsLoading(true);
+    setCommentsError(false);
     getModComments(mod.id, section)
       .then((res) => {
         if (!cancelled) {
@@ -290,7 +293,12 @@ function ModDetailsModal({
         }
       })
       .catch((err) => {
-        console.error('[ModDetailsModal] Failed to load comments:', err);
+        if (!cancelled) {
+          console.error('[ModDetailsModal] Failed to load comments:', err);
+          setComments([]);
+          setCommentsTotalCount(0);
+          setCommentsError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setCommentsLoading(false);
@@ -1659,6 +1667,10 @@ function ModDetailsModal({
                       </li>
                     ))}
                   </ul>
+                ) : commentsError ? (
+                  <p className="rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-secondary">
+                    {t('modDetails.comments.unavailable')}
+                  </p>
                 ) : comments.length === 0 ? (
                   <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-bg-tertiary/30 px-3 py-4 text-sm text-text-secondary">
                     <MessageSquare className="h-4 w-4 flex-shrink-0 text-text-tertiary" />

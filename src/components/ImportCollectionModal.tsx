@@ -175,11 +175,6 @@ export default function ImportCollectionModal({
   // stays interactive (cancel buttons, variant pickers for not-yet-queued
   // rows, etc.).
   const [submitting, setSubmitting] = useState(false);
-  // Selected mods that have multiple downloadable files and no manual pick.
-  // Populated when the user clicks Queue; submission is blocked while this
-  // set is non-empty so the user is forced to choose instead of silently
-  // getting the most-downloaded variant.
-  const [needsVariantPicks, setNeedsVariantPicks] = useState<Set<number>>(new Set());
   // Whether the user has opted into seeing every variant up-front. Off by
   // default to avoid the API-spam cost on large collections. When on, we
   // fetch details for every selectable row and auto-expand pickers for any
@@ -209,16 +204,6 @@ export default function ImportCollectionModal({
     rowsRef.current = rows;
   }, [rows]);
 
-  // Per-row DOM refs so we can scroll the first ambiguous-variant row into
-  // view when the banner appears.
-  const rowRefs = useRef<Map<number, HTMLLIElement>>(new Map());
-  const setRowRef = useCallback(
-    (id: number) => (el: HTMLLIElement | null) => {
-      if (el) rowRefs.current.set(id, el);
-      else rowRefs.current.delete(id);
-    },
-    []
-  );
 
   // Track which mod ids this modal owns so global queue events don't bleed
   // into rows that came from elsewhere (e.g. the user kicked off a download
@@ -550,11 +535,9 @@ export default function ImportCollectionModal({
 
   // Toggle a file on or off in the row's pickedFileIds set. Empty set means
   // "no explicit pick" and the queue falls back to the primary file; one or
-  // more picks means "download exactly these files". As soon as a row has at
-  // least one pick, we drop it from the variant-required banner.
+  // more picks means "download exactly these files".
   const toggleVariantPick = useCallback(
     (row: ItemRow, file: GameBananaFile) => {
-      let resultedInAtLeastOnePick = false;
       setRows((prev) =>
         prev.map((r) => {
           if (r.item.id !== row.item.id) return r;
@@ -562,18 +545,9 @@ export default function ImportCollectionModal({
           const nextPicks = has
             ? r.pickedFileIds.filter((id) => id !== file.id)
             : [...r.pickedFileIds, file.id];
-          if (nextPicks.length > 0) resultedInAtLeastOnePick = true;
           return { ...r, pickedFileIds: nextPicks };
         })
       );
-      if (resultedInAtLeastOnePick) {
-        setNeedsVariantPicks((prev) => {
-          if (!prev.has(row.item.id)) return prev;
-          const next = new Set(prev);
-          next.delete(row.item.id);
-          return next;
-        });
-      }
     },
     []
   );
@@ -622,20 +596,6 @@ export default function ImportCollectionModal({
     );
     setVariantScanProgress(null);
   }, [showAllVariants, ensureDetails]);
-
-  // "Use most popular" escape hatch on the variant-required banner. Stamps
-  // each unresolved row with the primary file as its sole pick so submission
-  // proceeds on the next Queue click without forcing manual picks.
-  const acceptDefaults = useCallback(() => {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (!needsVariantPicks.has(r.item.id)) return r;
-        if (!r.details?.files || r.details.files.length === 0) return r;
-        return { ...r, pickedFileIds: [getPrimaryFile(r.details.files).id] };
-      })
-    );
-    setNeedsVariantPicks(new Set());
-  }, [needsVariantPicks]);
 
   // ───────── Selection ─────────
 
@@ -730,8 +690,8 @@ export default function ImportCollectionModal({
       (r) => selected.has(r.item.id) && r.status === 'idle' && !(skipNsfw && r.item.nsfw)
     );
 
-    // Pre-fetch details for every selected row we don't have yet so we can
-    // detect variant ambiguity up-front. ensureDetails is cache-aware and
+    // Pre-fetch details for every selected row we don't have yet so each row
+    // knows its files before queueing. ensureDetails is cache-aware and
     // its underlying API calls are rate-limited in the main process, so a
     // big collection just trickles instead of hammering GameBanana.
     const needsFetch = initialQueue.filter((r) => !r.details);
@@ -743,40 +703,7 @@ export default function ImportCollectionModal({
       }
     }
 
-    // Re-read after pre-fetch: ensureDetails may have flipped some rows to
-    // files-unavailable (auto-deselected) and others now carry their files.
-    // A multi-file row with no explicit pick is ambiguous; one or more picks
-    // resolves it (multi-select lets users grab several variants at once).
-    const ambiguous = rowsRef.current.filter((r) => {
-      if (!selected.has(r.item.id)) return false;
-      if (r.status !== 'idle') return false;
-      if (!r.selectable) return false;
-      if (!r.details?.files || r.details.files.length <= 1) return false;
-      return r.pickedFileIds.length === 0;
-    });
-
-    if (ambiguous.length > 0) {
-      const ambiguousIds = new Set(ambiguous.map((r) => r.item.id));
-      setRows((prev) =>
-        prev.map((r) =>
-          ambiguousIds.has(r.item.id) && !r.variantsOpen
-            ? { ...r, variantsOpen: true }
-            : r
-        )
-      );
-      setNeedsVariantPicks(ambiguousIds);
-      requestAnimationFrame(() => {
-        const firstEl = rowRefs.current.get(ambiguous[0].item.id);
-        if (firstEl) firstEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      });
-      setSubmitting(false);
-      return;
-    }
-
-    setNeedsVariantPicks(new Set());
-
-    // Refresh the snapshot so each row carries its now-cached details and
-    // any picks the user made while the banner was up.
+    // Refresh the snapshot so each row carries its now-cached details.
     const toQueue = rowsRef.current.filter(
       (r) => selected.has(r.item.id) && r.status === 'idle' && r.selectable && !(skipNsfw && r.item.nsfw)
     );
@@ -1023,19 +950,6 @@ export default function ImportCollectionModal({
                   )}
                 </button>
               </div>
-              {needsVariantPicks.size > 0 && (
-                <div className="px-6 py-2.5 bg-amber-500/10 border-t border-amber-500/30 flex items-center justify-between gap-3">
-                  <div className="text-sm text-amber-200 flex items-center gap-2 min-w-0">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    <span>
-                      {t('importCollection.pickVariantPrompt', { count: needsVariantPicks.size })}
-                    </span>
-                  </div>
-                  <Button size="sm" variant="secondary" onClick={acceptDefaults}>
-                    {t('importCollection.actions.useMostPopular')}
-                  </Button>
-                </div>
-              )}
             </div>
           )}
 
@@ -1062,10 +976,7 @@ export default function ImportCollectionModal({
               return (
                 <li
                   key={row.item.id}
-                  ref={setRowRef(row.item.id)}
-                  className={`px-6 py-4 transition-colors ${
-                    needsVariantPicks.has(row.item.id) ? 'bg-amber-500/5' : ''
-                  }`}
+                  className="px-6 py-4 transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     <input
