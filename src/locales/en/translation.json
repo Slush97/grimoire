@@ -802,8 +802,6 @@
       }
     },
     "preferences": {
-      "hideNsfw": "Hide NSFW Content",
-      "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
       "hideOutdated": "Hide Outdated Mods",
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
@@ -946,6 +944,8 @@
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting."
     },
     "privacy": {
+      "nsfwContent": "NSFW content",
+      "nsfwContentDescription": "Applies across Grimoire. Blur covers thumbnails; Hide also removes NSFW mods from Browse results.",
       "noHiddenCreators": "No creators are hidden right now."
     }
   },
@@ -2631,11 +2631,6 @@
       "filterByCategory": "Filter by category",
       "allCategories": "All Categories",
       "heroOverridesCategories": "Hero filter overrides categories.",
-      "content": "Content",
-      "filterByContentRating": "Filter by content rating",
-      "contentAll": "All",
-      "sfwOnly": "SFW only",
-      "nsfwOnly": "NSFW only",
       "added": "Added",
       "filterByDateAdded": "Filter by date added",
       "anyTime": "Any time",

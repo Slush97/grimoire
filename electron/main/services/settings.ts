@@ -5,16 +5,14 @@ import { getSettingsPath } from '../utils/paths';
 // AppSettings is single-sourced in src/types/mod.ts (type-only import:
 // erased at build, so no renderer code is pulled into the main bundle).
 // Re-exported so existing `from './settings'` imports keep working.
-import type { AppSettings } from '../../../src/types/mod';
+import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
     deadlockPath: null,
     devMode: false,
     devDeadlockPath: null,
-    hideNsfwPreviews: true,
-    browseNsfwContentMode: 'blur',
-    installedHideNsfwPreviews: true,
+    nsfwContentMode: 'blur',
     hideOutdatedMods: false,
     hiddenCreators: [],
     lockerCardsExpandedByDefault: false,
@@ -68,6 +66,23 @@ function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] 
     return [...byId.entries()].map(([id, name]) => ({ id, name }));
 }
 
+/** The three NSFW keys that `nsfwContentMode` replaced. */
+interface LegacyNsfwSettings {
+    hideNsfwPreviews?: boolean;
+    browseNsfwContentMode?: NsfwContentMode;
+    installedHideNsfwPreviews?: boolean;
+}
+
+/** Collapse the old Browse mode and the old blur toggle into one mode, keeping
+ *  whichever was stricter so nobody starts seeing content they had covered. */
+function migrateNsfwContentMode(
+    browseMode: NsfwContentMode | undefined,
+    blur: boolean | undefined,
+): NsfwContentMode {
+    if (browseMode === 'hide') return 'hide';
+    return (browseMode ?? 'show') === 'show' && blur === false ? 'show' : 'blur';
+}
+
 /**
  * Load settings from disk
  * If settings are corrupted, resets to defaults and logs warning (P2 fix #21)
@@ -81,18 +96,19 @@ export function loadSettings(): AppSettings {
 
     try {
         const content = readFileSync(path, 'utf-8');
-        const settings = JSON.parse(content) as Partial<AppSettings>;
+        const {
+            hideNsfwPreviews,
+            browseNsfwContentMode,
+            installedHideNsfwPreviews,
+            ...settings
+        } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings;
         return {
             ...DEFAULT_SETTINGS,
             ...settings,
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
-            browseNsfwContentMode:
-                settings.browseNsfwContentMode ??
-                (settings.hideNsfwPreviews === false ? 'show' : DEFAULT_SETTINGS.browseNsfwContentMode),
-            installedHideNsfwPreviews:
-                settings.installedHideNsfwPreviews ??
-                settings.hideNsfwPreviews ??
-                DEFAULT_SETTINGS.installedHideNsfwPreviews,
+            nsfwContentMode:
+                settings.nsfwContentMode ??
+                migrateNsfwContentMode(browseNsfwContentMode, installedHideNsfwPreviews ?? hideNsfwPreviews),
             // PRE-RELEASE SHIM: delete before first release. Migrate the
             // pre-rename flag id so an existing opt-in survives.
             experimentalVpkImprinting:

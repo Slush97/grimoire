@@ -54,7 +54,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
@@ -805,8 +805,7 @@ export default function Installed() {
   // category keys) so the two AND together: "in my Ivy list AND tagged Skins"
   // is the useful reading, where folding lists into tagFilter would OR them.
   const [listFilter, setListFilter] = useState<string[]>([]);
-  const installedHideNsfwPreviews =
-    settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
+  const installedHideNsfwPreviews = shouldBlurNsfw(settings);
   // Disabled-section sort, deliberately separate from the top-bar sort above.
   // That one spans both sections and turns the whole page read-only (a sorted
   // enabled list no longer maps to load order). The disabled library is a

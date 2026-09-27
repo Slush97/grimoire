@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { EyeOff, Shield } from 'lucide-react';
+import { Eye, EyeClosed, EyeOff, Shield } from 'lucide-react';
 import { useAppStore } from '../../../stores/appStore';
-import { shouldBlurNsfw } from '../../../lib/appSettings';
 import { showToast } from '../../../stores/toastStore';
-import { Badge, Button, Card, Toggle } from '../../common/ui';
+import { Badge, Button, Card, SegmentedControl, Toggle } from '../../common/ui';
 import Tx from '../../translation/Tx';
 import { HiddenCreatorsManager, HiddenCreatorsModal } from '../../HiddenCreatorsManager';
 import type { SaltIngestStatus } from '../../../types/electron';
-import type { HiddenCreator } from '../../../types/mod';
+import type { HiddenCreator, NsfwContentMode } from '../../../types/mod';
 
 // What Grimoire shows you and what it shares on your behalf.
 export default function PrivacySection() {
@@ -67,12 +66,27 @@ export default function PrivacySection() {
     <>
       <Card title={<Tx k="settings.nav.privacy" fallback="Privacy & Content" />} icon={Shield}>
         <div className="space-y-6">
-          <Toggle
-            checked={shouldBlurNsfw(settings)}
-            onChange={(checked) => settings && saveSettings({ ...settings, installedHideNsfwPreviews: checked })}
-            label={<Tx k="settings.preferences.hideNsfw" fallback="Hide NSFW Content" />}
-            description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
-          />
+          <div>
+            <span className="block text-sm font-medium text-text-primary">
+              <Tx k="settings.privacy.nsfwContent" fallback="NSFW content" />
+            </span>
+            <p className="mt-0.5 mb-2.5 text-xs text-text-secondary">
+              <Tx
+                k="settings.privacy.nsfwContentDescription"
+                fallback="Applies across Grimoire. Blur covers thumbnails; Hide also removes NSFW mods from Browse results."
+              />
+            </p>
+            <SegmentedControl<NsfwContentMode>
+              label={t('settings.privacy.nsfwContent')}
+              value={settings?.nsfwContentMode ?? 'blur'}
+              onChange={(mode) => settings && saveSettings({ ...settings, nsfwContentMode: mode })}
+              options={[
+                { value: 'show', label: <><Eye className="h-3.5 w-3.5" />{t('browse.viewOptions.show')}</> },
+                { value: 'blur', label: <><EyeClosed className="h-3.5 w-3.5" />{t('browse.viewOptions.blur')}</> },
+                { value: 'hide', label: <><EyeOff className="h-3.5 w-3.5" />{t('browse.viewOptions.hide')}</> },
+              ]}
+            />
+          </div>
 
           <div className="h-px bg-hl/5" />
 

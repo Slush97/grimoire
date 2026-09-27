@@ -1044,7 +1044,7 @@ export type AppearanceSurface = 'launchModded' | 'launchVanilla' | 'activeTab' |
  *    service and keyed by the surface id.
  *  - `none`: no art (hidden). */
 export type AppearanceBgKind = 'default' | 'hero' | 'custom' | 'none';
-export type BrowseNsfwContentMode = 'show' | 'blur' | 'hide';
+export type NsfwContentMode = 'show' | 'blur' | 'hide';
 
 export interface AppearanceBg {
   kind: AppearanceBgKind;
@@ -1075,12 +1075,9 @@ export interface AppSettings {
    *  Off by default, so no listener exists at all unless the user asks for it.
    *  Every install still goes through a confirmation dialog. */
   forgeLocalInstallEnabled: boolean;
-  /** Shared/legacy NSFW thumbnail blur preference for non-Installed surfaces. */
-  hideNsfwPreviews: boolean;
-  /** Browser-specific handling for GameBanana mods marked as NSFW. */
-  browseNsfwContentMode: BrowseNsfwContentMode;
-  /** Blur thumbnail images for installed mods marked as NSFW. */
-  installedHideNsfwPreviews: boolean;
+  /** How mods marked NSFW are shown app-wide. `hide` also drops them from
+   *  Browse; surfaces that can't drop a mod (Installed, Locker) blur instead. */
+  nsfwContentMode: NsfwContentMode;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
   /** GameBanana submitters whose Mods, Sounds, and WiPs are excluded from

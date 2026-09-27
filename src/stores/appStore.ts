@@ -189,7 +189,6 @@ async function migrateLockerImagePreferences(
 // query, view mode, and filters all reset when switching pages.
 export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 export type BrowseLayout = 'grid' | 'list';
-export type BrowseNsfwFilter = 'all' | 'sfw' | 'nsfw';
 
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
@@ -197,10 +196,9 @@ export interface BrowseUiState {
   layout: BrowseLayout;
   sort: BrowseSortOption;
   section: string;
-  // Content-rating filter and recency window. Both route browsing through the
-  // local catalog mirror (see useLocalSearch in Browse.tsx). addedFrom/addedTo
-  // are 'YYYY-MM-DD' inputs used only when addedWithin === 'custom'.
-  nsfw: BrowseNsfwFilter;
+  // Recency window. Routes browsing through the local catalog mirror (see
+  // useLocalSearch in Browse.tsx). addedFrom/addedTo are 'YYYY-MM-DD' inputs
+  // used only when addedWithin === 'custom'.
   addedWithin: BrowseTimeRange;
   addedFrom: string;
   addedTo: string;
@@ -281,7 +279,6 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   layout: readPersistedLayout(),
   sort: readPersistedSort(),
   section: 'Mod',
-  nsfw: 'all',
   addedWithin: 'all',
   addedFrom: '',
   addedTo: '',
