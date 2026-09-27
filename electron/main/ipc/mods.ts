@@ -129,8 +129,8 @@ async function copyIntoModSlot(
 /**
  * Resolve a mod's Locker global type, classifying from the VPK tree when it has
  * not been classified yet OR when an older classifier version produced a stale
- * `null` ("not global") result. A positive type is left untouched: it may be a
- * manual override, and re-running can't improve a confident hit. Runs for mods
+ * `null` ("not global") result. A positive type is left untouched (except a
+ * stale 'icons', below): it may be a manual override. Runs for mods
  * with no metadata row too (a VPK dropped straight into citadel/addons), so
  * locally added HUD / Soul Container mods get tagged like downloaded ones.
  * Persists the result + classifier version so later scans skip the re-parse.
@@ -141,8 +141,11 @@ function resolveGlobalType(
 ): import('../../../src/types/mod').GlobalModType | null {
     const current = metadata?.globalType;
     const stamped = metadata?.globalTypeClassifierVersion ?? 0;
+    // Classifier v3 and earlier filed single-hero card packs as 'icons' (see
+    // heroImageHeroes in vpk.ts), so a stale 'icons' result is re-run too.
     const needsClassify =
-        current === undefined || (current === null && stamped < GLOBAL_CLASSIFIER_VERSION);
+        current === undefined ||
+        ((current === null || current === 'icons') && stamped < GLOBAL_CLASSIFIER_VERSION);
     if (!needsClassify) return current;
     let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
     try {
@@ -308,7 +311,7 @@ function needsVpkParseForEnrich(mod: Mod): boolean {
     const metadata = getModMetadata(mod.metaKey);
     const globalTypeStamped = metadata?.globalTypeClassifierVersion ?? 0;
     if (metadata?.globalType === undefined) return true;
-    if (metadata.globalType === null && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
+    if ((metadata.globalType === null || metadata.globalType === 'icons') && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
     if (metadata.abilitySounds === undefined) return true;
     if (!metadata.lockerHero && metadata.sourceSection === 'Sound') return true;
     const isUnknown =

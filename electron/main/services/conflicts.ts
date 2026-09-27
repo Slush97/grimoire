@@ -12,7 +12,7 @@ export function conflictPairKey(a: string, b: string): string {
 }
 
 // Files to ignore when checking for conflicts (non-game metadata files)
-const IGNORED_CONFLICT_FILES = new Set([
+export const IGNORED_CONFLICT_FILES = new Set([
     'readme.txt',
     'readme.md',
     'license.txt',

@@ -927,8 +927,8 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
-  // User-authored lists (see lib/modLists.ts). Purely an organization axis:
-  // membership never changes what is enabled, only which cards are shown.
+  // User-authored lists (see lib/modLists.ts). Membership never changes what
+  // is enabled; only the explicit "Enable all" / "Disable all" actions do.
   const [modLists, setModLists] = useState(readStoredModLists);
   // Grouping changes a standalone mod's stable key (sha256 -> localgroup) and
   // splitting does the reverse. The store migrates localStorage atomically,
@@ -2950,39 +2950,29 @@ export default function Installed() {
     }
   };
 
-  const handleBulkEnable = async () => {
-    // Snapshot the work list before the loop so the progress total stays
-    // stable even as `mods` updates after each toggle.
-    const targets = selectedMods.filter((m) => !m.enabled);
-    if (targets.length === 0) {
-      exitSelectMode();
-      return;
-    }
-    setBulkProgress({ verb: 'Enabling', done: 0, total: targets.length });
+  // Callers snapshot `targets` before the loop so the progress total stays
+  // stable even as `mods` updates after each toggle.
+  const runBulkToggle = async (targets: Mod[], verb: 'Enabling' | 'Disabling') => {
+    setBulkProgress({ verb, done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
       const ok = await toggleMod(targets[i].id);
-      setBulkProgress({ verb: 'Enabling', done: i + 1, total: targets.length });
+      setBulkProgress({ verb, done: i + 1, total: targets.length });
       // Stop the batch as soon as we hit the 99-enabled cap rather than firing
       // a failing enable for every remaining selection.
       if (!ok) break;
     }
     setBulkProgress(null);
+  };
+
+  const handleBulkEnable = async () => {
+    const targets = selectedMods.filter((m) => !m.enabled);
+    if (targets.length > 0) await runBulkToggle(targets, 'Enabling');
     exitSelectMode();
   };
 
   const handleBulkDisable = async () => {
     const targets = selectedMods.filter((m) => m.enabled);
-    if (targets.length === 0) {
-      exitSelectMode();
-      return;
-    }
-    setBulkProgress({ verb: 'Disabling', done: 0, total: targets.length });
-    for (let i = 0; i < targets.length; i++) {
-      const ok = await toggleMod(targets[i].id);
-      setBulkProgress({ verb: 'Disabling', done: i + 1, total: targets.length });
-      if (!ok) break;
-    }
-    setBulkProgress(null);
+    if (targets.length > 0) await runBulkToggle(targets, 'Disabling');
     exitSelectMode();
   };
 
@@ -3800,6 +3790,20 @@ export default function Installed() {
     // Drop the selection too, or the grid keeps filtering on a list that no
     // longer exists and shows an empty shelf with no visible cause.
     setListFilter((prev) => prev.filter((selected) => selected !== id));
+  });
+  // A fully disabled group enables only its primary, same as picking one file
+  // in the variant picker: variants are usually alternatives that conflict.
+  const setModListEnabled = useStableCallback(async (id: string, enabled: boolean) => {
+    if (bulkProgress) return;
+    const keys = new Set(modLists.find((list) => list.id === id)?.keys);
+    const targets = allEntries
+      .filter((entry) => keys.has(entryDisabledPreferenceKey(entry)))
+      .flatMap((entry) => {
+        if (entry.kind === 'single') return entry.mod.enabled === enabled ? [] : [entry.mod];
+        if (!enabled) return entry.enabledVariants;
+        return entry.enabledVariants.length > 0 ? [] : [entry.primary];
+      });
+    if (targets.length > 0) await runBulkToggle(targets, enabled ? 'Enabling' : 'Disabling');
   });
   // "Start with only this mod enabled": solo the entry (disable everything else)
   // then launch. For a group we keep its already-enabled variants, or enable
@@ -5284,9 +5288,13 @@ export default function Installed() {
         <ManageModListsModal
           lists={modLists}
           counts={listCounts}
-          onClose={() => setManagingLists(false)}
+          onClose={() => {
+            if (!bulkProgress) setManagingLists(false);
+          }}
           onRename={renameModList}
           onDelete={deleteModList}
+          onSetEnabled={setModListEnabled}
+          progress={bulkProgress}
         />
       )}
 

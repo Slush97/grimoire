@@ -102,7 +102,14 @@ const sessionMocks = vi.hoisted(() => ({
     syncRunningGameModSnapshotFromMods: vi.fn(),
 }));
 vi.mock('./gameSessionMods', () => sessionMocks);
+const vpkMocks = vi.hoisted(() => ({
+    parseVpkDirectoryCached: vi.fn((path: string) => [
+        `materials/${path.split('/').pop()}.vmat_c`,
+        'readme.txt',
+    ]),
+}));
 vi.mock('./vpk', () => ({
+    ...vpkMocks,
     parseVpkEntryStats: vi.fn(() => [{ path: 'materials/example.vmat_c', size: 12 }]),
 }));
 const portableMocks = vi.hoisted(() => ({
@@ -192,6 +199,7 @@ const oldManifest = {
 };
 beforeEach(() => {
     vi.clearAllMocks();
+    vpkMocks.parseVpkDirectoryCached.mockReset();
     processMocks.exitCodes.length = 0;
     processMocks.spawnArgs.length = 0;
     embeddedRecords.length = 0;
@@ -223,7 +231,7 @@ describe('addMergeSources', () => {
 
         expect(sessionMocks.assertCanMoveLoadedGameMods).toHaveBeenCalledWith([target, addition]);
         expect(modMocks.disableModUnlocked).toHaveBeenCalledWith('/game', addition.id);
-        expect(processMocks.spawnArgs[0]?.[0]).toBe('--strict');
+        expect(processMocks.spawnArgs[0]).not.toContain('--strict');
         expect(processMocks.spawnArgs[0]).toContain(disabledAddition.path);
         expect(fsMocks.rename).toHaveBeenLastCalledWith(
             expect.stringMatching(/\.merge-rebuild-.*\.vpk$/),
@@ -270,6 +278,19 @@ describe('addMergeSources', () => {
 
         expect(modMocks.disableModUnlocked).not.toHaveBeenCalled();
         expect(processMocks.spawnArgs).toEqual([]);
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
+    });
+
+    it('refuses a strict rebuild on a real shared file without invoking vpkmerge', async () => {
+        vpkMocks.parseVpkDirectoryCached.mockImplementation(() => ['materials/shared.vmat_c', 'readme.txt']);
+
+        await expect(
+            addMergeSources('/game', target.id, [addition.id], { strict: true })
+        ).rejects.toThrow(/Strict merge refused: 1 file shared.*materials\/shared\.vmat_c/);
+
+        expect(processMocks.spawnArgs).toEqual([]);
+        expect(modMocks.enableModUnlocked).toHaveBeenCalledWith('/game', disabledAddition.id);
+        expect(fsMocks.rename).not.toHaveBeenCalledWith(expect.any(String), target.path);
         expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
     });
 
