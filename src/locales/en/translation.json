@@ -2266,11 +2266,10 @@
     "overflowSkipped_other": "{{count}} links over the 100-item limit skipped",
     "scanTitle": "Fetch file lists and expand mods with variants",
     "noFiles": "No downloadable files. This mod may have been removed.",
-    "variantHint": "Check a variant, or leave unchecked to use the most popular file.",
+    "variantHint": "Check a variant, or leave unchecked to use the most popular non-archived file.",
     "title": "Import from GameBanana",
     "actions": {
       "fetch": "Fetch",
-      "useMostPopular": "Use most popular",
       "saveAsProfile": "Save as profile",
       "cancelRemaining": "Cancel remaining",
       "queue": "Queue",
@@ -2290,8 +2289,6 @@
     "loadingVariants": "Loading variants {{done}}/{{total}}",
     "hideAllVariants": "Hide all variants",
     "showAllVariants": "Show all variants",
-    "pickVariantPrompt_one": "Pick a variant for {{count}} mod before queueing.",
-    "pickVariantPrompt_other": "Pick a variant for {{count}} mods before queueing.",
     "chooseAVariant": "Choose a variant",
     "variantCount_one": "{{count}} variant",
     "variantCount_other": "{{count}} variants",
@@ -2422,6 +2419,8 @@
     "addMods": "Add mods",
     "addModsDescription": "Choose installed standalone mods to rebuild into this merge. Added originals stay in the disabled folder.",
     "noEligibleMods": "No eligible standalone mods are installed.",
+    "searchMods": "Search mods",
+    "noMatchingMods": "No eligible mods match that search.",
     "addingMods": "Adding...",
     "addSelected_one": "Add {{count}} mod",
     "addSelected_other": "Add {{count}} mods",
@@ -2704,6 +2703,7 @@
     },
     "comments": {
       "empty": "No comments yet",
+      "unavailable": "Comments unavailable.",
       "showing": "Showing {{shown}} of {{total}}"
     },
     "audio": {
@@ -2927,6 +2927,8 @@
       "count": "{{enabled}} of {{count}} enabled",
       "description": "The creator's visibility and camera settings are included by default. Turn off anything you do not want. Developer and testing tools stay off unless you enable them.",
       "presetValue": "This preset sets it to {{value}}",
+      "fileValue": "Set to {{value}} in gameinfo.gi (preset value: {{preset}})",
+      "strayValue": "Still in gameinfo.gi as {{value}}. Reapply to remove it.",
       "pending_one": "{{count}} gameplay setting changed. Reapply to write it to gameinfo.gi.",
       "pending_other": "{{count}} gameplay settings changed. Reapply to write them to gameinfo.gi.",
       "group": {

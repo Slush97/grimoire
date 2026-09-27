@@ -632,6 +632,9 @@ export default function PerformanceConfigCard() {
               controls={selectedRelease.optIn}
               selected={selectedOptIns}
               onChange={(keys) => void onChangeOptIns(keys)}
+              fileValues={
+                applied && !willSwitch && !pendingVersion ? status?.managedConvarValues : undefined
+              }
               disabled={busy}
             />
           )}

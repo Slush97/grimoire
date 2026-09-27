@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, Plus } from 'lucide-react';
+import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, Plus, Search } from 'lucide-react';
 import type { Mod, MergedModSource } from '../types/mod';
 import type { MergeSourceUpdateOutcome, MergeSourceUpdateSkip } from '../lib/mergeSourceUpdate';
 import ModThumbnail from './ModThumbnail';
 import { Button, Tag } from './common/ui';
 import { Modal } from './common/Modal';
+import { Input } from './common/forms';
 import { formatRelativeDate } from '../lib/dates';
 
 interface Props {
@@ -51,6 +52,7 @@ export default function MergedContentsModal({
   const [actionError, setActionError] = useState<string | null>(null);
   const [addPickerOpen, setAddPickerOpen] = useState(false);
   const [selectedAddIds, setSelectedAddIds] = useState<Set<string>>(new Set());
+  const [addSearch, setAddSearch] = useState('');
   const [strict, setStrict] = useState(false);
   const [addingSources, setAddingSources] = useState(false);
   const [updatingSources, setUpdatingSources] = useState(false);
@@ -62,6 +64,12 @@ export default function MergedContentsModal({
 
   const canExtract = !!onExtractSource;
   const canAdd = !!onAddSources;
+  const addQuery = addSearch.trim().toLowerCase();
+  const pickerMods = eligibleMods
+    .filter((eligible) => !addQuery
+      || eligible.name.toLowerCase().includes(addQuery)
+      || eligible.fileName.toLowerCase().includes(addQuery))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
 
   const handleExtract = async (src: MergedModSource) => {
     if (!onExtractSource || busyFileName || addingSources) return;
@@ -112,6 +120,7 @@ export default function MergedContentsModal({
     try {
       await onAddSources([...selectedAddIds], strict);
       setSelectedAddIds(new Set());
+      setAddSearch('');
       setAddPickerOpen(false);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
@@ -319,36 +328,53 @@ export default function MergedContentsModal({
                     {t('mergedContents.noEligibleMods')}
                   </div>
                 ) : (
-                  <ul className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                    {eligibleMods.map((eligible) => (
-                      <li key={eligible.id}>
-                        <label className="flex items-center gap-3 rounded border border-border/60 bg-bg-tertiary/50 px-2.5 py-2 cursor-pointer hover:border-border">
-                          <input
-                            type="checkbox"
-                            checked={selectedAddIds.has(eligible.id)}
-                            disabled={addingSources}
-                            onChange={() => toggleAddSelection(eligible.id)}
-                            className="accent-accent"
-                          />
-                          <div className="w-9 h-9 flex-shrink-0 rounded overflow-hidden bg-bg-tertiary">
-                            <ModThumbnail
-                              src={eligible.thumbnailUrl}
-                              alt={eligible.name}
-                              hideNsfw={hideNsfw}
-                              nsfw={eligible.nsfw}
-                              className="w-full h-full"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm text-text-primary truncate">{eligible.name}</div>
-                            <div className="text-[11px] text-text-secondary font-mono truncate">
-                              {eligible.fileName}
-                            </div>
-                          </div>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <Input
+                      icon={Search}
+                      inputSize="sm"
+                      type="search"
+                      value={addSearch}
+                      onChange={(event) => setAddSearch(event.target.value)}
+                      placeholder={t('mergedContents.searchMods')}
+                      aria-label={t('mergedContents.searchMods')}
+                    />
+                    {pickerMods.length === 0 ? (
+                      <div className="text-sm text-text-secondary py-2">
+                        {t('mergedContents.noMatchingMods')}
+                      </div>
+                    ) : (
+                      <ul className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {pickerMods.map((eligible) => (
+                          <li key={eligible.id}>
+                            <label className="flex items-center gap-3 rounded border border-border/60 bg-bg-tertiary/50 px-2.5 py-2 cursor-pointer hover:border-border">
+                              <input
+                                type="checkbox"
+                                checked={selectedAddIds.has(eligible.id)}
+                                disabled={addingSources}
+                                onChange={() => toggleAddSelection(eligible.id)}
+                                className="accent-accent"
+                              />
+                              <div className="w-9 h-9 flex-shrink-0 rounded overflow-hidden bg-bg-tertiary">
+                                <ModThumbnail
+                                  src={eligible.thumbnailUrl}
+                                  alt={eligible.name}
+                                  hideNsfw={hideNsfw}
+                                  nsfw={eligible.nsfw}
+                                  className="w-full h-full"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm text-text-primary truncate">{eligible.name}</div>
+                                <div className="text-[11px] text-text-secondary font-mono truncate">
+                                  {eligible.fileName}
+                                </div>
+                              </div>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
                 <label className="flex items-start gap-2 text-sm text-text-primary cursor-pointer select-none">
                   <input
@@ -372,6 +398,7 @@ export default function MergedContentsModal({
                     disabled={addingSources}
                     onClick={() => {
                       setSelectedAddIds(new Set());
+                      setAddSearch('');
                       setAddPickerOpen(false);
                     }}
                   >
