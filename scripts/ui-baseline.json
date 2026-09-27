@@ -69,6 +69,9 @@
   "src/components/foundry/SoundImportEditor.tsx": {
     "raw-palette": 2
   },
+  "src/components/installed/MakeCustomModModal.tsx": {
+    "raw-palette": 2
+  },
   "src/components/installed/ModCard.tsx": {
     "raw-palette": 7,
     "em-dash": 1
@@ -201,7 +204,7 @@
     "em-dash": 1
   },
   "src/pages/Installed.tsx": {
-    "raw-palette": 20,
+    "raw-palette": 18,
     "focus-ring": 2,
     "em-dash": 11
   },

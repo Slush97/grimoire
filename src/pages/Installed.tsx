@@ -31,7 +31,6 @@ import {
   FilePlus,
   Files,
   X,
-  ImagePlus,
   Search,
   Download,
   Info,
@@ -45,7 +44,6 @@ import {
   Layers,
   Beaker,
   Tag as TagIcon,
-  Pencil,
   Wand2,
   SlidersHorizontal,
   ArrowDownAZ,
@@ -68,7 +66,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
@@ -86,7 +84,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
-import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
+import { deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
@@ -140,8 +138,8 @@ import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
-import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
-import { FormField, Input, Select } from '../components/common/forms';
+import { Button, IconButton, ModalHeader, Tag } from '../components/common/ui';
+import { Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, LoadingState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
@@ -149,6 +147,8 @@ import { HeroTagLabel } from '../components/installed/chips';
 import { heroNameForLabel } from '../components/installed/heroNames';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
+import { EditLocalModModal } from '../components/installed/EditLocalModModal';
+import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -7625,423 +7625,3 @@ function UnknownMatchCard({
   );
 }
 
-interface EditLocalModModalProps {
-  mod: Mod;
-  onClose: () => void;
-  onSave: (args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
-}
-
-function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
-  const { t } = useTranslation();
-  // Drag-selecting the name field and releasing outside the panel used to
-  // close this dialog and drop the edit.
-  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
-  const [name, setName] = useState(mod.name);
-  const [imagePath, setImagePath] = useState('');
-  const [thumbnailDataUrl, setThumbnailDataUrl] = useState(mod.thumbnailUrl ?? '');
-  const [nsfw, setNsfw] = useState(!!mod.nsfw);
-  const [imgDragActive, setImgDragActive] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const trimmed = name.trim();
-
-  const acceptImagePath = async (picked: string) => {
-    setImagePath(picked);
-    setError(null);
-    try {
-      const dataUrl = await readImageDataUrl(picked);
-      setThumbnailDataUrl(dataUrl);
-    } catch (err) {
-      setThumbnailDataUrl(mod.thumbnailUrl ?? '');
-      setError(t('installed.imageField.readFailed', { error: String(err) }));
-    }
-  };
-
-  const pickImage = async () => {
-    const picked = await showOpenDialog({
-      title: t('installed.imageField.selectImage'),
-      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
-    });
-    if (picked) await acceptImagePath(picked);
-  };
-
-  const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setImgDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!IMAGE_EXTS.includes(ext)) {
-      setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
-      return;
-    }
-    const path = window.electronAPI.getDroppedFilePath(file);
-    if (!path) {
-      setError(t('installed.imageField.dropUnresolved'));
-      return;
-    }
-    await acceptImagePath(path);
-  };
-
-  const onZoneKeyDown = (e: React.KeyboardEvent, action: () => void) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      action();
-    }
-  };
-
-  const submit = async () => {
-    if (!trimmed || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        name: trimmed,
-        thumbnailDataUrl: thumbnailDataUrl || undefined,
-        nsfw,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return createPortal(
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/75 p-4 backdrop-blur-sm"
-    >
-      <div
-        className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent/10 text-accent">
-            <Pencil className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-text-primary">{t('installed.edit.title')}</h3>
-            <p className="mt-1 text-sm text-text-secondary">
-              {t('installed.edit.description')}
-            </p>
-          </div>
-        </div>
-
-        <FormField className="mt-5" label={t('locker.soulImport.fields.name')}>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void submit();
-              if (e.key === 'Escape') onClose();
-            }}
-            autoFocus
-            placeholder={t('installed.edit.modNamePlaceholder')}
-          />
-        </FormField>
-        <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
-          {t('installed.edit.fileLabel', { fileName: mod.fileName })}
-        </p>
-
-        <div className="mt-5">
-          <label className="block text-sm font-medium text-text-primary mb-1.5">
-            {t('installed.imageField.image')}
-          </label>
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={thumbnailDataUrl ? t('installed.imageField.ariaSelected') : t('installed.imageField.ariaBrowse')}
-            onClick={pickImage}
-            onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
-            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
-            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
-            onDrop={handleImageDrop}
-            className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-              imgDragActive
-                ? 'border-accent bg-accent/10'
-                : thumbnailDataUrl
-                  ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
-            }`}
-          >
-            <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
-              {thumbnailDataUrl ? (
-                <img src={thumbnailDataUrl} alt={t('installed.imageField.thumbnailPreview')} className="w-full h-full object-cover" />
-              ) : (
-                <ImagePlus className="w-5 h-5" aria-hidden />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              {imagePath ? (
-                <>
-                  <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
-                  <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                  <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
-                </>
-              ) : thumbnailDataUrl ? (
-                <>
-                  <div className="text-sm text-text-primary font-medium">{t('installed.imageField.currentImage')}</div>
-                  <div className="text-xs text-text-secondary">{t('installed.imageField.clickToReplace')}</div>
-                </>
-              ) : (
-                <>
-                  <div className="text-sm text-text-primary font-medium">{t('installed.imageField.dropImageHere')}</div>
-                  <div className="text-xs text-text-secondary">{t('installed.imageField.orClickToBrowse', { exts: IMAGE_EXTS.join(', ') })}</div>
-                </>
-              )}
-            </div>
-          </div>
-          {thumbnailDataUrl && (
-            <button
-              type="button"
-              onClick={() => {
-                setImagePath('');
-                setThumbnailDataUrl('');
-              }}
-              className="mt-2 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
-            >
-              {t('installed.imageField.removeImage')}
-            </button>
-          )}
-        </div>
-
-        <label className="mt-5 flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={nsfw}
-            onChange={(e) => setNsfw(e.target.checked)}
-            className="w-4 h-4 accent-accent cursor-pointer"
-          />
-          {t('installed.imageField.nsfw')}
-        </label>
-
-        {error && (
-          <div className="mt-4 rounded-md border border-state-danger/35 bg-state-danger/10 px-3 py-2 text-sm text-state-danger">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button onClick={submit} isLoading={saving} disabled={!trimmed}>
-            {t('common.actions.save')}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-interface MakeCustomModModalProps {
-  onClose: () => void;
-  onSave: (args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
-  /** The already-installed VPK the metadata attaches to. Display only. */
-  vpkPath: string;
-  initialName: string;
-}
-
-/**
- * Attach custom metadata (name, thumbnail, NSFW) to a VPK that is ALREADY on
- * disk: the "make this unknown mod custom" flow. The file is fixed, so there is
- * no picker and nothing is copied. Importing fresh files from disk goes through
- * ImportCustomModsModal instead.
- */
-function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCustomModModalProps) {
-  const { t } = useTranslation();
-  const [name, setName] = useState<string>(initialName);
-  const [imagePath, setImagePath] = useState<string>('');
-  const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string>('');
-  const [nsfw, setNsfw] = useState<boolean>(false);
-  const [submitting, setSubmitting] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [imgDragActive, setImgDragActive] = useState(false);
-
-  const acceptImagePath = async (picked: string) => {
-    setImagePath(picked);
-    setError(null);
-    try {
-      const dataUrl = await readImageDataUrl(picked);
-      setThumbnailDataUrl(dataUrl);
-    } catch (err) {
-      setThumbnailDataUrl('');
-      setError(t('installed.imageField.readFailed', { error: String(err) }));
-    }
-  };
-
-  const pickImage = async () => {
-    const picked = await showOpenDialog({
-      title: t('installed.imageField.selectImage'),
-      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
-    });
-    if (picked) await acceptImagePath(picked);
-  };
-
-  const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setImgDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!IMAGE_EXTS.includes(ext)) {
-      setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
-      return;
-    }
-    const path = window.electronAPI.getDroppedFilePath(file);
-    if (!path) {
-      setError(t('installed.imageField.dropUnresolved'));
-      return;
-    }
-    await acceptImagePath(path);
-  };
-
-  const canSubmit = !!name.trim() && !submitting;
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onSave({
-        name: name.trim(),
-        thumbnailDataUrl: thumbnailDataUrl || undefined,
-        nsfw,
-      });
-      onClose();
-    } catch (err) {
-      setError(String(err));
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Modal
-      onClose={onClose}
-      labelledBy="make-custom-mod-title"
-      size="lg"
-      dismissable={!submitting}
-      panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
-    >
-        <ModalHeader
-          title={t('installed.import.makeCustomTitle')}
-          titleId="make-custom-mod-title"
-          onClose={onClose}
-          closeLabel={t('common.actions.close')}
-          closeDisabled={submitting}
-        />
-
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
-          <p className="text-xs leading-5 text-text-secondary">
-            {t('installed.import.alreadyInstalledHint')}
-          </p>
-
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')}
-            </label>
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-bg-tertiary/40 px-4 py-3 text-center">
-              <FilePlus className="w-5 h-5 text-accent" aria-hidden />
-              <span className="text-sm text-text-primary font-medium truncate max-w-full">
-                {vpkPath.split(/[\\/]/).pop()}
-              </span>
-              <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
-            </div>
-          </div>
-
-          <FormField label={t('installed.import.modName')} required>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('installed.import.modNamePlaceholder')}
-            />
-          </FormField>
-
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.thumbnailImage')} <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
-            </label>
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label={imagePath ? t('installed.import.thumbnailSelected', { path: imagePath }) : t('installed.imageField.ariaBrowse')}
-              onClick={pickImage}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  void pickImage();
-                }
-              }}
-              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
-              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
-              onDrop={handleImageDrop}
-              className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-                imgDragActive
-                  ? 'border-accent bg-accent/10'
-                  : thumbnailDataUrl
-                    ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
-                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-hl/20'
-              }`}
-            >
-              <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
-                {thumbnailDataUrl ? (
-                  <img src={thumbnailDataUrl} alt={t('installed.imageField.thumbnailPreview')} className="w-full h-full object-cover" />
-                ) : (
-                  <ImagePlus className="w-5 h-5" aria-hidden />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                {imagePath ? (
-                  <>
-                    <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
-                    <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                    <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-sm text-text-primary font-medium">{t('installed.imageField.dropImageHere')}</div>
-                    <div className="text-xs text-text-secondary">{t('installed.imageField.orClickToBrowse', { exts: IMAGE_EXTS.join(', ') })}</div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <label className="group flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={nsfw}
-              onChange={(e) => setNsfw(e.target.checked)}
-              className="peer sr-only"
-            />
-            <CheckboxMark checked={nsfw} />
-            {t('locker.soulImport.fields.nsfw')}
-          </label>
-
-          {error && (
-            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-center border-t border-border px-5 py-3">
-          <Button
-            variant="primary"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            isLoading={submitting}
-            className="!px-10 !py-1.5"
-          >
-            {t('installed.import.saveCustom')}
-          </Button>
-        </div>
-    </Modal>
-  );
-}
