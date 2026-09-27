@@ -8,7 +8,8 @@ import {
   Palette,
   ArrowLeft,
 } from 'lucide-react';
-import { EmptyState, PageHeader } from '../components/common/PageComponents';
+import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
+import { Button } from '../components/common/ui';
 import Tx from '../components/translation/Tx';
 import { useAppStore } from '../stores/appStore';
 import { foundryHeroes, foundryWarmCache } from '../lib/api';
@@ -71,7 +72,7 @@ export default function Foundry() {
   // No game path: same gate regardless of mode.
   if (!hasGamePath) {
     return (
-      <div className="space-y-4 p-6">
+      <PageLayout>
         <PageHeader
           title={<Tx k="foundry.header.title" fallback="Foundry" />}
           description={
@@ -91,7 +92,7 @@ export default function Foundry() {
             />
           }
         />
-      </div>
+      </PageLayout>
     );
   }
 
@@ -109,7 +110,7 @@ export default function Foundry() {
   // Hero roster landing.
   if (mode === 'heroes') {
     return (
-      <div className="space-y-4 p-6">
+      <PageLayout>
         <PageHeader
           title={<Tx k="foundry.header.title" fallback="Foundry" />}
           description={
@@ -119,18 +120,13 @@ export default function Foundry() {
             />
           }
           action={
-            <button
-              type="button"
-              onClick={() => setMode('catalog')}
-              className="flex items-center gap-2 rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary cursor-pointer"
-            >
-              <Library size={15} />
+            <Button variant="secondary" size="sm" icon={Library} onClick={() => setMode('catalog')}>
               <Tx k="foundry.browseCatalog" fallback="Browse full catalog" />
-            </button>
+            </Button>
           }
         />
         <FoundryHeroGrid heroes={heroes} onPick={setSelectedHero} />
-      </div>
+      </PageLayout>
     );
   }
 
@@ -146,7 +142,7 @@ export default function Foundry() {
           <ArrowLeft size={15} />
           <Tx k="foundry.backToHeroes" fallback="Heroes" />
         </button>
-        <span className="px-2 pb-1 text-2xs font-semibold uppercase tracking-wide text-text-secondary/70">
+        <span className="px-2 pb-1 text-2xs font-semibold text-text-secondary/70">
           <Tx k="foundry.subtools.heading" fallback="Workshop" />
         </span>
         {SUBTOOLS.map((tool) => {
@@ -169,7 +165,7 @@ export default function Foundry() {
               <Icon size={16} />
               <span className="flex-1 text-left"><Tx k={tool.labelKey} fallback={tool.id} /></span>
               {!tool.enabled && (
-                <span className="text-[9px] uppercase tracking-wide text-text-secondary/40">
+                <span className="text-2xs text-text-secondary/40">
                   <Tx k="foundry.subtools.soon" fallback="soon" />
                 </span>
               )}
@@ -179,7 +175,7 @@ export default function Foundry() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="space-y-4 p-6">
+        <PageLayout>
           <PageHeader
             title={<Tx k="foundry.header.title" fallback="Foundry" />}
             description={
@@ -201,7 +197,7 @@ export default function Foundry() {
           ) : (
             <LibraryBrowse heroNames={heroNames} />
           )}
-        </div>
+        </PageLayout>
       </div>
     </div>
   );

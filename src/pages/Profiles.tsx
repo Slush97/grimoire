@@ -24,7 +24,7 @@ import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
 import { Input } from '../components/common/forms';
-import { ConfirmModal, EmptyState, PageLayout, LoadingState } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState, PageHeader, PageLayout, LoadingState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -153,7 +153,7 @@ export default function Profiles() {
   const [publishingProfileId, setPublishingProfileId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   // When set, the ImportProfileDialog renders with this JSON pre-seeded (via
-  // initialInput) and auto-resolves it — the snapshot restore flow.
+  // initialInput) and auto-resolves it (the snapshot restore flow).
   const [restoringSnapshotJson, setRestoringSnapshotJson] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsExpanded, setSnapshotsExpanded] = useState(false);
@@ -460,619 +460,622 @@ export default function Profiles() {
   }
 
   return (
-    <PageLayout variant="fill" maxWidth="5xl">
-      <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
-        <div className="space-y-6 pr-1">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
-              <AlertTriangle className="w-5 h-5" />
-              <p>{error}</p>
-            </div>
-          )}
+    <PageLayout maxWidth="5xl">
+      <PageHeader
+        title={<Tx k="nav.profiles" fallback="Profiles" />}
+        description={
+          <Tx k="profiles.header.description" fallback="Saved mod setups you can apply, share and restore." />
+        }
+      />
 
-          {/* Create New Profile */}
-          <Card title={<Tx k="profiles.create.title" fallback="Create New Profile" />} icon={Plus}>
-            <div className="flex flex-wrap gap-3">
-              <Input
-                type="text"
-                value={newProfileName}
-                onChange={(e) => setNewProfileName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
-                placeholder={t('profiles.create.placeholder')}
-                aria-label={t('profiles.create.profileName')}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleCreateProfile}
-                disabled={!newProfileName.trim() || isCreating}
-                isLoading={isCreating}
-                icon={Save}
-              >
-                <Tx k="profiles.create.submit" fallback="Create Profile" />
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setShowImport(true)}
-                icon={Upload}
-                title={t('profiles.import.title')}
-              >
-                <Tx k="profiles.actions.import" fallback="Import" />
-              </Button>
-            </div>
-            {/* Opt-in: only offered when a crosshair is actually applied. */}
-            {activeCrosshair && (
-              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none text-sm text-text-secondary w-fit">
-                <input
-                  type="checkbox"
-                  checked={includeCrosshairOnCreate}
-                  onChange={(e) => setIncludeCrosshairOnCreate(e.target.checked)}
-                  className="peer sr-only"
-                />
-                <CheckboxMark checked={includeCrosshairOnCreate} />
-                <Tx k="profiles.create.includeCrosshair" fallback="Include current crosshair" />
-              </label>
-            )}
-          </Card>
+      {error && (
+        <div className="bg-state-danger/10 border border-state-danger/30 rounded-sm p-4 flex items-center gap-2 text-state-danger">
+          <AlertTriangle className="w-5 h-5" />
+          <p>{error}</p>
+        </div>
+      )}
 
-          {/* Snapshots — automatic recovery points captured before
-              destructive operations (mod updates, profile apply). Also
-              supports manual capture. Restore re-uses the portable-import
-              dialog so the user sees exactly what will re-download. */}
-          <Card
-            title={
-              <Tx
-                k="profiles.snapshots.title"
-                values={{ count: snapshots.length }}
-                fallback={`Snapshots${snapshots.length > 0 ? ` (${snapshots.length})` : ''}`}
-              />
-            }
-            icon={History}
-            action={
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={Camera}
-                  onClick={handleCreateManualSnapshot}
-                  isLoading={creatingSnapshot}
-                  disabled={creatingSnapshot}
-                  title={t('profiles.snapshots.snapshotNowTitle')}
-                  aria-label={t('profiles.snapshots.snapshotNow')}
-                >
-                  <Tx k="profiles.snapshots.snapshotNow" fallback="Snapshot now" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setSnapshotsExpanded((v) => !v)}
-                  icon={snapshotsExpanded ? ChevronUp : ChevronDown}
-                  aria-label={snapshotsExpanded ? t('profiles.snapshots.collapse') : t('profiles.snapshots.expand')}
-                  title={snapshotsExpanded ? t('profiles.snapshots.collapseList') : t('profiles.snapshots.showAll')}
-                  className="px-1.5"
-                />
-              </div>
-            }
+      {/* Create New Profile */}
+      <Card title={<Tx k="profiles.create.title" fallback="Create New Profile" />} icon={Plus}>
+        <div className="flex flex-wrap gap-3">
+          <Input
+            type="text"
+            value={newProfileName}
+            onChange={(e) => setNewProfileName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
+            placeholder={t('profiles.create.placeholder')}
+            aria-label={t('profiles.create.profileName')}
+            className="flex-1"
+          />
+          <Button
+            onClick={handleCreateProfile}
+            disabled={!newProfileName.trim() || isCreating}
+            isLoading={isCreating}
+            icon={Save}
           >
-            {!snapshotsExpanded ? (
-              <p
-                className="text-xs text-text-secondary"
-                title={t('profiles.snapshots.tooltip')}
-              >
-                {snapshots.length === 0
-                  ? (
-                    <Tx
-                      k="profiles.snapshots.collapsedEmpty"
-                      fallback="Automatic recovery points captured before updates or profile applies. None yet - one will appear here the next time you run either."
-                    />
-                  )
-                  : (
-                    <Tx
-                      k="profiles.snapshots.mostRecent"
-                      values={{
-                        date: formatRelativeDate(snapshots[0].createdAt),
-                        count: snapshots[0].modCount,
-                      }}
-                      fallback={`Most recent: ${formatRelativeDate(snapshots[0].createdAt)} - ${snapshots[0].modCount} mods.`}
-                    />
-                  )}
-              </p>
-            ) : snapshots.length === 0 ? (
-              <p className="text-xs text-text-secondary">
+            <Tx k="profiles.create.submit" fallback="Create Profile" />
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setShowImport(true)}
+            icon={Upload}
+            title={t('profiles.import.title')}
+          >
+            <Tx k="profiles.actions.import" fallback="Import" />
+          </Button>
+        </div>
+        {/* Opt-in: only offered when a crosshair is actually applied. */}
+        {activeCrosshair && (
+          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none text-sm text-text-secondary w-fit">
+            <input
+              type="checkbox"
+              checked={includeCrosshairOnCreate}
+              onChange={(e) => setIncludeCrosshairOnCreate(e.target.checked)}
+              className="peer sr-only"
+            />
+            <CheckboxMark checked={includeCrosshairOnCreate} />
+            <Tx k="profiles.create.includeCrosshair" fallback="Include current crosshair" />
+          </label>
+        )}
+      </Card>
+
+      {/* Snapshots: automatic recovery points captured before
+          destructive operations (mod updates, profile apply). Also
+          supports manual capture. Restore re-uses the portable-import
+          dialog so the user sees exactly what will re-download. */}
+      <Card
+        title={
+          <Tx
+            k="profiles.snapshots.title"
+            values={{ count: snapshots.length }}
+            fallback={`Snapshots${snapshots.length > 0 ? ` (${snapshots.length})` : ''}`}
+          />
+        }
+        icon={History}
+        action={
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Camera}
+              onClick={handleCreateManualSnapshot}
+              isLoading={creatingSnapshot}
+              disabled={creatingSnapshot}
+              title={t('profiles.snapshots.snapshotNowTitle')}
+              aria-label={t('profiles.snapshots.snapshotNow')}
+            >
+              <Tx k="profiles.snapshots.snapshotNow" fallback="Snapshot now" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSnapshotsExpanded((v) => !v)}
+              icon={snapshotsExpanded ? ChevronUp : ChevronDown}
+              aria-label={snapshotsExpanded ? t('profiles.snapshots.collapse') : t('profiles.snapshots.expand')}
+              title={snapshotsExpanded ? t('profiles.snapshots.collapseList') : t('profiles.snapshots.showAll')}
+              className="px-1.5"
+            />
+          </div>
+        }
+      >
+        {!snapshotsExpanded ? (
+          <p
+            className="text-xs text-text-secondary"
+            title={t('profiles.snapshots.tooltip')}
+          >
+            {snapshots.length === 0
+              ? (
                 <Tx
-                  k="profiles.snapshots.expandedEmpty"
-                  fallback="Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong-profile-applied can be rolled back. Snapshots store only the list of mods (their GameBanana IDs), never the VPK files, so disk cost stays tiny - they accumulate until you delete them. You can also capture one manually with the button above before experimenting."
+                  k="profiles.snapshots.collapsedEmpty"
+                  fallback="Automatic recovery points captured before updates or profile applies. None yet - one will appear here the next time you run either."
                 />
-              </p>
-            ) : (
-              <>
-                {(() => {
-                  const allSelected = snapshots.length > 0 && selectedSnapshotIds.size === snapshots.length;
-                  const someSelected = selectedSnapshotIds.size > 0 && !allSelected;
-                  const toggleAll = () => {
-                    if (allSelected) {
-                      setSelectedSnapshotIds(new Set());
-                    } else {
-                      setSelectedSnapshotIds(new Set(snapshots.map((s) => s.snapshotId)));
-                    }
-                  };
-                  return (
-                    <div className="flex items-center gap-3 pb-2 mb-1 border-b border-hl/5 text-xs text-text-secondary">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                          onChange={toggleAll}
-                          aria-label={allSelected ? t('profiles.snapshots.clearSelection') : t('profiles.snapshots.selectAll')}
-                          className="peer sr-only"
+              )
+              : (
+                <Tx
+                  k="profiles.snapshots.mostRecent"
+                  values={{
+                    date: formatRelativeDate(snapshots[0].createdAt),
+                    count: snapshots[0].modCount,
+                  }}
+                  fallback={`Most recent: ${formatRelativeDate(snapshots[0].createdAt)} - ${snapshots[0].modCount} mods.`}
+                />
+              )}
+          </p>
+        ) : snapshots.length === 0 ? (
+          <p className="text-xs text-text-secondary">
+            <Tx
+              k="profiles.snapshots.expandedEmpty"
+              fallback="Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong-profile-applied can be rolled back. Snapshots store only the list of mods (their GameBanana IDs), never the VPK files, so disk cost stays tiny - they accumulate until you delete them. You can also capture one manually with the button above before experimenting."
+            />
+          </p>
+        ) : (
+          <>
+            {(() => {
+              const allSelected = snapshots.length > 0 && selectedSnapshotIds.size === snapshots.length;
+              const someSelected = selectedSnapshotIds.size > 0 && !allSelected;
+              const toggleAll = () => {
+                if (allSelected) {
+                  setSelectedSnapshotIds(new Set());
+                } else {
+                  setSelectedSnapshotIds(new Set(snapshots.map((s) => s.snapshotId)));
+                }
+              };
+              return (
+                <div className="flex items-center gap-3 pb-2 mb-1 border-b border-hl/5 text-xs text-text-secondary">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      aria-label={allSelected ? t('profiles.snapshots.clearSelection') : t('profiles.snapshots.selectAll')}
+                      className="peer sr-only"
+                    />
+                    <CheckboxMark checked={allSelected} indeterminate={someSelected} />
+                    <span>
+                      {selectedSnapshotIds.size === 0 ? (
+                        <Tx
+                          k="profiles.snapshots.selectToBulkDelete"
+                          values={{ count: snapshots.length }}
+                          fallback={`Select to bulk delete (${snapshots.length})`}
                         />
-                        <CheckboxMark checked={allSelected} indeterminate={someSelected} />
+                      ) : (
+                        <Tx
+                          k="profiles.snapshots.selected"
+                          values={{ count: selectedSnapshotIds.size }}
+                          fallback={`${selectedSnapshotIds.size} selected`}
+                        />
+                      )}
+                    </span>
+                  </label>
+                  {selectedSnapshotIds.size > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={Trash2}
+                      onClick={() => setBulkDeleteSnapshotsOpen(true)}
+                      className="ml-auto text-state-danger hover:text-red-300"
+                      title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
+                    >
+                      <Tx
+                        k="profiles.actions.deleteCount"
+                        values={{ count: selectedSnapshotIds.size }}
+                        fallback={`Delete ${selectedSnapshotIds.size}`}
+                      />
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
+            <ul className="divide-y divide-hl/5">
+            {snapshots.map((snap) => {
+              const isRestoring = restoringSnapshotId === snap.snapshotId;
+              const isSelected = selectedSnapshotIds.has(snap.snapshotId);
+              const triggerLabel =
+                snap.trigger === 'pre-update'
+                  ? t('profiles.snapshots.trigger.preUpdate')
+                  : snap.trigger === 'pre-apply-profile'
+                  ? t('profiles.snapshots.trigger.preApplyProfile')
+                  : snap.trigger === 'pre-dmm-import'
+                  ? t('profiles.snapshots.trigger.preDmmImport')
+                  : t('profiles.snapshots.trigger.manual');
+              const triggerExplanation =
+                snap.trigger === 'pre-update'
+                  ? t('profiles.snapshots.explanation.preUpdate')
+                  : snap.trigger === 'pre-apply-profile'
+                  ? t('profiles.snapshots.explanation.preApplyProfile')
+                  : snap.trigger === 'pre-dmm-import'
+                  ? t('profiles.snapshots.explanation.preDmmImport')
+                  : t('profiles.snapshots.explanation.manual');
+              return (
+                <li
+                  key={snap.snapshotId}
+                  className="flex flex-wrap items-center gap-3 py-2.5"
+                >
+                  <label className="shrink-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSnapshotSelected(snap.snapshotId)}
+                      aria-label={isSelected ? t('profiles.snapshots.unselect') : t('profiles.snapshots.select')}
+                      className="peer sr-only"
+                    />
+                    <CheckboxMark checked={isSelected} />
+                  </label>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="text-sm text-text-primary truncate"
+                      title={triggerExplanation}
+                    >
+                      {triggerLabel}
+                      <span className="text-text-secondary">
+                        {' · '}
+                        <Tx
+                          k="profiles.mods.count"
+                          values={{ count: snap.modCount }}
+                          fallback={`${snap.modCount} mods`}
+                        />
+                      </span>
+                    </div>
+                    <div
+                      className="text-xs text-text-secondary"
+                      title={formatAbsoluteDate(snap.createdAt)}
+                    >
+                      {formatRelativeDate(snap.createdAt)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={RotateCcw}
+                      onClick={() => handleRestoreSnapshot(snap.snapshotId)}
+                      isLoading={isRestoring}
+                      disabled={isRestoring}
+                      title={t('profiles.snapshots.restoreTitle')}
+                    >
+                      <Tx k="profiles.actions.restore" fallback="Restore" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={Trash2}
+                      onClick={() => setDeleteSnapshotConfirmId(snap.snapshotId)}
+                      title={t('profiles.snapshots.deleteTitle')}
+                      aria-label={t('profiles.snapshots.delete')}
+                      className="px-1.5"
+                    />
+                  </div>
+                </li>
+              );
+            })}
+            </ul>
+          </>
+        )}
+      </Card>
+
+      {/* Profile List */}
+      {profiles.length === 0 ? (
+        <div className="py-16">
+          <EmptyState
+            icon={User}
+            title={<Tx k="profiles.empty.title" fallback="No Profiles Yet" />}
+            description={<Tx k="profiles.empty.noProfiles" fallback="Create a profile to save your current mod setup." />}
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
+          {profiles.map((profile) => {
+            const isApplying = applyingId === profile.id;
+            const isUpdating = updatingId === profile.id;
+            const isActive = activeProfileId === profile.id;
+            const isExpanded = expandedProfiles.has(profile.id);
+            const profileModGroups = getProfileModGroups(profile.mods, modByFileName, modBySha);
+            const profileFileCount = profile.mods.length;
+
+            const isRenamingThis = renamingId === profile.id;
+
+            return (
+              <Card
+                key={profile.id}
+                title={
+                  isRenamingThis ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitRename();
+                        else if (e.key === 'Escape') cancelRename();
+                      }}
+                      onBlur={submitRename}
+                      disabled={isRenaming}
+                      aria-label={t('profiles.actions.renameProfile')}
+                      className="w-full px-2 py-1 bg-bg-tertiary border border-hl/10 rounded text-text-primary text-lg font-semibold font-reaver focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                  ) : (
+                    profile.name
+                  )
+                }
+                icon={Layers}
+                accentEdge={isActive ? 'active' : 'none'}
+                className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-hl/10'}`}
+                action={
+                  <div className="flex items-center gap-2">
+                    {!isRenamingThis && (
+                      <button
+                        type="button"
+                        onClick={() => startRename(profile)}
+                        disabled={isApplying || isUpdating}
+                        aria-label={t('profiles.actions.renameProfile')}
+                        title={t('profiles.actions.renameProfile')}
+                        className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isRenamingThis && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={cancelRename}
+                        disabled={isRenaming}
+                        aria-label={t('profiles.actions.cancelRename')}
+                        title={t('common.actions.cancel')}
+                        className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isActive ? (
+                      <Badge variant="success" className="animate-pulse">
+                        <Tx k="common.status.active" fallback="Active" />
+                      </Badge>
+                    ) : (
+                      <Badge variant="neutral">
+                        <Tx k="common.status.inactive" fallback="Inactive" />
+                      </Badge>
+                    )}
+                  </div>
+                }
+              >
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-hl/5">
+                      <div className="flex flex-col items-center">
+                        <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
+                        <span className="text-xs uppercase tracking-wider opacity-70">
+                          <Tx k="profiles.mods.label" fallback="Mods" />
+                        </span>
+                      </div>
+                      <div className="text-right text-xs">
+                      <div className="mb-1 opacity-70">
+                        <Tx k="profiles.updated" fallback="Updated" />
+                      </div>
+                      <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+
+                  {/* Capabilities Indicators */}
+                  {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-hl/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
+                        <Terminal className="w-3 h-3 text-blue-400" />
                         <span>
-                          {selectedSnapshotIds.size === 0 ? (
+                          <Tx
+                            k="profiles.autoexec.count"
+                            values={{ count: profile.autoexecCommands.length }}
+                            fallback={`Autoexec (${profile.autoexecCommands.length})`}
+                          />
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-hl/5">
+                    <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
+                      <Button
+                        size="sm"
+                        className="flex-1 min-w-0"
+                        onClick={() => handleApplyProfile(profile.id)}
+                        disabled={isApplying || isUpdating}
+                        isLoading={isApplying}
+                        icon={isActive ? RotateCcw : Play}
+                        variant={isActive ? 'secondary' : 'primary'}
+                        title={
+                          isActive
+                            ? t('profiles.actions.reapplyTitle')
+                            : undefined
+                        }
+                      >
+                        {isActive ? (
+                          <Tx k="profiles.actions.reapply" fallback="Re-apply" />
+                        ) : (
+                          <Tx k="profiles.actions.apply" fallback="Apply" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 min-w-0"
+                        variant="secondary"
+                        onClick={() =>
+                          (settings?.confirmProfileUpdate ?? true)
+                            ? setUpdateConfirmId(profile.id)
+                            : handleUpdateProfile(profile.id)
+                        }
+                        disabled={isUpdating || isApplying}
+                        isLoading={isUpdating}
+                        icon={Save}
+                        title={t('profiles.actions.updateTitle')}
+                      >
+                        <Tx k="profiles.actions.update" fallback="Update" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-1 ml-auto">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExportingProfileId(profile.id)}
+                        disabled={isApplying || isUpdating}
+                        icon={Share2}
+                        title={t('profiles.actions.exportTitle')}
+                        aria-label={t('profiles.actions.exportProfile')}
+                        className="px-1.5"
+                      />
+                      {socialSignedIn && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setPublishingProfileId(profile.id)}
+                          disabled={isApplying || isUpdating}
+                          icon={Globe}
+                          title={t('profiles.actions.publishToDiscover')}
+                          aria-label={t('profiles.actions.publishToDiscover')}
+                          className="px-1.5"
+                        />
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleExpand(profile.id)}
+                        icon={isExpanded ? ChevronUp : ChevronDown}
+                        title={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
+                        aria-label={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
+                        className="px-1.5"
+                      />
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => setDeleteConfirmId(profile.id)}
+                        disabled={isApplying || isUpdating}
+                        icon={Trash2}
+                        title={t('profiles.actions.deleteProfile')}
+                        aria-label={t('profiles.actions.deleteProfile')}
+                        className="px-1.5"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Expanded Content */}
+                  {isExpanded && (
+                    <div className="mt-2 pt-4 border-t border-hl/5 animate-fade-in space-y-4">
+                      {/* Mods List */}
+                      <div>
+                        <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                          {profileFileCount !== profileModGroups.length ? (
                             <Tx
-                              k="profiles.snapshots.selectToBulkDelete"
-                              values={{ count: snapshots.length }}
-                              fallback={`Select to bulk delete (${snapshots.length})`}
+                              k="profiles.mods.groupsAndFiles"
+                              values={{ mods: profileModGroups.length, files: profileFileCount }}
+                              fallback={`Mods (${profileModGroups.length}, ${profileFileCount} files)`}
                             />
                           ) : (
                             <Tx
-                              k="profiles.snapshots.selected"
-                              values={{ count: selectedSnapshotIds.size }}
-                              fallback={`${selectedSnapshotIds.size} selected`}
+                              k="profiles.mods.groups"
+                              values={{ count: profileModGroups.length }}
+                              fallback={`Mods (${profileModGroups.length})`}
                             />
                           )}
-                        </span>
-                      </label>
-                      {selectedSnapshotIds.size > 0 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={Trash2}
-                          onClick={() => setBulkDeleteSnapshotsOpen(true)}
-                          className="ml-auto text-state-danger hover:text-red-300"
-                          title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
-                        >
-                          <Tx
-                            k="profiles.actions.deleteCount"
-                            values={{ count: selectedSnapshotIds.size }}
-                            fallback={`Delete ${selectedSnapshotIds.size}`}
-                          />
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })()}
-                <ul className="divide-y divide-hl/5">
-                {snapshots.map((snap) => {
-                  const isRestoring = restoringSnapshotId === snap.snapshotId;
-                  const isSelected = selectedSnapshotIds.has(snap.snapshotId);
-                  const triggerLabel =
-                    snap.trigger === 'pre-update'
-                      ? t('profiles.snapshots.trigger.preUpdate')
-                      : snap.trigger === 'pre-apply-profile'
-                      ? t('profiles.snapshots.trigger.preApplyProfile')
-                      : snap.trigger === 'pre-dmm-import'
-                      ? t('profiles.snapshots.trigger.preDmmImport')
-                      : t('profiles.snapshots.trigger.manual');
-                  const triggerExplanation =
-                    snap.trigger === 'pre-update'
-                      ? t('profiles.snapshots.explanation.preUpdate')
-                      : snap.trigger === 'pre-apply-profile'
-                      ? t('profiles.snapshots.explanation.preApplyProfile')
-                      : snap.trigger === 'pre-dmm-import'
-                      ? t('profiles.snapshots.explanation.preDmmImport')
-                      : t('profiles.snapshots.explanation.manual');
-                  return (
-                    <li
-                      key={snap.snapshotId}
-                      className="flex flex-wrap items-center gap-3 py-2.5"
-                    >
-                      <label className="shrink-0 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSnapshotSelected(snap.snapshotId)}
-                          aria-label={isSelected ? t('profiles.snapshots.unselect') : t('profiles.snapshots.select')}
-                          className="peer sr-only"
-                        />
-                        <CheckboxMark checked={isSelected} />
-                      </label>
-                      <div className="min-w-0 flex-1">
-                        <div
-                          className="text-sm text-text-primary truncate"
-                          title={triggerExplanation}
-                        >
-                          {triggerLabel}
-                          <span className="text-text-secondary">
-                            {' · '}
-                            <Tx
-                              k="profiles.mods.count"
-                              values={{ count: snap.modCount }}
-                              fallback={`${snap.modCount} mods`}
-                            />
-                          </span>
                         </div>
-                        <div
-                          className="text-xs text-text-secondary"
-                          title={formatAbsoluteDate(snap.createdAt)}
-                        >
-                          {formatRelativeDate(snap.createdAt)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon={RotateCcw}
-                          onClick={() => handleRestoreSnapshot(snap.snapshotId)}
-                          isLoading={isRestoring}
-                          disabled={isRestoring}
-                          title={t('profiles.snapshots.restoreTitle')}
-                        >
-                          <Tx k="profiles.actions.restore" fallback="Restore" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={Trash2}
-                          onClick={() => setDeleteSnapshotConfirmId(snap.snapshotId)}
-                          title={t('profiles.snapshots.deleteTitle')}
-                          aria-label={t('profiles.snapshots.delete')}
-                          className="px-1.5"
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-                </ul>
-              </>
-            )}
-          </Card>
-
-          {/* Profile List */}
-          {profiles.length === 0 ? (
-            <div className="py-16">
-              <EmptyState
-                icon={User}
-                title={<Tx k="profiles.empty.title" fallback="No Profiles Yet" />}
-                description={<Tx k="profiles.empty.noProfiles" fallback="Create a profile to save your current mod setup." />}
-              />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
-              {profiles.map((profile) => {
-                const isApplying = applyingId === profile.id;
-                const isUpdating = updatingId === profile.id;
-                const isActive = activeProfileId === profile.id;
-                const isExpanded = expandedProfiles.has(profile.id);
-                const profileModGroups = getProfileModGroups(profile.mods, modByFileName, modBySha);
-                const profileFileCount = profile.mods.length;
-
-                const isRenamingThis = renamingId === profile.id;
-
-                return (
-                  <Card
-                    key={profile.id}
-                    title={
-                      isRenamingThis ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') submitRename();
-                            else if (e.key === 'Escape') cancelRename();
-                          }}
-                          onBlur={submitRename}
-                          disabled={isRenaming}
-                          aria-label={t('profiles.actions.renameProfile')}
-                          className="w-full px-2 py-1 bg-bg-tertiary border border-hl/10 rounded text-text-primary text-lg font-semibold font-reaver focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                      ) : (
-                        profile.name
-                      )
-                    }
-                    icon={Layers}
-                    accentEdge={isActive ? 'active' : 'none'}
-                    className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-hl/10'}`}
-                    action={
-                      <div className="flex items-center gap-2">
-                        {!isRenamingThis && (
-                          <button
-                            type="button"
-                            onClick={() => startRename(profile)}
-                            disabled={isApplying || isUpdating}
-                            aria-label={t('profiles.actions.renameProfile')}
-                            title={t('profiles.actions.renameProfile')}
-                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {isRenamingThis && (
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={cancelRename}
-                            disabled={isRenaming}
-                            aria-label={t('profiles.actions.cancelRename')}
-                            title={t('common.actions.cancel')}
-                            className="p-1 text-text-secondary hover:text-text-primary hover:bg-hl/5 rounded transition-colors disabled:opacity-50"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {isActive ? (
-                          <Badge variant="success" className="animate-pulse">
-                            <Tx k="common.status.active" fallback="Active" />
-                          </Badge>
-                        ) : (
-                          <Badge variant="neutral">
-                            <Tx k="common.status.inactive" fallback="Inactive" />
-                          </Badge>
-                        )}
-                      </div>
-                    }
-                  >
-                    <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-hl/5">
-                          <div className="flex flex-col items-center">
-                            <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
-                            <span className="text-xs uppercase tracking-wider opacity-70">
-                              <Tx k="profiles.mods.label" fallback="Mods" />
-                            </span>
-                          </div>
-                          <div className="text-right text-xs">
-                          <div className="mb-1 opacity-70">
-                            <Tx k="profiles.updated" fallback="Updated" />
-                          </div>
-                          <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
+                        <div className="max-h-32 overflow-y-auto pr-2 space-y-1">
+                          {profileModGroups.map((group) => {
+                            const variantSummary = group.variants.map((variant) => variant.label).join(', ');
+                            const showVariantSummary = group.variants.length > 1 || group.variants.some((variant) => variant.hasDetail);
+                            return (
+                              <div key={group.key} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 hover:bg-hl/5 rounded">
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-text-primary" title={group.name}>{group.name}</div>
+                                  {showVariantSummary && (
+                                    <div className="truncate text-2xs text-text-secondary" title={variantSummary}>
+                                      {variantSummary}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {group.variants.length > 1 && (
+                                    <span className="text-[10px] text-text-secondary bg-hl/5 rounded px-1.5 py-0.5">
+                                      <Tx
+                                        k="profiles.mods.files"
+                                        values={{ count: group.variants.length }}
+                                        fallback={`${group.variants.length} files`}
+                                      />
+                                    </span>
+                                  )}
+                                  {group.enabled && <Check className="w-3 h-3 text-green-400" />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {profileModGroups.length === 0 && (
+                            <div className="text-xs text-text-secondary italic">
+                              <Tx k="profiles.mods.empty" fallback="No mods in profile" />
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Capabilities Indicators */}
-                      {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
-                        <div className="flex gap-2">
-                          <div className="flex items-center gap-1.5 px-2 py-1 bg-hl/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
-                            <Terminal className="w-3 h-3 text-blue-400" />
-                            <span>
-                              <Tx
-                                k="profiles.autoexec.count"
-                                values={{ count: profile.autoexecCommands.length }}
-                                fallback={`Autoexec (${profile.autoexecCommands.length})`}
-                              />
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-hl/5">
-                        <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
-                          <Button
-                            size="sm"
-                            className="flex-1 min-w-0"
-                            onClick={() => handleApplyProfile(profile.id)}
-                            disabled={isApplying || isUpdating}
-                            isLoading={isApplying}
-                            icon={isActive ? RotateCcw : Play}
-                            variant={isActive ? 'secondary' : 'primary'}
-                            title={
-                              isActive
-                                ? t('profiles.actions.reapplyTitle')
-                                : undefined
-                            }
-                          >
-                            {isActive ? (
-                              <Tx k="profiles.actions.reapply" fallback="Re-apply" />
-                            ) : (
-                              <Tx k="profiles.actions.apply" fallback="Apply" />
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 min-w-0"
-                            variant="secondary"
-                            onClick={() =>
-                              (settings?.confirmProfileUpdate ?? true)
-                                ? setUpdateConfirmId(profile.id)
-                                : handleUpdateProfile(profile.id)
-                            }
-                            disabled={isUpdating || isApplying}
-                            isLoading={isUpdating}
-                            icon={Save}
-                            title={t('profiles.actions.updateTitle')}
-                          >
-                            <Tx k="profiles.actions.update" fallback="Update" />
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-1 ml-auto">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setExportingProfileId(profile.id)}
-                            disabled={isApplying || isUpdating}
-                            icon={Share2}
-                            title={t('profiles.actions.exportTitle')}
-                            aria-label={t('profiles.actions.exportProfile')}
-                            className="px-1.5"
-                          />
-                          {socialSignedIn && (
+                      {/* Crosshair Preview */}
+                      {profile.crosshair && (
+                        <div className="pt-3 border-t border-hl/5">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                              <Tx k="nav.crosshair" fallback="Crosshair" />
+                            </div>
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setPublishingProfileId(profile.id)}
-                              disabled={isApplying || isUpdating}
-                              icon={Globe}
-                              title={t('profiles.actions.publishToDiscover')}
-                              aria-label={t('profiles.actions.publishToDiscover')}
+                              onClick={() => handleRemoveCrosshair(profile.id)}
+                              disabled={isApplying || isUpdating || removingCrosshairId === profile.id}
+                              icon={X}
+                              title={t('profiles.crosshair.removeTitle')}
+                              aria-label={t('profiles.crosshair.remove')}
                               className="px-1.5"
-                            />
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => toggleExpand(profile.id)}
-                            icon={isExpanded ? ChevronUp : ChevronDown}
-                            title={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
-                            aria-label={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
-                            className="px-1.5"
-                          />
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => setDeleteConfirmId(profile.id)}
-                            disabled={isApplying || isUpdating}
-                            icon={Trash2}
-                            title={t('profiles.actions.deleteProfile')}
-                            aria-label={t('profiles.actions.deleteProfile')}
-                            className="px-1.5"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Expanded Content */}
-                      {isExpanded && (
-                        <div className="mt-2 pt-4 border-t border-hl/5 animate-fade-in space-y-4">
-                          {/* Mods List */}
-                          <div>
-                            <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                              {profileFileCount !== profileModGroups.length ? (
+                            >
+                              <Tx k="profiles.crosshair.remove" fallback="Remove" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <CrosshairPreview size={56} scale={1440 / 1080} settings={profile.crosshair} />
+                            <div className="text-xs text-text-secondary space-y-1">
+                              <div>
                                 <Tx
-                                  k="profiles.mods.groupsAndFiles"
-                                  values={{ mods: profileModGroups.length, files: profileFileCount }}
-                                  fallback={`Mods (${profileModGroups.length}, ${profileFileCount} files)`}
+                                  k="profiles.crosshair.summary"
+                                  values={{
+                                    gap: profile.crosshair.pipGap,
+                                    height: profile.crosshair.pipHeight,
+                                    width: profile.crosshair.pipWidth,
+                                  }}
+                                  fallback={`Gap: ${profile.crosshair.pipGap} | Height: ${profile.crosshair.pipHeight} | Width: ${profile.crosshair.pipWidth}`}
                                 />
-                              ) : (
-                                <Tx
-                                  k="profiles.mods.groups"
-                                  values={{ count: profileModGroups.length }}
-                                  fallback={`Mods (${profileModGroups.length})`}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-sm border border-hl/20"
+                                  style={{ backgroundColor: `rgb(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})` }}
                                 />
-                              )}
-                            </div>
-                            <div className="max-h-32 overflow-y-auto pr-2 space-y-1">
-                              {profileModGroups.map((group) => {
-                                const variantSummary = group.variants.map((variant) => variant.label).join(', ');
-                                const showVariantSummary = group.variants.length > 1 || group.variants.some((variant) => variant.hasDetail);
-                                return (
-                                  <div key={group.key} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 hover:bg-hl/5 rounded">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="truncate text-text-primary" title={group.name}>{group.name}</div>
-                                      {showVariantSummary && (
-                                        <div className="truncate text-2xs text-text-secondary" title={variantSummary}>
-                                          {variantSummary}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {group.variants.length > 1 && (
-                                        <span className="text-[10px] text-text-secondary bg-hl/5 rounded px-1.5 py-0.5">
-                                          <Tx
-                                            k="profiles.mods.files"
-                                            values={{ count: group.variants.length }}
-                                            fallback={`${group.variants.length} files`}
-                                          />
-                                        </span>
-                                      )}
-                                      {group.enabled && <Check className="w-3 h-3 text-green-400" />}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {profileModGroups.length === 0 && (
-                                <div className="text-xs text-text-secondary italic">
-                                  <Tx k="profiles.mods.empty" fallback="No mods in profile" />
-                                </div>
-                              )}
+                                <span>
+                                  <Tx
+                                    k="profiles.crosshair.rgb"
+                                    values={{
+                                      r: profile.crosshair.colorR,
+                                      g: profile.crosshair.colorG,
+                                      b: profile.crosshair.colorB,
+                                    }}
+                                    fallback={`RGB(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})`}
+                                  />
+                                </span>
+                              </div>
                             </div>
                           </div>
+                        </div>
+                      )}
 
-                          {/* Crosshair Preview */}
-                          {profile.crosshair && (
-                            <div className="pt-3 border-t border-hl/5">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">
-                                  <Tx k="nav.crosshair" fallback="Crosshair" />
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleRemoveCrosshair(profile.id)}
-                                  disabled={isApplying || isUpdating || removingCrosshairId === profile.id}
-                                  icon={X}
-                                  title={t('profiles.crosshair.removeTitle')}
-                                  aria-label={t('profiles.crosshair.remove')}
-                                  className="px-1.5"
-                                >
-                                  <Tx k="profiles.crosshair.remove" fallback="Remove" />
-                                </Button>
+                      {/* Autoexec Commands */}
+                      {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
+                        <div className="pt-3 border-t border-hl/5">
+                          <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                            <Tx
+                              k="profiles.autoexec.commandsCount"
+                              values={{ count: profile.autoexecCommands.length }}
+                              fallback={`Autoexec (${profile.autoexecCommands.length} commands)`}
+                            />
+                          </div>
+                          <div className="space-y-1 max-h-24 overflow-y-auto">
+                            {profile.autoexecCommands.map((cmd, idx) => (
+                              <div key={idx} className="text-xs font-mono bg-hl/5 rounded px-2 py-1 truncate" title={cmd}>
+                                {cmd}
                               </div>
-                              <div className="flex items-center gap-4">
-                                <CrosshairPreview size={56} scale={1440 / 1080} settings={profile.crosshair} />
-                                <div className="text-xs text-text-secondary space-y-1">
-                                  <div>
-                                    <Tx
-                                      k="profiles.crosshair.summary"
-                                      values={{
-                                        gap: profile.crosshair.pipGap,
-                                        height: profile.crosshair.pipHeight,
-                                        width: profile.crosshair.pipWidth,
-                                      }}
-                                      fallback={`Gap: ${profile.crosshair.pipGap} | Height: ${profile.crosshair.pipHeight} | Width: ${profile.crosshair.pipWidth}`}
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="w-3 h-3 rounded-sm border border-hl/20"
-                                      style={{ backgroundColor: `rgb(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})` }}
-                                    />
-                                    <span>
-                                      <Tx
-                                        k="profiles.crosshair.rgb"
-                                        values={{
-                                          r: profile.crosshair.colorR,
-                                          g: profile.crosshair.colorG,
-                                          b: profile.crosshair.colorB,
-                                        }}
-                                        fallback={`RGB(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})`}
-                                      />
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Autoexec Commands */}
-                          {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
-                            <div className="pt-3 border-t border-hl/5">
-                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                                <Tx
-                                  k="profiles.autoexec.commandsCount"
-                                  values={{ count: profile.autoexecCommands.length }}
-                                  fallback={`Autoexec (${profile.autoexecCommands.length} commands)`}
-                                />
-                              </div>
-                              <div className="space-y-1 max-h-24 overflow-y-auto">
-                                {profile.autoexecCommands.map((cmd, idx) => (
-                                  <div key={idx} className="text-xs font-mono bg-hl/5 rounded px-2 py-1 truncate" title={cmd}>
-                                    {cmd}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      </div>
+      )}
 
       {/* Update (overwrite) Confirmation Modal. Gated on confirmProfileUpdate so
           Update isn't a one-click overwrite that gets fired when Apply was meant. */}
