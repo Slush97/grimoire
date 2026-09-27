@@ -2,10 +2,10 @@
  * User-authored lists for the Installed page: named buckets a mod can belong
  * to, used purely to organize and filter the library.
  *
- * Lists are deliberately a *view* concept. They never enable, disable, or
- * reorder anything: that is what Mod Profiles are for, and a list that also
- * toggled mods would be a profile with a worse name. The only thing a list
- * does is narrow which cards the Installed grid shows.
+ * Lists are mainly a *view* concept: filing a mod never enables, disables, or
+ * reorders it, and a list stores no enabled state (that is what Mod Profiles
+ * are for). Beyond narrowing which cards the Installed grid shows, the only
+ * action is an explicit one-shot "Enable all" / "Disable all" over members.
  *
  * Membership is keyed by `modPreferenceKey` (see disabledModPrefs.ts), so it
  * survives the pakNN rename that enabling/disabling performs, and a GameBanana
