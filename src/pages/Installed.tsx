@@ -1,4 +1,4 @@
-import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -50,18 +50,16 @@ import {
   GripVertical,
   ClipboardList,
   Fingerprint,
-  Copy,
-  ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
+import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
+import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
 import type { GameBananaModDetails, GameBananaItemRef, GameBananaFile } from '../types/gamebanana';
 import {
   mergeSourceModIds,
@@ -75,7 +73,6 @@ import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
-import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
 import {
@@ -83,14 +80,12 @@ import {
   installedVariantGroupKey,
   localVariantSelectionEligibility,
 } from '../lib/localVariantEligibility';
-import { formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import {
   STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
   type StableKeyPreferencesMigratedDetail,
 } from '../lib/stableKeyMigration';
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
-import { formatBytes } from '../lib/formatBytes';
 import { planFileUpdates } from '../lib/updateFileMatch';
 import {
   createEnabledVpkRestoreSnapshot,
@@ -128,10 +123,10 @@ import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
-import { Button, IconButton, ModalHeader, Tag } from '../components/common/ui';
+import { Button, IconButton } from '../components/common/ui';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { ViewModeToggle, EmptyState, LoadingState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 import { HeroTagLabel } from '../components/installed/chips';
 import { heroNameForLabel } from '../components/installed/heroNames';
 import { ModCard } from '../components/installed/ModCard';
@@ -140,6 +135,8 @@ import { EditLocalModModal } from '../components/installed/EditLocalModModal';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
 import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/installed/unknown/UnknownFixModals';
+import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
+import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -170,18 +167,6 @@ function clearUnknownCacheForMod(
   delete next[mod.id];
   return next;
 }
-
-// The four phases of the bulk-imprint modal, as one discriminated union.
-//  - preflight: the dry-run is in flight; render a LoadingState.
-//  - review: the dry-run returned; render one line per bucket + the commit button.
-//  - running: the bulk imprint is streaming progress ticks (dismiss blocked).
-//  - done: the final report (imprinted / skipped / failed).
-type ImprintModalState =
-  | { phase: 'preflight' }
-  | { phase: 'review'; preflight: ImprintPreflightResult }
-  | { phase: 'running'; progress: ImprintInstalledProgress | null }
-  | { phase: 'done'; result: ImprintAllInstalledResult }
-  | null;
 
 type ReorderPosition = 'before' | 'after';
 type DragSection = 'enabled' | 'disabled';
@@ -5829,491 +5814,6 @@ function InstalledSkeleton({ viewMode, gridStyle }: { viewMode: ViewMode; gridSt
         )}
       </div>
     </div>
-  );
-}
-
-// One preflight bucket line: a count + its one-line consequence (the full copy,
-// which leads with {{count}}). A small tone-colored dot flags the buckets that
-// need attention. Hidden when the bucket is empty. Rendered in a fixed order so
-// the eligible line always leads and the anomaly line trails.
-function ImprintBucketLine({ count, label, tone = 'muted' }: {
-  count: number;
-  label: string;
-  tone?: 'muted' | 'accent' | 'warning' | 'danger';
-}) {
-  if (count <= 0) return null;
-  const dotTones: Record<string, string> = {
-    muted: 'bg-text-tertiary/50',
-    accent: 'bg-accent',
-    warning: 'bg-state-warning',
-    danger: 'bg-state-danger',
-  };
-  return (
-    <div className="flex items-center gap-2 text-sm text-text-secondary">
-      <span aria-hidden className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotTones[tone]}`} />
-      <span className="tabular-nums">{label}</span>
-    </div>
-  );
-}
-
-// A collapsible per-item report list (Skipped / Failed) for the result phase.
-// Defaults collapsed so a clean run stays tidy; the count sits in the summary.
-function ImprintReportList({ title, items }: {
-  title: string;
-  items: Array<{ key: string; name: string; reason: string }>;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <details className="rounded-md border border-hl/5 bg-bg-tertiary/40 overflow-hidden">
-      <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
-        {title}
-      </summary>
-      <ul className="divide-y divide-hl/5 border-t border-hl/5">
-        {items.map((item) => (
-          <li key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
-            <span className="min-w-0 truncate text-sm text-text-primary" title={item.name}>{item.name}</span>
-            <span className="flex-shrink-0 text-xs text-text-tertiary">{item.reason}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-// The retroactive bulk-imprint modal: a preflight dry-run, a commit + live
-// progress phase, and a final report, all in one shared Modal. Dismissal is
-// blocked while a run is in flight (the game has the VPKs, so an interrupted
-// swap would strand a temp file). No new IPC: it reads the preflight buckets and
-// streams progress from the channels wired in Stage B.
-function ImprintModal({ state, onConfirm, onClose }: {
-  state: NonNullable<ImprintModalState>;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const titleId = 'imprint-modal-title';
-  const running = state.phase === 'running';
-
-  const anomalyReason = (reason: ImprintAnomalousMod['reason']): string => {
-    switch (reason) {
-      case 'unparseable': return t('installed.imprintAll.anomalyUnparseable');
-      case 'empty': return t('installed.imprintAll.anomalyEmpty');
-      case 'chunked': return t('installed.imprintAll.anomalyChunked');
-      case 'hash-drift': return t('installed.imprintAll.anomalyHashDrift');
-      case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
-      case 'orphan-merge': return t('installed.imprintAll.anomalyOrphanMerge');
-      case 'unidentified': return t('installed.imprintAll.anomalyUnidentified');
-    }
-  };
-  // The bulk run reports anomalies as their raw reason tokens (they flow into
-  // failed[] alongside free-form error messages); localize the known tokens so
-  // the result list reads the same as the preflight list.
-  const isAnomalyReason = (reason: string): reason is ImprintAnomalousMod['reason'] =>
-    reason === 'unparseable' || reason === 'empty' || reason === 'chunked' ||
-    reason === 'hash-drift' || reason === 'foreign-embed' || reason === 'orphan-merge' ||
-    reason === 'unidentified';
-
-  let body: ReactNode;
-  let footer: ReactNode;
-
-  if (state.phase === 'preflight') {
-    body = <LoadingState label={t('installed.imprintAll.checking')} className="min-h-40" />;
-    footer = (
-      <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
-    );
-  } else if (state.phase === 'review') {
-    const { counts } = state.preflight;
-    const autoManaged = counts.merged + counts.lockerManaged;
-    const eligible = counts.eligible;
-    body = (
-      <>
-        <p className="text-sm text-text-secondary">{t('installed.imprintAll.description')}</p>
-        {eligible === 0 &&
-        counts.alreadyImprinted === 0 &&
-        counts.blockedLoaded === 0 &&
-        autoManaged === 0 &&
-        counts.anomalous === 0 ? (
-          <EmptyState
-            icon={Fingerprint}
-            title={t('installed.imprintAll.empty')}
-            className="min-h-40"
-          />
-        ) : (
-          <div className="space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3">
-            <ImprintBucketLine count={eligible} label={t('installed.imprintAll.eligible', { count: eligible })} tone="accent" />
-            <ImprintBucketLine count={counts.alreadyImprinted} label={t('installed.imprintAll.alreadyImprinted', { count: counts.alreadyImprinted })} />
-            <ImprintBucketLine count={counts.blockedLoaded} label={t('installed.imprintAll.blockedLoaded', { count: counts.blockedLoaded })} tone="warning" />
-            <ImprintBucketLine count={autoManaged} label={t('installed.imprintAll.autoManaged', { count: autoManaged })} />
-            <ImprintBucketLine count={counts.anomalous} label={t('installed.imprintAll.anomalies', { count: counts.anomalous })} tone="danger" />
-          </div>
-        )}
-        {state.preflight.anomalous.length > 0 && (
-          <ImprintReportList
-            title={t('installed.imprintAll.anomalies', { count: state.preflight.anomalous.length })}
-            items={state.preflight.anomalous.map((a: ImprintAnomalousMod) => ({
-              key: a.fileName,
-              name: a.modName || a.fileName,
-              reason: anomalyReason(a.reason),
-            }))}
-          />
-        )}
-        {eligible > 0 && (
-          <p className="text-xs text-text-tertiary">{t('installed.imprintAll.repackNote')}</p>
-        )}
-      </>
-    );
-    footer = (
-      <>
-        <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
-        <Button variant="primary" icon={Fingerprint} disabled={eligible === 0} onClick={onConfirm}>
-          {t('installed.imprintAll.startImprinting', { count: eligible })}
-        </Button>
-      </>
-    );
-  } else if (state.phase === 'running') {
-    const p = state.progress;
-    const done = p?.done ?? 0;
-    const total = p?.total ?? 0;
-    body = (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-accent" />
-          <div className="min-w-0">
-            <div className="text-sm text-text-primary">
-              {t('installed.imprintAll.progress', { done, total })}
-            </div>
-            {p?.fileName && (
-              <div className="mt-0.5 truncate text-xs text-text-tertiary" title={p.fileName}>
-                {t('installed.imprintAll.currentFile', { fileName: p.modName || p.fileName })}
-              </div>
-            )}
-          </div>
-          <span className="ml-auto flex-shrink-0 text-sm tabular-nums text-text-secondary">
-            {done}/{total}
-          </span>
-        </div>
-      </div>
-    );
-    footer = (
-      <Button variant="primary" isLoading disabled>
-        {t('installed.imprintAll.progress', { done, total })}
-      </Button>
-    );
-  } else {
-    const { result } = state;
-    const skipped = result.skipped.map((s: ImprintSkippedMod) => ({
-      key: s.fileName,
-      name: s.modName || s.fileName,
-      reason: t('installed.imprintAll.skipReasonLoaded'),
-    }));
-    const failed = result.failed.map((f: ImprintFailedMod) => ({
-      key: f.fileName,
-      name: f.modName || f.fileName,
-      reason: isAnomalyReason(f.reason) ? anomalyReason(f.reason) : f.reason,
-    }));
-    body = (
-      <>
-        <div className="flex items-center gap-2 text-sm text-text-primary">
-          <Fingerprint className="h-4 w-4 flex-shrink-0 text-accent" />
-          {t('installed.imprintAll.imprintedSummary', { count: result.imprinted })}
-        </div>
-        <ImprintReportList title={t('installed.imprintAll.skippedTitle', { count: skipped.length })} items={skipped} />
-        <ImprintReportList title={t('installed.imprintAll.failedTitle', { count: failed.length })} items={failed} />
-      </>
-    );
-    footer = (
-      <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
-    );
-  }
-
-  return (
-    <Modal
-      onClose={onClose}
-      size="lg"
-      labelledBy={titleId}
-      dismissable={!running}
-      panelClassName="flex max-h-[85vh] flex-col"
-    >
-      <ModalHeader
-        title={t('installed.imprintAll.title')}
-        titleId={titleId}
-        onClose={onClose}
-        closeLabel={t('common.actions.close')}
-        closeDisabled={running}
-      />
-      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
-      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">{footer}</div>
-    </Modal>
-  );
-}
-
-// One labeled row of the imprint detail sheet: a fixed-width muted label and a
-// wrapping value column, so the sheet reads like a spec table.
-function ImprintDetailRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline gap-3 text-sm">
-      <span className="w-32 flex-shrink-0 text-xs text-text-tertiary">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-text-primary">{children}</span>
-    </div>
-  );
-}
-
-// A monospace hash value with a copy-to-clipboard button, for the identity rows.
-function ImprintHashValue({ value, copyLabel, onCopy }: {
-  value: string;
-  copyLabel: string;
-  onCopy: (value: string) => void;
-}) {
-  return (
-    <span className="flex items-center gap-2">
-      <code className="min-w-0 flex-1 break-all font-mono text-xs">{value}</code>
-      <IconButton size="sm" icon={Copy} label={copyLabel} onClick={() => onCopy(value)} />
-    </span>
-  );
-}
-
-// "View imprint" details modal: shows the FULL embedded imprint of one
-// installed VPK (the parsed addoninfo.txt fields, the original identity
-// triple, the grimoire_meta.json merge companion for merged VPKs, and the raw
-// addoninfo.txt text). Strictly read-only and offline. Deliberately NOT gated
-// on experimentalVpkImprinting: like the provenance card, reading an imprint
-// back is recognition of data already inside the file, not writing, so files
-// imprinted elsewhere or before the flag was toggled off stay inspectable.
-function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }) {
-  const { t } = useTranslation();
-  const titleId = 'imprint-details-modal-title';
-  // undefined = fetch in flight; null = the file carries no valid imprint
-  // (reachable when the local `imprinted` flag is stale).
-  const [details, setDetails] = useState<ImprintDetails | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-  // Same unmount guard as handleImprintAllInstalled: no setState after the
-  // modal unmounts mid-fetch.
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  // No synchronous state reset here: the render site keys this modal by
-  // mod.id, so switching mods remounts it with fresh loading state.
-  useEffect(() => {
-    readImprintDetails(mod.id)
-      .then((result) => {
-        if (mountedRef.current) setDetails(result);
-      })
-      .catch((err) => {
-        if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
-      });
-  }, [mod.id]);
-
-  // Matches the file's clipboard pattern (copyEntryShareCode): writeText +
-  // success toast, error toast on refusal.
-  const copyValue = (value: string) => {
-    navigator.clipboard.writeText(value).then(
-      () => showToast(t('installed.imprintDetails.copied'), { tone: 'success', duration: 2200 }),
-      (err) => showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
-    );
-  };
-
-  const sectionHeading = 'text-xs font-semibold uppercase tracking-wider text-text-tertiary';
-  const sectionBox = 'space-y-1.5 rounded-md border border-hl/5 bg-bg-tertiary/40 p-3';
-
-  let body: ReactNode;
-  if (error) {
-    body = <p className="text-sm text-state-danger">{t('installed.imprintDetails.error', { error })}</p>;
-  } else if (details === undefined) {
-    body = <LoadingState label={t('installed.imprintDetails.loading')} className="min-h-40" />;
-  } else if (details === null) {
-    body = (
-      <EmptyState
-        icon={Fingerprint}
-        title={t('installed.imprintDetails.empty')}
-        className="min-h-40"
-      />
-    );
-  } else {
-    const modinfo = details.modinfo;
-    const merge = modinfo?.kind === 'merge' ? modinfo : null;
-    body = (
-      <>
-        <div className={sectionBox}>
-          <ImprintDetailRow label={t('installed.imprintDetails.modTitle')}>
-            {details.title ?? mod.name}
-          </ImprintDetailRow>
-          {details.author && (
-            <ImprintDetailRow label={t('installed.imprintDetails.author')}>
-              {details.author}
-            </ImprintDetailRow>
-          )}
-          {modinfo?.description && (
-            <ImprintDetailRow label={t('installed.imprintDetails.description')}>
-              {modinfo.description}
-            </ImprintDetailRow>
-          )}
-          {details.gamebananaId && (
-            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaId')}>
-              <span className="tabular-nums">#{details.gamebananaId}</span>
-            </ImprintDetailRow>
-          )}
-          {details.gamebananaFileId && (
-            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaFileId')}>
-              <span className="tabular-nums">#{details.gamebananaFileId}</span>
-            </ImprintDetailRow>
-          )}
-          {details.sourceUrl && (
-            <ImprintDetailRow label={t('installed.imprintDetails.sourceUrl')}>
-              <a
-                href={details.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex max-w-full items-baseline gap-1 break-all text-accent hover:underline"
-              >
-                <span className="min-w-0">{details.sourceUrl}</span>
-                <ExternalLink className="h-3 w-3 flex-shrink-0 self-center" aria-hidden />
-              </a>
-            </ImprintDetailRow>
-          )}
-          {modinfo?.packaging?.variantLabel && (
-            <ImprintDetailRow label={t('installed.imprintDetails.variant')}>
-              {modinfo.packaging.variantLabel}
-            </ImprintDetailRow>
-          )}
-          {typeof modinfo?.packaging?.vpkIndex === 'number' && (
-            <ImprintDetailRow label={t('installed.imprintDetails.vpkIndex')}>
-              <span className="tabular-nums">{modinfo.packaging.vpkIndex}</span>
-            </ImprintDetailRow>
-          )}
-          {/* Current-format imprints carry both timestamps; a legacy imprint
-              only has its addoninfo buildDate. */}
-          {modinfo ? (
-            <>
-              <ImprintDetailRow label={t('installed.imprintDetails.firstImprinted')}>
-                {formatAbsoluteDate(modinfo.firstImprintedAt)}
-              </ImprintDetailRow>
-              <ImprintDetailRow label={t('installed.imprintDetails.lastWritten')}>
-                {formatAbsoluteDate(modinfo.writtenAt)}
-              </ImprintDetailRow>
-            </>
-          ) : (
-            details.buildDate && (
-              <ImprintDetailRow label={t('installed.imprintDetails.buildDate')}>
-                {formatAbsoluteDate(details.buildDate)}
-              </ImprintDetailRow>
-            )
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className={sectionHeading}>{t('installed.imprintDetails.identityTitle')}</div>
-          <div className={sectionBox}>
-            <ImprintDetailRow label={t('installed.imprintDetails.sha256')}>
-              <ImprintHashValue
-                value={details.originalSha256}
-                copyLabel={t('installed.imprintDetails.copyValue')}
-                onCopy={copyValue}
-              />
-            </ImprintDetailRow>
-            {details.originalCrc32 && (
-              <ImprintDetailRow label={t('installed.imprintDetails.crc32')}>
-                <ImprintHashValue
-                  value={details.originalCrc32}
-                  copyLabel={t('installed.imprintDetails.copyValue')}
-                  onCopy={copyValue}
-                />
-              </ImprintDetailRow>
-            )}
-            {typeof details.originalSize === 'number' && (
-              <ImprintDetailRow label={t('installed.imprintDetails.size')}>
-                <span className="tabular-nums">{formatBytes(details.originalSize)}</span>
-              </ImprintDetailRow>
-            )}
-          </div>
-        </div>
-
-        {merge && (
-          <div className="space-y-2">
-            <div className={sectionHeading}>{t('installed.imprintDetails.mergeTitle')}</div>
-            <div className={sectionBox}>
-              <ImprintDetailRow label={t('installed.imprintDetails.mergeName')}>
-                {merge.merge.title}
-              </ImprintDetailRow>
-              <ImprintDetailRow label={t('installed.imprintDetails.createdAt')}>
-                {formatAbsoluteDate(merge.writtenAt)}
-              </ImprintDetailRow>
-              <ImprintDetailRow label={t('installed.imprintDetails.createdBy')}>
-                {`${merge.writtenBy.tool} ${merge.writtenBy.version}`}
-              </ImprintDetailRow>
-              <ImprintDetailRow label={t('installed.imprintDetails.schemaVersion')}>
-                <span className="tabular-nums">{merge.schemaVersion}</span>
-              </ImprintDetailRow>
-            </div>
-            {merge.sources.length > 0 && (
-              <>
-                <div className={sectionHeading}>
-                  {t('installed.imprintDetails.sourcesTitle', { count: merge.sources.length })}
-                </div>
-                {/* Tag rows consistent with UnknownEmbeddedCard's source list. */}
-                <div className={sectionBox}>
-                  {merge.sources.map((source, i) => (
-                    <div
-                      key={`${source.fileNameAtMergeTime}-${i}`}
-                      className="flex flex-wrap items-center gap-2"
-                    >
-                      <Tag tone="neutral" title={source.fileNameAtMergeTime}>
-                        {source.title}
-                        {typeof source.gamebananaId === 'number' ? ` (#${source.gamebananaId})` : ''}
-                      </Tag>
-                      <span className="text-xs tabular-nums text-text-tertiary">
-                        {t('installed.imprintDetails.sourcePriority', { priority: source.priorityAtMergeTime })}
-                      </span>
-                      <span className="text-xs text-text-tertiary">
-                        {source.enabledAtMergeTime
-                          ? t('installed.imprintDetails.sourceEnabled')
-                          : t('installed.imprintDetails.sourceDisabled')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Same collapsible pattern as ImprintReportList: details/summary,
-            collapsed by default so the sheet stays tidy. */}
-        <details className="overflow-hidden rounded-md border border-hl/5 bg-bg-tertiary/40">
-          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
-            {t('installed.imprintDetails.rawToggle')}
-          </summary>
-          <pre className="max-h-64 overflow-auto border-t border-hl/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
-            {details.rawAddonInfo}
-          </pre>
-        </details>
-      </>
-    );
-  }
-
-  return (
-    <Modal
-      onClose={onClose}
-      size="lg"
-      labelledBy={titleId}
-      panelClassName="flex max-h-[85vh] flex-col"
-    >
-      <ModalHeader
-        title={t('installed.imprintDetails.title')}
-        titleId={titleId}
-        subtitle={mod.fileName}
-        subtitleTitle={mod.fileName}
-        onClose={onClose}
-        closeLabel={t('common.actions.close')}
-      />
-      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
-      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">
-        <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
-      </div>
-    </Modal>
   );
 }
 
