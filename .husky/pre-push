@@ -1,5 +1,5 @@
 # Mirror CI's "i18n catalog + manifest" gate so a missing key or a stale
 # manifest.json never reaches a push (and a red CI run). Both checks are
-# sub-second and need no build. See grimoire/CLAUDE.md for the i18n workflow.
+# sub-second and need no build. See AGENTS.md and docs/localization.md for the i18n workflow.
 pnpm i18n:check
 node scripts/gen-locale-manifest.mjs --check

@@ -2,7 +2,7 @@
 // append them to the unwired staging catalog (src/locales/unwired-en.json)
 // under unwired.* keys. These are a developer to-do list of strings still to be
 // wired to t()/Tx; they are deliberately kept OUT of translation.json so Weblate
-// only ever sees real, displayed strings. See grimoire/CLAUDE.md (i18n).
+// only ever sees real, displayed strings. See AGENTS.md (i18n).
 //
 // Report only:
 //   pnpm i18n:extract-unwired
