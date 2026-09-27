@@ -113,9 +113,6 @@ export default function BackgroundGradientPicker() {
   }, [draft, saved, settings, saveSettings]);
 
   const titleId = useId();
-  // Escape, backdrop and the header X all commit, matching the accent picker
-  // directly above. Cancel is the one explicit way to revert.
-  const dismiss = useCallback(() => void commit(), [commit]);
 
   return (
     <div>
@@ -172,11 +169,11 @@ export default function BackgroundGradientPicker() {
         </button>
       </div>
 
-      <Modal open={pickerOpen} onClose={dismiss} labelledBy={titleId} size="none" panelClassName="max-w-sm">
+      <Modal open={pickerOpen} onClose={cancel} labelledBy={titleId} size="none" panelClassName="max-w-sm">
         <ModalHeader
           title={<Tx k="settings.appearance.background.customTitle" fallback="Custom background glow" />}
           titleId={titleId}
-          onClose={dismiss}
+          onClose={cancel}
         />
         <ModalBody className="space-y-4">
           <div

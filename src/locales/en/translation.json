@@ -1949,7 +1949,8 @@
       "useCrop": "Use crop",
       "boxHint": "Drag the box to move it, drag a corner to resize. The selection is locked to the surface's shape.",
       "selectionSize": "Selection size",
-      "resetCrop": "Reset selection"
+      "resetCrop": "Reset selection",
+      "outputSize": "output {{width}} x {{height}}"
     },
     "model": {
       "close3d": "Close 3D model",
@@ -2828,7 +2829,12 @@
     "addVariant": "Add variant",
     "addVariantHint": "Import another .vpk or archive as a variant of this mod",
     "detachVariant": "Remove from group",
-    "detachVariantHint": "Keep this file installed, but stop treating it as a variant of this mod"
+    "detachVariantHint": "Keep this file installed, but stop treating it as a variant of this mod",
+    "updateInProgress": "Update already in progress",
+    "updateGroupHint_one": "Re-download {{count}} file and restore its enabled state",
+    "updateGroupHint_other": "Re-download {{count}} files and restore their enabled state",
+    "updatingProgress": "Updating {{done}}/{{total}}",
+    "updateCount": "Update {{count}}"
   },
   "imageContextMenu": {
     "image": "Image",

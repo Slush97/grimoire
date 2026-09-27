@@ -619,13 +619,13 @@ export default function VariantPickerModal({
                                     onClick={() => void onUpdateGroup()}
                                     title={
                                         isUpdating
-                                            ? 'Update already in progress'
-                                            : `Re-download ${variantsWithUpdate.size} file${variantsWithUpdate.size === 1 ? '' : 's'} and restore their enabled state`
+                                            ? t('variantPicker.updateInProgress')
+                                            : t('variantPicker.updateGroupHint', { count: variantsWithUpdate.size })
                                     }
                                 >
                                     {isUpdating && updateProgress
-                                        ? `Updating ${updateProgress.done}/${updateProgress.total}`
-                                        : `Update ${variantsWithUpdate.size}`}
+                                        ? t('variantPicker.updatingProgress', { done: updateProgress.done, total: updateProgress.total })
+                                        : t('variantPicker.updateCount', { count: variantsWithUpdate.size })}
                                 </Button>
                             )}
                         </>

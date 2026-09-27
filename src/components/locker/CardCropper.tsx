@@ -157,7 +157,7 @@ export default function CardCropper({
       <ModalHeader
         title={t('locker.crop.title', { variant: variantLabel })}
         titleId={titleId}
-        subtitle={<span className="tabular-nums">output {targetWidth} x {targetHeight}</span>}
+        subtitle={<span className="tabular-nums">{t('locker.crop.outputSize', { width: targetWidth, height: targetHeight })}</span>}
         onClose={onCancel}
         closeLabel={t('common.actions.close')}
       />

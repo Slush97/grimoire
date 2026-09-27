@@ -1,5 +1,6 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Loader2, X, type LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
 
 interface CardProps {
@@ -437,7 +438,8 @@ interface ModalHeaderProps {
     /** id wired to the Modal's labelledBy for aria-labelledby. */
     titleId?: string;
     subtitle?: ReactNode;
-    /** Tooltip for a truncated subtitle (e.g. the full mod name). */
+    /** Truncates the subtitle to one line with this as its tooltip (e.g. the
+     *  full mod name). Without it the subtitle wraps. */
     subtitleTitle?: string;
     onClose: () => void;
     closeLabel?: string;
@@ -458,6 +460,7 @@ export function ModalHeader({
     actions,
     className = '',
 }: ModalHeaderProps) {
+    const { t } = useTranslation();
     return (
         <div className={`flex flex-shrink-0 items-start justify-between gap-3 px-5 pt-4 ${className}`}>
             <div className="min-w-0 pt-1">
@@ -465,7 +468,7 @@ export function ModalHeader({
                     {title}
                 </h2>
                 {subtitle && (
-                    <p className="mt-0.5 truncate text-xs text-text-secondary" title={subtitleTitle}>
+                    <p className={`mt-0.5 text-xs text-text-secondary ${subtitleTitle ? 'truncate' : ''}`} title={subtitleTitle}>
                         {subtitle}
                     </p>
                 )}
@@ -474,7 +477,7 @@ export function ModalHeader({
                 {actions}
                 <IconButton
                     icon={X}
-                    label={closeLabel ?? 'Close'}
+                    label={closeLabel ?? t('common.actions.close')}
                     onClick={onClose}
                     disabled={closeDisabled}
                 />

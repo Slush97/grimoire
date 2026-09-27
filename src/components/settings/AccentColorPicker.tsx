@@ -54,7 +54,12 @@ export default function AccentColorPicker() {
   };
 
   const customPickerTitleId = useId();
-  const closeCustomPicker = useCallback(() => void commitCustomDraft(), [commitCustomDraft]);
+  // Dismissing (X, Escape, backdrop) cancels; only Apply saves.
+  const cancelCustomPicker = () => {
+    applyAccentColor(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
+    setCustomDraft(null);
+    setCustomPickerOpen(false);
+  };
 
   const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
   const isCustomActive = !ACCENT_PRESETS.some((p) => p.color.toLowerCase() === current);
@@ -111,11 +116,11 @@ export default function AccentColorPicker() {
         </button>
       </div>
 
-      <Modal open={customPickerOpen} onClose={closeCustomPicker} labelledBy={customPickerTitleId} size="none" panelClassName="max-w-sm">
+      <Modal open={customPickerOpen} onClose={cancelCustomPicker} labelledBy={customPickerTitleId} size="none" panelClassName="max-w-sm">
         <ModalHeader
           title={<Tx k="settings.appearance.customAccent" fallback="Custom Accent" />}
           titleId={customPickerTitleId}
-          onClose={closeCustomPicker}
+          onClose={cancelCustomPicker}
         />
         <ModalBody className="space-y-4">
           <HexColorPicker
@@ -141,11 +146,7 @@ export default function AccentColorPicker() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => {
-              applyAccentColor(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
-              setCustomDraft(null);
-              setCustomPickerOpen(false);
-            }}
+            onClick={cancelCustomPicker}
           >
             <Tx k="common.actions.cancel" fallback="Cancel" />
           </Button>

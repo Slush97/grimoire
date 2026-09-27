@@ -305,7 +305,9 @@ export default function SpiritUrnImportModal({
       onClose={onClose}
       labelledBy={titleId}
       size="none"
-      dismissable={!submitting && !exporting}
+      // Escape or a stray backdrop click would throw away the loaded model and
+      // its orientation; only the X closes this one.
+      dismissable={false}
       panelClassName="max-w-3xl"
     >
       <ModalHeader title={t('locker.urnImport.title')} titleId={titleId} onClose={onClose} closeDisabled={submitting || exporting} />
