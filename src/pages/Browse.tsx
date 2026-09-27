@@ -144,9 +144,7 @@ function traceBrowse(message: string): void {
 }
 
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-// Effective render mode derived from layout + card size. 'compact' is no
-// longer a user choice: it's what small cards become below the size threshold.
-type ViewMode = 'grid' | 'compact' | 'list';
+type ViewMode = 'grid' | 'list';
 type BrowseCardDesign = 'classic' | 'readable';
 // Where a clicked mod's details open: the centered overlay (default) or a
 // docked right-side panel that lets the user keep browsing the grid. Persisted
@@ -448,12 +446,11 @@ function estimateBrowseRowHeight(
   columnWidth: number,
   layout: BrowseLayout,
   cardDesign: BrowseCardDesign,
-  viewMode: ViewMode,
   section: string
 ): number {
   if (layout === 'list') return 112;
   if (cardDesign === 'classic') {
-    return Math.ceil(columnWidth * (viewMode === 'compact' ? 0.75 : 2 / 3));
+    return Math.ceil(columnWidth * (2 / 3));
   }
 
   const density = getReadableDensity(columnWidth);
@@ -1180,8 +1177,6 @@ export default function Browse() {
     () => getBrowseCardSizeGridStyle(browseCardSizeMultiplier),
     [browseCardSizeMultiplier]
   );
-  // Effective render mode: List is structural; otherwise small cards get the
-  // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
   const viewMode: ViewMode = layout === 'list' ? 'list' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
@@ -3132,7 +3127,6 @@ export default function Browse() {
     virtualColumnWidth,
     layout,
     browseCardDesign,
-    viewMode,
     section
   );
   const virtualRowHeight = virtualCardHeight + gridGap;
@@ -4477,9 +4471,8 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
       </div>
     );
   }
-  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
   return (
-    <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
+    <div className="relative bg-bg-tertiary border border-border rounded-lg overflow-hidden aspect-[3/2]">
       <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
       <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
         <div className="h-3.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-3/4" />
@@ -4493,14 +4486,10 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const { t } = useTranslation();
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
-  // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
-  // see the size-threshold derivation of viewMode in the Browse component.
-  const isCompact = viewMode === 'compact';
   // At the smallest grid sizes the bottom overlay (title + stats + author) eats
   // most of a classic card, burying the art it's drawn over. Below this width
   // we collapse to just the title at rest and reveal the rest on hover/focus.
-  // Keyed off the real card width (not viewMode, which never resolves to
-  // 'compact' for classic cards) so it tracks the card-size slider.
+  // Keyed off the real card width so it tracks the card-size slider.
   const minimalChrome =
     cardDesign === 'classic' && typeof cardWidth === 'number' && cardWidth > 0 && cardWidth < 205;
   const isList = viewMode === 'list';
@@ -4654,7 +4643,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
     );
   }
 
-  // Grid/Compact: overlay card — image fills card, info overlaid at bottom
+  // Grid: overlay card. Image fills card, info overlaid at bottom
   if (cardDesign === 'readable') {
     return (
       <BrowseArtParallaxCard>
@@ -4705,7 +4694,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group aspect-[3/2] ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : downloading
@@ -4737,8 +4726,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
             {!hasAudioPreview && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-accent/40 bg-accent/10 text-text-primary font-medium shadow-lg backdrop-blur-sm ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
-                  <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-accent/40 bg-accent/10 text-text-primary font-medium shadow-lg backdrop-blur-sm text-sm">
+                  <Volume2 className="w-4 h-4" />
                   <span>{t('browse.card.sound')}</span>
                 </div>
               </div>
@@ -4798,7 +4787,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           ABOVE the title. The default top-left overlay covers the title text on this
           variant because the title is anchored at top:0 instead of bottom:0. */}
       {isSoundSection && hasAudioPreview ? (
-        <div className={`absolute top-0 left-0 right-0 pointer-events-none ${isCompact ? 'p-2.5 pr-10' : 'p-3 pr-12'}`}>
+        <div className="absolute top-0 left-0 right-0 pointer-events-none p-3 pr-12">
           {(mod.nsfw || installed || isOutdated) && (
             <div className="flex flex-wrap items-center gap-1 mb-1.5">
               {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
@@ -4820,16 +4809,16 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               )}
             </div>
           )}
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-2xs' : 'text-xs'}`}>
+          <h3 className="font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-base">{mod.name}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-xs">
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
         </div>
       ) : (
-        <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : isCompact ? 'p-2.5' : 'p-3'}`}>
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+        <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : 'p-3'}`}>
+          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           {/* Stats / author / outdated. On minimal cards this group is collapsed
               to zero height at rest and slides up on hover or keyboard focus. */}
           <div
@@ -4839,7 +4828,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 : ''
             }
           >
-            <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-sm">
               <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
               <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
               {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -4847,7 +4836,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
               <IconText
                 icon={AlertTriangle}
-                className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
+                className="mt-1 max-w-full text-state-warning text-sm"
                 iconClassName="browse-meta-icon"
               >
                 <span className="truncate">{t('browse.card.outdatedPrefix')}{formatDate(mod.dateModified)}</span>
@@ -4889,7 +4878,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           Single spacious pill: [play + progress + time] | divider | [volume icon + slider] */}
       {isSoundSection && hasAudioPreview && (
         <div
-          className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
+          className="absolute bottom-0 left-0 right-0 z-20 p-2.5"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-hl/10 px-3 py-2 shadow-lg">
@@ -4950,26 +4939,26 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           // than forcing them to the Installed tab.
           <button
             onClick={(e) => { e.stopPropagation(); onEnable(); }}
-            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-2xs' : 'h-8 px-2.5 text-xs'}`}
+            className="flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer h-8 px-2.5 text-xs"
             title={t('browse.actions.enableDisabledTitle')}
           >
-            <Power className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            <Power className="w-3.5 h-3.5" />
             Enable
           </button>
         ) : installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className="flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-state-success w-8 h-8 text-base"
             title={t('browse.card.installedAndEnabled')}
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`browse-download-badge flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title={t('browse.card.downloading')}>
-            <BrowseDownloadSpinner className="text-accent" size={isCompact ? 'default' : 'large'} />
+          <div className="browse-download-badge flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md w-8 h-8" title={t('browse.card.downloading')}>
+            <BrowseDownloadSpinner className="text-accent" size="large" />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-2xs' : 'w-8 h-8 text-xs'}`}
+            className="flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md w-8 h-8 text-xs"
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -4977,10 +4966,10 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
-            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className="flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer w-8 h-8"
             title={t('browse.card.install')}
           >
-            <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
+            <Download className="w-5 h-5" />
           </button>
         )}
       </div>
