@@ -2715,20 +2715,6 @@ export default function Browse() {
                   </div>
 
                   <div>
-                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.nsfwContent')}</div>
-                    <BrowseViewOptionControl<NsfwContentMode>
-                      label={t('browse.viewOptions.nsfwContent')}
-                      value={nsfwContentMode}
-                      onChange={setNsfwContentMode}
-                      options={[
-                        { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
-                        { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
-                        { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
-                      ]}
-                    />
-                  </div>
-
-                  <div>
                     <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
                     <BrowseViewOptionControl<'show' | 'hide'>
                       label={t('browse.viewOptions.outdatedContent')}
@@ -2935,6 +2921,23 @@ export default function Browse() {
                           )}
                         </div>
                       )}
+
+                      {/* Not a session filter: this is the app-wide NSFW
+                          setting, shared with Settings > Privacy & Content, so
+                          it isn't counted or reset by Clear all. */}
+                      <div className="block">
+                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
+                        <BrowseViewOptionControl<NsfwContentMode>
+                          label={t('browse.viewOptions.nsfwContent')}
+                          value={nsfwContentMode}
+                          onChange={setNsfwContentMode}
+                          options={[
+                            { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                            { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
+                            { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                          ]}
+                        />
+                      </div>
 
                       {/* Recency can only be answered by the local catalog
                           mirror. It used to be hidden entirely without a
