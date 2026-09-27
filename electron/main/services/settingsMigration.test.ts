@@ -109,3 +109,39 @@ describe('loadSettings OLED mode', () => {
     expect(loadSettings().oledMode).toBe(true);
   });
 });
+
+describe('loadSettings legacy NSFW keys -> nsfwContentMode', () => {
+  const load = (legacy: object) => {
+    writeFileSync(settingsPath(), JSON.stringify(legacy));
+    return loadSettings();
+  };
+
+  it('defaults to blur when no NSFW key is present', () => {
+    expect(load({}).nsfwContentMode).toBe('blur');
+  });
+
+  it('keeps a Browse hide choice', () => {
+    expect(load({ browseNsfwContentMode: 'hide', installedHideNsfwPreviews: false }).nsfwContentMode).toBe('hide');
+  });
+
+  it('shows only when both the Browse mode and the blur toggle were off', () => {
+    expect(load({ browseNsfwContentMode: 'show', installedHideNsfwPreviews: false }).nsfwContentMode).toBe('show');
+    expect(load({ browseNsfwContentMode: 'show', installedHideNsfwPreviews: true }).nsfwContentMode).toBe('blur');
+    expect(load({ browseNsfwContentMode: 'blur', installedHideNsfwPreviews: false }).nsfwContentMode).toBe('blur');
+  });
+
+  it('migrates a pre-split hideNsfwPreviews:false to show', () => {
+    expect(load({ hideNsfwPreviews: false }).nsfwContentMode).toBe('show');
+  });
+
+  it('lets an explicit nsfwContentMode win over legacy keys', () => {
+    expect(load({ nsfwContentMode: 'show', browseNsfwContentMode: 'hide' }).nsfwContentMode).toBe('show');
+  });
+
+  it('strips the legacy keys', () => {
+    const settings = load({ hideNsfwPreviews: true, browseNsfwContentMode: 'blur', installedHideNsfwPreviews: true });
+    expect(settings).not.toHaveProperty('hideNsfwPreviews');
+    expect(settings).not.toHaveProperty('browseNsfwContentMode');
+    expect(settings).not.toHaveProperty('installedHideNsfwPreviews');
+  });
+});

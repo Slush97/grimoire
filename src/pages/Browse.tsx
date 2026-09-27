@@ -35,7 +35,7 @@ import {
   createSnapshot,
   deleteMod as deleteModApi,
 } from '../lib/api';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import {
   isModDownloadPending,
@@ -449,7 +449,7 @@ export default function Browse() {
   }, []);
   // Mirrors the Settings control: both write the one app-wide setting.
   const nsfwContentMode: NsfwContentMode = settings?.nsfwContentMode ?? 'blur';
-  const browseBlurNsfwPreviews = nsfwContentMode === 'blur';
+  const browseBlurNsfwPreviews = shouldBlurNsfw(settings);
   const nsfw = nsfwContentMode === 'hide' ? 'sfw' : 'all';
   const setNsfwContentMode = useCallback((mode: NsfwContentMode) => {
     if (!settings) return;
@@ -2218,6 +2218,13 @@ export default function Browse() {
 
     return nextMods;
   }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw, hiddenCreatorIdSet, allowHiddenSubmitter]);
+  // Client-side filters (Hide mode, hidden creators, outdated) can empty a
+  // remote page entirely. The sentinel sits below the fold then, so page on
+  // until something survives or the results run out.
+  const pagingPastFilteredPage = displayMods.length === 0 && mods.length > 0 && hasMore && !autoLoadPaused;
+  useEffect(() => {
+    if (pagingPastFilteredPage && !loading && !loadingMore) setPage((prev) => prev + 1);
+  }, [pagingPastFilteredPage, loading, loadingMore]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -3028,7 +3035,7 @@ export default function Browse() {
             addedFrom.length > 0 ||
             addedTo.length > 0;
 
-          if (loading) {
+          if (loading || (pagingPastFilteredPage && !error)) {
             // Match perPage so the skeleton grid fills roughly the same footprint
             // as the real results once they arrive.
             return (
