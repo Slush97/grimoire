@@ -113,7 +113,7 @@ import PriorityEditor from '../components/PriorityEditor';
 import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
 import {
   canJoinLocalVariantGroup,
   installedVariantGroupKey,
@@ -171,6 +171,8 @@ import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, LoadingState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { GlobalLoadBadge, ChipText, HeroTagLabel } from '../components/installed/chips';
+import { heroNameForLabel } from '../components/installed/heroNames';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -483,26 +485,6 @@ function entryRepresentativeId(entry: ModEntry): string {
 
 function entryDisabledPreferenceKey(entry: ModEntry): string {
   return modPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
-}
-
-/** Stand-in for PriorityEditor on Global (priority-root) cards. They load
- *  before every numbered mod and reorderMods filters them out of reposition
- *  batches, so a position number would be both a lie and dead UI. Echoes the
- *  PriorityEditor chip geometry, accent-tinted so Global reads as its own
- *  tier rather than position zero. */
-function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  return (
-    <span
-      title={t('installed.priority.hint')}
-      aria-label={t('installed.priority.chip')}
-      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
-        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
-      }`}
-    >
-      <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
-    </span>
-  );
 }
 
 /**
@@ -3312,7 +3294,6 @@ export default function Installed() {
     return { updated: replacements.length, skipped };
   };
 
-
   // Surface a non-fatal store notice (e.g. the 99-enabled cap) through the same
   // transient toast, then clear it from the store so it doesn't re-fire.
   useEffect(() => {
@@ -3320,7 +3301,6 @@ export default function Installed() {
     showToast(modsNotice, { tone: 'warning' });
     clearModsNotice();
   }, [modsNotice, clearModsNotice]);
-
 
   /**
    * Flip a single variant's enabled state. Variants are independent — a
@@ -7980,31 +7960,6 @@ function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
     default:
       return 'Inferred by Grimoire';
   }
-}
-
-function ChipText({ children }: { children: ReactNode }) {
-  return <span className="relative top-[1.5px] min-w-0 truncate leading-[14px]">{children}</span>;
-}
-
-function HeroTagLabel({ heroName, iconClassName = 'h-4 w-4', iconOnly = false }: { heroName: string; iconClassName?: string; iconOnly?: boolean }) {
-  return (
-    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle leading-none">
-      <img
-        src={getHeroChipIconPath(heroName)}
-        alt=""
-        aria-hidden="true"
-        className={`${iconClassName} block flex-shrink-0 rounded-full object-cover`}
-        loading="lazy"
-      />
-      {iconOnly ? <span className="sr-only">{heroName}</span> : <ChipText>{heroName}</ChipText>}
-    </span>
-  );
-}
-
-function heroNameForLabel(label?: string): string | null {
-  if (!label) return null;
-  const needle = label.trim().toLowerCase();
-  return HERO_NAMES.find((name) => name.toLowerCase() === needle) ?? null;
 }
 
 function CategoryChip({
