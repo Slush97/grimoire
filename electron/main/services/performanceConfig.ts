@@ -771,7 +771,9 @@ export function reapplyWipedPerformanceConfig(
     return applyPerformanceConfig(deadlockPath, {
         presetId: sidecar.presetId,
         version: sidecar.version,
-        optIns: sidecar.optIns,
+        // The sidecar drops an empty list, so absent means "all off", not
+        // "creator defaults".
+        optIns: sidecar.optIns ?? [],
     });
 }
 

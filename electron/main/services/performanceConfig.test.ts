@@ -478,6 +478,18 @@ describe('game-update wipe recovery', () => {
         expect(read()).toBe(before);
     });
 
+    it('reapplies with every opt-in off when the user turned them all off', () => {
+        const preset = PRESETS.find((p) => p.optIn.some((control) => control.group !== 'devtools'))!;
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        const before = read();
+
+        write(STOCK);
+        reapplyWipedPerformanceConfig(gameRoot);
+
+        expect(getPerformanceConfigStatus(gameRoot).appliedOptIns).toEqual([]);
+        expect(read()).toBe(before);
+    });
+
     it('leaves a file that was never wiped alone', () => {
         expect(reapplyWipedPerformanceConfig(gameRoot).state).toBe('not-applied');
         expect(read()).toBe(STOCK);
