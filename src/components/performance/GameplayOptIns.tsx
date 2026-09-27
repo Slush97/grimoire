@@ -14,6 +14,9 @@ interface GameplayOptInsProps {
   /** What each opt-in key is actually set to in gameinfo.gi right now, so a
    *  hand edit or a line left behind is visible instead of the preset value. */
   fileValues?: Record<string, string>;
+  /** Hand edits banked as overrides. A disabled row shows its banked value,
+   *  because that is what turning it back on writes. */
+  savedValues?: Record<string, string>;
   onChange: (keys: string[]) => void;
   disabled?: boolean;
 }
@@ -29,6 +32,7 @@ export default function GameplayOptIns({
   controls,
   selected,
   fileValues,
+  savedValues,
   onChange,
   disabled,
 }: GameplayOptInsProps) {
@@ -98,19 +102,28 @@ export default function GameplayOptIns({
                     {controls.map((control) => {
                       const on = enabled.has(control.key);
                       const inFile = fileValues?.[control.key];
+                      const stray = inFile !== undefined && !on;
+                      const value = on ? (inFile ?? control.value) : (savedValues?.[control.key] ?? control.value);
+                      const edited = !stray && value !== control.value;
                       return (
-                        <tr key={control.key} className="border-t border-hl/5">
-                          <td className="px-3 py-2 font-mono text-xs text-text-primary break-all">{control.key}</td>
+                        <tr key={control.key} className={`border-t border-hl/5 ${edited ? 'bg-accent/5' : ''}`}>
+                          <td className={`px-3 py-2 font-mono text-xs break-all ${on ? 'text-text-primary' : 'text-text-tertiary'}`}>
+                            {control.key}
+                          </td>
                           <td className="px-3 py-2 text-xs text-text-secondary">
-                            {inFile !== undefined && !on ? (
+                            {stray ? (
                               <span className="text-state-warning">{t('performance.optIn.stray', { value: inFile })}</span>
-                            ) : inFile !== undefined && inFile !== control.value ? (
-                              <>
-                                <span className="font-mono text-text-primary">{inFile}</span>
-                                <span className="block">{t('performance.optIn.authorValue', { value: control.value })}</span>
-                              </>
                             ) : (
-                              <span className="font-mono">{control.value}</span>
+                              <>
+                                <span
+                                  className={`font-mono ${edited ? 'text-accent' : ''} ${on ? '' : 'opacity-60'}`}
+                                >
+                                  {value}
+                                </span>
+                                {edited && (
+                                  <span className="block">{t('performance.optIn.authorValue', { value: control.value })}</span>
+                                )}
+                              </>
                             )}
                           </td>
                           <td className="px-3 py-2 text-right">

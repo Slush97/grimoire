@@ -208,6 +208,9 @@ export interface PerformanceConfigStatus {
     /** Current values of the active ConVars lines Grimoire manages in
      *  gameinfo.gi, hand edits included. */
     managedConvarValues?: Record<string, string>;
+    /** ConVars values banked as overrides for the applied preset. A disabled
+     *  opt-in with one here comes back at this value when re-enabled. */
+    savedConvarValues?: Record<string, string>;
     /** Applied, but the file no longer matches what Grimoire wrote (hand edits). */
     handEdited?: boolean;
     /** Saved user deviations from the preset (hand edits harvested on reapply,

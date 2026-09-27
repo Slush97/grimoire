@@ -890,7 +890,14 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             // sidecar can be stale or absent (hand-installed, restored backup).
             const appliedId = begin[1];
             const known = PRESETS.find((p) => p.id === appliedId) ?? null;
-            const overrideCount = Object.keys(allOverrides(sidecar)[appliedId] ?? {}).length;
+            const appliedOverrides = allOverrides(sidecar)[appliedId] ?? {};
+            const overrideCount = Object.keys(appliedOverrides).length;
+            const savedConvarValues: Record<string, string> = {};
+            for (const [okey, override] of Object.entries(appliedOverrides)) {
+                if (okey.startsWith('ConVars/') && override.value !== undefined) {
+                    savedConvarValues[okey.slice('ConVars/'.length)] = override.value;
+                }
+            }
             const appliedName = known?.name ?? appliedId;
             // "Newest we bundle", not "the one the user picked": the selection
             // lives in renderer settings, so the card decides whether a newer
@@ -915,6 +922,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 bundledVersion: newestVersion ?? begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
                 managedConvarValues: managedConvarValues(content),
+                savedConvarValues,
                 handEdited,
                 overrideCount,
                 message: handEdited
