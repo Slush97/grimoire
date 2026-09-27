@@ -1,0 +1,233 @@
+{
+  "src/components/AudioPreviewPlayer.tsx": {
+    "em-dash": 2
+  },
+  "src/components/DownloadQueueIndicator.tsx": {
+    "raw-palette": 4,
+    "em-dash": 1
+  },
+  "src/components/ImportCollectionModal.tsx": {
+    "raw-palette": 2,
+    "em-dash": 4
+  },
+  "src/components/ImportCustomModsModal.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/Layout.tsx": {
+    "raw-palette": 1,
+    "em-dash": 2
+  },
+  "src/components/LockerOverridesModal.tsx": {
+    "raw-palette": 8
+  },
+  "src/components/MergeModsModal.tsx": {
+    "raw-palette": 6
+  },
+  "src/components/MergedContentsModal.tsx": {
+    "raw-palette": 8
+  },
+  "src/components/ModDetailsModal.tsx": {
+    "raw-palette": 42
+  },
+  "src/components/ModThumbnail.tsx": {
+    "em-dash": 1
+  },
+  "src/components/PriorityEditor.tsx": {
+    "raw-palette": 1
+  },
+  "src/components/Sidebar.tsx": {
+    "raw-palette": 31
+  },
+  "src/components/UpdateModal.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/VariantPickerModal.tsx": {
+    "raw-palette": 1
+  },
+  "src/components/WelcomeModal.tsx": {
+    "raw-palette": 4
+  },
+  "src/components/common/DynamicSelect.tsx": {
+    "focus-ring": 2
+  },
+  "src/components/common/ErrorBoundary.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/common/HeroSelect.tsx": {
+    "focus-ring": 2
+  },
+  "src/components/common/ToastStack.tsx": {
+    "raw-palette": 6
+  },
+  "src/components/common/ui.tsx": {
+    "raw-palette": 1,
+    "em-dash": 2
+  },
+  "src/components/crosshair/CrosshairPresetRail.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/foundry/SoundImportEditor.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/locker/CardCropper.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/locker/HeroColorPicker.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/locker/HeroPoseViewer.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/locker/HeroSkinsPanel.tsx": {
+    "em-dash": 4
+  },
+  "src/components/locker/HeroSoundPicker.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/locker/LockerImageCropper.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/locker/SoulContainerImportModal.tsx": {
+    "raw-palette": 15
+  },
+  "src/components/locker/SpiritUrnImportModal.tsx": {
+    "raw-palette": 15
+  },
+  "src/components/locker/TrippyPatternPicker.tsx": {
+    "raw-palette": 1
+  },
+  "src/components/locker/TrippySkinPanel.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/profiles/ExportProfileModal.tsx": {
+    "raw-palette": 5
+  },
+  "src/components/profiles/ImportProfileDialog.tsx": {
+    "raw-palette": 16,
+    "em-dash": 3
+  },
+  "src/components/servers/ConnectServerDialog.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/settings/AccentColorPicker.tsx": {
+    "focus-ring": 2
+  },
+  "src/components/settings/BackgroundGradientPicker.tsx": {
+    "focus-ring": 2
+  },
+  "src/components/settings/sections/GameSection.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/settings/sections/SupportSection.tsx": {
+    "focus-ring": 6
+  },
+  "src/components/settings/sections/UpdatesSection.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/sidebar/surfaceArt.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/social/EditProfileDialog.tsx": {
+    "raw-palette": 5
+  },
+  "src/components/social/MyPublishedSection.tsx": {
+    "raw-palette": 4
+  },
+  "src/components/social/PublishDialog.tsx": {
+    "raw-palette": 12,
+    "em-dash": 1
+  },
+  "src/components/social/PublishPickerDialog.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/social/SocialAccountSection.tsx": {
+    "raw-palette": 9
+  },
+  "src/components/social/SocialProfileHeader.tsx": {
+    "raw-palette": 7,
+    "em-dash": 3
+  },
+  "src/components/stats/MmrChart.tsx": {
+    "raw-palette": 1
+  },
+  "src/components/stats/PlayerSelect.tsx": {
+    "raw-palette": 3
+  },
+  "src/components/stats/format.ts": {
+    "raw-palette": 2
+  },
+  "src/components/stats/primitives.tsx": {
+    "raw-palette": 4
+  },
+  "src/components/stats/tabs/LeaderboardTab.tsx": {
+    "raw-palette": 1
+  },
+  "src/components/stats/tabs/OverviewTab.tsx": {
+    "raw-palette": 2
+  },
+  "src/components/stats/tabs/SocialTab.tsx": {
+    "raw-palette": 3
+  },
+  "src/index.css": {
+    "em-dash": 2
+  },
+  "src/lib/accentColor.ts": {
+    "em-dash": 1
+  },
+  "src/lib/dmmState.ts": {
+    "em-dash": 1
+  },
+  "src/lib/lockerUtils.ts": {
+    "em-dash": 4
+  },
+  "src/lib/performanceHistory.ts": {
+    "em-dash": 1
+  },
+  "src/pages/Browse.tsx": {
+    "raw-palette": 1,
+    "focus-ring": 2,
+    "em-dash": 15
+  },
+  "src/pages/Conflicts.tsx": {
+    "raw-palette": 23,
+    "em-dash": 9
+  },
+  "src/pages/Discover.tsx": {
+    "raw-palette": 9,
+    "em-dash": 1
+  },
+  "src/pages/Installed.tsx": {
+    "raw-palette": 27,
+    "focus-ring": 2,
+    "em-dash": 12
+  },
+  "src/pages/Locker.tsx": {
+    "raw-hex": 1,
+    "raw-palette": 11,
+    "em-dash": 3
+  },
+  "src/pages/LockerHero.tsx": {
+    "raw-palette": 3,
+    "em-dash": 2
+  },
+  "src/pages/Profiles.tsx": {
+    "raw-palette": 5,
+    "focus-ring": 2,
+    "em-dash": 2
+  },
+  "src/pages/Servers.tsx": {
+    "raw-palette": 7
+  },
+  "src/stores/appStore.ts": {
+    "em-dash": 4
+  },
+  "src/stores/socialStore.ts": {
+    "em-dash": 1
+  },
+  "src/types/snapshot.ts": {
+    "em-dash": 1
+  },
+  "src/types/social.ts": {
+    "em-dash": 1
+  }
+}

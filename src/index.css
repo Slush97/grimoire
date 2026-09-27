@@ -110,9 +110,8 @@
      than pure white. */
   --color-mod-title: #eee8df;
 
-  /* Semantic state tokens. Use these for card states, toasts, badges —
-     anything that communicates status. The raw Tailwind colors
-     (green-400/yellow-400/etc) stay available for non-semantic use. */
+  /* Semantic state tokens: card states, toasts, badges, anything that
+     communicates status. Never decoration. */
   --color-state-success: #4ade80;
   --color-state-warning: #facc15;
   --color-state-danger:  #f87171;
@@ -169,6 +168,12 @@
     rgb(from var(--color-bg-primary) r g b / 0.65),
     rgb(from var(--color-bg-primary) r g b / 0.88)
   );
+}
+
+/* Trims a text box to cap-height/baseline so flex centering centers the
+   letters instead of the line box. Needed because Radiance sits high. */
+@utility text-trim-cap {
+  text-box: trim-both cap alphabetic;
 }
 
 /* Base styles */
@@ -376,13 +381,13 @@ body {
   justify-content: center;
   gap: clamp(4px, 2.2cqw, 7px);
   flex: 0 0 auto;
-  border-radius: 7px;
-  border: 1px solid rgba(120, 140, 170, 0.28);
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-hl) 12%, transparent);
+  background: color-mix(in srgb, var(--color-hl) 2.5%, transparent);
   color: color-mix(in srgb, var(--color-text-secondary) 86%, transparent);
   font-size: clamp(10px, 4.3cqw, 13px);
   line-height: 16px;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transition:
@@ -408,8 +413,8 @@ body {
 
 .browse-action-button:hover {
   color: var(--color-text-primary);
-  border-color: rgba(120, 140, 170, 0.4);
-  background: rgba(255, 255, 255, 0.055);
+  border-color: color-mix(in srgb, var(--color-hl) 22%, transparent);
+  background: color-mix(in srgb, var(--color-hl) 5.5%, transparent);
 }
 
 .browse-action-button--icon {
@@ -418,7 +423,6 @@ body {
   padding: 0;
   align-items: center;
   gap: 0;
-  border-radius: 4px;
 }
 
 .browse-action-button--install:hover {
@@ -428,21 +432,19 @@ body {
 }
 
 .browse-action-button--install {
-  border-color: rgba(120, 140, 170, 0.28);
-  background: rgba(255, 255, 255, 0.025);
   color: var(--color-text-primary);
 }
 
 .browse-action-button--installed {
-  border-color: rgb(74 222 128 / 0.3);
-  background: rgb(74 222 128 / 0.055);
-  color: rgb(74 222 128);
+  border-color: color-mix(in srgb, var(--color-state-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-state-success) 5.5%, transparent);
+  color: var(--color-state-success);
 }
 
 .browse-action-button--installed:hover {
-  border-color: rgb(74 222 128 / 0.5);
-  background: rgb(74 222 128 / 0.09);
-  color: rgb(74 222 128);
+  border-color: color-mix(in srgb, var(--color-state-success) 50%, transparent);
+  background: color-mix(in srgb, var(--color-state-success) 9%, transparent);
+  color: var(--color-state-success);
 }
 
 .browse-action-button--enable {
@@ -458,15 +460,15 @@ body {
 }
 
 .browse-action-button--queued {
-  border-color: rgb(96 165 250 / 0.3);
-  background: rgb(96 165 250 / 0.055);
-  color: rgb(96 165 250);
+  border-color: color-mix(in srgb, var(--color-state-info) 30%, transparent);
+  background: color-mix(in srgb, var(--color-state-info) 5.5%, transparent);
+  color: var(--color-state-info);
 }
 
 .browse-action-button--downloading {
-  border-color: rgb(249 115 22 / 0.3);
-  background: rgb(249 115 22 / 0.055);
-  color: rgb(249 115 22);
+  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 5.5%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 82%, var(--color-text-primary));
 }
 
 .browse-action-button--downloading::after {
@@ -484,12 +486,12 @@ body {
   inset: -2px;
   pointer-events: none;
   border-radius: inherit;
-  border: 1px solid rgb(74 222 128 / 0.68);
+  border: 1px solid color-mix(in srgb, var(--color-state-success) 68%, transparent);
   animation: browseActionCompleteRing 620ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .browse-action-button--queue-shift {
-  border-color: rgb(96 165 250 / 0.48);
+  border-color: color-mix(in srgb, var(--color-state-info) 48%, transparent);
 }
 
 .browse-action-button-icon {
@@ -562,11 +564,15 @@ body {
 }
 
 .browse-action-button-label {
-  display: inline-flex;
-  align-items: center;
+  display: block;
   line-height: 16px;
   flex: 0 0 auto;
-  overflow: hidden;
+  /* Radiance's metrics put glyphs high in the line box; trimming to
+     cap-height/baseline lets flex centering center the letters. The clip
+     margin keeps descenders visible while still masking the queue swap. */
+  text-box: trim-both cap alphabetic;
+  overflow: clip;
+  overflow-clip-margin: 0.35em;
 }
 
 .browse-action-button-queue-value {

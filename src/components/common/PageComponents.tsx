@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { Loader2, type LucideIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Skeleton } from './Skeleton';
+import { Button } from './ui';
 import Tx from '../translation/Tx';
 
 // ============================================================================
@@ -16,7 +17,7 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ children, count, className = '' }: SectionHeaderProps) {
     return (
-        <h2 className={`text-sm font-medium text-text-secondary mb-3 uppercase tracking-wider ${className}`}>
+        <h2 className={`text-sm font-medium text-text-secondary mb-3 ${className}`}>
             {children}{count !== undefined && ` (${count})`}
         </h2>
     );
@@ -70,7 +71,7 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 }
 
 // ============================================================================
-// PageHeader - Standardized page header with icon badge
+// PageHeader - serif title, optional one-line description, actions right
 // ============================================================================
 
 interface PageHeaderProps {
@@ -85,7 +86,7 @@ export function PageHeader({ title, description, action, stats, className = '' }
     return (
         <div className={`flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-border ${className}`}>
             <div className="min-w-0">
-                <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight whitespace-nowrap">
+                <h1 className="text-2xl font-reaver tracking-wide text-text-primary leading-tight whitespace-nowrap">
                     {title}
                 </h1>
                 {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
@@ -235,34 +236,23 @@ export function ConfirmModal({
     onConfirm,
     onCancel,
 }: ConfirmModalProps) {
-    const confirmClass = variant === 'danger'
-        ? 'border border-state-danger/40 bg-state-danger/10 hover:bg-state-danger/20 hover:border-state-danger/60 text-state-danger focus-visible:ring-state-danger'
-        : 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent';
-
     return (
         <Modal
             open={isOpen}
             onClose={onCancel}
             labelledBy="confirm-modal-title"
             size="sm"
-            panelClassName="relative overflow-hidden p-6"
+            panelClassName="p-6"
         >
-            <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-state-danger/60' : 'bg-accent/60'}`} />
             <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
             <div className="text-text-secondary mb-4">{message}</div>
             <div className="flex justify-end gap-3">
-                <button
-                    onClick={onCancel}
-                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                >
+                <Button variant="secondary" onClick={onCancel}>
                     {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
-                </button>
-                <button
-                    onClick={onConfirm}
-                    className={`px-4 py-2 rounded-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
-                >
+                </Button>
+                <Button variant={variant} onClick={onConfirm}>
                     {confirmLabel ?? <Tx k="common.actions.confirm" fallback="Confirm" />}
-                </button>
+                </Button>
             </div>
         </Modal>
     );

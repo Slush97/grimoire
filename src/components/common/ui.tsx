@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, X, type LucideIcon } from 'lucide-react';
+import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, Loader2, X, type LucideIcon } from 'lucide-react';
 import Tx from '../translation/Tx';
 
 interface CardProps {
@@ -22,10 +22,10 @@ export function Card({ children, className = '', contentClassName = '', title, i
     const edgeClass = edge === 'active' ? 'w-[3px] bg-accent' : 'w-[2px] bg-accent/60';
     const hasBody = children !== undefined && children !== null && children !== false;
     return (
-        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-sm overflow-hidden relative ${className}`}>
+        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
             {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
             {showHeader && (
-                <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-white/5' : ''}`}>
+                <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-hl/5' : ''}`}>
                     <div className="min-w-0">
                         {title && (
                             <div className={`flex items-center gap-2 ${description ? 'mb-1' : ''}`}>
@@ -57,7 +57,7 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
         warning: 'bg-state-warning/10 text-state-warning border-state-warning/20',
         error: 'bg-state-danger/10 text-state-danger border-state-danger/20',
         info: 'bg-state-info/10 text-state-info border-state-info/20',
-        neutral: 'bg-white/5 text-text-secondary border-white/10',
+        neutral: 'bg-hl/5 text-text-secondary border-hl/10',
     };
 
     return (
@@ -105,7 +105,7 @@ export function Tag({
         danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayBorder: 'border-state-danger/70' },
         success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayBorder: 'border-state-success/70' },
         info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayBorder: 'border-state-info/70' },
-        neutral: { text: 'text-text-secondary',  border: 'border-white/10',          fill: 'bg-white/5',            overlayBorder: 'border-white/20' },
+        neutral: { text: 'text-text-secondary',  border: 'border-hl/10',          fill: 'bg-hl/5',            overlayBorder: 'border-hl/20' },
     };
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
@@ -290,13 +290,13 @@ export function ToggleIndicator({ checked, disabled, className = '' }: ToggleInd
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 ease-out motion-reduce:transition-none ${
                 checked
                     ? 'border-accent/55 bg-accent/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-accent/25 group-hover:border-accent/75 group-hover:bg-accent/20 group-hover/toggle:border-accent/75 group-hover/toggle:bg-accent/20'
-                    : 'border-white/15 bg-white/[0.16] group-hover:border-white/25 group-hover:bg-white/[0.22] group-hover/toggle:border-white/25 group-hover/toggle:bg-white/[0.22]'
+                    : 'border-hl/15 bg-hl/[0.16] group-hover:border-hl/25 group-hover:bg-hl/[0.22] group-hover/toggle:border-hl/25 group-hover/toggle:bg-hl/[0.22]'
             } ${disabled ? 'opacity-60' : ''} ${className}`}
         >
             <span
                 className={`absolute left-0.5 h-5 w-5 rounded-full bg-zinc-300 shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 transition-transform duration-150 ease-out motion-reduce:transition-none ${
                     checked ? 'translate-x-5' : 'translate-x-0'
-                } ${checked ? 'ring-accent/45' : 'ring-white/35'}`}
+                } ${checked ? 'ring-accent/45' : 'ring-hl/35'}`}
             />
         </span>
     );
@@ -322,7 +322,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                 />
             </div>
             <div>
-                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-white transition-colors">{label}</span>}
+                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors">{label}</span>}
                 {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
             </div>
         </label>
@@ -331,7 +331,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success' | 'warning';
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'sm' | 'md';
     icon?: LucideIcon;
     isLoading?: boolean;
 }
@@ -346,22 +346,26 @@ export function Button({
     disabled,
     ...props
 }: ButtonProps) {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm border font-medium whitespace-nowrap transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
-        primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus:ring-accent',
-        secondary: 'bg-bg-tertiary hover:bg-white/10 text-text-primary border border-white/5 focus:ring-white/60',
-        danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 focus:ring-red-500',
-        success: 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 focus:ring-green-500',
-        warning: 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/20 focus:ring-yellow-500',
-        ghost: 'hover:bg-white/5 text-text-secondary hover:text-text-primary focus:ring-white/40',
+        primary: 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent',
+        secondary: 'border-hl/5 bg-bg-tertiary hover:bg-hl/10 text-text-primary focus-visible:ring-hl/60',
+        danger: 'border-state-danger/30 bg-state-danger/10 hover:bg-state-danger/20 hover:border-state-danger/50 text-state-danger focus-visible:ring-state-danger',
+        success: 'border-state-success/30 bg-state-success/10 hover:bg-state-success/20 hover:border-state-success/50 text-state-success focus-visible:ring-state-success',
+        warning: 'border-state-warning/30 bg-state-warning/10 hover:bg-state-warning/20 hover:border-state-warning/50 text-state-warning focus-visible:ring-state-warning',
+        ghost: 'border-transparent hover:bg-hl/5 text-text-secondary hover:text-text-primary focus-visible:ring-hl/40',
     };
 
     const sizes = {
-        sm: 'px-3 py-1.5 text-xs',
-        md: 'px-4 py-2 text-sm',
-        lg: 'px-6 py-3 text-base',
+        sm: 'h-7 px-3 text-xs',
+        md: 'h-8 px-3.5 text-sm',
     };
+
+    // A lone label goes in a cap-trimmed box so flex centering centers the
+    // letters (Radiance sits high in its line box). Multi-child content keeps
+    // the raw children so the gap between them still applies.
+    const content = Children.count(children) === 1 ? <span className="text-trim-cap">{children}</span> : children;
 
     return (
         <button
@@ -370,14 +374,11 @@ export function Button({
             {...props}
         >
             {isLoading ? (
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : Icon ? (
-                <Icon className="w-4 h-4" />
+                <Icon className="h-4 w-4" aria-hidden />
             ) : null}
-            {children}
+            {content}
         </button>
     );
 }
@@ -403,7 +404,7 @@ export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', c
         md: 'h-8 w-8',
     };
     const tones = {
-        default: 'border-border text-text-secondary hover:border-white/25 hover:bg-white/5 hover:text-text-primary',
+        default: 'border-border text-text-secondary hover:border-hl/25 hover:bg-hl/5 hover:text-text-primary',
         danger: 'border-border text-text-secondary hover:border-state-danger/60 hover:bg-state-danger/10 hover:text-state-danger',
     };
     const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
@@ -412,7 +413,7 @@ export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', c
             type="button"
             aria-label={label}
             title={label}
-            className={`flex flex-shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${sizes[size]} ${tones[tone]} ${className}`}
+            className={`flex flex-shrink-0 items-center justify-center rounded-sm border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${sizes[size]} ${tones[tone]} ${className}`}
             {...props}
         >
             <Icon className={iconSize} aria-hidden />
@@ -545,7 +546,7 @@ export function SegmentedControl<T extends string>({
                                 move(i, -1);
                             }
                         }}
-                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${
+                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${
                             active
                                 ? 'border-accent/70 bg-accent/15 text-text-primary'
                                 : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'

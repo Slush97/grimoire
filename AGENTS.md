@@ -18,7 +18,7 @@ pnpm build                                       # needs GRIMOIRE_SOCIAL_BASE_UR
 pnpm package:linux | package:win | package:mac
 ```
 
-Before calling a change done: `pnpm typecheck && pnpm lint && pnpm test`. CI (`.github/workflows/ci.yml`) runs lint, `tsc -b`, vitest, the i18n gates, then `electron-vite build`. The husky pre-push hook runs only the i18n gates.
+Before calling a change done: `pnpm typecheck && pnpm lint && pnpm test` (plus `pnpm ui:check` for renderer UI). CI (`.github/workflows/ci.yml`) runs lint, the `ui:check` design-system ratchet, `tsc -b`, vitest, the i18n gates, then `electron-vite build`. The husky pre-push hook runs only the i18n gates.
 
 ## Architecture
 

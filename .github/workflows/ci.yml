@@ -59,6 +59,12 @@ jobs:
         working-directory: grimoire
         run: pnpm lint
 
+      # Design-system ratchet: files may not gain raw hex, raw palette colors,
+      # focus:ring, white/N tints or em-dashes beyond scripts/ui-baseline.json.
+      - name: UI conventions
+        working-directory: grimoire
+        run: pnpm ui:check
+
       - name: Typecheck
         working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
