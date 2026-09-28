@@ -13,13 +13,28 @@ export function ModSafetyBadge({ id, name, snapshot }: { id: string; name: strin
     if (!snapshot || snapshot.report.verdict === 'no-findings') return null;
     const blocked = snapshot.report.verdict === 'blocked';
     const Icon = blocked ? ShieldAlert : snapshot.trusted ? ShieldCheck : ShieldQuestion;
-    return <button type="button" className="shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
+    return <button type="button" className="max-w-full shrink-0 cursor-pointer rounded-sm text-left focus-visible:outline-2 focus-visible:outline-accent"
         title={t('modSafety.viewFindings', { name })} onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
-        <Tag tone={blocked ? 'danger' : snapshot.trusted ? 'neutral' : 'warning'}>
-            <Icon className="h-3 w-3" aria-hidden />
-            {blocked ? t('modSafety.blocked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview')}
+        <Tag className="max-w-full" tone={blocked ? 'danger' : snapshot.trusted ? 'neutral' : 'warning'}>
+            <Icon className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="min-w-0 break-words whitespace-normal">{blocked ? t('modSafety.blocked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview')}</span>
         </Tag>
     </button>;
+}
+
+function Risks({ report }: { report: ModSafetyReport }) {
+    const { t } = useTranslation();
+    const descriptions = {
+        'local-file': t('modSafety.risks.localFile'), browser: t('modSafety.risks.browser'),
+        'remote-code': t('modSafety.risks.remoteCode'), 'dynamic-code': t('modSafety.risks.dynamicCode'),
+        executable: t('modSafety.risks.executable'), uninspectable: t('modSafety.risks.uninspectable'),
+    };
+    const reasons = [...new Set(report.findings.map(f => f.reason))];
+    const specific = reasons.filter(reason => reason !== 'executable');
+    const visible = specific.length ? specific : reasons;
+    return <ul className="space-y-2 text-sm leading-relaxed text-text-primary">
+        {visible.map(reason => <li key={reason}>{descriptions[reason]}</li>)}
+    </ul>;
 }
 
 function Findings({ report }: { report: ModSafetyReport }) {
@@ -37,7 +52,6 @@ function Findings({ report }: { report: ModSafetyReport }) {
                 <div className="mt-1 break-all font-mono text-text-secondary">{f.entry}</div>
             </li>)}
         </ul>
-        {report.fingerprint && <p className="mt-3 break-all font-mono text-2xs text-text-muted">{report.fingerprint}</p>}
     </details>;
 }
 
@@ -131,6 +145,7 @@ export function ModSafetyCenter() {
                     </div>)}
                     {installed.filter(m => !m.modId).map((m, i) => <div key={i} className="rounded-sm border border-hl/10 p-3">
                         <p className="break-all text-sm text-text-primary">{m.name}</p>
+                        <Risks report={m.report} />
                         <p className="my-2 text-xs text-text-secondary">{m.enabled ? t('modSafety.closeGame') : t('modSafety.movedDisabled')}</p>
                         <Findings report={m.report} />
                     </div>)}
@@ -142,14 +157,18 @@ export function ModSafetyCenter() {
             </ModalBody>
         </Modal>}
         {detail && !request && <Modal onClose={closeDetail} labelledBy="mod-safety-detail">
-            <ModalHeader title={t('modSafety.findings')} subtitle={detail.name} titleId="mod-safety-detail" onClose={closeDetail} />
+            <ModalHeader title={detail.snapshot?.report.verdict === 'blocked' ? t('modSafety.blockedTitle')
+                : detail.snapshot?.trusted ? t('modSafety.trustedTitle') : t('modSafety.trustTitle')}
+                subtitle={detail.name} titleId="mod-safety-detail" onClose={closeDetail} />
             <ModalBody className="space-y-4">
+                {detail.snapshot && <Risks report={detail.snapshot.report} />}
                 <p className="text-sm text-text-secondary">{detail.snapshot?.trusted
                     ? t('modSafety.trustedBody') : detail.snapshot?.report.verdict === 'blocked'
                         ? t('modSafety.blockedBody') : t('modSafety.trustBody')}</p>
                 {detail.snapshot && <Findings report={detail.snapshot.report} />}
                 {error && <p role="alert" className="text-sm text-state-danger">{t('modSafety.failed')}</p>}
                 <div className="flex flex-wrap justify-end gap-2">
+                    <Button variant="secondary" onClick={closeDetail}>{t('modSafety.close')}</Button>
                     <Button variant="secondary" isLoading={busy} onClick={inspect}>{t('modSafety.checkAgain')}</Button>
                     {detail.snapshot?.report.verdict === 'requires-trust' && !detail.snapshot.trusted
                         && <Button disabled={busy} onClick={() => review(detail.id)}>{t('modSafety.reviewAndEnable')}</Button>}
@@ -160,13 +179,13 @@ export function ModSafetyCenter() {
             <ModalHeader title={request.report.verdict === 'blocked' ? t('modSafety.blockedTitle') : t('modSafety.trustTitle')}
                 titleId="mod-safety-prompt" subtitle={request.name} onClose={() => answer(false)} closeDisabled={responding} />
             <ModalBody className="space-y-4">
+                <Risks report={request.report} />
                 <p className="text-sm leading-relaxed text-text-secondary">{request.report.verdict === 'blocked'
                     ? t('modSafety.blockedBody') : t('modSafety.trustBody')}</p>
                 {request.context === 'installation' && <p className="text-sm text-text-primary">{t('modSafety.oldVersionKept')}</p>}
                 {request.context === 'startup' && <p className="text-sm text-state-warning">{request.restartRequired
                     ? t('modSafety.closeGame') : t('modSafety.movedDisabled')}</p>}
                 <Findings report={request.report} />
-                {request.canTrust && <p className="text-xs leading-relaxed text-text-secondary">{t('modSafety.trustScope')}</p>}
                 {error && <p role="alert" className="text-sm text-state-danger">{t('modSafety.failed')}</p>}
                 <div className="flex flex-wrap justify-end gap-2">
                     <Button variant="secondary" disabled={responding} onClick={() => answer(false)}>{request.canTrust

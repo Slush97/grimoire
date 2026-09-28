@@ -618,14 +618,16 @@ function ModListRowContent({
         )}
       </button>
 
-      <div className="grid min-w-0 grid-rows-[22px_24px]">
+      <div className="grid min-w-0">
         <EditableModTitle
           name={mod.name}
           className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary"
           onRename={onRenameLocal}
         />
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+        <div className="min-w-0">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
+        </div>
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -940,7 +942,7 @@ export function ModCard({
       ? mod.thumbnailUrl
       : null;
   const shellClasses = isList
-    ? 'grid min-h-[58px] grid-cols-[52px_64px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-0'
+    ? 'grid min-h-[58px] grid-cols-[32px_56px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-0'
     : isCompact
       ? 'flex h-full flex-col gap-0 p-2'
       : 'flex h-full flex-col gap-0 p-2';
