@@ -30,9 +30,9 @@ describe('VPK safety inspection', () => {
         const result = await scan(safetyVpk([{ path: 'panorama/scripts/compact.vjs_c', bytes: safetyResource(Buffer.from('!function(a){a(1)}(run);')) }]));
         expect(result.verdict).toBe('requires-trust');
     });
-    it('keeps stylesheets behind review even when encoded URLs evade signatures', async () => {
+    it('does not require review for stylesheets without executable behavior', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.css', bytes: Buffer.from('.x { background-image: url("\\66 ile:///example"); }') }]));
-        expect(result.verdict).toBe('requires-trust');
+        expect(result.verdict).toBe('no-findings');
     });
     it('does not inherit a fingerprint after a one-byte change and ignores outer filename', async () => {
         const a = safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]);
@@ -45,11 +45,11 @@ describe('VPK safety inspection', () => {
     it('fails closed on missing compiled-layout decoder', async () => {
         expect((await scan(safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]))).verdict).toBe('blocked');
     });
-    it('inspects hoisted CSS image names as well as the stylesheet', async () => {
+    it('does not mistake static stylesheet image references for scripts', async () => {
         const header = Buffer.alloc(6); header.writeUInt16LE(1, 4);
         const css = Buffer.concat([header, Buffer.from('file:///example.png\0'), Buffer.alloc(8), Buffer.from('.test { width: 1px; }')]);
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.vcss_c', bytes: safetyResource(css) }]));
-        expect(result.findings.some(f => f.reason === 'local-file')).toBe(true);
+        expect(result.verdict).toBe('no-findings');
     });
     it.each(['../escape.js', '/root.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
         expect((await scan(safetyVpk([{ path, bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
@@ -61,9 +61,59 @@ describe('VPK safety inspection', () => {
         expect((await scan(bytes)).verdict).toBe('blocked');
     });
     it('rejects unknown executable and nested archive formats', async () => {
-        for (const extension of ['dll', 'exe', 'vpk', 'unknown']) {
+        for (const extension of ['dll', 'exe', 'vpk']) {
             expect((await scan(safetyVpk([{ path: `test.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
         }
+    });
+    it.each(['vnmskel_c', 'vnmclip_c', 'vnmgraph_c', 'vanmgrph_c', 'vnmgraph.+hero_c'])('recognizes animation asset %s', async extension => {
+        expect((await scan(safetyVpk([{ path: `models/hero.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('no-findings');
+    });
+    it('does not flag unknown asset formats without executable content', async () => {
+        const result = await scan(safetyVpk([{ path: 'scripts/heroes.vdata_c', bytes: Buffer.from('opaque') }]));
+        expect(result.verdict).toBe('no-findings');
+        expect(result.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+        expect(result.findings).toEqual([]);
+    });
+    it('clears passive compiled SVG but still checks active SVG', async () => {
+        const header = Buffer.alloc(6);
+        const plain = Buffer.concat([header, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg>')]);
+        expect((await scan(safetyVpk([{ path: 'name.vsvg_c', bytes: safetyResource(plain) }]))).verdict).toBe('no-findings');
+        const active = Buffer.concat([header, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="run(1)"/>')]);
+        expect((await scan(safetyVpk([{ path: 'name.vsvg_c', bytes: safetyResource(active) }]))).verdict).toBe('requires-trust');
+    });
+    it.each([
+        ['panorama/layout/static.xml', '<root><styles><include src="s2r://panorama/styles/x.vcss_c"/></styles><Panel><Image src="file://{images}/icon.png"/></Panel></root>'],
+        ['resource/localization/english.txt', '"description" "A file: label, not a script"'],
+        ['panorama/images/name.svg', '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg>'],
+    ])('does not prompt for passive content: %s', async (path, source) => {
+        expect((await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]))).verdict).toBe('no-findings');
+    });
+    it.each([
+        ['panorama/layout/hud.xml', '<root><scripts><include src="s2r://panorama/scripts/hud.vjs_c"/></scripts><Panel/></root>'],
+        ['panorama/layout/hud.xml', '<Panel onload="run(1)"/>'],
+        ['scripts/main.nut', 'run(1);'],
+    ])('keeps executable content behind review: %s', async (path, source) => {
+        expect((await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]))).verdict).toBe('requires-trust');
+    });
+    it('recursively inspects nested VPKs including preload bytes', async () => {
+        const asset = safetyVpk([{ path: 'model.vmdl_c', bytes: Buffer.from('inert') }]);
+        expect((await scan(safetyVpk([{ path: 'maps/portrait.vpk', bytes: asset, preload: 12 }]))).verdict).toBe('no-findings');
+        const bad = safetyVpk([{ path: 'probe.js', bytes: Buffer.from('run("file:///example")') }]);
+        const report = await scan(safetyVpk([{ path: 'maps/portrait.vpk', bytes: bad }]));
+        expect(report.verdict).toBe('blocked');
+        expect(report.findings).toContainEqual({ entry: 'maps/portrait.vpk > probe.js', reason: 'local-file' });
+    });
+    it('bounds nested archive depth', async () => {
+        let bytes = safetyVpk([{ path: 'model.vmdl_c', bytes: Buffer.from('inert') }]);
+        for (let i = 0; i < 6; i++) bytes = safetyVpk([{ path: 'nested.vpk', bytes }]);
+        expect((await scan(bytes)).verdict).toBe('blocked');
+    });
+    it('does not lose a denial when later unsupported findings reach the display limit', async () => {
+        const files = [{ path: 'probe.js', bytes: Buffer.from('run("file:///x")') },
+            ...Array.from({ length: 205 }, (_, i) => ({ path: `file${i}.unknown`, bytes: Buffer.from('inert') }))];
+        const result = await scan(safetyVpk(files));
+        expect(result.verdict).toBe('blocked');
+        expect(result.findings).toContainEqual({ entry: 'probe.js', reason: 'local-file' });
     });
     it('cannot hide a blocked finding behind the UI finding limit', async () => {
         const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run(1);') }));

@@ -14,11 +14,14 @@ const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
 const MAX_ENTRIES = 100000;
 const ASSETS = new Set(['vtex_c', 'vmat_c', 'vmdl_c', 'vmesh_c', 'vphys_c', 'vanim_c', 'vagrp_c',
+    'vnmskel_c', 'vnmclip_c', 'vnmgraph_c', 'vnmvar_c', 'vnmikrig_c', 'vanmgrph_c', 'vmorf_c',
     'vseq_c', 'vsnd_c', 'vsndevts_c', 'vsndstck_c', 'vpcf_c', 'vpost_c', 'vfont', 'ttf', 'otf',
     'png', 'jpg', 'jpeg', 'webp', 'tga', 'dds', 'wav', 'mp3', 'ogg']);
-const TEXT = new Set(['js', 'vjs', 'css', 'vcss', 'xml', 'vxml', 'html', 'htm', 'svg', 'vsvg', 'txt', 'json', 'cfg', 'lua']);
-const COMPILED_TEXT = new Set(['vjs_c', 'vcss_c', 'vsvg_c']);
-const EXECUTABLE = new Set(['js', 'vjs', 'vjs_c', 'lua', 'cfg']);
+const TEXT = new Set(['js', 'vjs', 'ts', 'vts', 'css', 'vcss', 'xml', 'vxml', 'html', 'htm', 'svg', 'vsvg', 'cfg', 'lua', 'nut']);
+const COMPILED_TEXT = new Set(['vjs_c', 'vts_c', 'vcss_c', 'vsvg_c']);
+const EXECUTABLE = new Set(['js', 'vjs', 'vjs_c', 'ts', 'vts', 'vts_c', 'lua', 'nut', 'cfg']);
+const PROGRAMS = new Set(['exe', 'dll', 'com', 'bat', 'cmd', 'ps1', 'vbs', 'lnk', 'msi', 'so', 'dylib', 'wasm']);
+interface ScanBudget { archives: number; nestedBytes: number; entries: number; sourceBytes: number }
 interface Entry { path: string; extension: string; preload: Buffer; file: string; offset: number; length: number }
 
 function requireCondition(condition: unknown): asserts condition {
@@ -66,7 +69,7 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
             return text;
         };
         for (let extension = string(); extension !== ''; extension = string()) {
-            requireCondition(/^[a-z0-9_]+$/i.test(extension));
+            requireCondition(/^[a-z0-9_+.-]+$/i.test(extension));
             for (let folder = string(); folder !== ''; folder = string()) {
                 for (let name = string(); name !== ''; name = string()) {
                     const entryPath = `${folder === ' ' ? '' : folder + '/'}${name}.${extension}`;
@@ -128,7 +131,7 @@ function resourceData(bytes: Buffer, extension: string): Buffer {
         tags.add(tag);
         if (tag !== 'DATA') continue;
         const data = bytes.subarray(offset, offset + length);
-        if (extension === 'vjs_c') { source = data; continue; }
+        if (extension === 'vjs_c' || extension === 'vts_c') { source = data; continue; }
         // Panorama styles/SVG carry a CRC and an image-name table before text.
         requireCondition(data.length >= 6);
         const names = data.readUInt16LE(4);
@@ -168,16 +171,20 @@ async function decodeLayouts(vpk: string, entries: Entry[], binary: string): Pro
     } finally { await fs.rm(staging, { recursive: true, force: true }); }
 }
 
-export async function scanModSafety(path: string, binary?: string): Promise<ModSafetyReport> {
+async function scanArchive(path: string, binary: string | undefined, budget: ScanBudget, depth: number): Promise<ModSafetyReport> {
     const findings: ModSafetyFinding[] = [];
     let fingerprint = '';
+    let blocked = false;
     const add = (finding: ModSafetyFinding) => {
+        if (finding.reason !== 'executable') blocked = true;
         if (findings.length < 200) findings.push(finding);
         else if (finding.reason !== 'executable') findings[199] = finding;
     };
     try {
         const initial = await fs.stat(path);
         const { entries, files } = await directory(path);
+        budget.entries += entries.length;
+        requireCondition(budget.entries <= MAX_ENTRIES);
         // Grimoire's slot moves handle standalone VPKs. External chunks cannot
         // be activated until the whole archive can be moved transactionally.
         if (files.length > 1) add({ entry: basename(path), reason: 'uninspectable' });
@@ -185,21 +192,33 @@ export async function scanModSafety(path: string, binary?: string): Promise<ModS
         requireCondition(before[0] === `${initial.size}:${initial.mtimeMs}:${initial.ctimeMs}`);
         fingerprint = await hashFiles(files);
         const layouts: Entry[] = [];
-        let sourceBytes = 0;
         for (const entry of entries) {
             const ext = entry.extension;
-            if (ASSETS.has(ext)) continue;
-            sourceBytes += entry.preload.length + entry.length;
-            requireCondition(entry.length + entry.preload.length <= MAX_SOURCE && sourceBytes <= MAX_SOURCES);
-            if (ext === 'vxml_c') {
-                // LaCo-to-XML is a semantic view, not a byte-exact round trip.
-                // Never classify a compiled layout as an asset-only package.
-                add({ entry: entry.path, reason: 'executable' });
-                layouts.push(entry); continue;
-            }
-            if (!TEXT.has(ext) && !COMPILED_TEXT.has(ext)) {
-                add({ entry: entry.path, reason: 'uninspectable' });
+            if (ASSETS.has(ext) || /\.vnmgraph\.\+[a-z0-9_-]+_c$/i.test(entry.path)) continue;
+            if (ext === 'vpk') {
+                const size = entry.preload.length + entry.length;
+                budget.nestedBytes += size;
+                requireCondition(depth < 4 && ++budget.archives <= 64 && size <= 128 * 1024 * 1024
+                    && budget.nestedBytes <= 256 * 1024 * 1024);
+                const staging = await fs.mkdtemp(join(tmpdir(), 'grimoire-nested-safety-'));
+                try {
+                    const handle = await fs.open(entry.file, 'r');
+                    const nested = join(staging, 'nested_dir.vpk');
+                    try { await fs.writeFile(nested, Buffer.concat([entry.preload, await readExactly(handle, entry.length, entry.offset)])); }
+                    finally { await handle.close(); }
+                    const report = await scanArchive(nested, binary, budget, depth + 1);
+                    for (const finding of report.findings) add({ ...finding, entry: `${entry.path} > ${finding.entry}` });
+                } finally { await fs.rm(staging, { recursive: true, force: true }); }
                 continue;
+            }
+            if (PROGRAMS.has(ext)) { add({ entry: entry.path, reason: 'native-code' }); continue; }
+            if (ext !== 'vxml_c' && !TEXT.has(ext) && !COMPILED_TEXT.has(ext)) {
+                continue;
+            }
+            budget.sourceBytes += entry.preload.length + entry.length;
+            requireCondition(entry.length + entry.preload.length <= MAX_SOURCE && budget.sourceBytes <= MAX_SOURCES);
+            if (ext === 'vxml_c') {
+                layouts.push(entry); continue;
             }
             const handle = await fs.open(entry.file, 'r');
             let bytes: Buffer;
@@ -208,17 +227,24 @@ export async function scanModSafety(path: string, binary?: string): Promise<ModS
             if (COMPILED_TEXT.has(ext)) bytes = resourceData(bytes, ext);
             const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/\0$/, '');
             requireCondition(!text.includes('\0'));
-            const isJs = ['js', 'vjs', 'vjs_c'].includes(ext);
-            for (const finding of inspectModSource(entry.path, text, isJs)) add(finding);
-            if (EXECUTABLE.has(ext) && !isJs) add({ entry: entry.path, reason: 'executable' });
-            if (['xml', 'vxml', 'html', 'htm', 'svg', 'vsvg', 'vsvg_c', 'css', 'vcss', 'vcss_c'].includes(ext)) {
-                add({ entry: entry.path, reason: 'executable' });
+            const isJs = ['js', 'vjs', 'vjs_c', 'vts_c'].includes(ext);
+            const sourceFindings = inspectModSource(entry.path, text, isJs);
+            if (EXECUTABLE.has(ext) || sourceFindings.some(f => f.reason === 'executable' || f.reason === 'browser'
+                || f.reason === 'dynamic-code' || f.reason === 'remote-code')) {
+                for (const finding of sourceFindings) add(finding);
             }
+            if (EXECUTABLE.has(ext) && !isJs) add({ entry: entry.path, reason: 'executable' });
         }
         if (layouts.length) {
             requireCondition(binary && layouts.length <= 128);
             const decoded = await decodeLayouts(path, layouts, binary);
-            for (const [entry, text] of decoded) for (const finding of inspectModSource(entry, text, false)) add(finding);
+            for (const [entry, text] of decoded) {
+                const sourceFindings = inspectModSource(entry, text, false);
+                if (sourceFindings.some(f => f.reason === 'executable' || f.reason === 'browser'
+                    || f.reason === 'dynamic-code' || f.reason === 'remote-code')) {
+                    for (const finding of sourceFindings) add(finding);
+                }
+            }
         }
         const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before.every((s, i) => s === after[i]));
@@ -227,7 +253,11 @@ export async function scanModSafety(path: string, binary?: string): Promise<ModS
     }
     return {
         policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint,
-        verdict: findings.some(f => f.reason !== 'executable') ? 'blocked' : findings.length ? 'requires-trust' : 'no-findings',
+        verdict: blocked ? 'blocked' : findings.length ? 'requires-trust' : 'no-findings',
         findings,
     };
+}
+
+export function scanModSafety(path: string, binary?: string): Promise<ModSafetyReport> {
+    return scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0);
 }

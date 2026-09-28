@@ -1,7 +1,7 @@
 import { parse, type Node } from 'acorn';
 import type { ModSafetyFinding, ModSafetyReason } from '../../../src/types/modSafety';
 
-export const MOD_SAFETY_POLICY_VERSION = 1;
+export const MOD_SAFETY_POLICY_VERSION = 2;
 
 interface AstNode extends Node {
     [key: string]: unknown;
@@ -43,7 +43,7 @@ function decodeEntities(text: string): string {
 export function inspectModSource(entry: string, source: string, javascript: boolean): ModSafetyFinding[] {
     const reasons = new Set<ModSafetyReason>();
     function inspectText(text: string): void {
-        if (/(?:\bfile\s*:|\\\\[^\\\s]+\\)/i.test(text)) reasons.add('local-file');
+        if (/(?:\bfile\s*:|\\\\[^\\\s"'<>]+\\)/i.test(text)) reasons.add('local-file');
         if (/\bjavascript\s*:|\b(?:CitadelHTMLPanel|HTMLPanel|HTMLTitle|HTMLFinishRequest|SetURL|SetURLWithParams|OpenURL|OpenExternalBrowserURL)\b/i.test(text)) reasons.add('browser');
         if (/\b(?:eval|Function)\s*\(/.test(text) || text === 'eval' || text === 'Function') reasons.add('dynamic-code');
         if (['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'RunScriptInPanelContext'].includes(text)) reasons.add('remote-code');

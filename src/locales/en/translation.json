@@ -1,6 +1,9 @@
 {
   "modSafety": {
     "blocked": "Blocked",
+    "unchecked": "Can't check",
+    "uncheckedTitle": "Couldn't check this mod",
+    "uncheckedBody": "Cannot be enabled yet. Try downloading it again or ask the author for a complete version.",
     "needsReview": "Review",
     "trusted": "Allowed",
     "viewFindings": "View risks and actions for {{name}}",
@@ -35,7 +38,8 @@
       "remoteCode": "Network requests or external code",
       "dynamicCode": "Code created at runtime",
       "executable": "Scripts or UI content",
-      "uninspectable": "Contents could not be checked"
+      "uninspectable": "Contents could not be checked",
+      "nativeCode": "Executable program"
     },
     "risks": {
       "localFile": "Could access private files on your computer or network.",
@@ -43,7 +47,8 @@
       "remoteCode": "Could send data to a server or load code from elsewhere.",
       "dynamicCode": "Could run hidden code that accesses files or sends data.",
       "executable": "Scripts or UI content may access files or send data while you play.",
-      "uninspectable": "Some contents could not be checked. The risk is unknown."
+      "uninspectable": "Some contents could not be checked. The risk is unknown.",
+      "nativeCode": "Includes a program that could run commands on your computer."
     }
   },
   "common": {

@@ -28,6 +28,13 @@ describe('mod source policy', () => {
     it('fails closed on unsupported syntax', () => {
         expect(reasons('function {')).toContain('uninspectable');
     });
+    it('does not mistake escaped localization quotes for a UNC hostname', () => {
+        expect(reasons(String.raw`"description" "<span class=\\\"highlight\\\">Damage</span>"`, false)).toEqual([]);
+    });
+    it('still blocks UNC addresses in source and decoded JavaScript strings', () => {
+        expect(reasons(String.raw`<Image src="\\server\share\image.png"/>`, false)).toContain('local-file');
+        expect(reasons(String.raw`use("\\\\server\\share\\image.png")`)).toContain('local-file');
+    });
     it('inspects markup entities and inline handlers', () => {
         expect(reasons('<Panel onload="run(\'file&#58;///example\')"/>', false)).toContain('local-file');
         expect(reasons('<Panel onactivate="eval(code)"/>', false)).toContain('dynamic-code');

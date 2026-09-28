@@ -229,6 +229,7 @@ function ModMediaPreview({
 
   if (!isSound) {
     return (
+      <div className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden border border-hl/[0.08] ${mediaSpacingClasses}`}>
       <button
         type="button"
         onClick={(e) => {
@@ -236,7 +237,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
+        className="absolute inset-0 h-full w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -246,8 +247,9 @@ function ModMediaPreview({
         {canOpen && (
           <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
         )}
-        {overlayBadges}
       </button>
+      {overlayBadges}
+      </div>
     );
   }
 
@@ -1364,7 +1366,10 @@ export function ModCard({
                 )}
               </div>
             )}
-              <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+              <div className="absolute top-2 right-2 z-10 flex items-start gap-1">
+              {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
+                name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
+              <div className="flex flex-col items-end gap-1">
               {mod.nsfw && (
                 <Tag
                   tone="danger"
@@ -1436,6 +1441,7 @@ export function ModCard({
                   {variantStatusLabel}
                 </Tag>
               )}
+              </div>
             </div>
           </>
         );
@@ -1462,11 +1468,6 @@ export function ModCard({
             className={`min-w-0 text-text-primary ${titleClasses}`}
             onRename={onRenameLocal}
           />
-          {(mod.safetyTarget ?? mod).safety && (mod.safetyTarget ?? mod).safety?.report.verdict !== 'no-findings' && (
-            <div className="mt-1">
-              <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
-            </div>
-          )}
           <div
             className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}

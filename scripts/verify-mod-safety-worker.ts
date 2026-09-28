@@ -14,6 +14,11 @@ const binary = resolve('resources/vpkmerge', binaries[`${process.platform}-${pro
 try {
     const cases = [
         { name: 'asset', entry: 'textures/test.vtex_c', bytes: Buffer.from('inert fixture'), verdict: 'no-findings' },
+        { name: 'animation', entry: 'models/hero.vnmskel_c', bytes: Buffer.from('inert fixture'), verdict: 'no-findings' },
+        { name: 'unknown-resource', entry: 'scripts/heroes.vdata_c', bytes: Buffer.from('opaque fixture'), verdict: 'no-findings' },
+        { name: 'passive-svg', entry: 'panorama/images/name.vsvg_c', bytes: safetyResource(Buffer.concat([Buffer.alloc(6), Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg>')])), verdict: 'no-findings' },
+        { name: 'nested-asset', entry: 'maps/portrait.vpk', bytes: safetyVpk([{ path: 'hero.vmdl_c', bytes: Buffer.from('inert') }]), verdict: 'no-findings' },
+        { name: 'nested-blocked', entry: 'maps/portrait.vpk', bytes: safetyVpk([{ path: 'test.js', bytes: Buffer.from('run("file:///example.txt")') }]), verdict: 'blocked' },
         { name: 'script', entry: 'panorama/scripts/test.vjs_c', bytes: safetyResource(Buffer.from('run(1);')), verdict: 'requires-trust' },
         { name: 'blocked', entry: 'panorama/scripts/test.vjs_c', bytes: safetyResource(Buffer.from('run("file:///example.txt");')), verdict: 'blocked' },
         { name: 'compiled-layout', entry: 'panorama/layout/test.vxml_c', bytes: safetyLayout('run(1);'), verdict: 'requires-trust' },
