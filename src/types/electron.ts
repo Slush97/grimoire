@@ -360,6 +360,8 @@ export interface ImportCustomModResult {
     ok: boolean;
     /** Mod slots this source produced (an archive can yield several). */
     imported: number;
+    /** Imported disabled; this source contains versions still needing consent. */
+    needsReview?: boolean;
     /** Resolved local group id when this source was imported as a variant.
      *  Returned even on failure so a retry joins files that already landed. */
     localGroupId?: string;

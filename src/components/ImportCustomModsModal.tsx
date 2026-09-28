@@ -38,6 +38,8 @@ import {
   pathDedupeKey,
 } from '../lib/customModImport';
 import { useAppStore } from '../stores/appStore';
+import { useNavigate } from 'react-router-dom';
+import { useModSafetyStore } from '../stores/modSafetyStore';
 
 type RowStatus = 'pending' | 'importing' | 'done' | 'failed';
 
@@ -59,7 +61,6 @@ interface ImportRow {
 }
 
 interface ImportCustomModsModalProps {
-  suspended?: boolean;
   onClose: () => void;
   /** Runs the batch. Resolves with one result per item, in the order given. */
   onImport: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
@@ -119,7 +120,6 @@ const newRow = (path: string): ImportRow => ({
  * same picking, dropping and retry behavior, minus the per-row name field.
  */
 export default function ImportCustomModsModal({
-  suspended = false,
   onClose,
   onImport,
   onFinished,
@@ -129,6 +129,15 @@ export default function ImportCustomModsModal({
   onSubmittingChange,
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const reviewAfterClose = useRef(false);
+  const close = () => {
+    onClose();
+    if (reviewAfterClose.current) {
+      useModSafetyStore.setState({ detail: null });
+      navigate('/mod-safety');
+    }
+  };
   const platform = window.electronAPI.platform;
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -228,7 +237,6 @@ export default function ImportCustomModsModal({
   // after mount get imprint recognition with no extra wiring.
   useEffect(() => {
     if (!pendingPaths?.length) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- rows stay editable, so incoming paths cannot be derived during render
     addPaths(pendingPaths);
     onConsumedPaths?.(pendingPaths);
   }, [pendingPaths, addPaths, onConsumedPaths]);
@@ -391,12 +399,13 @@ export default function ImportCustomModsModal({
         const path = batch[index]?.path;
         if (path && !result.ok) failed.set(path, result.error);
       });
+      reviewAfterClose.current ||= results.some(result => result.ok && result.needsReview);
       onFinished?.(results);
 
       // Drop what landed, keep what didn't (with its reason) so the button
       // retries exactly the leftovers.
       if (failed.size === 0) {
-        onClose();
+        close();
         return;
       }
       setRows((prev) =>
@@ -432,8 +441,7 @@ export default function ImportCustomModsModal({
 
   return (
     <Modal
-      open={!suspended}
-      onClose={onClose}
+      onClose={close}
       labelledBy="import-custom-mods-title"
       size="xl"
       dismissable={!submitting}
@@ -447,7 +455,7 @@ export default function ImportCustomModsModal({
         }
         titleId="import-custom-mods-title"
         subtitle={rows.length > 0 ? t('installed.batchImport.fileCount', { count: rows.length }) : undefined}
-        onClose={onClose}
+        onClose={close}
         closeLabel={t('common.actions.close')}
         closeDisabled={submitting}
       />

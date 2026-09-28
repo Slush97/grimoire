@@ -1556,7 +1556,7 @@
     },
     "batchImport": {
       "title": "Import Local Mods",
-      "help": "Drop any number of .vpk files or archives (.zip, .7z, .rar). Each one is copied into your addons folder at the next free pak## priority, using the name parsed from its filename unless you change it. Tip: drag the .zip itself, not a file dragged out of an opened zip window.",
+      "help": "Add .vpk files or archives (.zip, .7z, .rar). Mods are imported disabled so you can review them before enabling them.",
       "selectFiles": "Select VPK files or archives",
       "ariaBrowse": "Drop .vpk files or archives here, or press Enter to browse",
       "dropFilesHere": "Drop <code>.vpk</code> files or archives here",

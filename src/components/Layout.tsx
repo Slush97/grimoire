@@ -66,7 +66,6 @@ export default function Layout() {
   // non-empty mid-batch, which would unmount the dialog and throw away the rows
   // a partly-failed batch still needs in order to retry just the leftovers.
   const batchImportOpen = useAppStore((s) => s.batchImportOpen);
-  const batchImportBusy = useAppStore((s) => s.batchImportBusy);
   const batchImportPendingPaths = useAppStore((s) => s.batchImportPendingPaths);
   const consumeBatchImportPaths = useAppStore((s) => s.consumeBatchImportPaths);
   const setBatchImportBusy = useAppStore((s) => s.setBatchImportBusy);
@@ -377,7 +376,6 @@ export default function Layout() {
       )}
       {batchImportOpen && (
         <ImportCustomModsModal
-          suspended={location.pathname === '/mod-safety' && batchImportBusy}
           onClose={closeBatchImport}
           onImport={importCustomMods}
           onFinished={reportBatchImport}
