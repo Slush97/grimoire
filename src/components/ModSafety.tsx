@@ -65,7 +65,8 @@ function Findings({ report }: { report: ModSafetyReport }) {
     };
     return <details className="rounded-sm border border-hl/10 p-3">
         <summary className="cursor-pointer text-sm text-text-primary">{t('modSafety.findings')}</summary>
-        <ul className="mt-3 space-y-3 text-xs">
+        <ul tabIndex={0} aria-label={t('modSafety.findings')}
+            className="mt-3 max-h-[min(20rem,40vh)] space-y-3 overflow-y-auto overscroll-contain rounded-sm pr-2 text-xs [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-accent">
             {report.findings.map((f, i) => <li key={`${f.entry}:${f.reason}:${i}`}>
                 <div className="text-text-primary">{labels[f.reason]}</div>
                 <div className="mt-1 break-all font-mono text-text-secondary">{f.entry}</div>
