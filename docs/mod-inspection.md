@@ -49,17 +49,26 @@ bytes. Neither script contents nor nested packages are executed during inspectio
 Trust is local to this Grimoire installation and keyed by SHA-256 of the full
 physical package, referenced chunks, and policy version. It is not imported from
 mod metadata, profiles, a filename, an author, or a GameBanana ID. Every gate
-rehashes current bytes. Acceptance triggers another scan to detect changes during
-review. Repacking also changes the hash and may require another review.
-This advisory-only change retains policy version 2 so existing approvals for the
-same bytes remain valid; it introduces no new risk that needs renewed consent.
+rehashes current bytes. Inspection reports are cached locally by content hash and
+scanner version, so unchanged packages do not need decoding and analysis again.
+Acceptance rechecks the current bytes against the reviewed fingerprint. Repacking
+changes the hash and may require another review.
 
-The review panel shows mod thumbnails and risk summaries together. Each mod expands
+The Mod safety sidebar page shows mod thumbnails and risk summaries together. Each mod expands
 in place for explanations, affected files and its decision. Card shields open the
 corresponding row directly. Inline approval sends the displayed fingerprint to the
 main process, which rechecks the current bytes before saving consent; enabling the
 mod then passes through the normal activation gate. Downloads and other pending
-decisions appear in the same panel, without a second confirmation dialog.
+decisions appear on the same page, without a second confirmation dialog. The
+dismissible library notice returns for new versions needing review and disappears
+when none remain. An optional visual explainer illustrates legitimate uses and
+why unexpected access deserves scrutiny.
+
+Local imports are staged and inspected, then committed to the disabled library.
+The batch finishes and its dialog closes before navigation to Mod safety. Passive
+and previously approved imports also remain disabled until enabled by the user.
+Partial failures retain successful disabled imports and leave failed sources
+available to retry in a closable import dialog.
 
 Rejected download candidates are retained under `userData/mod-quarantine` when
 possible, with a report. Candidates already staged in the disabled library stay
