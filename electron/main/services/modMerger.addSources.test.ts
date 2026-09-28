@@ -234,7 +234,7 @@ describe('addMergeSources', () => {
         expect(processMocks.spawnArgs[0]).not.toContain('--strict');
         expect(processMocks.spawnArgs[0]).toContain(disabledAddition.path);
         expect(fsMocks.rename).toHaveBeenLastCalledWith(
-            expect.stringMatching(/\.merge-rebuild-.*\.vpk$/),
+            expect.stringMatching(/\.merge-rebuild-.*\.tmp$/),
             target.path
         );
 
@@ -306,3 +306,5 @@ describe('addMergeSources', () => {
         expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

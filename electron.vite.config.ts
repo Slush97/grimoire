@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
                 // unreliable. Externalizing it shipped a launch crash in 1.15.1
                 // (ERR_MODULE_NOT_FOUND from app.asar).
                 exclude: [
+                    'acorn',
                     'electron-updater',
                     'electron-log',
                     '@grimoire/social-types',
@@ -78,6 +79,7 @@ export default defineConfig(({ mode }) => {
             rollupOptions: {
                 input: {
                     index: resolve(__dirname, 'electron/main/index.ts'),
+                    vpkSafetyWorker: resolve(__dirname, 'electron/main/services/vpkSafetyWorker.ts'),
                 },
             },
         },

@@ -145,3 +145,4 @@ describe('migrateDmmInstall (non-destructive adoption)', () => {
     for (const n of Object.keys(preSeparate)) expect(postSeparate[n]).toBeDefined();
   });
 });
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

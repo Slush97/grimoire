@@ -60,3 +60,5 @@ describe('Vanilla user-mod stash', () => {
         expect(existsSync(join(harness.userData, 'vanilla-stash.json'))).toBe(false);
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

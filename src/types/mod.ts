@@ -607,6 +607,7 @@ export interface SoundSwapInfo {
 }
 
 export interface Mod {
+  safety?: import('./modSafety').ModSafetySnapshot;
   id: string;
   name: string;
   fileName: string;

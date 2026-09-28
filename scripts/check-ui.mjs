@@ -49,7 +49,7 @@ function walk(dir) {
 const counts = {};
 for (const file of walk(join(root, 'src'))) {
     const text = readFileSync(file, 'utf8');
-    const rel = relative(root, file);
+    const rel = relative(root, file).replaceAll('\\', '/');
     for (const [rule, { re }] of Object.entries(RULES)) {
         const n = text.match(re)?.length ?? 0;
         if (n) (counts[rel] ??= {})[rule] = n;

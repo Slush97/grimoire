@@ -424,10 +424,14 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   // Group entry. Stand-in `mod` is the primary so the card visuals look
   // right; the `group` prop tells ModCard to swap filename for file
   // selection metadata and route clicks to the picker.
+  const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked')
+    ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
+    ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
   return (
     <ModCard
       mod={{
         ...entry.primary,
+        safetyTarget,
         // Group's overall enable state is "one or more files enabled", not
         // the primary's individual flag (matches sort + section choice).
         enabled: entry.enabledVariants.length > 0,

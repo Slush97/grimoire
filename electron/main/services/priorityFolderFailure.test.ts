@@ -73,6 +73,18 @@ describe('setModPriorityFolder failure atomicity', () => {
         expect(getModMetadata(target.metaKey)?.priorityMod).toBeUndefined();
     });
 
+    it('leaves the file and metadata in place when the safety gate rejects it', async () => {
+        const { assertVpkSafety } = await import('./modSafety');
+        const { root, addons } = createGame();
+        const source = join(addons, 'pak01_dir.vpk');
+        writeVpk(source);
+        const target = (await scanMods(root)).find(mod => mod.path === source)!;
+        vi.mocked(assertVpkSafety).mockRejectedValueOnce(new Error('MOD_SAFETY_BLOCKED'));
+        await expect(setModPriorityFolder(root, target.id, true)).rejects.toThrow('MOD_SAFETY_BLOCKED');
+        expect(existsSync(source)).toBe(true);
+        expect(getModMetadata(target.metaKey)?.priorityMod).toBeUndefined();
+    });
+
     it('restores the flag when the move out of Global fails', async () => {
         const { root, grimoire } = createGame();
         const source = join(grimoire, 'pak05_dir.vpk');
@@ -89,3 +101,5 @@ describe('setModPriorityFolder failure atomicity', () => {
         expect(getModMetadata(target.metaKey)?.priorityMod).toBe(true);
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

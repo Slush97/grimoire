@@ -1,0 +1,75 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { scanModSafety } from './modSafetyScan';
+import { safetyResource, safetyVpk } from './modSafetyFixtures';
+
+let root: string;
+beforeEach(async () => { root = await fs.mkdtemp(join(tmpdir(), 'safety-scanner-test-')); });
+afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
+async function scan(bytes: Buffer) {
+    const path = join(root, 'test_dir.vpk');
+    await fs.writeFile(path, bytes);
+    return scanModSafety(path);
+}
+
+describe('VPK safety inspection', () => {
+    it.each([1, 2])('reads VPK v%s with preload and returns asset-only no-findings', async version => {
+        const result = await scan(safetyVpk([{ path: 'textures/test.vtex_c', bytes: Buffer.from('inert'), preload: 2 }], version));
+        expect(result.verdict).toBe('no-findings');
+        expect(result.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    });
+    it('reads compiled JS DATA rather than searching only archive names', async () => {
+        const result = await scan(safetyVpk([{ path: 'panorama/scripts/ordinary.vjs_c',
+            bytes: safetyResource(Buffer.from('use("file:///example.txt");')), preload: 19 }]));
+        expect(result.verdict).toBe('blocked');
+        expect(result.findings).toContainEqual({ entry: 'panorama/scripts/ordinary.vjs_c', reason: 'local-file' });
+    });
+    it('requires consent for scripts without recognizable dangerous tokens', async () => {
+        const result = await scan(safetyVpk([{ path: 'panorama/scripts/compact.vjs_c', bytes: safetyResource(Buffer.from('!function(a){a(1)}(run);')) }]));
+        expect(result.verdict).toBe('requires-trust');
+    });
+    it('keeps stylesheets behind review even when encoded URLs evade signatures', async () => {
+        const result = await scan(safetyVpk([{ path: 'panorama/styles/test.css', bytes: Buffer.from('.x { background-image: url("\\66 ile:///example"); }') }]));
+        expect(result.verdict).toBe('requires-trust');
+    });
+    it('does not inherit a fingerprint after a one-byte change and ignores outer filename', async () => {
+        const a = safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]);
+        const b = safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(2);') }]);
+        const first = await scan(a);
+        await fs.rename(join(root, 'test_dir.vpk'), join(root, 'renamed.vpk'));
+        expect((await scanModSafety(join(root, 'renamed.vpk'))).fingerprint).toBe(first.fingerprint);
+        expect((await scan(b)).fingerprint).not.toBe(first.fingerprint);
+    });
+    it('fails closed on missing compiled-layout decoder', async () => {
+        expect((await scan(safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]))).verdict).toBe('blocked');
+    });
+    it('inspects hoisted CSS image names as well as the stylesheet', async () => {
+        const header = Buffer.alloc(6); header.writeUInt16LE(1, 4);
+        const css = Buffer.concat([header, Buffer.from('file:///example.png\0'), Buffer.alloc(8), Buffer.from('.test { width: 1px; }')]);
+        const result = await scan(safetyVpk([{ path: 'panorama/styles/test.vcss_c', bytes: safetyResource(css) }]));
+        expect(result.findings.some(f => f.reason === 'local-file')).toBe(true);
+    });
+    it.each(['../escape.js', '/root.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
+        expect((await scan(safetyVpk([{ path, bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
+    });
+    it('rejects duplicate case-insensitive paths', async () => {
+        expect((await scan(safetyVpk([{ path: 'a.js', bytes: Buffer.from('run()') }, { path: 'A.js', bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
+    });
+    it.each([Buffer.alloc(0), Buffer.from('not a vpk'), Buffer.from([0x34, 0x12, 0xaa, 0x55])])('rejects truncated headers', async bytes => {
+        expect((await scan(bytes)).verdict).toBe('blocked');
+    });
+    it('rejects unknown executable and nested archive formats', async () => {
+        for (const extension of ['dll', 'exe', 'vpk', 'unknown']) {
+            expect((await scan(safetyVpk([{ path: `test.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
+        }
+    });
+    it('cannot hide a blocked finding behind the UI finding limit', async () => {
+        const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run(1);') }));
+        files.push({ path: 'last.js', bytes: Buffer.from('run("file:///example")') });
+        const result = await scan(safetyVpk(files));
+        expect(result.findings.length).toBe(200);
+        expect(result.verdict).toBe('blocked');
+    });
+});

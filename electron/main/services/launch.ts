@@ -2,6 +2,8 @@ import { promises as fs, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
+import { assertVpkSafety } from './modSafety';
+import { assertActiveModsSafety } from './modSafetyAudit';
 import { getUserDataPath } from '../utils/paths';
 import {
     getAddonsPath,
@@ -326,6 +328,12 @@ export async function restoreFromStash(
             continue;
         }
 
+        try {
+            await assertVpkSafety(from, { prompt: false });
+        } catch {
+            failed.push(fileName);
+            continue;
+        }
         // The origin folder may have been emptied (overflow) but should still
         // exist; recreate it defensively so the rename lands.
         await fs.mkdir(targetDir, { recursive: true });
@@ -488,6 +496,7 @@ export async function launchModded({
                 );
             }
         }
+        await assertActiveModsSafety(deadlockPath);
         await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
         await triggerSteamLaunch(deadlockPath);
@@ -539,6 +548,8 @@ export async function launchVanilla({
     }
 
     try {
+        // Vanilla leaves reserved Locker artifacts mounted. Inspect those too.
+        await assertActiveModsSafety(deadlockPath);
         await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
         await triggerSteamLaunch(deadlockPath);

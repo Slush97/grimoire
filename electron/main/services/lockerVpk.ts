@@ -18,6 +18,7 @@
  * addons so applied cards keep loading through the transition.
  */
 import { promises as fs } from 'fs';
+import { assertVpkSafety } from './modSafety';
 import { join } from 'path';
 import { getGrimoirePath } from './deadlock';
 import { getGameinfoStatus, fixGameinfo } from './system';
@@ -100,6 +101,7 @@ async function relocateManaged(
     toKey: string,
     metaToWrite: Parameters<typeof setModMetadata>[1],
 ): Promise<void> {
+    await assertVpkSafety(fromPath, { prompt: false });
     await fs.unlink(toPath).catch(() => {}); // overwrite any partial prior migration
     await fs.rename(fromPath, toPath);
     setModMetadata(toKey, metaToWrite);

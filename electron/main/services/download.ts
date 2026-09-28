@@ -3,6 +3,7 @@ import { promises as fs, statSync } from 'fs';
 import { join, basename, extname, resolve } from 'path';
 import { tmpdir } from 'os';
 import { BrowserWindow } from 'electron';
+import { assertVpkSafety } from './modSafety';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, type ExtractedVpk } from './extract';
 import { buildVpkIndexBySize } from './vpkVariantIndex';
@@ -699,6 +700,8 @@ async function renameVpksToAvoidConflicts(
     extractedVpks: ExtractedVpk[],
     nameHint?: string
 ): Promise<RenamedVpk[]> {
+    // Validate the entire selection before moving any candidate or replacing peers.
+    for (const vpk of extractedVpks) await assertVpkSafety(vpk.path, { allowUntrusted: true, context: 'installation' });
     const taken = existsSync(targetPath)
         ? new Set((await fs.readdir(targetPath)).map((n) => n.toLowerCase()))
         : new Set<string>();
@@ -1073,6 +1076,10 @@ async function executeDownload(
     if (loadSettings().experimentalVpkImprinting) {
         await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
+
+    // Review final bytes before any old variant is disabled or an update caller
+    // receives success and deletes its previous version.
+    for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
 
     // Switching variants: when the user installs a different file of a mod they
     // already have enabled, disable the previously-enabled sibling so only the
@@ -1594,6 +1601,8 @@ async function executeOneClickDownload(
         await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
 
+    for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
+
     let enabledInstalledVpks = false;
     if (settings.autoDisableSiblingVariants !== false) {
         try {
@@ -1718,6 +1727,8 @@ export async function installForgeVpk(
         if (settings.experimentalVpkImprinting) {
             await imprintFreshlyInstalled(deadlockPath, installedVpks);
         }
+
+        for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
 
         // Sibling-variant handling is skipped on purpose: it keys off a real
         // GameBanana mod id, and repeat forges of the same sound are legitimate

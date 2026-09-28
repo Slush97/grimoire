@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
+import { assertVpkSafety } from './modSafety';
 import {
     scanMods,
     runExclusiveModMutation,
@@ -452,6 +453,11 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
             const profileMod = profileModByCurrentId.get(mod.id);
             return !profileMod || !profileMod.enabled || profileMod.priority !== mod.priority;
         }));
+
+        // Review the whole incoming selection before changing the current profile.
+        for (const mod of currentMods) {
+            if (profileModByCurrentId.get(mod.id)?.enabled) await assertVpkSafety(mod.path);
+        }
 
         // Two passes, disables BEFORE enables. The disabled library is uncapped now,
         // so a profile that swaps a large enabled set for a large disabled one could,

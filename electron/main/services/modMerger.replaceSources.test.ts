@@ -286,7 +286,7 @@ describe('replaceMergeSources', () => {
         await replaceMergeSources('/game', target.id, swap);
 
         expect(fsMocks.rename).toHaveBeenLastCalledWith(
-            expect.stringMatching(/\.merge-rebuild-.*\.vpk$/),
+            expect.stringMatching(/\.merge-rebuild-.*\.tmp$/),
             target.path
         );
         const sidecarPatch = metadataMocks.setModMetadata.mock.calls.at(-1)?.[1] as {
@@ -413,3 +413,5 @@ describe('replaceMergeSources', () => {
         expect(processMocks.spawnArgs).toEqual([]);
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

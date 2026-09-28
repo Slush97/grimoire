@@ -286,3 +286,4 @@ describe('recoverability: sidecar backup before the batch write', () => {
     expect(fileNames(backupDir)).toEqual(backups);
   });
 });
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

@@ -164,3 +164,5 @@ describe('setModPriorityFolder', () => {
     expect(getModMetadata('grimoire/pak06_dir.vpk')?.priorityMod).toBe(true);
   });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

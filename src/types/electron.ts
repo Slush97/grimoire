@@ -1,3 +1,4 @@
+import type { ModSafetyPrompt, InstalledModSafety, ModSafetySnapshot } from './modSafety';
 import type {
     Mod,
     AppSettings,
@@ -814,6 +815,13 @@ export interface ElectronAPI {
     };
 
     // Mods
+    getModSafetyPrompts: () => Promise<ModSafetyPrompt[]>;
+    respondModSafety: (id: string, accepted: boolean) => Promise<void>;
+    getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;
+    rescanModSafety: () => Promise<InstalledModSafety[]>;
+    inspectModSafety: (id: string) => Promise<ModSafetySnapshot>;
+    reviewModSafety: (id: string) => Promise<InstalledModSafety[]>;
+    onModSafetyChanged: (callback: () => void) => () => void;
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;

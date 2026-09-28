@@ -118,6 +118,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // Mods
+    getModSafetyPrompts: () => ipcRenderer.invoke('get-mod-safety-prompts'),
+    respondModSafety: (id: string, accepted: boolean) => ipcRenderer.invoke('respond-mod-safety', id, accepted),
+    getInstalledModSafety: () => ipcRenderer.invoke('get-installed-mod-safety'),
+    rescanModSafety: () => ipcRenderer.invoke('rescan-mod-safety'),
+    inspectModSafety: (id: string) => ipcRenderer.invoke('inspect-mod-safety', id),
+    reviewModSafety: (id: string) => ipcRenderer.invoke('review-mod-safety', id),
+    onModSafetyChanged: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('mod-safety-changed', listener);
+        return () => ipcRenderer.removeListener('mod-safety-changed', listener);
+    },
     getMods: () => ipcRenderer.invoke('get-mods'),
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),

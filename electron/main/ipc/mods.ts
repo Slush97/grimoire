@@ -1,4 +1,5 @@
 import { ipcMain, shell } from 'electron';
+import { assertVpkSafety, modSafetySnapshot, moveSafetySnapshot } from '../services/modSafety';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
 import { extname, basename, join, resolve, sep } from 'path';
@@ -106,16 +107,20 @@ async function copyIntoModSlot(
     destPath: string,
     freshlyAllocated: boolean
 ): Promise<void> {
-    if (!freshlyAllocated) {
-        await fs.copyFile(sourcePath, destPath);
-        return;
-    }
-    await reserveOutputSlot(destPath);
+    // Inspect a private copy, then commit those exact bytes atomically.
+    const staged = `${destPath}.${randomUUID()}.safety-tmp`;
+    let reserved = false;
     try {
-        await fs.copyFile(sourcePath, destPath);
+        await fs.copyFile(sourcePath, staged);
+        await assertVpkSafety(staged, { context: 'installation', name: basename(sourcePath) });
+        if (freshlyAllocated) { await reserveOutputSlot(destPath); reserved = true; }
+        await fs.rename(staged, destPath);
+        moveSafetySnapshot(staged, destPath);
     } catch (err) {
-        try { await fs.unlink(destPath); } catch { /* ignore partial-output cleanup */ }
+        if (reserved) await fs.unlink(destPath).catch(() => {});
         throw err;
+    } finally {
+        await fs.unlink(staged).catch(() => {});
     }
 }
 
@@ -259,6 +264,7 @@ function enrichMod(mod: Mod): WireMod {
         }
         return {
             ...mod,
+            safety: modSafetySnapshot(mod.path),
             // Use the stored mod name from GameBanana if available
             name: metadata.modName || mod.name,
             thumbnailUrl: metadata.thumbnailUrl,
@@ -296,7 +302,7 @@ function enrichMod(mod: Mod): WireMod {
     // No metadata row (a VPK dropped straight into addons): still file-tree tag
     // the hero so unknown skins get their Locker chip like downloaded mods.
     const { lockerHero, lockerHeroSource } = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
-    return { ...mod, isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
+    return { ...mod, safety: modSafetySnapshot(mod.path), isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
 /**

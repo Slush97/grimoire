@@ -44,6 +44,9 @@ importers:
       '@xhayper/discord-rpc':
         specifier: ^1.5.1
         version: 1.5.1
+      acorn:
+        specifier: 8.15.0
+        version: 8.15.0
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16

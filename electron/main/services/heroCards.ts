@@ -16,6 +16,7 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
+import { assertVpkSafety } from './modSafety';
 import {
     getCitadelPath,
     getGrimoirePath,
@@ -233,14 +234,14 @@ export async function rebuildLockerCosmetics(
     // cleaned up in the finally block.
     const tag = `.locker-cards-build-${randomUUID()}`;
     const planDir = join(app.getPath('userData'), 'locker-cosmetics-build', randomUUID());
-    const buildOut = join(grimoireDir, `${tag}.out.vpk`);
+    const buildOut = join(grimoireDir, `${tag}.out.tmp`);
     const chunkPaths: string[] = [];
     try {
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
             const srcPath = srcPathFor.get(sel)!;
-            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
+            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.tmp`);
             const planPath = join(planDir, `plan${i}.json`);
             await fs.writeFile(
                 planPath,
@@ -264,7 +265,7 @@ export async function rebuildLockerCosmetics(
         // Swap into the FIXED grimoire slot (overwrite). The grimoire folder wins
         // by SearchPaths precedence, so no load-order pinning is needed and the
         // selection set lives under the synthetic key, not the VPK filename.
-        await fs.unlink(destPath).catch(() => {});
+        await assertVpkSafety(buildOut);
         await fs.rename(buildOut, destPath);
         invalidateVpkParseCache(destPath);
 

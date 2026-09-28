@@ -856,7 +856,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // already moved), the second carries a dead id and the move throws "Mod not
       // found". The desired state is whatever the folder already reflects, so
       // resync silently instead of dropping the whole page to the error screen.
-      if (/Mod not found/.test(String(err))) {
+      if (/Mod not found|MOD_SAFETY_/.test(String(err))) {
         get().loadMods({ silent: true, force: true });
         return false;
       }

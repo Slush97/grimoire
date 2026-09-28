@@ -21,9 +21,12 @@ import type { ViewMode } from '../common/PageComponents';
 import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
 import { heroNameForLabel } from '../../lib/heroNames';
 import { EMPTY_LIST_IDS } from './emptyIds';
+import { ModSafetyBadge } from '../ModSafety';
 
 interface ModCardProps {
   mod: {
+    safety?: Mod['safety'];
+    safetyTarget?: Pick<Mod, 'id' | 'name' | 'safety'>;
     id: string;
     name: string;
     fileName: string;
@@ -622,6 +625,7 @@ function ModListRowContent({
           onRename={onRenameLocal}
         />
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+          <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -1461,6 +1465,7 @@ export function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
+              <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
               {cardTaxonomy.heroName && (
                 <span
                   className="inline-flex flex-shrink-0 items-center"

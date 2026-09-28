@@ -16,6 +16,7 @@ import { healLockerVpks } from '../services/lockerVpk';
 import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
+import { auditInstalledSafety } from '../services/modSafetyAudit';
 import {
     captureEmptyGameMods,
     captureLoadedGameMods,
@@ -154,6 +155,12 @@ ipcMain.handle('restore-vanilla-stash', async (): Promise<RestoreResult> => {
 export async function runStartupRecovery(): Promise<void> {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) return;
+    try {
+        await auditInstalledSafety(deadlockPath);
+    } catch (err) {
+        // The prelaunch gate still fails closed if startup enumeration fails.
+        console.error('[mod-safety] Startup inspection failed:', err);
+    }
     try {
         const result = await recoverFromStashOnStartup(deadlockPath);
         if (result) {

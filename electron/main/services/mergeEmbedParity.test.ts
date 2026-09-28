@@ -105,7 +105,7 @@ describe('embedMergeIdentity repack parity', () => {
         expect(findImprintRepackMismatch).toHaveBeenCalledTimes(1);
         expect(fsMocks.rename).toHaveBeenCalledTimes(1);
         const [from, to] = fsMocks.rename.mock.calls[0] as unknown as [string, string];
-        expect(from).toMatch(/\.imprint-embed-.*\.vpk$/);
+        expect(from).toMatch(/\.imprint-embed-.*\.tmp$/);
         expect(to).toBe(MERGED_PATH);
     });
 
@@ -118,7 +118,7 @@ describe('embedMergeIdentity repack parity', () => {
 
         expect(fsMocks.rename).not.toHaveBeenCalled();
         const unlinked = fsMocks.unlink.mock.calls.map((c) => c[0] as unknown as string);
-        expect(unlinked.some((p) => /\.imprint-embed-.*\.vpk$/.test(p))).toBe(true);
+        expect(unlinked.some((p) => /\.imprint-embed-.*\.tmp$/.test(p))).toBe(true);
     });
 
     it('rejects without renaming when the repacked output is unreadable', async () => {
@@ -133,3 +133,5 @@ describe('embedMergeIdentity repack parity', () => {
         expect(fsMocks.rename).not.toHaveBeenCalled();
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

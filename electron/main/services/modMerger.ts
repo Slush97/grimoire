@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
+import { assertVpkSafety } from './modSafety';
 import { metaKeyFor } from './deadlock';
 import { loadSettings } from './settings';
 import {
@@ -360,7 +361,7 @@ export async function repackWithEmbeddedEntries(
     }
     const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
     const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
-    const embedOut = join(dirname(vpkPath), `.imprint-embed-${randomUUID()}.vpk`);
+    const embedOut = join(dirname(vpkPath), `.imprint-embed-${randomUUID()}.tmp`);
     const droppedEntries = hasLegacyGrimoireMergeMetaEntry(vpkPath) ? [LEGACY_GRIMOIRE_META_ENTRY] : [];
     try {
         await fs.writeFile(addonTmp, addonText);
@@ -389,6 +390,9 @@ export async function repackWithEmbeddedEntries(
         // idiom): either the embedded VPK fully takes the slot or, if the rename
         // fails, the original un-embedded VPK is left untouched. Avoids a
         // window where the slot is missing on disk.
+        // Repacking changes the reviewed bytes. Do not transfer approval from
+        // metadata or entry sizes; inspect the actual output before replacing.
+        await assertVpkSafety(embedOut);
         await fs.rename(embedOut, vpkPath);
     } catch (err) {
         try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
@@ -646,12 +650,16 @@ async function mergeModsLocked(
     // EEXIST if anything else got there first.
     await reserveOutputSlot(mergedPath);
 
-    const args = [mergedPath, ...sources.map((src) => src.path)];
+    const stagingPath = join(dirname(mergedPath), `.safety-merge-${randomUUID()}.tmp`);
+    const args = [stagingPath, ...sources.map((src) => src.path)];
 
     try {
         await runVpkmerge(args);
-        await verifyVpkOutput(mergedPath);
+        await verifyVpkOutput(stagingPath);
+        await assertVpkSafety(stagingPath);
+        await fs.rename(stagingPath, mergedPath);
     } catch (err) {
+        await fs.unlink(stagingPath).catch(() => {});
         try { await fs.unlink(mergedPath); } catch { /* ignore partial-output cleanup */ }
         throw err;
     }
@@ -1151,7 +1159,7 @@ async function addMergeSourcesLocked(
     ]);
 
     const targetDir = dirname(target.path);
-    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.tmp`);
     const disabledForRollback: Mod[] = [];
     let swapped = false;
 
@@ -1218,6 +1226,7 @@ async function addMergeSourcesLocked(
         // Atomic same-directory replacement preserves filename, slot, mod id,
         // and metaKey. The metadata setter merges this patch with unrelated
         // fields already stored for the merge.
+        await assertVpkSafety(buildPath);
         await fs.rename(buildPath, target.path);
         swapped = true;
         setModMetadata(target.metaKey, {
@@ -1421,7 +1430,7 @@ async function replaceMergeSourcesLocked(
     ]);
 
     const targetDir = dirname(target.path);
-    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.tmp`);
     const disabledForRollback: Mod[] = [];
     let swapped = false;
 
@@ -1485,6 +1494,7 @@ async function replaceMergeSourcesLocked(
         );
         await verifyVpkOutput(buildPath);
 
+        await assertVpkSafety(buildPath);
         await fs.rename(buildPath, target.path);
         swapped = true;
         setModMetadata(target.metaKey, {
@@ -1655,7 +1665,7 @@ async function extractMergeSourceLocked(
     // a base-only "next free pakNN" + setModPriority path would wrongly fail (or
     // move the merge to the base folder) for a merge that lives in an overflow folder.
     const targetDir = dirname(target.path);
-    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.tmp`);
     mergeTrace(
         `rebuild start merge=${manifest.id} key=${target.metaKey}: ${ordered.length} sources -> ${basename(buildPath)} (removed "${sourceFileName}")`
     );
@@ -1691,12 +1701,11 @@ async function extractMergeSourceLocked(
         sources: remainingSnapshots,
     };
 
-    // Swap: drop the old merged VPK, then move the freshly built one into its
-    // exact path. Same folder + pakNN means the metaKey (and load order) is
-    // preserved, so the metadata re-stamps under the unchanged key.
-    await fs.unlink(target.path);
-    removeModMetadata(target.metaKey);
+    // Inspect before atomically replacing the old VPK. A refused rebuild keeps
+    // the previous file, metadata and load order intact.
+    await assertVpkSafety(buildPath);
     await fs.rename(buildPath, target.path);
+    removeModMetadata(target.metaKey);
     setModMetadata(target.metaKey, {
         modName: meta.modName,
         thumbnailUrl: meta.thumbnailUrl,

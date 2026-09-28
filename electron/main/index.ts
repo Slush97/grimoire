@@ -103,6 +103,7 @@ import './ipc/forge';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
+import './ipc/modSafety';
 import { loadSettings, saveSettings, type AppSettings } from './services/settings';
 import {
     configureForgeBridge,

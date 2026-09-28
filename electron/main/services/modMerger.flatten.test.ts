@@ -191,6 +191,7 @@ beforeEach(() => {
     processMocks.spawnArgs.length = 0;
     embeddedRecords.length = 0;
     modMocks.scanMods
+        .mockReset()
         .mockResolvedValueOnce([parentA, parentB, sourceA, sourceB, sourceC])
         .mockResolvedValueOnce([flattened, sourceA, sourceB, sourceC]);
     metadataMocks.getModMetadata.mockImplementation((key: string) => {
@@ -214,7 +215,7 @@ describe('mergeMods flattening', () => {
         });
 
         expect(processMocks.spawnArgs[0]).toEqual([
-            flattened.path,
+            expect.stringMatching(/\.safety-merge-[\w-]+\.tmp$/),
             sourceC.path,
             sourceB.path,
             sourceA.path,
@@ -263,6 +264,17 @@ describe('mergeMods flattening', () => {
         expect(metadataMocks.removeModMetadata).not.toHaveBeenCalledWith(parentB.metaKey);
     });
 
+    it('keeps parent merges and sources intact when output inspection denies activation', async () => {
+        const { assertVpkSafety } = await import('./modSafety');
+        vi.mocked(assertVpkSafety).mockRejectedValueOnce(new Error('MOD_SAFETY_BLOCKED'));
+        await expect(mergeMods('/game', [parentA.id, parentB.id], { name: 'Flattened' }))
+            .rejects.toThrow('MOD_SAFETY_BLOCKED');
+        expect(fsMocks.rename).not.toHaveBeenCalled();
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentA.path);
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentB.path);
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
+    });
+
     it('leaves parent merges intact when any original leaf is missing', async () => {
         modMocks.scanMods.mockReset()
             .mockResolvedValueOnce([parentA, parentB, sourceA, sourceB]);
@@ -277,3 +289,5 @@ describe('mergeMods flattening', () => {
         expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentB.path);
     });
 });
+// These tests use inert file placeholders; scanner behavior has its own fixtures.
+vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));

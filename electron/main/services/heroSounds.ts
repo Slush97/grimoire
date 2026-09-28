@@ -21,6 +21,7 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
+import { assertVpkSafety } from './modSafety';
 import { getCitadelPath, getGrimoirePath } from './deadlock';
 import { listInstalledUserVpks } from './modLibrary';
 import { invalidateVpkParseCache } from './vpk';
@@ -217,14 +218,14 @@ async function rebuildLockerSounds(
 
     const tag = `.locker-sounds-build-${randomUUID()}`;
     const planDir = join(app.getPath('userData'), 'locker-sounds-build', randomUUID());
-    const buildOut = join(grimoireDir, `${tag}.out.vpk`);
+    const buildOut = join(grimoireDir, `${tag}.out.tmp`);
     const chunkPaths: string[] = [];
     try {
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
             const src = vpks.find((v) => v.metaKey === sel.source.fileName)!;
-            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
+            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.tmp`);
             const planPath = join(planDir, `plan${i}.json`);
             // Each clip's full path used as an AnyPrefix predicate matches only
             // that file, so the chunk is exactly this (hero, slot)'s clips.
@@ -275,7 +276,7 @@ async function rebuildLockerSounds(
         // Swap into the FIXED grimoire slot (overwrite). The grimoire folder wins
         // by SearchPaths precedence, so no load-order pinning is needed and the
         // selection set lives under the synthetic key, not the VPK filename.
-        await fs.unlink(destPath).catch(() => {});
+        await assertVpkSafety(buildOut);
         await fs.rename(buildOut, destPath);
         invalidateVpkParseCache(destPath);
 

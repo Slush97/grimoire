@@ -8,6 +8,7 @@ import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata }
 import { compareFileContents } from './fileMatch';
 import { resolveVpkIdentity, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from './vpkIdentity';
 import { loadSettings } from './settings';
+import { assertVpkSafety, moveSafetySnapshot } from './modSafety';
 import {
     assertCanMoveLoadedGameMod,
     assertCanMoveLoadedGameMods,
@@ -674,6 +675,7 @@ async function moveModToFolderAs(
     enabled: boolean,
     rememberPriority?: number
 ): Promise<Mod> {
+    if (enabled) await assertVpkSafety(targetMod.path, { name: getModMetadata(targetMod.metaKey)?.modName ?? targetMod.name });
     if (rememberPriority != null) {
         setModMetadata(targetMod.metaKey, { lastPriority: rememberPriority });
     }
@@ -681,6 +683,7 @@ async function moveModToFolderAs(
     await fs.mkdir(destinationFolder, { recursive: true });
     const destinationPath = join(destinationFolder, destinationFileName);
     await renameWithRetry(targetMod.path, destinationPath);
+    moveSafetySnapshot(targetMod.path, destinationPath);
     const destMetaKey = metaKeyFor(destinationPath);
 
     if (destMetaKey !== targetMod.metaKey) {
@@ -1020,6 +1023,9 @@ export function setModsEnabledBatch(
         const current = await scanMods(deadlockPath);
         await syncRunningGameModSnapshotFromMods(current);
         assertCanMoveLoadedGameMods(current.filter((m) => m.enabled && disable.has(m.id)));
+        for (const mod of current) {
+            if (enable.has(mod.id)) await assertVpkSafety(mod.path);
+        }
 
         for (const modId of disable) {
             try {
@@ -1058,6 +1064,7 @@ async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> 
     }
 
     if (targetMod.enabled) {
+        await assertVpkSafety(targetMod.path);
         return targetMod;
     }
 
