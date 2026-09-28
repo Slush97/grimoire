@@ -1331,14 +1331,14 @@ export function ModCard({
         )}
         {(() => {
         const overlayBadges = (
-          <>
+          <div className="absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
             {mod.enabled && !selectMode && (
               mod.priorityMod ? (
-                <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
+                <div className="flex h-5 shrink-0 items-start">
                   <GlobalLoadBadge variant="overlay" />
                 </div>
               ) : (
-              <div className="absolute top-2 left-2 z-10 flex h-5 items-start" data-card-action="true">
+              <div className="flex h-5 shrink-0 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
                   value={loadPosition ?? mod.priority}
@@ -1350,7 +1350,7 @@ export function ModCard({
               )
             )}
             {!mod.enabled && !selectMode && (
-              <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
+              <div className="flex shrink-0 flex-col items-start gap-1">
                 <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
                   {t('locker.global.disabledBadge')}
                 </Tag>
@@ -1366,10 +1366,9 @@ export function ModCard({
                 )}
               </div>
             )}
-              <div className="absolute top-2 right-2 z-10 flex items-start gap-1">
+              <div className="ml-auto flex min-w-0 flex-wrap items-start justify-end gap-1">
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
-              <div className="flex flex-col items-end gap-1">
               {mod.nsfw && (
                 <Tag
                   tone="danger"
@@ -1441,9 +1440,8 @@ export function ModCard({
                   {variantStatusLabel}
                 </Tag>
               )}
-              </div>
             </div>
-          </>
+          </div>
         );
 
         return (

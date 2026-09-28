@@ -12,7 +12,6 @@
     "attention_one": "{{count}} mod needs attention",
     "attention_other": "{{count}} mods need attention",
     "reviewMods": "Review mods",
-    "listIntro": "Review the risks, then choose which mods to allow.",
     "allowHint": "Allowing this version enables the mod with these risks.",
     "changed": "This mod changed since you reviewed it. Check installed mods again before allowing it.",
     "summary": {

@@ -6,7 +6,7 @@ import ModThumbnail from './ModThumbnail';
 import { inferHeroFromTitle } from '../lib/lockerUtils';
 import { shouldBlurNsfw } from '../lib/appSettings';
 import type { Mod } from '../types/mod';
-import { Button, IconButton, ModalHeader, Tag } from './common/ui';
+import { Button, ModalHeader, Tag } from './common/ui';
 import { useModSafetyStore } from '../stores/modSafetyStore';
 import { useAppStore } from '../stores/appStore';
 import type { ModSafetyPrompt, ModSafetyReport, ModSafetySnapshot } from '../types/modSafety';
@@ -20,14 +20,18 @@ export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
     const unchecked = snapshot.report.verdict === 'blocked';
     const Icon = unchecked ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
     const status = unchecked ? t('modSafety.unchecked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
-    if (variant === 'overlay') return <IconButton icon={Icon} size="sm"
-        label={`${status}. ${t('modSafety.viewFindings', { name })}`} data-card-action="true"
-        className={`bg-bg-primary/90 ${snapshot.trusted
-            ? '[&>svg]:text-text-secondary' : '[&>svg]:text-state-warning'}`}
-        onClick={e => { e.stopPropagation(); open(id, name, snapshot); }} />;
+    if (variant === 'overlay') return <button type="button" data-card-action="true"
+        aria-label={`${status}. ${t('modSafety.viewFindings', { name })}`}
+        title={`${status}. ${t('modSafety.viewFindings', { name })}`}
+        className="inline-flex shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
+        onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
+        <Tag variant="overlay" tone={snapshot.trusted ? 'accepted' : 'warning'}>
+            <Icon className="h-3 w-3" aria-hidden />
+        </Tag>
+    </button>;
     return <button type="button" className="max-w-full shrink-0 cursor-pointer rounded-sm text-left focus-visible:outline-2 focus-visible:outline-accent"
         title={t('modSafety.viewFindings', { name })} onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
-        <Tag className="max-w-full" tone={snapshot.trusted ? 'neutral' : 'warning'}>
+        <Tag className="max-w-full" tone={snapshot.trusted ? 'accepted' : 'warning'}>
             <Icon className="h-3 w-3 shrink-0" aria-hidden />
             <span className="min-w-0 break-words whitespace-normal">{status}</span>
         </Tag>
@@ -129,7 +133,7 @@ function ReviewCard({ row, expanded, busy, disabled, error, onExpand, onAllow, o
             <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="break-words font-mod-title text-sm text-text-primary">{row.name}</span>
-                    <span className={row.trusted ? 'text-xs text-text-secondary' : 'text-xs text-state-warning'}>{state}</span>
+                    <span className={row.trusted ? 'text-xs text-state-accepted' : 'text-xs text-state-warning'}>{state}</span>
                 </span>
                 <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
                     {summary.map(reason => <span key={reason}>{labels[reason]}</span>)}
@@ -275,7 +279,6 @@ export function ModSafetyCenter() {
     return <Modal onClose={close} labelledBy="mod-safety-list" size="xl" panelClassName="h-[85vh]">
         <ModalHeader title={t('modSafety.manage')} titleId="mod-safety-list" onClose={close} />
         <ModalBody className="space-y-3 [scrollbar-gutter:stable]">
-            <p className="mb-4 text-sm text-text-secondary">{t('modSafety.listIntro')}</p>
             <ReviewList rows={rows}>{row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
                 busy={busy === row.key} disabled={!!busy} error={error?.key === row.key ? error.text : undefined}
                 onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} />}</ReviewList>

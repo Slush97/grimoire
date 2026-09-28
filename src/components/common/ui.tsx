@@ -75,7 +75,7 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
 // soft web-style pills.
 // ============================================================================
 
-type TagTone = 'accent' | 'warning' | 'danger' | 'success' | 'info' | 'neutral';
+type TagTone = 'accent' | 'warning' | 'danger' | 'success' | 'accepted' | 'info' | 'neutral';
 
 interface TagProps {
     children: ReactNode;
@@ -105,6 +105,7 @@ export function Tag({
         warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayBorder: 'border-state-warning/70' },
         danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayBorder: 'border-state-danger/70' },
         success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayBorder: 'border-state-success/70' },
+        accepted: { text: 'text-state-accepted', border: 'border-state-accepted/40', fill: 'bg-state-accepted/10', overlayBorder: 'border-state-accepted/70' },
         info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayBorder: 'border-state-info/70' },
         neutral: { text: 'text-text-secondary',  border: 'border-hl/10',          fill: 'bg-hl/5',            overlayBorder: 'border-hl/20' },
     };
