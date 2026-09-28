@@ -1,4 +1,4 @@
-import { parse, type Node } from 'acorn';
+import { parse, tokenizer, type Node } from 'acorn';
 import type { ModSafetyFinding, ModSafetyReason } from '../../../src/types/modSafety';
 
 export const MOD_SAFETY_POLICY_VERSION = 2;
@@ -39,7 +39,68 @@ function decodeEntities(text: string): string {
         .replace(/&apos;/gi, "'").replace(/&amp;/gi, '&');
 }
 
-/** Heuristics explain a denial. Every script needs consent even if none fire. */
+function panoramaEventCalls(source: string): string {
+    // Panorama also separates top-level event calls with whitespace.
+    try {
+        const reader = tokenizer(source, { ecmaVersion: 'latest' });
+        let current = reader.getToken();
+        let previous = '';
+        let depth = 0;
+        let start = 0;
+        let offset = 0;
+        let count = 0;
+        const parts: string[] = [];
+        while (current.type.label !== 'eof') {
+            if (++count > 200000) return source;
+            const next = reader.getToken();
+            const label = current.type.label;
+            if (depth === 0 && previous === ')' && label === 'name' && next.type.label === '(') {
+                const prefix = node(parse(source.slice(start, current.start), { ecmaVersion: 'latest' }));
+                const body = prefix?.body;
+                if (Array.isArray(body) && body.length === 1 && node(body[0])?.type === 'ExpressionStatement'
+                    && node(node(body[0])?.expression)?.type === 'CallExpression') {
+                    parts.push(source.slice(offset, current.start), ';');
+                    offset = start = current.start;
+                }
+            }
+            if (['(', '[', '{'].includes(label)) depth++;
+            if ([')', ']', '}'].includes(label)) depth--;
+            if (depth === 0 && label === ';') start = current.end;
+            previous = label;
+            current = next;
+        }
+        return parts.join('') + source.slice(offset);
+    } catch { return source; }
+}
+
+function panoramaEventSource(source: string): string {
+    // Panorama accepts bare localization tokens as event arguments. Tokenize
+    // first so strings, comments, regular expressions and JS private fields
+    // cannot be changed by a textual replacement.
+    try {
+        const reader = tokenizer(source, { ecmaVersion: 'latest' });
+        let previous = '';
+        let current = reader.getToken();
+        let offset = 0;
+        let count = 0;
+        const parts: string[] = [];
+        while (current.type.label !== 'eof') {
+            if (++count > 200000) return source;
+            const next = reader.getToken();
+            if (current.type.label === 'privateId' && (previous === '(' || previous === ',')
+                && (next.type.label === ')' || next.type.label === ',')
+                && /^#[A-Za-z_][\w]*$/.test(source.slice(current.start, current.end))) {
+                parts.push(source.slice(offset, current.start), JSON.stringify(source.slice(current.start, current.end)));
+                offset = current.end;
+            }
+            previous = current.type.label;
+            current = next;
+        }
+        return panoramaEventCalls(parts.length ? parts.join('') + source.slice(offset) : source);
+    } catch { return source; }
+}
+
+/** Findings describe risks. Every script needs consent even if none fire. */
 export function inspectModSource(entry: string, source: string, javascript: boolean): ModSafetyFinding[] {
     const reasons = new Set<ModSafetyReason>();
     function inspectText(text: string): void {
@@ -48,7 +109,7 @@ export function inspectModSource(entry: string, source: string, javascript: bool
         if (/\b(?:eval|Function)\s*\(/.test(text) || text === 'eval' || text === 'Function') reasons.add('dynamic-code');
         if (['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'RunScriptInPanelContext'].includes(text)) reasons.add('remote-code');
     }
-    const text = javascript ? source : decodeEntities(source);
+    const text = source;
     if (javascript) {
         reasons.add('executable');
         try {
@@ -85,14 +146,16 @@ export function inspectModSource(entry: string, source: string, javascript: bool
         }
     } else {
         const withoutComments = text.replace(/<!--[\s\S]*?-->|\/\*[\s\S]*?\*\//g, '');
-        inspectText(withoutComments);
+        const decoded = decodeEntities(withoutComments);
+        inspectText(decoded);
         if (/<(?:script|scripts|iframe|object|embed)\b|\bon[a-z]+\s*=/i.test(withoutComments)) reasons.add('executable');
-        if (/<(?:script|include|iframe|object|embed)\b[^>]*\b(?:src|href|url)\s*=\s*["']\s*(?:https?:|\/\/|data:|blob:)/i.test(withoutComments)) reasons.add('remote-code');
+        if (/<(?:script|include|iframe|object|embed)\b[^>]*\b(?:src|href|url)\s*=\s*["']\s*(?:https?:|\/\/|data:|blob:)/i.test(decoded)) reasons.add('remote-code');
         for (const match of withoutComments.matchAll(/\bon[a-z]+\s*=\s*(["'])([\s\S]*?)\1/gi)) {
-            for (const finding of inspectModSource(entry, match[2], true)) reasons.add(finding.reason);
+            for (const finding of inspectModSource(entry, panoramaEventSource(decodeEntities(match[2])), true)) reasons.add(finding.reason);
         }
         for (const match of withoutComments.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
-            const body = match[1].replace(/^\s*<!\[CDATA\[([\s\S]*)\]\]>\s*$/, '$1');
+            const cdata = /^\s*<!\[CDATA\[([\s\S]*)\]\]>\s*$/.exec(match[1]);
+            const body = cdata ? cdata[1] : decodeEntities(match[1]);
             for (const finding of inspectModSource(entry, body, true)) reasons.add(finding.reason);
         }
     }

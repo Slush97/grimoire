@@ -14,6 +14,10 @@ let failed = false;
 export function installedSafetyStatus(): InstalledModSafety[] { return status; }
 export function installedSafetyRunning(): boolean { return auditing !== null; }
 export function installedSafetyFailed(): boolean { return failed; }
+export function updateInstalledSafety(previousId: string, updated: InstalledModSafety): void {
+    status = status.map(item => item.modId === previousId ? { ...updated, name: item.name } : item);
+    notifyModSafetyChanged();
+}
 
 async function candidates(root: string): Promise<string[]> {
     let names: string[];

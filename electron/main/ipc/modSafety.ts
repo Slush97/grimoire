@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
 import { getMainWindow } from '../index';
 import { getActiveDeadlockPath } from '../services/settings';
-import { getModSafetyPrompts, respondToModSafety, inspectVpkSafety, isModSafetyTrusted, approveVpkSafety } from '../services/modSafety';
-import { auditInstalledSafety, installedSafetyStatus, installedSafetyRunning, installedSafetyFailed } from '../services/modSafetyAudit';
+import { getModSafetyPrompts, respondToModSafety, inspectVpkSafety, isModSafetyTrusted, approveVpkSafety, modSafetySnapshot } from '../services/modSafety';
+import { auditInstalledSafety, installedSafetyStatus, installedSafetyRunning, installedSafetyFailed, updateInstalledSafety } from '../services/modSafetyAudit';
 import { enableMod, scanMods } from '../services/mods';
 
 ipcMain.handle('get-mod-safety-prompts', () => getModSafetyPrompts());
@@ -34,6 +34,8 @@ ipcMain.handle('review-mod-safety', async (event, modId: string, fingerprint: st
     const mod = (await scanMods(path)).find(m => m.id === modId);
     if (!mod) throw new Error('Mod not found');
     await approveVpkSafety(mod.path, fingerprint);
-    await enableMod(path, modId);
-    return auditInstalledSafety(path);
+    const enabled = await enableMod(path, modId);
+    const safety = modSafetySnapshot(enabled.path);
+    if (safety) updateInstalledSafety(modId, { modId: enabled.id, name: enabled.name, enabled: enabled.enabled, ...safety });
+    return { ...enabled, safety };
 });

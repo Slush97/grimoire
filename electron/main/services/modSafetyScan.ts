@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
@@ -9,6 +9,8 @@ import { inspectModSource, MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 import type { ModSafetyFinding, ModSafetyReport } from '../../../src/types/modSafety';
 
 const run = promisify(execFile);
+// Bump for parser, decoder or finding changes, without invalidating user consent.
+export const MOD_SAFETY_SCANNER_VERSION = 2;
 const MAX_TREE = 16 * 1024 * 1024;
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
@@ -171,7 +173,24 @@ async function decodeLayouts(vpk: string, entries: Entry[], binary: string): Pro
     } finally { await fs.rm(staging, { recursive: true, force: true }); }
 }
 
-async function scanArchive(path: string, binary: string | undefined, budget: ScanBudget, depth: number): Promise<ModSafetyReport> {
+async function readCachedReport(cacheDir: string, fingerprint: string): Promise<ModSafetyReport | undefined> {
+    try {
+        const file = join(cacheDir, `${fingerprint}.json`);
+        requireCondition((await fs.stat(file)).size <= 1024 * 1024);
+        const cached = JSON.parse(await fs.readFile(file, 'utf8'));
+        const report = cached.report;
+        requireCondition(cached.scannerVersion === MOD_SAFETY_SCANNER_VERSION
+            && report.policyVersion === MOD_SAFETY_POLICY_VERSION && report.fingerprint === fingerprint
+            && Array.isArray(report.findings) && report.findings.length <= 200);
+        const reasons = new Set(['local-file', 'browser', 'remote-code', 'dynamic-code', 'executable', 'uninspectable', 'native-code']);
+        requireCondition(report.findings.every((f: ModSafetyFinding) => f && typeof f.entry === 'string'
+            && f.entry.length <= 16384 && reasons.has(f.reason)));
+        requireCondition(report.verdict === (report.findings.length ? 'requires-trust' : 'no-findings'));
+        return report;
+    } catch { return undefined; }
+}
+
+async function scanArchive(path: string, binary: string | undefined, budget: ScanBudget, depth: number, cacheDir?: string): Promise<ModSafetyReport> {
     const findings: ModSafetyFinding[] = [];
     let fingerprint = '';
     let blocked = false;
@@ -192,6 +211,14 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         const before = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before[0] === `${initial.size}:${initial.mtimeMs}:${initial.ctimeMs}`);
         fingerprint = await hashFiles(files);
+        if (cacheDir && !blocked) {
+            const cached = await readCachedReport(cacheDir, fingerprint);
+            if (cached) {
+                const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
+                requireCondition(before.every((s, i) => s === after[i]));
+                return cached;
+            }
+        }
         const layouts: Entry[] = [];
         for (const entry of entries) {
             const ext = entry.extension;
@@ -259,6 +286,19 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
     };
 }
 
-export function scanModSafety(path: string, binary?: string): Promise<ModSafetyReport> {
-    return scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0);
+export async function scanModSafety(path: string, binary?: string, cacheDir?: string): Promise<ModSafetyReport> {
+    const report = await scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0, cacheDir);
+    if (cacheDir && report.verdict !== 'blocked') {
+        const temp = join(cacheDir, `${randomUUID()}.tmp`);
+        try {
+            await fs.mkdir(cacheDir, { recursive: true });
+            // Keep an existing valid report untouched on cache hits.
+            if (!await readCachedReport(cacheDir, report.fingerprint)) {
+                await fs.writeFile(temp, JSON.stringify({ scannerVersion: MOD_SAFETY_SCANNER_VERSION, report }));
+                await fs.rename(temp, join(cacheDir, `${report.fingerprint}.json`));
+            }
+        } catch { /* Cache failures do not change the scan result. */ }
+        finally { await fs.unlink(temp).catch(() => {}); }
+    }
+    return report;
 }

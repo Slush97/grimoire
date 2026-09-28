@@ -7,7 +7,7 @@ import type { ModSafetyReport, ModSafetyPrompt, ModSafetySnapshot } from '../../
 import { MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 
 const pending = new Map<string, { prompt: ModSafetyPrompt; finish: (accepted: boolean) => void }>();
-// Presentation only. Every permission decision scans and hashes the file again.
+// Presentation only. Permission decisions hash current bytes before reusing a report.
 const snapshots = new Map<string, ModSafetySnapshot>();
 export function modSafetySnapshot(path: string): ModSafetySnapshot | undefined { return snapshots.get(path); }
 export function moveSafetySnapshot(from: string, to: string): void {
@@ -92,7 +92,7 @@ export function inspectVpkSafety(path: string): Promise<ModSafetyReport> {
             worker.once('message', finish);
             worker.once('error', () => finish(inspectionFailure(path)));
             worker.once('exit', () => finish(inspectionFailure(path)));
-            worker.postMessage({ path, binary });
+            worker.postMessage({ path, binary, cacheDir: join(app.getPath('userData'), 'mod-safety-reports') });
         });
         snapshots.set(path, { report, trusted: await isModSafetyTrusted(report) });
         return report;

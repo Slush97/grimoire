@@ -50,7 +50,7 @@
       "remoteCode": "Could send data to a server or load code from elsewhere.",
       "dynamicCode": "Could run hidden code that accesses files or sends data.",
       "executable": "Scripts or UI content may access files or send data while you play.",
-      "uninspectable": "Some contents could not be checked. The risk is unknown.",
+      "uninspectable": "Some script code couldn't be analyzed. It may have risks that aren't listed here.",
       "nativeCode": "Includes a program that could run commands on your computer.",
       "unreadableArchive": "Grimoire couldn't read or safely install this archive."
     }

@@ -1,13 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { scanModSafety } from './modSafetyScan';
 import { safetyResource, safetyVpk } from './modSafetyFixtures';
+import * as policy from './modSafetyPolicy';
 
 let root: string;
 beforeEach(async () => { root = await fs.mkdtemp(join(tmpdir(), 'safety-scanner-test-')); });
-afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true }); });
 async function scan(bytes: Buffer) {
     const path = join(root, 'test_dir.vpk');
     await fs.writeFile(path, bytes);
@@ -15,6 +16,65 @@ async function scan(bytes: Buffer) {
 }
 
 describe('VPK safety inspection', () => {
+    it('reuses a persisted report after a rename without analyzing unchanged scripts again', async () => {
+        const inspect = vi.spyOn(policy, 'inspectModSource');
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        const first = await scanModSafety(path, undefined, cache);
+        expect(inspect).toHaveBeenCalledTimes(1);
+        const renamed = join(root, 'enabled_dir.vpk');
+        await fs.rename(path, renamed);
+        expect(await scanModSafety(renamed, undefined, cache)).toEqual(first);
+        expect(inspect).toHaveBeenCalledTimes(1);
+    });
+    it('hashes current contents even when file size and modification time are unchanged', async () => {
+        const inspect = vi.spyOn(policy, 'inspectModSource');
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        const before = await fs.stat(path);
+        const first = await scanModSafety(path, undefined, cache);
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('eval(x)') }]));
+        await fs.utimes(path, before.atime, before.mtime);
+        expect((await fs.stat(path)).size).toBe(before.size);
+        const changed = await scanModSafety(path, undefined, cache);
+        expect(changed.fingerprint).not.toBe(first.fingerprint);
+        expect(changed.findings).toContainEqual({ entry: 'test.js', reason: 'dynamic-code' });
+        expect(inspect).toHaveBeenCalledTimes(2);
+    });
+    it.each(['old-scanner', 'old-policy', 'wrong-hash', 'invalid-report', 'broken-json'])(
+        'reanalyzes when the persisted cache has %s', async kind => {
+            const inspect = vi.spyOn(policy, 'inspectModSource');
+            const path = join(root, 'test_dir.vpk');
+            const cache = join(root, 'reports');
+            await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+            const report = await scanModSafety(path, undefined, cache);
+            const file = join(cache, `${report.fingerprint}.json`);
+            const stored = JSON.parse(await fs.readFile(file, 'utf8'));
+            if (kind === 'old-scanner') stored.scannerVersion = -1;
+            if (kind === 'old-policy') stored.report.policyVersion = -1;
+            if (kind === 'wrong-hash') stored.report.fingerprint = 'f'.repeat(64);
+            if (kind === 'invalid-report') stored.report.findings = null;
+            await fs.writeFile(file, kind === 'broken-json' ? '{' : JSON.stringify(stored));
+            expect(await scanModSafety(path, undefined, cache)).toEqual(report);
+            expect(inspect).toHaveBeenCalledTimes(2);
+        });
+    it('does not let a cache write failure block valid inspection', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'not-a-directory');
+        await fs.writeFile(cache, 'inert');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        expect((await scanModSafety(path, undefined, cache)).verdict).toBe('requires-trust');
+    });
+    it('never reuses a successful report for a missing file', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        await scanModSafety(path, undefined, cache);
+        await fs.unlink(path);
+        expect((await scanModSafety(path, undefined, cache)).verdict).toBe('blocked');
+    });
     it.each([1, 2])('reads VPK v%s with preload and returns asset-only no-findings', async version => {
         const result = await scan(safetyVpk([{ path: 'textures/test.vtex_c', bytes: Buffer.from('inert'), preload: 2 }], version));
         expect(result.verdict).toBe('no-findings');

@@ -48,4 +48,35 @@ describe('mod source policy', () => {
     it('reads the CDATA form produced by the compiled-layout decoder', () => {
         expect(reasons('<script><![CDATA[run(1);]]></script>', false)).toEqual(['executable']);
     });
+    it('recognizes bare localization arguments in Panorama event handlers', () => {
+        expect(reasons('<Panel onmouseover="UIShowTextTooltip( #hud_spectate_count_tooltip )" onmouseout="UIHideTextTooltip()"/>', false)).toEqual(['executable']);
+        expect(reasons('<Panel onactivate="Show(#title, #description); Next()"/>', false)).toEqual(['executable']);
+    });
+    it('recognizes whitespace-separated Panorama event calls and inspects every call', () => {
+        expect(reasons('<Panel onactivate="CitadelStartExploreMap() AsyncEvent( 0.2, CitadelNavigateBackToHome() )"/>', false)).toEqual(['executable']);
+        const result = reasons('<Panel onactivate="Show(#tip) eval(code) fetch(&quot;https://example.invalid&quot;)"/>', false);
+        expect(result).toEqual(expect.arrayContaining(['executable', 'dynamic-code', 'remote-code']));
+        expect(result).not.toContain('uninspectable');
+    });
+    it('does not reinterpret control flow or unsupported expressions as event lists', () => {
+        expect(reasons('<Panel onactivate="if (x) eval(code);"/>', false)).toEqual(expect.arrayContaining(['executable', 'dynamic-code']));
+        expect(reasons('<Panel onactivate="(1 + 2) run()"/>', false)).toContain('uninspectable');
+        expect(reasons('First() Second()')).toContain('uninspectable');
+    });
+    it('keeps inspecting risky operations alongside Panorama event arguments', () => {
+        const result = reasons('<Panel onactivate="UIShowTextTooltip(#tip); eval(code); fetch(&quot;https://example.invalid&quot;); use(&quot;file:///example&quot;); panel.SetURL(url)"/>', false);
+        expect(result).toEqual(expect.arrayContaining(['executable', 'dynamic-code', 'remote-code', 'local-file', 'browser']));
+        expect(result).not.toContain('uninspectable');
+    });
+    it('does not rewrite quoted hashes, regular expressions or private fields', () => {
+        expect(reasons('<Panel onactivate="run(&quot;#tip&quot;, /#tip/); class X { #value; read(){return this.#value;} }"/>', false)).toEqual(['executable']);
+    });
+    it('still flags unsupported event syntax and does not normalize standalone JavaScript', () => {
+        expect(reasons('<Panel onactivate="Show(#tip); function {"/>', false)).toContain('uninspectable');
+        expect(reasons('Show(#tip)')).toContain('uninspectable');
+    });
+    it('decodes attribute entities after finding their boundaries', () => {
+        expect(reasons('<Panel onload="use(&quot;f&quot; + &quot;ile:///example&quot;)"/>', false)).toContain('local-file');
+        expect(reasons('<Panel onload="use(&quot;normal text&quot;)"/>', false)).not.toContain('uninspectable');
+    });
 });

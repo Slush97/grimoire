@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import { Modal, ModalBody, ModalFooter } from './common/Modal';
@@ -96,8 +96,8 @@ interface ReviewRow {
     request?: ModSafetyPrompt;
 }
 
-function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisabled }: {
-    row: ReviewRow; expanded: boolean; busy: boolean; error?: string;
+function ReviewCard({ row, expanded, busy, disabled, error, onExpand, onAllow, onKeepDisabled }: {
+    row: ReviewRow; expanded: boolean; busy: boolean; disabled: boolean; error?: string;
     onExpand: () => void; onAllow: () => void; onKeepDisabled: () => void;
 }) {
     const { t } = useTranslation();
@@ -149,11 +149,23 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
             <Findings report={row.report} />
             {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
             <div className="flex flex-wrap justify-end gap-2">
-                {!row.trusted && <Button variant="secondary" disabled={busy} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
-                {canAllow && <Button isLoading={busy} onClick={onAllow}>{t('modSafety.trustVersion')}</Button>}
+                {!row.trusted && <Button variant="secondary" disabled={disabled} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
+                {canAllow && <Button disabled={disabled} isLoading={busy} onClick={onAllow}>{t('modSafety.trustVersion')}</Button>}
             </div>
         </div>}
     </article>;
+}
+
+function ReviewList({ rows, children }: { rows: ReviewRow[]; children: (row: ReviewRow) => ReactNode }) {
+    // Capture display order for this open panel. Enabling changes installed-list order.
+    const [order, setOrder] = useState(() => new Map(rows.map((row, index) => [row.key, index])));
+    const added = rows.filter(row => !order.has(row.key));
+    if (added.length) {
+        const next = new Map(order);
+        for (const row of added) next.set(row.key, next.size);
+        setOrder(next);
+    }
+    return [...rows].sort((a, b) => (order.get(a.key) ?? order.size) - (order.get(b.key) ?? order.size)).map(children);
 }
 
 export function ModSafetyCenter() {
@@ -162,6 +174,9 @@ export function ModSafetyCenter() {
     const [busy, setBusy] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [error, setError] = useState<{ key: string; text: string } | null>(null);
+    const operation = useRef(false);
+    const dismissedPrompts = useRef(new Set<string>());
+    const acceptingPrompt = useRef<string | undefined>(undefined);
     const { installed, panelOpen, detail, scanning, scanFailed } = useModSafetyStore();
     const mods = useAppStore(s => s.mods);
     useEffect(() => {
@@ -174,7 +189,7 @@ export function ModSafetyCenter() {
                     window.electronAPI.getModSafetyPrompts(), window.electronAPI.getInstalledModSafety(),
                 ]);
                 if (!live || rev !== revision) return;
-                setPrompts(queue);
+                setPrompts(queue.filter(p => !dismissedPrompts.current.has(p.id)));
                 useModSafetyStore.setState({ installed: results.mods, scanning: results.running, scanFailed: results.failed });
                 void useAppStore.getState().loadMods({ force: true, silent: true });
             } catch { if (live) setError({ key: 'panel', text: t('modSafety.failed') }); }
@@ -196,32 +211,47 @@ export function ModSafetyCenter() {
             report: request.report, trusted: false, enabled: request.restartRequired,
             mod: mods.find(m => m.name === request.name) });
     }
+    const occurrences = new Map<string, number>();
+    for (const row of rows) {
+        // File slots and mod IDs change on enable; reviewed content identity does not.
+        const identity = JSON.stringify([row.name, row.report.fingerprint]);
+        const occurrence = occurrences.get(identity) ?? 0;
+        occurrences.set(identity, occurrence + 1);
+        row.key = `${identity}:${occurrence}`;
+    }
     // A card's shield opens its row directly; automatic prompts expand in place.
-    const expandedKey = detail?.id ?? expanded ?? rows.find(r => r.request)?.key;
+    const expandedKey = (detail && rows.find(r => r.mod?.id === detail.id)?.key) ?? expanded ?? rows.find(r => r.request)?.key;
     const open = panelOpen || prompts.length > 0;
     const expand = (key: string) => {
         useModSafetyStore.setState({ detail: null, panelOpen: true });
         setExpanded(expandedKey === key ? '' : key);
     };
     const run = async (key: string, action: () => Promise<void>) => {
-        if (busy) return;
+        if (operation.current) return;
+        operation.current = true;
         setBusy(key); setError(null);
         try { await action(); }
         catch (err) {
             setError({ key, text: t(String(err).includes('MOD_SAFETY_CHANGED') ? 'modSafety.changed' : 'modSafety.failed') });
         } finally {
-            await useAppStore.getState().loadMods({ force: true, silent: true });
+            operation.current = false;
             setBusy(null);
+            void useAppStore.getState().loadMods({ force: true, silent: true });
         }
     };
     const allow = (row: ReviewRow) => void run(row.key, async () => {
         useModSafetyStore.setState({ panelOpen: true });
+        setExpanded(row.key); useModSafetyStore.setState({ detail: null });
         if (row.request?.canTrust) {
-            await window.electronAPI.respondModSafety(row.request.id, true);
+            acceptingPrompt.current = row.request.id;
+            try { await window.electronAPI.respondModSafety(row.request.id, true); }
+            finally { acceptingPrompt.current = undefined; }
         } else if (row.mod) {
             if (row.request) await window.electronAPI.respondModSafety(row.request.id, false);
-            const results = await window.electronAPI.reviewModSafety(row.mod.id, row.report.fingerprint);
-            useModSafetyStore.setState({ installed: results });
+            const updated = await window.electronAPI.reviewModSafety(row.mod.id, row.report.fingerprint);
+            useAppStore.setState(state => ({ mods: state.mods.map(mod => mod.id === row.mod!.id
+                ? { ...mod, id: updated.id, path: updated.path, fileName: updated.fileName,
+                    metaKey: updated.metaKey, enabled: updated.enabled, priority: updated.priority, safety: updated.safety } : mod) }));
         }
     });
     const keepDisabled = (row: ReviewRow) => void run(row.key, async () => {
@@ -229,30 +259,33 @@ export function ModSafetyCenter() {
         if (row.mod?.enabled && row.request?.context !== 'installation') await window.electronAPI.disableMod(row.mod.id);
         setExpanded(''); useModSafetyStore.setState({ detail: null });
     });
-    const close = () => void run('close', async () => {
-        await Promise.all(prompts.map(p => window.electronAPI.respondModSafety(p.id, false)));
+    const close = () => {
+        const dismiss = prompts.filter(p => p.id !== acceptingPrompt.current);
+        for (const p of prompts) dismissedPrompts.current.add(p.id);
         setPrompts([]); setExpanded(null);
         useModSafetyStore.setState({ panelOpen: false, detail: null });
-    });
+        void Promise.all(dismiss.map(p => window.electronAPI.respondModSafety(p.id, false)))
+            .catch(() => setError({ key: 'panel', text: t('modSafety.failed') }));
+    };
     const rescan = () => void run('scan', async () => {
         const results = await window.electronAPI.rescanModSafety();
         useModSafetyStore.setState({ installed: results });
     });
     if (!open) return null;
-    return <Modal onClose={close} labelledBy="mod-safety-list" size="xl" dismissable={!busy} panelClassName="max-h-[85vh]">
-        <ModalHeader title={t('modSafety.manage')} titleId="mod-safety-list" onClose={close} closeDisabled={!!busy} />
-        <ModalBody className="space-y-3">
+    return <Modal onClose={close} labelledBy="mod-safety-list" size="xl" panelClassName="h-[85vh]">
+        <ModalHeader title={t('modSafety.manage')} titleId="mod-safety-list" onClose={close} />
+        <ModalBody className="space-y-3 [scrollbar-gutter:stable]">
             <p className="mb-4 text-sm text-text-secondary">{t('modSafety.listIntro')}</p>
-            {rows.map(row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
-                busy={!!busy} error={error?.key === row.key ? error.text : undefined}
-                onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} />)}
+            <ReviewList rows={rows}>{row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
+                busy={busy === row.key} disabled={!!busy} error={error?.key === row.key ? error.text : undefined}
+                onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} />}</ReviewList>
             {!rows.length && <p className="text-sm text-text-secondary">{scanning
                 ? t('modSafety.scanning') : scanFailed ? t('modSafety.scanFailed') : t('modSafety.noFlaggedMods')}</p>}
             {error && !rows.some(r => r.key === error.key) && <p role="alert" className="text-sm text-state-danger">{error.text}</p>}
         </ModalBody>
         <ModalFooter>
             <Button variant="ghost" disabled={!!busy || scanning} isLoading={busy === 'scan'} onClick={rescan}>{t('modSafety.rescan')}</Button>
-            <Button variant="secondary" disabled={!!busy} onClick={close}>{t('modSafety.close')}</Button>
+            <Button variant="secondary" onClick={close}>{t('modSafety.close')}</Button>
         </ModalFooter>
     </Modal>;
 }
