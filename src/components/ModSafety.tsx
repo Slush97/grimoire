@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, ShieldAlert, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
+import { ChevronDown, CircleHelp, ShieldAlert, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
+import SafetyExplainer from './mod-safety/SafetyExplainer';
 import { PageHeader, PageLayout } from './common/PageComponents';
 import ModThumbnail from './ModThumbnail';
 import { inferHeroFromTitle } from '../lib/lockerUtils';
@@ -209,6 +210,7 @@ export function ModSafetySync() {
 
 export function ModSafetyPage() {
     const { t } = useTranslation();
+    const [explainerOpen, setExplainerOpen] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [error, setError] = useState<{ key: string; text: string } | null>(null);
@@ -258,7 +260,10 @@ export function ModSafetyPage() {
     });
     return <PageLayout maxWidth="5xl">
         <PageHeader title={t('modSafety.manage')} action={
-            <Button variant="ghost" disabled={!!busy || scanning} isLoading={busy === 'scan' || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
+            <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" icon={CircleHelp} onClick={() => setExplainerOpen(true)}>{t('modSafety.explainer.title')}</Button>
+                <Button variant="ghost" disabled={!!busy || scanning} isLoading={busy === 'scan' || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
+            </div>
         } />
         {scanFailed && <p role="alert" className="mb-4 text-sm text-state-warning">{t('modSafety.scanFailed')}</p>}
         <div className="space-y-3">
@@ -269,5 +274,6 @@ export function ModSafetyPage() {
                 ? t('modSafety.scanning') : scanFailed ? t('modSafety.scanFailed') : t('modSafety.noFlaggedMods')}</p>}
             {error && !rows.some(r => r.key === error.key) && <p role="alert" className="text-sm text-state-danger">{error.text}</p>}
         </div>
+        {explainerOpen && <SafetyExplainer onClose={() => setExplainerOpen(false)} />}
     </PageLayout>;
 }

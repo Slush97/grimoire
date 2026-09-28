@@ -1,5 +1,29 @@
 {
   "modSafety": {
+    "explainer": {
+      "title": "Why review mods?",
+      "examples": "Example mods",
+      "limits": "A warning is not proof of malicious code, and a scan cannot guarantee safety.",
+      "choice": "Allow only if you trust the source and understand the access. If unsure, keep it disabled.",
+      "timer": {
+        "name": "HUD timer",
+        "access": "Runs scripts",
+        "result": "Live cooldowns",
+        "body": "Scripts can power useful features like cooldown timers. Allowing a mod means trusting the code it runs."
+      },
+      "music": {
+        "name": "Music player",
+        "access": "Files + internet",
+        "result": "Music playback",
+        "body": "A player might read your music or stream it online. The same access could read private files or send data outside the game."
+      },
+      "cosmetic": {
+        "name": "Cosmetic mod",
+        "access": "Scripts + internet",
+        "result": "Why this access?",
+        "body": "A new look alone usually does not need scripts or internet access. Check the author's explanation before allowing unexpected access."
+      }
+    },
     "unchecked": "Can't check",
     "uncheckedBody": "Try downloading it again or ask the author for a complete, supported archive.",
     "needsReview": "Review",
