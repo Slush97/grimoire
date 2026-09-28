@@ -1460,12 +1460,16 @@ export function ModCard({
             className={`min-w-0 text-text-primary ${titleClasses}`}
             onRename={onRenameLocal}
           />
+          {(mod.safetyTarget ?? mod).safety && (mod.safetyTarget ?? mod).safety?.report.verdict !== 'no-findings' && (
+            <div className="mt-1">
+              <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
+            </div>
+          )}
           <div
             className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
-              <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
               {cardTaxonomy.heroName && (
                 <span
                   className="inline-flex flex-shrink-0 items-center"
