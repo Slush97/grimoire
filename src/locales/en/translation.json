@@ -1,9 +1,8 @@
 {
   "modSafety": {
-    "blocked": "Blocked",
     "unchecked": "Can't check",
-    "uncheckedTitle": "Couldn't check this mod",
-    "uncheckedBody": "Cannot be enabled yet. Try downloading it again or ask the author for a complete version.",
+    "uncheckedTitle": "Couldn't read this archive",
+    "uncheckedBody": "Try downloading it again or ask the author for a complete, supported archive.",
     "needsReview": "Review",
     "trusted": "Allowed",
     "viewFindings": "View risks and actions for {{name}}",
@@ -19,18 +18,16 @@
     "rescan": "Check installed mods",
     "checkAgain": "Check again",
     "failed": "Could not finish. Try again.",
-    "blockedTitle": "Mod blocked",
     "trustTitle": "Allow this mod?",
     "trustedTitle": "Allowed by you",
-    "blockedBody": "Cannot be enabled. Use a different version or ask the author for a fix.",
     "trustBody": "Only allow it if you trust the author.",
     "trustedBody": "You accepted these risks for this version. You can disable or remove it in Installed.",
-    "oldVersionKept": "Updating? Cancel to keep your current version.",
+    "oldVersionKept": "Updating? Choose Keep disabled to keep your current version.",
     "movedDisabled": "This mod is disabled.",
     "closeGame": "This mod may still be running. Close Deadlock, then check installed mods again to disable it.",
     "reviewAndEnable": "Continue",
     "trustVersion": "Allow this version",
-    "cancel": "Cancel",
+    "cancel": "Keep disabled",
     "close": "Close",
     "reasons": {
       "localFile": "Local or network file access",
@@ -39,7 +36,8 @@
       "dynamicCode": "Code created at runtime",
       "executable": "Scripts or UI content",
       "uninspectable": "Contents could not be checked",
-      "nativeCode": "Executable program"
+      "nativeCode": "Executable program",
+      "unreadableArchive": "Archive could not be read or installed"
     },
     "risks": {
       "localFile": "Could access private files on your computer or network.",
@@ -48,7 +46,8 @@
       "dynamicCode": "Could run hidden code that accesses files or sends data.",
       "executable": "Scripts or UI content may access files or send data while you play.",
       "uninspectable": "Some contents could not be checked. The risk is unknown.",
-      "nativeCode": "Includes a program that could run commands on your computer."
+      "nativeCode": "Includes a program that could run commands on your computer.",
+      "unreadableArchive": "Grimoire couldn't read or safely install this archive."
     }
   },
   "common": {

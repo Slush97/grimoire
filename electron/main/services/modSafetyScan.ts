@@ -176,9 +176,10 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
     let fingerprint = '';
     let blocked = false;
     const add = (finding: ModSafetyFinding) => {
-        if (finding.reason !== 'executable') blocked = true;
+        if (finding.reason === 'unreadable-archive') blocked = true;
         if (findings.length < 200) findings.push(finding);
-        else if (finding.reason !== 'executable') findings[199] = finding;
+        else if (finding.reason === 'unreadable-archive' || (finding.reason !== 'executable'
+            && findings[199].reason !== 'unreadable-archive')) findings[199] = finding;
     };
     try {
         const initial = await fs.stat(path);
@@ -187,7 +188,7 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         requireCondition(budget.entries <= MAX_ENTRIES);
         // Grimoire's slot moves handle standalone VPKs. External chunks cannot
         // be activated until the whole archive can be moved transactionally.
-        if (files.length > 1) add({ entry: basename(path), reason: 'uninspectable' });
+        if (files.length > 1) add({ entry: basename(path), reason: 'unreadable-archive' });
         const before = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before[0] === `${initial.size}:${initial.mtimeMs}:${initial.ctimeMs}`);
         fingerprint = await hashFiles(files);
@@ -249,7 +250,7 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before.every((s, i) => s === after[i]));
     } catch {
-        add({ entry: basename(path), reason: 'uninspectable' });
+        add({ entry: basename(path), reason: 'unreadable-archive' });
     }
     return {
         policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint,

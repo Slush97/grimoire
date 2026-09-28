@@ -7,29 +7,23 @@ import { useModSafetyStore } from '../stores/modSafetyStore';
 import { useAppStore } from '../stores/appStore';
 import type { ModSafetyPrompt, ModSafetyReport, ModSafetySnapshot } from '../types/modSafety';
 
-function couldNotCheck(report: ModSafetyReport): boolean {
-    return report.verdict === 'blocked' && report.findings.every(f =>
-        f.reason === 'uninspectable' || f.reason === 'executable');
-}
-
 export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
     id: string; name: string; snapshot?: ModSafetySnapshot; variant?: 'inline' | 'overlay';
 }) {
     const { t } = useTranslation();
     const open = useModSafetyStore(s => s.openDetail);
     if (!snapshot || snapshot.report.verdict === 'no-findings') return null;
-    const blocked = snapshot.report.verdict === 'blocked';
-    const unchecked = couldNotCheck(snapshot.report);
-    const Icon = unchecked ? ShieldQuestion : blocked ? ShieldAlert : snapshot.trusted ? ShieldCheck : ShieldQuestion;
-    const status = unchecked ? t('modSafety.unchecked') : blocked ? t('modSafety.blocked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
+    const unchecked = snapshot.report.verdict === 'blocked';
+    const Icon = unchecked ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
+    const status = unchecked ? t('modSafety.unchecked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
     if (variant === 'overlay') return <IconButton icon={Icon} size="sm"
         label={`${status}. ${t('modSafety.viewFindings', { name })}`} data-card-action="true"
-        className={`bg-bg-primary/90 ${blocked && !unchecked ? '[&>svg]:text-state-danger' : snapshot.trusted
+        className={`bg-bg-primary/90 ${snapshot.trusted
             ? '[&>svg]:text-text-secondary' : '[&>svg]:text-state-warning'}`}
         onClick={e => { e.stopPropagation(); open(id, name, snapshot); }} />;
     return <button type="button" className="max-w-full shrink-0 cursor-pointer rounded-sm text-left focus-visible:outline-2 focus-visible:outline-accent"
         title={t('modSafety.viewFindings', { name })} onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
-        <Tag className="max-w-full" tone={blocked && !unchecked ? 'danger' : snapshot.trusted ? 'neutral' : 'warning'}>
+        <Tag className="max-w-full" tone={snapshot.trusted ? 'neutral' : 'warning'}>
             <Icon className="h-3 w-3 shrink-0" aria-hidden />
             <span className="min-w-0 break-words whitespace-normal">{status}</span>
         </Tag>
@@ -42,7 +36,7 @@ function Risks({ report }: { report: ModSafetyReport }) {
         'local-file': t('modSafety.risks.localFile'), browser: t('modSafety.risks.browser'),
         'remote-code': t('modSafety.risks.remoteCode'), 'dynamic-code': t('modSafety.risks.dynamicCode'),
         executable: t('modSafety.risks.executable'), uninspectable: t('modSafety.risks.uninspectable'),
-        'native-code': t('modSafety.risks.nativeCode'),
+        'native-code': t('modSafety.risks.nativeCode'), 'unreadable-archive': t('modSafety.risks.unreadableArchive'),
     };
     const reasons = [...new Set(report.findings.map(f => f.reason))];
     const specific = reasons.filter(reason => reason !== 'executable');
@@ -58,7 +52,7 @@ function Findings({ report }: { report: ModSafetyReport }) {
         'local-file': t('modSafety.reasons.localFile'), browser: t('modSafety.reasons.browser'),
         'remote-code': t('modSafety.reasons.remoteCode'), 'dynamic-code': t('modSafety.reasons.dynamicCode'),
         executable: t('modSafety.reasons.executable'), uninspectable: t('modSafety.reasons.uninspectable'),
-        'native-code': t('modSafety.reasons.nativeCode'),
+        'native-code': t('modSafety.reasons.nativeCode'), 'unreadable-archive': t('modSafety.reasons.unreadableArchive'),
     };
     return <details className="rounded-sm border border-hl/10 p-3">
         <summary className="cursor-pointer text-sm text-text-primary">{t('modSafety.findings')}</summary>
@@ -173,16 +167,14 @@ export function ModSafetyCenter() {
             </ModalBody>
         </Modal>}
         {detail && !request && <Modal onClose={closeDetail} labelledBy="mod-safety-detail">
-            <ModalHeader title={detail.snapshot && couldNotCheck(detail.snapshot.report) ? t('modSafety.uncheckedTitle')
-                : detail.snapshot?.report.verdict === 'blocked' ? t('modSafety.blockedTitle')
+            <ModalHeader title={detail.snapshot?.report.verdict === 'blocked' ? t('modSafety.uncheckedTitle')
                 : detail.snapshot?.trusted ? t('modSafety.trustedTitle') : t('modSafety.trustTitle')}
                 subtitle={detail.name} titleId="mod-safety-detail" onClose={closeDetail} />
             <ModalBody className="space-y-4">
                 {detail.snapshot && <Risks report={detail.snapshot.report} />}
-                <p className="text-sm text-text-secondary">{detail.snapshot && couldNotCheck(detail.snapshot.report)
+                <p className="text-sm text-text-secondary">{detail.snapshot?.report.verdict === 'blocked'
                     ? t('modSafety.uncheckedBody') : detail.snapshot?.trusted
-                    ? t('modSafety.trustedBody') : detail.snapshot?.report.verdict === 'blocked'
-                        ? t('modSafety.blockedBody') : t('modSafety.trustBody')}</p>
+                    ? t('modSafety.trustedBody') : t('modSafety.trustBody')}</p>
                 {detail.snapshot && <Findings report={detail.snapshot.report} />}
                 {error && <p role="alert" className="text-sm text-state-danger">{t('modSafety.failed')}</p>}
                 <div className="flex flex-wrap justify-end gap-2">
@@ -194,14 +186,12 @@ export function ModSafetyCenter() {
             </ModalBody>
         </Modal>}
         {request && <Modal key={request.id} onClose={() => answer(false)} labelledBy="mod-safety-prompt" dismissable={!responding}>
-            <ModalHeader title={couldNotCheck(request.report) ? t('modSafety.uncheckedTitle')
-                : request.report.verdict === 'blocked' ? t('modSafety.blockedTitle') : t('modSafety.trustTitle')}
+            <ModalHeader title={request.report.verdict === 'blocked' ? t('modSafety.uncheckedTitle') : t('modSafety.trustTitle')}
                 titleId="mod-safety-prompt" subtitle={request.name} onClose={() => answer(false)} closeDisabled={responding} />
             <ModalBody className="space-y-4">
                 <Risks report={request.report} />
-                <p className="text-sm leading-relaxed text-text-secondary">{couldNotCheck(request.report)
-                    ? t('modSafety.uncheckedBody') : request.report.verdict === 'blocked'
-                    ? t('modSafety.blockedBody') : t('modSafety.trustBody')}</p>
+                <p className="text-sm leading-relaxed text-text-secondary">{request.report.verdict === 'blocked'
+                    ? t('modSafety.uncheckedBody') : t('modSafety.trustBody')}</p>
                 {request.context === 'installation' && <p className="text-sm text-text-primary">{t('modSafety.oldVersionKept')}</p>}
                 {request.context === 'startup' && <p className="text-sm text-state-warning">{request.restartRequired
                     ? t('modSafety.closeGame') : t('modSafety.movedDisabled')}</p>}

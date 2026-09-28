@@ -23,7 +23,7 @@ describe('VPK safety inspection', () => {
     it('reads compiled JS DATA rather than searching only archive names', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/scripts/ordinary.vjs_c',
             bytes: safetyResource(Buffer.from('use("file:///example.txt");')), preload: 19 }]));
-        expect(result.verdict).toBe('blocked');
+        expect(result.verdict).toBe('requires-trust');
         expect(result.findings).toContainEqual({ entry: 'panorama/scripts/ordinary.vjs_c', reason: 'local-file' });
     });
     it('requires consent for scripts without recognizable dangerous tokens', async () => {
@@ -60,10 +60,11 @@ describe('VPK safety inspection', () => {
     it.each([Buffer.alloc(0), Buffer.from('not a vpk'), Buffer.from([0x34, 0x12, 0xaa, 0x55])])('rejects truncated headers', async bytes => {
         expect((await scan(bytes)).verdict).toBe('blocked');
     });
-    it('rejects unknown executable and nested archive formats', async () => {
-        for (const extension of ['dll', 'exe', 'vpk']) {
-            expect((await scan(safetyVpk([{ path: `test.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
+    it('allows review of bundled programs but rejects malformed nested archives', async () => {
+        for (const extension of ['dll', 'exe']) {
+            expect((await scan(safetyVpk([{ path: `test.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('requires-trust');
         }
+        expect((await scan(safetyVpk([{ path: 'test.vpk', bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
     });
     it.each(['vnmskel_c', 'vnmclip_c', 'vnmgraph_c', 'vanmgrph_c', 'vnmgraph.+hero_c'])('recognizes animation asset %s', async extension => {
         expect((await scan(safetyVpk([{ path: `models/hero.${extension}`, bytes: Buffer.from('inert') }]))).verdict).toBe('no-findings');
@@ -100,7 +101,7 @@ describe('VPK safety inspection', () => {
         expect((await scan(safetyVpk([{ path: 'maps/portrait.vpk', bytes: asset, preload: 12 }]))).verdict).toBe('no-findings');
         const bad = safetyVpk([{ path: 'probe.js', bytes: Buffer.from('run("file:///example")') }]);
         const report = await scan(safetyVpk([{ path: 'maps/portrait.vpk', bytes: bad }]));
-        expect(report.verdict).toBe('blocked');
+        expect(report.verdict).toBe('requires-trust');
         expect(report.findings).toContainEqual({ entry: 'maps/portrait.vpk > probe.js', reason: 'local-file' });
     });
     it('bounds nested archive depth', async () => {
@@ -108,18 +109,30 @@ describe('VPK safety inspection', () => {
         for (let i = 0; i < 6; i++) bytes = safetyVpk([{ path: 'nested.vpk', bytes }]);
         expect((await scan(bytes)).verdict).toBe('blocked');
     });
-    it('does not lose a denial when later unsupported findings reach the display limit', async () => {
+    it('preserves risk findings when followed by unknown assets', async () => {
         const files = [{ path: 'probe.js', bytes: Buffer.from('run("file:///x")') },
             ...Array.from({ length: 205 }, (_, i) => ({ path: `file${i}.unknown`, bytes: Buffer.from('inert') }))];
         const result = await scan(safetyVpk(files));
-        expect(result.verdict).toBe('blocked');
+        expect(result.verdict).toBe('requires-trust');
         expect(result.findings).toContainEqual({ entry: 'probe.js', reason: 'local-file' });
     });
-    it('cannot hide a blocked finding behind the UI finding limit', async () => {
+    it('cannot hide a specific risk behind the UI finding limit', async () => {
         const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run(1);') }));
         files.push({ path: 'last.js', bytes: Buffer.from('run("file:///example")') });
         const result = await scan(safetyVpk(files));
         expect(result.findings.length).toBe(200);
-        expect(result.verdict).toBe('blocked');
+        expect(result.verdict).toBe('requires-trust');
+        expect(result.findings).toContainEqual({ entry: 'last.js', reason: 'local-file' });
+    });
+    it.each([
+        ['local-file', 'run("file:///example.txt")'],
+        ['browser', '$.CreatePanel("CitadelHTMLPanel", parent, "")'],
+        ['remote-code', 'fetch("https://example.invalid")'],
+        ['dynamic-code', 'eval(code)'],
+        ['uninspectable', 'function {'],
+    ])('offers review for %s without executing the script', async (reason, source) => {
+        const report = await scan(safetyVpk([{ path: 'script.js', bytes: Buffer.from(source) }]));
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: 'script.js', reason });
     });
 });

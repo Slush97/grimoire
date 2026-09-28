@@ -7,17 +7,18 @@ and vanilla-stash restoration also pass through the gate.
 
 The decisions are:
 
-- **Blocked:** a recognized local-file/UNC address in executable content, embedded-browser capability,
-  remote script or network API, dynamic code execution, or bundled programs.
-  Malformed/unreadable archives are also unavailable, shown as **Can't check**.
-  There is no user override for these decisions.
-- **Needs review:** scripts or executable UI content without a recognized
-  blocked operation. Passive models, artwork, audio, styles and layouts without
+- **Can't check:** an unreadable/malformed archive, unsafe archive paths, unsupported
+  multipart installation, decoder failure or inspection resource limit. This is
+  an installation/read error, not a malware verdict, and cannot be overridden.
+- **Review:** scripts or executable UI content, including local-file/UNC access,
+  embedded browsers, network APIs, dynamic code, opaque scripts and bundled programs.
+  Users see the specific risks and choose **Keep disabled** or **Allow this version**.
+  Recognized capabilities never prohibit informed consent. Passive models, artwork, audio, styles and layouts without
   executable behavior do not require consent. Unknown asset types alone do not
   generate findings.
   This includes minified scripts. Accepting means trusting
   their source, not that the scanner has proved them harmless.
-- **No findings:** only supported content without findings. This is not a safety
+- **No findings:** content without detected executable behavior. This is not a safety
   certification or a defense against native game resource-parser vulnerabilities.
 
 JavaScript is parsed with Acorn without executing it. String escapes, literal
@@ -50,6 +51,8 @@ physical package, referenced chunks, and policy version. It is not imported from
 mod metadata, profiles, a filename, an author, or a GameBanana ID. Every gate
 rehashes current bytes. Acceptance triggers another scan to detect changes during
 review. Repacking also changes the hash and may require another review.
+This advisory-only change retains policy version 2 so existing approvals for the
+same bytes remain valid; it introduces no new risk that needs renewed consent.
 
 Rejected download candidates are retained under `userData/mod-quarantine` when
 possible, with a report. Candidates already staged in the disabled library stay

@@ -54,7 +54,7 @@ async function saveApproval(report: ModSafetyReport): Promise<void> {
 
 function inspectionFailure(path: string): ModSafetyReport {
     return { policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint: '', verdict: 'blocked',
-        findings: [{ entry: basename(path), reason: 'uninspectable' }] };
+        findings: [{ entry: basename(path), reason: 'unreadable-archive' }] };
 }
 
 /** Always hashes current bytes. UI snapshots are never authorization caches. */
@@ -157,6 +157,6 @@ export async function assertVpkSafety(path: string, options: {
         }
     }
     throw new Error(report.verdict === 'blocked'
-        ? 'MOD_SAFETY_BLOCKED: Activation refused. Review the mod safety findings.'
+        ? 'MOD_SAFETY_BLOCKED: The archive could not be read or installed safely. Try a complete, valid copy.'
         : 'MOD_SAFETY_TRUST_REQUIRED: This version must be trusted before activation.');
 }

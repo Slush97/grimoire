@@ -46,7 +46,7 @@ describe('installed mod inspection', () => {
         const original = await fs.readFile(path);
         const results = await auditInstalledSafety(root);
         expect(results).toHaveLength(1);
-        expect(results[0]).toMatchObject({ enabled: false, trusted: false, report: { verdict: 'blocked' } });
+        expect(results[0]).toMatchObject({ enabled: false, trusted: false, report: { verdict: 'requires-trust' } });
         await expect(fs.stat(path)).rejects.toThrow();
         const disabled = await fs.readdir(join(root, '.disabled'));
         expect(disabled).toHaveLength(1);

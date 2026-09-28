@@ -1,5 +1,5 @@
 export type ModSafetyVerdict = 'no-findings' | 'requires-trust' | 'blocked';
-export type ModSafetyReason = 'local-file' | 'browser' | 'remote-code' | 'dynamic-code' | 'executable' | 'uninspectable' | 'native-code';
+export type ModSafetyReason = 'local-file' | 'browser' | 'remote-code' | 'dynamic-code' | 'executable' | 'uninspectable' | 'unreadable-archive' | 'native-code';
 
 export interface ModSafetyFinding {
     entry: string;

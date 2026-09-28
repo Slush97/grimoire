@@ -69,8 +69,8 @@ describe('mod safety authorization', () => {
         expect(await result).toContain('MOD_SAFETY_CHANGED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
     });
-    it('cannot override a hard block with a forged positive response', async () => {
-        h.reports.push({ ...script(), verdict: 'blocked', findings: [{ entry: 'test.js', reason: 'local-file' }] });
+    it('cannot override an unreadable archive with a forged positive response', async () => {
+        h.reports.push({ ...script(), verdict: 'blocked', findings: [{ entry: 'test.vpk', reason: 'unreadable-archive' }] });
         const result = assertVpkSafety(candidate).catch(e => String(e));
         const p = await prompt();
         expect(p.canTrust).toBe(false);
@@ -78,12 +78,34 @@ describe('mod safety authorization', () => {
         expect(await result).toContain('MOD_SAFETY_BLOCKED');
         await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
     });
-    it('does not let persisted trust override a new hard finding', async () => {
+    it('does not let persisted trust override an archive read error', async () => {
         await fs.writeFile(join(h.userData, 'mod-safety-trust.json'), JSON.stringify(['a'.repeat(64)]));
         h.reports.push({ ...script(), verdict: 'blocked' });
         await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_BLOCKED');
     });
     it('fails closed on worker crashes', async () => {
         await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_BLOCKED');
+    });
+    it.each(['local-file', 'browser', 'remote-code', 'dynamic-code', 'native-code', 'uninspectable'] as const)(
+        'accepts informed consent for %s and remembers the version', async reason => {
+            const report = { ...script(), findings: [{ entry: 'test.js', reason }] };
+            h.reports.push(report, report, report);
+            const result = assertVpkSafety(candidate);
+            const p = await prompt();
+            expect(p.canTrust).toBe(true);
+            expect(p.report.findings[0].reason).toBe(reason);
+            respondToModSafety(p.id, true);
+            await result;
+            await assertVpkSafety(candidate, { prompt: false });
+            expect(getModSafetyPrompts()).toHaveLength(0);
+        });
+    it('asks again when an approved package is replaced with changed executable bytes', async () => {
+        await fs.writeFile(join(h.userData, 'mod-safety-trust.json'), JSON.stringify(['a'.repeat(64)]));
+        h.reports.push(script('b'.repeat(64)));
+        const result = assertVpkSafety(candidate).catch(e => String(e));
+        const p = await prompt();
+        expect(p.canTrust).toBe(true);
+        respondToModSafety(p.id, false);
+        expect(await result).toContain('MOD_SAFETY_TRUST_REQUIRED');
     });
 });

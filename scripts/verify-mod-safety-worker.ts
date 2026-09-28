@@ -18,11 +18,11 @@ try {
         { name: 'unknown-resource', entry: 'scripts/heroes.vdata_c', bytes: Buffer.from('opaque fixture'), verdict: 'no-findings' },
         { name: 'passive-svg', entry: 'panorama/images/name.vsvg_c', bytes: safetyResource(Buffer.concat([Buffer.alloc(6), Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg>')])), verdict: 'no-findings' },
         { name: 'nested-asset', entry: 'maps/portrait.vpk', bytes: safetyVpk([{ path: 'hero.vmdl_c', bytes: Buffer.from('inert') }]), verdict: 'no-findings' },
-        { name: 'nested-blocked', entry: 'maps/portrait.vpk', bytes: safetyVpk([{ path: 'test.js', bytes: Buffer.from('run("file:///example.txt")') }]), verdict: 'blocked' },
+        { name: 'nested-risk', entry: 'maps/portrait.vpk', bytes: safetyVpk([{ path: 'test.js', bytes: Buffer.from('run("file:///example.txt")') }]), verdict: 'requires-trust' },
         { name: 'script', entry: 'panorama/scripts/test.vjs_c', bytes: safetyResource(Buffer.from('run(1);')), verdict: 'requires-trust' },
-        { name: 'blocked', entry: 'panorama/scripts/test.vjs_c', bytes: safetyResource(Buffer.from('run("file:///example.txt");')), verdict: 'blocked' },
+        { name: 'file-access', entry: 'panorama/scripts/test.vjs_c', bytes: safetyResource(Buffer.from('run("file:///example.txt");')), verdict: 'requires-trust' },
         { name: 'compiled-layout', entry: 'panorama/layout/test.vxml_c', bytes: safetyLayout('run(1);'), verdict: 'requires-trust' },
-        { name: 'blocked-layout', entry: 'panorama/layout/test.vxml_c', bytes: safetyLayout('run("file:///example.txt");'), verdict: 'blocked' },
+        { name: 'file-access-layout', entry: 'panorama/layout/test.vxml_c', bytes: safetyLayout('run("file:///example.txt");'), verdict: 'requires-trust' },
     ];
     for (const fixture of cases) {
         const path = join(root, fixture.name + '_dir.vpk');
