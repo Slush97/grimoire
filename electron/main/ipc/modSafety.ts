@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { getMainWindow } from '../index';
 import { getActiveDeadlockPath } from '../services/settings';
-import { getModSafetyPrompts, respondToModSafety, inspectVpkSafety, isModSafetyTrusted } from '../services/modSafety';
+import { getModSafetyPrompts, respondToModSafety, inspectVpkSafety, isModSafetyTrusted, approveVpkSafety } from '../services/modSafety';
 import { auditInstalledSafety, installedSafetyStatus, installedSafetyRunning, installedSafetyFailed } from '../services/modSafetyAudit';
 import { enableMod, scanMods } from '../services/mods';
 
@@ -27,10 +27,13 @@ ipcMain.handle('rescan-mod-safety', async () => {
     if (!path) return [];
     return auditInstalledSafety(path);
 });
-ipcMain.handle('review-mod-safety', async (event, modId: string) => {
-    if (event.sender !== getMainWindow()?.webContents || typeof modId !== 'string') throw new Error('Invalid mod');
+ipcMain.handle('review-mod-safety', async (event, modId: string, fingerprint: string) => {
+    if (event.sender !== getMainWindow()?.webContents || typeof modId !== 'string' || typeof fingerprint !== 'string') throw new Error('Invalid mod');
     const path = getActiveDeadlockPath();
     if (!path) throw new Error('No Deadlock path configured');
+    const mod = (await scanMods(path)).find(m => m.id === modId);
+    if (!mod) throw new Error('Mod not found');
+    await approveVpkSafety(mod.path, fingerprint);
     await enableMod(path, modId);
     return auditInstalledSafety(path);
 });

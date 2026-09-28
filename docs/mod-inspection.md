@@ -54,6 +54,13 @@ review. Repacking also changes the hash and may require another review.
 This advisory-only change retains policy version 2 so existing approvals for the
 same bytes remain valid; it introduces no new risk that needs renewed consent.
 
+The review panel shows mod thumbnails and risk summaries together. Each mod expands
+in place for explanations, affected files and its decision. Card shields open the
+corresponding row directly. Inline approval sends the displayed fingerprint to the
+main process, which rechecks the current bytes before saving consent; enabling the
+mod then passes through the normal activation gate. Downloads and other pending
+decisions appear in the same panel, without a second confirmation dialog.
+
 Rejected download candidates are retained under `userData/mod-quarantine` when
 possible, with a report. Candidates already staged in the disabled library stay
 disabled. The previous version is not removed by the update flow until the final

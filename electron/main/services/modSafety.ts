@@ -52,6 +52,14 @@ async function saveApproval(report: ModSafetyReport): Promise<void> {
     await write;
 }
 
+/** Consent applies only to the exact report the user reviewed. */
+export async function approveVpkSafety(path: string, fingerprint: string): Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('Invalid mod safety decision');
+    const current = await inspectVpkSafety(path);
+    if (current.fingerprint !== fingerprint) throw new Error('MOD_SAFETY_CHANGED');
+    await saveApproval(current);
+}
+
 function inspectionFailure(path: string): ModSafetyReport {
     return { policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint: '', verdict: 'blocked',
         findings: [{ entry: basename(path), reason: 'unreadable-archive' }] };

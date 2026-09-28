@@ -12,5 +12,5 @@ interface SafetyState {
 
 export const useModSafetyStore = create<SafetyState>((set) => ({
     installed: [], panelOpen: false, detail: null, scanning: false, scanFailed: false,
-    openDetail: (id, name, snapshot) => set({ detail: { id, name, snapshot }, panelOpen: false }),
+    openDetail: (id, name, snapshot) => set({ detail: { id, name, snapshot }, panelOpen: true }),
 }));

@@ -820,7 +820,7 @@ export interface ElectronAPI {
     getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;
     rescanModSafety: () => Promise<InstalledModSafety[]>;
     inspectModSafety: (id: string) => Promise<ModSafetySnapshot>;
-    reviewModSafety: (id: string) => Promise<InstalledModSafety[]>;
+    reviewModSafety: (id: string, fingerprint: string) => Promise<InstalledModSafety[]>;
     onModSafetyChanged: (callback: () => void) => () => void;
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;

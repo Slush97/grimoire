@@ -20,7 +20,7 @@ vi.mock('node:worker_threads', async () => {
         terminate() { return Promise.resolve(0); }
     } };
 });
-import { assertVpkSafety, getModSafetyPrompts, respondToModSafety } from './modSafety';
+import { approveVpkSafety, assertVpkSafety, getModSafetyPrompts, respondToModSafety } from './modSafety';
 
 const script = (fingerprint = 'a'.repeat(64)): ModSafetyReport => ({
     policyVersion: 1, fingerprint, verdict: 'requires-trust', findings: [{ entry: 'test.js', reason: 'executable' }],
@@ -42,6 +42,22 @@ async function prompt() {
 }
 
 describe('mod safety authorization', () => {
+    it('approves the exact inline-reviewed version without a second prompt', async () => {
+        h.reports.push(script(), script());
+        await approveVpkSafety(candidate, 'a'.repeat(64));
+        await assertVpkSafety(candidate, { prompt: false });
+        expect(getModSafetyPrompts()).toHaveLength(0);
+    });
+    it('does not apply inline consent to changed bytes', async () => {
+        h.reports.push(script('b'.repeat(64)));
+        await expect(approveVpkSafety(candidate, 'a'.repeat(64))).rejects.toThrow('MOD_SAFETY_CHANGED');
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+    });
+    it('cannot approve an unreadable archive inline', async () => {
+        h.reports.push({ ...script(), verdict: 'blocked' });
+        await expect(approveVpkSafety(candidate, 'a'.repeat(64))).rejects.toThrow('MOD_SAFETY_BLOCKED');
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+    });
     it('persists explicit consent and scans again before using it', async () => {
         h.reports.push(script(), script(), script());
         const request = assertVpkSafety(candidate);
