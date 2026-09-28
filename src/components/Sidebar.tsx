@@ -12,6 +12,7 @@ import {
   ScrollText,
   Activity,
   Swords,
+  ShieldCheck,
   BookMarked,
   Settings2,
   AlertTriangle,
@@ -46,6 +47,8 @@ import { getAssetPath } from '../lib/assetPath';
 import { rollMemeTooltip } from '../lib/easterEggs';
 import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
 import { useAppStore } from '../stores/appStore';
+import { useModSafetyStore } from '../stores/modSafetyStore';
+import { pendingSafetyKeys, safetyReviewRows } from '../lib/modSafetyReview';
 import UpdateModal from './UpdateModal';
 import Tx from './translation/Tx';
 import { SidebarActiveBackdrop, SurfaceBackdrop } from './sidebar/surfaceArt';
@@ -131,6 +134,8 @@ export default function Sidebar() {
   const settings = useAppStore((state) => state.settings);
   const appearanceImages = useAppStore((state) => state.appearanceImages);
   const mods = useAppStore((state) => state.mods);
+  const safety = useModSafetyStore();
+  const safetyCount = pendingSafetyKeys(safetyReviewRows(mods, safety.installed, safety.prompts)).length;
   const loadMods = useAppStore((state) => state.loadMods);
   const runLaunchShuffle = useAppStore((state) => state.runLaunchShuffle);
   const soundVolume = useAppStore((state) => state.soundVolume);
@@ -496,6 +501,7 @@ export default function Sidebar() {
       { to: '/autoexec', icon: ScrollText, labelKey: 'nav.autoexec', label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
       { to: '/conflicts', icon: Swords, labelKey: 'nav.conflicts', label: t('nav.conflicts'), tooltip: t('sidebar.tooltip.conflicts'), badge: conflictCount, badgeTone: 'warning' },
+      { to: '/mod-safety', icon: ShieldCheck, labelKey: 'modSafety.manage', label: t('modSafety.manage'), tooltip: t('modSafety.reviewMods'), badge: safetyCount, badgeTone: 'warning' },
       { to: '/profiles', icon: BookMarked, labelKey: 'nav.profiles', label: t('nav.profiles'), tooltip: t('sidebar.tooltip.profiles') },
     ];
 
@@ -507,7 +513,7 @@ export default function Sidebar() {
       if (item.experimental === 'foundry') return settings?.experimentalFoundry;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, conflictCount, discoverNotificationCount, installedCount, safetyCount]);
 
   // Optimistic nav highlight. The router wraps navigation in startTransition,
   // so location.pathname (and any highlight derived from it) only updates

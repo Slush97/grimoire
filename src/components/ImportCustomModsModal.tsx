@@ -59,6 +59,7 @@ interface ImportRow {
 }
 
 interface ImportCustomModsModalProps {
+  suspended?: boolean;
   onClose: () => void;
   /** Runs the batch. Resolves with one result per item, in the order given. */
   onImport: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
@@ -118,6 +119,7 @@ const newRow = (path: string): ImportRow => ({
  * same picking, dropping and retry behavior, minus the per-row name field.
  */
 export default function ImportCustomModsModal({
+  suspended = false,
   onClose,
   onImport,
   onFinished,
@@ -430,6 +432,7 @@ export default function ImportCustomModsModal({
 
   return (
     <Modal
+      open={!suspended}
       onClose={onClose}
       labelledBy="import-custom-mods-title"
       size="xl"

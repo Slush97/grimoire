@@ -12,6 +12,7 @@
     "attention_one": "{{count}} mod needs attention",
     "attention_other": "{{count}} mods need attention",
     "reviewMods": "Review mods",
+    "dismissNotice": "Dismiss mod safety notice",
     "allowHint": "Allowing this version enables the mod with these risks.",
     "changed": "This mod changed since you reviewed it. Check installed mods again before allowing it.",
     "summary": {
@@ -32,7 +33,6 @@
     "closeGame": "This mod may still be running. Close Deadlock, then check installed mods again to disable it.",
     "trustVersion": "Allow this version",
     "cancel": "Keep disabled",
-    "close": "Close",
     "reasons": {
       "localFile": "Local or network file access",
       "browser": "Web content",
