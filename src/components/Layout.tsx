@@ -295,7 +295,7 @@ export default function Layout() {
         <GameinfoBanner />
         <AppUpdateBanner />
         <ModSafetyBanner />
-        <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in">
+        <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
           <Outlet />
         </div>
       </main>
