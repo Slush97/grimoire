@@ -59,7 +59,10 @@ function ExampleScene({ example }: { example: Example }) {
                 <figcaption className="text-sm font-medium text-text-primary">{t(`modSafety.explainer.${example}.result`)}</figcaption>
             </figure>
         </div>
-        <p className="border-t border-border pt-4 text-sm text-text-secondary">{t(`modSafety.explainer.${example}.body`)}</p>
+        <div className="space-y-2 border-t border-border pt-4 text-sm text-text-secondary">
+            <p>{t(`modSafety.explainer.${example}.purpose`)}</p>
+            <p>{t(`modSafety.explainer.${example}.caution`)}</p>
+        </div>
     </>;
 }
 
@@ -78,9 +81,9 @@ export default function SafetyExplainer({ onClose }: { onClose: () => void }) {
                     <ExampleScene example={value} />
                 </div>)}
             </div>
-            <div className="space-y-2 text-sm">
-                <p className="font-medium text-text-primary">{t('modSafety.explainer.limits')}</p>
-                <p className="text-text-secondary">{t('modSafety.explainer.choice')}</p>
+            <div className="space-y-1">
+                <p className="text-sm text-text-primary">{t('modSafety.explainer.choice')}</p>
+                <p className="text-xs text-text-secondary">{t('modSafety.explainer.limits')}</p>
             </div>
         </ModalBody>
     </Modal>;
