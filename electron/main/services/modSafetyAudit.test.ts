@@ -38,7 +38,7 @@ beforeEach(async () => {
     h.running = false; h.trusted = false; h.incomplete = false; vi.clearAllMocks();
 });
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
-async function put(folder: string, name: string, source = 'run(1);') {
+async function put(folder: string, name: string, source = 'run("file:///example.txt");') {
     const path = join(root, folder, name);
     await fs.writeFile(path, safetyVpk([{ path: 'script.js', bytes: Buffer.from(source) }]));
     return path;
@@ -83,7 +83,7 @@ describe('installed mod inspection', () => {
         expect(h.announce).not.toHaveBeenCalled();
     });
     it('moves an unregistered multi-chunk archive with its chunks under one name', async () => {
-        const { dir, chunk } = safetyChunkedVpk([{ path: 'script.js', bytes: Buffer.from('run(1);') }]);
+        const { dir, chunk } = safetyChunkedVpk([{ path: 'script.js', bytes: Buffer.from('run("file:///x");') }]);
         await fs.writeFile(join(root, 'grimoire', 'pak01_dir.vpk'), dir);
         await fs.writeFile(join(root, 'grimoire', 'pak01_000.vpk'), chunk);
         const [row] = await auditInstalledSafety(root);

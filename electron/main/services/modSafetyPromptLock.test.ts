@@ -23,7 +23,7 @@ vi.mock('node:worker_threads', async () => {
     return { Worker: class extends EventEmitter {
         postMessage() {
             const report: ModSafetyReport = { policyVersion: 1, fingerprint: h.fingerprint, verdict: 'requires-trust',
-                findings: [{ entry: 'panorama/scripts/hud.js', reason: 'executable' }] };
+                findings: [{ entry: 'panorama/scripts/hud.js', reason: 'browser' }] };
             queueMicrotask(() => this.emit('message', report));
         }
         terminate() { return Promise.resolve(0); }

@@ -4,7 +4,7 @@ import type { ModSafetyPrompt, ModSafetyReport } from '../types/modSafety';
 import { hasNewSafetyReview, pendingSafetyKeys, safetyReviewRows } from './modSafetyReview';
 
 const report = (fingerprint = 'version-one'): ModSafetyReport => ({
-    fingerprint, policyVersion: 2, verdict: 'requires-trust', findings: [{ entry: 'hud.js', reason: 'executable' }],
+    fingerprint, policyVersion: 2, verdict: 'requires-trust', findings: [{ entry: 'hud.js', reason: 'browser' }],
 });
 const mod = (overrides: Partial<Mod> = {}): Mod => ({
     id: 'one', name: 'HUD', path: 'hud.vpk', fileName: 'hud.vpk', metaKey: 'hud.vpk', enabled: false,

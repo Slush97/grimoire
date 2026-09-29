@@ -19,11 +19,33 @@ describe('mod source policy', () => {
     it.each(['eval(code)', 'new Function(code)', 'globalThis["eval"](code)'])('flags dynamic execution: %s', source => {
         expect(reasons(source)).toContain('dynamic-code');
     });
-    it('does not exempt minified or opaque scripts from consent', () => {
-        expect(reasons('!function(a){a[decode(7)](decode(9))}(this);')).toEqual(['executable']);
+    it('flags calls whose method name is only known at runtime', () => {
+        expect(reasons('!function(a){a[decode(7)](decode(9))}(this);')).toEqual(['dynamic-code']);
+        expect(reasons('items[0](); handlers["click"](); fns[i]();')).toEqual(['dynamic-code']);
+        expect(reasons('items[0](); handlers["click"]();')).toEqual([]);
+    });
+    it('flags string decoders that could spell out a panel type or URL', () => {
+        for (const source of ['String.fromCharCode(67, 105)', 'atob("Q2l0YWRlbA==")', 'unescape("%43")', 'decodeURIComponent(x)']) {
+            expect(reasons(source)).toContain('dynamic-code');
+        }
+    });
+    it('flags panels and layouts created from values it cannot read', () => {
+        expect(reasons('$.CreatePanel(kind, parent, "")')).toContain('dynamic-code');
+        expect(reasons('panel.BLoadLayoutFromString(markup, false, false)')).toContain('dynamic-code');
+        expect(reasons('const kind = "Label"; $.CreatePanel(kind, parent, ""); $.CreatePanel("Image", parent, "icon");')).toEqual([]);
+    });
+    it('catches the CEF panel file read reported in development-chat', () => {
+        const result = reasons('const p = $.CreatePanel("CitadelHTMLPanel", $.GetContextPanel(), ""); p.SetURL("file:///C:/Users/me/secret.txt");');
+        expect(result).toEqual(expect.arrayContaining(['browser', 'local-file']));
+        expect(reasons('<root><CitadelHTMLPanel url="file:///C:/Users/me/secret.txt"/></root>', false)).toEqual(expect.arrayContaining(['browser', 'local-file']));
+    });
+    it('lets scripts that only drive the UI run without findings', () => {
+        expect(reasons('$.Schedule(0.1, () => $("#timer").text = String(Game.GetGameTime()));')).toEqual([]);
+        expect(reasons('panel.BLoadLayout("file://{resources}/layout/hud_timer.xml", false, false);')).toEqual([]);
+        expect(reasons('<root><Panel onload="Refresh()"><Image src="file://{images}/icon.png"/></Panel></root>', false)).toEqual([]);
     });
     it('ignores JavaScript comments and preserves JS entity strings', () => {
-        expect(reasons('// file:///example\nconst harmless="&quot;";')).toEqual(['executable']);
+        expect(reasons('// file:///example\nconst harmless="&quot;";')).toEqual([]);
     });
     it('fails closed on unsupported syntax', () => {
         expect(reasons('function {')).toContain('uninspectable');
@@ -31,8 +53,9 @@ describe('mod source policy', () => {
     it('does not mistake escaped localization quotes for a UNC hostname', () => {
         expect(reasons(String.raw`"description" "<span class=\\\"highlight\\\">Damage</span>"`, false)).toEqual([]);
     });
-    it('still blocks UNC addresses in source and decoded JavaScript strings', () => {
-        expect(reasons(String.raw`<Image src="\\server\share\image.png"/>`, false)).toContain('local-file');
+    it('flags UNC addresses in active markup and JavaScript, not in passive markup', () => {
+        expect(reasons(String.raw`<Image src="\\server\share\image.png"/>`, false)).toEqual([]);
+        expect(reasons(String.raw`<Panel onload="run()"><Image src="\\server\share\image.png"/></Panel>`, false)).toContain('local-file');
         expect(reasons(String.raw`use("\\\\server\\share\\image.png")`)).toContain('local-file');
     });
     it('inspects markup entities and inline handlers', () => {
@@ -46,30 +69,31 @@ describe('mod source policy', () => {
         expect(reasons('<script src="https://example.invalid/test.js"/>', false)).toContain('remote-code');
     });
     it('reads the CDATA form produced by the compiled-layout decoder', () => {
-        expect(reasons('<script><![CDATA[run(1);]]></script>', false)).toEqual(['executable']);
+        expect(reasons('<script><![CDATA[run(1);]]></script>', false)).toEqual([]);
+        expect(reasons('<script><![CDATA[eval(code);]]></script>', false)).toEqual(['dynamic-code']);
     });
     it('recognizes bare localization arguments in Panorama event handlers', () => {
-        expect(reasons('<Panel onmouseover="UIShowTextTooltip( #hud_spectate_count_tooltip )" onmouseout="UIHideTextTooltip()"/>', false)).toEqual(['executable']);
-        expect(reasons('<Panel onactivate="Show(#title, #description); Next()"/>', false)).toEqual(['executable']);
+        expect(reasons('<Panel onmouseover="UIShowTextTooltip( #hud_spectate_count_tooltip )" onmouseout="UIHideTextTooltip()"/>', false)).toEqual([]);
+        expect(reasons('<Panel onactivate="Show(#title, #description); Next()"/>', false)).toEqual([]);
     });
     it('recognizes whitespace-separated Panorama event calls and inspects every call', () => {
-        expect(reasons('<Panel onactivate="CitadelStartExploreMap() AsyncEvent( 0.2, CitadelNavigateBackToHome() )"/>', false)).toEqual(['executable']);
+        expect(reasons('<Panel onactivate="CitadelStartExploreMap() AsyncEvent( 0.2, CitadelNavigateBackToHome() )"/>', false)).toEqual([]);
         const result = reasons('<Panel onactivate="Show(#tip) eval(code) fetch(&quot;https://example.invalid&quot;)"/>', false);
-        expect(result).toEqual(expect.arrayContaining(['executable', 'dynamic-code', 'remote-code']));
+        expect(result).toEqual(expect.arrayContaining(['dynamic-code', 'remote-code']));
         expect(result).not.toContain('uninspectable');
     });
     it('does not reinterpret control flow or unsupported expressions as event lists', () => {
-        expect(reasons('<Panel onactivate="if (x) eval(code);"/>', false)).toEqual(expect.arrayContaining(['executable', 'dynamic-code']));
+        expect(reasons('<Panel onactivate="if (x) eval(code);"/>', false)).toEqual(['dynamic-code']);
         expect(reasons('<Panel onactivate="(1 + 2) run()"/>', false)).toContain('uninspectable');
         expect(reasons('First() Second()')).toContain('uninspectable');
     });
     it('keeps inspecting risky operations alongside Panorama event arguments', () => {
         const result = reasons('<Panel onactivate="UIShowTextTooltip(#tip); eval(code); fetch(&quot;https://example.invalid&quot;); use(&quot;file:///example&quot;); panel.SetURL(url)"/>', false);
-        expect(result).toEqual(expect.arrayContaining(['executable', 'dynamic-code', 'remote-code', 'local-file', 'browser']));
+        expect(result).toEqual(expect.arrayContaining(['dynamic-code', 'remote-code', 'local-file', 'browser']));
         expect(result).not.toContain('uninspectable');
     });
     it('does not rewrite quoted hashes, regular expressions or private fields', () => {
-        expect(reasons('<Panel onactivate="run(&quot;#tip&quot;, /#tip/); class X { #value; read(){return this.#value;} }"/>', false)).toEqual(['executable']);
+        expect(reasons('<Panel onactivate="run(&quot;#tip&quot;, /#tip/); class X { #value; read(){return this.#value;} }"/>', false)).toEqual([]);
     });
     it('still flags unsupported event syntax and does not normalize standalone JavaScript', () => {
         expect(reasons('<Panel onactivate="Show(#tip); function {"/>', false)).toContain('uninspectable');

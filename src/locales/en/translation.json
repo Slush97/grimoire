@@ -10,7 +10,7 @@
         "access": "Runs scripts",
         "result": "Live cooldowns",
         "purpose": "Scripts can power useful features like cooldown timers.",
-        "caution": "Allowing a mod means trusting the code it runs."
+        "caution": "Scripts that only change the HUD run without asking."
       },
       "music": {
         "name": "Music player",
@@ -49,7 +49,6 @@
       "browser": "Web content",
       "remoteCode": "Network access",
       "dynamicCode": "Hidden code",
-      "executable": "Runs scripts",
       "uninspectable": "Unknown code",
       "nativeCode": "Runs programs"
     },
@@ -68,7 +67,6 @@
       "browser": "Web content",
       "remoteCode": "Network requests or external code",
       "dynamicCode": "Code created at runtime",
-      "executable": "Scripts or UI content",
       "uninspectable": "Contents could not be checked",
       "nativeCode": "Executable program",
       "unreadableArchive": "Archive could not be read or installed",
@@ -79,12 +77,12 @@
       "browser": "Web content could access files or send data outside the game.",
       "remoteCode": "Could send data to a server or load code from elsewhere.",
       "dynamicCode": "Could run hidden code that accesses files or sends data.",
-      "executable": "Scripts or UI content may access files or send data while you play.",
       "uninspectable": "Some script code couldn't be analyzed. It may have risks that aren't listed here.",
       "nativeCode": "Includes a program that could run commands on your computer.",
       "unreadableArchive": "Grimoire couldn't read or safely install this archive.",
       "inspectionFailed": "The safety check stopped before it could look inside this mod, so its contents are unknown."
-    }
+    },
+    "description": "Grimoire asks before enabling a mod that can open web pages in the game, read files on your computer, reach the internet, or hide what its code does."
   },
   "common": {
     "view": "View",

@@ -100,18 +100,25 @@ function panoramaEventSource(source: string): string {
     } catch { return source; }
 }
 
-/** Findings describe risks. Every script needs consent even if none fire. */
+// Panorama scripts have no file or network API of their own. The threat is a
+// CEF panel (CitadelHTMLPanel) loading file:// and posting what it read to a
+// server, so scripts run without consent and findings are the ways a script
+// reaches that panel, including by building its names at runtime.
+const STRING_DECODERS = new Set(['atob', 'fromCharCode', 'fromCodePoint', 'unescape', 'decodeURI', 'decodeURIComponent']);
+const PANEL_FACTORIES = new Set(['CreatePanel', 'CreatePanelWithProperties', 'BLoadLayoutFromString', 'BLoadLayoutFromStringAsync']);
+
 export function inspectModSource(entry: string, source: string, javascript: boolean): ModSafetyFinding[] {
     const reasons = new Set<ModSafetyReason>();
+    let active = javascript;
     function inspectText(text: string): void {
-        if (/(?:\bfile\s*:|\\\\[^\\\s"'<>]+\\)/i.test(text)) reasons.add('local-file');
+        // file://{images}/ and the other Panorama roots resolve inside the game's own content.
+        if (/(?:\bfile\s*:(?!\/\/\{\w+\}\/)|\\\\[^\\\s"'<>]+\\)/i.test(text)) reasons.add('local-file');
         if (/\bjavascript\s*:|\b(?:CitadelHTMLPanel|HTMLPanel|HTMLTitle|HTMLFinishRequest|SetURL|SetURLWithParams|OpenURL|OpenExternalBrowserURL)\b/i.test(text)) reasons.add('browser');
         if (/\b(?:eval|Function)\s*\(/.test(text) || text === 'eval' || text === 'Function') reasons.add('dynamic-code');
         if (['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'RunScriptInPanelContext'].includes(text)) reasons.add('remote-code');
     }
     const text = source;
     if (javascript) {
-        reasons.add('executable');
         try {
             const ast = parse(text, { ecmaVersion: 'latest', sourceType: 'script', allowReturnOutsideFunction: true });
             const stack: AstNode[] = [node(ast)!];
@@ -130,8 +137,19 @@ export function inspectModSource(entry: string, source: string, javascript: bool
                 if (n.type === 'Identifier') {
                     const name = String(n.name);
                     inspectText(name);
-                    if (name === 'eval' || name === 'Function') reasons.add('dynamic-code');
+                    if (name === 'eval' || name === 'Function' || STRING_DECODERS.has(name)) reasons.add('dynamic-code');
                     if (['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'RunScriptInPanelContext'].includes(name)) reasons.add('remote-code');
+                }
+                if (n.type === 'CallExpression') {
+                    const callee = node(n.callee);
+                    const property = node(callee?.property);
+                    const first = Array.isArray(n.arguments) ? n.arguments[0] : undefined;
+                    // A panel type or layout that can't be read here could be the browser panel.
+                    if (callee?.type === 'MemberExpression' && !callee.computed && property?.type === 'Identifier'
+                        && PANEL_FACTORIES.has(String(property.name)) && constant(first, bindings) === undefined) reasons.add('dynamic-code');
+                    // obj[decode(7)](...) hides which method runs, SetURL included.
+                    if (callee?.type === 'MemberExpression' && callee.computed && property?.type !== 'Literal'
+                        && constant(property, bindings) === undefined) reasons.add('dynamic-code');
                 }
                 if (n.type === 'ImportExpression' || n.type === 'ImportDeclaration') reasons.add('remote-code');
                 const children: AstNode[] = [];
@@ -148,7 +166,7 @@ export function inspectModSource(entry: string, source: string, javascript: bool
         const withoutComments = text.replace(/<!--[\s\S]*?-->|\/\*[\s\S]*?\*\//g, '');
         const decoded = decodeEntities(withoutComments);
         inspectText(decoded);
-        if (/<(?:script|scripts|iframe|object|embed)\b|\bon[a-z]+\s*=/i.test(withoutComments)) reasons.add('executable');
+        if (/<(?:script|scripts|iframe|object|embed)\b|\bon[a-z]+\s*=/i.test(withoutComments)) active = true;
         if (/<(?:script|include|iframe|object|embed)\b[^>]*\b(?:src|href|url)\s*=\s*["']\s*(?:https?:|\/\/|data:|blob:)/i.test(decoded)) reasons.add('remote-code');
         for (const match of withoutComments.matchAll(/\bon[a-z]+\s*=\s*(["'])([\s\S]*?)\1/gi)) {
             for (const finding of inspectModSource(entry, panoramaEventSource(decodeEntities(match[2])), true)) reasons.add(finding.reason);
@@ -159,5 +177,7 @@ export function inspectModSource(entry: string, source: string, javascript: bool
             for (const finding of inspectModSource(entry, body, true)) reasons.add(finding.reason);
         }
     }
+    // A file address in passive content (a stylesheet, a static image) has nothing to act on it.
+    if (!active && !reasons.has('browser') && !reasons.has('remote-code') && !reasons.has('dynamic-code')) reasons.delete('local-file');
     return [...reasons].map(reason => ({ entry, reason }));
 }

@@ -8,7 +8,7 @@ import { inspectModSource, MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 import type { ModSafetyFinding, ModSafetyReport } from '../../../src/types/modSafety';
 
 // Bump for parser, decoder or finding changes, without invalidating user consent.
-export const MOD_SAFETY_SCANNER_VERSION = 3;
+export const MOD_SAFETY_SCANNER_VERSION = 4;
 const MAX_TREE = 16 * 1024 * 1024;
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
@@ -19,7 +19,6 @@ const ASSETS = new Set(['vtex_c', 'vmat_c', 'vmdl_c', 'vmesh_c', 'vphys_c', 'van
     'png', 'jpg', 'jpeg', 'webp', 'tga', 'dds', 'wav', 'mp3', 'ogg']);
 const TEXT = new Set(['js', 'vjs', 'ts', 'vts', 'css', 'vcss', 'xml', 'vxml', 'html', 'htm', 'svg', 'vsvg', 'cfg', 'lua', 'nut']);
 const COMPILED_TEXT = new Set(['vjs_c', 'vts_c', 'vcss_c', 'vsvg_c']);
-const EXECUTABLE = new Set(['js', 'vjs', 'vjs_c', 'ts', 'vts', 'vts_c', 'lua', 'nut', 'cfg']);
 const PROGRAMS = new Set(['exe', 'dll', 'com', 'bat', 'cmd', 'ps1', 'vbs', 'lnk', 'msi', 'so', 'dylib', 'wasm']);
 interface ScanBudget { archives: number; nestedBytes: number; entries: number; sourceBytes: number }
 interface Entry { path: string; extension: string; preload: Buffer; file: string; offset: number; length: number }
@@ -190,7 +189,7 @@ async function readCachedReport(cacheDir: string, fingerprint: string): Promise<
         requireCondition(cached.scannerVersion === MOD_SAFETY_SCANNER_VERSION
             && report.policyVersion === MOD_SAFETY_POLICY_VERSION && report.fingerprint === fingerprint
             && Array.isArray(report.findings) && report.findings.length <= 200);
-        const reasons = new Set(['local-file', 'browser', 'remote-code', 'dynamic-code', 'executable', 'uninspectable', 'native-code']);
+        const reasons = new Set(['local-file', 'browser', 'remote-code', 'dynamic-code', 'uninspectable', 'native-code']);
         requireCondition(report.findings.every((f: ModSafetyFinding) => f && typeof f.entry === 'string'
             && f.entry.length <= 16384 && reasons.has(f.reason)));
         requireCondition(report.verdict === (report.findings.length ? 'requires-trust' : 'no-findings'));
@@ -207,8 +206,7 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         if (finding.reason === 'unreadable-archive') blocked = true;
         if (finding.reason === 'inspection-failed') incomplete = true;
         if (findings.length < 200) findings.push(finding);
-        else if (finding.reason === 'unreadable-archive' || (finding.reason !== 'executable'
-            && findings[199].reason !== 'unreadable-archive')) findings[199] = finding;
+        else if (finding.reason === 'unreadable-archive' || findings[199].reason !== 'unreadable-archive') findings[199] = finding;
     };
     try {
         const initial = await fs.stat(path);
@@ -233,8 +231,8 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             if (ext === 'vpk') {
                 const size = entry.preload.length + entry.length;
                 budget.nestedBytes += size;
-                requireCondition(depth < 4 && ++budget.archives <= 64 && size <= 128 * 1024 * 1024
-                    && budget.nestedBytes <= 256 * 1024 * 1024);
+                requireCondition(depth < 4 && ++budget.archives <= 64 && size <= 512 * 1024 * 1024
+                    && budget.nestedBytes <= 1024 * 1024 * 1024);
                 const staging = await fs.mkdtemp(join(tmpdir(), 'grimoire-nested-safety-'));
                 try {
                     const handle = await fs.open(entry.file, 'r');
@@ -263,23 +261,14 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/\0$/, '');
             requireCondition(!text.includes('\0'));
             const isJs = ['js', 'vjs', 'vjs_c', 'vts_c'].includes(ext);
-            const sourceFindings = inspectModSource(entry.path, text, isJs);
-            if (EXECUTABLE.has(ext) || sourceFindings.some(f => f.reason === 'executable' || f.reason === 'browser'
-                || f.reason === 'dynamic-code' || f.reason === 'remote-code')) {
-                for (const finding of sourceFindings) add(finding);
-            }
-            if (EXECUTABLE.has(ext) && !isJs) add({ entry: entry.path, reason: 'executable' });
+            for (const finding of inspectModSource(entry.path, text, isJs)) add(finding);
         }
         if (layouts.length) {
             requireCondition(layouts.length <= 128);
             if (!binary) throw new InspectionIncomplete();
             const decoded = await decodeLayouts(path, layouts, binary);
             for (const [entry, text] of decoded) {
-                const sourceFindings = inspectModSource(entry, text, false);
-                if (sourceFindings.some(f => f.reason === 'executable' || f.reason === 'browser'
-                    || f.reason === 'dynamic-code' || f.reason === 'remote-code')) {
-                    for (const finding of sourceFindings) add(finding);
-                }
+                for (const finding of inspectModSource(entry, text, false)) add(finding);
             }
         }
         const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));

@@ -3,11 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, CircleHelp, ShieldAlert, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
 import SafetyExplainer from './mod-safety/SafetyExplainer';
-import { PageHeader, PageLayout } from './common/PageComponents';
 import ModThumbnail from './ModThumbnail';
 import { inferHeroFromTitle } from '../lib/lockerUtils';
 import { shouldBlurNsfw } from '../lib/appSettings';
-import { Button, IconButton, Tag } from './common/ui';
+import { Button, Card, IconButton, Tag } from './common/ui';
 import { useModSafetyStore } from '../stores/modSafetyStore';
 import { useAppStore } from '../stores/appStore';
 import type { ModSafetyReport, ModSafetySnapshot } from '../types/modSafety';
@@ -47,15 +46,13 @@ function Risks({ report }: { report: ModSafetyReport }) {
     const descriptions = {
         'local-file': t('modSafety.risks.localFile'), browser: t('modSafety.risks.browser'),
         'remote-code': t('modSafety.risks.remoteCode'), 'dynamic-code': t('modSafety.risks.dynamicCode'),
-        executable: t('modSafety.risks.executable'), uninspectable: t('modSafety.risks.uninspectable'),
+        uninspectable: t('modSafety.risks.uninspectable'),
         'native-code': t('modSafety.risks.nativeCode'), 'unreadable-archive': t('modSafety.risks.unreadableArchive'),
         'inspection-failed': t('modSafety.risks.inspectionFailed'),
     };
     const reasons = [...new Set(report.findings.map(f => f.reason))];
-    const specific = reasons.filter(reason => reason !== 'executable');
-    const visible = specific.some(reason => reason !== 'uninspectable') ? specific : reasons;
     return <ul className="space-y-2 text-sm leading-relaxed text-text-primary">
-        {visible.map(reason => <li key={reason}>{descriptions[reason]}</li>)}
+        {reasons.map(reason => <li key={reason}>{descriptions[reason]}</li>)}
     </ul>;
 }
 
@@ -64,7 +61,7 @@ function Findings({ report }: { report: ModSafetyReport }) {
     const labels = {
         'local-file': t('modSafety.reasons.localFile'), browser: t('modSafety.reasons.browser'),
         'remote-code': t('modSafety.reasons.remoteCode'), 'dynamic-code': t('modSafety.reasons.dynamicCode'),
-        executable: t('modSafety.reasons.executable'), uninspectable: t('modSafety.reasons.uninspectable'),
+        uninspectable: t('modSafety.reasons.uninspectable'),
         'native-code': t('modSafety.reasons.nativeCode'), 'unreadable-archive': t('modSafety.reasons.unreadableArchive'),
         'inspection-failed': t('modSafety.reasons.inspectionFailed'),
     };
@@ -87,14 +84,14 @@ export function ModSafetyBanner() {
     const { installed, prompts, dismissed, dismiss } = useModSafetyStore();
     const mods = useAppStore(s => s.mods);
     const pending = pendingSafetyKeys(safetyReviewRows(mods, installed, prompts));
-    if (location.pathname === '/mod-safety' || !hasNewSafetyReview(pending, dismissed)) return null;
+    if (location.pathname === '/settings/mod-safety' || !hasNewSafetyReview(pending, dismissed)) return null;
     return <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-hl/5 bg-bg-secondary px-4 py-2 text-xs">
         <span className="text-state-warning">
             {t('modSafety.attention', { count: pending.length })}
         </span>
         <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" icon={ShieldAlert}
-                onClick={() => { useModSafetyStore.setState({ detail: null }); navigate('/mod-safety'); }}>{t('modSafety.reviewMods')}</Button>
+                onClick={() => { useModSafetyStore.setState({ detail: null }); navigate('/settings/mod-safety'); }}>{t('modSafety.reviewMods')}</Button>
             <IconButton size="sm" icon={X} label={t('modSafety.dismissNotice')} onClick={() => dismiss(pending)} />
         </div>
     </div>;
@@ -113,12 +110,11 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
     const labels = {
         'local-file': t('modSafety.summary.localFile'), browser: t('modSafety.summary.browser'),
         'remote-code': t('modSafety.summary.remoteCode'), 'dynamic-code': t('modSafety.summary.dynamicCode'),
-        executable: t('modSafety.summary.executable'), uninspectable: t('modSafety.summary.uninspectable'),
+        uninspectable: t('modSafety.summary.uninspectable'),
         'native-code': t('modSafety.summary.nativeCode'), 'unreadable-archive': t('modSafety.unchecked'),
         'inspection-failed': t('modSafety.incomplete'),
     };
-    const reasons = [...new Set(row.report.findings.map(f => f.reason))];
-    const summary = reasons.length > 1 ? reasons.filter(r => r !== 'executable') : reasons;
+    const summary = [...new Set(row.report.findings.map(f => f.reason))];
     const unreadable = row.report.verdict === 'blocked';
     const incomplete = row.report.verdict === 'incomplete';
     const canAllow = !unreadable && !incomplete && !row.trusted && (!!row.mod || row.request?.canTrust);
@@ -185,7 +181,7 @@ export function ModSafetySync() {
     const openedRequests = useRef(new Set<string>());
     useEffect(() => {
         if (!openRequested) return;
-        navigate('/mod-safety');
+        navigate('/settings/mod-safety');
         useModSafetyStore.setState({ openRequested: false });
     }, [openRequested, navigate]);
     useEffect(() => {
@@ -195,7 +191,7 @@ export function ModSafetySync() {
         if (!waiting.length) return;
         for (const p of waiting) openedRequests.current.add(p.id);
         useModSafetyStore.setState({ detail: null });
-        navigate('/mod-safety');
+        navigate('/settings/mod-safety');
     }, [prompts, navigate]);
     useEffect(() => {
         let live = true;
@@ -218,7 +214,7 @@ export function ModSafetySync() {
     return null;
 }
 
-export function ModSafetyPage() {
+export function ModSafetySection() {
     const { t } = useTranslation();
     const [explainerOpen, setExplainerOpen] = useState(false);
     const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
@@ -276,13 +272,12 @@ export function ModSafetyPage() {
         const results = await window.electronAPI.rescanModSafety();
         useModSafetyStore.setState({ installed: results });
     });
-    return <PageLayout maxWidth="5xl">
-        <PageHeader title={t('modSafety.manage')} action={
-            <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" icon={CircleHelp} onClick={() => setExplainerOpen(true)}>{t('modSafety.explainer.title')}</Button>
-                <Button variant="ghost" isLoading={busy.has('scan') || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
-            </div>
-        } />
+    return <Card title={t('modSafety.manage')} icon={ShieldCheck} description={t('modSafety.description')} action={
+        <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" icon={CircleHelp} onClick={() => setExplainerOpen(true)}>{t('modSafety.explainer.title')}</Button>
+            <Button variant="ghost" isLoading={busy.has('scan') || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
+        </div>
+    }>
         {scanFailed && <p role="alert" className="mb-4 text-sm text-state-warning">{t('modSafety.scanFailed')}</p>}
         <div className="space-y-3">
             <ReviewList rows={rows}>{row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
@@ -293,5 +288,5 @@ export function ModSafetyPage() {
             {error && !rows.some(r => r.key === error.key) && <p role="alert" className="text-sm text-state-danger">{error.text}</p>}
         </div>
         {explainerOpen && <SafetyExplainer onClose={() => setExplainerOpen(false)} />}
-    </PageLayout>;
+    </Card>;
 }

@@ -135,7 +135,7 @@ export default function ImportCustomModsModal({
     onClose();
     if (reviewAfterClose.current) {
       useModSafetyStore.setState({ detail: null });
-      navigate('/mod-safety');
+      navigate('/settings/mod-safety');
     }
   };
   const platform = window.electronAPI.platform;

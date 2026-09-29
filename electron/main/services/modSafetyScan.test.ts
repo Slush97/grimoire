@@ -68,7 +68,7 @@ describe('VPK safety inspection', () => {
         const path = join(root, 'test_dir.vpk');
         const cache = join(root, 'not-a-directory');
         await fs.writeFile(cache, 'inert');
-        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('eval(x);') }]));
         expect((await scanModSafety(path, undefined, cache)).verdict).toBe('requires-trust');
     });
     it('never reuses a successful report for a missing file', async () => {
@@ -90,9 +90,9 @@ describe('VPK safety inspection', () => {
         expect(result.verdict).toBe('requires-trust');
         expect(result.findings).toContainEqual({ entry: 'panorama/scripts/ordinary.vjs_c', reason: 'local-file' });
     });
-    it('requires consent for scripts without recognizable dangerous tokens', async () => {
+    it('does not ask about scripts without a way to reach files, the network or a browser panel', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/scripts/compact.vjs_c', bytes: safetyResource(Buffer.from('!function(a){a(1)}(run);')) }]));
-        expect(result.verdict).toBe('requires-trust');
+        expect(result.verdict).toBe('no-findings');
     });
     it('does not require review for stylesheets without executable behavior', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.css', bytes: Buffer.from('.x { background-image: url("\\66 ile:///example"); }') }]));
@@ -121,11 +121,11 @@ describe('VPK safety inspection', () => {
     // which overflowed the old 2 MiB stdout buffer at roughly 9,000 entries.
     it.skipIf(!existsSync(pinnedDecoder))('decodes layouts in archives with many entries', async () => {
         const path = join(root, 'test_dir.vpk');
-        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/hud.vxml_c', bytes: safetyLayout('run(1);') },
+        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/hud.vxml_c', bytes: safetyLayout('run("file:///example.txt");') },
             ...Array.from({ length: 12000 }, (_, i) => ({ path: `models/heroes/hero_${i}.vmdl_c`, bytes: Buffer.from('inert') }))]));
         const report = await scanModSafety(path, pinnedDecoder);
         expect(report.verdict).toBe('requires-trust');
-        expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'executable' });
+        expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'local-file' });
     });
     it('still blocks layouts the decoder runs on but rejects', async () => {
         const path = join(root, 'test_dir.vpk');
@@ -195,7 +195,7 @@ describe('VPK safety inspection', () => {
         const header = Buffer.alloc(6);
         const plain = Buffer.concat([header, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg>')]);
         expect((await scan(safetyVpk([{ path: 'name.vsvg_c', bytes: safetyResource(plain) }]))).verdict).toBe('no-findings');
-        const active = Buffer.concat([header, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="run(1)"/>')]);
+        const active = Buffer.concat([header, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="eval(code)"/>')]);
         expect((await scan(safetyVpk([{ path: 'name.vsvg_c', bytes: safetyResource(active) }]))).verdict).toBe('requires-trust');
     });
     it.each([
@@ -209,8 +209,9 @@ describe('VPK safety inspection', () => {
         ['panorama/layout/hud.xml', '<root><scripts><include src="s2r://panorama/scripts/hud.vjs_c"/></scripts><Panel/></root>'],
         ['panorama/layout/hud.xml', '<Panel onload="run(1)"/>'],
         ['scripts/main.nut', 'run(1);'],
-    ])('keeps executable content behind review: %s', async (path, source) => {
-        expect((await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]))).verdict).toBe('requires-trust');
+        ['panorama/scripts/hud.js', '$.Schedule(0.1, () => $("#timer").text = String(Game.GetGameTime()));'],
+    ])('runs scripts that only drive the UI without review: %s', async (path, source) => {
+        expect((await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]))).verdict).toBe('no-findings');
     });
     it('recursively inspects nested VPKs including preload bytes', async () => {
         const asset = safetyVpk([{ path: 'model.vmdl_c', bytes: Buffer.from('inert') }]);
@@ -233,18 +234,19 @@ describe('VPK safety inspection', () => {
         expect(result.findings).toContainEqual({ entry: 'probe.js', reason: 'local-file' });
     });
     it('cannot hide a specific risk behind the UI finding limit', async () => {
-        const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run(1);') }));
-        files.push({ path: 'last.js', bytes: Buffer.from('run("file:///example")') });
+        const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run("file:///example")') }));
+        files.push({ path: 'last.js', bytes: Buffer.from('eval(code)') });
         const result = await scan(safetyVpk(files));
         expect(result.findings.length).toBe(200);
         expect(result.verdict).toBe('requires-trust');
-        expect(result.findings).toContainEqual({ entry: 'last.js', reason: 'local-file' });
+        expect(result.findings).toContainEqual({ entry: 'last.js', reason: 'dynamic-code' });
     });
     it.each([
         ['local-file', 'run("file:///example.txt")'],
         ['browser', '$.CreatePanel("CitadelHTMLPanel", parent, "")'],
         ['remote-code', 'fetch("https://example.invalid")'],
         ['dynamic-code', 'eval(code)'],
+        ['dynamic-code', 'panel[String.fromCharCode(83, 101, 116, 85, 82, 76)](target)'],
         ['uninspectable', 'function {'],
     ])('offers review for %s without executing the script', async (reason, source) => {
         const report = await scan(safetyVpk([{ path: 'script.js', bytes: Buffer.from(source) }]));

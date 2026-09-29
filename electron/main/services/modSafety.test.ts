@@ -24,7 +24,7 @@ vi.mock('node:worker_threads', async () => {
 import { approveVpkSafety, assertVpkSafety, carryVpkSafety, getModSafetyPrompts, pruneModQuarantine, respondToModSafety } from './modSafety';
 
 const script = (fingerprint = 'a'.repeat(64)): ModSafetyReport => ({
-    policyVersion: 1, fingerprint, verdict: 'requires-trust', findings: [{ entry: 'test.js', reason: 'executable' }],
+    policyVersion: 1, fingerprint, verdict: 'requires-trust', findings: [{ entry: 'test.js', reason: 'browser' }],
 });
 let candidate: string;
 beforeEach(async () => {
@@ -230,7 +230,7 @@ describe("approval for Grimoire's own repacks and merges", () => {
 
     it('carries an approved script mod to its imprinted repack without a prompt', async () => {
         await trust('a'.repeat(64));
-        h.reports.push(report('b'.repeat(64), [{ entry: 'addoninfo.txt', reason: 'executable' }, hud]), report('a'.repeat(64), [hud]));
+        h.reports.push(report('b'.repeat(64), [{ entry: 'addoninfo.txt', reason: 'local-file' }, hud]), report('a'.repeat(64), [hud]));
         expect(await carryVpkSafety(['mod'], 'repack')).toBe('trusted');
         expect(await trusted()).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
         expect(getModSafetyPrompts()).toHaveLength(0);
