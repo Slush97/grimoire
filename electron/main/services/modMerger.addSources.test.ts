@@ -307,4 +307,8 @@ describe('addMergeSources', () => {
     });
 });
 // These tests use inert file placeholders; scanner behavior has its own fixtures.
-vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));
+vi.mock('./modSafety', () => ({
+    assertVpkSafety: vi.fn(async () => {}),
+    carryVpkSafety: vi.fn(async () => 'trusted'),
+    moveSafetySnapshot: vi.fn(),
+}));

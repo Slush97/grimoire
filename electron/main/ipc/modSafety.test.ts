@@ -9,7 +9,7 @@ vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args
 vi.mock('../index', () => ({ getMainWindow: () => ({ webContents: h.sender }) }));
 vi.mock('../services/settings', () => ({ getActiveDeadlockPath: () => 'game' }));
 vi.mock('../services/modSafety', () => ({
-    getModSafetyPrompts: vi.fn(), respondToModSafety: vi.fn(), inspectVpkSafety: vi.fn(), isModSafetyTrusted: vi.fn(),
+    getModSafetyPrompts: vi.fn(), respondToModSafety: vi.fn(),
     approveVpkSafety: h.approve, modSafetySnapshot: () => h.snapshot,
 }));
 vi.mock('../services/modSafetyAudit', () => ({

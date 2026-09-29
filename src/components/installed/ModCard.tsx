@@ -229,7 +229,9 @@ function ModMediaPreview({
 
   if (!isSound) {
     return (
-      <div className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden border border-hl/[0.08] ${mediaSpacingClasses}`}>
+      <div className={`group relative w-full ${mediaFrameClasses} ${mediaSpacingClasses}`}>
+      {/* The frame is the button, not the wrapper: its focus ring must not be
+          clipped, and the image zoom keys on the button's :enabled state. */}
       <button
         type="button"
         onClick={(e) => {
@@ -237,7 +239,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className="absolute inset-0 h-full w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+        className="group absolute inset-0 h-full w-full overflow-hidden rounded-lg border border-hl/[0.08] bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -1331,14 +1333,14 @@ export function ModCard({
         )}
         {(() => {
         const overlayBadges = (
-          <div className="absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
+          <div className="pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
             {mod.enabled && !selectMode && (
               mod.priorityMod ? (
-                <div className="flex h-5 shrink-0 items-start">
+                <div className="pointer-events-auto flex h-5 shrink-0 items-start">
                   <GlobalLoadBadge variant="overlay" />
                 </div>
               ) : (
-              <div className="flex h-5 shrink-0 items-start" data-card-action="true">
+              <div className="pointer-events-auto flex h-5 shrink-0 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
                   value={loadPosition ?? mod.priority}
@@ -1350,7 +1352,7 @@ export function ModCard({
               )
             )}
             {!mod.enabled && !selectMode && (
-              <div className="flex shrink-0 flex-col items-start gap-1">
+              <div className="pointer-events-auto flex shrink-0 flex-col items-start gap-1">
                 <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
                   {t('locker.global.disabledBadge')}
                 </Tag>
@@ -1366,7 +1368,7 @@ export function ModCard({
                 )}
               </div>
             )}
-              <div className="ml-auto flex min-w-0 flex-wrap items-start justify-end gap-1">
+              <div className="pointer-events-auto ml-auto flex min-w-0 flex-wrap items-start justify-end gap-1">
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
               {mod.nsfw && (

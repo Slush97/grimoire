@@ -1,4 +1,4 @@
-import type { ModSafetyPrompt, InstalledModSafety, ModSafetySnapshot } from './modSafety';
+import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type {
     Mod,
     AppSettings,
@@ -821,7 +821,6 @@ export interface ElectronAPI {
     respondModSafety: (id: string, accepted: boolean) => Promise<void>;
     getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;
     rescanModSafety: () => Promise<InstalledModSafety[]>;
-    inspectModSafety: (id: string) => Promise<ModSafetySnapshot>;
     reviewModSafety: (id: string, fingerprint: string) => Promise<Mod>;
     onModSafetyChanged: (callback: () => void) => () => void;
     getMods: () => Promise<Mod[]>;
@@ -1463,7 +1462,7 @@ export interface ElectronAPI {
     deadworksServerContent: (serverId: string) => Promise<DeadworksContentItem[]>;
     deadworksRelayStats: () => Promise<DeadworksRelayStats | null>;
     deadworksPingServer: (addr: string) => Promise<number>;
-    deadworksConnect: (serverId: string, addr: string) => Promise<DeadworksConnectResult>;
+    deadworksConnect: (serverId: string, addr: string, serverName: string) => Promise<DeadworksConnectResult>;
     onDeadworksDownloadProgress: (callback: (p: DeadworksConnectProgress) => void) => () => void;
 }
 

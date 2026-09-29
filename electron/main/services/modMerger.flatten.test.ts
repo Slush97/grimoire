@@ -265,7 +265,8 @@ describe('mergeMods flattening', () => {
     });
 
     it('keeps parent merges and sources intact when output inspection denies activation', async () => {
-        const { assertVpkSafety } = await import('./modSafety');
+        const { assertVpkSafety, carryVpkSafety } = await import('./modSafety');
+        vi.mocked(carryVpkSafety).mockResolvedValueOnce('differs');
         vi.mocked(assertVpkSafety).mockRejectedValueOnce(new Error('MOD_SAFETY_BLOCKED'));
         await expect(mergeMods('/game', [parentA.id, parentB.id], { name: 'Flattened' }))
             .rejects.toThrow('MOD_SAFETY_BLOCKED');
@@ -290,4 +291,8 @@ describe('mergeMods flattening', () => {
     });
 });
 // These tests use inert file placeholders; scanner behavior has its own fixtures.
-vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));
+vi.mock('./modSafety', () => ({
+    assertVpkSafety: vi.fn(async () => {}),
+    carryVpkSafety: vi.fn(async () => 'trusted'),
+    moveSafetySnapshot: vi.fn(),
+}));

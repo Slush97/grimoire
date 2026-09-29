@@ -28,13 +28,13 @@ export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
         aria-label={`${status}. ${t('modSafety.viewFindings', { name })}`}
         title={`${status}. ${t('modSafety.viewFindings', { name })}`}
         className="inline-flex shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
-        onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
+        onClick={e => { e.stopPropagation(); open(id); }}>
         <Tag variant="overlay" tone={snapshot.trusted ? 'accepted' : 'warning'}>
             <Icon className="h-3 w-3" aria-hidden />
         </Tag>
     </button>;
     return <button type="button" className="max-w-full shrink-0 cursor-pointer rounded-sm text-left focus-visible:outline-2 focus-visible:outline-accent"
-        title={t('modSafety.viewFindings', { name })} onClick={e => { e.stopPropagation(); open(id, name, snapshot); }}>
+        title={t('modSafety.viewFindings', { name })} onClick={e => { e.stopPropagation(); open(id); }}>
         <Tag className="max-w-full" tone={snapshot.trusted ? 'accepted' : 'warning'}>
             <Icon className="h-3 w-3 shrink-0" aria-hidden />
             <span className="min-w-0 break-words whitespace-normal">{status}</span>
@@ -152,6 +152,7 @@ function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisab
             <p className="text-sm text-text-secondary">{unreadable ? t('modSafety.uncheckedBody')
                 : incomplete ? t('modSafety.incompleteBody') : row.trusted ? t('modSafety.trustedBody') : t('modSafety.allowHint')}</p>
             {row.request?.context === 'installation' && <p className="text-sm text-text-secondary">{t('modSafety.oldVersionKept')}</p>}
+            {row.request?.context === 'server' && <p className="text-sm text-text-secondary">{t('modSafety.serverContent')}</p>}
             {row.request?.restartRequired && <p className="text-sm text-state-warning">{t('modSafety.closeGame')}</p>}
             {!row.mod && !row.request?.canTrust && !unreadable && !incomplete && <p className="text-sm text-text-secondary">{row.enabled
                 ? t('modSafety.closeGame') : t('modSafety.movedDisabled')}</p>}

@@ -2,7 +2,7 @@ import { promises as fs, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
-import { inspectVpkSafety, isModSafetyTrusted } from './modSafety';
+import { inspectVpkSafety, isModSafetyTrusted, moveSafetySnapshot } from './modSafety';
 import { assertActiveModsSafety, moveToDisabledLibrary } from './modSafetyAudit';
 import { runExclusiveModMutation } from './mods';
 import { migrateModMetadata } from './metadata';
@@ -293,6 +293,7 @@ export async function stashEnabledMods(deadlockPath: string): Promise<VanillaSta
         }
         await fs.mkdir(dirname(to), { recursive: true });
         await fs.rename(from, to);
+        moveSafetySnapshot(from, to);
     }
 
     stash.status = 'active';
@@ -381,6 +382,7 @@ export async function restoreFromStash(
             for (let attempt = 0; attempt < RESTORE_MAX_ATTEMPTS; attempt++) {
                 try {
                     await fs.rename(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
+                    moveSafetySnapshot(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
                     ok = true;
                     break;
                 } catch (err) {

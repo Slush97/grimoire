@@ -121,6 +121,21 @@ describe('embedMergeIdentity repack parity', () => {
         expect(unlinked.some((p) => /\.imprint-embed-.*\.tmp$/.test(p))).toBe(true);
     });
 
+    it('keeps the input trust state without a review, and reviews only an output that differs', async () => {
+        findImprintRepackMismatch.mockReturnValue(null);
+        const { assertVpkSafety, carryVpkSafety } = await import('./modSafety');
+        vi.mocked(carryVpkSafety).mockResolvedValueOnce('untrusted').mockResolvedValueOnce('differs');
+
+        await embedMergeIdentity(MERGED_PATH, 'My Merge', '2026-01-01T00:00:00.000Z', ORIGINAL, []);
+        const [inputs, output] = vi.mocked(carryVpkSafety).mock.calls[0];
+        expect(inputs).toEqual([MERGED_PATH]);
+        expect(output).toMatch(/\.imprint-embed-.*\.tmp$/);
+        expect(assertVpkSafety).not.toHaveBeenCalled();
+
+        await embedMergeIdentity(MERGED_PATH, 'My Merge', '2026-01-01T00:00:00.000Z', ORIGINAL, []);
+        expect(assertVpkSafety).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\.imprint-embed-.*\.tmp$/), { name: 'My Merge' });
+    });
+
     it('rejects without renaming when the repacked output is unreadable', async () => {
         parseVpkEntryStats
             .mockReturnValueOnce([{ path: 'materials/foo.txt', size: 10 }])
@@ -134,4 +149,8 @@ describe('embedMergeIdentity repack parity', () => {
     });
 });
 // These tests use inert file placeholders; scanner behavior has its own fixtures.
-vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));
+vi.mock('./modSafety', () => ({
+    assertVpkSafety: vi.fn(async () => {}),
+    carryVpkSafety: vi.fn(async () => 'trusted'),
+    moveSafetySnapshot: vi.fn(),
+}));

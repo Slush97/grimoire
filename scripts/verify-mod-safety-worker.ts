@@ -5,12 +5,11 @@ import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import assert from 'node:assert/strict';
 import { safetyResource, safetyVpk, safetyLayout } from '../electron/main/services/modSafetyFixtures';
+import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from '../electron/main/services/vpkmergeBinary';
 import type { ModSafetyReport } from '../src/types/modSafety';
 
 const root = await fs.mkdtemp(join(tmpdir(), 'grimoire-worker-check-'));
-const binaries: Record<string, string> = { 'win32-x64': 'vpkmerge-windows-x86_64.exe',
-    'linux-x64': 'vpkmerge-linux-x86_64', 'darwin-arm64': 'vpkmerge-macos-aarch64' };
-const binary = resolve('resources/vpkmerge', binaries[`${process.platform}-${process.arch}`]);
+const binary = resolve('resources/vpkmerge', VPKMERGE_BINARY_BY_PLATFORM[`${process.platform}-${process.arch}` as SupportedPlatform]);
 try {
     const cases = [
         { name: 'asset', entry: 'textures/test.vtex_c', bytes: Buffer.from('inert fixture'), verdict: 'no-findings' },

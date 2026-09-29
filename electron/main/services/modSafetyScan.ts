@@ -3,14 +3,12 @@ import { createReadStream, promises as fs } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { inspectModSource, MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 import type { ModSafetyFinding, ModSafetyReport } from '../../../src/types/modSafety';
 
-const run = promisify(execFile);
 // Bump for parser, decoder or finding changes, without invalidating user consent.
-export const MOD_SAFETY_SCANNER_VERSION = 2;
+export const MOD_SAFETY_SCANNER_VERSION = 3;
 const MAX_TREE = 16 * 1024 * 1024;
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
@@ -74,10 +72,11 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
             return text;
         };
         for (let extension = string(); extension !== ''; extension = string()) {
-            requireCondition(/^[a-z0-9_+.-]+$/i.test(extension));
+            // Like the root folder, a missing extension is stored as a single space.
+            requireCondition(extension === ' ' || /^[a-z0-9_+.-]+$/i.test(extension));
             for (let folder = string(); folder !== ''; folder = string()) {
                 for (let name = string(); name !== ''; name = string()) {
-                    const entryPath = `${folder === ' ' ? '' : folder + '/'}${name}.${extension}`;
+                    const entryPath = `${folder === ' ' ? '' : folder + '/'}${name}${extension === ' ' ? '' : '.' + extension}`;
                     requireCondition(validPath(entryPath) && !seen.has(entryPath.toLowerCase()));
                     requireCondition(cursor + 18 <= tree.length && entries.length < MAX_ENTRIES);
                     seen.add(entryPath.toLowerCase());
@@ -100,7 +99,7 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
                         if (!sizes.has(file)) sizes.set(file, (await fs.stat(file)).size);
                         requireCondition(offset + length <= sizes.get(file)!);
                     }
-                    entries.push({ path: entryPath, extension: extension.toLowerCase(), preload, file, offset, length });
+                    entries.push({ path: entryPath, extension: extension.trim().toLowerCase(), preload, file, offset, length });
                 }
             }
         }
@@ -159,13 +158,16 @@ async function decodeLayouts(vpk: string, entries: Entry[], binary: string): Pro
     const staging = await fs.mkdtemp(join(tmpdir(), 'grimoire-safety-'));
     try {
         // Paths and sizes have been validated before invoking the bundled decoder.
-        const args = ['panorama', 'dump', '--vpk', vpk, '--out-dir', staging, '--no-raw', '--json'];
+        const args = ['panorama', 'dump', '--vpk', vpk, '--out-dir', staging, '--no-raw'];
         for (const entry of entries) args.push('--prefix', entry.path);
-        const { stdout } = await run(binary, args, { timeout: 30000, maxBuffer: 2 * 1024 * 1024, windowsHide: true })
-            .catch((err: NodeJS.ErrnoException) => {
-                throw err.syscall?.startsWith('spawn') ? new InspectionIncomplete() : err;
-            });
-        const report = JSON.parse(stdout);
+        await new Promise<void>((done, fail) => {
+            const child = spawn(binary, args, { stdio: 'ignore', timeout: 30000, windowsHide: true });
+            child.once('error', (err: NodeJS.ErrnoException) => fail(err.syscall?.startsWith('spawn') ? new InspectionIncomplete() : err));
+            child.once('close', code => code === 0 ? done() : fail(new Error('Layout decoder failed')));
+        });
+        // The report lists every archive entry, filtered ones included, so it
+        // grows with the archive: read it from disk rather than a capped pipe.
+        const report = JSON.parse(await fs.readFile(join(staging, '_manifest.json'), 'utf8'));
         requireCondition(Array.isArray(report.entries));
         const result = new Map<string, string>();
         for (const entry of entries) {

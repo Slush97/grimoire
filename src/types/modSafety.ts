@@ -24,7 +24,7 @@ export interface ModSafetyPrompt {
     report: ModSafetyReport;
     canTrust: boolean;
     restartRequired: boolean;
-    context: 'installation' | 'activation' | 'startup';
+    context: 'installation' | 'activation' | 'startup' | 'server';
 }
 
 export interface InstalledModSafety {

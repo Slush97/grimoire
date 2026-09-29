@@ -392,7 +392,12 @@ function planShuffleGroup(
   // Bucket members are pooled under an axis-qualified key so a hero-card opt-in
   // (or variant choice) on the same submission cannot arm this group.
   const poolKeyOf = scope === 'bucket' ? shufflePoolKey : shuffleSkinKey;
-  const skins = groupLockerSkins(mods);
+  // A random pick must not stop the launch on a safety prompt, so a disabled
+  // file the gate is known to refuse is never a candidate. Unchecked files
+  // stay in: the gate decides those.
+  const skins = groupLockerSkins(
+    mods.filter((mod) => mod.enabled || !mod.safety || mod.safety.trusted)
+  );
   // A Global mod is pinned by construction: it lives in the priority root and
   // outranks everything, so offering it as a shuffle candidate is
   // contradictory (it is already always on). Dropping it from the pool also

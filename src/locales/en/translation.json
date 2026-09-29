@@ -58,6 +58,7 @@
     "failed": "Could not finish. Try again.",
     "trustedBody": "You accepted these risks for this version. You can disable or remove it in Installed.",
     "oldVersionKept": "Updating? Choose Keep disabled to keep your current version.",
+    "serverContent": "This server needs this content to join. Keep disabled cancels joining and removes it.",
     "movedDisabled": "This mod is disabled.",
     "closeGame": "This mod may still be running. Close Deadlock, then check installed mods again to disable it.",
     "trustVersion": "Allow this version",
@@ -584,6 +585,7 @@
       "launchingSteam": "Launching Deadlock through Steam. Accept any Steam prompt to join.",
       "preparing": "Preparing...",
       "preparingToConnect": "Preparing to connect...",
+      "safetyDeclined": "This server's content did not pass the mod safety check, so Grimoire did not join.",
       "status": {
         "checking": "Verifying files",
         "connecting": "Handing off to Steam",
@@ -1553,6 +1555,7 @@
       "partial_other": "{{count}} mods could not be toggled; launching anyway.",
       "restorePartial_one": "{{count}} mod could not be restored; try again.",
       "restorePartial_other": "{{count}} mods could not be restored; try again.",
+      "safety": "{{name}} stayed off after the safety check, so the game was not launched. Use Restore mods to undo.",
       "targetMissing": "Couldn't find that mod to solo. It may have been toggled or removed."
     },
     "edit": {

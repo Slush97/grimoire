@@ -122,7 +122,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     respondModSafety: (id: string, accepted: boolean) => ipcRenderer.invoke('respond-mod-safety', id, accepted),
     getInstalledModSafety: () => ipcRenderer.invoke('get-installed-mod-safety'),
     rescanModSafety: () => ipcRenderer.invoke('rescan-mod-safety'),
-    inspectModSafety: (id: string) => ipcRenderer.invoke('inspect-mod-safety', id),
     reviewModSafety: (id: string, fingerprint: string) => ipcRenderer.invoke('review-mod-safety', id, fingerprint),
     onModSafetyChanged: (callback: () => void) => {
         const listener = () => callback();
@@ -866,7 +865,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deadworksServerContent: (serverId: string) => ipcRenderer.invoke('deadworks-server-content', serverId),
     deadworksRelayStats: () => ipcRenderer.invoke('deadworks-relay-stats'),
     deadworksPingServer: (addr: string) => ipcRenderer.invoke('deadworks-ping-server', addr),
-    deadworksConnect: (serverId: string, addr: string) => ipcRenderer.invoke('deadworks-connect', serverId, addr),
+    deadworksConnect: (serverId: string, addr: string, serverName: string) => ipcRenderer.invoke('deadworks-connect', serverId, addr, serverName),
     onDeadworksDownloadProgress: (callback: (p: DeadworksConnectProgress) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, p: DeadworksConnectProgress) => callback(p);
         ipcRenderer.on('deadworks-download-progress', handler);

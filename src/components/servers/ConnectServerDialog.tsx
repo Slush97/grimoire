@@ -17,7 +17,7 @@ interface Props {
 }
 
 type Phase = 'working' | 'done' | 'error';
-type MessageKey = 'preparing' | 'launching' | 'connectionFailed';
+type MessageKey = 'preparing' | 'launching' | 'connectionFailed' | 'safetyDeclined';
 
 function formatBytes(n: number): string {
   if (!n || n < 0) return '';
@@ -58,11 +58,15 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
 
     if (!startedRef.current) {
       startedRef.current = true;
-      deadworksConnect(server.id, server.raw_address)
+      deadworksConnect(server.id, server.raw_address, server.name)
         .then((result) => {
           if (result.success) {
             setPhase('done');
             setMessageKey('launching');
+            setMessageText('');
+          } else if (result.method === 'safety') {
+            setPhase('error');
+            setMessageKey('safetyDeclined');
             setMessageText('');
           } else {
             setPhase('error');
@@ -81,7 +85,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
     }
 
     return unsubscribe;
-  }, [server.id, server.raw_address]);
+  }, [server.id, server.raw_address, server.name]);
 
   // Per-item download bar. Decompression has no reliable total, so we show an
   // indeterminate shimmer for that phase instead of a misleading percentage.
@@ -95,7 +99,9 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
       ? t('servers.connect.launchingSteam')
       : messageKey === 'connectionFailed'
         ? t('servers.connect.connectionFailed')
-        : t('servers.connect.preparingToConnect')
+        : messageKey === 'safetyDeclined'
+          ? t('servers.connect.safetyDeclined')
+          : t('servers.connect.preparingToConnect')
   );
 
   return (

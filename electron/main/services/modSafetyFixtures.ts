@@ -16,9 +16,9 @@ function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: num
     let offset = 0;
     const groups = new Map<string, Map<string, typeof files>>();
     for (const file of files) {
-        const dot = file.path.lastIndexOf('.');
         const slash = file.path.lastIndexOf('/');
-        const extension = file.path.slice(dot + 1);
+        const dot = file.path.lastIndexOf('.');
+        const extension = dot > slash ? file.path.slice(dot + 1) : ' ';
         const folder = slash === -1 ? ' ' : file.path.slice(0, slash);
         if (!groups.has(extension)) groups.set(extension, new Map());
         const folders = groups.get(extension)!;
@@ -31,7 +31,9 @@ function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: num
         for (const [folder, entries] of folders) {
             str(folder);
             for (const file of entries) {
-                str(file.path.slice(file.path.lastIndexOf('/') + 1, file.path.lastIndexOf('.')));
+                const slash = file.path.lastIndexOf('/');
+                const dot = file.path.lastIndexOf('.');
+                str(file.path.slice(slash + 1, dot > slash ? dot : undefined));
                 const preload = file.preload ?? 0;
                 const meta = Buffer.alloc(18);
                 meta.writeUInt16LE(preload, 4);

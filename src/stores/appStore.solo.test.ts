@@ -118,4 +118,20 @@ describe('appStore solo restore', () => {
     // Expected, recoverable lock: it must not snapshot a restore set (nothing changed).
     expect(useAppStore.getState().soloRestore).toBeNull();
   });
+
+  it('reports a target the safety gate kept off without dropping to the error page', async () => {
+    const a = mod({ id: 'a', enabled: true, sha256: 'aa' });
+    const c = mod({ id: 'c', enabled: false, sha256: 'cc' });
+    useAppStore.setState({ mods: [a, c] });
+    applyModToggleBatch.mockResolvedValueOnce({
+      mods: [{ ...a, enabled: false }, c],
+      failures: ['enable c: Error: MOD_SAFETY_BLOCKED: The archive could not be read or installed safely.'],
+    });
+
+    const result = await useAppStore.getState().soloMod([modRestoreKey(c)], 'C');
+
+    expect(result).toEqual({ applied: true, failures: 1, reason: 'safety' });
+    expect(useAppStore.getState().modsError).toBeNull();
+    expect(useAppStore.getState().soloRestore).toEqual({ keys: [modRestoreKey(a)], label: 'C' });
+  });
 });

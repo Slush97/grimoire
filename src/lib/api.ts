@@ -1398,8 +1398,8 @@ export async function deadworksPingServer(addr: string): Promise<number> {
   return window.electronAPI.deadworksPingServer(addr);
 }
 
-export async function deadworksConnect(serverId: string, addr: string): Promise<DeadworksConnectResult> {
-  return window.electronAPI.deadworksConnect(serverId, addr);
+export async function deadworksConnect(serverId: string, addr: string, serverName: string): Promise<DeadworksConnectResult> {
+  return window.electronAPI.deadworksConnect(serverId, addr, serverName);
 }
 
 export function deadworksOnDownloadProgress(

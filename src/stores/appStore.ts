@@ -447,8 +447,10 @@ interface AppState {
   /** Disable every other mod and enable only `enableKeys` (one card's file(s)),
    *  snapshotting the prior enabled set for one-click restore. `applied` is
    *  false when the target no longer resolves or the whole batch was rejected
-   *  (e.g. game running), so the caller knows whether it's safe to launch. */
-  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' | 'gameRunning' }>;
+   *  (e.g. game running), so the caller knows whether it's safe to launch.
+   *  reason 'safety' means the swap applied but a target stayed off at the
+   *  safety gate, so launching would not test it. */
+  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' | 'gameRunning' | 'safety' }>;
   /** Re-apply the enabled set captured by the last soloMod call. */
   restoreSoloMods: () => Promise<{ failures: number }>;
   /** Drop the solo-restore snapshot without touching enablement. */
@@ -1031,6 +1033,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
       set({ mods: updated, soloRestore: { keys, label } });
+      // Only enables pass the safety gate, so any safety failure is a target.
+      if (failures.some((failure) => failure.includes('MOD_SAFETY_'))) {
+        return { applied: true, failures: failures.length, reason: 'safety' };
+      }
       return { applied: true, failures: failures.length };
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }

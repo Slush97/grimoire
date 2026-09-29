@@ -1,5 +1,5 @@
 import { ipcMain, shell } from 'electron';
-import { assertVpkSafety, modSafetySnapshot, moveSafetySnapshot } from '../services/modSafety';
+import { modSafetySnapshot } from '../services/modSafety';
 import { importDisabledVpk } from '../services/importDisabledVpk';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
@@ -17,7 +17,7 @@ import {
     swapModPriority,
     setModsEnabledBatch,
     setModPriorityFolder,
-    allocateEnabledVpkPath,
+    installEnabledVpk,
     runExclusiveModMutation,
     type Mod,
 } from '../services/mods';
@@ -52,7 +52,6 @@ import {
     extractMergeSource,
     addMergeSources,
     replaceMergeSources,
-    reserveOutputSlot,
 } from '../services/modMerger';
 import {
     imprintOneMod,
@@ -87,42 +86,6 @@ let lastUntrustedPathWarned: string | null = null;
 interface UnknownCacheBulkRequest {
     modId: string;
     requestId?: string;
-}
-
-/**
- * Copy a built or extracted VPK into an ENABLED slot.
- *
- * `allocateEnabledVpkPath` reserves nothing on disk, so between the allocate and
- * the copy a concurrent enable or download scans the folder, sees the same pakNN
- * as free, and renames its own VPK in: the copy then overwrites it and that mod
- * silently loses its file. Claiming the slot exclusively first closes that
- * window, the same way mergeMods does via reserveOutputSlot. A failed copy
- * removes the reservation so no 0-byte VPK is left for scanMods to pick up.
- *
- * `freshlyAllocated` is false when replacing one of our own earlier imports
- * (resolveModVpk returned an existing path), where the slot is already ours and
- * an exclusive create would fail with EEXIST.
- */
-async function copyIntoModSlot(
-    sourcePath: string,
-    destPath: string,
-    freshlyAllocated: boolean
-): Promise<void> {
-    // Inspect a private copy, then commit those exact bytes atomically.
-    const staged = `${destPath}.${randomUUID()}.safety-tmp`;
-    let reserved = false;
-    try {
-        await fs.copyFile(sourcePath, staged);
-        await assertVpkSafety(staged, { context: 'installation', name: basename(sourcePath) });
-        if (freshlyAllocated) { await reserveOutputSlot(destPath); reserved = true; }
-        await fs.rename(staged, destPath);
-        moveSafetySnapshot(staged, destPath);
-    } catch (err) {
-        if (reserved) await fs.unlink(destPath).catch(() => {});
-        throw err;
-    } finally {
-        await fs.unlink(staged).catch(() => {});
-    }
 }
 
 /**
@@ -1790,11 +1753,9 @@ ipcMain.handle(
         });
 
         try {
-            // 2. Allocate the next free ENABLED slot (same as import-custom-mod).
-            const destPath = await allocateEnabledVpkPath(deadlockPath);
+            // 2. Install into the next free ENABLED slot.
+            const destPath = await installEnabledVpk(deadlockPath, built.vpkPath);
             const destMetaKey = metaKeyFor(destPath);
-
-            await copyIntoModSlot(built.vpkPath, destPath, true);
 
             const soundSwap: SoundSwapInfo = {
                 heroCodename: built.soundCodename,
@@ -1905,20 +1866,9 @@ ipcMain.handle(
 
         try {
             // 2. Resolve the destination slot: reuse the previous import's slot
-            //    when replacing (never stack two soul containers), else allocate
-            //    the next free ENABLED slot the same way import-custom-mod does.
-            let destPath: string | null = null;
-            let destMetaKey: string | null = null;
-            if (replaceMetaKey) {
-                destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
-                if (destPath) destMetaKey = replaceMetaKey;
-            }
-            let freshSlot = false;
-            if (!destPath) {
-                destPath = await allocateEnabledVpkPath(deadlockPath);
-                destMetaKey = metaKeyFor(destPath);
-                freshSlot = true;
-            }
+            //    when replacing (never stack two soul containers), else install
+            //    into the next free ENABLED slot.
+            const replacePath = replaceMetaKey ? await resolveModVpk(deadlockPath, replaceMetaKey) : null;
 
             // Captured before the copy replaces it: a REUSED slot keeps its
             // fileName and metaKey but gets new bytes, so saved profile entries
@@ -1926,12 +1876,13 @@ ipcMain.handle(
             // deliberately: any sidecar entry still sitting there is an orphan
             // of a deleted mod, and retargeting it would hand this import that
             // dead mod's profile entries.
-            const previousSha = freshSlot ? undefined : getModMetadata(destMetaKey!)?.sha256;
+            const previousSha = replacePath ? getModMetadata(metaKeyFor(replacePath))?.sha256 : undefined;
 
-            await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
+            const destPath = await installEnabledVpk(deadlockPath, built.vpkPath, replacePath ?? undefined);
+            const destMetaKey = metaKeyFor(destPath);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
-            await clearSoulModelCache(destMetaKey!);
+            await clearSoulModelCache(destMetaKey);
 
             const soulImport: SoulContainerImportInfo = {
                 glbFileName: basename(glbPath),
@@ -1950,9 +1901,9 @@ ipcMain.handle(
             // 3. Scrub orphan metadata, then write the local-import entry. We set
             //    globalType explicitly (it always classifies as soul-container) so
             //    it lands in the Locker's Global soul-container group immediately.
-            removeModMetadata(destMetaKey!);
+            removeModMetadata(destMetaKey);
             await setModMetadataWithHash(
-                destMetaKey!,
+                destMetaKey,
                 {
                     modName: name.trim(),
                     thumbnailUrl: thumbnailDataUrl,
@@ -1965,7 +1916,7 @@ ipcMain.handle(
                 },
                 destPath
             );
-            retargetProfileModSha(previousSha, getModMetadata(destMetaKey!)?.sha256);
+            retargetProfileModSha(previousSha, getModMetadata(destMetaKey)?.sha256);
 
             const mods = await scanMods(deadlockPath);
             return mods.map(enrichMod);
@@ -2070,30 +2021,20 @@ ipcMain.handle(
 
         try {
             // 2. Resolve the destination slot: reuse the previous import's slot
-            //    when replacing (never stack two urns), else allocate the next
-            //    free ENABLED slot the same way import-soul-container-glb does.
-            let destPath: string | null = null;
-            let destMetaKey: string | null = null;
-            if (replaceMetaKey) {
-                destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
-                if (destPath) destMetaKey = replaceMetaKey;
-            }
-            let freshSlot = false;
-            if (!destPath) {
-                destPath = await allocateEnabledVpkPath(deadlockPath);
-                destMetaKey = metaKeyFor(destPath);
-                freshSlot = true;
-            }
+            //    when replacing (never stack two urns), else install into the
+            //    next free ENABLED slot the same way import-soul-container-glb does.
+            const replacePath = replaceMetaKey ? await resolveModVpk(deadlockPath, replaceMetaKey) : null;
 
             // Same capture as import-soul-container-glb: a reused slot keeps
             // its fileName and metaKey but gets new bytes, a fresh one carries
             // only orphan metadata worth ignoring.
-            const previousSha = freshSlot ? undefined : getModMetadata(destMetaKey!)?.sha256;
+            const previousSha = replacePath ? getModMetadata(metaKeyFor(replacePath))?.sha256 : undefined;
 
-            await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
+            const destPath = await installEnabledVpk(deadlockPath, built.vpkPath, replacePath ?? undefined);
+            const destMetaKey = metaKeyFor(destPath);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
-            await clearSoulModelCache(destMetaKey!);
+            await clearSoulModelCache(destMetaKey);
 
             const urnImport: UrnImportInfo = {
                 glbFileName: basename(glbPath),
@@ -2111,9 +2052,9 @@ ipcMain.handle(
             // 3. Scrub orphan metadata, then write the local-import entry. We set
             //    globalType explicitly (always 'spirit-urn') so it lands in the
             //    Locker's Global spirit-urn group immediately.
-            removeModMetadata(destMetaKey!);
+            removeModMetadata(destMetaKey);
             await setModMetadataWithHash(
-                destMetaKey!,
+                destMetaKey,
                 {
                     modName: name.trim(),
                     thumbnailUrl: thumbnailDataUrl,
@@ -2126,7 +2067,7 @@ ipcMain.handle(
                 },
                 destPath
             );
-            retargetProfileModSha(previousSha, getModMetadata(destMetaKey!)?.sha256);
+            retargetProfileModSha(previousSha, getModMetadata(destMetaKey)?.sha256);
 
             const mods = await scanMods(deadlockPath);
             return mods.map(enrichMod);

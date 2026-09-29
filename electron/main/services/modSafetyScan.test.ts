@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { scanModSafety } from './modSafetyScan';
-import { safetyChunkedVpk, safetyResource, safetyVpk } from './modSafetyFixtures';
+import { safetyChunkedVpk, safetyLayout, safetyResource, safetyVpk } from './modSafetyFixtures';
+import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import * as policy from './modSafetyPolicy';
+
+const pinnedDecoder = join(__dirname, '../../../resources/vpkmerge',
+    VPKMERGE_BINARY_BY_PLATFORM[`${process.platform}-${process.arch}` as SupportedPlatform] ?? 'unsupported');
 
 let root: string;
 beforeEach(async () => { root = await fs.mkdtemp(join(tmpdir(), 'safety-scanner-test-')); });
@@ -113,6 +117,16 @@ describe('VPK safety inspection', () => {
         }
         expect(await fs.readdir(cache).catch(() => [])).toEqual([]);
     });
+    // The pinned decoder reports every archive entry, filtered ones included,
+    // which overflowed the old 2 MiB stdout buffer at roughly 9,000 entries.
+    it.skipIf(!existsSync(pinnedDecoder))('decodes layouts in archives with many entries', async () => {
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/hud.vxml_c', bytes: safetyLayout('run(1);') },
+            ...Array.from({ length: 12000 }, (_, i) => ({ path: `models/heroes/hero_${i}.vmdl_c`, bytes: Buffer.from('inert') }))]));
+        const report = await scanModSafety(path, pinnedDecoder);
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'executable' });
+    });
     it('still blocks layouts the decoder runs on but rejects', async () => {
         const path = join(root, 'test_dir.vpk');
         await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]));
@@ -146,6 +160,15 @@ describe('VPK safety inspection', () => {
     });
     it.each(['../escape.js', '/root.js', 'C:/outside.js', 'CON.js', 'folder/../x.js'])('rejects unsafe entry paths: %s', async path => {
         expect((await scan(safetyVpk([{ path, bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
+    });
+    it('reads extensionless entries, which the VPK format stores with a blank extension', async () => {
+        const report = await scan(safetyVpk([{ path: 'README', bytes: Buffer.from('notes') },
+            { path: 'docs/LICENSE', bytes: Buffer.from('terms') }, { path: 'models/hero.vmdl_c', bytes: Buffer.from('inert') }]));
+        expect(report.verdict).toBe('no-findings');
+        expect(report.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    });
+    it.each(['../README', 'folder/../LICENSE', 'CON', 'notes/README '])('rejects unsafe extensionless paths: %s', async path => {
+        expect((await scan(safetyVpk([{ path, bytes: Buffer.from('inert') }]))).verdict).toBe('blocked');
     });
     it('rejects duplicate case-insensitive paths', async () => {
         expect((await scan(safetyVpk([{ path: 'a.js', bytes: Buffer.from('run()') }, { path: 'A.js', bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');

@@ -407,6 +407,50 @@ describe('planRandomization', () => {
     expect(plan.enableIds).toEqual(['a2']);
   });
 
+  describe('safety', () => {
+    const refused = (verdict: 'blocked' | 'requires-trust' | 'incomplete'): Mod['safety'] => ({
+      report: { policyVersion: 2, fingerprint: 'f'.repeat(64), verdict, findings: [] },
+      trusted: false,
+    });
+
+    it('keeps the current skin rather than picking one the gate refuses', () => {
+      const heroSkins = new Map<number, Mod[]>([
+        [1, [
+          mod({ id: 'b', gameBananaId: 2, enabled: true, priority: 1 }),
+          mod({ id: 'c', gameBananaId: 3, priority: 2, safety: refused('blocked') }),
+          mod({ id: 'd', gameBananaId: 4, priority: 3, safety: refused('requires-trust') }),
+        ]],
+      ]);
+      for (const value of [0, 0.5, 0.99]) {
+        const plan = planRandomization({
+          heroSkins,
+          heroIds: [1],
+          included: new Set(['gamebanana:2', 'gamebanana:3', 'gamebanana:4']),
+          rng: fixedRng(value),
+        });
+        expect(plan).toEqual({ enableIds: [], disableIds: [], changedHeroes: [] });
+      }
+    });
+
+    it('picks an unchecked variant over a refused one of the same skin', () => {
+      const heroSkins = new Map<number, Mod[]>([
+        [1, [
+          mod({ id: 'a1', gameBananaId: 1, priority: 2, safety: refused('incomplete') }),
+          mod({ id: 'a2', gameBananaId: 1, priority: 3 }),
+          mod({ id: 'b', gameBananaId: 2, enabled: true, priority: 1 }),
+        ]],
+      ]);
+      const plan = planRandomization({
+        heroSkins,
+        heroIds: [1],
+        included: new Set(['gamebanana:1', 'gamebanana:2']),
+        rng: fixedRng(0),
+      });
+      expect(plan.enableIds).toEqual(['a2']);
+      expect(plan.disableIds).toEqual(['b']);
+    });
+  });
+
   it('honors scope: only shuffles heroes in heroIds', () => {
     const heroSkins = new Map<number, Mod[]>([
       [1, [mod({ id: 'a', gameBananaId: 1, enabled: false, priority: 1 })]],

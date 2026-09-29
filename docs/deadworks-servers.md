@@ -22,8 +22,10 @@ Servers.tsx ── api.ts ── IPC (ipc/servers.ts) ── services/deadworksS
    - Ensure `gameinfo.gi` mounts the deadworks content path (see below).
    - For each item not already at the manifest `version`: download the
      `.vpk.bz2`, decompress via the bundled 7-Zip (`7zip-bin`), verify the VPK
-     magic (`0x55aa1234`), then atomically rename onto the canonical path. A
-     `deadworks_cache/versions.json` ledger skips already-current files.
+     magic (`0x55aa1234`), pass an addon through the mod safety gate, then
+     atomically rename onto the canonical path. A
+     `deadworks_cache/versions.json` ledger skips downloading already-current
+     files; current addons still pass the gate on every join.
    - Open `steam://connect/<ip:port>` via `shell.openExternal`.
 
 Maps land in `citadel/maps`; addons in `citadel/deadworks_addons/vpks`.
@@ -68,5 +70,11 @@ built-in `https://relay.grimoiremods.com`; any deadworks-shaped relay works.
 - Manifest filenames are validated as a single safe path component (mirrors the
   relay's Zod guard) before any filesystem write.
 - A 4 GiB decompression ceiling bounds a bz2-bomb manifest.
+- Addons are mounted on every launch, so each one goes through `assertVpkSafety`
+  (context `server`, named after the server) before the join dials. The user can
+  allow a flagged version on the Mod safety page. A declined, blocked or
+  incomplete check deletes that addon and its ledger entry and returns
+  `method: 'safety'` without opening `steam://connect`. Maps are not inspected.
+  See `docs/mod-inspection.md`.
 - No telemetry: unlike the upstream Deadworks launcher, Grimoire sends no
   install/heartbeat pings.

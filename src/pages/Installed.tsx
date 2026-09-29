@@ -3495,6 +3495,10 @@ export default function Installed() {
         }
         return;
       }
+      if (reason === 'safety') {
+        showToast(t('installed.solo.safety', { name: label }), { tone: 'warning' });
+        return;
+      }
       if (failures > 0) {
         showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
       }

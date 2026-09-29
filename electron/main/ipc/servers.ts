@@ -43,14 +43,14 @@ ipcMain.handle('deadworks-ping-server', async (_e, addr: string): Promise<number
     return pingServer(addr);
 });
 
-ipcMain.handle('deadworks-connect', async (_e, serverId: string, addr: string): Promise<DeadworksConnectResult> => {
+ipcMain.handle('deadworks-connect', async (_e, serverId: string, addr: string, serverName: string): Promise<DeadworksConnectResult> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         return { success: false, method: 'none', message: 'No Deadlock path configured. Set it in Settings first.' };
     }
     const win = getMainWindow();
     return prepareAndConnect(
-        { deadlockPath, relayUrl: getRelayUrl(), serverId, addr },
+        { deadlockPath, relayUrl: getRelayUrl(), serverId, serverName, addr },
         (p) => win?.webContents.send('deadworks-download-progress', p),
     );
 });

@@ -22,6 +22,7 @@ import {
     getDeadworksVersionsPath,
 } from './deadlock';
 import { ensureDeadworksSearchPath } from './system';
+import { assertVpkSafety } from './modSafety';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -343,6 +344,7 @@ export interface PrepareAndConnectArgs {
     deadlockPath: string;
     relayUrl: string;
     serverId: string;
+    serverName: string;
     addr: string;
 }
 
@@ -350,14 +352,15 @@ export interface PrepareAndConnectArgs {
  * Provision a server's required content, then hand off to Steam to join.
  *
  * Steps: fetch the manifest, ensure gameinfo.gi mounts the deadworks path,
- * download + bz2-decompress + magic-verify each VPK into its target folder
- * (skipping versions we already hold), then open steam://connect.
+ * download + bz2-decompress + magic-verify each VPK, pass every addon through
+ * the mod safety gate (including versions we already hold), move new files
+ * into their target folder, then open steam://connect.
  */
 export async function prepareAndConnect(
     args: PrepareAndConnectArgs,
     onProgress: (p: DeadworksConnectProgress) => void,
 ): Promise<DeadworksConnectResult> {
-    const { deadlockPath, relayUrl, serverId, addr } = args;
+    const { deadlockPath, relayUrl, serverId, serverName, addr } = args;
     if (!isValidIpPort(addr)) {
         return { success: false, method: 'none', message: `Invalid server address: ${addr}` };
     }
@@ -389,6 +392,26 @@ export async function prepareAndConnect(
     const state = loadVersions(deadlockPath);
     const total = items.length;
 
+    // The addons folder is a search path every launch mounts, so an addon that
+    // fails the gate must not stay there in any version. Dropping its ledger
+    // entry makes the next join download and review it again.
+    const reviewAddon = async (
+        item: DeadworksContentItem,
+        candidate: string,
+        destVpk: string,
+    ): Promise<DeadworksConnectResult | null> => {
+        try {
+            await assertVpkSafety(candidate, { context: 'server', name: serverName });
+            return null;
+        } catch (e) {
+            safeUnlink(candidate);
+            safeUnlink(destVpk);
+            delete state.managed[item.filename];
+            saveVersions(deadlockPath, state);
+            return { success: false, method: 'safety', message: `${item.filename}.vpk: ${(e as Error).message}` };
+        }
+    };
+
     for (let idx = 0; idx < total; idx++) {
         const item = items[idx];
         const targetDir = item.kind === 'map' ? mapsDir : addonsDir;
@@ -398,12 +421,15 @@ export async function prepareAndConnect(
         const current = existsSync(destVpk)
             && state.managed[item.filename]?.version === item.version
             && state.managed[item.filename]?.kind === item.kind;
+        onProgress({ name: displayName, status: 'checking', bytesDownloaded: 0, totalBytes: item.compressed_size, itemIndex: idx, totalItems: total });
         if (current) {
+            // Files placed before the gate existed were never reviewed. A trusted
+            // version costs a rehash against its cached report.
+            const refused = targetDir === addonsDir && await reviewAddon(item, destVpk, destVpk);
+            if (refused) return refused;
             onProgress({ name: displayName, status: 'ready', bytesDownloaded: item.compressed_size, totalBytes: item.compressed_size, itemIndex: idx, totalItems: total });
             continue;
         }
-
-        onProgress({ name: displayName, status: 'checking', bytesDownloaded: 0, totalBytes: item.compressed_size, itemIndex: idx, totalItems: total });
 
         const bz2Tmp = `${destVpk}.bz2.part`;
         const vpkTmp = `${destVpk}.part`;
@@ -416,6 +442,8 @@ export async function prepareAndConnect(
             });
             safeUnlink(bz2Tmp);
             verifyVpkMagic(vpkTmp);
+            const refused = targetDir === addonsDir && await reviewAddon(item, vpkTmp, destVpk);
+            if (refused) return refused;
             // Atomic-ish replace onto the canonical path. If Deadlock has the old
             // VPK open this throws EBUSY/EPERM; surface a recoverable message.
             try {
