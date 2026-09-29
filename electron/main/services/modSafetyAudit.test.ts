@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { safetyVpk } from './modSafetyFixtures';
+import { safetyChunkedVpk, safetyVpk } from './modSafetyFixtures';
 
-const h = vi.hoisted(() => ({ running: false, trusted: false, scans: vi.fn(), announce: vi.fn(), guard: vi.fn() }));
+const h = vi.hoisted(() => ({ running: false, trusted: false, incomplete: false, scans: vi.fn(), announce: vi.fn(), guard: vi.fn() }));
 vi.mock('./deadlock', () => ({
     getDisabledPath: (root: string) => join(root, '.disabled'),
     getModScanRootPaths: (root: string) => [join(root, 'addons'), join(root, 'grimoire')],
@@ -19,7 +19,11 @@ vi.mock('./metadata', () => ({ getModMetadata: () => undefined }));
 vi.mock('./modSafety', async () => {
     const { scanModSafety } = await import('./modSafetyScan');
     return {
-        inspectVpkSafety: async (path: string) => { h.scans(path); return scanModSafety(path); },
+        inspectVpkSafety: async (path: string) => {
+            h.scans(path);
+            return h.incomplete ? { policyVersion: 1, fingerprint: '', verdict: 'incomplete', findings: [{ entry: 'x', reason: 'inspection-failed' }] }
+                : scanModSafety(path);
+        },
         isModSafetyTrusted: async (report: { verdict: string }) => report.verdict === 'no-findings' || (h.trusted && report.verdict === 'requires-trust'),
         announceUnsafeMod: h.announce, assertVpkSafety: h.guard,
         moveSafetySnapshot: vi.fn(), notifyModSafetyChanged: vi.fn(),
@@ -31,7 +35,7 @@ let root: string;
 beforeEach(async () => {
     root = await fs.mkdtemp(join(tmpdir(), 'safety-audit-test-'));
     for (const dir of ['addons', 'grimoire', '.disabled']) await fs.mkdir(join(root, dir));
-    h.running = false; h.trusted = false; vi.clearAllMocks();
+    h.running = false; h.trusted = false; h.incomplete = false; vi.clearAllMocks();
 });
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
 async function put(folder: string, name: string, source = 'run(1);') {
@@ -68,6 +72,37 @@ describe('installed mod inspection', () => {
         expect(results[0]).toMatchObject({ enabled: true, trusted: true });
         expect((await fs.stat(path)).isFile()).toBe(true);
         expect(h.announce).not.toHaveBeenCalled();
+    });
+    it('leaves every mod in place when the inspector fails instead of treating it as a verdict', async () => {
+        h.incomplete = true;
+        const paths = [await put('addons', 'pak05_dir.vpk'), await put('grimoire', 'pak01_dir.vpk')];
+        const results = await auditInstalledSafety(root);
+        expect(results.map(r => [r.enabled, r.trusted, r.report.verdict])).toEqual([[true, false, 'incomplete'], [true, false, 'incomplete']]);
+        for (const path of paths) expect((await fs.stat(path)).isFile()).toBe(true);
+        expect(await fs.readdir(join(root, '.disabled'))).toEqual([]);
+        expect(h.announce).not.toHaveBeenCalled();
+    });
+    it('moves an unregistered multi-chunk archive with its chunks under one name', async () => {
+        const { dir, chunk } = safetyChunkedVpk([{ path: 'script.js', bytes: Buffer.from('run(1);') }]);
+        await fs.writeFile(join(root, 'grimoire', 'pak01_dir.vpk'), dir);
+        await fs.writeFile(join(root, 'grimoire', 'pak01_000.vpk'), chunk);
+        const [row] = await auditInstalledSafety(root);
+        expect(row).toMatchObject({ enabled: false, report: { verdict: 'requires-trust' } });
+        expect(await fs.readdir(join(root, 'grimoire'))).toEqual([]);
+        const moved = (await fs.readdir(join(root, '.disabled'))).sort();
+        expect(moved).toEqual([moved[0], moved[0].replace(/_000\.vpk$/, '_dir.vpk')]);
+        expect(moved[0]).toMatch(/^safety_.+_pak01_000\.vpk$/);
+        expect(await fs.readFile(join(root, '.disabled', moved[0]))).toEqual(chunk);
+        expect(await auditInstalledSafety(root)).toHaveLength(1);
+    });
+    it('does not inspect or move chunk files that have no directory file', async () => {
+        const orphan = await put('addons', 'pak09_000.vpk');
+        await put('.disabled', 'safety_x_pak07_000.vpk');
+        expect(await auditInstalledSafety(root)).toEqual([]);
+        expect((await fs.stat(orphan)).isFile()).toBe(true);
+        await assertActiveModsSafety(root);
+        expect(h.scans).not.toHaveBeenCalled();
+        expect(h.guard).not.toHaveBeenCalled();
     });
     it('prelaunch includes reserved slots and rejects before proceeding', async () => {
         const path = await put('grimoire', 'pak01_dir.vpk');

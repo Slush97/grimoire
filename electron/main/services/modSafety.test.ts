@@ -44,9 +44,31 @@ async function prompt() {
 describe('mod safety authorization', () => {
     it('approves the exact inline-reviewed version without a second prompt', async () => {
         h.reports.push(script(), script());
-        await approveVpkSafety(candidate, 'a'.repeat(64));
+        expect(await approveVpkSafety(candidate, 'a'.repeat(64))).toBe(false);
         await assertVpkSafety(candidate, { prompt: false });
         expect(getModSafetyPrompts()).toHaveLength(0);
+    });
+    it('lets an inline approval answer the operation already waiting on that version', async () => {
+        h.reports.push(script(), script(), script());
+        const waiting = assertVpkSafety(candidate, { name: 'HUD Timer' });
+        expect((await prompt()).name).toBe('HUD Timer');
+        expect(await approveVpkSafety(candidate, 'a'.repeat(64))).toBe(true);
+        await waiting;
+        expect(getModSafetyPrompts()).toHaveLength(0);
+    });
+    it('rejects every operation waiting on a version the user kept disabled', async () => {
+        h.reports.push(script(), script(), script('b'.repeat(64)));
+        const first = assertVpkSafety(candidate).catch(e => String(e));
+        await prompt();
+        const second = assertVpkSafety(candidate).catch(e => String(e));
+        const other = assertVpkSafety(candidate).catch(e => String(e));
+        await vi.waitFor(() => expect(getModSafetyPrompts()).toHaveLength(3));
+        respondToModSafety(getModSafetyPrompts()[0].id, false);
+        expect(await first).toContain('MOD_SAFETY_TRUST_REQUIRED');
+        expect(await second).toContain('MOD_SAFETY_TRUST_REQUIRED');
+        expect(getModSafetyPrompts().map(p => p.report.fingerprint)).toEqual(['b'.repeat(64)]);
+        respondToModSafety(getModSafetyPrompts()[0].id, false);
+        expect(await other).toContain('MOD_SAFETY_TRUST_REQUIRED');
     });
     it('does not apply inline consent to changed bytes', async () => {
         h.reports.push(script('b'.repeat(64)));
@@ -100,7 +122,19 @@ describe('mod safety authorization', () => {
         await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_BLOCKED');
     });
     it('fails closed on worker crashes', async () => {
-        await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_BLOCKED');
+        await expect(assertVpkSafety(candidate, { prompt: false })).rejects.toThrow('MOD_SAFETY_INCOMPLETE');
+    });
+    it('treats a worker failure as a retryable incomplete check rather than a rejection', async () => {
+        const result = assertVpkSafety(candidate).catch(e => String(e));
+        const p = await prompt();
+        expect(p.canTrust).toBe(false);
+        expect(p.report).toMatchObject({ verdict: 'incomplete', findings: [{ entry: 'test.vpk', reason: 'inspection-failed' }] });
+        respondToModSafety(p.id, true);
+        expect(await result).toContain('MOD_SAFETY_INCOMPLETE');
+        await expect(fs.stat(join(h.userData, 'mod-quarantine'))).rejects.toThrow();
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+        h.reports.push({ ...script(), verdict: 'no-findings', findings: [] });
+        await assertVpkSafety(candidate, { prompt: false });
     });
     it.each(['local-file', 'browser', 'remote-code', 'dynamic-code', 'native-code', 'uninspectable'] as const)(
         'accepts informed consent for %s and remembers the version', async reason => {

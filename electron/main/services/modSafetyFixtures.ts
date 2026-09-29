@@ -1,5 +1,16 @@
 /** Tiny inert archives for scanner tests. Their script bytes are never executed. */
 export function safetyVpk(files: Array<{ path: string; bytes: Buffer; preload?: number }>, version = 1): Buffer {
+    const { directory, data } = safetyArchive(files, version, 0x7fff);
+    return Buffer.concat([directory, data]);
+}
+
+/** The same archive with every payload in `_000.vpk`, as multi-chunk releases ship. */
+export function safetyChunkedVpk(files: Array<{ path: string; bytes: Buffer }>): { dir: Buffer; chunk: Buffer } {
+    const { directory, data } = safetyArchive(files, 1, 0);
+    return { dir: directory, chunk: data };
+}
+
+function safetyArchive(files: Array<{ path: string; bytes: Buffer; preload?: number }>, version: number, archive: number) {
     const tree: Buffer[] = [];
     const data: Buffer[] = [];
     let offset = 0;
@@ -24,7 +35,7 @@ export function safetyVpk(files: Array<{ path: string; bytes: Buffer; preload?: 
                 const preload = file.preload ?? 0;
                 const meta = Buffer.alloc(18);
                 meta.writeUInt16LE(preload, 4);
-                meta.writeUInt16LE(0x7fff, 6);
+                meta.writeUInt16LE(archive, 6);
                 meta.writeUInt32LE(offset, 8);
                 meta.writeUInt32LE(file.bytes.length - preload, 12);
                 meta.writeUInt16LE(0xffff, 16);
@@ -43,7 +54,7 @@ export function safetyVpk(files: Array<{ path: string; bytes: Buffer; preload?: 
     header.writeUInt32LE(version, 4);
     header.writeUInt32LE(directory.length, 8);
     if (version === 2) header.writeUInt32LE(offset, 12);
-    return Buffer.concat([header, directory, ...data]);
+    return { directory: Buffer.concat([header, directory]), data: Buffer.concat(data) };
 }
 
 export function safetyResource(data: Buffer, tag = 'DATA'): Buffer {

@@ -7,6 +7,7 @@ import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents } from './fileMatch';
 import { resolveVpkIdentity, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from './vpkIdentity';
+import { findChunkSiblingNames } from './vpk';
 import { loadSettings } from './settings';
 import { assertVpkSafety, moveSafetySnapshot } from './modSafety';
 import {
@@ -80,6 +81,29 @@ async function renameWithRetry(from: string, to: string, attempts = 5): Promise<
             if (!transient || i >= attempts - 1) throw err;
             await new Promise((resolve) => setTimeout(resolve, 80 * (i + 1)));
         }
+    }
+}
+
+/**
+ * Rename a `_dir.vpk` together with the `_NNN.vpk` archives it resolves by
+ * name, so a move never strands chunks under a slot another mod can take.
+ * Chunks go first and a partial failure is rolled back.
+ */
+async function renameVpkSet(from: string, to: string): Promise<void> {
+    const stem = basename(from).slice(0, -'_dir.vpk'.length);
+    const toStem = join(dirname(to), basename(to).slice(0, -'_dir.vpk'.length));
+    const moves = findChunkSiblingNames(basename(from), await fs.readdir(dirname(from)))
+        .map((chunk): [string, string] => [join(dirname(from), chunk), toStem + chunk.slice(stem.length)]);
+    moves.push([from, to]);
+    const done: Array<[string, string]> = [];
+    try {
+        for (const move of moves) {
+            await renameWithRetry(...move);
+            done.push(move);
+        }
+    } catch (err) {
+        for (const [source, destination] of done.reverse()) await fs.rename(destination, source).catch(() => {});
+        throw err;
     }
 }
 
@@ -682,7 +706,7 @@ async function moveModToFolderAs(
 
     await fs.mkdir(destinationFolder, { recursive: true });
     const destinationPath = join(destinationFolder, destinationFileName);
-    await renameWithRetry(targetMod.path, destinationPath);
+    await renameVpkSet(targetMod.path, destinationPath);
     moveSafetySnapshot(targetMod.path, destinationPath);
     const destMetaKey = metaKeyFor(destinationPath);
 
@@ -1024,7 +1048,7 @@ export function setModsEnabledBatch(
         await syncRunningGameModSnapshotFromMods(current);
         assertCanMoveLoadedGameMods(current.filter((m) => m.enabled && disable.has(m.id)));
         for (const mod of current) {
-            if (enable.has(mod.id)) await assertVpkSafety(mod.path);
+            if (enable.has(mod.id)) await assertVpkSafety(mod.path, { name: getModMetadata(mod.metaKey)?.modName || mod.name });
         }
 
         for (const modId of disable) {
@@ -1064,7 +1088,7 @@ async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> 
     }
 
     if (targetMod.enabled) {
-        await assertVpkSafety(targetMod.path);
+        await assertVpkSafety(targetMod.path, { name: getModMetadata(targetMod.metaKey)?.modName || targetMod.name });
         return targetMod;
     }
 
@@ -1144,6 +1168,27 @@ async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod>
     const result = await moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
     modTrace(`disable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey}`);
     return result;
+}
+
+/**
+ * Gate replacements an update promotes instead of downloading. They skipped
+ * the download gate, and a candidate the user kept disabled still carries its
+ * new file id, so the update must not delete the version they supersede until
+ * this passes. Unlocked because the check can wait on the user's review.
+ */
+export async function assertReplacementSafety(deadlockPath: string, modIds: string[]): Promise<void> {
+    const mods = await scanMods(deadlockPath);
+    const replacements = modIds.map((modId) => {
+        const mod = mods.find((m) => m.id === modId);
+        if (!mod) throw new Error(`Mod not found: ${modId}`);
+        return mod;
+    });
+    for (const mod of replacements) {
+        await assertVpkSafety(mod.path, {
+            context: 'installation',
+            name: getModMetadata(mod.metaKey)?.modName ?? mod.name,
+        });
+    }
 }
 
 /**

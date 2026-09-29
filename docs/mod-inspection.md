@@ -7,9 +7,14 @@ and vanilla-stash restoration also pass through the gate.
 
 The decisions are:
 
-- **Can't check:** an unreadable/malformed archive, unsafe archive paths, unsupported
-  multipart installation, decoder failure or inspection resource limit. This is
+- **Can't check:** an unreadable/malformed archive, unsafe archive paths, a missing
+  chunk file, decoder failure or inspection resource limit. This is
   an installation/read error, not a malware verdict, and cannot be overridden.
+- **Check incomplete:** the inspector itself failed (worker could not start,
+  crashed, ran out of memory or timed out, or the decoder is missing). This says
+  nothing about the mod. It is never cached, never moves a mod at startup and is
+  retried on the next gate or **Check installed mods**. Activation and launch
+  still refuse the mod until a check completes.
 - **Review:** scripts or executable UI content, including local-file/UNC access,
   embedded browsers, network APIs, dynamic code, opaque scripts and bundled programs.
   Users see the specific risks and choose **Keep disabled** or **Allow this version**.
@@ -36,10 +41,12 @@ Panorama DATA. The shipped, hash-pinned vpkmerge v0.19.1 decodes LaCo layouts in
 temporary directory. Its extraction-path protection prevents directory traversal;
 it does not prevent a game script from navigating CEF to a local file.
 
-Unknown entry formats do not require review. Malformed resources, decoder failures, excessive source
-sizes, and multipart archives are blocked. Multipart content can be read, but
-Grimoire's current slot renaming does not move chunk sets transactionally. The
-scanner therefore cannot approve them for activation. Limits: 16 MiB directory,
+Unknown entry formats do not require review. Malformed resources, decoder failures and excessive source
+sizes are blocked. Multipart archives are read through their `_dir.vpk`, and
+every referenced `_NNN.vpk` chunk is inspected and hashed into the fingerprint.
+Enabling, disabling, Global moves and the startup check move chunk files
+together with their directory file. A chunk file without its `_dir.vpk` is not mountable and is not
+inspected on its own. Limits: 16 MiB directory,
 100,000 entries, 8 MiB per inspected source, 64 MiB combined sources, 128 compiled
 layouts, 30 seconds per decoder invocation, 120 seconds per worker. Nested VPKs
 are inspected recursively with shared entry/source budgets, up to four nested
@@ -59,7 +66,12 @@ in place for explanations, affected files and its decision. Card shields open th
 corresponding row directly. Inline approval sends the displayed fingerprint to the
 main process, which rechecks the current bytes before saving consent; enabling the
 mod then passes through the normal activation gate. Downloads and other pending
-decisions appear on the same page, without a second confirmation dialog. The
+decisions appear on the same page, without a second confirmation dialog, on the
+mod's own row when the archive is installed. A decision on a version answers
+every operation already waiting on it (an enable, profile apply, merge or
+install), which then continues or stops. Answering never waits on the mod
+library lock those operations hold, and a change still queued on one row does
+not block answering another. The
 dismissible library notice returns for new versions needing review and disappears
 when none remain. An optional visual explainer illustrates legitimate uses and
 why unexpected access deserves scrutiny.
@@ -76,7 +88,9 @@ disabled. The previous version is not removed by the update flow until the final
 candidate passes inspection and consent. Startup moves untrusted active VPKs
 into the disabled library while the game is closed; it does not delete them. If
 Deadlock is running or a move fails, the UI reports that the file may still be
-active. Close the game and run the installed-mod check again.
+active. Close the game and run the installed-mod check again. Unapproved VPKs
+restored after a vanilla launch go to the disabled library, chunks and metadata
+included, instead of back into a game folder.
 
 Inspection applies to Grimoire's configured priority/addon roots and disabled
 library. It does not police custom SearchPaths, loose files installed by other

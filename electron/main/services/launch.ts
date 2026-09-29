@@ -2,8 +2,10 @@ import { promises as fs, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
-import { assertVpkSafety } from './modSafety';
-import { assertActiveModsSafety } from './modSafetyAudit';
+import { inspectVpkSafety, isModSafetyTrusted } from './modSafety';
+import { assertActiveModsSafety, moveToDisabledLibrary } from './modSafetyAudit';
+import { runExclusiveModMutation } from './mods';
+import { migrateModMetadata } from './metadata';
 import { getUserDataPath } from '../utils/paths';
 import {
     getAddonsPath,
@@ -11,6 +13,7 @@ import {
     getModScanRootPaths,
     getCitadelPath,
     isReservedPriorityVpkArtifact,
+    metaKeyFor,
     PRIORITY_FOLDER_NAME,
 } from './deadlock';
 import { loadSettings } from './settings';
@@ -77,6 +80,22 @@ function stashSlotPath(disabledPath: string, folder: string, fileName: string): 
     return folder === 'addons'
         ? join(disabledPath, fileName)
         : join(disabledPath, folder, fileName);
+}
+
+/** Stashed entries with each `_dir.vpk` carrying its numbered chunks, so an
+ *  archive gets one safety verdict and moves as a unit. */
+function stashedArchives(stash: VanillaStash): Array<{ fileName: string; folder: string; chunks: string[] }> {
+    // Legacy stashes (pre-overflow) carry no folder; they're all base addons.
+    const entries = stash.mods.map(({ fileName, folder }) => ({ fileName, folder: folder ?? 'addons', chunks: [] as string[] }));
+    const archiveKey = (e: { fileName: string; folder: string }) => `${e.folder}/${e.fileName.slice(0, -8).toLowerCase()}`;
+    const dirs = new Map(entries.filter((e) => /_dir\.vpk$/i.test(e.fileName)).map((e) => [archiveKey(e), e]));
+    const archives: typeof entries = [];
+    for (const entry of entries) {
+        const dir = /_\d{3}\.vpk$/i.test(entry.fileName) ? dirs.get(archiveKey(entry)) : undefined;
+        if (dir) dir.chunks.push(entry.fileName);
+        else archives.push(entry);
+    }
+    return archives;
 }
 
 function getStashPath(): string {
@@ -300,6 +319,11 @@ export interface RestoreResult {
  * - If a stashed file is already back in its origin folder (user manually moved
  *   it), we skip rather than clobber.
  * - If the stashed file vanished from disabled/ (user deleted it), we skip.
+ * - A stashed archive without an approved safety verdict never returns to a
+ *   game folder, and never counts as a failure (the gate can't prompt here, so
+ *   it would block every launch). It moves into the disabled library for review.
+ *   An incomplete check restores as usual, like the startup audit leaves it
+ *   active: the pre-launch gate re-checks and refuses until a check completes.
  */
 export async function restoreFromStash(
     deadlockPath: string,
@@ -311,52 +335,67 @@ export async function restoreFromStash(
     let skipped = 0;
     const failed: string[] = [];
 
-    for (const { fileName, folder } of stash.mods) {
-        // Legacy stashes (pre-overflow) carry no folder; they're all base addons.
-        const originFolder = folder ?? 'addons';
-        const from = stashSlotPath(disabledPath, originFolder, fileName);
-        const targetDir = originFolderPath(deadlockPath, originFolder);
+    for (const archive of stashedArchives(stash)) {
+        const { fileName, folder } = archive;
+        const from = stashSlotPath(disabledPath, folder, fileName);
+        const targetDir = originFolderPath(deadlockPath, folder);
         const to = join(targetDir, fileName);
+        const chunks = archive.chunks.filter((chunk) => existsSync(stashSlotPath(disabledPath, folder, chunk)));
+        skipped += archive.chunks.length - chunks.length;
 
         if (!existsSync(from)) {
-            skipped++;
+            skipped += 1 + chunks.length;
             continue;
         }
         if (existsSync(to)) {
             // Collision — don't clobber whatever's already there.
-            skipped++;
+            skipped += 1 + chunks.length;
             continue;
         }
 
-        try {
-            await assertVpkSafety(from, { prompt: false });
-        } catch {
-            failed.push(fileName);
+        const report = await inspectVpkSafety(from);
+        if (report.verdict !== 'incomplete' && !(await isModSafetyTrusted(report))) {
+            try {
+                await runExclusiveModMutation(async () => {
+                    const dest = await moveToDisabledLibrary(
+                        deadlockPath,
+                        from,
+                        chunks.map((chunk) => stashSlotPath(disabledPath, folder, chunk))
+                    );
+                    migrateModMetadata([{ from: metaKeyFor(from), to: metaKeyFor(dest) }]);
+                });
+                skipped += 1 + chunks.length;
+            } catch (err) {
+                console.error(`[launch] Failed to move ${fileName} to the disabled library:`, err);
+                failed.push(fileName);
+            }
             continue;
         }
         // The origin folder may have been emptied (overflow) but should still
         // exist; recreate it defensively so the rename lands.
         await fs.mkdir(targetDir, { recursive: true });
 
-        let ok = false;
-        let lastErr: unknown;
-        for (let attempt = 0; attempt < RESTORE_MAX_ATTEMPTS; attempt++) {
-            try {
-                await fs.rename(from, to);
-                ok = true;
-                break;
-            } catch (err) {
-                lastErr = err;
-                if (attempt < RESTORE_MAX_ATTEMPTS - 1) {
-                    await sleep(RESTORE_RETRY_DELAY_MS);
+        for (const name of [fileName, ...chunks]) {
+            let ok = false;
+            let lastErr: unknown;
+            for (let attempt = 0; attempt < RESTORE_MAX_ATTEMPTS; attempt++) {
+                try {
+                    await fs.rename(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
+                    ok = true;
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                    if (attempt < RESTORE_MAX_ATTEMPTS - 1) {
+                        await sleep(RESTORE_RETRY_DELAY_MS);
+                    }
                 }
             }
-        }
-        if (ok) {
-            restored++;
-        } else {
-            console.error(`[launch] Failed to restore ${fileName}:`, lastErr);
-            failed.push(fileName);
+            if (ok) {
+                restored++;
+            } else {
+                console.error(`[launch] Failed to restore ${name}:`, lastErr);
+                failed.push(name);
+            }
         }
     }
 

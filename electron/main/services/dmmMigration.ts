@@ -473,7 +473,7 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
 
         try {
           let destPath: string;
-          await assertVpkSafety(src, { context: 'installation' });
+          await assertVpkSafety(src, { context: 'installation', name: entry.modName });
           if (entry.enabled) {
             if (mode === 'in-place' && isLiveEnabledSlot(src, addonRoots)) {
               // Already a live pakNN_dir.vpk slot Grimoire scans: adopt by

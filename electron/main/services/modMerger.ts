@@ -323,7 +323,7 @@ export async function embedMergeIdentity(
         sources,
     };
     const metaText = serializeModinfo(record);
-    await repackWithEmbeddedEntries(mergedPath, addonText, metaText);
+    await repackWithEmbeddedEntries(mergedPath, addonText, metaText, title);
 }
 
 /**
@@ -353,7 +353,8 @@ export async function embedMergeIdentity(
 export async function repackWithEmbeddedEntries(
     vpkPath: string,
     addonText: string,
-    modinfoText: string
+    modinfoText: string,
+    name: string
 ): Promise<void> {
     const inputEntries = parseVpkEntryStats(vpkPath);
     if (!inputEntries) {
@@ -392,7 +393,7 @@ export async function repackWithEmbeddedEntries(
         // window where the slot is missing on disk.
         // Repacking changes the reviewed bytes. Do not transfer approval from
         // metadata or entry sizes; inspect the actual output before replacing.
-        await assertVpkSafety(embedOut);
+        await assertVpkSafety(embedOut, { name });
         await fs.rename(embedOut, vpkPath);
     } catch (err) {
         try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
@@ -656,7 +657,7 @@ async function mergeModsLocked(
     try {
         await runVpkmerge(args);
         await verifyVpkOutput(stagingPath);
-        await assertVpkSafety(stagingPath);
+        await assertVpkSafety(stagingPath, { name: trimmedName });
         await fs.rename(stagingPath, mergedPath);
     } catch (err) {
         await fs.unlink(stagingPath).catch(() => {});
@@ -1226,7 +1227,7 @@ async function addMergeSourcesLocked(
         // Atomic same-directory replacement preserves filename, slot, mod id,
         // and metaKey. The metadata setter merges this patch with unrelated
         // fields already stored for the merge.
-        await assertVpkSafety(buildPath);
+        await assertVpkSafety(buildPath, { name: targetMeta.modName || target.name });
         await fs.rename(buildPath, target.path);
         swapped = true;
         setModMetadata(target.metaKey, {
@@ -1494,7 +1495,7 @@ async function replaceMergeSourcesLocked(
         );
         await verifyVpkOutput(buildPath);
 
-        await assertVpkSafety(buildPath);
+        await assertVpkSafety(buildPath, { name: targetMeta.modName || target.name });
         await fs.rename(buildPath, target.path);
         swapped = true;
         setModMetadata(target.metaKey, {
@@ -1703,7 +1704,7 @@ async function extractMergeSourceLocked(
 
     // Inspect before atomically replacing the old VPK. A refused rebuild keeps
     // the previous file, metadata and load order intact.
-    await assertVpkSafety(buildPath);
+    await assertVpkSafety(buildPath, { name: meta.modName || target.name });
     await fs.rename(buildPath, target.path);
     removeModMetadata(target.metaKey);
     setModMetadata(target.metaKey, {

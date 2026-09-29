@@ -39,6 +39,18 @@ describe('mod safety attention', () => {
         const changed = { ...request, report: report('version-two') };
         expect(pendingSafetyKeys(safetyReviewRows([mod()], [], [changed]))).toHaveLength(2);
     });
+    it('puts a prompt on the mod row with the same bytes when the caller only knew the file name', () => {
+        const request: ModSafetyPrompt = { id: 'request', name: 'pak05_dir.vpk', report: report(), canTrust: true, restartRequired: false, context: 'activation' };
+        const rows = safetyReviewRows([mod({ enabled: true })], [], [request]);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ name: 'HUD', mod: { id: 'one' }, request });
+    });
+    it('keeps the prompt an operation waits on when a startup notice for the same version arrives', () => {
+        const waiting: ModSafetyPrompt = { id: 'waiting', name: 'HUD', report: report(), canTrust: true, restartRequired: false, context: 'activation' };
+        const notice: ModSafetyPrompt = { ...waiting, id: 'notice', canTrust: false, restartRequired: true, context: 'startup' };
+        expect(safetyReviewRows([mod()], [], [waiting, notice])[0].request).toBe(waiting);
+        expect(safetyReviewRows([mod()], [], [notice, waiting])[0].request).toBe(waiting);
+    });
     it('includes unmanaged archives and read errors, without counting passive assets', () => {
         const passive = mod({ safety: { trusted: false, report: { ...report(), verdict: 'no-findings', findings: [] } } });
         const rows = safetyReviewRows([passive], [{ modId: '', name: 'Broken archive', enabled: false, trusted: false,

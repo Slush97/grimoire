@@ -701,7 +701,7 @@ async function renameVpksToAvoidConflicts(
     nameHint?: string
 ): Promise<RenamedVpk[]> {
     // Validate the entire selection before moving any candidate or replacing peers.
-    for (const vpk of extractedVpks) await assertVpkSafety(vpk.path, { allowUntrusted: true, context: 'installation' });
+    for (const vpk of extractedVpks) await assertVpkSafety(vpk.path, { allowUntrusted: true, context: 'installation', name: nameHint });
     const taken = existsSync(targetPath)
         ? new Set((await fs.readdir(targetPath)).map((n) => n.toLowerCase()))
         : new Set<string>();
@@ -1079,7 +1079,9 @@ async function executeDownload(
 
     // Review final bytes before any old variant is disabled or an update caller
     // receives success and deletes its previous version.
-    for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
+    for (const name of installedVpks) {
+        await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+    }
 
     // Switching variants: when the user installs a different file of a mod they
     // already have enabled, disable the previously-enabled sibling so only the
@@ -1601,7 +1603,9 @@ async function executeOneClickDownload(
         await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
 
-    for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
+    for (const name of installedVpks) {
+        await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+    }
 
     let enabledInstalledVpks = false;
     if (settings.autoDisableSiblingVariants !== false) {
@@ -1728,7 +1732,9 @@ export async function installForgeVpk(
             await imprintFreshlyInstalled(deadlockPath, installedVpks);
         }
 
-        for (const name of installedVpks) await assertVpkSafety(join(targetPath, name), { context: 'installation' });
+        for (const name of installedVpks) {
+            await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+        }
 
         // Sibling-variant handling is skipped on purpose: it keys off a real
         // GameBanana mod id, and repeat forges of the same sound are legitimate

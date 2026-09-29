@@ -56,7 +56,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, assertReplacementSafety, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
@@ -424,7 +424,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   // Group entry. Stand-in `mod` is the primary so the card visuals look
   // right; the `group` prop tells ModCard to swap filename for file
   // selection metadata and route clicks to the picker.
-  const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked')
+  const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
   return (
@@ -2031,16 +2031,18 @@ export default function Installed() {
         }
       }
 
-      const replacementAlreadyInstalled = mods.some(
-        (mod) =>
-          mod.gameBananaId === detailsMod.id &&
-          mod.gameBananaFileId === fileId &&
-          !replacementTargets.some((target) => target.id === mod.id),
-      );
+      const installedReplacementIds = mods
+        .filter(
+          (mod) =>
+            mod.gameBananaId === detailsMod.id &&
+            mod.gameBananaFileId === fileId &&
+            !replacementTargets.some((target) => target.id === mod.id),
+        )
+        .map((mod) => mod.id);
       if (!isDownloadRequestPending(detailsMod.id, fileId)) return;
       let installedBeforeCleanup: typeof mods;
       let targetIds: string[];
-      if (!replacementAlreadyInstalled) {
+      if (installedReplacementIds.length === 0) {
         await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
         await loadMods();
         installedBeforeCleanup = useAppStore.getState().mods;
@@ -2050,6 +2052,7 @@ export default function Installed() {
           fileId,
         );
       } else {
+        await assertReplacementSafety(installedReplacementIds);
         installedBeforeCleanup = useAppStore.getState().mods;
         targetIds = replacementTargets.map((mod) => mod.id);
       }
@@ -2369,14 +2372,18 @@ export default function Installed() {
           // (for example the user installed V5 from Browse while V4 remained
           // enabled). In that case the update is a promotion, not another
           // download: delete the stale install and restore its state onto the
-          // existing current file.
-          const replacementAlreadyInstalled = mods.some(
-            (mod) =>
-              mod.gameBananaId === batch.gameBananaId &&
-              mod.gameBananaFileId === batch.fileId &&
-              !batch.snapshots.some((snapshot) => snapshot.oldId === mod.id),
-          );
-          if (!replacementAlreadyInstalled) {
+          // existing current file. That file never passed this update's
+          // download gate (it may be a candidate the user kept disabled), so
+          // it is checked before the stale install is deleted.
+          const installedReplacementIds = mods
+            .filter(
+              (mod) =>
+                mod.gameBananaId === batch.gameBananaId &&
+                mod.gameBananaFileId === batch.fileId &&
+                !batch.snapshots.some((snapshot) => snapshot.oldId === mod.id),
+            )
+            .map((mod) => mod.id);
+          if (installedReplacementIds.length === 0) {
             await downloadMod(
               batch.gameBananaId,
               batch.fileId,
@@ -2384,6 +2391,8 @@ export default function Installed() {
               batch.section,
               batch.categoryId,
             );
+          } else {
+            await assertReplacementSafety(installedReplacementIds);
           }
           await loadMods();
           const installedAfterDownload = useAppStore.getState().mods;

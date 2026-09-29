@@ -18,8 +18,12 @@ export function safetyReviewRows(mods: Mod[], installed: InstalledModSafety[], p
         rows.push({ key: 'unmanaged:' + item.name, ...item });
     }
     for (const request of prompts) {
-        const existing = rows.find(r => r.name === request.name && r.report.fingerprint === request.report.fingerprint);
-        if (existing) existing.request = request;
+        const fingerprint = request.report.fingerprint;
+        // Equal bytes are one archive, whatever file name the prompting caller saw.
+        const existing = rows.find(r => r.name === request.name && r.report.fingerprint === fingerprint)
+            ?? (fingerprint ? rows.find(r => r.report.fingerprint === fingerprint) : undefined);
+        // A startup notice must not shadow a prompt an operation is waiting on.
+        if (existing) { if (!existing.request?.canTrust) existing.request = request; }
         else rows.unshift({ key: 'request:' + request.id, name: request.name, request,
             report: request.report, trusted: false, enabled: request.restartRequired,
             mod: mods.find(m => m.name === request.name) });

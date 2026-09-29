@@ -133,6 +133,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
+    assertReplacementSafety: (modIds: string[]) => ipcRenderer.invoke('assert-replacement-safety', modIds),
     revealModInFolder: (modId: string) => ipcRenderer.invoke('reveal-mod-in-folder', modId),
     detectUnknownModFilters: (modId: string, requestId?: string) =>
         ipcRenderer.invoke('detect-unknown-mod-filters', modId, requestId),

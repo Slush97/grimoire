@@ -34,6 +34,7 @@ import {
   backfillGameBananaFileId,
   createSnapshot,
   deleteMod as deleteModApi,
+  assertReplacementSafety,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -1836,16 +1837,19 @@ export default function Browse() {
         }
       }
 
-      const replacementAlreadyInstalled =
-        updateSourceIds.length > 0 &&
-        installedMods.some(
-          (mod) =>
-            mod.gameBananaId === selectedMod.id &&
-            mod.gameBananaFileId === fileId &&
-            !updateSourceIds.includes(mod.id),
-        );
+      const installedReplacementIds =
+        updateSourceIds.length > 0
+          ? installedMods
+              .filter(
+                (mod) =>
+                  mod.gameBananaId === selectedMod.id &&
+                  mod.gameBananaFileId === fileId &&
+                  !updateSourceIds.includes(mod.id),
+              )
+              .map((mod) => mod.id)
+          : [];
 
-      if (!replacementAlreadyInstalled) {
+      if (installedReplacementIds.length === 0) {
         // Snapshot capture can leave an optimistic row on screen long enough
         // for the user to cancel it. Do not cross IPC after that cancellation.
         if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
@@ -1860,6 +1864,7 @@ export default function Browse() {
         for (const targetId of targetIds) await deleteModApi(targetId);
       } else {
         if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
+        await assertReplacementSafety(installedReplacementIds);
         for (const target of replacementTargets) await deleteModApi(target.id);
       }
       await loadMods({ force: true });

@@ -34,7 +34,22 @@ export async function isModSafetyTrusted(report: ModSafetyReport): Promise<boole
         && !!report.fingerprint && (await approvals()).has(report.fingerprint));
 }
 
-async function saveApproval(report: ModSafetyReport): Promise<void> {
+/**
+ * Settles every pending prompt for these bytes. Prompts are raised while the
+ * caller holds the mod mutation lock, so a decision made anywhere else must
+ * reach them. Returns whether an operation was waiting on the decision.
+ */
+function settlePrompts(fingerprint: string, accepted: boolean): boolean {
+    let waiting = false;
+    for (const request of [...pending.values()]) {
+        if (!fingerprint || request.prompt.report.fingerprint !== fingerprint) continue;
+        waiting ||= request.prompt.canTrust;
+        request.finish(accepted && request.prompt.canTrust);
+    }
+    return waiting;
+}
+
+async function saveApproval(report: ModSafetyReport): Promise<boolean> {
     if (report.verdict !== 'requires-trust' || !report.fingerprint) throw new Error('MOD_SAFETY_BLOCKED');
     const write = trustWrite.then(async () => {
         const trusted = await approvals();
@@ -50,19 +65,23 @@ async function saveApproval(report: ModSafetyReport): Promise<void> {
     });
     trustWrite = write.catch(() => {});
     await write;
+    return settlePrompts(report.fingerprint, true);
 }
 
-/** Consent applies only to the exact report the user reviewed. */
-export async function approveVpkSafety(path: string, fingerprint: string): Promise<void> {
+/**
+ * Consent applies only to the exact report the user reviewed. Resolves true
+ * when an operation was waiting on this version; that operation activates it.
+ */
+export async function approveVpkSafety(path: string, fingerprint: string): Promise<boolean> {
     if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('Invalid mod safety decision');
     const current = await inspectVpkSafety(path);
     if (current.fingerprint !== fingerprint) throw new Error('MOD_SAFETY_CHANGED');
-    await saveApproval(current);
+    return saveApproval(current);
 }
 
 function inspectionFailure(path: string): ModSafetyReport {
-    return { policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint: '', verdict: 'blocked',
-        findings: [{ entry: basename(path), reason: 'unreadable-archive' }] };
+    return { policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint: '', verdict: 'incomplete',
+        findings: [{ entry: basename(path), reason: 'inspection-failed' }] };
 }
 
 /** Always hashes current bytes. UI snapshots are never authorization caches. */
@@ -105,6 +124,7 @@ export function getModSafetyPrompts(): ModSafetyPrompt[] { return [...pending.va
 export function respondToModSafety(id: string, accepted: boolean): void {
     const request = pending.get(id);
     if (!request) return;
+    if (!accepted) settlePrompts(request.prompt.report.fingerprint, false);
     request.finish(accepted === true && request.prompt.canTrust);
 }
 
@@ -151,8 +171,11 @@ export async function assertVpkSafety(path: string, options: {
     if (await isModSafetyTrusted(report)) return;
     if (report.verdict === 'requires-trust' && options.allowUntrusted) return;
     // Keep a rejected download for diagnosis without hiding the original denial
-    // if the disk is full or the candidate has already disappeared.
-    await retainRejectedPackage(path, report).catch(err => console.warn('[mod-safety] Could not retain package:', err));
+    // if the disk is full or the candidate has already disappeared. An
+    // incomplete check rejected nothing and would recopy every mod per retry.
+    if (report.verdict !== 'incomplete') {
+        await retainRejectedPackage(path, report).catch(err => console.warn('[mod-safety] Could not retain package:', err));
+    }
     if (options.prompt !== false) {
         const accepted = await ask(options.name ?? basename(path), report, report.verdict === 'requires-trust', false, options.context);
         if (accepted) {
@@ -166,5 +189,7 @@ export async function assertVpkSafety(path: string, options: {
     }
     throw new Error(report.verdict === 'blocked'
         ? 'MOD_SAFETY_BLOCKED: The archive could not be read or installed safely. Try a complete, valid copy.'
-        : 'MOD_SAFETY_TRUST_REQUIRED: This version must be trusted before activation.');
+        : report.verdict === 'incomplete'
+            ? 'MOD_SAFETY_INCOMPLETE: Grimoire could not finish checking this mod. Try again.'
+            : 'MOD_SAFETY_TRUST_REQUIRED: This version must be trusted before activation.');
 }

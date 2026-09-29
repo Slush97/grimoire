@@ -116,6 +116,10 @@ export async function deleteMod(modId: string): Promise<void> {
   return withGameRunningWarning(() => window.electronAPI.deleteMod(modId));
 }
 
+export async function assertReplacementSafety(modIds: string[]): Promise<void> {
+  return window.electronAPI.assertReplacementSafety(modIds);
+}
+
 export async function revealModInFolder(modId: string): Promise<void> {
   return window.electronAPI.revealModInFolder(modId);
 }

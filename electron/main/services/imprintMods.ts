@@ -459,7 +459,7 @@ async function imprintModCore(mod: Mod): Promise<void> {
     const modinfoText = serializeModinfo(
         buildModinfoRecord(mod, meta, original, writtenAt, firstImprintedAt)
     );
-    await repackWithEmbeddedEntries(mod.path, addonText, modinfoText);
+    await repackWithEmbeddedEntries(mod.path, addonText, modinfoText, meta?.modName || mod.name);
     const hasValidStoredHash = !!meta?.sha256 && SHA256_RE.test(meta.sha256);
     setModMetadata(mod.metaKey, {
         imprinted: true,

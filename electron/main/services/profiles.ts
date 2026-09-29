@@ -456,7 +456,9 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
 
         // Review the whole incoming selection before changing the current profile.
         for (const mod of currentMods) {
-            if (profileModByCurrentId.get(mod.id)?.enabled) await assertVpkSafety(mod.path);
+            if (profileModByCurrentId.get(mod.id)?.enabled) {
+                await assertVpkSafety(mod.path, { name: getModMetadata(mod.metaKey)?.modName || mod.name });
+            }
         }
 
         // Two passes, disables BEFORE enables. The disabled library is uncapped now,

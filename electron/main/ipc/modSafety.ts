@@ -33,8 +33,8 @@ ipcMain.handle('review-mod-safety', async (event, modId: string, fingerprint: st
     if (!path) throw new Error('No Deadlock path configured');
     const mod = (await scanMods(path)).find(m => m.id === modId);
     if (!mod) throw new Error('Mod not found');
-    await approveVpkSafety(mod.path, fingerprint);
-    const enabled = await enableMod(path, modId);
+    // The waiting operation holds the mod lock and activates the mod itself.
+    const enabled = await approveVpkSafety(mod.path, fingerprint) ? mod : await enableMod(path, modId);
     const safety = modSafetySnapshot(enabled.path);
     if (safety) updateInstalledSafety(modId, { modId: enabled.id, name: enabled.name, enabled: enabled.enabled, ...safety });
     return { ...enabled, safety };

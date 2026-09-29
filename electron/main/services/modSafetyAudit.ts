@@ -3,6 +3,7 @@ import { join, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getDisabledPath, getModScanRootPaths } from './deadlock';
 import { scanMods, disableModUnlocked, runExclusiveModMutation } from './mods';
+import { findChunkSiblingNames } from './vpk';
 import { isDeadlockRunning } from './launch';
 import { getModMetadata } from './metadata';
 import { inspectVpkSafety, isModSafetyTrusted, announceUnsafeMod, assertVpkSafety, moveSafetySnapshot, notifyModSafetyChanged } from './modSafety';
@@ -23,9 +24,18 @@ async function candidates(root: string): Promise<string[]> {
     let names: string[];
     try { names = await fs.readdir(root); }
     catch (err) { if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []; throw err; }
-    const dirs = new Set(names.filter(n => /_dir\.vpk$/i.test(n)).map(n => n.slice(0, -8).toLowerCase()));
-    return names.filter(n => /\.vpk$/i.test(n) && !(/_\d{3}\.vpk$/i.test(n) && dirs.has(n.slice(0, -8).toLowerCase())))
-        .map(n => join(root, n));
+    // Chunks are inspected through their _dir.vpk. Without one they are not mountable.
+    return names.filter(n => /\.vpk$/i.test(n) && !/_\d{3}\.vpk$/i.test(n)).map(n => join(root, n));
+}
+
+/** Moves a VPK and its chunks out of the engine's search paths without deleting their bytes. */
+export async function moveToDisabledLibrary(deadlockPath: string, path: string, chunks: string[] = []): Promise<string> {
+    const prefix = join(getDisabledPath(deadlockPath), `safety_${randomUUID()}_`);
+    for (const chunk of chunks) await fs.rename(chunk, prefix + basename(chunk));
+    const dest = prefix + basename(path);
+    await fs.rename(path, dest);
+    moveSafetySnapshot(path, dest);
+    return dest;
 }
 
 /** Includes reserved/generated slots and hand-placed VPKs, irrespective of metadata. */
@@ -56,17 +66,16 @@ export function auditInstalledSafety(deadlockPath: string): Promise<InstalledMod
                 let enabled = root !== disabled;
                 const report = await inspectVpkSafety(path);
                 const trusted = await isModSafetyTrusted(report);
-                if (enabled && !trusted) {
+                // A failed inspection is not a verdict: leave the mod alone, the gates still refuse it.
+                if (enabled && !trusted && report.verdict !== 'incomplete') {
                     const running = await isDeadlockRunning();
                     if (!running) {
                         try {
                             if (mod) { mod = await disableModUnlocked(deadlockPath, mod.id); path = mod.path; }
                             else {
                                 // Unknown/reserved slots also leave the engine's search paths.
-                                const dest = join(disabled, `safety_${randomUUID()}_${basename(path)}`);
-                                await fs.rename(path, dest);
-                                moveSafetySnapshot(path, dest);
-                                path = dest;
+                                const chunks = findChunkSiblingNames(basename(path), await fs.readdir(root));
+                                path = await moveToDisabledLibrary(deadlockPath, path, chunks.map(n => join(root, n)));
                             }
                             enabled = false;
                         } catch { /* Retain the enabled flag; the launch gate still refuses it. */ }

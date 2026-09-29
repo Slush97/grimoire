@@ -20,8 +20,10 @@ export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
     const open = useModSafetyStore(s => s.openDetail);
     if (!snapshot || snapshot.report.verdict === 'no-findings') return null;
     const unchecked = snapshot.report.verdict === 'blocked';
-    const Icon = unchecked ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
-    const status = unchecked ? t('modSafety.unchecked') : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
+    const incomplete = snapshot.report.verdict === 'incomplete';
+    const Icon = unchecked || incomplete ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
+    const status = unchecked ? t('modSafety.unchecked') : incomplete ? t('modSafety.incomplete')
+        : snapshot.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
     if (variant === 'overlay') return <button type="button" data-card-action="true"
         aria-label={`${status}. ${t('modSafety.viewFindings', { name })}`}
         title={`${status}. ${t('modSafety.viewFindings', { name })}`}
@@ -47,6 +49,7 @@ function Risks({ report }: { report: ModSafetyReport }) {
         'remote-code': t('modSafety.risks.remoteCode'), 'dynamic-code': t('modSafety.risks.dynamicCode'),
         executable: t('modSafety.risks.executable'), uninspectable: t('modSafety.risks.uninspectable'),
         'native-code': t('modSafety.risks.nativeCode'), 'unreadable-archive': t('modSafety.risks.unreadableArchive'),
+        'inspection-failed': t('modSafety.risks.inspectionFailed'),
     };
     const reasons = [...new Set(report.findings.map(f => f.reason))];
     const specific = reasons.filter(reason => reason !== 'executable');
@@ -63,6 +66,7 @@ function Findings({ report }: { report: ModSafetyReport }) {
         'remote-code': t('modSafety.reasons.remoteCode'), 'dynamic-code': t('modSafety.reasons.dynamicCode'),
         executable: t('modSafety.reasons.executable'), uninspectable: t('modSafety.reasons.uninspectable'),
         'native-code': t('modSafety.reasons.nativeCode'), 'unreadable-archive': t('modSafety.reasons.unreadableArchive'),
+        'inspection-failed': t('modSafety.reasons.inspectionFailed'),
     };
     return <details className="rounded-sm border border-hl/10 p-3">
         <summary className="cursor-pointer text-sm text-text-primary">{t('modSafety.findings')}</summary>
@@ -96,8 +100,8 @@ export function ModSafetyBanner() {
     </div>;
 }
 
-function ReviewCard({ row, expanded, busy, disabled, error, onExpand, onAllow, onKeepDisabled }: {
-    row: ReviewRow; expanded: boolean; busy: boolean; disabled: boolean; error?: string;
+function ReviewCard({ row, expanded, busy, error, onExpand, onAllow, onKeepDisabled }: {
+    row: ReviewRow; expanded: boolean; busy: boolean; error?: string;
     onExpand: () => void; onAllow: () => void; onKeepDisabled: () => void;
 }) {
     const { t } = useTranslation();
@@ -111,15 +115,20 @@ function ReviewCard({ row, expanded, busy, disabled, error, onExpand, onAllow, o
         'remote-code': t('modSafety.summary.remoteCode'), 'dynamic-code': t('modSafety.summary.dynamicCode'),
         executable: t('modSafety.summary.executable'), uninspectable: t('modSafety.summary.uninspectable'),
         'native-code': t('modSafety.summary.nativeCode'), 'unreadable-archive': t('modSafety.unchecked'),
+        'inspection-failed': t('modSafety.incomplete'),
     };
     const reasons = [...new Set(row.report.findings.map(f => f.reason))];
     const summary = reasons.length > 1 ? reasons.filter(r => r !== 'executable') : reasons;
     const unreadable = row.report.verdict === 'blocked';
-    const canAllow = !unreadable && !row.trusted && (!!row.mod || row.request?.canTrust);
-    const state = unreadable ? t('modSafety.unchecked') : row.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
+    const incomplete = row.report.verdict === 'incomplete';
+    const canAllow = !unreadable && !incomplete && !row.trusted && (!!row.mod || row.request?.canTrust);
+    const state = unreadable ? t('modSafety.unchecked') : incomplete ? t('modSafety.incomplete')
+        : row.trusted ? t('modSafety.trusted') : t('modSafety.needsReview');
     const hero = row.mod?.sourceSection === 'Sound' && !row.mod.thumbnailUrl
         ? row.mod.lockerHero ?? inferHeroFromTitle(row.name) : undefined;
     const contentId = 'safety-review-' + encodeURIComponent(row.key);
+    // A pending prompt stays answerable: answering never waits on the mod lock.
+    const locked = busy && !row.request;
     return <article ref={card} className="overflow-hidden rounded-sm border border-border bg-bg-primary" data-safety-row={row.key}>
         <button type="button" aria-expanded={expanded} aria-controls={contentId} onClick={onExpand}
             className="flex w-full items-center gap-3 p-3 text-left hover:bg-hl/5 focus-visible:outline-2 focus-visible:outline-accent">
@@ -141,16 +150,16 @@ function ReviewCard({ row, expanded, busy, disabled, error, onExpand, onAllow, o
             {row.mod && <p className="break-all text-xs text-text-secondary">{row.mod.fileName}</p>}
             <Risks report={row.report} />
             <p className="text-sm text-text-secondary">{unreadable ? t('modSafety.uncheckedBody')
-                : row.trusted ? t('modSafety.trustedBody') : t('modSafety.allowHint')}</p>
+                : incomplete ? t('modSafety.incompleteBody') : row.trusted ? t('modSafety.trustedBody') : t('modSafety.allowHint')}</p>
             {row.request?.context === 'installation' && <p className="text-sm text-text-secondary">{t('modSafety.oldVersionKept')}</p>}
             {row.request?.restartRequired && <p className="text-sm text-state-warning">{t('modSafety.closeGame')}</p>}
-            {!row.mod && !row.request?.canTrust && !unreadable && <p className="text-sm text-text-secondary">{row.enabled
+            {!row.mod && !row.request?.canTrust && !unreadable && !incomplete && <p className="text-sm text-text-secondary">{row.enabled
                 ? t('modSafety.closeGame') : t('modSafety.movedDisabled')}</p>}
             <Findings report={row.report} />
             {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
             <div className="flex flex-wrap justify-end gap-2">
-                {!row.trusted && <Button variant="secondary" disabled={disabled} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
-                {canAllow && <Button disabled={disabled} isLoading={busy} onClick={onAllow}>{t('modSafety.trustVersion')}</Button>}
+                {!row.trusted && <Button variant="secondary" disabled={locked} onClick={onKeepDisabled}>{t('modSafety.cancel')}</Button>}
+                {canAllow && <Button isLoading={locked} onClick={onAllow}>{t('modSafety.trustVersion')}</Button>}
             </div>
         </div>}
     </article>;
@@ -211,10 +220,11 @@ export function ModSafetySync() {
 export function ModSafetyPage() {
     const { t } = useTranslation();
     const [explainerOpen, setExplainerOpen] = useState(false);
-    const [busy, setBusy] = useState<string | null>(null);
+    const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
     const [expanded, setExpanded] = useState<string | null>(null);
     const [error, setError] = useState<{ key: string; text: string } | null>(null);
-    const operation = useRef(false);
+    // Per row: an action queued behind the mod lock must not block answering another row's prompt.
+    const operations = useRef(new Set<string>());
     const { installed, prompts, detail, scanning, scanFailed } = useModSafetyStore();
     const mods = useAppStore(s => s.mods);
     const rows = safetyReviewRows(mods, installed, prompts).sort((a, b) => Number(a.trusted) - Number(b.trusted));
@@ -225,35 +235,42 @@ export function ModSafetyPage() {
         setExpanded(expandedKey === key ? '' : key);
     };
     const run = async (key: string, action: () => Promise<void>) => {
-        if (operation.current) return;
-        operation.current = true;
-        setBusy(key); setError(null);
+        if (operations.current.has(key)) return;
+        operations.current.add(key);
+        setBusy(new Set(operations.current)); setError(null);
         try { await action(); }
         catch (err) {
             setError({ key, text: t(String(err).includes('MOD_SAFETY_CHANGED') ? 'modSafety.changed' : 'modSafety.failed') });
         } finally {
-            operation.current = false;
-            setBusy(null);
+            operations.current.delete(key);
+            setBusy(new Set(operations.current));
             void useAppStore.getState().loadMods({ force: true, silent: true });
         }
     };
-    const allow = (row: ReviewRow) => void run(row.key, async () => {
+    // The prompting operation holds the mod lock and applies the decision itself.
+    const answer = (row: ReviewRow, id: string, accepted: boolean) => window.electronAPI.respondModSafety(id, accepted)
+        .catch(() => setError({ key: row.key, text: t('modSafety.failed') }));
+    const allow = (row: ReviewRow) => {
         setExpanded(row.key); useModSafetyStore.setState({ detail: null });
-        if (row.request?.canTrust) {
-            await window.electronAPI.respondModSafety(row.request.id, true);
-        } else if (row.mod) {
-            if (row.request) await window.electronAPI.respondModSafety(row.request.id, false);
-            const updated = await window.electronAPI.reviewModSafety(row.mod.id, row.report.fingerprint);
-            useAppStore.setState(state => ({ mods: state.mods.map(mod => mod.id === row.mod!.id
-                ? { ...mod, id: updated.id, path: updated.path, fileName: updated.fileName,
-                    metaKey: updated.metaKey, enabled: updated.enabled, priority: updated.priority, safety: updated.safety } : mod) }));
-        }
-    });
-    const keepDisabled = (row: ReviewRow) => void run(row.key, async () => {
-        if (row.request) await window.electronAPI.respondModSafety(row.request.id, false);
-        if (row.mod?.enabled && row.request?.context !== 'installation') await window.electronAPI.disableMod(row.mod.id);
-        setExpanded(''); useModSafetyStore.setState({ detail: null });
-    });
+        const mod = row.mod;
+        if (row.request?.canTrust) void answer(row, row.request.id, true);
+        else if (mod) void run(row.key, async () => {
+            const updated = await window.electronAPI.reviewModSafety(mod.id, row.report.fingerprint);
+            useAppStore.setState(state => ({ mods: state.mods.map(m => m.id === mod.id
+                ? { ...m, id: updated.id, path: updated.path, fileName: updated.fileName,
+                    metaKey: updated.metaKey, enabled: updated.enabled, priority: updated.priority, safety: updated.safety } : m) }));
+        });
+    };
+    const keepDisabled = (row: ReviewRow) => {
+        useModSafetyStore.setState({ detail: null });
+        if (row.request) void answer(row, row.request.id, false);
+        const mod = row.mod;
+        if (!mod?.enabled || row.request?.context === 'installation') { setExpanded(''); return; }
+        void run(row.key, async () => {
+            await window.electronAPI.disableMod(mod.id);
+            setExpanded('');
+        });
+    };
     const rescan = () => void run('scan', async () => {
         const results = await window.electronAPI.rescanModSafety();
         useModSafetyStore.setState({ installed: results });
@@ -262,13 +279,13 @@ export function ModSafetyPage() {
         <PageHeader title={t('modSafety.manage')} action={
             <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" icon={CircleHelp} onClick={() => setExplainerOpen(true)}>{t('modSafety.explainer.title')}</Button>
-                <Button variant="ghost" disabled={!!busy || scanning} isLoading={busy === 'scan' || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
+                <Button variant="ghost" isLoading={busy.has('scan') || scanning} onClick={rescan}>{t('modSafety.rescan')}</Button>
             </div>
         } />
         {scanFailed && <p role="alert" className="mb-4 text-sm text-state-warning">{t('modSafety.scanFailed')}</p>}
         <div className="space-y-3">
             <ReviewList rows={rows}>{row => <ReviewCard key={row.key} row={row} expanded={expandedKey === row.key}
-                busy={busy === row.key} disabled={!!busy} error={error?.key === row.key ? error.text : undefined}
+                busy={busy.has(row.key)} error={error?.key === row.key ? error.text : undefined}
                 onExpand={() => expand(row.key)} onAllow={() => allow(row)} onKeepDisabled={() => keepDisabled(row)} />}</ReviewList>
             {!rows.length && <p className="text-sm text-text-secondary">{scanning
                 ? t('modSafety.scanning') : scanFailed ? t('modSafety.scanFailed') : t('modSafety.noFlaggedMods')}</p>}

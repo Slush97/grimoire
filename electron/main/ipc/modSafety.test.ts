@@ -23,7 +23,7 @@ import './modSafety';
 
 beforeEach(() => {
     vi.clearAllMocks();
-    h.approve.mockResolvedValue(undefined);
+    h.approve.mockResolvedValue(false);
     h.enable.mockResolvedValue({ id: 'enabled', path: 'pak01.vpk', name: 'Test', enabled: true });
 });
 describe('inline mod approval', () => {
@@ -34,6 +34,12 @@ describe('inline mod approval', () => {
         expect(h.update).toHaveBeenCalledWith('disabled', { modId: 'enabled', name: 'Test', enabled: true, ...h.snapshot });
         expect(result).toMatchObject({ id: 'enabled', safety: h.snapshot });
         expect(h.audit).not.toHaveBeenCalled();
+    });
+    it('leaves activation to an operation that was waiting on the approved version', async () => {
+        h.approve.mockResolvedValue(true);
+        const result = await h.handlers.get('review-mod-safety')!({ sender: h.sender }, 'disabled', 'a'.repeat(64));
+        expect(h.enable).not.toHaveBeenCalled();
+        expect(result).toMatchObject({ id: 'disabled', safety: h.snapshot });
     });
     it('does not enable or update a mod whose reviewed content changed', async () => {
         h.approve.mockRejectedValue(new Error('MOD_SAFETY_CHANGED'));

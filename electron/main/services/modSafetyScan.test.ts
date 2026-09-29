@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { scanModSafety } from './modSafetyScan';
-import { safetyResource, safetyVpk } from './modSafetyFixtures';
+import { safetyChunkedVpk, safetyResource, safetyVpk } from './modSafetyFixtures';
 import * as policy from './modSafetyPolicy';
 
 let root: string;
@@ -102,8 +102,41 @@ describe('VPK safety inspection', () => {
         expect((await scanModSafety(join(root, 'renamed.vpk'))).fingerprint).toBe(first.fingerprint);
         expect((await scan(b)).fingerprint).not.toBe(first.fingerprint);
     });
-    it('fails closed on missing compiled-layout decoder', async () => {
-        expect((await scan(safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]))).verdict).toBe('blocked');
+    it('reports a missing layout decoder as an incomplete check and never caches it', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]));
+        for (const binary of [undefined, join(root, 'missing-decoder')]) {
+            const report = await scanModSafety(path, binary, cache);
+            expect(report.verdict).toBe('incomplete');
+            expect(report.findings).toContainEqual({ entry: 'test_dir.vpk', reason: 'inspection-failed' });
+        }
+        expect(await fs.readdir(cache).catch(() => [])).toEqual([]);
+    });
+    it('still blocks layouts the decoder runs on but rejects', async () => {
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]));
+        expect((await scanModSafety(path, process.execPath)).verdict).toBe('blocked');
+    });
+    it('inspects scripts stored in chunk archives and fingerprints the chunk bytes', async () => {
+        const { dir, chunk } = safetyChunkedVpk([{ path: 'panorama/scripts/hud.js', bytes: Buffer.from('run("file:///a")') }]);
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, dir);
+        await fs.writeFile(join(root, 'test_000.vpk'), chunk);
+        const report = await scanModSafety(path);
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: 'panorama/scripts/hud.js', reason: 'local-file' });
+        await fs.writeFile(join(root, 'test_000.vpk'), Buffer.from(chunk.toString().replace('/a', '/b')));
+        expect((await scanModSafety(path)).fingerprint).not.toBe(report.fingerprint);
+    });
+    it('accepts passive multi-chunk archives but blocks one with a missing chunk', async () => {
+        const { dir, chunk } = safetyChunkedVpk([{ path: 'models/hero.vmdl_c', bytes: Buffer.from('inert') }]);
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, dir);
+        await fs.writeFile(join(root, 'test_000.vpk'), chunk);
+        expect((await scanModSafety(path)).verdict).toBe('no-findings');
+        await fs.unlink(join(root, 'test_000.vpk'));
+        expect((await scanModSafety(path)).verdict).toBe('blocked');
     });
     it('does not mistake static stylesheet image references for scripts', async () => {
         const header = Buffer.alloc(6); header.writeUInt16LE(1, 4);

@@ -30,6 +30,9 @@ function requireCondition(condition: unknown): asserts condition {
     if (!condition) throw new Error('Invalid or unsupported VPK resource');
 }
 
+/** The inspector itself could not run. Says nothing about the archive. */
+class InspectionIncomplete extends Error {}
+
 async function readExactly(file: FileHandle, size: number, offset: number): Promise<Buffer> {
     const buffer = Buffer.alloc(size);
     let n = 0;
@@ -158,7 +161,10 @@ async function decodeLayouts(vpk: string, entries: Entry[], binary: string): Pro
         // Paths and sizes have been validated before invoking the bundled decoder.
         const args = ['panorama', 'dump', '--vpk', vpk, '--out-dir', staging, '--no-raw', '--json'];
         for (const entry of entries) args.push('--prefix', entry.path);
-        const { stdout } = await run(binary, args, { timeout: 30000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+        const { stdout } = await run(binary, args, { timeout: 30000, maxBuffer: 2 * 1024 * 1024, windowsHide: true })
+            .catch((err: NodeJS.ErrnoException) => {
+                throw err.syscall?.startsWith('spawn') ? new InspectionIncomplete() : err;
+            });
         const report = JSON.parse(stdout);
         requireCondition(Array.isArray(report.entries));
         const result = new Map<string, string>();
@@ -194,8 +200,10 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
     const findings: ModSafetyFinding[] = [];
     let fingerprint = '';
     let blocked = false;
+    let incomplete = false;
     const add = (finding: ModSafetyFinding) => {
         if (finding.reason === 'unreadable-archive') blocked = true;
+        if (finding.reason === 'inspection-failed') incomplete = true;
         if (findings.length < 200) findings.push(finding);
         else if (finding.reason === 'unreadable-archive' || (finding.reason !== 'executable'
             && findings[199].reason !== 'unreadable-archive')) findings[199] = finding;
@@ -205,13 +213,10 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         const { entries, files } = await directory(path);
         budget.entries += entries.length;
         requireCondition(budget.entries <= MAX_ENTRIES);
-        // Grimoire's slot moves handle standalone VPKs. External chunks cannot
-        // be activated until the whole archive can be moved transactionally.
-        if (files.length > 1) add({ entry: basename(path), reason: 'unreadable-archive' });
         const before = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before[0] === `${initial.size}:${initial.mtimeMs}:${initial.ctimeMs}`);
         fingerprint = await hashFiles(files);
-        if (cacheDir && !blocked) {
+        if (cacheDir) {
             const cached = await readCachedReport(cacheDir, fingerprint);
             if (cached) {
                 const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
@@ -264,7 +269,8 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             if (EXECUTABLE.has(ext) && !isJs) add({ entry: entry.path, reason: 'executable' });
         }
         if (layouts.length) {
-            requireCondition(binary && layouts.length <= 128);
+            requireCondition(layouts.length <= 128);
+            if (!binary) throw new InspectionIncomplete();
             const decoded = await decodeLayouts(path, layouts, binary);
             for (const [entry, text] of decoded) {
                 const sourceFindings = inspectModSource(entry, text, false);
@@ -276,19 +282,19 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         }
         const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
         requireCondition(before.every((s, i) => s === after[i]));
-    } catch {
-        add({ entry: basename(path), reason: 'unreadable-archive' });
+    } catch (err) {
+        add({ entry: basename(path), reason: err instanceof InspectionIncomplete ? 'inspection-failed' : 'unreadable-archive' });
     }
     return {
         policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint,
-        verdict: blocked ? 'blocked' : findings.length ? 'requires-trust' : 'no-findings',
+        verdict: blocked ? 'blocked' : incomplete ? 'incomplete' : findings.length ? 'requires-trust' : 'no-findings',
         findings,
     };
 }
 
 export async function scanModSafety(path: string, binary?: string, cacheDir?: string): Promise<ModSafetyReport> {
     const report = await scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0, cacheDir);
-    if (cacheDir && report.verdict !== 'blocked') {
+    if (cacheDir && (report.verdict === 'no-findings' || report.verdict === 'requires-trust')) {
         const temp = join(cacheDir, `${randomUUID()}.tmp`);
         try {
             await fs.mkdir(cacheDir, { recursive: true });

@@ -11,6 +11,7 @@ import {
     enableMod,
     disableMod,
     deleteMod,
+    assertReplacementSafety,
     setModPriority,
     reorderMods,
     swapModPriority,
@@ -490,6 +491,14 @@ ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
         throw new Error('No Deadlock path configured');
     }
     await deleteMod(deadlockPath, modId);
+});
+
+ipcMain.handle('assert-replacement-safety', async (_, modIds: string[]): Promise<void> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    await assertReplacementSafety(deadlockPath, modIds);
 });
 
 // detect-unknown-mod-filters

@@ -29,6 +29,8 @@
     },
     "unchecked": "Can't check",
     "uncheckedBody": "Try downloading it again or ask the author for a complete, supported archive.",
+    "incomplete": "Check incomplete",
+    "incompleteBody": "Grimoire couldn't finish checking this mod. This isn't a finding about the mod. Check installed mods to try again.",
     "needsReview": "Review",
     "trusted": "Allowed",
     "viewFindings": "View risks and actions for {{name}}",
@@ -68,7 +70,8 @@
       "executable": "Scripts or UI content",
       "uninspectable": "Contents could not be checked",
       "nativeCode": "Executable program",
-      "unreadableArchive": "Archive could not be read or installed"
+      "unreadableArchive": "Archive could not be read or installed",
+      "inspectionFailed": "Check could not finish"
     },
     "risks": {
       "localFile": "Could access private files on your computer or network.",
@@ -78,7 +81,8 @@
       "executable": "Scripts or UI content may access files or send data while you play.",
       "uninspectable": "Some script code couldn't be analyzed. It may have risks that aren't listed here.",
       "nativeCode": "Includes a program that could run commands on your computer.",
-      "unreadableArchive": "Grimoire couldn't read or safely install this archive."
+      "unreadableArchive": "Grimoire couldn't read or safely install this archive.",
+      "inspectionFailed": "The safety check stopped before it could look inside this mod, so its contents are unknown."
     }
   },
   "common": {
