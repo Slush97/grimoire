@@ -64,9 +64,11 @@ import {
   groupModsByCategory,
   isLockerManagedMod,
   isLockerManagedSound,
+  isPendingGameBananaHero,
   isPropContainerType,
   modLoadOrder,
   readStoredFavorites,
+  withPendingGameBananaHeroes,
   type GlobalModGroups,
   type HeroCategory,
 } from '../lib/lockerUtils';
@@ -415,11 +417,12 @@ export default function Locker() {
   );
   const openHeroInBrowse = useCallback(
     (hero: HeroCategory) => {
+      const pending = isPendingGameBananaHero(hero.id);
       setBrowseUi({
         section: 'Mod',
-        heroCategoryId: hero.id,
+        heroCategoryId: pending ? 'all' : hero.id,
         categoryId: 'all',
-        search: '',
+        search: pending ? hero.name : '',
         // Leave artist mode: it persists in the session store and would
         // otherwise override the hero filter this entry point asks for.
         submitter: undefined,
@@ -451,7 +454,10 @@ export default function Locker() {
   }, [selectedHeroId, globalSelected, refreshLockerOverview]);
 
   // Build basic hero list first (needed for mod categorization)
-  const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
+  const baseHeroList = useMemo(
+    () => withPendingGameBananaHeroes(buildHeroList(categories)),
+    [categories]
+  );
   const heroNamesForColorSupport = useMemo(
     () => Array.from(new Set(baseHeroList.map((hero) => hero.name))).sort((a, b) => a.localeCompare(b)),
     [baseHeroList]

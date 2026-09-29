@@ -553,9 +553,15 @@ export const HERO_NAMES: Record<number, string> = {
   72: 'Billy',
   76: 'Graves',
   77: 'Apollo',
+  78: 'Deadman Danny',
   79: 'Rem',
   80: 'Silver',
   81: 'Celeste',
+  84: 'Rat King',
+  85: 'Solomon',
+  86: 'Violet',
+  87: 'Nurse Harrow',
+  88: 'Baba',
 }
 
 /**
@@ -564,6 +570,6 @@ export const HERO_NAMES: Record<number, string> = {
  * uses the live in_development flag instead.
  */
 export const EXPERIMENTAL_HERO_IDS = new Set([
-  38, 39, 47, 48, 49, 51, 53, 54, 56, 57, 59, 61, 62, 68, 70, 71, 73, 74, 75, 78, 82, 83,
+  38, 39, 47, 48, 49, 51, 53, 54, 56, 57, 59, 61, 62, 68, 70, 71, 73, 74, 75, 82, 83,
 ])
 

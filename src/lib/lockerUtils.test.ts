@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { modLoadOrder, activeLockerSkin } from './lockerUtils';
+import {
+  modLoadOrder,
+  activeLockerSkin,
+  isPendingGameBananaHero,
+  withPendingGameBananaHeroes,
+} from './lockerUtils';
 
 function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: number }): Mod {
   return {
@@ -58,5 +63,33 @@ describe('activeLockerSkin', () => {
 
   it('is undefined when nothing is enabled', () => {
     expect(activeLockerSkin([mod({ id: 'x', metaKey: 'pak01_dir.vpk', priority: 1, enabled: false })])).toBeUndefined();
+  });
+});
+
+describe('withPendingGameBananaHeroes', () => {
+  const gameBanana = [
+    { id: 33324, name: 'Vindicta' },
+    { id: 40060, name: 'Doorman' },
+  ];
+
+  it('appends roster heroes GameBanana has no Skins category for yet', () => {
+    const heroes = withPendingGameBananaHeroes(gameBanana);
+    const ratKing = heroes.find((hero) => hero.name === 'Rat King');
+    expect(ratKing).toBeDefined();
+    expect(isPendingGameBananaHero(ratKing!.id)).toBe(true);
+    expect(heroes.filter((hero) => hero.name === 'Vindicta')).toHaveLength(1);
+    expect(heroes.some((hero) => hero.name === 'The Doorman')).toBe(false);
+    expect(heroes.slice(0, 2)).toEqual(gameBanana);
+  });
+
+  it('keeps pending ids stable and clear of real category ids', () => {
+    const first = withPendingGameBananaHeroes(gameBanana).find((h) => h.name === 'Baba');
+    const second = withPendingGameBananaHeroes([gameBanana[0]]).find((h) => h.name === 'Baba');
+    expect(first?.id).toBe(second?.id);
+    expect(isPendingGameBananaHero(33324)).toBe(false);
+  });
+
+  it('adds nothing while the category tree is unavailable', () => {
+    expect(withPendingGameBananaHeroes([])).toEqual([]);
   });
 });

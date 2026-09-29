@@ -6,7 +6,7 @@ import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { showToast } from './toastStore';
-import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey, withPendingGameBananaHeroes } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
@@ -987,7 +987,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
     let heroList: { id: number; name: string }[] = [];
     try {
-      heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
+      heroList = withPendingGameBananaHeroes(
+        buildHeroList(await api.getGamebananaCategories('ModCategory'))
+      );
     } catch {
       // Cold category cache only (a fresh install that never opened Browse or
       // the Locker): getGamebananaCategories is SQLite-backed, so it serves the

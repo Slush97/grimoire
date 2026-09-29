@@ -62,6 +62,14 @@ export const HERO_SOUND_CODENAMES: Readonly<Record<string, string>> = {
     priest: 'Venator',
     warden: 'Warden',
     wraith: 'Wraith',
+    // The 2026-09-29 batch ships VO (`sounds/vo/<codename>/`) but no ability
+    // sound dirs yet. Sound-path codename == class_name.
+    artist: 'Violet',
+    baba: 'Baba',
+    chessmaster: 'Solomon',
+    deadpack: 'Deadman Danny',
+    nurse: 'Nurse Harrow',
+    ratking: 'Rat King',
 };
 
 /**
