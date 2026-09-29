@@ -52,7 +52,7 @@
       "uninspectable": "Unknown code",
       "nativeCode": "Runs programs"
     },
-    "noFlaggedMods": "No risks flagged. This does not guarantee every mod is safe.",
+    "noFlaggedMods": "No mods need review.",
     "rescan": "Check installed mods",
     "failed": "Could not finish. Try again.",
     "trustedBody": "You accepted these risks for this version. You can disable or remove it in Installed.",
