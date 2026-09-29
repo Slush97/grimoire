@@ -100,16 +100,16 @@ function panoramaEventSource(source: string): string {
     } catch { return source; }
 }
 
-// Panorama scripts have no file or network API of their own. The threat is a
-// CEF panel (CitadelHTMLPanel) loading file:// and posting what it read to a
-// server, so scripts run without consent and findings are the ways a script
-// reaches that panel, including by building its names at runtime.
+// Every script needs consent even when nothing else fires: a text scanner
+// can't prove what a script reaches once it builds names at runtime. The other
+// findings say why a script looks risky, e.g. a CEF panel (CitadelHTMLPanel)
+// loading file:// and posting what it read to a server.
 const STRING_DECODERS = new Set(['atob', 'fromCharCode', 'fromCodePoint', 'unescape', 'decodeURI', 'decodeURIComponent']);
 const PANEL_FACTORIES = new Set(['CreatePanel', 'CreatePanelWithProperties', 'BLoadLayoutFromString', 'BLoadLayoutFromStringAsync']);
 
 export function inspectModSource(entry: string, source: string, javascript: boolean): ModSafetyFinding[] {
     const reasons = new Set<ModSafetyReason>();
-    let active = javascript;
+    if (javascript) reasons.add('executable');
     function inspectText(text: string): void {
         // file://{images}/ and the other Panorama roots resolve inside the game's own content.
         if (/(?:\bfile\s*:(?!\/\/\{\w+\}\/)|\\\\[^\\\s"'<>]+\\)/i.test(text)) reasons.add('local-file');
@@ -166,7 +166,7 @@ export function inspectModSource(entry: string, source: string, javascript: bool
         const withoutComments = text.replace(/<!--[\s\S]*?-->|\/\*[\s\S]*?\*\//g, '');
         const decoded = decodeEntities(withoutComments);
         inspectText(decoded);
-        if (/<(?:script|scripts|iframe|object|embed)\b|\bon[a-z]+\s*=/i.test(withoutComments)) active = true;
+        if (/<(?:script|scripts|iframe|object|embed)\b|\bon[a-z]+\s*=/i.test(withoutComments)) reasons.add('executable');
         if (/<(?:script|include|iframe|object|embed)\b[^>]*\b(?:src|href|url)\s*=\s*["']\s*(?:https?:|\/\/|data:|blob:)/i.test(decoded)) reasons.add('remote-code');
         for (const match of withoutComments.matchAll(/\bon[a-z]+\s*=\s*(["'])([\s\S]*?)\1/gi)) {
             for (const finding of inspectModSource(entry, panoramaEventSource(decodeEntities(match[2])), true)) reasons.add(finding.reason);
@@ -178,6 +178,6 @@ export function inspectModSource(entry: string, source: string, javascript: bool
         }
     }
     // A file address in passive content (a stylesheet, a static image) has nothing to act on it.
-    if (!active && !reasons.has('browser') && !reasons.has('remote-code') && !reasons.has('dynamic-code')) reasons.delete('local-file');
+    if (!reasons.has('executable') && !reasons.has('browser') && !reasons.has('remote-code') && !reasons.has('dynamic-code')) reasons.delete('local-file');
     return [...reasons].map(reason => ({ entry, reason }));
 }

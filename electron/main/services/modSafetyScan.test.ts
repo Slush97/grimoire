@@ -90,9 +90,10 @@ describe('VPK safety inspection', () => {
         expect(result.verdict).toBe('requires-trust');
         expect(result.findings).toContainEqual({ entry: 'panorama/scripts/ordinary.vjs_c', reason: 'local-file' });
     });
-    it('does not ask about scripts without a way to reach files, the network or a browser panel', async () => {
+    it('requires consent for scripts without recognizable dangerous tokens', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/scripts/compact.vjs_c', bytes: safetyResource(Buffer.from('!function(a){a(1)}(run);')) }]));
-        expect(result.verdict).toBe('no-findings');
+        expect(result.verdict).toBe('requires-trust');
+        expect(result.findings).toEqual([{ entry: 'panorama/scripts/compact.vjs_c', reason: 'executable' }]);
     });
     it('does not require review for stylesheets without executable behavior', async () => {
         const result = await scan(safetyVpk([{ path: 'panorama/styles/test.css', bytes: Buffer.from('.x { background-image: url("\\66 ile:///example"); }') }]));
@@ -210,8 +211,10 @@ describe('VPK safety inspection', () => {
         ['panorama/layout/hud.xml', '<Panel onload="run(1)"/>'],
         ['scripts/main.nut', 'run(1);'],
         ['panorama/scripts/hud.js', '$.Schedule(0.1, () => $("#timer").text = String(Game.GetGameTime()));'],
-    ])('runs scripts that only drive the UI without review: %s', async (path, source) => {
-        expect((await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]))).verdict).toBe('no-findings');
+    ])('keeps executable content behind review: %s', async (path, source) => {
+        const report = await scan(safetyVpk([{ path, bytes: Buffer.from(source) }]));
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: path, reason: 'executable' });
     });
     it('recursively inspects nested VPKs including preload bytes', async () => {
         const asset = safetyVpk([{ path: 'model.vmdl_c', bytes: Buffer.from('inert') }]);
@@ -234,12 +237,12 @@ describe('VPK safety inspection', () => {
         expect(result.findings).toContainEqual({ entry: 'probe.js', reason: 'local-file' });
     });
     it('cannot hide a specific risk behind the UI finding limit', async () => {
-        const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run("file:///example")') }));
-        files.push({ path: 'last.js', bytes: Buffer.from('eval(code)') });
+        const files = Array.from({ length: 201 }, (_, i) => ({ path: `script${i}.js`, bytes: Buffer.from('run(1);') }));
+        files.push({ path: 'last.js', bytes: Buffer.from('run("file:///example")') });
         const result = await scan(safetyVpk(files));
         expect(result.findings.length).toBe(200);
         expect(result.verdict).toBe('requires-trust');
-        expect(result.findings).toContainEqual({ entry: 'last.js', reason: 'dynamic-code' });
+        expect(result.findings).toContainEqual({ entry: 'last.js', reason: 'local-file' });
     });
     it.each([
         ['local-file', 'run("file:///example.txt")'],

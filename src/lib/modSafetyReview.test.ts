@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
 import type { ModSafetyPrompt, ModSafetyReport } from '../types/modSafety';
-import { hasNewSafetyReview, pendingSafetyKeys, safetyReviewRows } from './modSafetyReview';
+import { hasNewSafetyReview, pendingSafetyKeys, safetyReviewRows, scriptOnlySafetyRows } from './modSafetyReview';
 
 const report = (fingerprint = 'version-one'): ModSafetyReport => ({
     fingerprint, policyVersion: 2, verdict: 'requires-trust', findings: [{ entry: 'hud.js', reason: 'browser' }],
@@ -57,5 +57,26 @@ describe('mod safety attention', () => {
             report: { ...report(''), verdict: 'blocked', findings: [{ entry: 'bad.vpk', reason: 'unreadable-archive' }] } }], []);
         expect(pendingSafetyKeys(rows)).toHaveLength(1);
         expect(hasNewSafetyReview(pendingSafetyKeys(rows), [])).toBe(true);
+    });
+});
+
+describe('allowing script-only mods together', () => {
+    const scripts = (fingerprint: string): ModSafetyReport => ({ ...report(fingerprint),
+        findings: [{ entry: 'hud.js', reason: 'executable' }, { entry: 'timer.js', reason: 'executable' }] });
+    it('takes only untrusted library mods whose every finding is a script', () => {
+        const hud = mod({ safety: { trusted: false, report: scripts('hud') } });
+        const allowed = mod({ id: 'allowed', name: 'Allowed', safety: { trusted: true, report: scripts('allowed') } });
+        const browser = mod({ id: 'browser', name: 'Browser' });
+        const mixed = mod({ id: 'mixed', name: 'Mixed', safety: { trusted: false,
+            report: { ...scripts('mixed'), findings: [{ entry: 'hud.js', reason: 'executable' }, { entry: 'hud.js', reason: 'local-file' }] } } });
+        const rows = safetyReviewRows([hud, allowed, browser, mixed], [], []);
+        expect(scriptOnlySafetyRows(rows).map(row => row.mod?.id)).toEqual(['one']);
+    });
+    it('leaves a mod an operation is waiting on to its own prompt', () => {
+        const hud = mod({ safety: { trusted: false, report: scripts('hud') } });
+        const waiting: ModSafetyPrompt = { id: 'waiting', name: 'HUD', report: scripts('hud'), canTrust: true, restartRequired: false, context: 'activation' };
+        const notice: ModSafetyPrompt = { ...waiting, id: 'notice', canTrust: false, restartRequired: true, context: 'startup' };
+        expect(scriptOnlySafetyRows(safetyReviewRows([hud], [], [waiting]))).toEqual([]);
+        expect(scriptOnlySafetyRows(safetyReviewRows([hud], [], [notice]))).toHaveLength(1);
     });
 });

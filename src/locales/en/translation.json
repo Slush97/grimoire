@@ -2,30 +2,11 @@
   "modSafety": {
     "explainer": {
       "title": "Why review mods?",
-      "examples": "Example mods",
-      "limits": "Warnings flag capabilities, not intent. A scan cannot guarantee safety.",
       "choice": "Only allow mods you trust. If unsure, keep them disabled.",
-      "timer": {
-        "name": "HUD timer",
-        "access": "Runs scripts",
-        "result": "Live cooldowns",
-        "purpose": "Scripts can power useful features like cooldown timers.",
-        "caution": "Scripts that only change the HUD run without asking."
-      },
-      "music": {
-        "name": "Music player",
-        "access": "Files + internet",
-        "result": "Music playback",
-        "purpose": "A player might read your music or stream it online.",
-        "caution": "The same access could read private files or send data outside the game."
-      },
-      "cosmetic": {
-        "name": "Cosmetic mod",
-        "access": "Scripts + internet",
-        "result": "Why this access?",
-        "purpose": "A new look alone usually does not need scripts or internet access.",
-        "caution": "Check the author's explanation before allowing unexpected access."
-      }
+      "simpleTitle": "In short",
+      "simple": "Some mods come with scripts: small bits of code that run inside Deadlock's HUD and menus. Most are harmless, like a cooldown timer or a better scoreboard. But a script can also quietly open a web page inside the game, and that page can read files on your computer and send them to someone else. Grimoire can't always tell a harmless script from a harmful one, so script mods stay off until you say you trust them.",
+      "technicalTitle": "A bit more detail",
+      "technical": "Deadlock's UI (Panorama) runs JavaScript and can embed a browser panel. That panel can load file:// addresses, so a page can read files off your disk and post them to a server. Grimoire reads every script and layout in a mod and points out file paths, browser panels, network calls and code that hides what it runs. A script can build those names while it runs, though, so reading the code can never prove it's safe. That's why every script needs your OK, and why an OK only covers that exact version: when the mod updates, Grimoire asks again."
     },
     "unchecked": "Can't check",
     "uncheckedBody": "Try downloading it again or ask the author for a complete, supported archive.",
@@ -43,12 +24,16 @@
     "reviewMods": "Review mods",
     "dismissNotice": "Dismiss mod safety notice",
     "allowHint": "Allowing this version enables the mod with these risks.",
+    "allowScripts_one": "Allow {{count}} script mod",
+    "allowScripts_other": "Allow {{count}} script mods",
+    "allowScriptsHint": "Allows and enables every mod below whose only finding is Runs scripts. Mods with other findings are allowed one at a time.",
     "changed": "This mod changed since you reviewed it. Check installed mods again before allowing it.",
     "summary": {
       "localFile": "File access",
       "browser": "Web content",
       "remoteCode": "Network access",
       "dynamicCode": "Hidden code",
+      "executable": "Runs scripts",
       "uninspectable": "Unknown code",
       "nativeCode": "Runs programs"
     },
@@ -67,6 +52,7 @@
       "browser": "Web content",
       "remoteCode": "Network requests or external code",
       "dynamicCode": "Code created at runtime",
+      "executable": "Runs scripts",
       "uninspectable": "Contents could not be checked",
       "nativeCode": "Executable program",
       "unreadableArchive": "Archive could not be read or installed",
@@ -77,12 +63,13 @@
       "browser": "Web content could access files or send data outside the game.",
       "remoteCode": "Could send data to a server or load code from elsewhere.",
       "dynamicCode": "Could run hidden code that accesses files or sends data.",
+      "executable": "Runs scripts in the game's UI. Grimoire reads them but can't be sure what they'll do when they run, so it asks first.",
       "uninspectable": "Some script code couldn't be analyzed. It may have risks that aren't listed here.",
       "nativeCode": "Includes a program that could run commands on your computer.",
       "unreadableArchive": "Grimoire couldn't read or safely install this archive.",
       "inspectionFailed": "The safety check stopped before it could look inside this mod, so its contents are unknown."
     },
-    "description": "Grimoire asks before enabling a mod that can open web pages in the game, read files on your computer, reach the internet, or hide what its code does."
+    "description": "Grimoire asks before enabling a mod that runs scripts, bundles a program, or can't be fully read."
   },
   "common": {
     "view": "View",

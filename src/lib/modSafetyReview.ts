@@ -39,6 +39,15 @@ export function safetyReviewRows(mods: Mod[], installed: InstalledModSafety[], p
     return rows;
 }
 
+/**
+ * Library mods whose only finding is that they run scripts. Anything more
+ * specific, or an operation waiting on its own prompt, is decided one by one.
+ */
+export function scriptOnlySafetyRows(rows: SafetyReviewRow[]): SafetyReviewRow[] {
+    return rows.filter(row => row.mod && !row.trusted && !row.request?.canTrust
+        && row.report.verdict === 'requires-trust' && row.report.findings.every(f => f.reason === 'executable'));
+}
+
 export function pendingSafetyKeys(rows: SafetyReviewRow[]): string[] {
     return rows.filter(row => !row.trusted).map(row => row.key);
 }
