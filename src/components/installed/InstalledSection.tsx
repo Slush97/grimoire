@@ -34,7 +34,7 @@ export function InstalledSection({
         {actions}
       </div>
       <div id={contentId} hidden={collapsed}>
-        {!collapsed && children}
+        {children}
       </div>
     </section>
   );
