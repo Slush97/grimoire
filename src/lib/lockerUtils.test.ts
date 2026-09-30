@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import {
-  modLoadOrder,
-  activeLockerSkin,
-  isPendingGameBananaHero,
-  withPendingGameBananaHeroes,
-} from './lockerUtils';
+import { modLoadOrder, activeLockerSkin, buildHeroList, inferHeroFromTitle } from './lockerUtils';
 
 function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: number }): Mod {
   return {
@@ -66,30 +61,33 @@ describe('activeLockerSkin', () => {
   });
 });
 
-describe('withPendingGameBananaHeroes', () => {
-  const gameBanana = [
-    { id: 33324, name: 'Vindicta' },
-    { id: 40060, name: 'Doorman' },
-  ];
+describe('buildHeroList', () => {
+  it('canonicalizes GameBanana category names to roster names', () => {
+    const skins = {
+      id: 33295,
+      name: 'Skins',
+      itemCount: 0,
+      children: [
+        { id: 49629, name: 'RatKing', itemCount: 0 },
+        { id: 40060, name: 'Doorman', itemCount: 0 },
+      ],
+    };
+    expect(buildHeroList([skins]).map((hero) => hero.name)).toEqual(['Rat King', 'Doorman']);
+  });
+});
 
-  it('appends roster heroes GameBanana has no Skins category for yet', () => {
-    const heroes = withPendingGameBananaHeroes(gameBanana);
-    const ratKing = heroes.find((hero) => hero.name === 'Rat King');
-    expect(ratKing).toBeDefined();
-    expect(isPendingGameBananaHero(ratKing!.id)).toBe(true);
-    expect(heroes.filter((hero) => hero.name === 'Vindicta')).toHaveLength(1);
-    expect(heroes.some((hero) => hero.name === 'The Doorman')).toBe(false);
-    expect(heroes.slice(0, 2)).toEqual(gameBanana);
+describe('inferHeroFromTitle', () => {
+  it('does not let colour words or partial names steal a title from the hero it names', () => {
+    expect(inferHeroFromTitle('Patches of Violet on Billy Blasted (Ability 3)')).toBe('Billy');
+    expect(inferHeroFromTitle('Violet Haze')).toBe('Haze');
+    expect(inferHeroFromTitle('Warden as Makina from Deadman Wonderland')).toBe('Warden');
+    expect(inferHeroFromTitle('Harrow Grey Talon')).toBe('Grey Talon');
   });
 
-  it('keeps pending ids stable and clear of real category ids', () => {
-    const first = withPendingGameBananaHeroes(gameBanana).find((h) => h.name === 'Baba');
-    const second = withPendingGameBananaHeroes([gameBanana[0]]).find((h) => h.name === 'Baba');
-    expect(first?.id).toBe(second?.id);
-    expect(isPendingGameBananaHero(33324)).toBe(false);
-  });
-
-  it('adds nothing while the category tree is unavailable', () => {
-    expect(withPendingGameBananaHeroes([])).toEqual([]);
+  it('still matches the new heroes by name', () => {
+    expect(inferHeroFromTitle('Violet Painter Outfit')).toBe('Violet');
+    expect(inferHeroFromTitle('Deadman Danny Crash Test')).toBe('Deadman Danny');
+    expect(inferHeroFromTitle('Nurse Harrow VO')).toBe('Nurse Harrow');
+    expect(inferHeroFromTitle('RatKing recolor')).toBe('Rat King');
   });
 });

@@ -24,6 +24,7 @@ describe('getInstalledCardTaxonomy', () => {
   it('canonicalizes hero aliases from either metadata source', () => {
     expect(getInstalledCardTaxonomy({ lockerHero: 'The Doorman' }).heroName).toBe('Doorman');
     expect(getInstalledCardTaxonomy({ categoryName: 'The Doorman' }).heroName).toBe('Doorman');
+    expect(getInstalledCardTaxonomy({ categoryName: 'RatKing' }).heroName).toBe('Rat King');
   });
 
   it('uses a global classification instead of its redundant category', () => {

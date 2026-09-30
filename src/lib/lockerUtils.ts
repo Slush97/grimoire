@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
-import { HERO_NAMES as STATS_HERO_NAMES } from '../types/deadlock-stats';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -135,9 +134,14 @@ export const HERO_ALIASES = SHARED_HERO_ALIASES;
  * "Old Gods, New Blood" batch). They are the same hero, so the tag menu shows a
  * single "Doorman". Kept client-side only: the shared roster and server-side
  * inference are untouched.
+ *
+ * "RatKing" is GameBanana's Skins category name for Rat King. buildHeroList
+ * canonicalizes through here so the Locker card, assets and codename lookups
+ * all see the roster name.
  */
 const HERO_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
   'The Doorman': 'Doorman',
+  RatKing: 'Rat King',
 };
 
 /** Canonical display name for a hero, collapsing roster duplicates (see above). */
@@ -248,43 +252,9 @@ export function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategor
   if (!skins?.children) return [];
   return skins.children.map((child) => ({
     id: child.id,
-    name: child.name,
+    name: canonicalHeroName(child.name),
     iconUrl: child.iconUrl,
   }));
-}
-
-/**
- * Placeholder ids for roster heroes that GameBanana has no Skins category for
- * yet. A new hero batch lands days before GameBanana adds its categories, and
- * the Locker grid is otherwise built only from those. Offset far past any real
- * GameBanana category id, and derived from the in-game hero id so favorites and
- * routes stay stable until the real category shows up and takes over by name.
- */
-const PENDING_HERO_ID_OFFSET = 1_000_000;
-
-export function isPendingGameBananaHero(id: number): boolean {
-  return id >= PENDING_HERO_ID_OFFSET;
-}
-
-const GAME_HERO_ID_BY_NAME: ReadonlyMap<string, number> = new Map(
-  Object.entries(STATS_HERO_NAMES).map(([id, name]) => [canonicalHeroName(name), Number(id)])
-);
-
-/** Append roster heroes missing from the GameBanana-built list (see above). */
-export function withPendingGameBananaHeroes(heroes: HeroCategory[]): HeroCategory[] {
-  if (heroes.length === 0) return heroes;
-  const listed = new Set(heroes.map((hero) => canonicalHeroName(hero.name).toLowerCase()));
-  const pending: HeroCategory[] = [];
-  for (const name of HERO_NAMES_SORTED) {
-    const gameId = GAME_HERO_ID_BY_NAME.get(name);
-    if (gameId === undefined || listed.has(name.toLowerCase())) continue;
-    pending.push({
-      id: PENDING_HERO_ID_OFFSET + gameId,
-      name,
-      iconUrl: getAssetPath(`/heroes/icons/${heroIconAssetName(name)}.png`),
-    });
-  }
-  return pending.length > 0 ? [...heroes, ...pending] : heroes;
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {

@@ -31,7 +31,6 @@ import {
   getHeroRenderPath,
   getHeroWikiUrl,
   getLockerSkinKey,
-  isPendingGameBananaHero,
   type HeroCategory,
 } from '../lib/lockerUtils';
 import type { VariantChoice } from '../lib/lockerRandomizer';
@@ -257,7 +256,7 @@ export function LockerHeroView({
         onToggleVariant={handleToggleVariant}
         onRequestDelete={onRequestDeleteSkin}
         hideNsfwPreviews={hideNsfwPreviews}
-        categoryId={isPendingGameBananaHero(hero.id) ? undefined : hero.id}
+        categoryId={hero.id}
         showDownloadable
         heroName={hero.name}
         emptyMessage={t('locker.hero.downloadASkinForThisHero')}

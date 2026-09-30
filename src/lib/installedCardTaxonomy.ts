@@ -20,7 +20,7 @@ export interface InstalledCardTaxonomy {
 }
 
 function heroFromCategory(categoryName?: string): string | undefined {
-  const needle = categoryName?.trim().toLowerCase();
+  const needle = canonicalHeroName(categoryName?.trim()).toLowerCase();
   if (!needle) return undefined;
   const rosterName = HERO_NAMES.find((name) => name.toLowerCase() === needle);
   return rosterName ? canonicalHeroName(rosterName) : undefined;
