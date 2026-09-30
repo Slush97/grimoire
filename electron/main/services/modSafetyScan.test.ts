@@ -128,6 +128,17 @@ describe('VPK safety inspection', () => {
         expect(report.verdict).toBe('requires-trust');
         expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'local-file' });
     });
+    it.skipIf(!existsSync(pinnedDecoder)).each([0, 120])('inspects every layout across batches with %s extra path characters', async extra => {
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, safetyVpk(Array.from({ length: 129 }, (_, i) => ({
+            path: `panorama/layout/${'x'.repeat(extra)}hud_${i}.vxml_c`,
+            bytes: safetyLayout(i === 128 ? 'run("file:///example.txt");' : 'run(1);'),
+        }))));
+        const report = await scanModSafety(path, pinnedDecoder);
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: `panorama/layout/${'x'.repeat(extra)}hud_128.vxml_c`, reason: 'local-file' });
+        expect(report.findings.some((finding) => finding.reason === 'unreadable-archive')).toBe(false);
+    });
     it('still blocks layouts the decoder runs on but rejects', async () => {
         const path = join(root, 'test_dir.vpk');
         await fs.writeFile(path, safetyVpk([{ path: 'panorama/layout/test.vxml_c', bytes: safetyResource(Buffer.from('inert'), 'LaCo') }]));

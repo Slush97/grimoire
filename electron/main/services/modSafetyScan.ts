@@ -8,7 +8,7 @@ import { inspectModSource, MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
 import type { ModSafetyFinding, ModSafetyReport } from '../../../src/types/modSafety';
 
 // Bump for parser, decoder or finding changes, without invalidating user consent.
-export const MOD_SAFETY_SCANNER_VERSION = 5;
+export const MOD_SAFETY_SCANNER_VERSION = 6;
 const MAX_TREE = 16 * 1024 * 1024;
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_SOURCES = 64 * 1024 * 1024;
@@ -267,11 +267,27 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             if (EXECUTABLE.has(ext)) add({ entry: entry.path, reason: 'executable' });
         }
         if (layouts.length) {
-            requireCondition(layouts.length <= 128);
             if (!binary) throw new InspectionIncomplete();
-            const decoded = await decodeLayouts(path, layouts, binary);
-            for (const [entry, text] of decoded) {
-                for (const finding of inspectModSource(entry, text, false)) add(finding);
+            let cursor = 0;
+            while (cursor < layouts.length) {
+                // Bound each decoder invocation, including Windows command-line
+                // length, rather than rejecting a valid archive with many layouts.
+                const batch: Entry[] = [];
+                let argumentLength = 0;
+                while (cursor < layouts.length && batch.length < 128) {
+                    const entry = layouts[cursor];
+                    const length = entry.path.length + 12;
+                    if (batch.length && argumentLength + length > 16000) break;
+                    batch.push(entry);
+                    argumentLength += length;
+                    cursor++;
+                }
+                const decoded = await decodeLayouts(path, batch, binary);
+                for (const [entry, text] of decoded) {
+                    budget.sourceBytes += Buffer.byteLength(text);
+                    requireCondition(budget.sourceBytes <= MAX_SOURCES);
+                    for (const finding of inspectModSource(entry, text, false)) add(finding);
+                }
             }
         }
         const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
