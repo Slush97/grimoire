@@ -1247,7 +1247,11 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       if (uNprCel > 0.5 && uCelV2 > 0.5) {
         vec3 nprDirect = reflectedLight.directDiffuse;
         float nprDirectLum = dot(nprDirect, vec3(0.2126, 0.7152, 0.0722));
-        float nprDirectQ = celQuantize(clamp(nprDirectLum, 0.0, 1.0), uBands, uStepSharpness);
+        // Band the lighting factor, then restore albedo. Quantizing the lit
+        // color itself makes a dark material lose light under the same lamp.
+        float nprAlbedoLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+        float nprLightLum = nprDirectLum / max(nprAlbedoLum, 1e-4);
+        float nprDirectQ = celQuantize(clamp(nprLightLum, 0.0, 1.0), uBands, uStepSharpness) * nprAlbedoLum;
         vec3 nprDirectCel = nprDirect * (
           nprDirectLum > 1e-4 ? clamp(nprDirectQ / nprDirectLum, 0.0, 4.0) : 1.0
         );

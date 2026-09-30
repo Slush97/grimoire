@@ -30,3 +30,9 @@ A faithful next step needs extracted scene NPR globals, explicit Source-world up
 The preview fallback now uses Three's final view-space normal, which already includes normal maps, flat shading and backface orientation. Its world-space preview key direction is transformed into view space with homogeneous `w=0`, once. Previously a view-space normal was dotted with a world-space light direction, making camera orbit change the light gate. The same correction applies to the existing preview transmissive hemisphere gate. It adds no second normal-map transform and introduces no guessed game globals.
 
 Tests check the shader's coordinate contract and invariant normal/light dot products across camera rotations and translations. They establish the coordinate correction, not game-equivalent NPR lighting.
+
+## Preview diffuse bands
+
+The preview's direct diffuse bands operate on the lighting factor, with the diffuse albedo restored afterward. Three's diffuse response already includes the material color. Quantizing that accumulated color directly makes band selection depend on the paint: a dark garment can lose directional light while a pale garment under the same light retains it. The shared patch divides direct diffuse luminance by diffuse albedo luminance before selecting the band. It retains the accumulated light hue and bounded rescaling, with guards for black and unlit surfaces. Indirect light, specular, emission, material tint and the authored color-correction stage remain independent.
+
+This is a correction to the preview's calibrated banding, not a reconstruction of Source 2's missing scene NPR globals. Regression checks evaluate the shader expressions with dark and pale albedos under equal lighting, plus black and unlit inputs. Four-hero rendered comparisons verify the production material path; they do not establish reference or game parity.

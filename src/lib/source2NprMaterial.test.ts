@@ -55,6 +55,35 @@ describe('NPR_FRAGMENT vertex colors', () => {
   });
 });
 
+describe('Preview diffuse lighting bands', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+  const light = patch.value.match(/float nprLightLum = ([^;]+);/)![1];
+  const quantized = patch.value.match(/float nprDirectQ = ([^;]+);/)![1];
+  const scale = patch.value.match(/nprDirectLum > 1e-4 \? ([^\n]+) : 1.0/)![1];
+  const evaluate = new Function('nprDirectLum', 'nprAlbedoLum', 'max', 'clamp', 'celQuantize', `
+    const uBands = 4, uStepSharpness = 0.08;
+    const nprLightLum = ${light};
+    const nprDirectQ = ${quantized};
+    return nprDirectLum > 1e-4 ? ${scale} : 1;
+  `);
+  const factor = (albedo: number, illumination: number) => evaluate(
+    albedo * illumination, albedo, Math.max,
+    (value: number, low: number, high: number) => Math.min(high, Math.max(low, value)),
+    (value: number, bands: number) => Math.round(value * bands) / bands,
+  ) as number;
+
+  it('gives dark and pale diffuse surfaces the same band under equal lighting', () => {
+    expect(factor(0.02, 0.22)).toBeCloseTo(factor(0.8, 0.22));
+    expect(factor(0.02, 0.22)).toBeCloseTo(0.25 / 0.22);
+  });
+
+  it('keeps black and unlit surfaces finite without adding diffuse light', () => {
+    expect(factor(0, 0.22)).toBe(1);
+    expect(factor(0.8, 0)).toBe(1);
+    expect(factor(1e-8, 0.22)).toBe(1);
+  });
+});
+
 describe('Citadel near-black specular rule', () => {
   const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
   // Evaluate the actual shader expression, rather than duplicating its formula.
