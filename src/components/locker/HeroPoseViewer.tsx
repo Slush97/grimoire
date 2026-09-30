@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FULL_EFFECTS_PREVIEW_DEFAULTS, initialHeroPreviewFlags } from './heroViewerDefaults';
+import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
 import { Loader2 } from 'lucide-react';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -230,7 +231,7 @@ function pickIdleClip(clips: THREE.AnimationClip[]): THREE.AnimationClip | null 
  *  the turntable pauses while `dragging`. A mutable ref so it updates without
  *  re-rendering. */
 export type TurntableInteraction = { dragging: boolean; paused: boolean };
-const normalizedScenes = new WeakMap<THREE.Object3D, { scale: number; center: THREE.Vector3 }>();
+const normalizedScenes = new WeakMap<THREE.Object3D, { scale: number; center: THREE.Vector3; bounds: THREE.Box3 }>();
 
 type ViewerText = (key: string, options?: Record<string, unknown>) => string;
 
@@ -309,7 +310,7 @@ export function PosedModel({
     box.getCenter(center);
     const maxDim = Math.max(size.x, size.y, size.z);
     const scale = maxDim > 0 ? 2.0 / maxDim : 1;
-    const result = { scale, center };
+    const result = { scale, center, bounds: box.clone().applyMatrix4(scene.matrixWorld.clone().invert()) };
     normalizedScenes.set(scene, result);
     return result;
   }, [scene]);
@@ -392,7 +393,7 @@ export function RiggedModel({
     box.getCenter(center);
     const maxDim = Math.max(size.x, size.y, size.z);
     const scale = maxDim > 0 ? 2.0 / maxDim : 1;
-    const result = { scale, center };
+    const result = { scale, center, bounds: box.clone().applyMatrix4(scene.matrixWorld.clone().invert()) };
     normalizedScenes.set(scene, result);
     return result;
   }, [scene]);
@@ -488,11 +489,7 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
     // not updateWorldMatrix. Without this pass the first bounds include the
     // normalization wrapper twice; later rendered frames hide the mistake.
     model.updateMatrixWorld(true);
-    model.traverse((obj) => {
-      const mesh = obj as THREE.SkinnedMesh;
-      if (mesh.isSkinnedMesh) mesh.computeBoundingBox();
-    });
-    const bounds = new THREE.Box3().setFromObject(model);
+    const bounds = heroPreviewBounds(model, normalizedScenes.get(model)?.bounds);
     if (bounds.isEmpty()) return;
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
