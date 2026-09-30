@@ -180,6 +180,7 @@ function effectTextureBaseUrl(key: string): string {
 // Turntable rotation rate (rad/s). The spin pauses while the user holds (orbits)
 // the model with the mouse.
 const SPIN_SPEED = 0.25;
+const PREVIEW_CAMERA = { position: [0, 0, 3.2] as [number, number, number], fov: 40 };
 
 function meshUrlFor(key: string, mtimeMs: number | null): string {
   // The key contains `::` (and a `/` for overflow skins), which a standard
@@ -1014,7 +1015,7 @@ export default function HeroPoseViewer({
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
   const [devFlags, setDevFlags] = useState<DevPreviewFlags>(() => ({
     ...RELEASE_RENDER_FLAGS,
-    animated: previewFlag('grimoire.preview.effects', USE_EFFECT_PREVIEW),
+    animated: previewFlag('grimoire.preview.effects', USE_EFFECT_PREVIEW) || previewFlag('grimoire.preview.cloth', USE_CLOTH),
     unified: previewFlag('grimoire.preview.unifiedMaterial', USE_UNIFIED_MATERIAL),
     celV2: previewFlag('grimoire.preview.celV2', USE_CEL_V2),
     cloth: previewFlag('grimoire.preview.cloth', USE_CLOTH),
@@ -1030,7 +1031,7 @@ export default function HeroPoseViewer({
   }));
   const setDevFlag = useCallback((key: keyof DevPreviewFlags, storageKey: string, value: boolean) => {
     writePreviewFlag(storageKey, value);
-    setDevFlags((current) => ({ ...current, [key]: value, ...(key === 'effects' && value ? { animated: true } : {}) }));
+    setDevFlags((current) => ({ ...current, [key]: value, ...((key === 'effects' || key === 'cloth') && value ? { animated: true } : {}) }));
   }, []);
   const activeRenderFlags = {
     ...(import.meta.env.DEV ? devFlags : RELEASE_RENDER_FLAGS),
@@ -1120,7 +1121,8 @@ export default function HeroPoseViewer({
               }
               loaded = gltf.scene;
               setClips((gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001));
-              setClipName(clip.name);
+              setClipName((current) => gltf.animations.some((candidate) => candidate.name === current
+                && Number.isFinite(candidate.duration) && candidate.duration > 0.001) ? current : clip.name);
               setRigged(true);
               setClothModel(clothModel);
               setScene(gltf.scene);
@@ -1282,7 +1284,7 @@ export default function HeroPoseViewer({
       ) : <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
         onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
-        camera={{ position: [0, 0, 3.2], fov: 40 }}
+        camera={PREVIEW_CAMERA}
         dpr={[1, 2]}
         gl={{
           alpha: true,

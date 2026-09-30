@@ -66,7 +66,9 @@ export function BloomEffect({ intensity, radius, threshold, deadlockExposure }: 
 
   return (
     <EffectComposer multisampling={4} frameBufferType={THREE.HalfFloatType}>
-      {intensity > 0 && lights.length > 0 && <SelectiveBloom
+      {/* Keep the effect graph stable: removing bloom can strand the tone pass
+          offscreen after a composer rebuild. Zero intensity preserves live frames. */}
+      {lights.length > 0 && <SelectiveBloom
         lights={lights}
         selection={selection}
         intensity={intensity}
