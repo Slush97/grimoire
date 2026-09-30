@@ -266,7 +266,9 @@ export function applyGlassParameters(physical: THREE.MeshPhysicalMaterial, morph
   physical.ior = firstNumber(morphic, ['g_flIOR'], physical.ior ?? 1.5);
   const floats = morphic.floats;
   if (floats?.g_flCloakRefractAmount !== undefined && floats.g_flFullyCloakedRefractFactor1 !== undefined) {
-    const refraction = floats.g_flCloakRefractAmount * floats.g_flFullyCloakedRefractFactor1 * (floats.g_flCloakFactor1 ?? 1);
+    const refraction = firstNumber(morphic, ['g_flCloakRefractAmount'], 0)
+      * firstNumber(morphic, ['g_flFullyCloakedRefractFactor1'], 0)
+      * firstNumber(morphic, ['g_flCloakFactor1'], 1);
     // Three thickness zero samples scene color without the invented volume offset.
     // Nonzero Source screen-space refraction remains approximated by the exporter.
     if (refraction === 0) physical.thickness = 0;
