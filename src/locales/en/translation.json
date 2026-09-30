@@ -2050,6 +2050,13 @@
       },
       "scene": "Lighting",
       "background": "Background",
+      "backgrounds": {
+        "broadway": "Broadway",
+        "uptown": "Uptown",
+        "timesSquare": "Times Square",
+        "none": "None",
+        "custom": "Custom"
+      },
       "openBackground": "Open image",
       "clearBackground": "Clear",
       "backgroundFailed": "Could not open image.",

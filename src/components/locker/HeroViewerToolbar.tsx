@@ -78,9 +78,9 @@ export function HeroViewerToolbar(p: Props) {
     other: t('locker.pose.clipGroups.other'),
   };
   return (
-    <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-col items-start gap-2">
+    <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex flex-col items-start gap-2">
       {open && (
-        <div id={panelId} className="max-h-80 w-64 overflow-y-auto rounded-sm border border-hl/10 bg-bg-secondary/95 p-3 shadow-lg backdrop-blur-sm">
+        <div id={panelId} className="pointer-events-auto max-h-80 w-64 max-w-full overflow-y-auto rounded-sm border border-hl/10 bg-bg-secondary/95 p-3 shadow-lg backdrop-blur-sm">
           <div className="space-y-3">
             <Toggle label={t('locker.pose.animated')} checked={p.animated} onChange={p.onAnimated} />
             {p.clips.length > 0 && (
@@ -117,18 +117,20 @@ export function HeroViewerToolbar(p: Props) {
           </div>
         </div>
       )}
-      {p.animated && p.clips.length > 0 && (
-        <div className="w-64 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 px-3 py-1 backdrop-blur-sm">
-          <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
-        </div>
-      )}
-      {p.status && <p role="status" className="max-w-64 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">{p.status}</p>}
-      <div className="flex gap-1 rounded-sm border border-hl/10 bg-bg-secondary/95 p-1 backdrop-blur-sm">
+      {p.status && <p role="status" className="pointer-events-auto max-w-64 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">{p.status}</p>}
+      <div className="pointer-events-auto w-64 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 backdrop-blur-sm">
+        {p.animated && p.clips.length > 0 && (
+          <div className="px-2 pt-1">
+            <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
+          </div>
+        )}
+        <div className="flex gap-1 p-1">
         <Button size="sm" variant={open ? 'primary' : 'secondary'} icon={Settings2} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{t('locker.pose.controls')}</Button>
         <IconButton size="sm" icon={p.paused ? Play : Pause} label={p.paused ? t('locker.pose.resumeAnimation') : t('locker.pose.pauseAnimation')} disabled={!p.animated || p.clips.length === 0} onClick={() => p.onPaused(!p.paused)} />
         <IconButton size="sm" icon={RotateCcw} label={t('locker.pose.resetView')} onClick={p.onReset} />
         <IconButton size="sm" icon={Camera} label={t('locker.pose.screenshot')} onClick={p.onScreenshot} />
         <IconButton size="sm" icon={Expand} label={t('locker.pose.fullscreen')} onClick={p.onFullscreen} />
+        </div>
       </div>
     </div>
   );

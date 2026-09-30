@@ -16,7 +16,7 @@ import { Leva, folder, useControls } from 'leva';
 import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { FULL_EFFECTS_PREVIEW_DEFAULTS, initialHeroPreviewFlags } from './heroViewerDefaults';
+import { FULL_EFFECTS_PREVIEW_DEFAULTS, heroPresentationStorageKey, initialHeroPreviewFlags } from './heroViewerDefaults';
 import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
 import { Loader2 } from 'lucide-react';
 import { getAssetPath } from '../../lib/assetPath';
@@ -140,7 +140,11 @@ const COMPACT_LEVA_THEME = {
 
 
 function writePreviewFlag(name: string, value: boolean): void {
-  if (typeof window !== 'undefined') window.localStorage.setItem(name, value ? '1' : '0');
+  if (typeof window !== 'undefined') {
+    const key = name.replace('grimoire.preview.', '');
+    const presentation = ['animated', 'cloth', 'effects', 'bloom', 'autoRotate'].includes(key);
+    window.localStorage.setItem(presentation ? heroPresentationStorageKey(key) : name, value ? '1' : '0');
+  }
 }
 
 
@@ -978,8 +982,8 @@ export default function HeroPoseViewer({
   const [rigged, setRigged] = useState(false);
   const [clothModel, setClothModel] = useState<ClothModel | null>(null);
   const [generating, setGenerating] = useState(false);
-  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: false });
-  const [spinPaused, setSpinPaused] = useState(false);
+  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: !initialHeroPreviewFlags().autoRotate });
+  const [spinPaused, setSpinPaused] = useState(() => !initialHeroPreviewFlags().autoRotate);
   const [playback, setPlayback] = useState({ paused: false, speed: 1 });
   const [clipName, setClipName] = useState('');
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
@@ -1208,13 +1212,16 @@ export default function HeroPoseViewer({
       }}
       cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} scene={viewerScene}
       backdropControls={<ViewerBackdropControls hasImage={!!backdrop.texture} loading={backdrop.loading}
+        preset={backdrop.preset} onPreset={(value) => {
+          if (value !== 'none' && viewerScene === 'transparent') setViewerScene('studio');
+          backdrop.choosePreset(value);
+        }}
         onFile={(file) => {
           if (viewerScene === 'transparent') setViewerScene('studio');
           void backdrop.choose(file);
         }} onClear={backdrop.clear} />}
       status={viewerError ?? backdropError ?? (scene && features.riggedPreviewEnabled && !rigged
-          ? t('locker.pose.animationUnavailable') : effectPreviewEnabled && (effectUnavailable || (scene && !rigged))
-            ? t('locker.pose.particlesUnavailable') : effectPreviewEnabled && partialEffect
+            ? t('locker.pose.animationUnavailable') : effectPreviewEnabled && partialEffect
               ? t('locker.pose.particlesPartial') : null)}
       onAnimated={(v) => {
         writePreviewFlag('grimoire.preview.animated', v);
@@ -1230,7 +1237,7 @@ export default function HeroPoseViewer({
         playbackProgressRef.current = { time: 0, duration: clips.find((c) => c.name === name)?.duration ?? 0 };
       }} onPaused={(paused) => setPlayback((p) => ({ ...p, paused }))}
       onSpeed={(speed) => setPlayback((p) => ({ ...p, speed }))}
-      onSpinPaused={(paused) => { interaction.current.paused = paused; setSpinPaused(paused); }}
+      onSpinPaused={(paused) => { writePreviewFlag('grimoire.preview.autoRotate', !paused); interaction.current.paused = paused; setSpinPaused(paused); }}
       onCloth={(v) => setDevFlag('cloth', 'grimoire.preview.cloth', v)}
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
@@ -1254,7 +1261,7 @@ export default function HeroPoseViewer({
   );
 
   return (
-    <div ref={viewerRef} className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
+    <div ref={viewerRef} data-particle-availability={effectUnavailable ? 'unavailable' : effect ? 'ready' : 'pending'} className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
         <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
       ) : <Canvas
