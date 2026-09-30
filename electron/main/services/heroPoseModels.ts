@@ -31,6 +31,7 @@ import { app, protocol, net } from 'electron';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
 import { exportParticleBundle } from './heroParticleExport';
+import { exportModelAttachments } from './modelAttachments';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -174,6 +175,7 @@ const STATIC_MODEL_FILENAME = 'model.glb';
  *  the static glb in the same entry dir; served over the same scheme. */
 const RIGGED_MODEL_FILENAME = 'model-rigged.glb';
 const RIGGED_CLOTH_FILENAME = 'cloth-rigged.json';
+const RIGGED_ATTACHMENTS_FILENAME = 'attachments.json';
 
 function modelFile(key: string): string {
     return join(modelDir(key), STATIC_MODEL_FILENAME);
@@ -293,10 +295,11 @@ function versionFile(key: string): string {
  * including a single-skin fallback. A null sidecar means animation only.
  *
  * v9: export a bounded menu of representative full-body motions.
+ * v10: preserve supported authored attachment frames beside the rigged model.
  *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '9';
+const RIGGED_PIPELINE_VERSION = '10';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -778,6 +781,7 @@ async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
             return { hasModel: false, mtimeMs: null, key };
         }
         await fs.access(riggedClothFile(key));
+        await fs.access(join(modelDir(key), RIGGED_ATTACHMENTS_FILENAME));
         return { hasModel: true, mtimeMs: stat.mtimeMs, key };
     } catch {
         return { hasModel: false, mtimeMs: null, key };
@@ -1022,6 +1026,16 @@ async function runRiggedHeroExportForSources(
                     console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
                 }
                 await fs.writeFile(riggedClothFile(key), JSON.stringify(cloth));
+                let attachments: Awaited<ReturnType<typeof exportModelAttachments>> = [];
+                const entryIndex = selector.indexOf('--entry');
+                if (entryIndex >= 0 && selector[entryIndex + 1]) {
+                    try {
+                        attachments = await exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]);
+                    } catch (error) {
+                        console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
+                    }
+                }
+                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(attachments));
                 await fs.writeFile(riggedVersionFile(key), RIGGED_CACHE_VERSION);
                 return infoForRiggedKey(key);
             } catch (err) {
@@ -1142,6 +1156,8 @@ export function registerHeroPoseProtocol(): void {
                 file = riggedModelFile(key);
             } else if (requested === RIGGED_CLOTH_FILENAME) {
                 file = riggedClothFile(key);
+            } else if (requested === RIGGED_ATTACHMENTS_FILENAME) {
+                file = join(modelDir(key), RIGGED_ATTACHMENTS_FILENAME);
             } else {
                 file = modelFile(key);
             }
@@ -1152,7 +1168,7 @@ export function registerHeroPoseProtocol(): void {
             // must keep meaning "export time". Both glbs share the dir, so
             // touching the one sidecar protects the whole entry.
             const now = new Date();
-            const version = requested === RIGGED_MODEL_FILENAME || requested === RIGGED_CLOTH_FILENAME
+            const version = requested === RIGGED_MODEL_FILENAME || requested === RIGGED_CLOTH_FILENAME || requested === RIGGED_ATTACHMENTS_FILENAME
                 ? riggedVersionFile(key) : versionFile(key);
             void fs.utimes(version, now, now).catch(() => { });
             return net.fetch(pathToFileURL(file).toString());

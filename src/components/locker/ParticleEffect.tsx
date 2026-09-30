@@ -65,7 +65,9 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [layer.texture, textureBaseUrl]);
-  const anchor = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment).object : null, [model, layer.attachment]);
+  const attachment = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment) : null, [model, layer.attachment]);
+  const anchor = attachment?.object;
+  const attachmentRotation = useMemo(() => attachment?.frame ? new THREE.Quaternion(...attachment.frame.rotation) : null, [attachment]);
   // morphic converts Source inches to meters at the skeleton root. The effect
   // sits alongside that root, so apply the same units exactly once.
   const sourceUnit = useMemo(() => model?.getObjectByName('skeleton')?.scale.x ?? 0.0254, [model]);
@@ -124,9 +126,11 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     origin.set(0, 0, 0);
     if (anchor) {
       anchor.updateWorldMatrix(true, false);
-      anchor.getWorldPosition(origin);
+      if (attachment?.frame) anchor.localToWorld(origin.set(...attachment.frame.position));
+      else anchor.getWorldPosition(origin);
       mesh.parent.worldToLocal(origin);
       anchor.getWorldQuaternion(orientation);
+      if (attachmentRotation) orientation.multiply(attachmentRotation);
       orientation.premultiply(parentOrientation);
     }
     if (!initialized.current) { previous.copy(origin); scratch.previousOrientation.copy(orientation); initialized.current = true; }

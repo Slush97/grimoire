@@ -58,6 +58,7 @@ async function main() {
     const file = filename === 'model-rigged.glb' ? viewer.rigged.file
       : filename === 'model.glb' ? viewer.posed?.file
         : filename === 'cloth-rigged.json' ? 'cloth.json'
+          : filename === 'attachments.json' ? 'attachments.json'
           : filename === 'effect.json' || filename.startsWith('effect-tex/') ? filename : null;
     if (!file) return new Response(null, { status: 404 });
     if (filename === 'cloth-rigged.json') {

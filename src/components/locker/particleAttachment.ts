@@ -1,19 +1,25 @@
 import type { Object3D } from 'three';
+import type { ModelAttachment } from '../../types/modelAttachment';
 import { allSpriteLayers, type FxDescriptor, type FxPreviewIssue } from './fxDescriptor';
 
 export interface ParticleAttachmentResolution {
   object: Object3D | null;
   kind: 'exact' | 'fallback' | 'missing' | 'origin';
+  frame?: ModelAttachment;
 }
 
 /** Exported attachment nodes take priority. The current morphic GLBs omit
  * attachment metadata, so hand aliases provide only a bounded approximation.
- * Unsided ability_cast retains the historical right-hand fallback. Its side
- * and local attachment frame are unverified, including for Wraith. */
+ * A decoded authored frame supplies the bone and local transform when the
+ * GLB omits its attachment nodes. Missing metadata retains the approximation. */
 export function resolveParticleAttachment(model: Object3D, attachment: string | null): ParticleAttachmentResolution {
   if (attachment) {
     const exact = model.getObjectByName(attachment);
     if (exact) return { object: exact, kind: 'exact' };
+    const frames: ModelAttachment[] = model.userData.grimoireAttachments ?? [];
+    const frame = frames.find((candidate) => candidate.name === attachment);
+    const bone = frame && model.getObjectByName(frame.bone);
+    if (bone) return { object: bone, kind: 'exact', frame };
   }
   const side = /left|_l$/i.test(attachment ?? '') ? 'l' : 'r';
   let found: Object3D | null = null;

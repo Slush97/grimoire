@@ -10,6 +10,21 @@ const descriptor: FxDescriptor = {
 };
 
 describe('particle attachment resolution', () => {
+  it('uses authored bone-local frames without guessing the hand or mutating the skeleton', () => {
+    const model = new THREE.Group();
+    const left = new THREE.Bone(); left.name = 'hand_L';
+    const right = new THREE.Bone(); right.name = 'hand_R'; model.add(left, right);
+    model.scale.setScalar(0.0254); left.position.set(10, 20, 30);
+    const frame = { name: 'ability_cast', bone: 'hand_L', position: [6.5, 3.2, -1.6], rotation: [0, 0, 0, 1] };
+    model.userData.grimoireAttachments = [frame];
+    expect(resolveParticleAttachment(model, 'ability_cast')).toEqual({ object: left, kind: 'exact', frame });
+    expect(particleAttachmentIssues(descriptor, model)).toEqual([]);
+    expect(left.children).toHaveLength(0);
+    const point = left.localToWorld(new THREE.Vector3(...frame.position));
+    expect(point.x).toBeCloseTo(16.5 * 0.0254);
+    expect(point.y).toBeCloseTo(23.2 * 0.0254);
+    expect(point.z).toBeCloseTo(28.4 * 0.0254);
+  });
   it('marks the unsided right-hand fallback as approximate and prioritizes exact authored nodes', () => {
     const model = new THREE.Group();
     const right = new THREE.Bone(); right.name = 'hand_R';

@@ -66,6 +66,16 @@ describe('loadRiggedHeroPreview', () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     expect(await loadRiggedHeroPreview(info, false)).toEqual({ gltf, clothModel: null });
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain('/attachments.json?v=42');
+    expect(gltf.scene.userData.grimoireAttachments).toEqual([]);
+  });
+
+  it('loads validated authored frames from the returned rig key and rejects malformed transforms', async () => {
+    const gltf = await prepareModel();
+    const frame = { name: 'ability_cast', bone: 'hand_L', position: [6.5, 3.2, -1.6], rotation: [0, 0, 0, 1] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([frame, { ...frame, rotation: [0, 0, 0, 0] }])));
+    await loadRiggedHeroPreview(info, false);
+    expect(gltf.scene.userData.grimoireAttachments).toEqual([frame]);
   });
 });
