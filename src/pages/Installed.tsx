@@ -124,7 +124,9 @@ import { InstalledProfilesMenu } from '../components/installed/InstalledProfiles
 import { Button, IconButton } from '../components/common/ui';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
+import { InstalledSection } from '../components/installed/InstalledSection';
+import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { HeroTagLabel } from '../components/installed/chips';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
@@ -300,7 +302,7 @@ interface InstalledEntryCardProps {
   onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
   onCopyShareCode: (mod: Mod) => void;
-  onSelectToggle: (entry: ModEntry) => void;
+  onSelectToggle: (entry: ModEntry, shiftKey: boolean) => void;
   onToggleFavorite: (entry: ModEntry) => void;
   /** All user lists, for the card's "Add to list" submenu. */
   lists: readonly ModList[];
@@ -408,7 +410,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onCopyShareCode={mod.merged ? () => onCopyShareCode(mod) : undefined}
         selectMode={selectMode}
         selected={selected}
-        onSelectToggle={() => onSelectToggle(entry)}
+        onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
         favorite={favorite}
         // Settable in both sections: starring while enabled pre-pins the entry
         // for the moment it later gets disabled. On an enabled card the star is
@@ -478,7 +480,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
       selectMode={selectMode}
       selected={selected}
-      onSelectToggle={() => onSelectToggle(entry)}
+      onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
       favorite={favorite}
       onToggleFavorite={() => onToggleFavorite(entry)}
       // A group shares one preference key with its variants, so filing the card
@@ -915,7 +917,15 @@ export default function Installed() {
   // selected group expand to every variant id) so bulk handlers can iterate
   // directly without re-deriving from entries.
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [enabledCollapsed, setEnabledCollapsed] = useState(false);
+  const [disabledCollapsed, setDisabledCollapsed] = useState(false);
+  const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(() =>
+    [...(enabledCollapsed ? [] : visibleEnabled), ...(disabledCollapsed ? [] : visibleDisabled)]
+      .map((entry) => ({
+        key: entry.key,
+        ids: entry.kind === 'single' ? [entry.mod.id] : entry.variants.map((variant) => variant.id),
+      }))
+  );
   // Per-item progress for the in-flight bulk enable/disable. While set, the
   // action bar swaps its buttons for a "Enabling 2/5…" line so users see
   // incremental progress on large selections.
@@ -2558,7 +2568,7 @@ export default function Installed() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectMode, bulkProgress, modToDelete]);
+  }, [selectMode, bulkProgress, modToDelete, setSelectedIds]);
 
   const handleDeleteConfirm = async () => {
     if (!modToDelete) return;
@@ -2570,20 +2580,6 @@ export default function Installed() {
     }
     setModToDelete(null);
     if (wasBulk) exitSelectMode();
-  };
-
-  const toggleEntrySelection = (entry: ModEntry) => {
-    const ids = entry.kind === 'single' ? [entry.mod.id] : entry.variants.map((v) => v.id);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      const allSelected = ids.every((id) => next.has(id));
-      if (allSelected) {
-        ids.forEach((id) => next.delete(id));
-      } else {
-        ids.forEach((id) => next.add(id));
-      }
-      return next;
-    });
   };
 
   const isEntrySelected = (entry: ModEntry): boolean => {
@@ -3682,7 +3678,12 @@ export default function Installed() {
   );
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
-  const selectToggleEntry = useStableCallback((entry: ModEntry) => toggleEntrySelection(entry));
+  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean) =>
+    toggleSelection({
+      key: entry.key,
+      ids: entry.kind === 'single' ? [entry.mod.id] : entry.variants.map((variant) => variant.id),
+    }, shiftKey)
+  );
 
   if (!activeDeadlockPath) {
     return (
@@ -4763,25 +4764,25 @@ export default function Installed() {
           should not get a stray button row under it). */}
       {(visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
-          <div className="flex items-center justify-between gap-3 mb-[14px]">
-            {visibleEnabled.length > 0 ? (
-              <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
-            ) : (
-              <span />
-            )}
-            <InstalledProfilesMenu onApplied={handleProfileApplied} />
-          </div>
-          {visibleEnabled.length > 0 && renderSortableSection('enabled')}
+          <InstalledSection
+            title={t('installed.sections.enabled', { count: visibleEnabled.length })}
+            count={visibleEnabled.length}
+            collapsed={enabledCollapsed}
+            onToggle={() => setEnabledCollapsed((collapsed) => !collapsed)}
+            actions={<InstalledProfilesMenu onApplied={handleProfileApplied} />}
+          >
+            {visibleEnabled.length > 0 && renderSortableSection('enabled')}
+          </InstalledSection>
         </div>
       )}
 
       {visibleDisabled.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between gap-3 mb-[14px]">
-            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.disabled', { count: visibleDisabled.length })}</SectionHeader>
-            {/* Sort toggle for the disabled shelf only, parked on the header
-                row so it reads as belonging to this section and not to the
-                top bar's page-wide sort. */}
+        <InstalledSection
+          title={t('installed.sections.disabled', { count: visibleDisabled.length })}
+          count={visibleDisabled.length}
+          collapsed={disabledCollapsed}
+          onToggle={() => setDisabledCollapsed((collapsed) => !collapsed)}
+          actions={
             <button
               type="button"
               onClick={() => setDisabledSortMode(disabledAlphabetical ? 'custom' : 'name')}
@@ -4800,9 +4801,10 @@ export default function Installed() {
               <ArrowDownAZ className="h-3.5 w-3.5" />
               {t('installed.sections.sortAlphabetical')}
             </button>
-          </div>
+          }
+        >
           {renderSortableSection('disabled')}
-        </div>
+        </InstalledSection>
       )}
 
       <ConfirmModal
