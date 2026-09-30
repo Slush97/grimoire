@@ -24,6 +24,7 @@ import {
   albedoCsb,
   detailLayer,
   highlightLayer,
+  citadelColorUniforms,
 } from './source2NprMaterial';
 import { compileScalarExpr, peakScalar } from './dynamicScalar';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
@@ -473,6 +474,7 @@ export function buildDeadlockMaterial(
     uTintRimMask: { value: tintMask ?? whiteFallback() },
     uHasTintMask: { value: tintMask ? 1.0 : 0.0 },
     uApplyVertexColor: { value: requiresVertexColors(morphic) ? 1.0 : 0.0 },
+    ...citadelColorUniforms(morphic),
     uTime: { value: 0 },
     uSelfIllumMap: { value: illumMap ?? whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },

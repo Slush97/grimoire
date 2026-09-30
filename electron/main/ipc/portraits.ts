@@ -20,7 +20,6 @@ import {
     exportHeroPose,
     getRiggedHeroPose,
     exportRiggedHeroPose,
-    getHeroClothModel,
     getHeroEffectInfo,
     exportHeroEffect,
     type HeroPoseInfo,
@@ -169,15 +168,6 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         return exportRiggedHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey);
-    }
-);
-
-ipcMain.handle(
-    'get-hero-cloth-model',
-    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<unknown> => {
-        const deadlockPath = getActiveDeadlockPath();
-        if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return getHeroClothModel(deadlockPath, heroName, skinSources);
     }
 );
 

@@ -472,6 +472,21 @@ export function albedoCsb(morphic: MorphicExtras): { vec: THREE.Vector3; has: nu
   return { vec: new THREE.Vector3(c?.[0] ?? 1, c?.[1] ?? 1, c?.[2] ?? 1), has: identity ? 0 : 1 };
 }
 
+/** Deadlock pbr.vfx applies vertex tint before or after its color correction,
+ * according to the authored switch. Missing switches default to after. */
+export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THREE.IUniform> {
+  const pbr = morphic.shader.toLowerCase() === 'pbr.vfx';
+  return {
+    uVertexColorBeforeCsb: { value: !pbr || flag(morphic, 'g_bApplyTintToVertexColors') ? 1 : 0 },
+    uMaskVertexColor: { value: pbr && flag(morphic, 'g_bMaskVertexColorTint1') ? 1 : 0 },
+    uVertexColorStrength: { value: pbr ? firstNumber(morphic, ['g_fVertexColorStrength1'], 1) : 1 },
+    uCitadelSpecular: { value: pbr ? 1 : 0 },
+    uNoSpecularAtFullRoughness: {
+      value: pbr && flag(morphic, 'F_USE_NPR_LIGHTING') && flag(morphic, 'F_NO_SPECULAR_AT_FULL_ROUGHNESS') ? 1 : 0,
+    },
+  };
+}
+
 export interface NprDetailLayer {
   texture: THREE.Texture | null;
   has: number;
@@ -995,13 +1010,12 @@ varying vec2 vNprUv;
 varying vec2 vNprUv2;
 varying vec3 vNprSourcePosition;
 void main() {
-  #ifdef USE_UV
-    vNprUv = uv;
-  #else
-    vNprUv = vec2(0.0);
-  #endif
-  #ifdef USE_UV2
-    vNprUv2 = uv2;
+  // Three declares the primary uv attribute unconditionally. USE_UV is no
+  // longer emitted for ordinary map materials, so gating on it samples every
+  // Source 2 mask at (0,0), flooding Dynamo's whole gun with self illumination.
+  vNprUv = uv;
+  #ifdef USE_UV1
+    vNprUv2 = uv1;
   #else
     vNprUv2 = vNprUv;
   #endif
@@ -1030,6 +1044,11 @@ uniform vec3  uTintColor;
 uniform sampler2D uTintRimMask;
 uniform float uHasTintMask;
 uniform float uApplyVertexColor;
+uniform float uVertexColorBeforeCsb;
+uniform float uMaskVertexColor;
+uniform float uVertexColorStrength;
+uniform float uCitadelSpecular;
+uniform float uNoSpecularAtFullRoughness;
 uniform float uTime;
 uniform sampler2D uSelfIllumMap;
 uniform float uHasSelfIllum;
@@ -1129,15 +1148,17 @@ void main() {
   vec4 nprMask = uHasTintMask > 0.5 ? texture2D(uTintRimMask, vNprUv) : vec4(1.0);
   vec3 nprDetail = vec3(0.0);
   float tintEnable = uHasTintMask > 0.5 ? nprMask.r : 0.0;
-  // Vertex color as albedo, but ONLY when the material declares it (F_VERTEX_COLOR /
-  // F_PAINT_VERTEX_COLORS). three's GLTFLoader turns USE_COLOR on for ANY mesh that
-  // ships a COLOR_0 attribute, but on Deadlock tint-MASK materials
-  // (g_bMaskVertexColorTint1) that COLOR_0 is a tint mask, frequently authored as
-  // (0,0,0) "no tint here" - multiplying albedo by it blacks the mesh out (Celeste's
-  // dress ships COLOR_0 = (0,0,0,0)). uApplyVertexColor is 1 only for true
-  // vertex-color-albedo materials, so a mask-only COLOR_0 is left alone.
+  // Gate real vertex albedo separately from tint-mask-only COLOR_0. Preserve
+  // Source's authored tint placement, mask and strength instead of raising black
+  // vertex colors through a later contrast correction.
   #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
-    if (uApplyVertexColor > 0.5) csm_DiffuseColor *= vColor;
+    float vertexColorAmount = (uMaskVertexColor > 0.5 ? nprMask.r : 1.0) * uVertexColorStrength;
+    if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5) {
+      csm_DiffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
+    }
+    #ifdef USE_COLOR_ALPHA
+      if (uApplyVertexColor > 0.5) csm_DiffuseColor.a *= vColor.a;
+    #endif
   #endif
   // Detail (F5): apply only when CPU-side authoring + placeholder gates enabled
   // it. Add-self-illum mode is deferred to the post-light emission branch below.
@@ -1163,6 +1184,11 @@ void main() {
   if (uHasAlbedoCSB > 0.5) {
     csm_DiffuseColor.rgb = applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB);
   }
+  #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+    if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5) {
+      csm_DiffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
+    }
+  #endif
 }
 `;
 
@@ -1178,6 +1204,18 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       type: 'fs',
       value: /* glsl */ `
       #include <lights_fragment_end>
+      if (uCitadelSpecular > 0.5) {
+        // Citadel suppresses the neutral dielectric lobe on near-black albedo.
+        // Apply the same attenuation to both Three specular accumulators so the
+        // metallic IBL path is covered without altering diffuse illumination.
+        float citadelSpecularFactor = clamp(max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b) * 25.0, 0.0, 1.0);
+        reflectedLight.directSpecular *= citadelSpecularFactor;
+        reflectedLight.indirectSpecular *= citadelSpecularFactor;
+      }
+      if (uNoSpecularAtFullRoughness > 0.5 && roughnessFactor >= 1.0) {
+        reflectedLight.directSpecular = vec3(0.0);
+        reflectedLight.indirectSpecular = vec3(0.0);
+      }
       if (uNprCel > 0.5 && uCelV2 > 0.5) {
         vec3 nprDirect = reflectedLight.directDiffuse;
         float nprDirectLum = dot(nprDirect, vec3(0.2126, 0.7152, 0.0722));
@@ -1399,6 +1437,7 @@ export function wrapMaterialWithNpr(
     uTintRimMask: { value: tintMask ?? whiteFallback() },
     uHasTintMask: { value: tintMask ? 1.0 : 0.0 },
     uApplyVertexColor: { value: requiresVertexColors(morphic) ? 1.0 : 0.0 },
+    ...citadelColorUniforms(morphic),
     uTime: { value: 0 },
     uSelfIllumMap: { value: hasSelfIllum ? selfIllumMap : whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },

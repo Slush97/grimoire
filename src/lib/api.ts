@@ -31,7 +31,6 @@ import type {
   RestoreLocalVariantGroupReplacementArgs,
   SetLocalVariantGroupResult,
 } from '../types/electron';
-import { parseFeModel, type ClothModel } from './feModel';
 import { showToast } from '../stores/toastStore';
 import i18n from '../i18n';
 
@@ -295,25 +294,6 @@ export async function exportRiggedHeroPose(
   fallbackSkinMetaKey?: string
 ): Promise<HeroPoseInfo> {
   return window.electronAPI.exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey);
-}
-
-/** The hero's cloth finite-element model (PHYS.m_pFeModel) as the verlet sidecar:
- *  collision capsules/spheres + nodes the rigged preview's cloth sim reads to
- *  stop the cloth bones clipping through the body. Returns null on a model with
- *  no cloth (most heroes carry one; a few don't). */
-export async function getHeroClothModel(
-  heroName: string,
-  skinSources?: HeroPoseSkinSource[]
-): Promise<ClothModel | null> {
-  try {
-    const raw = await window.electronAPI.getHeroClothModel(heroName, skinSources);
-    if (raw == null) return null;
-    const parsed = parseFeModel(raw);
-    if (!parsed) console.warn('[cloth] failed to parse FeModel payload');
-    return parsed;
-  } catch {
-    return null;
-  }
 }
 
 /** Whether a hero's ambient FX descriptor bundle is cached/current. */

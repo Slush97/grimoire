@@ -34,6 +34,45 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
 }
 
 describe('buildDeadlockMaterial vertex colors', () => {
+  it.each([0, 1])('honors authored vertex-color placement, mask and strength beforeCsb=%s', (before) => {
+    const base = materialWithMorphic({ shader: 'pbr.vfx',
+      ints: { F_USE_NPR_LIGHTING: 1, F_VERTEX_COLOR: 1, g_bApplyTintToVertexColors: before, g_bMaskVertexColorTint1: 1 },
+      floats: { g_fVertexColorStrength1: 0.4 },
+      vectors: { g_vAlbedoContrastSaturationBrightness1: [0.91, 0.89, 1.25, 0] },
+    });
+    const result = buildDeadlockMaterial(base);
+    const shader = { ...THREE.ShaderLib.standard, uniforms: {} } as Parameters<THREE.Material['onBeforeCompile']>[0];
+    result.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    expect(shader.uniforms).toMatchObject({
+      uApplyVertexColor: { value: 1 }, uVertexColorBeforeCsb: { value: before },
+      uMaskVertexColor: { value: 1 }, uVertexColorStrength: { value: 0.4 }, uCitadelSpecular: { value: 1 },
+    });
+    expect(shader.fragmentShader).toContain('reflectedLight.indirectSpecular *= citadelSpecularFactor;');
+    expect(shader.fragmentShader).toContain('uVertexColorBeforeCsb <= 0.5');
+    result.dispose();
+  });
+
+  it('uses the engine default placement after correction, and keeps other shader specular unchanged', () => {
+    for (const [shader, before, specular] of [['pbr.vfx', 0, 1], ['complex.vfx', 1, 0]] as const) {
+      const result = buildDeadlockMaterial(materialWithMorphic({ shader, ints: { F_USE_NPR_LIGHTING: 1 } }));
+      expect(result.uniforms.uVertexColorBeforeCsb.value).toBe(before);
+      expect(result.uniforms.uMaskVertexColor.value).toBe(0);
+      expect(result.uniforms.uVertexColorStrength.value).toBe(1);
+      expect(result.uniforms.uCitadelSpecular.value).toBe(specular);
+      result.dispose();
+    }
+  });
+
+  it.each([
+    ['pbr.vfx', 1, 1, 1], ['pbr.vfx', 1, 0, 0], ['pbr.vfx', 0, 1, 0], ['complex.vfx', 1, 1, 0],
+  ] as const)('gates authored full-roughness specular suppression for %s NPR=%s flag=%s', (shader, npr, noSpecular, expected) => {
+    const result = buildDeadlockMaterial(materialWithMorphic({ shader,
+      ints: { F_USE_NPR_LIGHTING: npr, F_NO_SPECULAR_AT_FULL_ROUGHNESS: noSpecular },
+    }));
+    expect(result.uniforms.uNoSpecularAtFullRoughness.value).toBe(expected);
+    result.dispose();
+  });
+
   it.each(['F_VERTEX_COLOR', 'F_PAINT_VERTEX_COLORS'])(
     'enables Three vertex colors when %s requires COLOR_0',
     (flagName) => {

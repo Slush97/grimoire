@@ -32,24 +32,57 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
 }
 
 describe('NPR_FRAGMENT vertex colors', () => {
-  it('applies Three vertex colors before tint and CSB', () => {
+  it('places authored vertex tint on the correct side of CSB and preserves alpha separately', () => {
     const colorGuard = '#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )';
-    const colorMultiply = 'csm_DiffuseColor *= vColor;';
-    const tintMix = 'csm_DiffuseColor.rgb = mix';
+    const before = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5)';
+    const after = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5)';
     const csbApply = 'applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB)';
 
     expect(NPR_FRAGMENT).toContain(colorGuard);
-    expect(NPR_FRAGMENT).toContain(colorMultiply);
-
-    expect(NPR_FRAGMENT.indexOf(colorGuard)).toBeLessThan(NPR_FRAGMENT.indexOf(tintMix));
-    expect(NPR_FRAGMENT.indexOf(colorMultiply)).toBeLessThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT.indexOf(before)).toBeLessThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT.indexOf(after)).toBeGreaterThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT).toContain('(uMaskVertexColor > 0.5 ? nprMask.r : 1.0) * uVertexColorStrength');
+    expect(NPR_FRAGMENT).toContain('csm_DiffuseColor.a *= vColor.a');
+    expect(NPR_FRAGMENT).not.toContain('csm_DiffuseColor *= vColor;');
   });
 
   it('gates the vertex-color multiply on uApplyVertexColor (mask-only COLOR_0 is left alone)', () => {
     // GLTFLoader turns USE_COLOR on for any mesh with a COLOR_0 attribute, but a
     // tint-mask COLOR_0 (often (0,0,0)) must not multiply the albedo - that blacks
     // out Celeste's dress. The multiply has to be conditioned on the uniform.
-    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5) csm_DiffuseColor *= vColor;');
+    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5)');
+    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5)');
+  });
+});
+
+describe('Citadel near-black specular rule', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+  // Evaluate the actual shader expression, rather than duplicating its formula.
+  const expression = patch.value.match(/float citadelSpecularFactor = ([^;]+);/)![1];
+  it.each([0, 1])('suppresses black and dark specular while preserving brighter material with metalness=%s', (metalness) => {
+    const evaluate = new Function('diffuseColor', 'max', 'clamp', `return (${expression});`);
+    const factor = (albedo: number) => evaluate(
+      { r: albedo, g: albedo, b: albedo }, Math.max,
+      (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
+    ) as number;
+    const specular = metalness ? 0.02 : 0.04;
+    expect(specular * factor(0)).toBe(0);
+    expect(specular * factor(0.02)).toBeCloseTo(specular / 2);
+    expect(specular * factor(0.04)).toBe(specular);
+    expect(specular * factor(0.8)).toBe(specular);
+    expect(patch.value).toContain('if (uCitadelSpecular > 0.5)');
+    expect(patch.value).toContain('reflectedLight.directSpecular *= citadelSpecularFactor;');
+    expect(patch.value).toContain('reflectedLight.indirectSpecular *= citadelSpecularFactor;');
+  });
+  it('disables both specular paths only at authored full roughness when opted in', () => {
+    const condition = patch.value.match(/if \((uNoSpecularAtFullRoughness[^)]+)\)/)![1];
+    const evaluate = new Function('uNoSpecularAtFullRoughness', 'roughnessFactor', `return (${condition});`);
+    const active = (flag: number, roughness: number) => evaluate(flag, roughness) as boolean;
+    expect(active(1, 1)).toBe(true);
+    expect(active(1, 0.999)).toBe(false);
+    expect(active(0, 1)).toBe(false);
+    expect(patch.value).toContain('reflectedLight.directSpecular = vec3(0.0);');
+    expect(patch.value).toContain('reflectedLight.indirectSpecular = vec3(0.0);');
   });
 });
 

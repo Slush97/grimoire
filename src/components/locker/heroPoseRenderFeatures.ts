@@ -5,6 +5,7 @@ export interface HeroPoseDevFlags {
   bloom: boolean;
   nprDebug: boolean;
   matDebug: boolean;
+  animated?: boolean;
 }
 
 export interface HeroPoseRenderFeatures {
@@ -35,7 +36,7 @@ export function resolveHeroPoseRenderFeatures(
     celV2Enabled: flags.celV2,
     clothPreviewEnabled,
     bloomEnabled: flags.bloom,
-    riggedPreviewEnabled: clothPreviewEnabled,
+    riggedPreviewEnabled: flags.animated === true || clothPreviewEnabled,
     source2ShaderHintsEnabled: unifiedEnabled,
     nprDebugEnabled: flags.nprDebug,
     source2SkipNpr: unifiedEnabled && !trippySpriteActive,

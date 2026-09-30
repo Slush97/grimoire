@@ -43,19 +43,22 @@ async function main() {
     exportHeroPose: async (hero: string) => info(hero, false),
     getRiggedHeroPose: async (hero: string) => info(hero, true),
     exportRiggedHeroPose: async (hero: string) => info(hero, true),
-    getHeroEffectInfo: async () => ({ key: '', entry: null, hasEffect: false }),
+    getHeroEffectInfo: async (hero: string) => ({ key: byHero.get(hero)?.name ?? '', entry: hero === 'Wraith' ? 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c' : null, hasEffect: hero === 'Wraith' }),
   } satisfies Pick<Window['electronAPI'], 'getHeroPoseInfo' | 'exportHeroPose' | 'getRiggedHeroPose' | 'exportRiggedHeroPose' | 'getHeroEffectInfo'>;
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: api });
   window.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input.toString(), location.href);
     if (url.protocol !== 'grimoire-hero:') return fetchAsset(input, init);
-    const [key, filename] = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    const key = parts[0];
+    const filename = parts.slice(1).join('/');
     const item = byKey.get(key);
     const viewer = item?.metadata.viewer;
     if (!viewer) return new Response(null, { status: 404 });
     const file = filename === 'model-rigged.glb' ? viewer.rigged.file
       : filename === 'model.glb' ? viewer.posed?.file
-        : filename === 'cloth-rigged.json' ? 'cloth.json' : null;
+        : filename === 'cloth-rigged.json' ? 'cloth.json'
+          : filename === 'effect.json' || filename.startsWith('effect-tex/') ? filename : null;
     if (!file) return new Response(null, { status: 404 });
     if (filename === 'cloth-rigged.json') {
       if (physicsData.value === 'missing') return new Response(null, { status: 404 });

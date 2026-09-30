@@ -1,192 +1,144 @@
-/**
- * Types + interpretation for the FX descriptor emitted by
- * `vpkmerge particle <entry> --vpk <pak> --out descriptor.json --textures-dir tex/`
- * (vpkmerge-core `export_fx_descriptor`). See
- * `../../../vpkmerge/vpkmerge-core/src/particle.rs` and
- * `../../docs/3d-preview-effects-feasibility.md`.
- *
- * The descriptor lists emitters/initializers/operators/renderers as
- * `{class, params}` with Source's `PF_TYPE_*` numeric wrappers already collapsed
- * (a literal -> a number; a driven value -> `{pf, literal, min, max, ...}`). This
- * module is the renderer's read side: it pulls the handful of fields a CPU sprite
- * sim needs out of those nodes, with sane fallbacks, rather than modelling all
- * ~92 operator classes. It is deliberately a *first-slice* interpretation (sprite
- * emitters only) -- enough to render the curated ambient auras (Wraith, Familiar).
- */
-
-/** Resolve a descriptor texture handle to its bundled PNG filename, using the
- *  same flatten rule as vpkmerge `fx_texture_png_name` (non-alnum -> `_`, +
- *  `.png`), so the renderer needs no manifest. */
+/** Read-only subset of Source 2 particle descriptors for the hero preview.
+ * Authored sprite emitters, attributes and simple lifetime curves are supported.
+ * Ropes, models, lights, sprite-sheet sequences and arbitrary operators are skipped. */
 export function fxTexturePngName(vtexPath: string): string {
   return vtexPath.replace(/[^a-zA-Z0-9]/g, '_') + '.png';
 }
 
-/** A collapsed parameter: a bare number (literal) or a driven wrapper. */
-export type FxParam =
-  | number
-  | {
-      pf?: string;
-      literal?: number;
-      min?: number;
-      max?: number;
-      in0?: number;
-      in1?: number;
-      out0?: number;
-      out1?: number;
-      cp?: number;
-      named?: string;
-      curve?: unknown;
-    };
-
-export interface FxNode {
-  class: string;
-  params: Record<string, FxParam | unknown>;
-}
-
-export interface FxRenderer extends FxNode {
-  mode: string;
-  blendMode: string | null;
-  textures: string[];
-}
-
-export interface FxControlPoint {
-  cp: number | null;
-  attachType: string | null;
-  attachment: string | null;
-  entity: string | null;
-}
-
+export type FxParam = number | {
+  pf?: string; literal?: number; min?: number; max?: number;
+  in0?: number; in1?: number; out0?: number; out1?: number; cp?: number; curve?: unknown;
+};
+export interface FxNode { class: string; params: Record<string, unknown> }
+export interface FxRenderer extends FxNode { mode: string; blendMode: string | null; textures: string[] }
+export interface FxControlPoint { cp: number | null; attachType: string | null; attachment: string | null; entity: string | null }
 export interface FxDescriptor {
-  name: string;
-  class?: string;
-  maxParticles?: number;
-  constantRadius?: FxParam;
-  constantColor?: number[] | FxParam;
-  controlPoints: FxControlPoint[];
+  name: string; class?: string; maxParticles?: number; constantRadius?: FxParam;
+  constantColor?: number[] | FxParam; controlPoints: FxControlPoint[];
   preview?: { model: string | null; sequence: string | null };
-  emitters: FxNode[];
-  initializers: FxNode[];
-  operators: FxNode[];
-  renderers: FxRenderer[];
-  children: FxDescriptor[];
+  emitters: FxNode[]; initializers: FxNode[]; operators: FxNode[];
+  renderers: FxRenderer[]; children: FxDescriptor[];
 }
-
-/** Effective scalar of a collapsed param: the number itself, or the wrapper's
- *  literal/mid-of-range, or a fallback. */
-export function paramScalar(p: FxParam | unknown, fallback: number): number {
-  if (typeof p === 'number') return p;
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+export function paramRange(p: unknown, fallback: [number, number]): [number, number] {
+  if (finite(p)) return [p, p];
   if (p && typeof p === 'object') {
     const w = p as Exclude<FxParam, number>;
-    if (typeof w.literal === 'number') return w.literal;
-    if (typeof w.min === 'number' && typeof w.max === 'number') return (w.min + w.max) / 2;
+    if (finite(w.literal)) return [w.literal, w.literal];
+    if (finite(w.min) && finite(w.max)) return [Math.min(w.min, w.max), Math.max(w.min, w.max)];
   }
   return fallback;
 }
-
-/** [min, max] of a collapsed param, collapsing a literal to [v, v]. */
-export function paramRange(p: FxParam | unknown, fallback: [number, number]): [number, number] {
-  if (typeof p === 'number') return [p, p];
-  if (p && typeof p === 'object') {
-    const w = p as Exclude<FxParam, number>;
-    if (typeof w.min === 'number' && typeof w.max === 'number') return [w.min, w.max];
-    if (typeof w.literal === 'number') return [w.literal, w.literal];
-  }
-  return fallback;
+export function paramScalar(p: unknown, fallback: number): number {
+  const [lo, hi] = paramRange(p, [fallback, fallback]);
+  return (lo + hi) / 2;
 }
-
-function findNode(nodes: FxNode[], cls: string): FxNode | undefined {
-  return nodes.find((n) => n.class === cls);
-}
-
-/** The flattened, renderer-ready parameters of one drawable sprite layer: the
- *  knobs a CPU billboard sim consumes, derived from the descriptor's nodes with
- *  Source-sane fallbacks. One per sprite renderer (a system can have several). */
+type Vec3 = [number, number, number];
+const vector = (v: unknown, fallback: Vec3): Vec3 => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(finite)
+  ? [v[0], v[1], v[2]] : fallback;
+const boundedRange = (p: unknown, fallback: [number, number], lo: number, hi: number): [number, number] =>
+  paramRange(p, fallback).map((v) => Math.max(lo, Math.min(hi, v))) as [number, number];
+const color = (v: unknown, fallback: Vec3): Vec3 => {
+  const c = vector(v, fallback);
+  return c.map((x) => {
+    const s = Math.min(255, Math.max(0, x)) / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  }) as Vec3;
+};
+const findNode = (nodes: FxNode[], cls: string) => nodes.find((n) => n.class === cls);
+const fieldInit = (d: FxDescriptor, field: number) => d.initializers.find(
+  (n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, 0) === field
+)?.params.m_InputValue;
 export interface SpriteSimParams {
-  texture: string | null;
-  additive: boolean;
-  maxParticles: number;
-  /** Particles spawned per second (ContinuousEmitter rate). */
-  emitRate: number;
-  /** Particle lifetime range in seconds. */
-  lifetime: [number, number];
-  /** Base world radius of a particle billboard. */
-  radius: number;
-  /** Base color, linear 0..1 RGB. */
-  color: [number, number, number];
-  /** Per-particle drift velocity magnitude (BasicMovement), world units/sec. */
-  drift: number;
-  /** Spin rate range, rad/sec (SpinUpdate). */
-  spin: [number, number];
-  /** Spawn jitter radius (CreateWithinSphere / PositionOffset), world units. */
-  spawnRadius: number;
+  attachment: string | null; texture: string | null; additive: boolean; maxParticles: number;
+  emitRate: number; emitFirst: boolean; lifetime: [number, number]; radius: [number, number];
+  colorMin: Vec3; colorMax: Vec3; colorFade: Vec3 | null;
+  alpha: [number, number]; rotation: [number, number]; spin: [number, number];
+  spawnRadius: number; offsetMin: Vec3; offsetMax: Vec3; gravity: Vec3; drag: number;
+  follow: boolean; overbright: number; alphaCurve: unknown; radiusCurve: unknown;
 }
 
-/** Builds the sprite-sim params for the system's first sprite renderer, or null
- *  when the system has no sprite renderer (a rope/model/child-only parent -- the
- *  caller should recurse into `children`). */
-export function spriteParamsFor(d: FxDescriptor): SpriteSimParams | null {
-  const renderer = d.renderers.find((r) => r.mode === 'sprite');
+/** Source particle attributes: radius=0, lifetime=1, roll=4, roll speed=5, alpha=7.
+ * Omitted output fields mean radius, rather than position or lifetime. */
+export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r) => r.mode === 'sprite')): SpriteSimParams | null {
   if (!renderer) return null;
-
-  // Prefer the "shape" texture (ring/flare/glow) over a noise/voronoi detail
-  // mask: a sprite renderer often binds a noise lookup as textures[0] and the
-  // actual visible shape second, so picking [0] renders cellular blobs.
-  const texture =
-    renderer.textures.find((t) => !/noise|voronoi|detail|mask/i.test(t)) ??
-    renderer.textures[0] ??
-    null;
-
-  const max = typeof d.maxParticles === 'number' ? d.maxParticles : 64;
-  const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter') ?? d.emitters[0];
-  const emitRate = emitter ? paramScalar(emitter.params.m_flEmitRate, 20) : 20;
-
-  // Lifetime: a Decay operator means "die at end of life"; the life length itself
-  // is an InitFloat onto the lifetime field, else a believable default.
-  const lifeInit = d.initializers.find(
-    (n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, -1) === 0
-  );
-  const lifetime: [number, number] = lifeInit
-    ? paramRange(lifeInit.params.m_InputValue, [1, 1.5])
-    : [1, 1.5];
-
-  const radius = paramScalar(d.constantRadius, 15);
-
-  const colorArr = Array.isArray(d.constantColor) ? d.constantColor : [255, 255, 255, 255];
-  const color: [number, number, number] = [
-    (colorArr[0] ?? 255) / 255,
-    (colorArr[1] ?? 255) / 255,
-    (colorArr[2] ?? 255) / 255,
-  ];
-
-  const movement = findNode(d.operators, 'C_OP_BasicMovement');
-  const drift = movement ? Math.abs(paramScalar(movement.params.m_flSpeedMin, 4)) : 4;
-
-  const spinOp = findNode(d.operators, 'C_OP_SpinUpdate');
-  const spin: [number, number] = spinOp ? [-2, 2] : [0, 0];
-
+  const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter');
   const sphere = findNode(d.initializers, 'C_INIT_CreateWithinSphereTransform');
-  const spawnRadius = sphere ? paramScalar(sphere.params.m_fRadiusMax, radius) : radius;
-
+  const offset = findNode(d.initializers, 'C_INIT_PositionOffset');
+  const movement = findNode(d.operators, 'C_OP_BasicMovement');
+  const randomColor = findNode(d.initializers, 'C_INIT_RandomColor');
+  const cp = (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
+  const curve = (field: number) => d.operators.find((n) => n.class === 'C_OP_SetFloat'
+    && paramScalar(n.params.m_nOutputField, 0) === field
+    && n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE')?.params.m_InputValue;
+  const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
+    .map((v) => v * Math.PI / 180) as [number, number];
   return {
-    texture,
+    attachment: d.controlPoints.find((point) => point.cp === cp && point.attachment)?.attachment
+      ?? d.controlPoints.find((point) => point.attachment)?.attachment ?? null,
+    texture: renderer.textures.find((t) => !/noise|voronoi|detail|mask/i.test(t)) ?? renderer.textures[0] ?? null,
     additive: (renderer.blendMode ?? '').includes('ADD'),
-    maxParticles: max,
-    emitRate,
-    lifetime,
-    radius,
-    color,
-    drift,
-    spin,
-    spawnRadius,
+    maxParticles: Math.floor(Math.max(1, Math.min(256, paramScalar(d.maxParticles, 64)))),
+    emitRate: emitter ? Math.max(0, Math.min(256, paramScalar(emitter.params.m_flEmitRate, 0))) : 0,
+    emitFirst: emitter?.params.m_bForceEmitOnFirstUpdate === true,
+    lifetime: boundedRange(fieldInit(d, 1), [1, 1], 0.01, 30),
+    radius: boundedRange(fieldInit(d, 0) ?? d.constantRadius, [1, 1], 0, 128),
+    colorMin: color(randomColor?.params.m_ColorMin ?? d.constantColor, [255, 255, 255]),
+    colorMax: color(randomColor?.params.m_ColorMax ?? d.constantColor, [255, 255, 255]),
+    colorFade: findNode(d.operators, 'C_OP_ColorInterpolate')
+      ? color(findNode(d.operators, 'C_OP_ColorInterpolate')!.params.m_ColorFade, [255, 255, 255]) : null,
+    alpha: boundedRange(fieldInit(d, 7), [1, 1], 0, 1),
+    rotation: radians(fieldInit(d, 4)),
+    spin: findNode(d.operators, 'C_OP_SpinUpdate') ? radians(fieldInit(d, 5)) : [0, 0],
+    spawnRadius: Math.max(0, Math.min(128, paramScalar(sphere?.params.m_fRadiusMax, 0))),
+    offsetMin: vector(offset?.params.m_OffsetMin, [0, 0, 0]),
+    offsetMax: vector(offset?.params.m_OffsetMax, [0, 0, 0]),
+    gravity: vector(movement?.params.m_Gravity, [0, 0, 0]),
+    drag: Math.max(0, Math.min(10, paramScalar(movement?.params.m_fDrag, 0))),
+    follow: !!findNode(d.operators, 'C_OP_PositionLock'),
+    overbright: Math.max(0, Math.min(10, paramScalar(renderer.params.m_flOverbrightFactor, 1))),
+    alphaCurve: curve(7), radiusCurve: curve(0),
   };
 }
 
-/** Every sprite layer reachable from a descriptor, walking children. The first
- *  visible slice renders these as additive billboard clusters. */
+/** Cubic interpolation uses the slopes authored in Source's normalized-age curves. */
+export function ageCurveValue(input: unknown, age: number, fallback = 1): number {
+  if (!input || typeof input !== 'object') return fallback;
+  const param = input as Exclude<FxParam, number>;
+  if (param.pf !== 'PF_TYPE_PARTICLE_AGE_NORMALIZED') return fallback;
+  const points = (param.curve as { m_spline?: Array<{ x: number; y: number; m_flSlopeOutgoing?: number; m_flSlopeIncoming?: number }> } | undefined)?.m_spline;
+  if (!points?.length || !points.every((p) => finite(p.x) && finite(p.y))) return fallback;
+  if (age <= points[0].x) return points[0].y;
+  for (let i = 1; i < points.length; i++) {
+    const b = points[i], a = points[i - 1];
+    if (age > b.x) continue;
+    const width = b.x - a.x;
+    if (width <= 0) return b.y;
+    const t = (age - a.x) / width;
+    const slope = (b.y - a.y) / width;
+    const ma = finite(a.m_flSlopeOutgoing) ? a.m_flSlopeOutgoing : slope;
+    const mb = finite(b.m_flSlopeIncoming) ? b.m_flSlopeIncoming : slope;
+    return (2*t*t*t - 3*t*t + 1)*a.y + (t*t*t - 2*t*t + t)*width*ma
+      + (-2*t*t*t + 3*t*t)*b.y + (t*t*t - t*t)*width*mb;
+  }
+  return points[points.length - 1].y;
+}
+
+/** Total budgets apply across children, rather than multiplying per system. */
 export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
   const layers: SpriteSimParams[] = [];
-  const self = spriteParamsFor(d);
-  if (self) layers.push(self);
-  for (const child of d.children) layers.push(...allSpriteLayers(child));
+  let remaining = 512;
+  const visit = (system: FxDescriptor, depth: number) => {
+    if (depth > 4 || layers.length >= 16 || remaining <= 0) return;
+    for (const renderer of system.renderers) {
+      if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;
+      const layer = spriteParamsFor(system, renderer)!;
+      layer.maxParticles = Math.min(remaining, layer.maxParticles);
+      remaining -= layer.maxParticles;
+      layers.push(layer);
+    }
+    for (const child of system.children) visit(child, depth + 1);
+  };
+  visit(d, 0);
   return layers;
 }

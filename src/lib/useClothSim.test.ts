@@ -1,31 +1,33 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
+import strayReference from './__fixtures__/cloth/source2_stray_reference.json';
+import fitReference from './__fixtures__/cloth/source2_fit_reference.json';
+import frictionReference from './__fixtures__/cloth/source2_contact_friction_reference.json';
+import boxSphereReference from './__fixtures__/cloth/source2_box_sphere_reference.json';
+import { parseFeModel } from './feModel';
 import type { ClothModel } from './feModel';
 import {
-  applyDrivenReconstructions,
-  applyFitMatrixReconstructions,
   animationAttraction,
-  applyReverseOffsetReconstructions,
   buildFitMatrixReconstructions,
+  boxDepth,
+  capsuleDepth,
   closestPointOnSegment,
   clothAnchorMap,
-  DEFAULT_CLOTH_SUBSTEPS,
   effectiveNodeGravity,
   fitMatrixDrivenNodeSet,
   fitMatrixTargetNode,
-  fixedClothSubsteps,
-  freeSimNodeSet,
-  isFreeSimNode,
   isKinematicNode,
   isPositionDrivenNode,
   jiggleDrivenNodeSet,
   orderBonesParentFirst,
   projectCollisionPlane,
+  projectClothContact,
   projectAnimStrayRadius,
+  projectAnimStrayRadiusBatch,
   pushOutsideBox,
   pushOutsideCapsule,
+  reconstructFitMatrixTransform,
   reconstructReverseOffsetPosition,
-  reverseOffsetDrivenNodeSet,
   rigidAnchorSeed,
   restoreBoneBindTransform,
   restorePinnedSolverNodes,
@@ -38,20 +40,6 @@ import {
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const Q = (x = 0, y = 0, z = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
 const jiggleParams = {} as NonNullable<Parameters<typeof jiggleDrivenNodeSet>[0]['jiggleBones'][number]['params']>;
-const simNode = (invMass: number): ClothModel['nodes'][number] => ({
-  name: '',
-  invMass,
-  pinned: invMass <= 0,
-  gravity: 0,
-  damping: 0,
-  animForce: 0,
-  animVertex: 0,
-  initPos: [0, 0, 0],
-  initRot: [0, 0, 0, 1],
-  collideRadius: 0,
-  friction: 0,
-  collisionMask: 0xffff,
-});
 
 describe('pushOutsideCapsule', () => {
   it('pushes a point inside a sphere out to the surface', () => {
@@ -74,22 +62,107 @@ describe('pushOutsideCapsule', () => {
     expect(p.length()).toBeCloseTo(6, 4); // 5 (collider) + 1 (particle)
   });
 
-  it('uses the tapered radius along a capsule', () => {
-    // segment x in [0,10], radius 1 at a -> 5 at b. midpoint radius is 3.
-    // point off-axis (y=1) so there's a push direction.
+  it('shifts the contact sphere toward the wider end of a tapered capsule', () => {
     const p = V(5, 1, 0);
     pushOutsideCapsule(p, { a: V(0, 0, 0), b: V(10, 0, 0), ra: 1, rb: 5 }, 0);
-    expect(Math.hypot(p.y, p.z)).toBeCloseTo(3, 4);
-    expect(p.x).toBeCloseTo(5, 4);
+    expect(p.x).toBeCloseTo(4.226405462721032, 8);
+    expect(p.y).toBeCloseTo(2.933986343197419, 8);
+    expect(p.z).toBe(0);
   });
 
-  it('bails (no NaN) on a point exactly on the centerline', () => {
-    // measure-zero degenerate: no escape direction. Returns false, leaves p put;
-    // next frame's gravity nudges it off-axis. ponytail: not worth a special case.
+  it('uses a deterministic escape direction on the centerline', () => {
     const p = V(5, 0, 0);
     const hit = pushOutsideCapsule(p, { a: V(0, 0, 0), b: V(10, 0, 0), ra: 1, rb: 5 }, 0);
-    expect(hit).toBe(false);
-    expect(Number.isNaN(p.y)).toBe(false);
+    expect(hit).toBe(true);
+    expect(p.toArray()).toEqual([5, 0, 3]);
+  });
+
+  it('collapses an engulfed small end to the larger sphere', () => {
+    const p = V(0, 1, 0);
+    pushOutsideCapsule(p, { a: V(0, 0, 0), b: V(1, 0, 0), ra: 1, rb: 3 }, 0);
+    expect(p.distanceTo(V(1, 0, 0))).toBeCloseTo(3, 8);
+  });
+
+  it('keeps the cylindrical contact normal perpendicular for equal radii', () => {
+    const p = V(5, 1, 0);
+    pushOutsideCapsule(p, { a: V(0, 0, 0), b: V(10, 0, 0), ra: 3, rb: 3 }, 0);
+    expect(p.toArray()).toEqual([5, 3, 0]);
+  });
+});
+
+describe('projectClothContact', () => {
+  it.each(boxSphereReference.cases)('matches the complete sphere/box contact pass: $name', (reference) => {
+    const transform = (values: number[]) => new THREE.Matrix4().compose(
+      new THREE.Vector3().fromArray(values), new THREE.Quaternion().fromArray(values, 4), V(1, 1, 1),
+    );
+    const now = transform(reference.current);
+    const motion = reference.old ? now.clone().multiply(transform(reference.old).invert()) : new THREE.Matrix4();
+    const point = new THREE.Vector3().fromArray(reference.position);
+    const history = new THREE.Vector3().fromArray(reference.previous);
+    const normal = new THREE.Vector3();
+    let depth: number;
+    if (reference.kind === 'sphere') {
+      const center = new THREE.Vector3().fromArray(reference.sphere).applyMatrix4(now);
+      depth = capsuleDepth(point, { a: center, b: center, ra: reference.sphere[3], rb: reference.sphere[3] }, reference.radius, normal, reference.frictionEnabled);
+    } else {
+      const frame = now.clone().multiply(transform(reference.frame));
+      depth = boxDepth(point, {
+        center: new THREE.Vector3().setFromMatrixPosition(frame),
+        rotation: new THREE.Quaternion().setFromRotationMatrix(frame),
+        halfSize: new THREE.Vector3().fromArray(reference.size),
+      }, reference.radius, normal, reference.frictionEnabled);
+    }
+    projectClothContact(point, history, normal, depth, reference.frictionEnabled ? reference.friction : 0, motion);
+    expect(point.distanceTo(new THREE.Vector3().fromArray(reference.expected))).toBeLessThan(2e-6);
+    expect(history.toArray()).toEqual(reference.previous);
+  });
+
+  it.each(frictionReference.cases)('matches the complete runtime contact pass: $name', ({ position, previous, capsule, friction, current, old, radius, frictionEnabled, expected }) => {
+    const transform = (values: number[]) => new THREE.Matrix4().compose(
+      new THREE.Vector3().fromArray(values), new THREE.Quaternion().fromArray(values, 4), V(1, 1, 1),
+    );
+    const now = transform(current);
+    const motion = old ? now.clone().multiply(transform(old).invert()) : new THREE.Matrix4();
+    const shape = {
+      a: new THREE.Vector3().fromArray(capsule[0]).applyMatrix4(now),
+      b: new THREE.Vector3().fromArray(capsule[1]).applyMatrix4(now),
+      ra: capsule[0][3], rb: capsule[1][3],
+    };
+    const point = new THREE.Vector3().fromArray(position);
+    const history = new THREE.Vector3().fromArray(previous);
+    const normal = new THREE.Vector3();
+    const depth = capsuleDepth(point, shape, radius, normal, frictionEnabled);
+    projectClothContact(point, history, normal, depth, friction, motion);
+    expect(point.distanceTo(new THREE.Vector3().fromArray(expected))).toBeLessThan(2e-6);
+    expect(history.toArray()).toEqual(previous);
+  });
+
+  it.each([{ friction: 0, x: 0 }, { friction: 0.25, x: 0.5 }, { friction: 10, x: 10 }])('limits sliding by friction times depth ($friction)', ({ friction, x }) => {
+    const position = V(0, 0, 0);
+    const previous = V(10, 2, 0);
+    projectClothContact(position, previous, V(0, 1, 0), 2, friction, new THREE.Matrix4());
+    expect(position.toArray()).toEqual([x, 2, 0]);
+    expect(previous.toArray()).toEqual([10, 2, 0]);
+  });
+
+  it('carries friction with a translating body', () => {
+    const position = V(0, 0, 0);
+    projectClothContact(position, V(0, 0, 0), V(0, 1, 0), 2, 0.5, new THREE.Matrix4().makeTranslation(4, 0, 0));
+    expect(position.toArray()).toEqual([1, 2, 0]);
+  });
+
+  it('uses rotation of the previous contact frame as well as translation', () => {
+    const position = V(0, 0, 0);
+    projectClothContact(position, V(2, 0, 0), V(0, 0, 1), 1, 0.5, new THREE.Matrix4().makeRotationZ(Math.PI / 2));
+    expect(position.x).toBeCloseTo(0, 8);
+    expect(position.y).toBeCloseTo(0.5, 8);
+    expect(position.z).toBe(1);
+  });
+
+  it('does not apply friction without contact', () => {
+    const position = V(0, 0, 0);
+    projectClothContact(position, V(10, 2, 0), V(0, 1, 0), 0, 1, new THREE.Matrix4());
+    expect(position.toArray()).toEqual([0, 0, 0]);
   });
 });
 
@@ -247,46 +320,25 @@ describe('animationAttraction', () => {
 });
 
 describe('solverIterationPhases', () => {
-  it('keeps constraint and goal iterations as separate authored phases', () => {
+  it('includes the base pass in both authored iteration counts', () => {
     expect(solverIterationPhases({ extraIterations: 18, extraGoalIterations: 12 })).toEqual({
-      goalIterations: 12,
-      constraintIterations: 18,
+      goalIterations: 13,
+      constraintIterations: 19,
     });
   });
 
-  it('uses the iteration override only for the constraint phase', () => {
+  it('bounds goal passes to the overridden relaxation count', () => {
     expect(solverIterationPhases({ extraIterations: 18, extraGoalIterations: 12 }, 5)).toEqual({
-      goalIterations: 12,
+      goalIterations: 5,
       constraintIterations: 5,
     });
   });
 
-  it('keeps the existing constraint fallback without inventing goal iterations', () => {
+  it('runs one base pass when no extra iterations are authored', () => {
     expect(solverIterationPhases({ extraIterations: 0, extraGoalIterations: 0 })).toEqual({
-      goalIterations: 0,
-      constraintIterations: 8,
+      goalIterations: 1,
+      constraintIterations: 1,
     });
-  });
-});
-
-describe('fixedClothSubsteps', () => {
-  it('splits the clamped frame delta into the default fixed quality count', () => {
-    expect(fixedClothSubsteps(1 / 60)).toEqual({
-      count: DEFAULT_CLOTH_SUBSTEPS,
-      dt: (1 / 60) / DEFAULT_CLOTH_SUBSTEPS,
-    });
-  });
-
-  it('clamps long frames before splitting them', () => {
-    expect(fixedClothSubsteps(1)).toEqual({
-      count: DEFAULT_CLOTH_SUBSTEPS,
-      dt: (1 / 30) / DEFAULT_CLOTH_SUBSTEPS,
-    });
-  });
-
-  it('keeps at least one substep and ignores invalid deltas', () => {
-    expect(fixedClothSubsteps(Number.NaN, 0)).toEqual({ count: 1, dt: 0 });
-    expect(fixedClothSubsteps(-1 / 60, -4)).toEqual({ count: 1, dt: 0 });
   });
 });
 
@@ -333,9 +385,18 @@ describe('rodCorrectionShares', () => {
 });
 
 describe('projectAnimStrayRadius', () => {
-  // Faithful semantics: clamp node[0] to within maxDist of its OWN animated target
-  // (shipped data is self-referential, nNode == [n, n]). Target sits at the origin
-  // in these cases, so the numbers match a clamp toward (0,0,0).
+  it.each(strayReference.cases)('matches the compiled SIMD routine: $name', ({ positions, targets, batches, scale, expected }) => {
+    const nodes = positions.map((p, i) => ({ pos: new THREE.Vector3().fromArray(p),
+      prev: new THREE.Vector3().fromArray(p), target: new THREE.Vector3().fromArray(targets[i]) }));
+    for (const batch of batches) projectAnimStrayRadiusBatch(nodes, batch.map((limit) => ({
+      node: [limit.nNode[0], limit.nNode[1]], maxDist: limit.flMaxDist, relax: limit.flRelaxationFactor,
+    })), scale);
+    nodes.forEach((node, i) => {
+      expect(node.pos.distanceTo(new THREE.Vector3().fromArray(expected[i]))).toBeLessThan(2e-6);
+      expect(node.prev.toArray()).toEqual(positions[i]);
+    });
+  });
+
   it('leaves the node unchanged inside the authored radius', () => {
     const nodes = [{ pos: V(3, 0, 0), target: V(0, 0, 0) }];
 
@@ -364,22 +425,15 @@ describe('projectAnimStrayRadius', () => {
     expect(nodes[0].pos.x).toBeCloseTo(4, 6);
   });
 
-  it('applies the same clamp delta to prev to preserve existing velocity', () => {
+  it('leaves history unchanged when applying a compiled position correction', () => {
     const node = { pos: V(10, 0, 0), prev: V(9.5, 1, 0), target: V(0, 0, 0) };
-    const beforePos = node.pos.clone();
     const beforePrev = node.prev.clone();
-    const beforeVelocity = beforePos.clone().sub(beforePrev);
 
     const changed = projectAnimStrayRadius([node], { node: [0, 0], maxDist: 4, relax: 1 });
 
-    const posDelta = node.pos.clone().sub(beforePos);
-    const prevDelta = node.prev.clone().sub(beforePrev);
-    const afterVelocity = node.pos.clone().sub(node.prev);
     expect(changed).toBe(true);
-    expect(posDelta.distanceTo(prevDelta)).toBeLessThan(1e-9);
-    expect(afterVelocity.distanceTo(beforeVelocity)).toBeLessThan(1e-9);
     expect(node.pos.x).toBeCloseTo(4, 6);
-    expect(node.prev.equals(V(3.5, 1, 0))).toBe(true);
+    expect(node.prev.equals(beforePrev)).toBe(true);
   });
 
   it('scales the projection by the authored relaxation factor', () => {
@@ -410,7 +464,7 @@ describe('projectAnimStrayRadius', () => {
 });
 
 describe('projectCollisionPlane', () => {
-  it('pushes the child along the parent-rotated positive normal and preserves velocity', () => {
+  it('projects current position along the parent-rotated plane normal', () => {
     const parent = {
       pos: V(10, 0, 0),
       prev: V(10, 0, 0),
@@ -421,20 +475,16 @@ describe('projectCollisionPlane', () => {
       prev: V(9.5, 1.5, 0),
       solvedRot: Q(),
     };
-    const beforeVelocity = child.pos.clone().sub(child.prev);
-
     const changed = projectCollisionPlane(
       [parent, child],
       { ctrlParent: 0, childNode: 1, normal: [1, 0, 0], offset: 2, strength: 1 },
-      0.5,
     );
 
-    const afterVelocity = child.pos.clone().sub(child.prev);
     expect(changed).toBe(true);
     expect(child.pos.x).toBeCloseTo(10, 6);
-    expect(child.pos.y).toBeCloseTo(2.5, 6);
+    expect(child.pos.y).toBeCloseTo(2, 6);
     expect(child.pos.z).toBeCloseTo(0, 6);
-    expect(afterVelocity.distanceTo(beforeVelocity)).toBeLessThan(1e-9);
+    expect(child.prev.toArray()).toEqual([9.5, 1.5, 0]);
   });
 
   it('scales correction by clamped strength', () => {
@@ -445,20 +495,18 @@ describe('projectCollisionPlane', () => {
     const changed = projectCollisionPlane(
       [parent, child],
       { ctrlParent: 0, childNode: 1, normal: [0, 1, 0], offset: 0, strength: 0.25 },
-      1,
     );
 
     expect(changed).toBe(true);
-    expect(child.pos.y).toBeCloseTo(-0.5, 6);
-    expect(child.prev.y).toBeCloseTo(-1.5, 6);
+    expect(child.pos.y).toBeCloseTo(-0.75, 6);
+    expect(child.prev.y).toBeCloseTo(-2, 6);
 
     projectCollisionPlane(
       [parent, clampedChild],
       { ctrlParent: 0, childNode: 1, normal: [0, 1, 0], offset: 0, strength: 5 },
-      1,
     );
-    expect(clampedChild.pos.y).toBeCloseTo(1, 6);
-    expect(clampedChild.prev.y).toBeCloseTo(0, 6);
+    expect(clampedChild.pos.y).toBeCloseTo(0, 6);
+    expect(clampedChild.prev.y).toBeCloseTo(-2, 6);
   });
 
   it('leaves nodes alone when the plane reference or normal is invalid', () => {
@@ -470,12 +518,10 @@ describe('projectCollisionPlane', () => {
     expect(projectCollisionPlane(
       [parent, child],
       { ctrlParent: 9, childNode: 1, normal: [0, 1, 0], offset: 0, strength: 1 },
-      1,
     )).toBe(false);
     expect(projectCollisionPlane(
       [parent, child],
       { ctrlParent: 0, childNode: 1, normal: [0, 0, 0], offset: 0, strength: 1 },
-      1,
     )).toBe(false);
 
     expect(child.pos.equals(beforePos)).toBe(true);
@@ -489,7 +535,6 @@ describe('projectCollisionPlane', () => {
     const changed = projectCollisionPlane(
       [parent, child],
       { ctrlParent: 0, childNode: 1, normal: [0, 1, 0], offset: 0, strength: 1 },
-      1,
     );
 
     expect(changed).toBe(false);
@@ -507,11 +552,12 @@ describe('position-driven classification', () => {
     expect(isPositionDrivenNode(3, model)).toBe(true);
   });
 
-  it('disables position-driven classification when FitMatrix data is present', () => {
+  it('preserves the explicit position-driven boundary when FitMatrix data is present', () => {
     const model = { firstPositionDrivenNode: 1, fitMatrices: [{}] } as Parameters<typeof isPositionDrivenNode>[1];
 
-    expect(isPositionDrivenNode(1, model)).toBe(false);
-    expect(isPositionDrivenNode(2, model)).toBe(false);
+    expect(isPositionDrivenNode(0, model)).toBe(false);
+    expect(isPositionDrivenNode(1, model)).toBe(true);
+    expect(isPositionDrivenNode(2, model)).toBe(true);
   });
 
   it('treats pinned, position-driven, and lock-to-goal nodes as kinematic', () => {
@@ -541,27 +587,6 @@ describe('position-driven classification', () => {
     expect(isKinematicNode({ jiggleDriven: jiggleNodes.has(2) })).toBe(false);
   });
 
-  it('classifies reverse-offset bone controls as kinematic below firstPositionDrivenNode', () => {
-    const reverseOffsetNodes = reverseOffsetDrivenNodeSet({
-      reverseOffsets: [{ boneCtrl: 127, targetNode: 252, offset: [1, 0, 0] }],
-    });
-
-    expect(isPositionDrivenNode(127, { firstPositionDrivenNode: 252, fitMatrices: [] })).toBe(false);
-    expect(reverseOffsetNodes.has(127)).toBe(true);
-    expect(isKinematicNode({ reverseOffsetDriven: reverseOffsetNodes.has(127) })).toBe(true);
-  });
-
-  it('keeps reverse-offset classification independent of FitMatrix position-driven gating', () => {
-    const reverseOffsetNodes = reverseOffsetDrivenNodeSet({
-      reverseOffsets: [{ boneCtrl: 127, targetNode: 252, offset: [1, 0, 0] }],
-    });
-
-    const model = { firstPositionDrivenNode: 1, fitMatrices: [{}] } as Parameters<typeof isPositionDrivenNode>[1];
-
-    expect(isPositionDrivenNode(127, model)).toBe(false);
-    expect(reverseOffsetNodes.has(127)).toBe(true);
-  });
-
   it('classifies FitMatrix ctrl controls as kinematic position-driven nodes', () => {
     const fitNodes = fitMatrixDrivenNodeSet({
       fitMatrices: [{
@@ -585,40 +610,6 @@ describe('position-driven classification', () => {
     expect(fitMatrixTargetNode({ node: 4, ctrl: -1 }, 8)).toBe(4);
   });
 
-  it('uses authored freeNodes as the free simulation set when present', () => {
-    const model = {
-      freeNodes: [2, 99, -1],
-      nodes: [
-        simNode(0),
-        simNode(1),
-        simNode(1),
-      ],
-    };
-
-    const freeNodes = freeSimNodeSet(model);
-
-    expect(freeNodes.has(1)).toBe(false);
-    expect(freeNodes.has(2)).toBe(true);
-    expect(freeNodes.has(99)).toBe(false);
-    expect(isFreeSimNode(2, model)).toBe(true);
-  });
-
-  it('falls back to positive invMass when freeNodes are absent', () => {
-    const model = {
-      freeNodes: [],
-      nodes: [
-        simNode(0),
-        simNode(0.5),
-        simNode(1),
-      ],
-    };
-
-    const freeNodes = freeSimNodeSet(model);
-
-    expect(freeNodes.has(0)).toBe(false);
-    expect(freeNodes.has(1)).toBe(true);
-    expect(freeNodes.has(2)).toBe(true);
-  });
 });
 
 describe('restorePinnedSolverNodes', () => {
@@ -668,28 +659,10 @@ describe('restorePinnedSolverNodes', () => {
     expect(node.prev.equals(node.target)).toBe(true);
     expect(node.solvedRot.angleTo(targetRot)).toBeCloseTo(0, 6);
   });
-
-  it('restores reverse-offset-driven solver positions as kinematic state', () => {
-    const node = {
-      pinned: false,
-      reverseOffsetDriven: true,
-      pos: V(20, 0, 0),
-      prev: V(19, 0, 0),
-      target: V(2, 3, 4),
-      solvedRot: Q(),
-      targetRot: Q(0, Math.PI / 5, 0),
-    };
-
-    restorePinnedSolverNodes([node]);
-
-    expect(node.pos.equals(node.target)).toBe(true);
-    expect(node.prev.equals(node.target)).toBe(true);
-    expect(node.solvedRot.angleTo(node.targetRot)).toBeCloseTo(0, 6);
-  });
 });
 
 describe('reconstructReverseOffsetPosition', () => {
-  it('reconstructs the bone control node from target position plus rotated offset', () => {
+  it('reconstructs the rendered bone without overwriting its simulated position or history', () => {
     const boneNode = {
       pos: V(0, 0, 0),
       prev: V(-1, 0, 0),
@@ -709,38 +682,11 @@ describe('reconstructReverseOffsetPosition', () => {
     expect(pos?.x).toBeCloseTo(10, 6);
     expect(pos?.y).toBeCloseTo(2, 6);
     expect(pos?.z).toBeCloseTo(0, 6);
-    expect(boneNode.pos.equals(pos!)).toBe(true);
-    expect(boneNode.prev.equals(pos!)).toBe(true);
+    expect(boneNode.pos.toArray()).toEqual([0, 0, 0]);
+    expect(boneNode.prev.toArray()).toEqual([-1, 0, 0]);
   });
 
-  it('applies all reverse-offset reconstructions into solver state before consumers read positions', () => {
-    const boneNode = {
-      initPos: [0, 0, 0] as [number, number, number],
-      pos: V(-100, 0, 0),
-      prev: V(-101, 0, 0),
-      solvedRot: Q(0, 0, Math.PI / 2),
-    };
-    const targetNode = {
-      initPos: [0, 0, 0] as [number, number, number],
-      pos: V(10, 0, 0),
-      prev: V(9, 0, 0),
-      solvedRot: Q(),
-    };
-
-    const count = applyReverseOffsetReconstructions(
-      [{ boneCtrl: 0, targetNode: 1, offset: [2, 0, 0], sign: 1 }],
-      [boneNode, targetNode],
-    );
-    const consumerRead = boneNode.pos.clone();
-
-    expect(count).toBe(1);
-    expect(consumerRead.x).toBeCloseTo(10, 6);
-    expect(consumerRead.y).toBeCloseTo(2, 6);
-    expect(consumerRead.z).toBeCloseTo(0, 6);
-    expect(boneNode.prev.equals(boneNode.pos)).toBe(true);
-  });
-
-  it('reruns reverse offsets after FitMatrix so fit-driven targets are observed', () => {
+  it('keeps fit output separate from the particle read by a reverse offset', () => {
     const current = [
       V(10, 0, 0),
       V(11, 0, 0),
@@ -768,9 +714,8 @@ describe('reconstructReverseOffsetPosition', () => {
       reverseBone,
     ];
 
-    const counts = applyDrivenReconstructions(
-      [{ boneCtrl: 5, targetNode: 4, offset: [1, 0, 0], sign: 1 }],
-      [{
+    const fit = reconstructFitMatrixTransform(
+      {
         node: 4,
         targetNode: 4,
         bone: [0, 0, 0],
@@ -782,17 +727,40 @@ describe('reconstructReverseOffsetPosition', () => {
           { node: 2, weight: 1 },
           { node: 3, weight: 1 },
         ],
-      }],
+      },
       nodes,
     );
 
-    expect(counts).toEqual({ reverseBefore: 1, fit: 1, reverseAfter: 1 });
-    expect(fitTarget.pos.x).toBeCloseTo(10.25, 6);
-    expect(reverseBone.pos.x).toBeCloseTo(11.25, 6);
+    const rendered = reconstructReverseOffsetPosition({ boneCtrl: 5, targetNode: 4, offset: [1, 0, 0], sign: 1 }, nodes);
+    expect(fit!.position.x).toBeCloseTo(10.25, 6);
+    expect(fitTarget.pos.x).toBe(0);
+    expect(rendered!.x).toBe(1);
+    expect(reverseBone.pos.x).toBe(-100);
   });
 });
 
 describe('FitMatrix reconstruction', () => {
+  it.each(fitReference.cases)('matches the compiled output transform: $name', ({ initial, positions, fit, weights, expected }) => {
+    const model = parseFeModel({
+      m_CtrlName: initial.map((_, index) => String(index)),
+      m_InitPose: initial.map((point) => [...point, 1, 0, 0, 0, 1]),
+      m_FitMatrices: [fit], m_FitWeights: weights,
+    })!;
+    const nodes = model.nodes.map((node, index) => ({
+      initPos: node.initPos, pos: new THREE.Vector3().fromArray(positions[index]),
+      prev: new THREE.Vector3().fromArray(positions[index]).addScalar(-1), solvedRot: Q(),
+    }));
+    const before = nodes.map((node) => ({ pos: node.pos.clone(), prev: node.prev.clone(), rotation: node.solvedRot.clone() }));
+    const output = reconstructFitMatrixTransform(buildFitMatrixReconstructions(model)[0], nodes)!;
+    expect(output.position.distanceTo(new THREE.Vector3().fromArray(expected))).toBeLessThan(5e-5);
+    expect(output.rotation.angleTo(new THREE.Quaternion().fromArray(expected, 4).normalize())).toBeLessThan(1e-4);
+    nodes.forEach((node, index) => {
+      expect(node.pos).toEqual(before[index].pos);
+      expect(node.prev).toEqual(before[index].prev);
+      expect(node.solvedRot).toEqual(before[index].rotation);
+    });
+  });
+
   it('builds spans from previous endWeight and keeps the static prefix before beginDynamic', () => {
     const reconstructions = buildFitMatrixReconstructions({
       nodes: [
@@ -833,12 +801,13 @@ describe('FitMatrix reconstruction', () => {
       ],
     });
 
-    expect(reconstructions).toHaveLength(1);
-    expect(reconstructions[0].node).toBe(6);
-    expect(reconstructions[0].targetNode).toBe(6);
-    expect(reconstructions[0].center).toEqual([0.25, 0.25, 0.25]);
-    expect(reconstructions[0].weights.map((w) => w.node)).toEqual([0, 1, 2, 3]);
-    expect(reconstructions[0].weights.map((w) => w.weight)).toEqual([4, 2, 3, 5]);
+    expect(reconstructions).toHaveLength(2);
+    expect(reconstructions[0].weights.map((w) => w.node)).toEqual([5]);
+    expect(reconstructions[1].node).toBe(6);
+    expect(reconstructions[1].targetNode).toBe(6);
+    expect(reconstructions[1].center).toEqual([0.25, 0.25, 0.25]);
+    expect(reconstructions[1].weights.map((w) => w.node)).toEqual([0, 1, 2, 3]);
+    expect(reconstructions[1].weights.map((w) => w.weight)).toEqual([4, 2, 3, 5]);
   });
 
   it('targets nCtrl when it differs from nNode', () => {
@@ -902,11 +871,11 @@ describe('FitMatrix reconstruction', () => {
       { initPos: [0, 0, 3] as [number, number, number], pos: current[3], prev: current[3].clone(), solvedRot: Q() },
       driven,
     ];
-    const expectedPos = targetCenter.clone().add(bone.clone().sub(authoredCenter).applyQuaternion(rotation));
+    const expectedPos = targetCenter.clone().add(bone.clone().applyQuaternion(rotation));
     const expectedRot = rotation.clone().multiply(boneRot).normalize();
 
-    const count = applyFitMatrixReconstructions(
-      [{
+    const transform = reconstructFitMatrixTransform(
+      {
         node: 4,
         targetNode: 4,
         bone: [bone.x, bone.y, bone.z],
@@ -918,14 +887,15 @@ describe('FitMatrix reconstruction', () => {
           { node: 2, weight: weights[2] },
           { node: 3, weight: weights[3] },
         ],
-      }],
+      },
       nodes,
     );
 
-    expect(count).toBe(1);
-    expect(driven.pos.distanceTo(expectedPos)).toBeLessThan(1e-9);
-    expect(driven.prev.distanceTo(expectedPos)).toBeLessThan(1e-9);
-    expect(driven.solvedRot.angleTo(expectedRot)).toBeLessThan(1e-9);
+    expect(transform!.position.distanceTo(expectedPos)).toBeLessThan(1e-9);
+    expect(transform!.rotation.angleTo(expectedRot)).toBeLessThan(1e-7);
+    expect(driven.pos.toArray()).toEqual([-100, 0, 0]);
+    expect(driven.prev.toArray()).toEqual([-101, 0, 0]);
+    expect(driven.solvedRot.equals(Q())).toBe(true);
   });
 
   it('reconstructs the ctrl target when ctrl differs from node', () => {
@@ -957,8 +927,8 @@ describe('FitMatrix reconstruction', () => {
       ctrl,
     ];
 
-    const count = applyFitMatrixReconstructions(
-      [{
+    const transform = reconstructFitMatrixTransform(
+      {
         node: 4,
         targetNode: 5,
         bone: [0, 0, 0],
@@ -970,12 +940,12 @@ describe('FitMatrix reconstruction', () => {
           { node: 2, weight: 1 },
           { node: 3, weight: 1 },
         ],
-      }],
+      },
       nodes,
     );
 
-    expect(count).toBe(1);
-    expect(ctrl.pos.x).toBeCloseTo(5.25, 6);
+    expect(transform!.position.x).toBeCloseTo(5.25, 6);
+    expect(ctrl.pos.x).toBe(-200);
     expect(dynamicCenter.pos.equals(V(-100, 0, 0))).toBe(true);
   });
 });

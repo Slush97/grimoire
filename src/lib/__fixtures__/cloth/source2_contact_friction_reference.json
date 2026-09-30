@@ -1,0 +1,2739 @@
+{
+  "provenance": {
+    "binarySha256": "66b65fd571d8b301ed55fef5ced8ad2ed1206c67dedbd44782cd7c70bdb17ebe",
+    "rva": "0x234a20",
+    "method": "Synthetic complete capsule contact passes with particle history, current and previous collider transforms, per-node radii and optional friction arrays, evaluated by the compiled x64 runtime in Unicorn 2.1.4. No imported functions or game assets. History verified unchanged."
+  },
+  "cases": [
+    {
+      "name": "stationary friction 0",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "name": "moving translation 0",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        -1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "name": "stationary friction 0.1",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.1,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.05000000074505806,
+        2.0
+      ]
+    },
+    {
+      "name": "moving translation 0.1",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.1,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        -1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.05000000074505806,
+        2.0
+      ]
+    },
+    {
+      "name": "stationary friction 0.5",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.25,
+        2.0
+      ]
+    },
+    {
+      "name": "moving translation 0.5",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        -1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.25,
+        2.0
+      ]
+    },
+    {
+      "name": "stationary friction 1",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 1,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "name": "moving translation 1",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 1,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        -1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "name": "stationary friction 2",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 2,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        1.0,
+        2.0
+      ]
+    },
+    {
+      "name": "moving translation 2",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 2,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        -1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        1.0,
+        2.0
+      ]
+    },
+    {
+      "name": "center distance 0 z -0.001",
+      "position": [
+        0,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0,
+        0.5,
+        0.9990000128746033
+      ]
+    },
+    {
+      "name": "center distance 0 z 2",
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "previous": [
+        0,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0,
+        0.5,
+        3.0
+      ]
+    },
+    {
+      "name": "center distance 0 z 4.001",
+      "position": [
+        0,
+        0,
+        4.001
+      ],
+      "previous": [
+        0,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0,
+        0.5,
+        5.000999927520752
+      ]
+    },
+    {
+      "name": "center distance 0.0001 z -0.001",
+      "position": [
+        0.0001,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.0001,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        9.999999747378752e-05,
+        0.5,
+        0.9990000128746033
+      ]
+    },
+    {
+      "name": "center distance 0.0001 z 2",
+      "position": [
+        0.0001,
+        0,
+        2
+      ],
+      "previous": [
+        0.0001,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        9.999999747378752e-05,
+        0.5,
+        3.0
+      ]
+    },
+    {
+      "name": "center distance 0.0001 z 4.001",
+      "position": [
+        0.0001,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.0001,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        9.999999747378752e-05,
+        0.5,
+        5.000999927520752
+      ]
+    },
+    {
+      "name": "center distance 0.001 z -0.001",
+      "position": [
+        0.001,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.001,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0010000000474974513,
+        0.5,
+        0.9990000128746033
+      ]
+    },
+    {
+      "name": "center distance 0.001 z 2",
+      "position": [
+        0.001,
+        0,
+        2
+      ],
+      "previous": [
+        0.001,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0010000000474974513,
+        0.5,
+        3.0
+      ]
+    },
+    {
+      "name": "center distance 0.001 z 4.001",
+      "position": [
+        0.001,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.001,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0010000000474974513,
+        0.5,
+        5.000999927520752
+      ]
+    },
+    {
+      "name": "center distance 0.05 z -0.001",
+      "position": [
+        0.05,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.05,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.05000000074505806,
+        0.5,
+        0.9990000128746033
+      ]
+    },
+    {
+      "name": "center distance 0.05 z 2",
+      "position": [
+        0.05,
+        0,
+        2
+      ],
+      "previous": [
+        0.05,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.05000000074505806,
+        0.5,
+        3.0
+      ]
+    },
+    {
+      "name": "center distance 0.05 z 4.001",
+      "position": [
+        0.05,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.05,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.05000000074505806,
+        0.5,
+        5.000999927520752
+      ]
+    },
+    {
+      "name": "center distance 0.099 z -0.001",
+      "position": [
+        0.099,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.099,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0989999994635582,
+        0.5,
+        0.9990000128746033
+      ]
+    },
+    {
+      "name": "center distance 0.099 z 2",
+      "position": [
+        0.099,
+        0,
+        2
+      ],
+      "previous": [
+        0.099,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0989999994635582,
+        0.5,
+        3.0
+      ]
+    },
+    {
+      "name": "center distance 0.099 z 4.001",
+      "position": [
+        0.099,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.099,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.0989999994635582,
+        0.5,
+        5.000999927520752
+      ]
+    },
+    {
+      "name": "center distance 0.1 z -0.001",
+      "position": [
+        0.1,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.1,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999499320983887,
+        0.4499974846839905,
+        -0.009999499656260014
+      ]
+    },
+    {
+      "name": "center distance 0.1 z 2",
+      "position": [
+        0.1,
+        0,
+        2
+      ],
+      "previous": [
+        0.1,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.44999998807907104,
+        2.0
+      ]
+    },
+    {
+      "name": "center distance 0.1 z 4.001",
+      "position": [
+        0.1,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.1,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999499320983887,
+        0.4499974846839905,
+        4.009998798370361
+      ]
+    },
+    {
+      "name": "center distance 0.101 z -0.001",
+      "position": [
+        0.101,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.101,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999509453773499,
+        0.4494975209236145,
+        -0.009900504723191261
+      ]
+    },
+    {
+      "name": "center distance 0.101 z 2",
+      "position": [
+        0.101,
+        0,
+        2
+      ],
+      "previous": [
+        0.101,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.4494999945163727,
+        2.0
+      ]
+    },
+    {
+      "name": "center distance 0.101 z 4.001",
+      "position": [
+        0.101,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.101,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999509453773499,
+        0.4494975209236145,
+        4.009899616241455
+      ]
+    },
+    {
+      "name": "center distance 0.5 z -0.001",
+      "position": [
+        0.5,
+        0,
+        -0.001
+      ],
+      "previous": [
+        0.5,
+        1,
+        -0.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999979734420776,
+        0.2499994933605194,
+        -0.0019999961368739605
+      ]
+    },
+    {
+      "name": "center distance 0.5 z 2",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.25,
+        2.0
+      ]
+    },
+    {
+      "name": "center distance 0.5 z 4.001",
+      "position": [
+        0.5,
+        0,
+        4.001
+      ],
+      "previous": [
+        0.5,
+        1,
+        4.001
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.9999979734420776,
+        0.2499994933605194,
+        4.001999855041504
+      ]
+    },
+    {
+      "name": "rotated history 0.2",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0.09983341664682815,
+        0.9950041652780258
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        -0.001328006386756897,
+        2.0
+      ]
+    },
+    {
+      "name": "rotated history -0.7",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -0.34289780745545134,
+        0.9393727128473789
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        0.25,
+        2.0
+      ]
+    },
+    {
+      "name": "rotated history 1.3",
+      "position": [
+        0.5,
+        0,
+        2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0.6051864057360395,
+        0.7960837985490559
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        1.0,
+        -0.25,
+        2.0
+      ]
+    },
+    {
+      "name": "tapered",
+      "position": [
+        0.5,
+        0,
+        0.2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        0.2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          0.5
+        ],
+        [
+          0,
+          0,
+          4,
+          1.5
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0.2,
+      "frictionEnabled": true,
+      "expected": [
+        0.7579238414764404,
+        0.10000000149011612,
+        0.13551905751228333
+      ]
+    },
+    {
+      "name": "short",
+      "position": [
+        0.5,
+        0,
+        0.2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        0.2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          0.5
+        ],
+        [
+          0,
+          0,
+          0.4,
+          1.5
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0.2,
+      "frictionEnabled": true,
+      "expected": [
+        1.5784105062484741,
+        0.10000000149011612,
+        -0.2313641756772995
+      ]
+    },
+    {
+      "name": "sphere",
+      "position": [
+        0.5,
+        0,
+        0.2
+      ],
+      "previous": [
+        0.5,
+        0.1,
+        0.2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0.2,
+      "frictionEnabled": true,
+      "expected": [
+        1.114172101020813,
+        0.10000000149011612,
+        0.44566887617111206
+      ]
+    },
+    {
+      "name": "position only distance 0 z 0",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "previous": [
+        0,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "position only distance 0 z 2",
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "previous": [
+        0,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        3.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0001 z 0",
+      "position": [
+        0.0001,
+        0,
+        0
+      ],
+      "previous": [
+        0.0001,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0001 z 2",
+      "position": [
+        0.0001,
+        0,
+        2
+      ],
+      "previous": [
+        0.0001,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        3.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0003 z 0",
+      "position": [
+        0.0003,
+        0,
+        0
+      ],
+      "previous": [
+        0.0003,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0003 z 2",
+      "position": [
+        0.0003,
+        0,
+        2
+      ],
+      "previous": [
+        0.0003,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        0.0,
+        0.0,
+        3.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0004 z 0",
+      "position": [
+        0.0004,
+        0,
+        0
+      ],
+      "previous": [
+        0.0004,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "position only distance 0.0004 z 2",
+      "position": [
+        0.0004,
+        0,
+        2
+      ],
+      "previous": [
+        0.0004,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "name": "position only distance 0.05 z 0",
+      "position": [
+        0.05,
+        0,
+        0
+      ],
+      "previous": [
+        0.05,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "position only distance 0.05 z 2",
+      "position": [
+        0.05,
+        0,
+        2
+      ],
+      "previous": [
+        0.05,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "name": "position only distance 0.1 z 0",
+      "position": [
+        0.1,
+        0,
+        0
+      ],
+      "previous": [
+        0.1,
+        1,
+        0
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "position only distance 0.1 z 2",
+      "position": [
+        0.1,
+        0,
+        2
+      ],
+      "previous": [
+        0.1,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        1.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "name": "zero-valued friction array near center",
+      "position": [
+        0.05,
+        0,
+        2
+      ],
+      "previous": [
+        0.05,
+        1,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.05000000074505806,
+        0.0,
+        3.0
+      ]
+    },
+    {
+      "name": "rotated collider center fallback",
+      "position": [
+        0,
+        0.05,
+        2
+      ],
+      "previous": [
+        1,
+        0.05,
+        2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0.479425538604203,
+        0.8775825618903728
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        0.5,
+        0.05000000074505806,
+        3.0
+      ]
+    },
+    {
+      "name": "translated and rotated collider",
+      "position": [
+        3.5,
+        2,
+        5
+      ],
+      "previous": [
+        3.5,
+        2,
+        5.2
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        3,
+        4,
+        5,
+        1,
+        0.7071067811865476,
+        0,
+        0,
+        0.7071067811865476
+      ],
+      "old": [
+        1,
+        2,
+        5,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        4.0,
+        2.25,
+        5.0
+      ]
+    },
+    {
+      "name": "escape stays on Source Z under rotated collider",
+      "position": [
+        3.05,
+        2,
+        5
+      ],
+      "previous": [
+        3.05,
+        2,
+        5
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0.5,
+      "current": [
+        3,
+        4,
+        5,
+        1,
+        0.7071067811865476,
+        0,
+        0,
+        0.7071067811865476
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": true,
+      "expected": [
+        3.049999952316284,
+        2.0,
+        6.0
+      ]
+    },
+    {
+      "name": "position-only pole stays on Source Z",
+      "position": [
+        3.0001,
+        2,
+        5
+      ],
+      "previous": [
+        3.0001,
+        2,
+        5
+      ],
+      "capsule": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          4,
+          1
+        ]
+      ],
+      "friction": 0,
+      "current": [
+        3,
+        4,
+        5,
+        1,
+        0.7071067811865476,
+        0,
+        0,
+        0.7071067811865476
+      ],
+      "old": null,
+      "radius": 0,
+      "frictionEnabled": false,
+      "expected": [
+        3.0,
+        1.9999998807907104,
+        6.0
+      ]
+    }
+  ]
+}
