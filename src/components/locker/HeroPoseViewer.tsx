@@ -1212,8 +1212,7 @@ export default function HeroPoseViewer({
           if (viewerScene === 'transparent') setViewerScene('studio');
           void backdrop.choose(file);
         }} onClear={backdrop.clear} />}
-      status={viewerError ?? backdropError ?? (scene && features.clothPreviewEnabled && (!rigged || !clothModel)
-        ? t('locker.pose.physicsUnavailable') : scene && features.riggedPreviewEnabled && !rigged
+      status={viewerError ?? backdropError ?? (scene && features.riggedPreviewEnabled && !rigged
           ? t('locker.pose.animationUnavailable') : effectPreviewEnabled && (effectUnavailable || (scene && !rigged))
             ? t('locker.pose.particlesUnavailable') : effectPreviewEnabled && partialEffect
               ? t('locker.pose.particlesPartial') : null)}
