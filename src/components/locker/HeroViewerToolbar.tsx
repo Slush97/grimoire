@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState, type RefObject, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Camera, Expand, Pause, Play, RotateCcw, Settings2 } from 'lucide-react';
 import { Button, IconButton, Toggle } from '../common/ui';
 import { Select } from '../common/forms';
+import { clampAnimationTime, groupHeroClips, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
 
 export type HeroViewerScene = 'midtown' | 'studio' | 'transparent';
 
@@ -12,12 +13,15 @@ interface Props {
   clip: string;
   paused: boolean;
   speed: number;
+  progressRef: RefObject<HeroPlaybackProgress>;
+  onSeek: (value: number) => void;
   spinPaused: boolean;
   cloth: boolean;
   bloom: boolean;
   particles: boolean;
   scene: HeroViewerScene;
   status: string | null;
+  backdropControls?: ReactNode;
   onAnimated: (value: boolean) => void;
   onClip: (value: string) => void;
   onPaused: (value: boolean) => void;
@@ -32,10 +36,47 @@ interface Props {
   onFullscreen: () => void;
 }
 
+function AnimationTimeline({ progressRef, onSeek }: Pick<Props, 'progressRef' | 'onSeek'>) {
+  const { t } = useTranslation();
+  const [position, setPosition] = useState<HeroPlaybackProgress>({ time: 0, duration: 0 });
+  useEffect(() => {
+    // Only this small control samples playback, keeping React out of the scene's
+    // per-frame animation path. Unmounting the controls stops the timer.
+    const timer = window.setInterval(() => {
+      const { time, duration } = progressRef.current;
+      setPosition((old) => old.time === time && old.duration === duration ? old : { time, duration });
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [progressRef]);
+  return (
+    <div className="flex items-center gap-2">
+      <input type="range" min={0} max={position.duration || 1} step={0.01}
+        disabled={position.duration <= 0} value={clampAnimationTime(position.time, position.duration)}
+        aria-label={t('locker.pose.seek')} aria-valuetext={`${position.time.toFixed(2)} / ${position.duration.toFixed(2)}`}
+        className="h-7 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed disabled:opacity-60"
+        onChange={(event) => {
+          const time = clampAnimationTime(Number(event.target.value), position.duration);
+          setPosition((p) => ({ ...p, time }));
+          onSeek(time);
+        }} />
+      <span className="shrink-0 text-2xs tabular-nums text-text-secondary" aria-hidden="true">
+        {position.time.toFixed(1)} / {position.duration.toFixed(1)}
+      </span>
+    </div>
+  );
+}
+
 export function HeroViewerToolbar(p: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const clipGroups = groupHeroClips(p.clips);
+  const clipGroupLabel = {
+    idle: t('locker.pose.clipGroups.idle'),
+    movement: t('locker.pose.clipGroups.movement'),
+    combat: t('locker.pose.clipGroups.combat'),
+    other: t('locker.pose.clipGroups.other'),
+  };
   return (
     <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-col items-start gap-2">
       {open && (
@@ -46,7 +87,11 @@ export function HeroViewerToolbar(p: Props) {
               <label className="block space-y-1 text-xs text-text-secondary">
                 <span>{t('locker.pose.animation')}</span>
                 <Select inputSize="sm" value={p.clip} onChange={(e) => p.onClip(e.target.value)}>
-                  {p.clips.map((clip) => <option key={clip} value={clip}>{clip.replace(/_/g, ' ')}</option>)}
+                  {clipGroups.map(({ group, clips }) => (
+                    <optgroup key={group} label={clipGroupLabel[group]}>
+                      {clips.map((clip) => <option key={clip} value={clip}>{clip.replace(/_/g, ' ')}</option>)}
+                    </optgroup>
+                  ))}
                 </Select>
               </label>
             )}
@@ -64,18 +109,23 @@ export function HeroViewerToolbar(p: Props) {
                 <option value="transparent">{t('locker.pose.transparent')}</option>
               </Select>
             </label>
+            {p.backdropControls}
             <Toggle label={t('locker.pose.autoRotate')} checked={!p.spinPaused} onChange={(v) => p.onSpinPaused(!v)} />
-            <Toggle label={t('locker.pose.physics')} description={t('locker.pose.physicsHint')} checked={p.cloth} onChange={p.onCloth} />
+            <Toggle label={t('locker.pose.physics')} checked={p.cloth} onChange={p.onCloth} />
             <Toggle label={t('locker.pose.bloom')} checked={p.bloom} onChange={p.onBloom} />
             <Toggle label={t('locker.pose.particles')} checked={p.particles} onChange={p.onParticles} />
-            <p className="text-xs text-text-secondary">{t('locker.pose.cameraHint')}</p>
           </div>
+        </div>
+      )}
+      {p.animated && p.clips.length > 0 && (
+        <div className="w-64 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 px-3 py-1 backdrop-blur-sm">
+          <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
         </div>
       )}
       {p.status && <p role="status" className="max-w-64 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">{p.status}</p>}
       <div className="flex gap-1 rounded-sm border border-hl/10 bg-bg-secondary/95 p-1 backdrop-blur-sm">
         <Button size="sm" variant={open ? 'primary' : 'secondary'} icon={Settings2} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{t('locker.pose.controls')}</Button>
-        <IconButton size="sm" icon={p.paused ? Play : Pause} label={p.paused ? t('locker.pose.resumeAnimation') : t('locker.pose.pauseAnimation')} disabled={!p.animated} onClick={() => p.onPaused(!p.paused)} />
+        <IconButton size="sm" icon={p.paused ? Play : Pause} label={p.paused ? t('locker.pose.resumeAnimation') : t('locker.pose.pauseAnimation')} disabled={!p.animated || p.clips.length === 0} onClick={() => p.onPaused(!p.paused)} />
         <IconButton size="sm" icon={RotateCcw} label={t('locker.pose.resetView')} onClick={p.onReset} />
         <IconButton size="sm" icon={Camera} label={t('locker.pose.screenshot')} onClick={p.onScreenshot} />
         <IconButton size="sm" icon={Expand} label={t('locker.pose.fullscreen')} onClick={p.onFullscreen} />

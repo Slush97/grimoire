@@ -36,9 +36,11 @@ Generated game assets remain in the ignored `.codex-run/source2-physics` directo
 
 The remaining comparison work includes game color-correction LUTs, richer particle renderers/operators, complete attachment metadata, a locally extracted map backdrop, game-equivalent direct-light evaluation and broader roster checks. The branch deliberately makes no claim that these are already equivalent.
 
-Two material color rules also remain to verify and implement. ValveResourceFormat's `MatrixColorCorrect2` uses the texture reflectivity as its contrast pivot and composes contrast, brightness, then saturation. Our current CSB approximation uses a fixed midpoint and different ordering. Its Deadlock tint matrix converts `g_vColorTint1` from sRGB to linear, while the current morphic export writes that vector directly into a linear glTF base-color factor. These are shared pipeline discrepancies, not reasons to recolor individual heroes by eye.
+The cloud continuation corrected the shared contrast/brightness/saturation ordering, per-channel contrast pivot and authored tint transfer function. The pinned exporter lacks compiled texture reflectivity, so the current pivot comes from a bounded linear albedo average. See [the material pipeline](viewer-color-pipeline.md) for compatibility guards, source attribution and the remaining approximation. The preview's rim and transmissive light gates also now compare normals and light directions in the same coordinate space. [The lighting boundary](viewer-npr-lighting.md) explains why this is not yet game-equivalent per-light NPR.
 
-## Local handoff checkpoint
+The continuation adds a persistent controls panel, pause-on-seek timeline, clip groups, local image backgrounds, transparent PNG verification and a broader bounded particle runtime. See [cloud results](viewer-cloud-results.md) for current checks and fixture access status.
+
+## Original local handoff checkpoint
 
 Typecheck, full source lint, UI conventions and locale manifest checks passed. The final full suite reported 2,166 passed, 16 failed and 15 skipped. The same baseline Windows failures concern Wine/Bottle/Steam mocks, CRLF fixtures, path separators and stale roster expectations; one fake-Wine spawn error is also unchanged. The production build passed with the public social URL configured.
 

@@ -56,7 +56,7 @@ describe('buildDeadlockMaterial vertex colors', () => {
     for (const [shader, before, specular] of [['pbr.vfx', 0, 1], ['complex.vfx', 1, 0]] as const) {
       const result = buildDeadlockMaterial(materialWithMorphic({ shader, ints: { F_USE_NPR_LIGHTING: 1 } }));
       expect(result.uniforms.uVertexColorBeforeCsb.value).toBe(before);
-      expect(result.uniforms.uMaskVertexColor.value).toBe(0);
+      expect(result.uniforms.uMaskVertexColor.value).toBe(shader === 'pbr.vfx' ? 1 : 0);
       expect(result.uniforms.uVertexColorStrength.value).toBe(1);
       expect(result.uniforms.uCitadelSpecular.value).toBe(specular);
       result.dispose();

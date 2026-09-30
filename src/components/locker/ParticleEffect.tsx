@@ -3,7 +3,8 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { ageCurveValue, allSpriteLayers, fxTexturePngName, type FxDescriptor, type SpriteSimParams } from './fxDescriptor';
+import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, spriteFadeValue,
+  type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
 
 const VERT = /* glsl */ `
   attribute vec3 aPosition;
@@ -42,7 +43,7 @@ const FRAG = /* glsl */ `
   }
 `;
 interface Particle {
-  age: number; life: number; position: THREE.Vector3; offset: THREE.Vector3;
+  age: number; life: number; position: THREE.Vector3;
   velocity: THREE.Vector3; radius: number; rotation: number; spin: number;
   color: THREE.Color; alpha: number;
 }
@@ -73,7 +74,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const particles = useRef<Particle[]>([]);
-  const spawnAcc = useRef(layer.emitFirst ? 1 : 0);
+  const emissionState = useRef<SpriteEmissionState[]>([]);
+  const clock = useRef(0);
   const initialized = useRef(false);
   const texture = useMemo(() => {
     if (!layer.texture) return null;
@@ -85,12 +87,14 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
   // morphic converts Source inches to meters at the skeleton root. The effect
   // sits alongside that root, so apply the same units exactly once.
   const sourceUnit = useMemo(() => model?.getObjectByName('skeleton')?.scale.x ?? 0.0254, [model]);
+  const sourceRoot = useMemo(() => model?.getObjectByName('skeleton') ?? null, [model]);
   const scratch = useMemo(() => ({
     origin: new THREE.Vector3(), previous: new THREE.Vector3(),
     orientation: new THREE.Quaternion(), parentOrientation: new THREE.Quaternion(),
-    gravity: new THREE.Vector3(layer.gravity[1], layer.gravity[2], layer.gravity[0]).multiplyScalar(sourceUnit),
-    color: new THREE.Color(),
-  }), [layer.gravity, sourceUnit]);
+    sourceOrientation: new THREE.Quaternion(), gravity: new THREE.Vector3(),
+    previousOrientation: new THREE.Quaternion(), deltaOrientation: new THREE.Quaternion(),
+    color: new THREE.Color(), fadeColor: layer.colorFade ? new THREE.Color().setRGB(...layer.colorFade) : null,
+  }), [layer.colorFade]);
   const { geometry, material } = useMemo(() => {
     const quad = new THREE.PlaneGeometry(2, 2);
     const geom = new THREE.InstancedBufferGeometry();
@@ -108,39 +112,80 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       blending: layer.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     }) };
   }, [layer.maxParticles, layer.additive, texture]);
-  useEffect(() => () => { texture?.dispose(); geometry.dispose(); material.dispose(); }, [texture, geometry, material]);
+  useEffect(() => () => { texture?.dispose(); }, [texture]);
+  useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
+  useEffect(() => {
+    particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false;
+    if (meshRef.current) (meshRef.current.geometry as THREE.InstancedBufferGeometry).instanceCount = 0;
+  }, [layer, geometry]);
 
   useFrame((_, deltaRaw) => {
     if (playback?.paused) return;
-    const delta = Math.min(deltaRaw, 0.05) * (playback?.speed ?? 1);
+    const speed = playback?.speed ?? 1;
+    const delta = Number.isFinite(deltaRaw) && Number.isFinite(speed) ? Math.max(0, Math.min(deltaRaw * speed, 0.1)) : 0;
+    if (delta <= 0) return;
     const mesh = meshRef.current;
     if (!mesh?.parent) return;
-    const { origin, previous, orientation, parentOrientation, gravity } = scratch;
+    const { origin, previous, orientation, parentOrientation, sourceOrientation, gravity } = scratch;
+    mesh.parent.getWorldQuaternion(parentOrientation).invert();
+    if (sourceRoot) {
+      sourceRoot.updateWorldMatrix(true, false);
+      sourceRoot.getWorldQuaternion(sourceOrientation).premultiply(parentOrientation);
+    } else {
+      // Source Z-up to morphic Y-up. With an exported skeleton its root owns
+      // this conversion; local attachment vectors use the bone basis directly.
+      sourceOrientation.set(0.5, 0.5, 0.5, 0.5).invert();
+    }
+    gravity.set(...layer.gravity).multiplyScalar(sourceUnit).applyQuaternion(sourceOrientation);
+    orientation.copy(sourceOrientation);
+    origin.set(0, 0, 0);
     if (anchor) {
       anchor.updateWorldMatrix(true, false);
       anchor.getWorldPosition(origin);
       mesh.parent.worldToLocal(origin);
       anchor.getWorldQuaternion(orientation);
-      mesh.parent.getWorldQuaternion(parentOrientation).invert();
       orientation.premultiply(parentOrientation);
     }
-    if (!initialized.current) { previous.copy(origin); initialized.current = true; }
+    if (!initialized.current) { previous.copy(origin); scratch.previousOrientation.copy(orientation); initialized.current = true; }
     const list = particles.current;
-    if (layer.follow) for (const p of list) p.position.add(origin).sub(previous);
-    spawnAcc.current = Math.min(layer.maxParticles, spawnAcc.current + layer.emitRate * delta);
-    while (spawnAcc.current >= 1 && list.length < layer.maxParticles) {
-      spawnAcc.current -= 1;
-      const offset = new THREE.Vector3(Math.random()*2 - 1, Math.random()*2 - 1, Math.random()*2 - 1).normalize()
-        .multiplyScalar(Math.cbrt(Math.random()) * layer.spawnRadius);
-      offset.add(new THREE.Vector3(
+    if (layer.follow) {
+      scratch.deltaOrientation.copy(scratch.previousOrientation).invert().premultiply(orientation);
+      for (const p of list) {
+        if (layer.followRotation) {
+          p.position.sub(previous).applyQuaternion(scratch.deltaOrientation).add(origin);
+          p.velocity.applyQuaternion(scratch.deltaOrientation);
+        }
+        else p.position.add(origin).sub(previous);
+      }
+    }
+    // Remove spent slots before emission, and account only for the part of a
+    // frame after birth. Pausing freezes this clock and delayed emitters too.
+    const live = list.filter((p) => p.age + delta < p.life);
+    particles.current = live;
+    const births = advanceSpriteEmission(layer.emissions, emissionState.current, clock.current, clock.current + delta, layer.maxParticles - live.length);
+    clock.current += delta;
+    for (const birthAge of births) {
+      const z = Math.random()*2 - 1, angle = Math.random()*Math.PI*2;
+      const direction = new THREE.Vector3(Math.sqrt(1-z*z)*Math.cos(angle), Math.sqrt(1-z*z)*Math.sin(angle), z);
+      const distance = THREE.MathUtils.lerp(Math.min(layer.spawnRadiusMin, layer.spawnRadius), Math.max(layer.spawnRadiusMin, layer.spawnRadius), Math.cbrt(Math.random()));
+      const offset = direction.clone().multiplyScalar(distance*sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation);
+      const radius = sample(layer.radius)*sourceUnit;
+      const positionOffset = new THREE.Vector3(
         THREE.MathUtils.lerp(layer.offsetMin[0], layer.offsetMax[0], Math.random()),
         THREE.MathUtils.lerp(layer.offsetMin[1], layer.offsetMax[1], Math.random()),
         THREE.MathUtils.lerp(layer.offsetMin[2], layer.offsetMax[2], Math.random())
-      )).multiplyScalar(sourceUnit);
+      ).multiplyScalar(layer.offsetProportional ? radius : sourceUnit).applyQuaternion(layer.offsetLocal ? orientation : sourceOrientation);
+      offset.add(positionOffset);
+      const velocity = direction.multiplyScalar(sample(layer.speed)*sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation)
+        .add(new THREE.Vector3(
+          THREE.MathUtils.lerp(layer.localSpeedMin[0], layer.localSpeedMax[0], Math.random()),
+          THREE.MathUtils.lerp(layer.localSpeedMin[1], layer.localSpeedMax[1], Math.random()),
+          THREE.MathUtils.lerp(layer.localSpeedMin[2], layer.localSpeedMax[2], Math.random())
+        ).multiplyScalar(sourceUnit).applyQuaternion(orientation));
       const tint = new THREE.Color().setRGB(...layer.colorMin).lerp(new THREE.Color().setRGB(...layer.colorMax), Math.random());
-      list.push({ age: 0, life: sample(layer.lifetime), offset,
-        position: offset.clone().applyQuaternion(orientation).add(origin), velocity: new THREE.Vector3(),
-        radius: sample(layer.radius)*sourceUnit, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha) });
+      live.push({ age: birthAge-delta, life: sample(layer.lifetime),
+        position: offset.add(origin), velocity,
+        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha) });
     }
     const position = geometry.getAttribute('aPosition') as THREE.InstancedBufferAttribute;
     const color = geometry.getAttribute('aColor') as THREE.InstancedBufferAttribute;
@@ -148,26 +193,32 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     const alpha = geometry.getAttribute('aAlpha') as THREE.InstancedBufferAttribute;
     const rotation = geometry.getAttribute('aRotation') as THREE.InstancedBufferAttribute;
     let count = 0;
-    for (const p of list) {
+    for (const p of live) {
       p.age += delta;
       if (p.age >= p.life) continue;
-      p.velocity.addScaledVector(gravity, delta).multiplyScalar(Math.exp(-layer.drag*delta));
-      p.position.addScaledVector(p.velocity, delta);
-      p.rotation += p.spin*delta;
+      const step = Math.min(delta, p.age);
+      if (layer.movement) {
+        // Source's drag is fractional velocity loss per 1/30 second. Gravity
+        // adds after inertia decay, matching BasicMovement's position step.
+        p.velocity.multiplyScalar(Math.pow(1-layer.drag, 30*step)).addScaledVector(gravity, step);
+        p.position.addScaledVector(p.velocity, step);
+      }
+      p.rotation += p.spin*step;
       const t = p.age/p.life;
       scratch.color.copy(p.color);
-      if (layer.colorFade) scratch.color.lerp(new THREE.Color().setRGB(...layer.colorFade), t);
+      if (scratch.fadeColor) scratch.color.lerp(scratch.fadeColor, normalizedWindow(t, layer.colorFadeTime, layer.colorEase));
       position.setXYZ(count, p.position.x, p.position.y, p.position.z);
       color.setXYZ(count, scratch.color.r*layer.overbright, scratch.color.g*layer.overbright, scratch.color.b*layer.overbright);
-      radius.setX(count, p.radius*Math.max(0, ageCurveValue(layer.radiusCurve, t)));
-      alpha.setX(count, p.alpha*THREE.MathUtils.clamp(ageCurveValue(layer.alphaCurve, t), 0, 1));
+      radius.setX(count, Math.min(128*sourceUnit, p.radius*Math.max(0, ageCurveValue(layer.radiusCurve, t))));
+      alpha.setX(count, p.alpha*spriteFadeValue(layer.fade, t)*THREE.MathUtils.clamp(ageCurveValue(layer.alphaCurve, t), 0, 1));
       rotation.setX(count, p.rotation);
-      list[count++] = p;
+      live[count++] = p;
     }
-    list.length = count;
+    live.length = count;
     (mesh.geometry as THREE.InstancedBufferGeometry).instanceCount = count;
     for (const attr of [position, color, radius, alpha, rotation]) attr.needsUpdate = true;
     previous.copy(origin);
+    scratch.previousOrientation.copy(orientation);
   });
   if (layer.attachment && !anchor) return null;
   return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />;

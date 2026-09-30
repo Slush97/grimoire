@@ -37,12 +37,13 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
     class: String(renderer._class ?? ''), params: parameter(renderer) as Row,
     mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : 'unsupported',
     blendMode: typeof renderer.m_nOutputBlendMode === 'string' ? renderer.m_nOutputBlendMode : null,
-    textures: rows(renderer.m_vecTexturesInput).map((t) => t.m_hTexture)
+    textures: [...rows(renderer.m_vecTexturesInput).map((t) => t.m_hTexture), renderer.m_hTexture]
       .filter((t): t is string => typeof t === 'string' && /^materials\/[a-zA-Z0-9_./-]+\.vtex$/.test(t) && !t.includes('..')),
   }));
   return {
     name, maxParticles: Math.min(256, Math.max(1, Number(r.m_nMaxParticles) || 64)),
     constantRadius: parameter(r.m_flConstantRadius) as FxDescriptor['constantRadius'],
+    constantLifespan: parameter(r.m_flConstantLifespan) as FxDescriptor['constantLifespan'],
     constantColor: r.m_ConstantColor as number[],
     controlPoints: rows(r.m_controlPointConfigurations).flatMap((c) => rows(c.m_drivers)).map((cp) => ({
       cp: Number(cp.m_iControlPoint) || 0,
@@ -51,6 +52,7 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
       entity: typeof cp.m_entityName === 'string' ? cp.m_entityName : null,
     })),
     emitters: nodes(r.m_Emitters), initializers: nodes(r.m_Initializers), operators: nodes(r.m_Operators),
+    preEmissionOperators: nodes(r.m_PreEmissionOperators), forces: nodes(r.m_ForceGenerators), constraints: nodes(r.m_Constraints),
     renderers, children: [],
   };
 }

@@ -30,11 +30,14 @@ import { loadGltfPreview } from '../../lib/loadGltfPreview';
 import { prepareSource2VertexColors } from '../../lib/source2VertexColors';
 import { loadRiggedHeroPreview } from '../../lib/loadRiggedHeroPreview';
 import { ParticleEffect } from './ParticleEffect';
-import type { FxDescriptor } from './fxDescriptor';
+import { fxPreviewIssues, type FxDescriptor } from './fxDescriptor';
 import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
+import { ViewerBackdrop, ViewerBackdropControls } from './ViewerBackdrop';
+import { useViewerBackdrop } from '../../lib/useViewerBackdrop';
+import { clampAnimationTime, clampPlaybackSpeed, type HeroPlaybackProgress, type HeroPlaybackSeek } from '../../lib/heroViewerPlayback';
 import {
   isNprMaterial,
   isSelfIllumMaterial,
@@ -243,8 +246,8 @@ function enableVertexColors(scene: THREE.Object3D): void {
 
 /** Prefer an idle loop from the exported animation menu. */
 function pickIdleClip(clips: THREE.AnimationClip[]): THREE.AnimationClip | null {
-  return clips.find((c) => c.duration > 0.001 && /stand.*idle|idle.*stand/i.test(c.name))
-    ?? clips.find((c) => c.duration > 0.001) ?? null;
+  return clips.find((c) => Number.isFinite(c.duration) && c.duration > 0.001 && /stand.*idle|idle.*stand/i.test(c.name))
+    ?? clips.find((c) => Number.isFinite(c.duration) && c.duration > 0.001) ?? null;
 }
 
 /** Shared pointer-interaction state between OrbitControls and the model group:
@@ -375,10 +378,14 @@ export function RiggedModel({
   effect,
   clipName,
   playback,
+  seek,
+  progressRef,
   reset,
 }: {
   clipName: string;
   playback: { paused: boolean; speed: number };
+  seek?: HeroPlaybackSeek;
+  progressRef?: RefObject<HeroPlaybackProgress>;
   reset: number;
   scene: THREE.Object3D;
   clips: THREE.AnimationClip[];
@@ -389,6 +396,7 @@ export function RiggedModel({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const selectedClip = useMemo(() => clips.find((c) => c.name === clipName) ?? pickIdleClip(clips), [clips, clipName]);
 
   // Normalize from the BIND/rest pose, once. Force the skeleton to bind pose and
   // flush world matrices first so the AABB is the true rest extent and does not
@@ -425,22 +433,30 @@ export function RiggedModel({
       if (mesh.isSkinnedMesh && mesh.skeleton) mesh.skeleton.pose();
     });
     scene.updateWorldMatrix(true, true);
-  }, [scene, clipName]);
+  }, [scene, clipName, seek]);
 
-  const clothStep = useClothSim(scene, clothEnabled ? clothModel : null, clipName);
+  const clothResetKey = JSON.stringify([clipName, seek?.revision ?? 0]);
+  const clothStep = useClothSim(scene, clothEnabled ? clothModel : null, clothResetKey);
 
   // Register after cloth captures bind transforms. Applying time zero makes a
   // selected motion visible immediately, including while playback is paused.
   useEffect(() => {
-    const clip = clips.find((c) => c.name === clipName) ?? pickIdleClip(clips);
-    if (!clip) return;
+    const clip = selectedClip;
+    if (!clip) {
+      if (progressRef) progressRef.current = { time: 0, duration: 0 };
+      return;
+    }
     const mixer = new THREE.AnimationMixer(scene);
     mixerRef.current = mixer;
     const action = mixer.clipAction(clip);
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.clampWhenFinished = false;
     action.reset().play();
-    mixer.update(0);
+    const time = clampAnimationTime(seek?.time ?? 0, clip.duration);
+    // Repeat actions wrap at duration. Sample just inside the end so dragging
+    // the timeline to its last position shows the final pose, not time zero.
+    mixer.setTime(Math.min(time, Math.max(0, clip.duration - 1e-7)));
+    if (progressRef) progressRef.current = { time, duration: clip.duration };
     return () => {
       action.stop();
       mixer.stopAllAction();
@@ -448,12 +464,18 @@ export function RiggedModel({
       mixer.uncacheRoot(scene);
       mixerRef.current = null;
     };
-  }, [scene, clips, clipName]);
+  }, [scene, selectedClip, seek, progressRef]);
 
   // The cloth driver restores the clean pose before advancing animation. With
   // physics disabled it advances the mixer directly at the render frame rate.
   useFrame((_, delta) => {
-    if (!playback.paused) clothStep(delta * playback.speed, (dt) => { mixerRef.current?.update(dt); });
+    if (!playback.paused) clothStep(delta * clampPlaybackSpeed(playback.speed), (dt) => { mixerRef.current?.update(dt); });
+    const mixer = mixerRef.current;
+    const clip = selectedClip;
+    if (progressRef && mixer && clip && !playback.paused) {
+      progressRef.current.time = clampAnimationTime(mixer.existingAction(clip)?.time ?? 0, clip.duration);
+      progressRef.current.duration = clip.duration;
+    }
   });
 
   useTurntable(groupRef, interaction, reset);
@@ -463,7 +485,7 @@ export function RiggedModel({
       <group position={[-norm.center.x, -norm.center.y, -norm.center.z]}>
         <primitive object={scene} />
         {effect && (
-          <ParticleEffect descriptor={effect.descriptor} textureBaseUrl={effect.baseUrl} model={scene} playback={playback} />
+          <ParticleEffect key={`${clipName}:${seek?.revision ?? 0}`} descriptor={effect.descriptor} textureBaseUrl={effect.baseUrl} model={scene} playback={playback} />
         )}
       </group>
     </group>
@@ -973,14 +995,20 @@ export default function HeroPoseViewer({
   const [spinPaused, setSpinPaused] = useState(false);
   const [playback, setPlayback] = useState({ paused: false, speed: 1 });
   const [clipName, setClipName] = useState('');
+  const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
+  const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
   const [viewerScene, setViewerScene] = useState<HeroViewerScene>('midtown');
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
+  const backdrop = useViewerBackdrop();
+  const backdropError = backdrop.errorKey === 'locker.pose.backgroundTooLarge'
+    ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [failed, setFailed] = useState(false);
   const [effect, setEffect] = useState<EffectMount | null>(null);
   const [effectUnavailable, setEffectUnavailable] = useState(false);
+  const partialEffect = useMemo(() => effect ? fxPreviewIssues(effect.descriptor).length > 0 : false, [effect]);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
   const [devFlags, setDevFlags] = useState<DevPreviewFlags>(() => ({
     ...RELEASE_RENDER_FLAGS,
@@ -1058,6 +1086,8 @@ export default function HeroPoseViewer({
     setFailed(false);
     setScene(null);
     setClips([]);
+    setSeek((s) => ({ time: 0, revision: s.revision + 1 }));
+    playbackProgressRef.current = { time: 0, duration: 0 };
     setRigged(false);
     setClothModel(null);
 
@@ -1087,7 +1117,7 @@ export default function HeroPoseViewer({
                 throw new Error('Rigged preview GLB has no animated clip.');
               }
               loaded = gltf.scene;
-              setClips((gltf.animations ?? []).filter((c) => c.duration > 0.001));
+              setClips((gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001));
               setClipName(clip.name);
               setRigged(true);
               setClothModel(clothModel);
@@ -1192,11 +1222,21 @@ export default function HeroPoseViewer({
     <HeroViewerToolbar
       animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)} clip={clipName}
       paused={playback.paused} speed={playback.speed} spinPaused={spinPaused}
+      progressRef={playbackProgressRef} onSeek={(time) => {
+        setPlayback((p) => ({ ...p, paused: true }));
+        setSeek((s) => ({ time, revision: s.revision + 1 }));
+      }}
       cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} scene={viewerScene}
-      status={viewerError ?? (scene && features.clothPreviewEnabled && (!rigged || !clothModel)
+      backdropControls={<ViewerBackdropControls hasImage={!!backdrop.texture} loading={backdrop.loading}
+        onFile={(file) => {
+          if (viewerScene === 'transparent') setViewerScene('studio');
+          void backdrop.choose(file);
+        }} onClear={backdrop.clear} />}
+      status={viewerError ?? backdropError ?? (scene && features.clothPreviewEnabled && (!rigged || !clothModel)
         ? t('locker.pose.physicsUnavailable') : scene && features.riggedPreviewEnabled && !rigged
           ? t('locker.pose.animationUnavailable') : effectPreviewEnabled && (effectUnavailable || (scene && !rigged))
-            ? t('locker.pose.particlesUnavailable') : null)}
+            ? t('locker.pose.particlesUnavailable') : effectPreviewEnabled && partialEffect
+              ? t('locker.pose.particlesPartial') : null)}
       onAnimated={(v) => {
         if (!v) {
           writePreviewFlag('grimoire.preview.cloth', false);
@@ -1204,7 +1244,11 @@ export default function HeroPoseViewer({
         }
         setDevFlags((f) => ({ ...f, animated: v, cloth: v ? f.cloth : false, effects: v ? f.effects : false }));
       }}
-      onClip={setClipName} onPaused={(paused) => setPlayback((p) => ({ ...p, paused }))}
+      onClip={(name) => {
+        setClipName(name);
+        setSeek((s) => ({ time: 0, revision: s.revision + 1 }));
+        playbackProgressRef.current = { time: 0, duration: clips.find((c) => c.name === name)?.duration ?? 0 };
+      }} onPaused={(paused) => setPlayback((p) => ({ ...p, paused }))}
       onSpeed={(speed) => setPlayback((p) => ({ ...p, speed }))}
       onSpinPaused={(paused) => { interaction.current.paused = paused; setSpinPaused(paused); }}
       onCloth={(v) => setDevFlag('cloth', 'grimoire.preview.cloth', v)}
@@ -1229,32 +1273,11 @@ export default function HeroPoseViewer({
     />
   );
 
-  if (failed) {
-    return (
-      <>
-        <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
-        {toolbar}
-      </>
-    );
-  }
-
-  if (!scene) {
-    return (
-      <>
-        <HeroPoseLoadingState
-          generating={generating}
-          heroName={heroName}
-          skinSourceCount={skinSources.length}
-          t={t}
-        />
-        {toolbar}
-      </>
-    );
-  }
-
   return (
     <div ref={viewerRef} className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
-      <Canvas
+      {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
+        <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
+      ) : <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
         onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
         camera={{ position: [0, 0, 3.2], fov: 40 }}
@@ -1265,6 +1288,7 @@ export default function HeroPoseViewer({
           preserveDrawingBuffer: true,
         }}
       >
+        <ViewerBackdrop texture={viewerScene === 'transparent' ? null : backdrop.texture} />
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
@@ -1285,6 +1309,8 @@ export default function HeroPoseViewer({
             reset={resetView}
             clipName={clipName}
             playback={playback}
+            seek={seek}
+            progressRef={playbackProgressRef}
             scene={scene}
             clips={clips}
             interaction={interaction}
@@ -1324,7 +1350,7 @@ export default function HeroPoseViewer({
           />
         )}
         <Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} />
-      </Canvas>
+      </Canvas>}
       {toolbar}
       {import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer-debug') && (
         <DevViewerControls
@@ -1334,7 +1360,7 @@ export default function HeroPoseViewer({
           setBloomParams={setBloomParams}
         />
       )}
-      {import.meta.env.DEV && devFlags.matDebug && <MaterialDebugPanel scene={scene} />}
+      {scene && import.meta.env.DEV && devFlags.matDebug && <MaterialDebugPanel scene={scene} />}
     </div>
   );
 }

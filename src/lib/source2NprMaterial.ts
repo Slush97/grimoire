@@ -3,6 +3,7 @@ import CustomShaderMaterial, { type CSMPatchMap } from 'three-custom-shader-mate
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
+import { decodedAlbedoAverage, source2TintPlan, SOURCE2_SATURATION_WEIGHTS } from './source2ColorCorrection';
 
 /**
  * Source 2 NPR (cel / rim / tint) restyle for the Locker hero preview.
@@ -103,6 +104,10 @@ export interface MorphicExtras {
   /** v2: entity/scene attributes the expressions read. */
   render_attributes_used?: string[];
   resolvedTextures?: Record<string, THREE.Texture>;
+  /** Optional future exporter metadata: linear VTEX header reflectivity by slot. */
+  texture_reflectivity?: Record<string, number[]>;
+  /** Preview-only decoded top-mip estimate for older exports without that header. */
+  preview_albedo_average?: number[];
 }
 
 /**
@@ -383,6 +388,18 @@ export async function resolveMorphicTextures(gltf: GLTF): Promise<void> {
     (Array.isArray(mat) ? mat : [mat]).forEach((m) => materials.add(m));
   });
 
+  for (const material of materials) {
+    const morphic = getMorphic(material);
+    if (!morphic || morphic.shader.toLowerCase() !== 'pbr.vfx') continue;
+    const standard = material as THREE.MeshStandardMaterial;
+    if (!standard.color) continue;
+    const tint = source2TintPlan(morphic, standard.color);
+    if (tint.ownsExportedFactor) standard.color.copy(tint.linearTint);
+    if (!morphic.texture_reflectivity?.g_tColor && !morphic.preview_albedo_average) {
+      const average = decodedAlbedoAverage(standard.map);
+      if (average) morphic.preview_albedo_average = average.toArray();
+    }
+  }
   const targets = [...materials].filter((m) => getMorphic(m)?.textures);
   if (targets.length === 0) return;
 
@@ -465,11 +482,20 @@ export function isSelfIllumMaterial(mat: THREE.Material): boolean {
 export function albedoCsb(morphic: MorphicExtras): { vec: THREE.Vector3; has: number } {
   const c = morphic.vectors?.g_vAlbedoContrastSaturationBrightness1;
   const identity =
+    !!morphic.dynamic_params?.g_vAlbedoContrastSaturationBrightness1 ||
     !c ||
     (Math.abs((c[0] ?? 1) - 1) < 1e-4 &&
       Math.abs((c[1] ?? 1) - 1) < 1e-4 &&
       Math.abs((c[2] ?? 1) - 1) < 1e-4);
   return { vec: new THREE.Vector3(c?.[0] ?? 1, c?.[1] ?? 1, c?.[2] ?? 1), has: identity ? 0 : 1 };
+}
+
+/** Header values are already linear. Legacy decoded averages are an explicit
+ * estimate, and the missing-texture fallback follows VRF's white default. */
+export function albedoReflectivity(morphic: MorphicExtras): THREE.Vector3 {
+  const value = morphic.texture_reflectivity?.g_tColor ?? morphic.preview_albedo_average;
+  return value && value.length >= 3 && value.slice(0, 3).every(Number.isFinite)
+    ? new THREE.Vector3(value[0], value[1], value[2]) : new THREE.Vector3(1, 1, 1);
 }
 
 /** Deadlock pbr.vfx applies vertex tint before or after its color correction,
@@ -478,7 +504,9 @@ export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THR
   const pbr = morphic.shader.toLowerCase() === 'pbr.vfx';
   return {
     uVertexColorBeforeCsb: { value: !pbr || flag(morphic, 'g_bApplyTintToVertexColors') ? 1 : 0 },
-    uMaskVertexColor: { value: pbr && flag(morphic, 'g_bMaskVertexColorTint1') ? 1 : 0 },
+    uMaskVertexColor: { value: pbr && scalar(morphic.ints?.g_bMaskVertexColorTint1, 1) !== 0 ? 1 : 0 },
+    uMaskSource2ColorTint: { value: pbr && scalar(morphic.ints?.g_bMaskColorTint1, 1) !== 0 ? 1 : 0 },
+    uAlbedoReflectivity: { value: albedoReflectivity(morphic) },
     uVertexColorStrength: { value: pbr ? firstNumber(morphic, ['g_fVertexColorStrength1'], 1) : 1 },
     uCitadelSpecular: { value: pbr ? 1 : 0 },
     uNoSpecularAtFullRoughness: {
@@ -1063,6 +1091,10 @@ uniform float uSelfIllumMaskShaping;
 uniform float uSelfIllumMaskLow;
 uniform float uSelfIllumMaskHigh;
 uniform vec3  uAlbedoCSB;
+uniform vec3  uAlbedoReflectivity;
+uniform mat3  uSource2ColorTint;
+uniform vec3  uSource2ColorTintOffset;
+uniform float uMaskSource2ColorTint;
 uniform float uHasAlbedoCSB;
 uniform sampler2D uNprTransmissiveColor;
 uniform vec3  uNprTransmissiveTint;
@@ -1114,16 +1146,13 @@ float celQuantize(float x, float bands, float sharp) {
   return (lower + soft) / bands;
 }
 
-// Pre-light albedo contrast/saturation/brightness (g_vAlbedoContrastSaturationBrightness1
-// = [contrast, saturation, brightness]). Source 2 pbr.vfx order: brightness, then
-// saturation (lerp from luma), then contrast (lerp about mid-grey). Linear, no clamp -
-// the tonemap downstream handles overbright (viscous brightness 1.6).
-vec3 applyAlbedoCSB(vec3 c, vec3 csb) {
+// MatrixColorCorrect2 in linear RGB: contrast about texture reflectivity,
+// brightness, then its luminance-axis saturation transform. No clamp.
+vec3 applyAlbedoCSB(vec3 c, vec3 csb, vec3 reflectivity) {
+  c = (c - reflectivity) * csb.x + reflectivity;
   c *= csb.z;
-  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c = mix(vec3(l), c, csb.y);
-  c = mix(vec3(0.5), c, csb.x);
-  return c;
+  float l = dot(c, vec3(${SOURCE2_SATURATION_WEIGHTS.map((v) => v.toPrecision(12)).join(', ')}));
+  return mix(vec3(l), c, csb.y);
 }
 
 vec2 rotateDetailUv(vec2 uv, float angle) {
@@ -1160,6 +1189,19 @@ void main() {
       if (uApplyVertexColor > 0.5) csm_DiffuseColor.a *= vColor.a;
     #endif
   #endif
+  if (uHasAlbedoCSB > 0.5) {
+    csm_DiffuseColor.rgb = applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB, uAlbedoReflectivity);
+  }
+  float source2TintAmount = uMaskSource2ColorTint > 0.5 ? nprMask.r : 1.0;
+  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb,
+    uSource2ColorTint * csm_DiffuseColor.rgb + uSource2ColorTintOffset, source2TintAmount);
+  // Live recolor is linear and independent of the authored texture tint.
+  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, csm_DiffuseColor.rgb * uTintColor, tintEnable);
+  #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+    if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5) {
+      csm_DiffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
+    }
+  #endif
   // Detail (F5): apply only when CPU-side authoring + placeholder gates enabled
   // it. Add-self-illum mode is deferred to the post-light emission branch below.
   if (uHasDetail > 0.5) {
@@ -1174,21 +1216,7 @@ void main() {
       );
     }
   }
-  // uTintColor defaults to white (identity); it is driven only by an external
-  // recolor override. The authoring tint g_vColorTint1 is already baked into the
-  // base color factor by vpkmerge, so it must NOT be re-applied here.
-  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, csm_DiffuseColor.rgb * uTintColor, tintEnable);
-  // CSB (NPR plan D2): pre-light albedo shaping. Gated so [1,1,1] heroes are
-  // byte-unchanged. Runs after the recolor tint (engine order: tint then CSB) and
-  // before lighting, so the self-illum albedo mix downstream sees the shaped albedo.
-  if (uHasAlbedoCSB > 0.5) {
-    csm_DiffuseColor.rgb = applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB);
-  }
-  #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
-    if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5) {
-      csm_DiffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
-    }
-  #endif
+
 }
 `;
 
@@ -1249,13 +1277,12 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       #include <opaque_fragment>
       {
         vec3 nprLit = gl_FragColor.rgb;
-        #ifdef FLAT_SHADED
-          vec3 nprN = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
-        #else
-          vec3 nprN = normalize(vNormal);
-        #endif
+        // Three's final normal already includes normal maps, flat-shading and
+        // backface handling, all in view space. Transform the world key direction
+        // into that same space once, so orbiting cannot rotate the light gate.
+        vec3 nprN = normal;
         vec3 nprV = normalize(vViewPosition);
-        vec3 nprL = normalize(uKeyDir);
+        vec3 nprL = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
 
         // Cel posterize + rim are NPR-only. A non-NPR material (uNprCel = 0, e.g.
         // familiar eyes: F_USE_NPR_LIGHTING off but F_SELF_ILLUM on) passes its lit
@@ -1271,8 +1298,9 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float nprQ = celQuantize(clamp(nprLum, 0.0, 1.0), uBands, uStepSharpness);
             nprCel = nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0);
           }
-          // Rim: fresnel edge, gated to the lit hemisphere, modulated by mask G (or
-          // the default when no mask).
+          // Preview approximation: view Fresnel gated by a key light and mask G.
+          // Source's NPR rim instead needs per-light evaluation, an authored up
+          // ramp, AO and scene globals the current export does not supply.
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
           float nprFres = pow(clamp(1.0 - abs(dot(nprN, nprV)), 0.0, 1.0), uRimPower);
           float nprGate = smoothstep(-uWrap, 1.0, dot(nprN, nprL));
@@ -1363,16 +1391,24 @@ export function wrapMaterialWithNpr(
 ): NprWrapResult | null {
   if (!isNprMaterial(base)) return null;
   const morphic = getMorphic(base)!;
+  const standard = base as THREE.MeshStandardMaterial & { __nprPrevColor?: THREE.Color };
+  const tintPlan = source2TintPlan(morphic, standard.__nprPrevColor ?? standard.color);
+  if (tintPlan.ownsExportedFactor) {
+    standard.__nprPrevColor ??= tintPlan.linearTint.clone();
+    standard.color.setRGB(1, 1, 1);
+  }
 
-  const tintMask = morphic.resolvedTextures?.g_tTintMaskRimLightMask ?? null;
+
+  const sharedTintMask = morphic.resolvedTextures?.g_tTintMaskRimLightMask ?? morphic.resolvedTextures?.g_tTintMask ?? null;
+  const tintMask = sharedTintMask?.clone() ?? null;
   const sharedTransmissive = morphic.resolvedTextures?.g_tNprTransmissiveColor;
   const transmissiveMap = isMeaningfulMask(sharedTransmissive) ? sharedTransmissive.clone() : null;
   if (transmissiveMap) {
     transmissiveMap.colorSpace = THREE.SRGBColorSpace;
     transmissiveMap.needsUpdate = true;
   }
-  // Default to white (identity). g_vColorTint1 is already baked into the base
-  // color factor by vpkmerge; re-reading it here would double-apply the tint.
+  // The authored tint has its own matrix after correction. This uniform is
+  // only the independent, live recolor override.
   const tintColor = tintOverride ?? new THREE.Color(1, 1, 1);
 
   // Self-illum: only a REAL mask animates (placeholder 4x4 gate, same as the hints
@@ -1438,6 +1474,8 @@ export function wrapMaterialWithNpr(
     uHasTintMask: { value: tintMask ? 1.0 : 0.0 },
     uApplyVertexColor: { value: requiresVertexColors(morphic) ? 1.0 : 0.0 },
     ...citadelColorUniforms(morphic),
+    uSource2ColorTint: { value: tintPlan.matrix },
+    uSource2ColorTintOffset: { value: tintPlan.offset },
     uTime: { value: 0 },
     uSelfIllumMap: { value: hasSelfIllum ? selfIllumMap : whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },
@@ -1523,7 +1561,12 @@ export function unwrapNprBase(mat: THREE.Material): void {
   const m = mat as THREE.Material & {
     __csm?: { prevOnBeforeCompile?: THREE.Material['onBeforeCompile'] };
     __nprPrevEmissiveIntensity?: number;
+    __nprPrevColor?: THREE.Color;
   };
+  if (m.__nprPrevColor) {
+    (mat as THREE.MeshStandardMaterial).color.copy(m.__nprPrevColor);
+    delete m.__nprPrevColor;
+  }
   // Restore the baked emissive the NPR self-illum path zeroed (see wrapMaterialWithNpr).
   if (m.__nprPrevEmissiveIntensity !== undefined) {
     (mat as THREE.MeshStandardMaterial).emissiveIntensity = m.__nprPrevEmissiveIntensity;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
   NPR_FRAGMENT,
@@ -36,7 +36,7 @@ describe('NPR_FRAGMENT vertex colors', () => {
     const colorGuard = '#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )';
     const before = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5)';
     const after = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5)';
-    const csbApply = 'applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB)';
+    const csbApply = 'applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB, uAlbedoReflectivity)';
 
     expect(NPR_FRAGMENT).toContain(colorGuard);
     expect(NPR_FRAGMENT.indexOf(before)).toBeLessThan(NPR_FRAGMENT.indexOf(csbApply));
@@ -284,6 +284,19 @@ describe('highlightLayer', () => {
     );
     expect(NPR_FRAGMENT).not.toContain('vNprWorldPosition');
     expect(NPR_FRAGMENT).not.toContain('uHighlightPositionWs');
+  });
+
+  it('owns a tint-mask clone without disposing the shared resolved sampler', () => {
+    const shared = texture(8);
+    const disposed = vi.spyOn(shared, 'dispose');
+    const base = new THREE.MeshStandardMaterial();
+    base.userData.morphic = morphic({ ints: { F_USE_NPR_LIGHTING: 1 }, resolvedTextures: { g_tTintMaskRimLightMask: shared } });
+    const result = wrapMaterialWithNpr(base)!;
+    expect(result.uniforms.uTintRimMask.value).not.toBe(shared);
+    expect(result.ownedTextures).toContain(result.uniforms.uTintRimMask.value);
+    result.ownedTextures.forEach((t) => t.dispose());
+    result.material.dispose();
+    expect(disposed).not.toHaveBeenCalled();
   });
 
   it('keeps legacy wrapper highlight uniforms identity even with authored F6 params', () => {
@@ -601,5 +614,32 @@ describe('NPR self-illum hue-preserving cap', () => {
     expect(patch).toContain('float detailGate = smoothstep');
     expect(patch).toContain('float headRegion = smoothstep(70.0, 78.0, vNprSourcePosition.z)');
     expect(patch).toContain('rawSiMask * rawSiMask * 8192.0 * inkGate');
+  });
+});
+
+
+describe('NPR preview light coordinate space', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+  it('uses the final view-space mapped normal and transforms the world key once', () => {
+    expect(patch).toContain('vec3 nprN = normal;');
+    expect(patch).toContain('vec3 nprL = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);');
+    expect(patch).not.toContain('vec3 nprN = normalize(vNormal)');
+    expect(patch).not.toContain('vec3 nprL = normalize(uKeyDir)');
+    // A direction has w=0, so camera translation must not affect the gate.
+    expect(patch).not.toContain('vec4(uKeyDir, 1.0)');
+  });
+  it('keeps the light-normal gate invariant under camera orbit and translation', () => {
+    const normalWorld = new THREE.Vector3(0.2, 0.8, 0.5).normalize();
+    const lightWorld = new THREE.Vector3(3, 5, 4).normalize();
+    const expected = normalWorld.dot(lightWorld);
+    for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 3]) {
+      const camera = new THREE.PerspectiveCamera();
+      camera.position.set(Math.sin(yaw) * 4, 2, Math.cos(yaw) * 4);
+      camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+      const rotation = new THREE.Matrix3().setFromMatrix4(camera.matrixWorldInverse);
+      const normalView = normalWorld.clone().applyMatrix3(rotation).normalize();
+      const lightView = lightWorld.clone().applyMatrix3(rotation).normalize();
+      expect(normalView.dot(lightView)).toBeCloseTo(expected, 12);
+    }
   });
 });

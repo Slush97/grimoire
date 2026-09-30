@@ -88,6 +88,49 @@ describe('rigged preview motion lifecycle', () => {
     expect(end.position.toArray()).toEqual([1, 0, 0]);
   });
 
+  it.each([false, true])('seeks forward and backward while paused, then resumes cleanly with cloth=%s', async (clothEnabled) => {
+    const { scene, tip, end, model, clips } = makeRig();
+    const progressRef = { current: { time: 0, duration: 0 } };
+    const props = { scene, clips, clipName: 'first', reset: 0, clothModel: model, clothEnabled,
+      interaction: { current: { dragging: false, paused: true } }, progressRef };
+    const renderer = await ReactThreeTestRenderer.create(
+      <RiggedModel {...props} playback={{ paused: false, speed: 1 }} />,
+    );
+    await renderer.advanceFrames(10, CLOTH_TIMESTEP);
+    await renderer.update(
+      <RiggedModel {...props} seek={{ time: 0.75, revision: 1 }} playback={{ paused: true, speed: 1 }} />,
+    );
+    expect(tip.position.toArray()).toEqual([1, 0.75, 0]);
+    expect(end.position.toArray()).toEqual([1, 0, 0]);
+    expect(progressRef.current).toEqual({ time: 0.75, duration: 1 });
+    await renderer.advanceFrames(3, CLOTH_TIMESTEP);
+    expect(tip.position.y).toBe(0.75);
+    const seek = { time: 0.25, revision: 2 };
+    await renderer.update(
+      <RiggedModel {...props} seek={seek} playback={{ paused: true, speed: 1 }} />,
+    );
+    expect(tip.position.toArray()).toEqual([1, 0.25, 0]);
+    await renderer.update(
+      <RiggedModel {...props} seek={seek} playback={{ paused: false, speed: 1 }} />,
+    );
+    await renderer.advanceFrames(1, CLOTH_TIMESTEP);
+    expect(tip.position.y).toBeCloseTo(0.25 + CLOTH_TIMESTEP - (clothEnabled ? 360 * CLOTH_TIMESTEP ** 2 : 0));
+    expect(progressRef.current.time).toBeCloseTo(0.25 + CLOTH_TIMESTEP);
+    await renderer.unmount();
+    expect(tip.position.toArray()).toEqual([1, 0, 0]);
+  });
+
+  it('clamps out-of-range seeks and holds the final pose rather than wrapping', async () => {
+    const { scene, tip, clips } = makeRig();
+    const props = { scene, clips, clipName: 'first', reset: 0, clothModel: null, clothEnabled: false,
+      interaction: { current: { dragging: false, paused: true } }, playback: { paused: true, speed: 1 } };
+    const renderer = await ReactThreeTestRenderer.create(<RiggedModel {...props} seek={{ time: 999, revision: 1 }} />);
+    expect(tip.position.y).toBeCloseTo(1);
+    await renderer.update(<RiggedModel {...props} seek={{ time: -5, revision: 2 }} />);
+    expect(tip.position.y).toBe(0);
+    await renderer.unmount();
+  });
+
   it('keeps paused first-frame animation through StrictMode effect replay', async () => {
     const { scene, tip, model, clips } = makeRig();
     const renderer = await ReactThreeTestRenderer.create(

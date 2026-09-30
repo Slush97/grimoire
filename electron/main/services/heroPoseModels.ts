@@ -325,7 +325,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 
 /** Bump when descriptors or bundled textures change. v2 reads generic KV3 DATA
  * through the pinned decoder and exports textures with Panorama dump. */
-const EFFECT_CACHE_VERSION = '2';
+// v3: retain lifespan, legacy sprite texture and unsupported stages for diagnostics.
+const EFFECT_CACHE_VERSION = '3';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1073,7 +1074,7 @@ export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInf
 const inFlightEffectExports = new Map<string, Promise<HeroEffectInfo>>();
 
 /**
- * Generate a hero's ambient FX bundle by running the bundled `vpkmerge particle`:
+ * Generate a hero's ambient FX bundle through the bundled vpkmerge KV3 reader:
  * the normalized descriptor (`effect.json`) plus every referenced texture decoded
  * to PNG (`effect-tex/`), both served over the `grimoire-hero:` scheme. Reads
  * straight from the base pak (ambient VFX is not skin-specific). No-op result for

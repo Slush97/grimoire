@@ -27,6 +27,7 @@ import {
   citadelColorUniforms,
 } from './source2NprMaterial';
 import { compileScalarExpr, peakScalar } from './dynamicScalar';
+import { source2TintPlan } from './source2ColorCorrection';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
 
@@ -230,6 +231,8 @@ export function buildDeadlockMaterial(
   const physical = needsPhysical(morphic, base);
   const clone = cloneOwned(base, physical);
   const phys = clone as THREE.MeshPhysicalMaterial;
+  const tintPlan = source2TintPlan(morphic, clone.color);
+  if (tintPlan.ownsExportedFactor) clone.color.setRGB(1, 1, 1);
   // requiresVertexColors checks F_VERTEX_COLOR / F_PAINT_VERTEX_COLORS. The vpkmerge
   // GLB exporter writes COLOR_n on a SUPERSET of those flags (also the tint-mask
   // bools), so vertexColors=true here always implies the geometry shipped a COLOR_0
@@ -388,9 +391,9 @@ export function buildDeadlockMaterial(
   clone.needsUpdate = true;
 
   // --- CSM uniforms (cel + rim + tint + self-illum scroll). ------------------
-  // Default tint is white (identity); g_vColorTint1 is already baked into the
-  // base color factor by vpkmerge, so it must NOT be re-applied here.
-  const sharedTint = morphic.resolvedTextures?.g_tTintMaskRimLightMask;
+  // The proven exported factor was removed from our owned clone above. Its
+  // linear authored tint matrix runs after correction; this is only live recolor.
+  const sharedTint = morphic.resolvedTextures?.g_tTintMaskRimLightMask ?? morphic.resolvedTextures?.g_tTintMask;
   const tintMask = sharedTint ? ownClone(sharedTint) : null;
   const tintColor = tintOverride ?? new THREE.Color(1, 1, 1);
   const sharedTransmissive = morphic.resolvedTextures?.g_tNprTransmissiveColor;
@@ -475,6 +478,8 @@ export function buildDeadlockMaterial(
     uHasTintMask: { value: tintMask ? 1.0 : 0.0 },
     uApplyVertexColor: { value: requiresVertexColors(morphic) ? 1.0 : 0.0 },
     ...citadelColorUniforms(morphic),
+    uSource2ColorTint: { value: tintPlan.matrix },
+    uSource2ColorTintOffset: { value: tintPlan.offset },
     uTime: { value: 0 },
     uSelfIllumMap: { value: illumMap ?? whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },

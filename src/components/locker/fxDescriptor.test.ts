@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ageCurveValue, allSpriteLayers, paramRange, spriteParamsFor, type FxDescriptor } from './fxDescriptor';
+import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxPreviewIssues, normalizedWindow, paramRange, spriteFadeValue,
+  spriteParamsFor, type FxDescriptor, type SpriteEmissionState } from './fxDescriptor';
 const descriptor = (): FxDescriptor => ({
   name: 'sprite', maxParticles: 64, constantRadius: 15, constantColor: [255, 0, 0],
   controlPoints: [{ cp: 2, attachment: 'ability_cast', attachType: 'PATTACH_POINT_FOLLOW', entity: 'self' }],
@@ -41,5 +42,63 @@ describe('authored sprite attributes', () => {
     const d = descriptor(); d.maxParticles = 256; d.children = Array.from({ length: 16 }, () => ({ ...descriptor(), maxParticles: 256 }));
     expect(allSpriteLayers(d).reduce((sum, layer) => sum + layer.maxParticles, 0)).toBe(512);
     expect(paramRange(NaN, [1, 2])).toEqual([1, 2]); expect(paramRange({ min: 3, max: 2 }, [0, 0])).toEqual([2, 3]);
+  });
+  it('uses authored constants, local velocity and timed fade windows', () => {
+    const d = descriptor(); d.initializers = [{ class: 'C_INIT_CreateWithinSphereTransform', params: {
+      m_fRadiusMin: 2, m_fRadiusMax: 4, m_fSpeedMin: 10, m_fSpeedMax: 20, m_bLocalCoords: true,
+      m_LocalCoordinateSystemSpeedMin: [0, 5, 0], m_LocalCoordinateSystemSpeedMax: [0, 8, 0],
+    } }];
+    d.constantLifespan = 4;
+    d.operators = [{ class: 'C_OP_ColorInterpolate', params: { m_flFadeStartTime: 0.2, m_flFadeEndTime: 0.8 } },
+      { class: 'C_OP_FadeAndKill', params: { m_flStartAlpha: 0, m_flEndFadeInTime: 0.2, m_flStartFadeOutTime: 0.8 } }];
+    const p = spriteParamsFor(d)!;
+    expect(p.lifetime).toEqual([4, 4]); expect(p.speed).toEqual([10, 20]); expect(p.spawnLocal).toBe(true);
+    expect(p.spawnRadiusMin).toBe(2); expect(p.localSpeedMax).toEqual([0, 8, 0]);
+    expect(p.colorFadeTime).toEqual([0.2, 0.8]);
+    expect(spriteFadeValue(p.fade, 0)).toBe(0);
+    expect(spriteFadeValue(p.fade, 0.1)).toBeCloseTo(0.5);
+    expect(spriteFadeValue(p.fade, 0.5)).toBe(1);
+    expect(spriteFadeValue(p.fade, 0.9)).toBeCloseTo(0.5);
+    expect(spriteFadeValue(p.fade, 1)).toBe(0);
+    expect(normalizedWindow(0.2, [0.2, 0.8])).toBe(0);
+    expect(normalizedWindow(0.8, [0.2, 0.8])).toBe(1);
+  });
+  it('respects start/duration boundaries, delayed bursts and frame caps', () => {
+    const d = descriptor(); d.emitters = [
+      { class: 'C_OP_ContinuousEmitter', params: { m_flEmitRate: 20, m_flStartTime: 0.1, m_flEmissionDuration: 0.1 } },
+      { class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 3, m_flStartTime: 0.2, m_nMaxEmittedPerFrame: 2 } },
+    ];
+    const emissions = spriteParamsFor(d)!.emissions, state: SpriteEmissionState[] = [];
+    expect(advanceSpriteEmission(emissions, state, 0, 0.05, 64)).toEqual([]);
+    expect(advanceSpriteEmission(emissions, state, 0.05, 0.15, 64)).toHaveLength(1);
+    const boundary = advanceSpriteEmission(emissions, state, 0.15, 0.25, 64);
+    expect(boundary).toHaveLength(3);
+    for (const age of boundary) expect(age).toBeCloseTo(0.05);
+    expect(advanceSpriteEmission(emissions, state, 0.25, 0.3, 64)).toEqual([0.3 - 0.2]);
+    expect(advanceSpriteEmission(emissions, state, 0.3, 1, 64)).toEqual([]);
+  });
+  it('drops continuous emission debt when the particle budget is full', () => {
+    const d = descriptor(); d.emitters[0].params = { m_flEmitRate: 100 };
+    const emissions = spriteParamsFor(d)!.emissions, state: SpriteEmissionState[] = [];
+    expect(advanceSpriteEmission(emissions, state, 0, 0.1, 0)).toEqual([]);
+    expect(advanceSpriteEmission(emissions, state, 0.1, 0.11, 64)).toHaveLength(1);
+    expect(paramRange({ pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', min: 5, max: 10 }, [0, 0])).toEqual([0, 0]);
+  });
+  it('reports unsupported operators, renderers and providers in bounded diagnostics', () => {
+    const d = descriptor();
+    d.operators.push({ class: 'C_OP_AttractToControlPoint', params: {} });
+    d.emitters[0].params.m_flEmitRate = { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', cp: 2 };
+    expect(spriteParamsFor(d)!.emitRate).toBe(0);
+    d.renderers.push({ class: 'C_OP_RenderRopes', params: {}, mode: 'unsupported', blendMode: null, textures: [] });
+    d.forces = [{ class: 'C_OP_TurbulenceForce', params: {} }];
+    expect(fxPreviewIssues(d)).toEqual(expect.arrayContaining([
+      { system: 'sprite', class: 'C_OP_AttractToControlPoint', reason: 'unsupported-class' },
+      { system: 'sprite', class: 'C_OP_RenderRopes', reason: 'unsupported-class' },
+      { system: 'sprite', class: 'C_OP_ContinuousEmitter', reason: 'unsupported-input' },
+      { system: 'sprite', class: 'C_OP_TurbulenceForce', reason: 'unsupported-class' },
+    ]));
+    d.children = [d];
+    expect(fxPreviewIssues(d).length).toBeLessThan(128);
+    expect(ageCurveValue({ pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED', curve: { m_spline: {} } }, 0.5)).toBe(1);
   });
 });

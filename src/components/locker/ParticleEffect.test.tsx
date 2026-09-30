@@ -52,4 +52,94 @@ describe('particle playback and model units', () => {
     expect(disposeGeometry).toHaveBeenCalled(); expect(disposeMaterial).toHaveBeenCalled();
     vi.restoreAllMocks();
   });
+  it('distinguishes Source world offsets from local attachment velocity under rotated roots', async () => {
+    const model = new THREE.Group();
+    const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    skeleton.rotation.z = Math.PI/2;
+    const hand = new THREE.Bone(); hand.name = 'ability_cast'; hand.rotation.y = Math.PI/2;
+    skeleton.add(hand); model.add(skeleton);
+    const d: FxDescriptor = { ...descriptor,
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      operators: [{ class: 'C_OP_BasicMovement', params: {} }],
+      initializers: [
+        { class: 'C_INIT_PositionOffset', params: { m_OffsetMin: [4, 0, 0], m_OffsetMax: [4, 0, 0] } },
+        { class: 'C_INIT_CreateWithinSphereTransform', params: {
+          m_TransformInput: { m_nControlPoint: 2 },
+          m_LocalCoordinateSystemSpeedMin: [10, 0, 0], m_LocalCoordinateSystemSpeedMax: [10, 0, 0],
+        } },
+      ],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} />
+      <ParticleEffect descriptor={d} textureBaseUrl="/" model={model} />
+    </group>);
+    try {
+      await renderer.advanceFrames(1, 0.05);
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      expect(p.getX(0)).toBeCloseTo(0);
+      expect(p.getY(0)).toBeCloseTo(4*0.0254);
+      expect(p.getZ(0)).toBeCloseTo(-0.5*0.0254);
+      await renderer.advanceFrames(1, 0.05);
+      expect(p.getZ(0)).toBeCloseTo(-1*0.0254);
+    } finally { await renderer.unmount(); }
+  });
+  it('freezes delayed emitters while paused and resets their clocks when a descriptor changes', async () => {
+    const delayed: FxDescriptor = { ...descriptor, controlPoints: [],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_flStartTime: 0.2, m_nParticlesToEmit: 2 } }],
+    };
+    const render = (paused: boolean, d = delayed) => <ParticleEffect descriptor={d} textureBaseUrl="/" playback={{ paused, speed: 1 }} />;
+    const renderer = await ReactThreeTestRenderer.create(render(false));
+    try {
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      await renderer.advanceFrames(2, 0.05);
+      expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(0);
+      await renderer.update(render(true));
+      await renderer.advanceFrames(30, 0.05);
+      expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(0);
+      await renderer.update(render(false));
+      await renderer.advanceFrames(2, 0.05);
+      expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(2);
+      await renderer.update(render(false, { ...delayed, name: 'replacement' }));
+      await renderer.advanceFrames(1, 0.05);
+      expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(0);
+    } finally { await renderer.unmount(); }
+  });
+  it('honors movement operators and Source drag while full rotation locks preserve local offsets', async () => {
+    const model = new THREE.Group();
+    const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    const hand = new THREE.Bone(); hand.name = 'ability_cast'; skeleton.add(hand); model.add(skeleton);
+    const d: FxDescriptor = { ...descriptor,
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      initializers: [
+        { class: 'C_INIT_PositionOffset', params: { m_bLocalCoords: true, m_OffsetMin: [4, 0, 0], m_OffsetMax: [4, 0, 0] } },
+        { class: 'C_INIT_CreateWithinSphereTransform', params: {
+          m_TransformInput: { m_nControlPoint: 2 },
+          m_LocalCoordinateSystemSpeedMin: [10, 0, 0], m_LocalCoordinateSystemSpeedMax: [10, 0, 0],
+        } },
+      ],
+      operators: [{ class: 'C_OP_PositionLock', params: { m_bLockRot: true } }],
+    };
+    const render = (effect: FxDescriptor) => <group><primitive object={model} />
+      <ParticleEffect descriptor={effect} textureBaseUrl="/" model={model} />
+    </group>;
+    const renderer = await ReactThreeTestRenderer.create(render(d));
+    try {
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo(4*0.0254);
+      hand.rotation.z = Math.PI/2;
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo(0); expect(p.getY(0)).toBeCloseTo(4*0.0254);
+      hand.rotation.z = 0;
+      await renderer.update(render({ ...d, operators: [{ class: 'C_OP_BasicMovement', params: { m_fDrag: 0.5 } }] }));
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo((4 + 5/30)*0.0254);
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo((4 + 5/30 + 2.5/30)*0.0254);
+    } finally { await renderer.unmount(); }
+  });
 });

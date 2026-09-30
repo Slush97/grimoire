@@ -16,6 +16,21 @@ describe('compiled particle export', () => {
     expect(d.initializers[1].params.m_OffsetMin).toEqual([0, -5, 0]);
     expect(() => particleDescriptor({ _class: 'SoundEvent' }, 'test')).toThrow('Not a compiled');
   });
+  it('preserves lifespan, older texture fields and unsupported stages for diagnostics', () => {
+    const d = particleDescriptor(resource({ m_flConstantLifespan: { m_nType: 'PF_TYPE_LITERAL', m_flLiteralValue: 3 },
+      m_Renderers: [{ _class: 'C_OP_RenderSprites', m_hTexture: 'materials/particle/glow.vtex' },
+        { _class: 'C_OP_RenderSprites', m_hTexture: '../escape.vtex' }],
+      m_PreEmissionOperators: [{ _class: 'C_OP_SetControlPointToPlayer' }],
+      m_ForceGenerators: [{ _class: 'C_OP_TurbulenceForce' }],
+      m_Constraints: [{ _class: 'C_OP_WorldCollideConstraint' }],
+    }), 'test');
+    expect(d.constantLifespan).toBe(3);
+    expect(d.renderers[0].textures).toEqual(['materials/particle/glow.vtex']);
+    expect(d.renderers[1].textures).toEqual([]);
+    expect(d.preEmissionOperators?.[0].class).toBe('C_OP_SetControlPointToPlayer');
+    expect(d.forces?.[0].class).toBe('C_OP_TurbulenceForce');
+    expect(d.constraints?.[0].class).toBe('C_OP_WorldCollideConstraint');
+  });
   it('uses supported generic KV3 decode, bounded texture prefixes and inherited child attachments', async () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-particle-test-'));
     const parent = resource({

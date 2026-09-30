@@ -290,11 +290,14 @@ export function solverIterationPhases(
   model: Pick<ClothModel, 'extraIterations' | 'extraGoalIterations'>,
   iterationOverride = 0,
 ): { goalIterations: number; constraintIterations: number } {
+  const extra = Number.isFinite(model.extraIterations) ? model.extraIterations : 0;
+  const goalExtra = Number.isFinite(model.extraGoalIterations) ? model.extraGoalIterations : 0;
+  const override = Number.isFinite(iterationOverride) && iterationOverride > 0 ? iterationOverride : 0;
   const constraintIterations = THREE.MathUtils.clamp(
-    Math.round(iterationOverride || (model.extraIterations + 1)), 1, 256,
+    Math.round(override || (extra + 1)), 1, 256,
   );
   return {
-    goalIterations: THREE.MathUtils.clamp(Math.round(model.extraGoalIterations + 1), 1, constraintIterations),
+    goalIterations: THREE.MathUtils.clamp(Math.round(goalExtra + 1), 1, constraintIterations),
     constraintIterations,
   };
 }
@@ -638,6 +641,8 @@ interface ClothRuntime {
   writtenBones: Set<THREE.Bone>;
   accumulator: number;
   simulationSteps: number;
+  recoveryCount: number;
+  teleportDistance: number;
 }
 
 export interface ClothSimulationCoverage {
@@ -671,6 +676,7 @@ export interface ClothHarnessMetrics {
   nodeCount: number;
   kinematicCount: number;
   simulationSteps: number;
+  recoveryCount: number;
   coverage: ClothSimulationCoverage;
 }
 
@@ -724,6 +730,15 @@ function vec3(v: Vec3): THREE.Vector3 {
 
 function quat(v: Vec4): THREE.Quaternion {
   return new THREE.Quaternion(v[0], v[1], v[2], v[3]).normalize();
+}
+
+function finiteVector(vector: THREE.Vector3): boolean {
+  return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z);
+}
+
+function finiteRotation(rotation: THREE.Quaternion): boolean {
+  return Number.isFinite(rotation.x) && Number.isFinite(rotation.y)
+    && Number.isFinite(rotation.z) && Number.isFinite(rotation.w) && rotation.lengthSq() > 1e-12;
 }
 
 function v3Array(v: THREE.Vector3): Vec3 {
@@ -975,6 +990,8 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
   if (source.length < 3) return null;
 
   const fit = recoverSimilarity(source, target);
+  if (![fit.scale, fit.rmse, ...fit.matrix.elements, ...fit.inverse.elements].every(Number.isFinite)
+    || Math.abs(fit.scale) < 1e-12) return null;
   const lockToGoalNodes = new Set(model.lockToGoal);
   const fitMatrixDrivenNodes = fitMatrixDrivenNodeSet(model);
   const jiggleDrivenNodes = jiggleDrivenNodeSet(model);
@@ -1053,11 +1070,12 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
   });
 
   const capsules = [...model.capsules.map(fromCapsule).reverse(), ...model.spheres.map(fromSphere).reverse()].filter(
-    (rigid) => rigid.node >= 0 && rigid.node < nodes.length,
+    (rigid) => Number.isInteger(rigid.node) && rigid.node >= 0 && rigid.node < nodes.length,
   );
-  const boxes = model.boxes.map(fromBox).reverse().filter((rigid) => rigid.node >= 0 && rigid.node < nodes.length);
+  const boxes = model.boxes.map(fromBox).reverse().filter((rigid) => Number.isInteger(rigid.node) && rigid.node >= 0 && rigid.node < nodes.length);
   const collisionPlanes = model.collisionPlanes.map(fromCollisionPlane).filter((plane) => (
-    plane.ctrlParent >= 0 && plane.ctrlParent < nodes.length && plane.childNode >= 0 && plane.childNode < nodes.length
+    Number.isInteger(plane.ctrlParent) && Number.isInteger(plane.childNode)
+    && plane.ctrlParent >= 0 && plane.ctrlParent < nodes.length && plane.childNode >= 0 && plane.childNode < nodes.length
   ));
   const colliders: ColliderRuntime[] = [
     ...capsules.map((shape) => ({ kind: 'capsule' as const, shape })),
@@ -1098,6 +1116,10 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
     writtenBones: new Set(),
     accumulator: 0,
     simulationSteps: 0,
+    recoveryCount: 0,
+    // Source units. Ordinary animation remains untouched; discontinuous body
+    // motion spanning multiple rest-pose bounds starts a new drape.
+    teleportDistance: Math.max(128, new THREE.Box3().setFromPoints(nodes.map((node) => vec3(node.initPos))).getSize(new THREE.Vector3()).length() * 4),
   };
 }
 
@@ -1116,6 +1138,12 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
   // from this clean pose, while body anchors remain owned by animation.
   for (const node of rt.nodes) {
     if (!node.bone) continue;
+    // A malformed animation sample must not become next frame's restore pose.
+    if (!finiteVector(node.bone.position) || !finiteRotation(node.bone.quaternion) || !finiteVector(node.bone.scale)) {
+      if (node.animationPosition && node.animationQuaternion && node.animationScale) {
+        restoreBoneBindTransform(node.bone, node.animationPosition, node.animationQuaternion, node.animationScale);
+      }
+    }
     node.animationPosition?.copy(node.bone.position);
     node.animationQuaternion?.copy(node.bone.quaternion);
     node.animationScale?.copy(node.bone.scale);
@@ -1123,11 +1151,19 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
   root.updateWorldMatrix(true, true);
 
   for (const node of rt.nodes) {
-    node.target.copy(vec3(node.initPos));
-    node.targetRot.copy(quat(node.initRot));
-    if (!node.bone) continue;
-    node.target.copy(worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3())));
-    node.targetRot.copy(worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion())));
+    if (!node.bone) {
+      node.target.copy(vec3(node.initPos));
+      node.targetRot.copy(quat(node.initRot));
+      continue;
+    }
+    const target = worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3()));
+    const rotation = worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion()));
+    if (!finiteVector(target) || !finiteRotation(rotation)) continue;
+    if (rt.warmStarted && node.kinematic && target.distanceTo(node.target) > rt.teleportDistance) {
+      resetRuntimeHistory(rt);
+    }
+    node.target.copy(target);
+    node.targetRot.copy(rotation);
   }
 
   for (const offset of rt.ctrlOffsets) {
@@ -1157,6 +1193,26 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
     const node = rt.nodes[base.node];
     if (node) node.targetRot.copy(nodeBaseQuaternion(positions, base));
   }
+}
+
+function resetRuntimeHistory(rt: ClothRuntime): void {
+  rt.warmStarted = false;
+  rt.lastSubstepDt = null;
+  rt.colliderTransforms.clear();
+  rt.recoveryCount++;
+}
+
+function recoverInvalidSolverState(rt: ClothRuntime): void {
+  const limit = Math.max(1e6, rt.teleportDistance * 1024);
+  if (rt.nodes.every((node) => (
+    finiteVector(node.pos) && finiteVector(node.prev) && finiteRotation(node.solvedRot)
+    // This is an emergency guard, far beyond ordinary cloth motion, rather
+    // than a replacement for authored constraints.
+    && node.pos.distanceToSquared(node.target) < limit * limit
+  ))) return;
+  resetRuntimeHistory(rt);
+  warmStartRuntime(rt, CLOTH_TIMESTEP);
+  for (const node of rt.nodes) node.lastSolvedPos.copy(node.pos);
 }
 
 const _seedTmp = new THREE.Vector3();
@@ -1341,7 +1397,11 @@ function solveRods(rt: ClothRuntime): void {
 }
 
 function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
+  recoverInvalidSolverState(rt);
   updateSolvedRotations(rt);
+  for (const node of rt.nodes) {
+    if (!finiteRotation(node.solvedRot)) node.solvedRot.copy(node.targetRot);
+  }
 
   const fitWrites = new Map<THREE.Bone, { position: THREE.Vector3; rotation: THREE.Quaternion }>();
   for (const fit of rt.fitReconstructions) {
@@ -1498,8 +1558,7 @@ function stepClothRuntime(
   if (!Number.isFinite(delta) || delta <= 0) return;
   if (delta > CLOTH_RESUME_GAP) {
     rt.accumulator = 0;
-    rt.colliderTransforms.clear();
-    for (const node of rt.nodes) node.prev.copy(node.pos);
+    resetRuntimeHistory(rt);
     return;
   }
   rt.accumulator += Math.min(delta, MAX_CLOTH_STEPS_PER_FRAME * CLOTH_TIMESTEP);
@@ -1619,6 +1678,7 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
     nodeCount,
     kinematicCount,
     simulationSteps: rt.simulationSteps,
+    recoveryCount: rt.recoveryCount,
     coverage: clothSimulationCoverage(rt.model),
   };
 }

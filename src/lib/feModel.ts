@@ -417,7 +417,7 @@ export interface ClothQuad {
 }
 
 export interface ClothDecodeIssue {
-  array: 'm_KelagerBends' | 'm_HingeLimits' | 'm_Tris' | 'm_SimdTris' | 'm_Quads' | 'm_SimdQuads' | 'm_SimdRods' | 'm_SimdRodsAnim' | 'm_AnimStrayRadii' | 'm_SimdAnimStrayRadii' | 'm_GoalDampedSpringIntegrators' | 'm_Twists' | 'm_Ropes' | 'm_RigidColliderPriorities' | 'm_VertexMaps';
+  array: 'm_KelagerBends' | 'm_HingeLimits' | 'm_Tris' | 'm_SimdTris' | 'm_Quads' | 'm_SimdQuads' | 'm_Rods' | 'm_NodeBases' | 'm_SimdRods' | 'm_SimdRodsAnim' | 'm_AnimStrayRadii' | 'm_SimdAnimStrayRadii' | 'm_GoalDampedSpringIntegrators' | 'm_Twists' | 'm_Ropes' | 'm_RigidColliderPriorities' | 'm_VertexMaps';
   record: number;
   reason: 'invalid-nodes' | 'invalid-weights' | 'invalid-limits' | 'invalid-height' | 'invalid-bitset' | 'invalid-count' | 'invalid-offsets' | 'unsupported-flags';
 }
@@ -983,15 +983,44 @@ const parseJiggleBoneParams = (p: RawJiggleBoneParams | undefined): ClothJiggleB
   };
 };
 
+const recordArrayFields = [
+  'm_NodeIntegrator', 'm_Rods', 'm_SimdRods', 'm_SimdRodsAnim', 'm_NodeBases',
+  'm_CtrlOffsets', 'm_ReverseOffsets', 'm_CtrlSoftOffsets', 'm_TaperedCapsuleRigids',
+  'm_SphereRigids', 'm_AnimStrayRadii', 'm_SimdAnimStrayRadii', 'm_BoxRigids',
+  'm_Twists', 'm_FitMatrices', 'm_FitWeights', 'm_LockToParent', 'm_CollisionPlanes',
+  'm_JiggleBones', 'm_KelagerBends', 'm_HingeLimits', 'm_Tris', 'm_SimdTris',
+  'm_Quads', 'm_SimdQuads', 'm_RigidColliderPriorities', 'm_VertexMaps',
+] as const satisfies readonly (keyof RawFeModel)[];
+
+const scalarArrayFields = [
+  'm_SkelParents', 'm_NodeInvMasses', 'm_NodeCollisionRadii', 'm_DynNodeFriction',
+  'm_TreeCollisionMasks', 'm_FreeNodes', 'm_LockToGoal', 'm_VertexMapValues',
+] as const satisfies readonly (keyof RawFeModel)[];
+
 /**
  * Parse the raw FeModel JSON (whole m_pFeModel subtree) into a typed `ClothModel`.
- * Returns null when the payload is not a FeModel (no m_CtrlName) so a non-cloth hero
- * is handled cleanly. Keeps compiler selectors and unsupported constraints so the
- * runtime can report its coverage without silently dropping authored behavior.
+ * Returns null for non-FeModel payloads or malformed containers so the viewer
+ * can keep playing animation without cloth. Keeps compiler selectors and
+ * unsupported constraints so the runtime can report its coverage.
  */
 export function parseFeModel(raw: unknown): ClothModel | null {
   const fe = raw as RawFeModel | null | undefined;
   if (!fe || !Array.isArray(fe.m_CtrlName)) return null;
+  // IPC sidecars are untrusted JSON. Reject broken containers before any map,
+  // reduce or record access. Numeric constraint validation still reports its
+  // existing decode issues, while structurally unusable sidecars return null.
+  if (fe.m_CtrlName.length > 16384 || !fe.m_CtrlName.every((name) => typeof name === 'string')) return null;
+  for (const field of recordArrayFields) {
+    const value = fe[field];
+    if (value != null && (!Array.isArray(value) || value.length > 262144
+      || !value.every((entry) => isObject(entry) && !Array.isArray(entry)))) return null;
+  }
+  for (const field of scalarArrayFields) {
+    const value = fe[field];
+    if (value != null && (!Array.isArray(value) || value.length > 262144)) return null;
+  }
+  if (fe.m_InitPose != null && (!Array.isArray(fe.m_InitPose) || fe.m_InitPose.length > 16384
+    || !fe.m_InitPose.every(Array.isArray))) return null;
   const decodeIssues: ClothDecodeIssue[] = [];
 
   const names = fe.m_CtrlName;
@@ -1039,14 +1068,15 @@ export function parseFeModel(raw: unknown): ClothModel | null {
     });
   }
 
-  const rods: ClothRod[] = (fe.m_Rods ?? []).map((r) => ({
-    a: num(r.nNode?.[0]),
-    b: num(r.nNode?.[1]),
-    min: num(r.flMinDist),
-    max: num(r.flMaxDist),
-    relax: num(r.flRelaxationFactor, 1),
-    weight: num(r.flWeight0),
-  }));
+  const rods: ClothRod[] = [];
+  for (const [record, r] of (fe.m_Rods ?? []).entries()) {
+    if (!Array.isArray(r.nNode) || r.nNode.length !== 2 || !r.nNode.every((index) => isNodeIndex(index, names.length))) {
+      decodeIssues.push({ array: 'm_Rods', record, reason: 'invalid-nodes' });
+      continue;
+    }
+    rods.push({ a: r.nNode[0], b: r.nNode[1], min: num(r.flMinDist), max: num(r.flMaxDist),
+      relax: num(r.flRelaxationFactor, 1), weight: num(r.flWeight0) });
+  }
 
   const priorities = parseColliderPriorities(fe, decodeIssues);
   const vertexMaps = parseCollisionVertexMaps(fe, decodeIssues);
@@ -1085,14 +1115,14 @@ export function parseFeModel(raw: unknown): ClothModel | null {
     vertexNodes: vertexNodes(b.nVertexMapIndex),
   }));
 
-  const nodeBases: ClothNodeBase[] = (fe.m_NodeBases ?? []).map((b) => ({
-    node: num(b.nNode),
-    x0: num(b.nNodeX0),
-    x1: num(b.nNodeX1),
-    y0: num(b.nNodeY0),
-    y1: num(b.nNodeY1),
-    qAdjust: vec4(b.qAdjust),
-  }));
+  const nodeBases: ClothNodeBase[] = [];
+  for (const [record, b] of (fe.m_NodeBases ?? []).entries()) {
+    if (![b.nNode, b.nNodeX0, b.nNodeX1, b.nNodeY0, b.nNodeY1].every((index) => isNodeIndex(index, names.length))) {
+      decodeIssues.push({ array: 'm_NodeBases', record, reason: 'invalid-nodes' });
+      continue;
+    }
+    nodeBases.push({ node: b.nNode, x0: b.nNodeX0, x1: b.nNodeX1, y0: b.nNodeY0, y1: b.nNodeY1, qAdjust: vec4(b.qAdjust) });
+  }
 
   const ctrlOffsets: ClothCtrlOffset[] = (fe.m_CtrlOffsets ?? []).map((c) => ({
     offset: vec3(c.vOffset),
