@@ -297,6 +297,25 @@ describe('buildDeadlockMaterial detail textures', () => {
 });
 
 describe('buildDeadlockMaterial glass and translucency state', () => {
+  it('preserves authored glass surface properties and uses full masked transmission without invented refraction', () => {
+    const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
+      floats: { g_flCloakFactor1: 0.905, g_flCloakRefractAmount: 0.075, g_flFullyCloakedRefractFactor1: 0, g_flCloakBlurAmount: 0 } });
+    base.roughness = 0.067;
+    base.metalness = 0.116;
+    base.transmission = 0.9;
+    base.thickness = 0.12;
+    const result = buildDeadlockMaterial(base);
+    const glass = result.material as THREE.MeshPhysicalMaterial;
+    expect(glass.transmission).toBe(1);
+    expect(glass.thickness).toBe(0);
+    expect(glass.roughness).toBe(0.067);
+    expect(glass.metalness).toBe(0.116);
+    expect(glass.clearcoat).toBe(0);
+    expect(result.uniforms.uGlassTransmissionRoughness.value).toBe(0);
+    expect(base.transmission).toBe(0.9);
+    expect(base.thickness).toBe(0.12);
+    result.dispose();
+  });
   it('binds F_GLASS g_tGlass as an owned transmissionMap clone', () => {
     const sourceGlass = texture(16);
     const base = materialWithMorphic({

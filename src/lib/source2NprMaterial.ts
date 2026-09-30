@@ -257,6 +257,22 @@ export function glassTransmissionTexture(morphic: MorphicExtras): THREE.Texture 
   return isMeaningfulMask(glass) ? glass : null;
 }
 
+/** Map authored PBR glass to Three's transmission approximation, without adding
+ * a second coating or overriding exported roughness/metalness. In the installed
+ * glass-enabled Vulkan variant the red mask removes diffuse, preserves specular,
+ * and adds scene color. Cloak factors control refraction, not mask opacity. */
+export function applyGlassParameters(physical: THREE.MeshPhysicalMaterial, morphic: MorphicExtras): void {
+  physical.transmission = flag(morphic, 'F_GLASS') ? 1 : Math.max(physical.transmission ?? 0, 0.85);
+  physical.ior = firstNumber(morphic, ['g_flIOR'], physical.ior ?? 1.5);
+  const floats = morphic.floats;
+  if (floats?.g_flCloakRefractAmount !== undefined && floats.g_flFullyCloakedRefractFactor1 !== undefined) {
+    const refraction = floats.g_flCloakRefractAmount * floats.g_flFullyCloakedRefractFactor1 * (floats.g_flCloakFactor1 ?? 1);
+    // Three thickness zero samples scene color without the invented volume offset.
+    // Nonzero Source screen-space refraction remains approximated by the exporter.
+    if (refraction === 0) physical.thickness = 0;
+  }
+}
+
 export function translucentAlphaTexture(morphic: MorphicExtras): THREE.Texture | null {
   if (hasDynamicTextureOverride(morphic, 'g_tAltTranslucency')) return null;
   const alt = morphic.resolvedTextures?.g_tAltTranslucency;
@@ -508,7 +524,9 @@ export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THR
     uMaskSource2ColorTint: { value: pbr && scalar(morphic.ints?.g_bMaskColorTint1, 1) !== 0 ? 1 : 0 },
     uAlbedoReflectivity: { value: albedoReflectivity(morphic) },
     uVertexColorStrength: { value: pbr ? firstNumber(morphic, ['g_fVertexColorStrength1'], 1) : 1 },
-    uCitadelSpecular: { value: pbr ? 1 : 0 },
+      uCitadelSpecular: { value: pbr ? 1 : 0 },
+      // Authored zero blur is independent of the surface's specular roughness.
+      uGlassTransmissionRoughness: { value: pbr && flag(morphic, 'F_GLASS') && morphic.floats?.g_flCloakBlurAmount === 0 ? 0 : -1 },
     uNoSpecularAtFullRoughness: {
       value: pbr && flag(morphic, 'F_USE_NPR_LIGHTING') && flag(morphic, 'F_NO_SPECULAR_AT_FULL_ROUGHNESS') ? 1 : 0,
     },
@@ -868,15 +886,8 @@ export function applySource2MaterialHints(
       }
 
       if (glass) {
-        standard.roughness = Math.min(standard.roughness ?? 1, 0.18);
-        standard.metalness = Math.min(standard.metalness ?? 0, 0.05);
-        standard.envMapIntensity = Math.max(standard.envMapIntensity ?? 1, 1.35);
         if (isPhysicalMaterial) {
-          physical.transmission = Math.max(physical.transmission ?? 0, 0.85);
-          physical.thickness = Math.max(physical.thickness ?? 0, 0.12);
-          physical.ior = firstNumber(morphic, ['g_flIOR'], physical.ior ?? 1.5);
-          physical.clearcoat = Math.max(physical.clearcoat ?? 0, 0.45);
-          physical.clearcoatRoughness = Math.min(physical.clearcoatRoughness ?? 0.25, 0.18);
+          applyGlassParameters(physical, morphic);
           physical.transmissionMap = glassTransmissionTexture(morphic);
         }
       }
@@ -1076,6 +1087,7 @@ uniform float uVertexColorBeforeCsb;
 uniform float uMaskVertexColor;
 uniform float uVertexColorStrength;
 uniform float uCitadelSpecular;
+uniform float uGlassTransmissionRoughness;
 uniform float uNoSpecularAtFullRoughness;
 uniform float uTime;
 uniform sampler2D uSelfIllumMap;
@@ -1228,6 +1240,13 @@ void main() {
 // tonemaps our result downstream exactly like the PBR path.
 export const NPR_PATCH_MAP: CSMPatchMap = {
   '*': {
+    '#include <transmission_fragment>': {
+      type: 'fs',
+      value: THREE.ShaderChunk.transmission_fragment.replace(
+        'n, v, material.roughness,',
+        'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,'
+      ),
+    },
     '#include <lights_fragment_end>': {
       type: 'fs',
       value: /* glsl */ `

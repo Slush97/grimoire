@@ -16,7 +16,8 @@ import {
   isMeaningfulMask,
   isTrueGlassMaterial,
   hasDynamicAlphaOverride,
-  glassTransmissionTexture,
+    glassTransmissionTexture,
+    applyGlassParameters,
   translucentAlphaTexture,
   staticOpacityScale,
   requiresVertexColors,
@@ -270,10 +271,6 @@ export function buildDeadlockMaterial(
   if (backfaces) clone.side = THREE.DoubleSide;
 
   if (glass) {
-    // F_GLASS keeps the current treatment: transmission is for GLASS ONLY.
-    clone.roughness = Math.min(clone.roughness ?? 1, 0.18);
-    clone.metalness = Math.min(clone.metalness ?? 0, 0.05);
-    clone.envMapIntensity = Math.max(clone.envMapIntensity ?? 1, 1.35);
     // needsPhysical() returns true on the SAME isTrueGlassMaterial predicate as
     // `glass`, so the clone is always a MeshPhysicalMaterial here. Guard the
     // physical-only writes anyway so the invariant is explicit at the write site
@@ -281,11 +278,7 @@ export function buildDeadlockMaterial(
     // clone-class decision can never write undefined physical fields onto a
     // standard clone.
     if (phys.isMeshPhysicalMaterial) {
-      phys.transmission = Math.max(phys.transmission ?? 0, 0.85);
-      phys.thickness = Math.max(phys.thickness ?? 0, 0.12);
-      phys.ior = firstNumber(morphic, ['g_flIOR'], phys.ior ?? 1.5);
-      phys.clearcoat = Math.max(phys.clearcoat ?? 0, 0.45);
-      phys.clearcoatRoughness = Math.min(phys.clearcoatRoughness ?? 0.25, 0.18);
+      applyGlassParameters(phys, morphic);
       const transmissionMap = glassTransmissionTexture(morphic);
       phys.transmissionMap = transmissionMap ? ownClone(transmissionMap) : null;
     }

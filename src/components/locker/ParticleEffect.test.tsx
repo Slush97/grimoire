@@ -13,6 +13,46 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('includes additive sprites in glass transmission input without writing depth', async () => {
+    const model = new THREE.Group();
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhysicalMaterial({ transmission: 0.9 }));
+    model.add(glass);
+    const d = { ...descriptor, controlPoints: [] };
+    const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={d} textureBaseUrl="/" model={model} />);
+    try {
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh && o.material instanceof THREE.ShaderMaterial) mesh = o; });
+      const material = mesh!.material as THREE.ShaderMaterial;
+      expect(material.transparent).toBe(false);
+      expect(material.depthWrite).toBe(false);
+      expect(material.blending).toBe(THREE.CustomBlending);
+      expect(mesh!.renderOrder).toBeGreaterThan(glass.renderOrder);
+    } finally { await renderer.unmount(); glass.geometry.dispose(); (glass.material as THREE.Material).dispose(); }
+  });
+  it('keeps authored endcap-only particles alive and selects a fixed sheet region', async () => {
+    const texture = 'materials/particle/synthetic.vtex';
+    const d: FxDescriptor = { ...descriptor, scale: 0.82, controlPoints: [],
+      constantLifespan: 0.1, constantRadius: 2,
+      sheets: { [texture]: { sequences: [{ id: 3, clamp: true, uv: [0.1, 0.2, 0.4, 0.6] }] } },
+      initializers: [{ class: 'C_INIT_RandomSequence', params: { m_nSequenceMin: 3, m_nSequenceMax: 3 } }],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      operators: [{ class: 'C_OP_Decay', params: { m_nOpEndCapState: 'PARTICLE_ENDCAP_ENDCAP_ON' } }],
+      renderers: [{ ...descriptor.renderers[0], textures: [texture] }],
+    };
+    // Avoid loading a browser image: this test exercises the instanced region
+    // selection and simulation; native Electron validates the actual texture.
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture());
+    const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={d} textureBaseUrl="/" />);
+    try {
+      await renderer.advanceFrames(10, 0.05);
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(1);
+      const uv = mesh!.geometry.getAttribute('aRegion');
+      expect([uv.getX(0), uv.getY(0), uv.getZ(0), uv.getW(0)]).toEqual(expect.arrayContaining([expect.closeTo(0.1), expect.closeTo(0.4), expect.closeTo(0.8)]));
+      expect(mesh!.geometry.getAttribute('aRadius').getX(0)).toBeCloseTo(2*0.0254*0.82);
+    } finally { await renderer.unmount(); load.mockRestore(); }
+  });
   it('adds sprite radiance while accumulating canvas coverage separately', async () => {
     const unanchored = { ...descriptor, controlPoints: [] };
     const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={unanchored} textureBaseUrl="/" />);

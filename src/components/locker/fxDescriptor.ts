@@ -1,18 +1,21 @@
 /** Read-only subset of Source 2 particle descriptors for the hero preview.
  * Authored sprite emitters, attributes and simple lifetime curves are supported.
- * Ropes, models, lights, sprite-sheet sequences and arbitrary operators are skipped. */
+ * Single-frame sheet sequences are supported; animated sheets, ropes, models,
+ * lights and arbitrary operators remain outside this bounded preview. */
 export function fxTexturePngName(vtexPath: string): string {
   return vtexPath.replace(/[^a-zA-Z0-9]/g, '_') + '.png';
 }
 
 export type FxParam = number | {
   pf?: string; literal?: number; min?: number; max?: number;
-  in0?: number; in1?: number; out0?: number; out1?: number; cp?: number; curve?: unknown;
+  in0?: number; in1?: number; out0?: number; out1?: number; cp?: number; curve?: unknown; bias?: number; biasType?: string;
 };
 export interface FxNode { class: string; params: Record<string, unknown> }
 export interface FxRenderer extends FxNode { mode: string; blendMode: string | null; textures: string[] }
 export interface FxControlPoint { cp: number | null; attachType: string | null; attachment: string | null; entity: string | null }
+export interface FxSheet { sequences: Array<{ id: number; clamp: boolean; uv: [number, number, number, number] }> }
 export interface FxDescriptor {
+  scale?: number; sheets?: Record<string, FxSheet>;
   name: string; class?: string; maxParticles?: number; constantRadius?: FxParam; constantLifespan?: FxParam;
   constantColor?: number[] | FxParam; controlPoints: FxControlPoint[];
   preview?: { model: string | null; sequence: string | null };
@@ -26,7 +29,7 @@ export function paramRange(p: unknown, fallback: [number, number]): [number, num
   if (p && typeof p === 'object') {
     const w = p as Exclude<FxParam, number>;
     if (finite(w.literal)) return [w.literal, w.literal];
-    if (w.pf && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM'].includes(w.pf)) return fallback;
+    if (w.pf && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM', 'PF_TYPE_RANDOM_BIASED'].includes(w.pf)) return fallback;
     if (finite(w.min) && finite(w.max)) return [Math.min(w.min, w.max), Math.max(w.min, w.max)];
   }
   return fallback;
@@ -49,10 +52,12 @@ const color = (v: unknown, fallback: Vec3): Vec3 => {
 };
 const findNode = (nodes: FxNode[], cls: string) => nodes.find((n) => n.class === cls);
 const fieldInit = (d: FxDescriptor, field: number) => {
-  const node = d.initializers.find((n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, 0) === field);
+  const node = d.initializers.filter((n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, 0) === field).at(-1);
   return node ? node.params.m_InputValue ?? 0 : undefined;
 };
 export interface SpriteSimParams {
+  scale: number; sheet: FxSheet | undefined; sequence: [number, number]; persistent: boolean; radiusInput: unknown; radiusScale: number;
+  spawnBias: Vec3; offsets: Array<{ min: Vec3; max: Vec3; local: boolean; proportional: boolean }>;
   attachment: string | null; texture: string | null; additive: boolean; maxParticles: number;
   emitRate: number; emitFirst: boolean; lifetime: [number, number]; radius: [number, number];
   colorMin: Vec3; colorMax: Vec3; colorFade: Vec3 | null; colorFadeTime: [number, number]; colorEase: boolean;
@@ -82,6 +87,8 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const colorOp = findNode(d.operators, 'C_OP_ColorInterpolate');
   const fade = findNode(d.operators, 'C_OP_FadeAndKill');
   const orbit = findNode(d.operators, 'C_OP_MovementRotateParticleAroundAxis');
+  const sequence = findNode(d.initializers, 'C_INIT_RandomSequence');
+  const texture = renderer.textures.find((t) => !/noise|voronoi|detail|mask/i.test(t)) ?? renderer.textures[0] ?? null;
   const scalar = (v: unknown, fallback: number, max = 30) => Math.max(0, Math.min(max, paramScalar(v, fallback)));
   const emissionRate = (v: unknown) => v === undefined ? 100 : scalar(v, 0, 256);
   const cp = (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
@@ -91,9 +98,20 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
     .map((v) => v * Math.PI / 180) as [number, number];
   return {
+    scale: 1, sheet: texture ? d.sheets?.[texture] : undefined,
+    spawnBias: vector(sphere?.params.m_vecDistanceBias, [1, 1, 1]),
+    offsets: d.initializers.filter((n) => n.class === 'C_INIT_PositionOffset').slice(0, 16).map((n) => ({
+      min: vector(n.params.m_OffsetMin, [0, 0, 0]), max: vector(n.params.m_OffsetMax, [0, 0, 0]),
+      local: n.params.m_bLocalCoords === true, proportional: n.params.m_bProportional === true,
+    })),
+    sequence: [sequence?.params.m_nSequenceMin ?? 0, sequence?.params.m_nSequenceMax ?? 0]
+      .map((v) => Math.floor(Math.max(0, Math.min(255, paramScalar(v, 0))))) as [number, number],
+    persistent: d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState === 'PARTICLE_ENDCAP_ENDCAP_ON')
+      && !d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState !== 'PARTICLE_ENDCAP_ENDCAP_ON'),
+    radiusInput: fieldInit(d, 0), radiusScale: Math.max(0, Math.min(16, paramScalar(renderer.params.m_flRadiusScale, 1))),
     attachment: d.controlPoints.find((point) => point.cp === cp && point.attachment)?.attachment
       ?? d.controlPoints.find((point) => point.attachment)?.attachment ?? null,
-    texture: renderer.textures.find((t) => !/noise|voronoi|detail|mask/i.test(t)) ?? renderer.textures[0] ?? null,
+    texture,
     additive: (renderer.blendMode ?? '').includes('ADD'),
     maxParticles: Math.floor(Math.max(1, Math.min(256, paramScalar(d.maxParticles, 64)))),
     emitRate: emitter ? emissionRate(emitter.params.m_flEmitRate) : 0,
@@ -195,7 +213,7 @@ export interface FxPreviewIssue { system: string; class: string; reason: string 
  * support notice without claiming unimplemented operators are game-equivalent. */
 export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
   const supported = new Set([
-    'C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter', 'C_INIT_InitFloat',
+    'C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter', 'C_INIT_InitFloat', 'C_INIT_RandomSequence',
     'C_INIT_CreateWithinSphere', 'C_INIT_CreateWithinSphereTransform', 'C_INIT_PositionOffset',
     'C_INIT_RandomColor', 'C_OP_BasicMovement', 'C_OP_PositionLock', 'C_OP_SpinUpdate',
     'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites', 'C_OP_MovementRotateParticleAroundAxis',
@@ -225,19 +243,18 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
       if (n.class === 'C_OP_PositionLock' && (['m_flStartTime_min', 'm_flStartTime_max', 'm_flEndTime_min', 'm_flEndTime_max']
         .some((key) => paramScalar(n.params[key], 1) !== 1) || paramScalar(n.params.m_flRange, 0) !== 0
         || vector(n.params.m_vecScale, [1, 1, 1]).some((v) => v !== 1))) report(n.class, 'unsupported-lock-fade-or-scale');
-      if (n.class.includes('CreateWithinSphere') && (vector(n.params.m_vecDistanceBias, [1, 1, 1]).some((v) => v !== 1)
-        || vector(n.params.m_vecDistanceBiasAbs, [0, 0, 0]).some((v) => v !== 0)
+      if (n.class.includes('CreateWithinSphere') && (vector(n.params.m_vecDistanceBiasAbs, [0, 0, 0]).some((v) => v !== 0)
         || paramScalar(n.params.m_fSpeedRandExp, 1) !== 1 || paramScalar(n.params.m_nScaleCP, -1) >= 0)) report(n.class, 'unsupported-sphere-bias');
       if (n.class === 'C_OP_ColorInterpolate' && paramScalar(n.params.m_nFieldOutput, 6) !== 6) report(n.class, 'unsupported-field');
       if (n.class === 'C_OP_RenderSprites' && (paramScalar(n.params.m_nOrientationType, 0) !== 0
-        || paramScalar(n.params.m_flAnimationRate, 0) !== 0)) report(n.class, 'unsupported-sprite-orientation-or-animation');
+        || (paramScalar(n.params.m_flAnimationRate, 0) !== 0 && !d.sheets?.[(n as FxRenderer).textures[0]]?.sequences.length))) report(n.class, 'unsupported-sprite-orientation-or-animation');
       if (n.class.includes('Emitter') && (paramScalar(n.params.m_nSnapshotControlPoint, -1) >= 0
         || paramScalar(n.params.m_flParentParticleScale, -1) !== -1
         || paramScalar(n.params.m_flInitFromKilledParentParticles, 0) !== 0)) report(n.class, 'unsupported-parent-or-snapshot-emission');
       const checkParam = (value: unknown, depth = 0) => {
         if (!value || typeof value !== 'object' || depth > 8) return;
         const r = value as Record<string, unknown>;
-        if (typeof r.pf === 'string' && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM', 'PF_TYPE_PARTICLE_AGE_NORMALIZED'].includes(r.pf)) report(n.class, 'unsupported-input');
+        if (typeof r.pf === 'string' && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM', 'PF_TYPE_RANDOM_BIASED', 'PF_TYPE_PARTICLE_AGE_NORMALIZED'].includes(r.pf)) report(n.class, 'unsupported-input');
         if (typeof r.m_nType === 'string' && r.m_nType.startsWith('PVEC_') && r.m_nType !== 'PVEC_TYPE_LITERAL') report(n.class, 'unsupported-vector-input');
         for (const child of Object.values(r)) checkParam(child, depth + 1);
       };
@@ -285,7 +302,8 @@ export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
     if (++systems > 16 || depth > 4 || layers.length >= 16 || remaining <= 0) return;
     for (const renderer of system.renderers) {
       if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;
-      const layer = spriteParamsFor(system, renderer)!;
+      const layer = spriteParamsFor({ ...system, sheets: d.sheets }, renderer)!;
+      layer.scale = Math.max(0.001, Math.min(16, paramScalar(d.scale, 1)));
       layer.maxParticles = Math.min(remaining, layer.maxParticles);
       remaining -= layer.maxParticles;
       layers.push(layer);

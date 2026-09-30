@@ -47,6 +47,8 @@ describe('compiled particle export', () => {
       const scratch = args[args.indexOf('--out-dir') + 1];
       await fs.mkdir(join(scratch, 'materials', 'particle'), { recursive: true });
       for (const name of ['noise', 'ring', 'glow']) await fs.writeFile(join(scratch, 'materials', 'particle', `${name}.png`), `synthetic ${name}`);
+      await fs.mkdir(join(scratch, '_raw', 'materials', 'particle'), { recursive: true });
+      for (const name of ['noise', 'ring', 'glow']) await fs.writeFile(join(scratch, '_raw', 'materials', 'particle', `${name}.vtex_c`), Buffer.alloc(16));
     });
     try {
       await exportParticleBundle('base.vpk', 'particles/root.vpcf_c', join(dir, 'effect.json'), join(dir, 'tex'));
@@ -54,7 +56,7 @@ describe('compiled particle export', () => {
       expect(h.stdout.mock.calls[1][0]).toEqual(['soundevents', 'particles/child.vpcf_c', '--from-vpk', 'base.vpk']);
       const dumpArgs = h.run.mock.calls[0][0];
       expect(dumpArgs.slice(0, 4)).toEqual(['panorama', 'dump', '--vpk', 'base.vpk']);
-      expect(dumpArgs.slice(6)).toEqual(['--no-raw', '--prefix', 'materials/particle/noise.vtex_c',
+      expect(dumpArgs.slice(6)).toEqual(['--prefix', 'materials/particle/noise.vtex_c',
         '--prefix', 'materials/particle/ring.vtex_c', '--prefix', 'materials/particle/glow.vtex_c']);
       const d = JSON.parse(await fs.readFile(join(dir, 'effect.json'), 'utf8'));
       expect(d.children[0].controlPoints[0].attachment).toBe('ability_cast');

@@ -313,11 +313,13 @@ function riggedVersionFile(key: string): string {
  * effects-preview axis is a hand-validated roster, NOT auto-discovered (the raw
  * "ambient candidate" metric over-counts ~20-56x); see
  * `docs/3d-preview-effects-feasibility.md`. Sprint 1: the two effects that render
- * correctly standalone -- Wraith's hand energy (sprite + CP2 driver) and
- * Familiar's body aura (CP0 + LockToBone). More land as the renderer grows
+ * correctly standalone: Wraith's hand energy (sprite + CP2 driver), Dynamo's
+ * model-authored head effect (fixed sheet regions + head_fx), and Familiar's
+ * body aura (CP0 + LockToBone). More land as the renderer grows
  * trail/rope + CP injection.
  */
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
+    Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
     Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
 };
@@ -328,8 +330,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 
 /** Bump when descriptors or bundled textures change. v2 reads generic KV3 DATA
  * through the pinned decoder and exports textures with Panorama dump. */
-// v3: retain lifespan, legacy sprite texture and unsupported stages for diagnostics.
-const EFFECT_CACHE_VERSION = '3';
+// v4: retain authored fixed sheet regions and model particle scale.
+const EFFECT_CACHE_VERSION = '4';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1109,7 +1111,8 @@ export async function exportHeroEffect(
         const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
         const dir = modelDir(key);
         await fs.mkdir(dir, { recursive: true });
-        await exportParticleBundle(pak01, entry, effectFile(key), effectTexDir(key));
+        await exportParticleBundle(pak01, entry, effectFile(key), effectTexDir(key),
+            heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName]);
         await fs.writeFile(effectVersionFile(key), EFFECT_CACHE_VERSION);
         return { hasEffect: true, key, entry };
     })();

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { FxDescriptor, FxNode, FxRenderer } from '../../../src/components/locker/fxDescriptor';
 import { fxTexturePngName } from '../../../src/components/locker/fxDescriptor';
 import { runVpkmerge, runVpkmergeStdout } from './modMerger';
+import { readParticleSheet } from './particleSheet';
 
 type Row = Record<string, unknown>;
 const row = (v: unknown): Row => v && typeof v === 'object' && !Array.isArray(v) ? v as Row : {};
@@ -17,6 +18,7 @@ function parameter(v: unknown): unknown {
       pf: r.m_nType, min: r.m_flRandomMin, max: r.m_flRandomMax, cp: r.m_nControlPoint,
       in0: r.m_flInput0, in1: r.m_flInput1, out0: r.m_flOutput0, out1: r.m_flOutput1,
       curve: parameter(r.m_Curve),
+      bias: r.m_flBiasParameter, biasType: r.m_nBiasType,
     };
   }
   if (r.m_nType === 'PVEC_TYPE_LITERAL') return r.m_vLiteralValue;
@@ -59,7 +61,7 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
 
 /** v0.19.1's soundevents reader decodes any resource's KV3 DATA block. Use its
  * read-only JSON mode, then validate the particle class. No new CLI is required. */
-export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string): Promise<void> {
+export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string): Promise<void> {
   const textures = new Set<string>();
   let systems = 0;
   const load = async (path: string, ancestors: Set<string>): Promise<FxDescriptor> => {
@@ -79,15 +81,31 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     return d;
   };
   const descriptor = await load(entry, new Set());
+  if (modelEntry) {
+    const model = row(JSON.parse(await runVpkmergeStdout(['soundevents', modelEntry, '--from-vpk', pak])));
+    const text = row(model.m_modelInfo).m_keyValueText;
+    // This optional model settings block contains scalar assignments only.
+    // Do not read unrelated scale fields from the rest of the embedded KV3.
+    const value = typeof text === 'string' && text.length < 1024 * 1024
+      ? text.match(/\bCitadelModelParticleSettings_t\s*=\s*\{[^{}]*\bm_flScale\s*=\s*([-+\d.eE]+)[^{}]*\}/)?.[1] : undefined;
+    if (value !== undefined) {
+      const scale = Number(value);
+      if (Number.isFinite(scale) && scale > 0 && scale <= 16) descriptor.scale = scale;
+    }
+  }
   await fs.mkdir(textureDir, { recursive: true });
   if (textures.size) {
     const scratch = await fs.mkdtemp(join(textureDir, 'decode-'));
     try {
-      await runVpkmerge(['panorama', 'dump', '--vpk', pak, '--out-dir', scratch, '--no-raw',
+      await runVpkmerge(['panorama', 'dump', '--vpk', pak, '--out-dir', scratch,
         ...[...textures].flatMap((texture) => ['--prefix', `${texture}_c`])]);
       for (const texture of textures) {
         const source = join(scratch, texture.replace(/\.vtex$/, '.png'));
         await fs.copyFile(source, join(textureDir, fxTexturePngName(texture)));
+        const raw = join(scratch, '_raw', `${texture}_c`);
+        if ((await fs.stat(raw)).size > 64 * 1024 * 1024) throw new Error('Particle texture resource exceeds preview limits.');
+        const sheet = await fs.readFile(raw).then(readParticleSheet);
+        if (sheet) (descriptor.sheets ??= {})[texture] = sheet;
       }
     } finally { await fs.rm(scratch, { recursive: true, force: true }); }
   }
