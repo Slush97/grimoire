@@ -157,7 +157,7 @@ ipcMain.handle(
 ipcMain.handle(
     'get-gamebanana-categories',
     async (_, args: GetCategoriesArgs): Promise<GameBananaCategoryNode[]> => {
-        return fetchCategoryTreeCached(args.categoryModelName);
+        return fetchCategoryTreeCached(args.categoryModelName, args.revalidate);
     }
 );
 

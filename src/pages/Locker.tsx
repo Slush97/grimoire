@@ -62,6 +62,7 @@ import {
   groupGlobalMods,
   groupLockerSkins,
   groupModsByCategory,
+  heroListMissesRoster,
   isLockerManagedMod,
   isLockerManagedSound,
   isPropContainerType,
@@ -377,6 +378,12 @@ export default function Locker() {
         lockerCategoriesCache = data;
         if (!active) return;
         setCategories(data);
+        if (heroListMissesRoster(buildHeroList(data))) {
+          // Main throttles this to hourly and falls back to the cached tree.
+          const fresh = await getGamebananaCategories('ModCategory', { revalidate: true });
+          lockerCategoriesCache = fresh;
+          if (active) setCategories(fresh);
+        }
       } catch (err) {
         if (active) {
           setCategoriesError(String(err));

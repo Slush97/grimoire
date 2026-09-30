@@ -257,6 +257,17 @@ export function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategor
   }));
 }
 
+/**
+ * True when a buildHeroList result lacks a roster hero: the category tree was
+ * cached before GameBanana added that hero's Skins category. An empty list
+ * (tree unavailable) is not a miss.
+ */
+export function heroListMissesRoster(heroes: readonly HeroCategory[]): boolean {
+  if (heroes.length === 0) return false;
+  const listed = new Set(heroes.map((hero) => hero.name));
+  return HERO_NAMES_SORTED.some((name) => !listed.has(name));
+}
+
 export function isLockerManagedMod(mod: Mod): boolean {
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are managed artifacts, never hero skin cards

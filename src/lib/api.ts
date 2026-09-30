@@ -892,9 +892,10 @@ export async function getGamebananaSections(): Promise<GameBananaSection[]> {
 }
 
 export async function getGamebananaCategories(
-  categoryModelName: string
+  categoryModelName: string,
+  options: { revalidate?: boolean } = {}
 ): Promise<GameBananaCategoryNode[]> {
-  return window.electronAPI.getGameBananaCategories({ categoryModelName });
+  return window.electronAPI.getGameBananaCategories({ categoryModelName, ...options });
 }
 
 export async function getCollection(collectionId: number): Promise<GameBananaCollection> {

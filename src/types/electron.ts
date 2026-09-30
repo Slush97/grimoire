@@ -104,6 +104,8 @@ export interface DownloadModArgs {
 
 export interface GetCategoriesArgs {
     categoryModelName: string;
+    /** Refetch a cached tree older than an hour and resolve with the fresh one. */
+    revalidate?: boolean;
 }
 
 export interface CleanupResult {

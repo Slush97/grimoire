@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { modLoadOrder, activeLockerSkin, buildHeroList, inferHeroFromTitle } from './lockerUtils';
+import { modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
 
 function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: number }): Mod {
   return {
@@ -73,6 +73,13 @@ describe('buildHeroList', () => {
       ],
     };
     expect(buildHeroList([skins]).map((hero) => hero.name)).toEqual(['Rat King', 'Doorman']);
+  });
+
+  it('flags a cached tree that predates a roster hero', () => {
+    const full = HERO_NAMES_SORTED.map((name, i) => ({ id: i, name }));
+    expect(heroListMissesRoster(full)).toBe(false);
+    expect(heroListMissesRoster(full.filter((hero) => hero.name !== 'Violet'))).toBe(true);
+    expect(heroListMissesRoster([])).toBe(false);
   });
 });
 
