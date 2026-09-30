@@ -13,6 +13,49 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('adds sprite radiance while accumulating canvas coverage separately', async () => {
+    const unanchored = { ...descriptor, controlPoints: [] };
+    const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={unanchored} textureBaseUrl="/" />);
+    try {
+      let material: THREE.ShaderMaterial | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) material = o.material as THREE.ShaderMaterial; });
+      expect(material!.blending).toBe(THREE.CustomBlending);
+      expect(material!.blendSrc).toBe(THREE.SrcAlphaFactor);
+      expect(material!.blendDst).toBe(THREE.OneFactor);
+      expect(material!.blendSrcAlpha).toBe(THREE.OneFactor);
+      expect(material!.blendDstAlpha).toBe(THREE.OneMinusSrcAlphaFactor);
+      expect(material!.uniforms.uAdditive.value).toBe(1);
+      await renderer.update(<ParticleEffect descriptor={{ ...unanchored, renderers: [{ ...descriptor.renderers[0], blendMode: 'ALPHA' }] }} textureBaseUrl="/" />);
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) material = o.material as THREE.ShaderMaterial; });
+      expect(material!.blending).toBe(THREE.NormalBlending);
+      expect(material!.uniforms.uAdditive.value).toBe(0);
+    } finally { await renderer.unmount(); }
+  });
+  it('composes a nonidentity authored frame with the bone once across motion', async () => {
+    const model = new THREE.Group();
+    const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    const hand = new THREE.Bone(); hand.name = 'hand_L'; hand.position.set(10, 20, 30);
+    skeleton.add(hand); model.add(skeleton);
+    const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI/2);
+    model.userData.grimoireAttachments = [{ name: 'ability_cast', bone: 'hand_L', position: [2, 0, 0], rotation: rotation.toArray() }];
+    const d: FxDescriptor = { ...descriptor,
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      initializers: [{ class: 'C_INIT_PositionOffset', params: { m_bLocalCoords: true, m_OffsetMin: [4, 0, 0], m_OffsetMax: [4, 0, 0] } }],
+      operators: [{ class: 'C_OP_PositionLock', params: { m_bLockRot: true } }],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} /><ParticleEffect descriptor={d} textureBaseUrl="/" model={model} /></group>);
+    try {
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo(12*0.0254); expect(p.getY(0)).toBeCloseTo(24*0.0254);
+      hand.rotation.z = Math.PI/2;
+      await renderer.advanceFrames(1, 1/30);
+      expect(p.getX(0)).toBeCloseTo(6*0.0254); expect(p.getY(0)).toBeCloseTo(22*0.0254);
+      expect(p.getZ(0)).toBeCloseTo(30*0.0254);
+    } finally { await renderer.unmount(); }
+  });
   it('anchors sprites at the hand, follows motion, and pauses ages and emission', async () => {
     const model = new THREE.Group();
     const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);

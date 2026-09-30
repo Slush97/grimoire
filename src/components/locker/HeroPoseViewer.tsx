@@ -15,6 +15,7 @@ import { OrbitControls as DreiOrbitControls } from '@react-three/drei';
 import { Leva, folder, useControls } from 'leva';
 import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Loader2 } from 'lucide-react';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -620,7 +621,7 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
  *  view shows a single viewer); SoulContainerViewer would want a shared probe.
  *  Drei Environment is not used here: the viewer needs HDRCubeTextureLoader's
  *  six-face Radiance cubemap path and HalfFloat PMREM for the Deadlock IBL. */
-function Environment({ intensity }: { intensity: number }) {
+function Environment({ intensity, studio }: { intensity: number; studio: boolean }) {
   const { gl, scene } = useThree();
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability -- R3F owns this mutable Three.js scene.
@@ -630,6 +631,20 @@ function Environment({ intensity }: { intensity: number }) {
     let disposed = false;
     const pmrem = new THREE.PMREMGenerator(gl);
     let envRT: THREE.WebGLRenderTarget | null = null;
+    if (studio) {
+      // A room probe supplies distinct softbox reflections for glass and metal.
+      // Keep this separate from the authored dusk probe used by Midtown.
+      const room = new RoomEnvironment();
+      envRT = pmrem.fromScene(room, 0.04);
+      // eslint-disable-next-line react-hooks/immutability -- R3F owns this mutable Three.js scene.
+      scene.environment = envRT.texture;
+      room.dispose();
+      pmrem.dispose();
+      return () => {
+        scene.environment = null;
+        envRT?.dispose();
+      };
+    }
     new HDRCubeTextureLoader()
       .setDataType(THREE.HalfFloatType)
       .load(IBL_FACES, (cube) => {
@@ -648,7 +663,7 @@ function Environment({ intensity }: { intensity: number }) {
       scene.environment = null;
       envRT?.dispose();
     };
-  }, [gl, scene]);
+  }, [gl, scene, studio]);
   return null;
 }
 
@@ -1296,7 +1311,7 @@ export default function HeroPoseViewer({
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
-        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} />
+        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} />
         <hemisphereLight args={[new THREE.Color(96 / 255, 135 / 255, 183 / 255), new THREE.Color(0.32, 0.25, 0.2), 1.5]} />
         <directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}

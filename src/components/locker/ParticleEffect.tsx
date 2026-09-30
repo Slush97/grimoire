@@ -31,6 +31,7 @@ const VERT = /* glsl */ `
 const FRAG = /* glsl */ `
   uniform sampler2D map;
   uniform float uHasMap;
+  uniform float uAdditive;
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha;
@@ -38,6 +39,14 @@ const FRAG = /* glsl */ `
     float d = length(vUv - vec2(0.5));
     vec4 tex = uHasMap > 0.5 ? texture2D(map, vUv) : vec4(1.0, 1.0, 1.0, 1.0 - smoothstep(0.0, 0.5, d));
     gl_FragColor = vec4(vColor * tex.rgb, tex.a * vAlpha);
+    if (uAdditive > 0.5) {
+      // Black adds no radiance. It must also add no canvas coverage, otherwise
+      // opaque-black sprite borders hide the viewer background and PNG alpha.
+      // Preserve the authored RGB contribution under SrcAlpha/One blending.
+      float coverage = clamp(max(max(tex.r, tex.g), tex.b), 0.0, 1.0);
+      gl_FragColor.a *= coverage;
+      gl_FragColor.rgb /= max(coverage, 0.0001);
+    }
     if (gl_FragColor.a <= 0.001) discard;
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -92,9 +101,11 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     geom.instanceCount = 0;
     quad.dispose();
     return { geometry: geom, material: new THREE.ShaderMaterial({
-      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 } },
+      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 } },
       vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,
-      blending: layer.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      blending: layer.additive ? THREE.CustomBlending : THREE.NormalBlending,
+      blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
+      blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
   }, [layer.maxParticles, layer.additive, texture]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
