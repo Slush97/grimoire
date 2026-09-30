@@ -142,4 +142,29 @@ describe('particle playback and model units', () => {
       expect(p.getX(0)).toBeCloseTo((4 + 5/30 + 2.5/30)*0.0254);
     } finally { await renderer.unmount(); }
   });
+  it('rotates authored world axes independently of an attachment frame', async () => {
+    const model = new THREE.Group();
+    const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    skeleton.rotation.z = Math.PI/2;
+    const hand = new THREE.Bone(); hand.name = 'ability_cast'; hand.rotation.y = Math.PI/2;
+    skeleton.add(hand); model.add(skeleton);
+    const d: FxDescriptor = { ...descriptor,
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      initializers: [{ class: 'C_INIT_PositionOffset', params: { m_OffsetMin: [4, 0, 0], m_OffsetMax: [4, 0, 0] } }],
+      operators: [{ class: 'C_OP_MovementRotateParticleAroundAxis', params: { m_vecRotAxis: [0, 1, 0], m_flRotRate: 900 } }],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} />
+      <ParticleEffect descriptor={d} textureBaseUrl="/" model={model} />
+    </group>);
+    try {
+      await renderer.advanceFrames(1, 0.1);
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      // The operator's zero-X rule substitutes Source +Z, so +Y rotates to -X.
+      expect(p.getX(0)).toBeCloseTo(-4*0.0254);
+      expect(p.getY(0)).toBeCloseTo(0);
+      expect(p.getZ(0)).toBeCloseTo(0);
+    } finally { await renderer.unmount(); }
+  });
 });

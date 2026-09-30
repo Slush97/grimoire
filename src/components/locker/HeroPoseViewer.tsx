@@ -31,6 +31,7 @@ import { prepareSource2VertexColors } from '../../lib/source2VertexColors';
 import { loadRiggedHeroPreview } from '../../lib/loadRiggedHeroPreview';
 import { ParticleEffect } from './ParticleEffect';
 import { fxPreviewIssues, type FxDescriptor } from './fxDescriptor';
+import { particleAttachmentIssues } from './particleAttachment';
 import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
@@ -1008,7 +1009,8 @@ export default function HeroPoseViewer({
   const [failed, setFailed] = useState(false);
   const [effect, setEffect] = useState<EffectMount | null>(null);
   const [effectUnavailable, setEffectUnavailable] = useState(false);
-  const partialEffect = useMemo(() => effect ? fxPreviewIssues(effect.descriptor).length > 0 : false, [effect]);
+  const partialEffect = useMemo(() => effect ? fxPreviewIssues(effect.descriptor).length > 0
+    || (scene ? particleAttachmentIssues(effect.descriptor, scene).length > 0 : false) : false, [effect, scene]);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
   const [devFlags, setDevFlags] = useState<DevPreviewFlags>(() => ({
     ...RELEASE_RENDER_FLAGS,

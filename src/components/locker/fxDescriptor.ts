@@ -62,6 +62,7 @@ export interface SpriteSimParams {
   offsetMin: Vec3; offsetMax: Vec3; gravity: Vec3; drag: number;
   follow: boolean; followRotation: boolean; movement: boolean; overbright: number; alphaCurve: unknown; radiusCurve: unknown;
   emissions: SpriteEmission[]; fade: SpriteFade | null;
+  orbit: { axis: Vec3; rate: number; local: boolean } | null;
 }
 export interface SpriteEmission {
   kind: 'continuous' | 'burst'; start: number; duration: number; rate: number;
@@ -80,6 +81,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const randomColor = findNode(d.initializers, 'C_INIT_RandomColor');
   const colorOp = findNode(d.operators, 'C_OP_ColorInterpolate');
   const fade = findNode(d.operators, 'C_OP_FadeAndKill');
+  const orbit = findNode(d.operators, 'C_OP_MovementRotateParticleAroundAxis');
   const scalar = (v: unknown, fallback: number, max = 30) => Math.max(0, Math.min(max, paramScalar(v, fallback)));
   const emissionRate = (v: unknown) => v === undefined ? 100 : scalar(v, 0, 256);
   const cp = (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
@@ -134,6 +136,11 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
       fadeIn: [scalar(fade.params.m_flStartFadeInTime, 0), scalar(fade.params.m_flEndFadeInTime, 0.5)],
       fadeOut: [scalar(fade.params.m_flStartFadeOutTime, 0.5), scalar(fade.params.m_flEndFadeOutTime, 1)],
       startAlpha: scalar(fade.params.m_flStartAlpha, 1, 1), endAlpha: scalar(fade.params.m_flEndAlpha, 0, 1),
+    } : null,
+    orbit: orbit ? {
+      axis: vector(orbit.params.m_vecRotAxis, [0, 0, 1]),
+      rate: Math.max(-3600, Math.min(3600, paramScalar(orbit.params.m_flRotRate, 180)))*Math.PI/180,
+      local: orbit.params.m_bLocalSpace === true,
     } : null,
   };
 }
@@ -191,7 +198,7 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
     'C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter', 'C_INIT_InitFloat',
     'C_INIT_CreateWithinSphere', 'C_INIT_CreateWithinSphereTransform', 'C_INIT_PositionOffset',
     'C_INIT_RandomColor', 'C_OP_BasicMovement', 'C_OP_PositionLock', 'C_OP_SpinUpdate',
-    'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites',
+    'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites', 'C_OP_MovementRotateParticleAroundAxis',
   ]);
   const issues: FxPreviewIssue[] = [];
   let visited = 0;

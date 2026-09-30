@@ -26,7 +26,7 @@ export function groupHeroClips(clips: string[]): { group: HeroClipGroup; clips: 
   for (const name of clips) {
     const tokens = name.toLowerCase().split(/[^a-z0-9]+/);
     const group = tokens.some((s) => /^(idle|menu|loadout|select)$/.test(s)) ? 'idle'
-      : tokens.some((s) => /^(walk|run|sprint|jump|land|crouch|dash|slide|climb|move)$/.test(s)) ? 'movement'
+      : tokens.some((s) => /^(walk|run|sprint|jump|land|crouch|dash|slide|climb|move)(?:\d+)?$/.test(s)) ? 'movement'
         : tokens.some((s) => /^(attack|fire|shoot|reload|melee|punch|cast|ability|ult|ultimate)$/.test(s)) ? 'combat'
           : 'other';
     groups[group].push(name);

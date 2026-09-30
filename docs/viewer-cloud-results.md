@@ -2,6 +2,8 @@
 
 Checkpoint: 2026-09-30. Source branch: `feat/viewer-parity`, continuing `6a5b4a8933dca4d09955e8c98276331a296d3b9d`. The source checkout was preserved. No private game assets belong in the public repository.
 
+Update: the later signed-download workaround succeeded. The archive hash and all 25 fixture hashes passed, and four real heroes are restored. [The agent handoff](viewer-agent-handoff.md) supersedes this checkpoint's fixture blocker and records the subsequent numerical checks and remaining rendered work.
+
 ## Implemented
 
 - Controls stay mounted while models reload. Copy remains short. The timeline seeks while paused, seeking pauses playback, resume continues from the selected pose, speed/time inputs are bounded, and authored clips are grouped without discarding their names. Progress updates stay local to the timeline.
@@ -30,7 +32,7 @@ The same three failures occur on the clean original head: `getInstalledCardTaxon
 
 The transport-only local harness mounted the production renderer in Chromium 153 using software WebGL2. A clearly marked synthetic skinned box exercised shader compilation, animated model loading with the controls left open, grouped clips, paused seeking, clip switching, resumed playback, local background load/clear, fullscreen, and PNG download. Capture pixels confirmed the selected background was included and the transparent preset retained zero-alpha corners. No page or shader errors were observed. Synthetic files and screenshots remain ignored, and are not hero comparisons. After verification, synthetic inputs were moved out of the real fixture directory to prevent accidental use as hero assets.
 
-## Private fixture access
+## Initial private fixture access blocker (resolved later)
 
 The private upload exists, but its authorized download returned HTTP 502. The later workaround uses `oldreceipt/grimoire-viewer-fixtures`, branch `main`, with eight ordinary-Git binary parts, a manifest and `restore.py`. The GitHub app could read the manifest and restore script. Cloud shell cloning failed exactly:
 

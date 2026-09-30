@@ -32,4 +32,11 @@ describe('viewer playback bounds', () => {
     expect(groups.flatMap((group) => group.clips).sort()).toEqual([...clips].sort());
     expect(groupHeroClips([])).toEqual([]);
   });
+
+  it('recognizes authored speed suffixes on Mirage and Yamato run clips', () => {
+    expect(groupHeroClips(['primary_run355_n', 'primary_run275_e', 'item_run_600_n', 'runaway', 'runner'])).toEqual([
+      { group: 'movement', clips: ['primary_run355_n', 'primary_run275_e', 'item_run_600_n'] },
+      { group: 'other', clips: ['runaway', 'runner'] },
+    ]);
+  });
 });

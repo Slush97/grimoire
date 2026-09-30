@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, spriteFadeValue,
   type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
+import { resolveParticleAttachment } from './particleAttachment';
 
 const VERT = /* glsl */ `
   attribute vec3 aPosition;
@@ -49,25 +50,6 @@ interface Particle {
 }
 const sample = (range: [number, number]) => THREE.MathUtils.lerp(range[0], range[1], Math.random());
 
-/** Named attachments are not currently exported as nodes. Fall back to the
- * corresponding hand bone for ability_cast while preserving exact matches. */
-function particleAnchor(model: THREE.Object3D, attachment: string | null): THREE.Object3D | null {
-  if (attachment) {
-    const exact = model.getObjectByName(attachment);
-    if (exact) return exact;
-  }
-  const side = /left|_l$/i.test(attachment ?? '') ? 'l' : 'r';
-  let found: THREE.Object3D | null = null;
-  model.traverse((object) => {
-    if (found) return;
-    const name = object.name.toLowerCase();
-    if (attachment && /cast|hand/i.test(attachment)
-      && [ `hand_${side}`, `${side}_hand`, `bip_hand_${side}` ].includes(name)) found = object;
-    if (!attachment && /^(spine_?2|spine_?1|bip_spine_?2)$/.test(name)) found = object;
-  });
-  return found;
-}
-
 function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
   layer: SpriteSimParams; textureBaseUrl: string; model?: THREE.Object3D;
   playback?: { paused: boolean; speed: number };
@@ -83,7 +65,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [layer.texture, textureBaseUrl]);
-  const anchor = useMemo(() => model ? particleAnchor(model, layer.attachment) : null, [model, layer.attachment]);
+  const anchor = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment).object : null, [model, layer.attachment]);
   // morphic converts Source inches to meters at the skeleton root. The effect
   // sits alongside that root, so apply the same units exactly once.
   const sourceUnit = useMemo(() => model?.getObjectByName('skeleton')?.scale.x ?? 0.0254, [model]);
@@ -93,6 +75,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     orientation: new THREE.Quaternion(), parentOrientation: new THREE.Quaternion(),
     sourceOrientation: new THREE.Quaternion(), gravity: new THREE.Vector3(),
     previousOrientation: new THREE.Quaternion(), deltaOrientation: new THREE.Quaternion(),
+    orbitAxis: new THREE.Vector3(), orbitRotation: new THREE.Quaternion(),
     color: new THREE.Color(), fadeColor: layer.colorFade ? new THREE.Color().setRGB(...layer.colorFade) : null,
   }), [layer.colorFade]);
   const { geometry, material } = useMemo(() => {
@@ -202,6 +185,16 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
         // adds after inertia decay, matching BasicMovement's position step.
         p.velocity.multiplyScalar(Math.pow(1-layer.drag, 30*step)).addScaledVector(gravity, step);
         p.position.addScaledVector(p.velocity, step);
+      }
+      if (layer.orbit) {
+        // Source substitutes +Z when the authored axis's X is zero. Rotating
+        // both position and velocity preserves physical momentum, so orbital
+        // displacement does not become an extra outward velocity next frame.
+        scratch.orbitAxis.fromArray(layer.orbit.axis[0] === 0 ? [0, 0, 1] : layer.orbit.axis).normalize()
+          .applyQuaternion(layer.orbit.local ? orientation : sourceOrientation);
+        scratch.orbitRotation.setFromAxisAngle(scratch.orbitAxis, layer.orbit.rate*step);
+        p.position.sub(origin).applyQuaternion(scratch.orbitRotation).add(origin);
+        p.velocity.applyQuaternion(scratch.orbitRotation);
       }
       p.rotation += p.spin*step;
       const t = p.age/p.life;
