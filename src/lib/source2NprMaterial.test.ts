@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import {
   NPR_FRAGMENT,
   NPR_PATCH_MAP,
@@ -654,6 +655,27 @@ describe('NPR self-illum hue-preserving cap', () => {
   });
 });
 
+
+describe('glass transmission shader integration', () => {
+  it('applies authored scene blur after CSM expands the transmission chunk', () => {
+    const material = new CustomShaderMaterial({
+      baseMaterial: new THREE.MeshPhysicalMaterial({ transmission: 1 }),
+      fragmentShader: NPR_FRAGMENT,
+      patchMap: NPR_PATCH_MAP,
+    });
+    const shader = {
+      vertexShader: THREE.ShaderLib.physical.vertexShader,
+      fragmentShader: THREE.ShaderLib.physical.fragmentShader,
+      uniforms: {},
+    };
+    material.onBeforeCompile(shader as Parameters<typeof material.onBeforeCompile>[0], {} as THREE.WebGLRenderer);
+    expect(shader.fragmentShader).toContain(
+      'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,'
+    );
+    expect(shader.fragmentShader).not.toContain('n, v, material.roughness,');
+    material.dispose();
+  });
+});
 
 describe('NPR preview light coordinate space', () => {
   const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;

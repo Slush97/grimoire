@@ -1242,12 +1242,11 @@ void main() {
 // tonemaps our result downstream exactly like the PBR path.
 export const NPR_PATCH_MAP: CSMPatchMap = {
   '*': {
-    '#include <transmission_fragment>': {
+    // CSM expands transmission_fragment before applying custom patches. Match
+    // the refraction call in that expanded chunk, rather than its removed include.
+    'n, v, material.roughness,': {
       type: 'fs',
-      value: THREE.ShaderChunk.transmission_fragment.replace(
-        'n, v, material.roughness,',
-        'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,'
-      ),
+      value: 'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,',
     },
     '#include <lights_fragment_end>': {
       type: 'fs',
