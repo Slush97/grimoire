@@ -16,6 +16,7 @@ import { Leva, folder, useControls } from 'leva';
 import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { FULL_EFFECTS_PREVIEW_DEFAULTS, initialHeroPreviewFlags } from './heroViewerDefaults';
 import { Loader2 } from 'lucide-react';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -63,7 +64,7 @@ import type { TrippyPreview } from '../../stores/trippyPreviewStore';
 /**
  * Live 3D preview of a hero's menu pose for the Locker's per-hero view.
  *
- * Defaults to a static menu pose. Physics preview loads an animated rig and
+ * Starts with animation and supported effects enabled. Physics loads an animated rig and
  * its matching cloth sidecar. Both are exported on demand by vpkmerge and
  * served from the user's cache through the `grimoire-hero:` scheme.
  *
@@ -88,10 +89,6 @@ const IBL_FACES = [
   getAssetPath('/ibl/nz.hdr'),
 ];
 
-const USE_CLOTH: boolean = false;
-
-// Bloom postprocessing gives self-illum glows their bright-core + colored-halo look.
-const USE_BLOOM: boolean = false;
 // UnrealBloomPass starting params. Threshold is in LINEAR space, so it mainly catches
 // the capped self-illum (peak ~ selfIllumCap) and the brightest speculars, not the
 // whole hero. All three are calibration knobs - tune against a glowing hero.
@@ -99,27 +96,8 @@ const BLOOM_INTENSITY = 0.2;
 const BLOOM_RADIUS = 0.5;
 const BLOOM_THRESHOLD = 1.2;
 
-// Unified single build pass (deadlockMaterial.buildDeadlockMaterial): the one
-// material-styling path. Collapses the Source 2 hints + NPR cel/rim/tint into one
-// pass on an owned clone of each material, so the GLTF base is never mutated. Off
-// shows the raw GLB.
-const USE_UNIFIED_MATERIAL: boolean = true;
-
-// Phase 5 shader experiment: quantize accumulated direct diffuse at
-// lights_fragment_end, leaving IBL unbanded.
-const USE_CEL_V2: boolean = true;
-
-// Ambient particle FX overlay stays off. It is separate from shader/material work.
-const USE_EFFECT_PREVIEW: boolean = false;
-
-const RELEASE_RENDER_FLAGS = {
-  unified: USE_UNIFIED_MATERIAL,
-  celV2: USE_CEL_V2,
-  cloth: USE_CLOTH,
-  bloom: USE_BLOOM,
-  nprDebug: false,
-  matDebug: false,
-};
+// Full preview effects start enabled; explicit saved switches take precedence.
+const RELEASE_RENDER_FLAGS = FULL_EFFECTS_PREVIEW_DEFAULTS;
 
 type DevPreviewFlags = typeof RELEASE_RENDER_FLAGS & {
   effects: boolean;
@@ -159,16 +137,11 @@ const COMPACT_LEVA_THEME = {
   },
 };
 
-function previewFlag(name: string, fallback: boolean): boolean {
-  if (typeof window === 'undefined') return fallback;
-  const raw = window.localStorage.getItem(name);
-  if (raw === null) return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(raw.toLowerCase());
-}
 
 function writePreviewFlag(name: string, value: boolean): void {
   if (typeof window !== 'undefined') window.localStorage.setItem(name, value ? '1' : '0');
 }
+
 
 function effectDescriptorUrl(key: string): string {
   return `${HERO_POSE_SCHEME}://m/${encodeURIComponent(key)}/effect.json`;
@@ -1028,17 +1001,7 @@ export default function HeroPoseViewer({
   const partialEffect = useMemo(() => effect ? fxPreviewIssues(effect.descriptor).length > 0
     || (scene ? particleAttachmentIssues(effect.descriptor, scene).length > 0 : false) : false, [effect, scene]);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
-  const [devFlags, setDevFlags] = useState<DevPreviewFlags>(() => ({
-    ...RELEASE_RENDER_FLAGS,
-    animated: previewFlag('grimoire.preview.effects', USE_EFFECT_PREVIEW) || previewFlag('grimoire.preview.cloth', USE_CLOTH),
-    unified: previewFlag('grimoire.preview.unifiedMaterial', USE_UNIFIED_MATERIAL),
-    celV2: previewFlag('grimoire.preview.celV2', USE_CEL_V2),
-    cloth: previewFlag('grimoire.preview.cloth', USE_CLOTH),
-    bloom: previewFlag('grimoire.preview.bloom', USE_BLOOM),
-    effects: previewFlag('grimoire.preview.effects', USE_EFFECT_PREVIEW),
-    nprDebug: previewFlag('grimoire.preview.nprDebug', false),
-    matDebug: previewFlag('grimoire.preview.matDebug', false),
-  }));
+  const [devFlags, setDevFlags] = useState<DevPreviewFlags>(initialHeroPreviewFlags);
   const [bloomParams, setBloomParams] = useState<BloomParams>(() => ({
     intensity: BLOOM_INTENSITY,
     radius: BLOOM_RADIUS,
@@ -1046,6 +1009,7 @@ export default function HeroPoseViewer({
   }));
   const setDevFlag = useCallback((key: keyof DevPreviewFlags, storageKey: string, value: boolean) => {
     writePreviewFlag(storageKey, value);
+    if ((key === 'effects' || key === 'cloth') && value) writePreviewFlag('grimoire.preview.animated', true);
     setDevFlags((current) => ({ ...current, [key]: value, ...((key === 'effects' || key === 'cloth') && value ? { animated: true } : {}) }));
   }, []);
   const activeRenderFlags = {
@@ -1257,6 +1221,7 @@ export default function HeroPoseViewer({
             ? t('locker.pose.particlesUnavailable') : effectPreviewEnabled && partialEffect
               ? t('locker.pose.particlesPartial') : null)}
       onAnimated={(v) => {
+        writePreviewFlag('grimoire.preview.animated', v);
         if (!v) {
           writePreviewFlag('grimoire.preview.cloth', false);
           writePreviewFlag('grimoire.preview.effects', false);
