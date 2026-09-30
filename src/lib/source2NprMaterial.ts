@@ -1302,6 +1302,13 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       #include <opaque_fragment>
       {
         vec3 nprLit = gl_FragColor.rgb;
+        // Glass removes surface diffuse before adding scene color. Keep the
+        // preview cel/rim approximation off that transmitted color and its
+        // preserved specular, including partially masked glass.
+        float nprSurfaceWeight = 1.0;
+        #ifdef USE_TRANSMISSION
+          nprSurfaceWeight = 1.0 - clamp(material.transmission, 0.0, 1.0);
+        #endif
         // Three's final normal already includes normal maps, flat-shading and
         // backface handling, all in view space. Transform the world key direction
         // into that same space once, so orbiting cannot rotate the light gate.
@@ -1321,7 +1328,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           if (uCelV2 <= 0.5) {
             float nprLum = dot(nprLit, vec3(0.2126, 0.7152, 0.0722));
             float nprQ = celQuantize(clamp(nprLum, 0.0, 1.0), uBands, uStepSharpness);
-            nprCel = nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0);
+            nprCel = mix(nprLit, nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0), nprSurfaceWeight);
           }
           // Preview approximation: view Fresnel gated by a key light and mask G.
           // Source's NPR rim instead needs per-light evaluation, an authored up
@@ -1329,7 +1336,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
           float nprFres = pow(clamp(1.0 - abs(dot(nprN, nprV)), 0.0, 1.0), uRimPower);
           float nprGate = smoothstep(-uWrap, 1.0, dot(nprN, nprL));
-          nprRim = nprFres * nprGate * nprRimMaskG * uRimStrength;
+          nprRim = nprFres * nprGate * nprRimMaskG * uRimStrength * nprSurfaceWeight;
         }
 
         vec3 nprOut = nprCel + uRimColor * nprRim;

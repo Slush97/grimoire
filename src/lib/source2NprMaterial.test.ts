@@ -602,6 +602,14 @@ describe('NPR rim mask (F8)', () => {
     expect(patch).toContain('nprMask.g : uRimMaskDefault');
     expect(patch).toContain('uRimColor * nprRim');
   });
+
+  it('keeps transmitted scene color out of the surface cel and rim approximation', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+    expect(patch).toContain('#ifdef USE_TRANSMISSION');
+    expect(patch).toContain('1.0 - clamp(material.transmission, 0.0, 1.0)');
+    expect(patch).toContain('mix(nprLit, nprLit *');
+    expect(patch).toContain('uRimStrength * nprSurfaceWeight');
+  });
 });
 
 describe('NPR self-illum hue-preserving cap', () => {
