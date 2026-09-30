@@ -28,7 +28,7 @@ Node 20 and pnpm 10 were used, matching CI. Cloud setup and the pinned exporter 
 
 The same three failures occur on the clean original head: `getInstalledCardTaxonomy` canonicalizing hero aliases, `buildHeroList` detecting a tree predating a roster hero, and `inferHeroFromTitle` matching new heroes. They are existing roster expectations, not introduced viewer failures. Loopback-dependent tests were run with network permission on both checkouts.
 
-The transport-only local harness mounted the production renderer in Chromium 153 using software WebGL2. A clearly marked synthetic skinned box exercised shader compilation, animated model loading with the controls left open, grouped clips, paused seeking, clip switching, resumed playback, local background load/clear, fullscreen, and PNG download. Capture pixels confirmed the selected background was included and the transparent preset retained zero-alpha corners. No page or shader errors were observed. Synthetic files and screenshots remain ignored, and are not hero comparisons.
+The transport-only local harness mounted the production renderer in Chromium 153 using software WebGL2. A clearly marked synthetic skinned box exercised shader compilation, animated model loading with the controls left open, grouped clips, paused seeking, clip switching, resumed playback, local background load/clear, fullscreen, and PNG download. Capture pixels confirmed the selected background was included and the transparent preset retained zero-alpha corners. No page or shader errors were observed. Synthetic files and screenshots remain ignored, and are not hero comparisons. After verification, synthetic inputs were moved out of the real fixture directory to prevent accidental use as hero assets.
 
 ## Private fixture access
 
@@ -49,6 +49,6 @@ cd /workspace/scratch/6af22c6f1513/grimoire
 node scripts/preview-cloth.mjs --serve-only --grimoire
 ```
 
-If `/tmp/grimoire-viewer-fixtures` still contains the downloaded text-only metadata, use another temporary clone destination and its corresponding restore path. The restore verifies all part hashes, the complete archive hash and all 25 files before extracting only ignored `.codex-run/source2-physics/` inputs. It replaces the synthetic harness inputs. Do not commit fixtures or make the fixture repository public.
+If `/tmp/grimoire-viewer-fixtures` still contains the downloaded text-only metadata, use another temporary clone destination and its corresponding restore path. The restore verifies all part hashes, the complete archive hash and all 25 files before extracting only ignored `.codex-run/source2-physics/` inputs. It supplies the real harness inputs. Do not commit fixtures or make the fixture repository public.
 
 All four real heroes still need comparison for materials, cloth, particles, playback and capture. This is blocked by fixture access. Browser-based controls/capture are verified with synthetic input; Windows Electron, native GPU appearance and frame comparisons with the game/reference remain separate unverified targets. The in-app reference browser also failed to load the reference model, so it did not provide a rendered comparison in this continuation.

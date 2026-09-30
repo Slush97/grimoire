@@ -57,4 +57,3 @@ export function useViewerBackdrop() {
   };
   return { texture, choose, clear, errorKey, loading };
 }
-
