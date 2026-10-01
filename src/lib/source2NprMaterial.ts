@@ -297,8 +297,8 @@ export const DEFAULT_NPR_TUNING: NprTuning = {
   bands: 4,
   stepSharpness: 0.08,
   wrap: 0.5,
-  rimStrength: 0.6,
-  rimPower: 3.0,
+  rimStrength: 1.5,
+  rimPower: 2.0,
   rimColor: new THREE.Color(0.6, 0.75, 1.0),
   nprStrength: 1.0,
   aoStrength: 1.0,
@@ -309,7 +309,8 @@ export const DEFAULT_NPR_TUNING: NprTuning = {
   selfIllumMaskLow: 0.005,
   selfIllumMaskHigh: 0.08,
   jitterStrength: 0.3,
-  keyDir: new THREE.Vector3(3, 5, 4).normalize(),
+  // Match the viewer's key light so reflected rim and cel shading agree.
+  keyDir: new THREE.Vector3(-3, 4, 3).normalize(),
 };
 
 // A 1x1 white texture so the mask sampler is ALWAYS bound (never sample an
