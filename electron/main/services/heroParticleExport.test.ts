@@ -2,12 +2,61 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-const h = vi.hoisted(() => ({ run: vi.fn(), stdout: vi.fn() }));
+const h = vi.hoisted(() => ({ run: vi.fn(), stdout: vi.fn(), index: vi.fn() }));
 vi.mock('./modMerger', () => ({ runVpkmerge: h.run, runVpkmergeStdout: h.stdout }));
+vi.mock('./vpk', () => ({ parseVpkDirectoryCached: h.index }));
 import { exportParticleBundle, particleDescriptor } from './heroParticleExport';
 const resource = (overrides = {}) => ({ _class: 'CParticleSystemDefinition', m_Renderers: [], ...overrides });
 afterEach(() => vi.resetAllMocks());
 describe('compiled particle export', () => {
+  it('resolves exact texture owners in skin, Citadel, core order without overriding higher priority', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-particle-mount-test-'));
+    const textureNames = ['override', 'base', 'core'];
+    h.stdout.mockResolvedValue(JSON.stringify(resource({ m_Renderers: [{ _class: 'C_OP_RenderSprites',
+      m_vecTexturesInput: textureNames.map((name) => ({ m_hTexture: `materials/particle/${name}.vtex` })) }] })));
+    h.index.mockImplementation((pak: string) => ({
+      'skin.vpk': ['materials/particle/override.vtex_c'],
+      'base.vpk': ['materials/particle/override.vtex_c', 'materials/particle/base.vtex_c'],
+      'core.vpk': textureNames.map((name) => `materials/particle/${name}.vtex_c`),
+    })[pak]);
+    h.run.mockImplementation(async (args: string[]) => {
+      const scratch = args[args.indexOf('--out-dir') + 1];
+      const pak = args[args.indexOf('--vpk') + 1];
+      for (let i = 0; i < args.length; i++) if (args[i] === '--prefix') {
+        const entry = args[i + 1];
+        const png = join(scratch, entry.replace(/\.vtex_c$/, '.png'));
+        const raw = join(scratch, '_raw', entry);
+        await fs.mkdir(join(png, '..'), { recursive: true });
+        await fs.mkdir(join(raw, '..'), { recursive: true });
+        await fs.writeFile(png, pak);
+        await fs.writeFile(raw, Buffer.alloc(16));
+      }
+    });
+    try {
+      await exportParticleBundle('base.vpk', 'particles/root.vpcf_c', join(dir, 'effect.json'), join(dir, 'tex'), undefined,
+        ['skin.vpk', 'base.vpk', 'core.vpk', 'skin.vpk']);
+      for (const [name, owner] of [['override', 'skin.vpk'], ['base', 'base.vpk'], ['core', 'core.vpk']]) {
+        expect(await fs.readFile(join(dir, 'tex', `materials_particle_${name}_vtex.png`), 'utf8')).toBe(owner);
+      }
+      expect(h.index).toHaveBeenCalledTimes(3);
+      expect(h.run).toHaveBeenCalledTimes(3);
+      expect(h.stdout.mock.calls[0][0]).toContain('base.vpk');
+      expect(await fs.readdir(join(dir, 'tex'))).toHaveLength(3);
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
+  it('never sends malformed texture paths to a decoder and refuses missing mounted entries', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-particle-missing-test-'));
+    h.stdout.mockResolvedValue(JSON.stringify(resource({ m_Renderers: [{ _class: 'C_OP_RenderSprites',
+      m_vecTexturesInput: ['../escape.vtex', 'materials/../escape.vtex', 'C:/secret.vtex', 'materials/particle/missing.vtex']
+        .map((m_hTexture) => ({ m_hTexture })) }] })));
+    h.index.mockReturnValue([]);
+    try {
+      await expect(exportParticleBundle('base.vpk', 'particles/root.vpcf_c', join(dir, 'effect.json'), join(dir, 'tex'), undefined,
+        ['skin.vpk', 'base.vpk', 'core.vpk'])).rejects.toThrow('absent from mounted packages: materials/particle/missing.vtex');
+      expect(h.run).not.toHaveBeenCalled();
+      await expect(fs.access(join(dir, 'effect.json'))).rejects.toThrow();
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
   it('normalizes scalar and vector wrappers while keeping authored curves', () => {
     const d = particleDescriptor(resource({ m_Initializers: [{ _class: 'C_INIT_InitFloat', m_InputValue: {
       m_nType: 'PF_TYPE_PARTICLE_AGE_NORMALIZED', m_Curve: { m_spline: [{ x: 0, y: 1 }] },

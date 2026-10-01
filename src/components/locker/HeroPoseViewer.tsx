@@ -1171,7 +1171,7 @@ export default function HeroPoseViewer({
     console.info('[HeroPoseViewer] NPR material summary', heroName, summarizeNprScene(scene));
   }, [scene, heroName, features.nprDebugEnabled]);
 
-  // Ambient FX overlay (skin-independent): only the curated heroes have one, so
+  // Ambient FX overlay: curated base graphs use the selected skin's texture stack.
   // getHeroEffectInfo cheaply returns hasEffect=false for everyone else. The
   // bundle is built on demand, then the descriptor JSON is fetched over the
   // grimoire-hero: scheme and handed to the renderer.
@@ -1182,11 +1182,11 @@ export default function HeroPoseViewer({
     setEffectUnavailable(false);
     (async () => {
       try {
-        let info = await getHeroEffectInfo(heroName);
+        let info = await getHeroEffectInfo(heroName, skinSources);
         if (cancelled) return;
         if (!info.entry) { setEffectUnavailable(true); return; }
         if (!info.hasEffect) {
-          info = await exportHeroEffect(heroName);
+          info = await exportHeroEffect(heroName, skinSources);
           if (cancelled) return;
           if (!info.hasEffect) { setEffectUnavailable(true); return; }
         }
@@ -1203,7 +1203,9 @@ export default function HeroPoseViewer({
     return () => {
       cancelled = true;
     };
-  }, [heroName, effectPreviewEnabled]);
+    // sourceKey covers the stack; parent renders may allocate an equivalent array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroName, sourceKey, effectPreviewEnabled]);
 
   const toolbar = (
     <HeroViewerToolbar

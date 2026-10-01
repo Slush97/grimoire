@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   stdout: vi.fn<(args: string[]) => Promise<string>>(),
   handle: vi.fn(),
   fetch: vi.fn<(url: string) => Promise<Response>>(),
+  particles: vi.fn(),
 }));
 vi.mock('electron', () => ({
   app: { getPath: () => h.userData },
@@ -18,6 +19,7 @@ vi.mock('electron', () => ({
 vi.mock('./modMerger', () => ({
   runVpkmerge: h.run, runVpkmergeStdout: h.stdout, verifyVpkOutput: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('./heroParticleExport', () => ({ exportParticleBundle: h.particles }));
 vi.mock('./heroPortraits', () => ({ codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : ['yamato'] }));
 vi.mock('./deadlock', () => ({
   getCitadelPath: (path: string) => join(path, 'game', 'citadel'),
@@ -25,7 +27,7 @@ vi.mock('./deadlock', () => ({
   getDisabledPath: (path: string) => join(path, 'game', 'citadel', '.disabled'),
 }));
 
-import { choosePreviewClips, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
+import { choosePreviewClips, exportHeroEffect, getHeroEffectInfo, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
 
 const container = resolve('.codex-run', 'hero-preview-tests');
 const clips = JSON.stringify([{ name: 'primary_stand_idle', frameCount: 31, fps: 30, durationSeconds: 1, looping: true, default: true }]);
@@ -50,6 +52,29 @@ describe('animation menu exports', () => {
     expect(h.run.mock.calls[0][0]).toContain('models/heroes_staging/mirage_v2/mirage.vmdl_c');
     const physics = h.stdout.mock.calls.find(([args]) => args[1] === 'femodel')?.[0];
     expect(physics).toContain('models/heroes_staging/mirage_v2/mirage.vmdl_c');
+  });
+});
+
+describe('mounted ambient particle textures', () => {
+  it('keys selected skin textures by content and passes skin before Citadel before core', async () => {
+    const addons = join(game(), 'game', 'citadel', 'addons');
+    await fs.mkdir(addons, { recursive: true });
+    const skin = join(addons, 'one_dir.vpk');
+    await fs.writeFile(skin, 'first texture version');
+    h.particles.mockImplementation(async (_pak, _entry, descriptor: string) => fs.writeFile(descriptor, '{}'));
+    const sources = [{ metaKey: 'one_dir.vpk', priority: 0 }];
+    const info = await exportHeroEffect(game(), 'Rem', sources);
+    expect(info.hasEffect).toBe(true);
+    expect(h.particles.mock.calls[0][5]).toEqual([skin, join(game(), 'game', 'citadel', 'pak01_dir.vpk'), join(game(), 'game', 'core', 'pak01_dir.vpk')]);
+    expect((await getHeroEffectInfo(game(), 'Rem', sources)).hasEffect).toBe(true);
+    expect((await getHeroEffectInfo(game(), 'Rem')).hasEffect).toBe(false);
+    await fs.writeFile(skin, 'changed texture version with a different size');
+    const changed = await getHeroEffectInfo(game(), 'Rem', sources);
+    expect(changed.key).not.toBe(info.key);
+    expect(changed.hasEffect).toBe(false);
+    h.particles.mockRejectedValue(new Error('decode failed'));
+    await expect(exportHeroEffect(game(), 'Rem', sources)).rejects.toThrow('decode failed');
+    expect((await getHeroEffectInfo(game(), 'Rem', sources)).hasEffect).toBe(false);
   });
 });
 

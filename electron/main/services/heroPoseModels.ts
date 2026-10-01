@@ -331,7 +331,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 /** Bump when descriptors or bundled textures change. v2 reads generic KV3 DATA
  * through the pinned decoder and exports textures with Panorama dump. */
 // v4: retain authored fixed sheet regions and model particle scale.
-const EFFECT_CACHE_VERSION = '4';
+// v5: resolve authored core texture dependencies after the primary package.
+const EFFECT_CACHE_VERSION = '5';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1059,23 +1060,17 @@ async function runRiggedHeroExportForSources(
 
 export interface HeroEffectInfo {
     hasEffect: boolean;
-    /** Storage key (vanilla pose key: ambient FX is skin-independent). */
+    /** Content-addressed storage key for the selected skin texture stack. */
     key: string;
     /** The `.vpcf_c` entry the descriptor was built from, for diagnostics. */
     entry: string | null;
 }
 
-/** Ambient FX is skin-independent (it comes from the base pak), so one bundle per
- *  hero serves every skin: key it to the vanilla pose dir. */
-function effectKey(heroName: string): string {
-    return poseKey(heroName, []);
-}
-
 /** Whether a hero's ambient FX bundle (descriptor + textures) is cached and
  *  current. Mirrors getHeroPoseInfo. */
-export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
+export async function getHeroEffectInfo(deadlockPath: string, heroName: string, skinSources: HeroPoseSkinSource[] = []): Promise<HeroEffectInfo> {
     const entry = AMBIENT_EFFECTS[heroName] ?? null;
-    const key = effectKey(heroName);
+    const key = await resolvePoseKey(deadlockPath, heroName, skinSources);
     if (!entry) return { hasEffect: false, key, entry: null };
     try {
         await fs.access(effectFile(key));
@@ -1093,15 +1088,16 @@ const inFlightEffectExports = new Map<string, Promise<HeroEffectInfo>>();
  * Generate a hero's ambient FX bundle through the bundled vpkmerge KV3 reader:
  * the normalized descriptor (`effect.json`) plus every referenced texture decoded
  * to PNG (`effect-tex/`), both served over the `grimoire-hero:` scheme. Reads
- * straight from the base pak (ambient VFX is not skin-specific). No-op result for
+ * authored graph from the base pak, with selected skin texture overrides. No-op result for
  * a hero without a curated effect.
  */
 export async function exportHeroEffect(
     deadlockPath: string,
-    heroName: string
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = []
 ): Promise<HeroEffectInfo> {
     const entry = AMBIENT_EFFECTS[heroName];
-    const key = effectKey(heroName);
+    const key = await resolvePoseKey(deadlockPath, heroName, skinSources);
     if (!entry) return { hasEffect: false, key, entry: null };
 
     const existing = inFlightEffectExports.get(key);
@@ -1109,12 +1105,20 @@ export async function exportHeroEffect(
 
     const work = (async (): Promise<HeroEffectInfo> => {
         const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
-        const dir = modelDir(key);
-        await fs.mkdir(dir, { recursive: true });
-        await exportParticleBundle(pak01, entry, effectFile(key), effectTexDir(key),
-            heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName]);
-        await fs.writeFile(effectVersionFile(key), EFFECT_CACHE_VERSION);
-        return { hasEffect: true, key, entry };
+        const source = await resolvePoseSource(deadlockPath, pak01, normalizeSkinSources(skinSources));
+        try {
+            const exportKey = poseKey(heroName, source.sources, source.fingerprint);
+            const dir = modelDir(exportKey);
+            await fs.mkdir(dir, { recursive: true });
+            await fs.rm(effectVersionFile(exportKey), { force: true });
+            await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
+                heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
+                [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')]);
+            await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
+            return { hasEffect: true, key: exportKey, entry };
+        } finally {
+            if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+        }
     })();
     inFlightEffectExports.set(key, work);
     try {

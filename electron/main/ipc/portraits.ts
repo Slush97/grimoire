@@ -173,16 +173,18 @@ ipcMain.handle(
 
 ipcMain.handle(
     'get-hero-effect-info',
-    async (_, heroName: string): Promise<HeroEffectInfo> => {
-        return getHeroEffectInfo(heroName);
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroEffectInfo> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return getHeroEffectInfo(deadlockPath, heroName, skinSources);
     }
 );
 
 ipcMain.handle(
     'export-hero-effect',
-    async (_, heroName: string): Promise<HeroEffectInfo> => {
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroEffectInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return exportHeroEffect(deadlockPath, heroName);
+        return exportHeroEffect(deadlockPath, heroName, skinSources);
     }
 );

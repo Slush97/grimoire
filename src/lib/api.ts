@@ -297,13 +297,13 @@ export async function exportRiggedHeroPose(
 }
 
 /** Whether a hero's ambient FX descriptor bundle is cached/current. */
-export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
-  return window.electronAPI.getHeroEffectInfo(heroName);
+export async function getHeroEffectInfo(heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroEffectInfo> {
+  return window.electronAPI.getHeroEffectInfo(heroName, skinSources);
 }
 
 /** Build (or refresh) a hero's ambient FX bundle via the bundled vpkmerge. */
-export async function exportHeroEffect(heroName: string): Promise<HeroEffectInfo> {
-  return window.electronAPI.exportHeroEffect(heroName);
+export async function exportHeroEffect(heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroEffectInfo> {
+  return window.electronAPI.exportHeroEffect(heroName, skinSources);
 }
 
 export async function applyHeroSound(

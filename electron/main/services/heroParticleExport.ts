@@ -4,6 +4,7 @@ import type { FxDescriptor, FxNode, FxRenderer } from '../../../src/components/l
 import { fxTexturePngName } from '../../../src/components/locker/fxDescriptor';
 import { runVpkmerge, runVpkmergeStdout } from './modMerger';
 import { readParticleSheet } from './particleSheet';
+import { parseVpkDirectoryCached } from './vpk';
 
 type Row = Record<string, unknown>;
 const row = (v: unknown): Row => v && typeof v === 'object' && !Array.isArray(v) ? v as Row : {};
@@ -61,7 +62,8 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
 
 /** v0.19.1's soundevents reader decodes any resource's KV3 DATA block. Use its
  * read-only JSON mode, then validate the particle class. No new CLI is required. */
-export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string): Promise<void> {
+export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string, texturePaks: readonly string[] = []): Promise<void> {
+  if (texturePaks.length > 8) throw new Error('Particle package lookup exceeds preview limits.');
   const textures = new Set<string>();
   let systems = 0;
   const load = async (path: string, ancestors: Set<string>): Promise<FxDescriptor> => {
@@ -95,17 +97,32 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
   }
   await fs.mkdir(textureDir, { recursive: true });
   if (textures.size) {
+    const owners = new Map<string, string[]>();
+    // Caller supplies mounted priority: selected skin stack, Citadel, core.
+    // Exact entries avoid decoding the same texture from a lower-priority VPK.
+    const indexes = texturePaks.length ? [...new Set(texturePaks)].map((path) => ({ path, entries: new Set(parseVpkDirectoryCached(path) ?? []) })) : null;
+    for (const texture of textures) {
+      const owner = indexes ? indexes.find(({ entries }) => entries.has(`${texture}_c`))?.path : pak;
+      if (!owner) throw new Error(`Particle texture is absent from mounted packages: ${texture}`);
+      const group = owners.get(owner) ?? [];
+      group.push(texture);
+      owners.set(owner, group);
+    }
     const scratch = await fs.mkdtemp(join(textureDir, 'decode-'));
     try {
-      await runVpkmerge(['panorama', 'dump', '--vpk', pak, '--out-dir', scratch,
-        ...[...textures].flatMap((texture) => ['--prefix', `${texture}_c`])]);
-      for (const texture of textures) {
-        const source = join(scratch, texture.replace(/\.vtex$/, '.png'));
-        await fs.copyFile(source, join(textureDir, fxTexturePngName(texture)));
-        const raw = join(scratch, '_raw', `${texture}_c`);
-        if ((await fs.stat(raw)).size > 64 * 1024 * 1024) throw new Error('Particle texture resource exceeds preview limits.');
-        const sheet = await fs.readFile(raw).then(readParticleSheet);
-        if (sheet) (descriptor.sheets ??= {})[texture] = sheet;
+      for (const [owner, group] of owners) {
+        const decoded = owners.size === 1 ? scratch : join(scratch, String([...owners.keys()].indexOf(owner)));
+        await fs.mkdir(decoded, { recursive: true });
+        await runVpkmerge(['panorama', 'dump', '--vpk', owner, '--out-dir', decoded,
+          ...group.flatMap((texture) => ['--prefix', `${texture}_c`])]);
+        for (const texture of group) {
+          const source = join(decoded, texture.replace(/\.vtex$/, '.png'));
+          await fs.copyFile(source, join(textureDir, fxTexturePngName(texture)));
+          const raw = join(decoded, '_raw', `${texture}_c`);
+          if ((await fs.stat(raw)).size > 64 * 1024 * 1024) throw new Error('Particle texture resource exceeds preview limits.');
+          const sheet = await fs.readFile(raw).then(readParticleSheet);
+          if (sheet) (descriptor.sheets ??= {})[texture] = sheet;
+        }
       }
     } finally { await fs.rm(scratch, { recursive: true, force: true }); }
   }

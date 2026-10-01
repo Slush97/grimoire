@@ -891,8 +891,8 @@ export interface ElectronAPI {
         skinSources?: HeroPoseSkinSource[],
         fallbackSkinMetaKey?: string
     ) => Promise<HeroPoseInfo>;
-    getHeroEffectInfo: (heroName: string) => Promise<HeroEffectInfo>;
-    exportHeroEffect: (heroName: string) => Promise<HeroEffectInfo>;
+    getHeroEffectInfo: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
+    exportHeroEffect: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
