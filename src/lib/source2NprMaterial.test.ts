@@ -62,6 +62,21 @@ describe('Authored glass sampling', () => {
     expect(citadelColorUniforms({ ...morphic, ints: { F_GLASS: 0 } }).uCitadelGlass.value).toBe(0);
   });
 
+  it('point-samples the decoded Citadel glass kernel without leaking across screen edges', () => {
+    const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
+    const offsets = [...patch.value.matchAll(/vec2\((-?\d+\.\d+), (-?\d+\.\d+)\)/g)]
+      .map((match) => [Number(match[1]), Number(match[2])]);
+    expect(offsets).toHaveLength(8);
+    expect(offsets[0]).toEqual([-0.0876, 0.9703]);
+    expect(offsets[7]).toEqual([0.6384, -0.4054]);
+    expect(offsets.every(([x, y]) => x * x + y * y <= 1)).toBe(true);
+    expect(patch.value).toContain('glassScene /= 9.0;');
+    expect(patch.value).toContain('texelFetch(transmissionSamplerMap, glassPixel, 0)');
+    expect(patch.value).toContain('clamp(ivec2(tapUv * vec2(glassSize)), ivec2(0), glassSize - 1)');
+    expect(patch.value).not.toContain('getTransmissionSample(');
+    expect(patch.value).toContain('transmitted = getIBLVolumeRefraction(');
+  });
+
   it('applies the second coverage factor and removes transmitted metallic color', () => {
     const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
     const expression = patch.value.match(/transmitted.rgb = ([^;]+);/)![1];

@@ -1291,16 +1291,25 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         vec4 glassClip = projectionMatrix * viewMatrix * vec4(glassExit, 1.0);
         vec2 glassUv = glassClip.xy / glassClip.w * 0.5 + 0.5;
         float glassRadius = clamp(uCitadelGlassBlur.x * mix(uCitadelGlassBlur.y, uCitadelGlassBlur.z, material.roughness), 0.0, 1.0);
-        vec4 glassScene = getTransmissionSample(clamp(glassUv, 0.0, 1.0), 0.0, material.ior);
+        // Citadel glass combo 280 uses point-clamped mip-zero framebuffer taps,
+        // not Three's bicubic volume sampler. Keep thin opaque interiors sharp.
+        ivec2 glassSize = textureSize(transmissionSamplerMap, 0);
+        ivec2 glassPixel = clamp(ivec2(clamp(glassUv, 0.0, 1.0) * vec2(glassSize)), ivec2(0), glassSize - 1);
+        vec4 glassScene = texelFetch(transmissionSamplerMap, glassPixel, 0);
         if (glassRadius > 0.0) {
-          // A compact symmetric filter approximates the authored UV blur. It
-          // deliberately does not invent the game's noise or depth-aware pass.
-          glassScene *= 2.0;
-          glassScene += getTransmissionSample(clamp(glassUv + vec2(glassRadius, 0.0), 0.0, 1.0), 0.0, material.ior);
-          glassScene += getTransmissionSample(clamp(glassUv - vec2(glassRadius, 0.0), 0.0, 1.0), 0.0, material.ior);
-          glassScene += getTransmissionSample(clamp(glassUv + vec2(0.0, glassRadius), 0.0, 1.0), 0.0, material.ior);
-          glassScene += getTransmissionSample(clamp(glassUv - vec2(0.0, glassRadius), 0.0, 1.0), 0.0, material.ior);
-          glassScene /= 6.0;
+          // Decoded static combo 280: center plus eight equal-weight offsets.
+          // The viewer does not yet export Citadel's validity/depth or noise map.
+          vec2 glassOffsets[8] = vec2[8](
+            vec2(-0.0876, 0.9703), vec2(0.4802, 0.5651),
+            vec2(0.1851, 0.1580), vec2(-0.2616, -0.0617),
+            vec2(-0.5477, -0.6603), vec2(-0.5325, 0.0711),
+            vec2(-0.0751, -0.8954), vec2(0.6384, -0.4054));
+          for (int glassTap = 0; glassTap < 8; glassTap++) {
+            vec2 tapUv = clamp(glassUv + glassOffsets[glassTap] * glassRadius, 0.0, 1.0);
+            ivec2 tapPixel = clamp(ivec2(tapUv * vec2(glassSize)), ivec2(0), glassSize - 1);
+            glassScene += texelFetch(transmissionSamplerMap, tapPixel, 0);
+          }
+          glassScene /= 9.0;
         }
         vec3 glassAbsorption = min(vec3(1.0), pow(max(diffuseColor.rgb, vec3(0.01)), vec3(1.0 / max(dot(n, v), 0.01))));
         // The existing mix applies coverage a second time, matching G squared.
