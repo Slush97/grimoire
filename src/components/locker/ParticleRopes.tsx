@@ -42,6 +42,14 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     const fraction = i/(count-1)*(ordered.points.length-1), lo = Math.floor(fraction), hi = Math.min(lo+1, ordered.points.length-1);
     return THREE.MathUtils.lerp(ordered.points[lo][key], ordered.points[hi][key], fraction-lo);
   };
+  const snapshotAttribute = (i: number, field: number, fallback: number) => {
+    if (!bound?.length) return fallback;
+    // Snapshot particles use number/count, not number/(count-1). Tessellation
+    // interpolates their initialized attributes rather than resampling curves.
+    const fraction = i/(count-1)*(bound.length-1), lo = Math.floor(fraction), hi = Math.min(lo+1, bound.length-1);
+    return THREE.MathUtils.lerp(attributeAt(system, field, lo/bound.length, fallback),
+      attributeAt(system, field, hi/bound.length, fallback), fraction-lo);
+  };
   const resource = useMemo(() => {
     const result = spritecardMaterial(renderer, textureBaseUrl, VERT, true);
     if (!result) return null;
@@ -89,16 +97,16 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     const worldVSize = Math.max(.001, paramScalar(renderer.params.m_flTextureVWorldSize, 1))*sourceUnit;
     let arc = 0;
     for (let i = 0; i < state.points.length; i++) {
-      const p = state.points[i], t = i/(state.points.length-1);
+      const p = state.points[i];
       if (i) arc += p.distanceTo(state.points[i-1]);
       state.tangent.copy(state.points[Math.min(i+1, state.points.length-1)]).sub(state.points[Math.max(i-1, 0)]).normalize();
       camera.getWorldPosition(state.eye).sub(p).normalize();
-      state.side.crossVectors(state.tangent, state.eye).normalize().multiplyScalar((ordered ? orderedAttribute(i, 'radius') : attributeAt(system, 3, t, paramScalar(system.constantRadius, 1)))*sourceUnit*scale*radiusScale);
+      state.side.crossVectors(state.tangent, state.eye).normalize().multiplyScalar((ordered ? orderedAttribute(i, 'radius') : snapshotAttribute(i, 3, paramScalar(system.constantRadius, 1)))*sourceUnit*scale*radiusScale);
       for (let edge = 0; edge < 2; edge++) {
         state.scratch.copy(p).addScaledVector(state.side, edge ? 1 : -1); ref.current.parent.worldToLocal(state.scratch);
         positions.setXYZ(i*2+edge, state.scratch.x, state.scratch.y, state.scratch.z);
         uv.setXY(i*2+edge, edge, (ordered && renderer.params.m_bUseScalarForTextureCoordinate === true ? orderedAttribute(i, 'scalarUv') : arc/worldVSize)+clock.current*paramScalar(renderer.params.m_flTextureVScrollRate, 0));
-        alpha.setX(i*2+edge, (ordered ? orderedAttribute(i, 'alpha') : Math.min(1, attributeAt(system, 7, t, 1))*Math.min(1,attributeAt(system,39,t,1)))*paramScalar(renderer.params.m_flAlphaScale, 1));
+        alpha.setX(i*2+edge, (ordered ? orderedAttribute(i, 'alpha') : Math.min(1, snapshotAttribute(i, 7, 1))*Math.min(1,snapshotAttribute(i,39,1)))*paramScalar(renderer.params.m_flAlphaScale, 1));
         color.setXYZ(i*2+edge,tint[0],tint[1],tint[2]);
       }
     }

@@ -9,6 +9,20 @@ const renderer = (blendMode: string | null): FxRenderer => ({ class: 'C_OP_Rende
     m_TextureControls: { m_flFinalTextureOffsetV: { pf: 'PF_TYPE_COLLECTION_AGE', mult: .3 } } })),
 } });
 describe('shared authored spritecards', () => {
+  it('keeps generated linear coverage gradients and converts authored UV degrees once', () => {
+    const r = renderer(null);
+    const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
+    inputs[0].m_Gradient = { m_Stops: [{ m_flPosition: 0, m_Color: [153, 153, 153] }, { m_flPosition: 1, m_Color: [153, 153, 153] }] };
+    inputs[0].m_TextureControls = { m_flFinalTextureUVRotation: 90 };
+    const result = spritecardMaterial(r, '/', 'void main(){}')!;
+    try {
+      result.update(0);
+      const texture = result.textures[0] as THREE.DataTexture;
+      expect(texture.colorSpace).toBe(THREE.NoColorSpace);
+      expect(Array.from(texture.image.data!.slice(0, 4))).toEqual([153, 153, 153, 255]);
+      expect(result.material.uniforms.rot0.value).toBeCloseTo(Math.PI/2);
+    } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+  });
   it('looks up RGBA ramps from covered color and preserves other supported ramp modes', () => {
     for (const channel of ['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGB']) {
       const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');

@@ -47,7 +47,9 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
       if (typeof input.m_hTexture !== 'string' || !renderer.textures.includes(input.m_hTexture)) { textures.forEach((t) => t.dispose()); return null; }
       texture = new THREE.TextureLoader().load(base+fxTexturePngName(input.m_hTexture));
     }
-    texture.colorSpace = THREE.SRGBColorSpace;
+    // Authored gradient stops are linear color bytes. Texture-file pixels are
+    // sRGB; applying that decode to generated gradients darkens their coverage.
+    texture.colorSpace = input.m_bReplaceTextureWithGradient === true ? THREE.NoColorSpace : THREE.SRGBColorSpace;
     texture.wrapS = texture.wrapT = input.m_bReplaceTextureWithGradient === true || control.m_bClampUVs === true ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
     textures.push(texture);
     uniforms[`tex${i}`] = { value: texture };
@@ -111,7 +113,7 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
       const c = row(input.m_TextureControls);
       const signedScale = (v: unknown) => { const value = scalar(v, age, 1); return Math.abs(value) < .001 ? (value < 0 ? -.001 : .001) : value; };
       (uniforms[`uv${i}`].value as THREE.Vector4).set(signedScale(c.m_flFinalTextureScaleU), signedScale(c.m_flFinalTextureScaleV), scalar(c.m_flFinalTextureOffsetU, age, 0), scalar(c.m_flFinalTextureOffsetV, age, 0));
-      uniforms[`rot${i}`].value = scalar(c.m_flFinalTextureUVRotation, age, 0);
+      uniforms[`rot${i}`].value = scalar(c.m_flFinalTextureUVRotation, age, 0)*Math.PI/180;
       uniforms[`dist${i}`].value = scalar(c.m_flDistortion, age, 0);
       uniforms[`blend${i}`].value = Math.max(0, Math.min(1, scalar(input.m_flTextureBlend, age, 1)));
     });

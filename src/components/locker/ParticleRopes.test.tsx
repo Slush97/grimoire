@@ -26,7 +26,7 @@ describe('snapshot ribbon playback', () => {
       const position = mesh!.geometry.getAttribute('position');
       expect(position.count).toBe(34); // snapshot count, not the emitter's inactive literal28
       expect(new THREE.Vector3().fromBufferAttribute(position, 0).distanceTo(new THREE.Vector3().fromBufferAttribute(position, 1))).toBeCloseTo(20*.0254);
-      expect(new THREE.Vector3().fromBufferAttribute(position, 32).distanceTo(new THREE.Vector3().fromBufferAttribute(position, 33))).toBeCloseTo(0);
+      expect(new THREE.Vector3().fromBufferAttribute(position, 32).distanceTo(new THREE.Vector3().fromBufferAttribute(position, 33))).toBeCloseTo(20*.0254/3);
       const before = position.getX(2); bone.position.x = 10; await renderer.advanceFrames(1, .1); expect(position.getX(2)-before).toBeCloseTo(10*.0254);
       const material = mesh!.material as THREE.ShaderMaterial; expect(material.uniforms.uv0.value.w).toBeCloseTo(.06);
       expect(mesh!.geometry.getAttribute('aAlpha').getX(0)).toBeCloseTo(.75);
