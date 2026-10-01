@@ -36,7 +36,7 @@ const production: [string, string, number, number][] = [
   ['Paige', 'out_of_combat_stand_idle', 41, 30.0],
   ['Doorman', 'primary_stand_idle', 101, 30.0],
   ['Billy', 'primary_idle', 121, 30.0],
-  ['Graves', 'ui_shop', 201, 30.0],
+  ['Graves', 'weapon_stand_idle', 201, 30.0],
   ['Apollo', 'ui_shop', 171, 30.0],
   ['Deadman Danny', 'ui_shop', 247, 30.0],
   ['Rem', 'ui_shop', 76, 30.0],

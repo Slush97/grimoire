@@ -21,10 +21,10 @@ describe('whole hero showcase actions', () => {
     expect(heroAnimationRecipe('primary_stand_reload', 'Wraith')?.playback).toBe('hold');
     expect(heroAnimationRecipe('weapon_run_n', 'Celeste')?.playback).toBe('loop');
   });
-  it('chooses a reviewed shop idle even when its legacy loop flag is false', () => {
-    const clips = [clip('respawn_countdown_idle'), clip('ui_shop', { looping: false }), clip('weapon_stand_idle')];
-    expect(selectHeroAnimations(clips, 'Graves').map((c) => c.name)).toEqual(['ui_shop']);
-    expect(preferredHeroAnimationName(clips.map((c) => c.name), 'Graves')).toBe('ui_shop');
+  it('keeps Graves weapon in its authored standing pose instead of the parked shop pose', () => {
+    const clips = [clip('respawn_countdown_idle'), clip('ui_shop'), clip('weapon_stand_idle', { looping: false })];
+    expect(selectHeroAnimations(clips, 'Graves').map((c) => c.name)).toEqual(['weapon_stand_idle']);
+    expect(preferredHeroAnimationName(clips.map((c) => c.name), 'Graves')).toBe('weapon_stand_idle');
   });
   it('lets positive compiled metadata reject a previously reviewed name', () => {
     const clips = [clip('ui_shop_idle', { additive: true }), clip('primary_stand_idle'), clip('ui_hero_select')];

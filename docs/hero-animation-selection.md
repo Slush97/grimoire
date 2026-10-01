@@ -16,7 +16,7 @@ Installed base-game research on 2026-10-01 covered 68 hero definitions, 64 model
 | Celeste | `ui_shop` | Loop | Modern shop graph loops it; exported body/weapon endpoints differ below 0.01 degrees. Legacy loop flag is false. |
 | Rem | `ui_shop` | Hold | Whole-body pillow/candle showcase. Exported body channels differ by about 40 degrees at endpoints despite the shop graph's loop setting. Play once, then hold. |
 | Victor | `weapon_stand_idle` | Loop | Stable body/weapon idle, maximum measured endpoint difference about 0.84 degrees. Modern `ui_shop` is a different, very short clip and is not substituted by name. |
-| Graves | `ui_shop` | Loop | Complete body/book pose, matching endpoints and ambient movement. `weapon_stand_idle` is static and only a fallback. |
+| Graves | `weapon_stand_idle` | Loop | Complete standing body and spectral weapon pose. The shop pose parks the separately skinned hand near the floor, so it is omitted from the preview menu. Standing has little body movement but keeps the weapon and its authored effect coherent. |
 
 Endpoint measurements used exported skeletal, weapon and pillow translation/quaternion channels, with midpoint samples to distinguish static poses. Captures sampled start, middle, end and the loop boundary; a second pass inspected cloth after warm-up. This verifies those base-model actions, not every skin, attachment combination or future game update. The private captures use the current viewer's materials/cloth and are not an assertion of game-render parity.
 

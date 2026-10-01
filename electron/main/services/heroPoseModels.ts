@@ -336,7 +336,9 @@ function versionFile(key: string): string {
  *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '13';
+// v14: Graves uses the complete standing weapon pose; shop parks its spectral
+// hand at the model origin. Refresh existing menus instead of reusing that pose.
+const RIGGED_PIPELINE_VERSION = '14';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';

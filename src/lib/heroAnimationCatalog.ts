@@ -35,7 +35,7 @@ export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimat
   Celeste: [recipe('idle', ['ui_shop', 'out_of_combat_stand_idle']), recipe('running', ['weapon_run_n'])],
   Rem: [recipe('heroPose', ['ui_shop'], 'hold')],
   Victor: [recipe('idle', ['weapon_stand_idle'])],
-  Graves: [recipe('idle', ['ui_shop', 'weapon_stand_idle'])],
+  Graves: [recipe('idle', ['weapon_stand_idle'])],
   'Infernus': [recipe('idle', ['shop_menu_base'], 'hold')],
   'Seven': [recipe('idle', ['primary_stand_idle'])],
   'Vindicta': [recipe('idle', ['primary_stand_idle'])],
