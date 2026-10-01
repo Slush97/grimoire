@@ -39,6 +39,7 @@ import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
+import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
 import { ViewerBackdrop, ViewerBackdropControls } from './ViewerBackdrop';
 import { useViewerBackdrop } from '../../lib/useViewerBackdrop';
 import { useViewerGif } from '../../lib/useViewerGif';
@@ -229,9 +230,10 @@ function enableVertexColors(scene: THREE.Object3D): void {
 }
 
 /** Prefer an idle loop from the exported animation menu. */
-function pickIdleClip(clips: THREE.AnimationClip[]): THREE.AnimationClip | null {
-  return clips.find((c) => Number.isFinite(c.duration) && c.duration > 0.001 && /stand.*idle|idle.*stand/i.test(c.name))
-    ?? clips.find((c) => Number.isFinite(c.duration) && c.duration > 0.001) ?? null;
+function pickIdleClip(clips: THREE.AnimationClip[], heroName?: string): THREE.AnimationClip | null {
+  const valid = clips.filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
+  const name = preferredHeroAnimationName(valid.map((c) => c.name), heroName);
+  return valid.find((c) => c.name === name) ?? null;
 }
 
 /** Shared pointer-interaction state between OrbitControls and the model group:
@@ -354,6 +356,7 @@ interface EffectMount {
  *  valid (no reparenting, no clone). The normalize box is computed ONCE from the
  *  bind pose so the model does not breathe/drift as the clip plays. */
 export function RiggedModel({
+  heroName,
   scene,
   clips,
   interaction,
@@ -366,6 +369,7 @@ export function RiggedModel({
   progressRef,
   reset,
 }: {
+  heroName?: string;
   clipName: string;
   playback: { paused: boolean; speed: number };
   seek?: HeroPlaybackSeek;
@@ -380,7 +384,7 @@ export function RiggedModel({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const selectedClip = useMemo(() => clips.find((c) => c.name === clipName) ?? pickIdleClip(clips), [clips, clipName]);
+  const selectedClip = useMemo(() => clips.find((c) => c.name === clipName) ?? pickIdleClip(clips, heroName), [clips, clipName, heroName]);
 
   // Normalize from the BIND/rest pose, once. Force the skeleton to bind pose and
   // flush world matrices first so the AABB is the true rest extent and does not
@@ -433,13 +437,14 @@ export function RiggedModel({
     const mixer = new THREE.AnimationMixer(scene);
     mixerRef.current = mixer;
     const action = mixer.clipAction(clip);
-    action.setLoop(THREE.LoopRepeat, Infinity);
-    action.clampWhenFinished = false;
+    const hold = heroAnimationRecipe(clip.name, heroName)?.playback === 'hold';
+    action.setLoop(hold ? THREE.LoopOnce : THREE.LoopRepeat, hold ? 1 : Infinity);
+    action.clampWhenFinished = hold;
     action.reset().play();
     const time = clampAnimationTime(seek?.time ?? 0, clip.duration);
     // Repeat actions wrap at duration. Sample just inside the end so dragging
     // the timeline to its last position shows the final pose, not time zero.
-    mixer.setTime(Math.min(time, Math.max(0, clip.duration - 1e-7)));
+    mixer.setTime(hold ? time : Math.min(time, Math.max(0, clip.duration - 1e-7)));
     if (progressRef) progressRef.current = { time, duration: clip.duration };
     return () => {
       action.stop();
@@ -448,7 +453,7 @@ export function RiggedModel({
       mixer.uncacheRoot(scene);
       mixerRef.current = null;
     };
-  }, [scene, selectedClip, seek, progressRef]);
+  }, [scene, selectedClip, seek, progressRef, heroName]);
 
   // The cloth driver restores the clean pose before advancing animation. With
   // physics disabled it advances the mixer directly at the render frame rate.
@@ -1105,7 +1110,7 @@ export default function HeroPoseViewer({
                 disposeScene(gltf.scene);
                 return;
               }
-              const clip = pickIdleClip(gltf.animations ?? []);
+              const clip = pickIdleClip(gltf.animations ?? [], heroName);
               if (!clip) {
                 disposeScene(gltf.scene);
                 throw new Error('Rigged preview GLB has no animated clip.');
@@ -1217,6 +1222,7 @@ export default function HeroPoseViewer({
 
   const toolbar = (
     <HeroViewerToolbar
+      heroName={heroName}
       animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)} clip={clipName}
       paused={playback.paused} speed={playback.speed} spinPaused={spinPaused}
       progressRef={playbackProgressRef} onSeek={(time) => {
@@ -1309,6 +1315,7 @@ export default function HeroPoseViewer({
         )}
         {rigged ? (
           <RiggedModel
+            heroName={heroName}
             reset={resetView}
             clipName={clipName}
             playback={playback}

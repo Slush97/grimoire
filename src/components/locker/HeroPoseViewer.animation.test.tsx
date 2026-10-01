@@ -57,6 +57,37 @@ function makeRig() {
 }
 
 describe('rigged preview motion lifecycle', () => {
+  it('chooses Rem showcase before a standing fallback and holds its last pose', async () => {
+    const { scene, tip, clips } = makeRig();
+    clips[0].name = 'ui_shop';
+    clips[1].name = 'primary_stand_idle';
+    const progressRef = { current: { time: 0, duration: 0 } };
+    const renderer = await ReactThreeTestRenderer.create(
+      <RiggedModel heroName="Rem" scene={scene} clips={clips} clipName="" reset={0}
+        interaction={{ current: { dragging: false, paused: true } }} progressRef={progressRef}
+        playback={{ paused: false, speed: 1 }} clothEnabled={false} clothModel={null} />,
+    );
+    await renderer.advanceFrames(20, 0.1);
+    expect(tip.position.y).toBeCloseTo(1);
+    expect(progressRef.current).toEqual({ time: 1, duration: 1 });
+    await renderer.advanceFrames(10, 0.1);
+    expect(tip.position.y).toBeCloseTo(1);
+    await renderer.unmount();
+  });
+
+  it('keeps a reviewed Wraith shop idle repeating', async () => {
+    const { scene, tip, clips } = makeRig();
+    clips[0].name = 'ui_shop_idle';
+    const renderer = await ReactThreeTestRenderer.create(
+      <RiggedModel heroName="Wraith" scene={scene} clips={clips} clipName="ui_shop_idle" reset={0}
+        interaction={{ current: { dragging: false, paused: true } }}
+        playback={{ paused: false, speed: 1 }} clothEnabled={false} clothModel={null} />,
+    );
+    await renderer.advanceFrames(12, 0.1);
+    expect(tip.position.y).toBeCloseTo(0.2);
+    await renderer.unmount();
+  });
+
   it.each([false, true])('applies a paused motion switch immediately with cloth=%s', async (clothEnabled) => {
     const { scene, tip, end, model, clips } = makeRig();
     const interaction = { current: { dragging: false, paused: true } satisfies TurntableInteraction };
