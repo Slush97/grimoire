@@ -1,7 +1,35 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { gifDimensions, GIF_RECORDING, recordViewerGif } from './viewerGif';
+import { gifDimensions, gifFramePalette, GIF_RECORDING, recordViewerGif } from './viewerGif';
 
 describe('Viewer GIF resource bounds', () => {
+  it('maps faint white and colored edges to transparency while retaining opaque color', () => {
+    const data = new Uint8ClampedArray([
+      0, 0, 0, 0, 255, 255, 255, 1, 255, 255, 255, 120,
+      230, 40, 210, 127, 230, 40, 210, 128, 255, 255, 255, 255,
+    ]);
+    const frame = gifFramePalette(data);
+    expect(Array.from(frame.indices.slice(0, 4))).toEqual(Array(4).fill(frame.transparentIndex));
+    expect(frame.indices[4]).not.toBe(frame.transparentIndex);
+    expect(frame.indices[5]).not.toBe(frame.transparentIndex);
+    expect(frame.palette[frame.indices[5]].slice(0, 3)).toEqual([255, 255, 255]);
+  });
+  it('bounds the palette reduction input for a full-size high-entropy frame', () => {
+    const data = new Uint8ClampedArray(480 * 480 * 4);
+    let state = 123456789;
+    for (let i = 0; i < data.length; i += 4) {
+      for (let channel = 0; channel < 3; channel++) {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        data[i + channel] = state >>> 24;
+      }
+      data[i + 3] = 255;
+    }
+    const frame = gifFramePalette(data);
+    const colors = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) colors.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+    expect(colors.size).toBeLessThanOrEqual(512);
+    expect(frame.palette.length).toBeLessThanOrEqual(256);
+    expect(frame.indices.length).toBe(480 * 480);
+  });
   it('bounds both portrait and landscape captures without stretching or enlarging', () => {
     expect(gifDimensions(1920, 1080)).toEqual([480, 270]);
     expect(gifDimensions(1080, 1920)).toEqual([270, 480]);

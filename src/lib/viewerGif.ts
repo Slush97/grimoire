@@ -2,6 +2,28 @@ import { GIFEncoder, applyPalette, quantize } from 'gifenc';
 
 export const GIF_RECORDING = { maxSeconds: 4, fps: 12, maxEdge: 480, maxBytes: 24 * 1024 * 1024 } as const;
 
+/** GIF has one-bit alpha. Normalize the owned canvas readback before both
+ * quantization and nearest-palette mapping so bright transparent edges cannot
+ * select an opaque color. Three bits per RGB channel bound gifenc's histogram
+ * to 512 opaque colors plus transparency, avoiding its expensive nearest-pair
+ * reduction over tens of thousands of colors on detailed backgrounds.
+ * No raw sequence or extra frame buffer is retained. */
+export function gifFramePalette(data: Uint8ClampedArray) {
+  let hasAlpha = false;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 128) {
+      data[i - 3] = data[i - 2] = data[i - 1] = data[i] = 0;
+      hasAlpha = true;
+    } else {
+      data[i] = 255;
+      for (let channel = i - 3; channel < i; channel++) data[channel] = Math.round(data[channel] * 7 / 255) * 255 / 7;
+    }
+  }
+  const format = hasAlpha ? 'rgba4444' : 'rgb565';
+  const palette = quantize(data, 256, { format, oneBitAlpha: hasAlpha });
+  return { palette, indices: applyPalette(data, palette, format), transparentIndex: palette.findIndex((color) => color[3] === 0) };
+}
+
 export function gifDimensions(width: number, height: number): [number, number] {
   if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) throw new Error('Invalid canvas size');
   const scale = Math.min(1, GIF_RECORDING.maxEdge / Math.max(width, height));
@@ -31,11 +53,8 @@ export async function recordViewerGif(canvas: HTMLCanvasElement, options: {
       context.clearRect(0, 0, width, height);
       context.drawImage(canvas, 0, 0, width, height);
       const { data } = context.getImageData(0, 0, width, height);
-      const hasAlpha = data.some((value, index) => index % 4 === 3 && value < 128);
-      const format = hasAlpha ? 'rgba4444' : 'rgb565';
-      const palette = quantize(data, 256, { format, oneBitAlpha: hasAlpha });
-      const transparentIndex = palette.findIndex((color) => color[3] === 0);
-      gif.writeFrame(applyPalette(data, palette, format), width, height, {
+      const { palette, indices, transparentIndex } = gifFramePalette(data);
+      gif.writeFrame(indices, width, height, {
         palette, delay, repeat: 0, transparent: transparentIndex >= 0,
         transparentIndex: Math.max(0, transparentIndex), dispose: 2,
       });
