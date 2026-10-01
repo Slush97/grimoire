@@ -1,9 +1,10 @@
 import { useEffect, useId, useState, type RefObject, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Camera, Expand, Film, Pause, Play, RotateCcw, RotateCw, Settings2, Square, X } from 'lucide-react';
+import { Camera, Film, Pause, Play, RotateCcw, RotateCw, Settings2, Square, X } from 'lucide-react';
 import { IconButton, Toggle } from '../common/ui';
 import { Select } from '../common/forms';
 import { ViewerGifReview } from './ViewerGifReview';
+import { ViewerFullscreenButton } from './ViewerFullscreenButton';
 import type { ViewerGifControls } from '../../lib/useViewerGif';
 import { clampAnimationTime, groupHeroClips, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
 
@@ -138,7 +139,7 @@ export function HeroViewerToolbar(p: Props) {
         <IconButton size="sm" icon={Camera} label={t('locker.pose.screenshot')} onClick={p.onScreenshot} />
         <IconButton size="sm" icon={p.gif.recording ? Square : Film} label={p.gif.recording ? t('locker.pose.stopGif') : t('locker.pose.recordGif')} aria-pressed={p.gif.recording} disabled={!p.gifAvailable || p.gif.status === 'encoding' || p.gif.status === 'review'} className="aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-accent" onClick={p.onGif} />
         <IconButton size="sm" icon={X} label={t('locker.pose.cancelGif')} disabled={p.gif.status === 'idle'} onClick={p.gif.cancel} />
-        <IconButton size="sm" icon={Expand} label={t('locker.pose.fullscreen')} onClick={p.onFullscreen} />
+        <ViewerFullscreenButton onRequest={p.onFullscreen} />
         </div>
       </div>
     </div>
