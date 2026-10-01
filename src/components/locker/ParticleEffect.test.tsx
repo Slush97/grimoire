@@ -13,6 +13,31 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('places snapshot sprites on authored animated bones without double applying model units', async () => {
+    const model = new THREE.Group(), root = new THREE.Group();
+    root.name = 'skeleton'; root.scale.setScalar(0.0254); model.add(root);
+    const hand = new THREE.Bone(); hand.name = 'prop_hand_R'; root.add(hand);
+    const skin = new THREE.SkinnedMesh();
+    skin.skeleton = new THREE.Skeleton([hand], [new THREE.Matrix4()]); root.add(skin);
+    const d: FxDescriptor = { ...descriptor, controlPoints: [], children: [], maxParticles: 2,
+      snapshot: { points: [0, 10].map(x => ({ position: [x, 0, 0], joints: ['prop_hand_R', '', '', ''], weights: [1, 0, 0, 0] })) },
+      initializers: [{ class: 'C_INIT_InitSkinnedPositionFromCPSnapshot', params: {} }],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 2 } }],
+      operators: [{ class: 'C_OP_SnapshotRigidSkinToBones', params: {} }, { class: 'C_OP_Decay', params: { m_nOpEndCapState: 'PARTICLE_ENDCAP_ENDCAP_ON' } }],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} />
+      <ParticleEffect descriptor={d} model={model} textureBaseUrl="/" /></group>);
+    try {
+      await renderer.advanceFrames(1, 0.1);
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse(o => { if (o instanceof THREE.Mesh && o.geometry.getAttribute('aPosition')) mesh = o; });
+      const positions = mesh!.geometry.getAttribute('aPosition');
+      expect(positions.getX(0)).toBeCloseTo(0); expect(positions.getX(1)).toBeCloseTo(10*0.0254);
+      hand.position.x = 20;
+      await renderer.advanceFrames(1, 0.1);
+      expect(positions.getX(0)).toBeCloseTo(20*0.0254); expect(positions.getX(1)).toBeCloseTo(30*0.0254);
+    } finally { await renderer.unmount(); }
+  });
   it('emits spawn-event children once per system, consumes full slots, and pauses both clocks', async () => {
     const child: FxDescriptor = { ...descriptor, name: 'spawn-child', controlPoints: [], maxParticles: 1, constantLifespan: 0.05,
       initializers: [], operators: [], children: [],

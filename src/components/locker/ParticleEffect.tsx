@@ -9,6 +9,7 @@ import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName
 import { resolveParticleAttachment } from './particleAttachment';
 import { spritecardMaterial } from './spritecardMaterial';
 import { ParticleRopes } from './ParticleRopes';
+import { bindParticleSnapshot, skinnedSnapshotPosition } from './particleSnapshotSkinning';
 import { balanceSpritePreviewComposition } from './spritePreviewComposition';
 
 const VERT = /* glsl */ `
@@ -76,6 +77,7 @@ interface Particle {
   color: THREE.Color; alpha: number;
   region: [number, number, number, number];
   frameClamp: boolean;
+  snapshotIndex: number | null;
   normal: THREE.Vector3; normalAxis: THREE.Vector3; normalRate: number;
   oscillation: { rate: THREE.Vector3; frequency: THREE.Vector3; start: number; end: number } | null;
 }
@@ -114,6 +116,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
   }, [layer.texture, textureBaseUrl]);
   const attachment = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment, layer.attachments) : null, [model, layer.attachment, layer.attachments]);
   const anchor = attachment?.object;
+  const snapshot = useMemo(() => model && layer.snapshot ? bindParticleSnapshot(model, layer.snapshot.points) : null, [model, layer.snapshot]);
   const beforeTransmission = useMemo(() => {
     let glass = false;
     model?.traverse((object) => {
@@ -141,7 +144,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
   const sourceUnit = useMemo(() => (model?.getObjectByName('skeleton')?.scale.x ?? 0.0254) * layer.scale, [model, layer.scale]);
   const sourceRoot = useMemo(() => model?.getObjectByName('skeleton') ?? null, [model]);
   const scratch = useMemo(() => ({
-    origin: new THREE.Vector3(), previous: new THREE.Vector3(),
+    snapshotScratch: new THREE.Vector3(), origin: new THREE.Vector3(), previous: new THREE.Vector3(),
     orientation: new THREE.Quaternion(), parentOrientation: new THREE.Quaternion(),
     sourceOrientation: new THREE.Quaternion(), gravity: new THREE.Vector3(),
     previousOrientation: new THREE.Quaternion(), deltaOrientation: new THREE.Quaternion(),
@@ -304,11 +307,17 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       const normalRandom = Math.random();
       const normalAxis = layer.normalRotation ? new THREE.Vector3(...layer.normalRotation.axisMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.normalRotation!.axisMax[i], normalRandom))).normalize() : new THREE.Vector3(0, 0, 1);
       const spawnPosition = offset.add(layer.spawnAtParent && birth.parentPosition ? birth.parentPosition : origin);
+      const snapshotIndex = snapshot?.length ? layer.snapshot?.random
+        ? Math.min(snapshot.length-1, Math.floor(Math.random()*snapshot.length)) : (particleNumber.current-1)%snapshot.length : null;
+      if (snapshotIndex !== null && snapshot) {
+        skinnedSnapshotPosition(snapshot[snapshotIndex], spawnPosition, scratch.snapshotScratch);
+        mesh.parent.worldToLocal(spawnPosition);
+      }
       if (layer.publishesSpawnEvents && layer.systemId) {
         spawnEvents.current.publish(layer.systemId, clock.current - birthAge, spawnPosition);
       }
       live.push({ age: birthAge-delta, life: sample(layer.lifetime),
-        position: spawnPosition, velocity,
+        position: spawnPosition, velocity, snapshotIndex,
         radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region, frameClamp: frame?.clamp === true,
         normal, normalAxis, normalRate: layer.normalRotation ? THREE.MathUtils.lerp(...layer.normalRotation.rate, normalRandom) : 0,
         oscillation: layer.oscillation ? {
@@ -331,6 +340,10 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       p.age += delta;
       if (!layer.persistent && p.age >= p.life) continue;
       const step = Math.min(delta, p.age);
+      if (p.snapshotIndex !== null && snapshot) {
+        skinnedSnapshotPosition(snapshot[p.snapshotIndex], p.position, scratch.snapshotScratch);
+        mesh.parent.worldToLocal(p.position);
+      }
       if (layer.movement) {
         // Source's drag is fractional velocity loss per 1/30 second. Gravity
         // adds after inertia decay, matching BasicMovement's position step.
@@ -389,7 +402,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     previous.copy(origin);
     scratch.previousOrientation.copy(orientation);
   });
-  if (layer.attachment && !anchor) return null;
+  if (layer.snapshot && !snapshot) return null;
+  if (layer.attachment && !anchor && !snapshot) return null;
   return <mesh ref={meshRef} geometry={geometry} material={material}
     renderOrder={beforeTransmission ? ADDITIVE_OVERLAY_RENDER_ORDER : 0} frustumCulled={false} />;
 }

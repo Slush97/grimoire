@@ -140,6 +140,14 @@ describe('authored sprite attributes', () => {
     expect(advanceSpriteEmission(emissions, state, 0.1, 0.11, 64)).toHaveLength(1);
     expect(paramRange({ pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', min: 5, max: 10 }, [0, 0])).toEqual([0, 0]);
   });
+  it('omits skinned snapshot sprites when the authored snapshot is unavailable', () => {
+    const d = descriptor();
+    d.initializers.push({ class: 'C_INIT_InitSkinnedPositionFromCPSnapshot', params: { m_bRandom: true } });
+    d.operators.push({ class: 'C_OP_SnapshotRigidSkinToBones', params: {} });
+    expect(spriteParamsFor(d)).toBeNull();
+    d.snapshot = { points: [0, 1].map(x => ({ position: [x, 0, 0], joints: ['hand', '', '', ''], weights: [1, 0, 0, 0] })) };
+    expect(spriteParamsFor(d)?.snapshot).toEqual({ points: d.snapshot.points, random: true });
+  });
   it('reports unsupported operators, renderers and providers in bounded diagnostics', () => {
     const d = descriptor();
     d.operators.push({ class: 'C_OP_AttractToControlPoint', params: {} });

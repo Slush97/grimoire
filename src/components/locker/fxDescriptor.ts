@@ -61,6 +61,7 @@ const fieldInit = (d: FxDescriptor, field: number) => {
   return node ? node.params.m_InputValue ?? 0 : undefined;
 };
 export interface SpriteSimParams {
+  snapshot?: { points: NonNullable<FxDescriptor['snapshot']>['points']; random: boolean };
   systemId?: string; parentSystemId?: string; publishesSpawnEvents?: boolean;
   parentSpawnEvents?: boolean; spawnAtParent?: boolean;
   parentSpawnWindow?: { start: number; duration: number; perFrame: number };
@@ -107,6 +108,9 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   if (parentEmitters.some((node) => node.class !== 'C_OP_ContinuousEmitter'
     || node.params.m_nEventType !== 'PARTICLE_EVENT_TYPE_MASK_SPAWNED')) return null;
   if (parentEmitters.length && (parentEmitters.length !== 1 || d.emitters.length !== 1)) return null;
+  const snapshotInit = findNode(d.initializers, 'C_INIT_InitSkinnedPositionFromCPSnapshot');
+  const skinSnapshot = !!snapshotInit && !!findNode(d.operators, 'C_OP_SnapshotRigidSkinToBones');
+  if (skinSnapshot && !d.snapshot?.points.length) return null;
   const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter');
   const sphere = findNode(d.initializers, 'C_INIT_CreateWithinSphereTransform') ?? findNode(d.initializers, 'C_INIT_CreateWithinSphere');
   const box = findNode(d.initializers, 'C_INIT_CreateWithinBox');
@@ -139,6 +143,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
     .map((v) => v * Math.PI / 180) as [number, number];
   return {
+    snapshot: skinSnapshot && d.snapshot ? { points: d.snapshot.points, random: snapshotInit?.params.m_bRandom === true } : undefined,
     parentSpawnEvents: parentEmitters.length > 0,
     parentSpawnWindow: parentEmitters.length ? {
       start: scalar(parentEmitters[0].params.m_flStartTime, 0),
