@@ -1,4 +1,25 @@
-import { ageCurveValue, paramScalar } from './fxDescriptor';
+import { ageCurveValue, paramScalar, type FxDescriptor } from './fxDescriptor';
+
+export function particleControlPointInputs(previewDefaults: Readonly<Record<number, number>> = {}, supplied: Readonly<Record<number, number>> = {}) {
+  const result: Record<number, number> = {};
+  for (const input of [previewDefaults, supplied]) for (const [key, value] of Object.entries(input).slice(0, 64)) {
+    const cp = Number(key);
+    if (Number.isInteger(cp) && cp >= 0 && cp < 64 && Number.isFinite(value)) result[cp] = value;
+  }
+  return result;
+}
+
+/** Initial values are applied in authored order, including transparent alpha. */
+export function particleInitialScalars(system: FxDescriptor, inputs: Readonly<Record<number, number>> = {}) {
+  const values = { life: paramScalar(system.constantLifespan, 1), radius: paramScalar(system.constantRadius, 1), alpha: paramScalar(system.constantAlpha, 1) };
+  for (const node of system.initializers.slice(0, 32)) if (node.class === 'C_INIT_InitFloat') {
+    const field = paramScalar(node.params.m_nOutputField, 3), key = field === 1 ? 'life' : field === 3 ? 'radius' : field === 7 ? 'alpha' : null;
+    if (!key) continue;
+    const value = particleScalarInput(node.params.m_InputValue, inputs, values[key]);
+    values[key] = node.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE' ? values[key]*value : value;
+  }
+  return { life: Math.max(.01, Math.min(30, values.life)), radius: Math.max(0, Math.min(128, values.radius)), alpha: Math.max(0, Math.min(1, values.alpha)) };
+}
 
 /** Offline particle CPs have zero components unless supplied. Runtime gameplay
  * inputs are not replaced with invented full-strength values. */

@@ -3,18 +3,19 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { advanceSpriteEmission, ageCurveValue, paramScalar, spriteGradientColor, spriteParamsFor, type FxDescriptor, type FxRenderer, type SpriteEmissionState } from './fxDescriptor';
 import { resolveParticleAttachment } from './particleAttachment';
-import { particleScalarInput } from './particleScalarInput';
+import { particleInitialScalars } from './particleScalarInput';
 import { spritecardMaterial } from './spritecardMaterial';
 
 const VERT = `attribute float aAlpha; attribute vec3 aColor; varying vec2 vUv; varying float vAlpha; varying vec3 vColor;
 void main(){vUv=uv;vAlpha=aAlpha;vColor=aColor;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
-interface Point { position: THREE.Vector3; velocity: THREE.Vector3; age: number; life: number; radius: number }
+interface Point { position: THREE.Vector3; velocity: THREE.Vector3; age: number; life: number; radius: number; alpha: number }
 
 /** Chronological particle ropes with authored local directional velocity,
  * world gravity, initial scalar fields and normalized-age width/color/alpha. */
-export function MovingParticleRope({ system, renderer, model, textureBaseUrl, delay, scale, attachments, playback }: {
+export function MovingParticleRope({ system, renderer, model, textureBaseUrl, delay, scale, attachments, playback, controlPointComponents }: {
   system: FxDescriptor; renderer: FxRenderer; model: THREE.Object3D; textureBaseUrl: string; delay: number; scale: number;
   attachments?: FxDescriptor['attachments']; playback?: { paused: boolean; speed: number };
+  controlPointComponents?: Readonly<Record<number, number>>;
 }) {
   const mesh = useRef<THREE.Mesh>(null), clock = useRef(0), points = useRef<Point[]>([]), emissions = useRef<SpriteEmissionState[]>([]), initialized = useRef(false);
   const params = useMemo(() => spriteParamsFor(system, renderer), [system, renderer]);
@@ -51,16 +52,11 @@ export function MovingParticleRope({ system, renderer, model, textureBaseUrl, de
     const births = advanceSpriteEmission(params.emissions.map(e => ({...e,start:e.start+delay})), emissions.current, clock.current, clock.current+dt, maximum-list.length);
     clock.current += dt;
     for (const born of births) {
-      let life = paramScalar(system.constantLifespan, 1), radius = paramScalar(system.constantRadius, 1);
-      for (const n of system.initializers) if (n.class === 'C_INIT_InitFloat') {
-        const field = paramScalar(n.params.m_nOutputField, 3), value = particleScalarInput(n.params.m_InputValue, {}, field === 1 ? life : radius);
-        if (field === 1) life = n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE' ? life*value : value;
-        if (field === 3) radius = n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE' ? radius*value : value;
-      }
+      const { life, radius, alpha } = particleInitialScalars(system, controlPointComponents);
       const position = state.origin.clone();
       for (const offset of params.offsets) position.add(new THREE.Vector3(...offset.min.map((lo, i) => THREE.MathUtils.lerp(lo, offset.max[i], Math.random()))).multiplyScalar(unit).applyQuaternion(offset.local ? state.orientation : state.sourceOrientation));
       const velocity = new THREE.Vector3(...params.localSpeedMin.map((lo, i) => THREE.MathUtils.lerp(lo, params.localSpeedMax[i], Math.random()))).multiplyScalar(unit).applyQuaternion(state.orientation);
-      list.push({ position, velocity, age: born-dt, life: Math.max(.01, Math.min(30, life)), radius: Math.max(0, Math.min(128, radius))*unit });
+      list.push({ position, velocity, age: born-dt, life, radius: radius*unit, alpha });
     }
     const lock = system.operators.find(n => n.class === 'C_OP_PositionLock');
     for (const p of list) {
@@ -84,7 +80,7 @@ export function MovingParticleRope({ system, renderer, model, textureBaseUrl, de
         state.edge.copy(p.position).addScaledVector(state.side,edge?1:-1);mesh.current.parent.worldToLocal(state.edge);
         positions.setXYZ(2*i+edge,state.edge.x,state.edge.y,state.edge.z);
         uv.setXY(2*i+edge,edge,arc/Math.max(.001,unit*paramScalar(renderer.params.m_flTextureVWorldSize,1)));
-        alpha.setX(2*i+edge,params.alphaScale*Math.max(0,Math.min(1,ageCurveValue(params.alphaCurve,t))));
+        alpha.setX(2*i+edge,p.alpha*params.alphaScale*Math.max(0,Math.min(1,ageCurveValue(params.alphaCurve,t))));
         color.setXYZ(2*i+edge,...tint);
       }
     }

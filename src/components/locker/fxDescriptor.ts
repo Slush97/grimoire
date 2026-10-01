@@ -19,8 +19,10 @@ export interface FxSheet { sequences: Array<{ id: number; clamp: boolean; uv: [n
 export interface FxDescriptor {
   snapshot?: { points: Array<{ position: [number, number, number]; joints: string[]; weights: number[] }> };
   scale?: number; sheets?: Record<string, FxSheet>; startDelay?: number; attachments?: ModelAttachment[];
+  /** Preview-only scalar CP inputs; supplied runtime components remain authoritative. */
+  previewControlPointComponents?: Record<number, number>; controlPointComponents?: Record<number, number>;
   name: string; class?: string; maxParticles?: number; constantRadius?: FxParam; constantLifespan?: FxParam;
-  constantColor?: number[] | FxParam; controlPoints: FxControlPoint[];
+  constantAlpha?: FxParam; constantColor?: number[] | FxParam; controlPoints: FxControlPoint[];
   preview?: { model: string | null; sequence: string | null };
   emitters: FxNode[]; initializers: FxNode[]; operators: FxNode[];
   preEmissionOperators?: FxNode[]; forces?: FxNode[]; constraints?: FxNode[];

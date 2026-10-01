@@ -54,6 +54,7 @@ export function particleDescriptor(raw: unknown, name: string, configuration?: s
     name, maxParticles: Math.min(256, Math.max(1, Number(r.m_nMaxParticles) || 64)),
     constantRadius: parameter(r.m_flConstantRadius) as FxDescriptor['constantRadius'],
     constantLifespan: parameter(r.m_flConstantLifespan) as FxDescriptor['constantLifespan'],
+    constantAlpha: parameter(r.m_flConstantAlpha) as FxDescriptor['constantAlpha'],
     constantColor: r.m_ConstantColor as number[],
     preview: { model: typeof preview.m_previewModel === 'string' ? preview.m_previewModel : null,
       sequence: typeof preview.m_sequenceName === 'string' ? preview.m_sequenceName : null },

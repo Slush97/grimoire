@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ageCurveValue, paramScalar, type FxDescriptor, type FxRenderer } from './fxDescriptor';
 import { spritecardMaterial } from './spritecardMaterial';
-import { orderedRopePoints } from './particleOrderedRope';
+import { orderedRopePoints, ropePositionSource } from './particleOrderedRope';
+import { particleControlPointInputs } from './particleScalarInput';
 import { MovingParticleRope } from './MovingParticleRope';
 import { bindParticleSnapshot, skinnedSnapshotPosition } from './particleSnapshotSkinning';
 
@@ -30,7 +31,8 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
   const ref = useRef<THREE.Mesh>(null), clock = useRef(0);
   const bound = useMemo(() => bindParticleSnapshot(model, system.snapshot?.points ?? []), [model, system]);
   const ordered = useMemo(() => orderedRopePoints(system), [system]);
-  const count = ordered ? Math.min(2048, (ordered.points.length-1)*Math.max(4, Math.min(16, paramScalar(renderer.params.m_nMinTesselation, 4)))+1) : bound?.length ?? 0;
+  const positionSource = ropePositionSource(bound?.length ?? 0, ordered?.points.length ?? 0);
+  const count = positionSource === 'ordered' && ordered ? Math.min(2048, (ordered.points.length-1)*Math.max(4, Math.min(16, paramScalar(renderer.params.m_nMinTesselation, 4)))+1) : bound?.length ?? 0;
   const orderedCurve = useMemo(() => ordered ? new THREE.CatmullRomCurve3(ordered.points.map(p => new THREE.Vector3(...p.position))) : null, [ordered]);
   const orderedAttribute = (i: number, key: 'radius' | 'alpha' | 'scalarUv') => {
     if (!ordered) return 0;
@@ -57,7 +59,7 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     resource.update(Math.max(0, clock.current-delay));
     const sourceRoot = model.getObjectByName('skeleton');
     for (let i = 0; i < state.points.length; i++) {
-      if (bound?.length) skinnedSnapshotPosition(bound[i], state.points[i], state.scratch);
+      if (positionSource === 'snapshot' && bound) skinnedSnapshotPosition(bound[i], state.points[i], state.scratch);
       else if (ordered && orderedCurve) {
         orderedCurve.getPoint(i/(count-1), state.points[i]).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.max(0, clock.current-delay)*ordered.orbitRate);
         if (sourceRoot) sourceRoot.localToWorld(state.points[i]);
@@ -109,6 +111,6 @@ export function ParticleRopes({ descriptor, model, textureBaseUrl, playback }: {
   }, [descriptor]);
   if (!model) return null;
   return <group>{layers.map((layer, i) => layer.moving
-    ? <MovingParticleRope key={i} {...layer} attachments={descriptor.attachments} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />
+    ? <MovingParticleRope key={i} {...layer} controlPointComponents={particleControlPointInputs(descriptor.previewControlPointComponents, { ...descriptor.controlPointComponents, ...layer.system.controlPointComponents })} attachments={descriptor.attachments} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />
     : <RopeLayer key={i} {...layer} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />)}</group>;
 }

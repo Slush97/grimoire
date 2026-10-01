@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderedRopePoints } from './particleOrderedRope';
+import { orderedRopePoints, ropePositionSource } from './particleOrderedRope';
 import type { FxDescriptor } from './fxDescriptor';
 const system = (): FxDescriptor => ({ name: 'ordered', controlPoints: [], constantRadius: 2, maxParticles: 50,
   emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 20 } }],
@@ -7,6 +7,15 @@ const system = (): FxDescriptor => ({ name: 'ordered', controlPoints: [], consta
     { class: 'C_INIT_PositionOffset', params: { m_OffsetMin: [0, 0, 20], m_OffsetMax: [0, 0, 20] } }],
   operators: [{ class: 'C_OP_MovementRotateParticleAroundAxis', params: { m_flRotRate: 30 } }], renderers: [], children: [] });
 describe('ordered authored rope initialization', () => {
+  it('selects one position source consistently when a short snapshot coexists with an ordered ring', () => {
+    const s = system();
+    s.snapshot = {points:Array.from({length:2},()=>({position:[0,0,0],joints:[],weights:[]}))};
+    const ordered = orderedRopePoints(s)!;
+    expect(ordered.points).toHaveLength(20);
+    expect(ropePositionSource(s.snapshot.points.length,ordered.points.length)).toBe('ordered');
+    expect(ropePositionSource(s.snapshot.points.length,0)).toBe('snapshot');
+    expect(ropePositionSource(0,0)).toBeNull();
+  });
   it('preserves emitter count, particle order, authored source plane and world offset', () => {
     const r = orderedRopePoints(system())!;
     expect(r.points).toHaveLength(20);

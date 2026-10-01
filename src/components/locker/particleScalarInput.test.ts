@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { particleScalarInput } from './particleScalarInput';
+import { particleControlPointInputs, particleInitialScalars, particleScalarInput } from './particleScalarInput';
+import type { FxDescriptor } from './fxDescriptor';
 describe('offline authored particle scalar inputs', () => {
+  it('uses an explicit preview endpoint only when runtime input is absent, preserving supplied zero', () => {
+    const curve = { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', cp: 2, map: 'PF_MAP_TYPE_CURVE', curve: { m_spline: [{x:0,y:.05},{x:1,y:.26}] } };
+    expect(particleScalarInput(curve, particleControlPointInputs({2:1}))).toBe(.26);
+    expect(particleScalarInput(curve, particleControlPointInputs({2:1},{2:0}))).toBe(.05);
+    expect(particleScalarInput(curve, particleControlPointInputs({2:1},{2:.5}))).toBeCloseTo(.155);
+    expect(particleControlPointInputs({2:1},{2:NaN})).toEqual({2:1});
+  });
+  it('retains constant alpha and ordered field7 scaling including fully transparent particles', () => {
+    const system: FxDescriptor = {name:'moving',controlPoints:[],emitters:[],operators:[],renderers:[],children:[],initializers:[],constantAlpha:.6};
+    expect(particleInitialScalars(system).alpha).toBe(.6);
+    system.initializers.push({class:'C_INIT_InitFloat',params:{m_nOutputField:7,m_InputValue:.5,m_nSetMethod:'PARTICLE_SET_SCALE_INITIAL_VALUE'}});
+    expect(particleInitialScalars(system).alpha).toBe(.3);
+    system.initializers.push({class:'C_INIT_InitFloat',params:{m_nOutputField:7,m_InputValue:0}});
+    expect(particleInitialScalars(system).alpha).toBe(0);
+    expect(particleInitialScalars({...system,initializers:[],constantAlpha:0}).alpha).toBe(0);
+  });
   it('uses zero for an unset CP instead of inventing a full-strength gameplay value', () => {
     const p = { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', cp: 2, map: 'PF_MAP_TYPE_CURVE', curve: { m_spline: [{x:0,y:.05},{x:1,y:.26}] } };
     expect(particleScalarInput(p)).toBe(.05);

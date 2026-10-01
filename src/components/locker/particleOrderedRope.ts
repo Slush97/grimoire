@@ -1,6 +1,9 @@
 import { ageCurveValue, paramScalar, type FxDescriptor } from './fxDescriptor';
 
 type Vec3 = [number, number, number];
+export function ropePositionSource(snapshotCount: number, orderedCount: number) {
+  return orderedCount > 1 ? 'ordered' : snapshotCount > 1 ? 'snapshot' : null;
+}
 const vector = (v: unknown, fallback: Vec3): Vec3 => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(Number.isFinite) ? v.slice(0, 3) as Vec3 : fallback;
 const scalarAt = (v: unknown, index: number, fallback: number) => {
   const p = v && typeof v === 'object' ? v as Record<string, unknown> : {};

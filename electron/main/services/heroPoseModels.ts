@@ -343,7 +343,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 // v7: preserve child CP frame distribution and authored instance delays.
 // v9: independent model/weapon roots and default spritecard texture inputs.
 // v10: passive weapon selections and their authored preview attachment frames.
-const EFFECT_CACHE_VERSION = '10';
+// v11: preserve constant alpha and explicit preview-only scalar CP fallback.
+const EFFECT_CACHE_VERSION = '11';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1127,6 +1128,14 @@ export async function exportHeroEffect(
                 [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
                 ['Abrams', 'Victor', 'Solomon', 'Celeste', 'Rem', 'Graves'].includes(heroName) ? 'preview' : undefined,
                 heroName === 'Celeste' ? ['particles/abilities/unicorn/unicorn_ambient_weapon.vpcf_c'] : []);
+            if (heroName === 'Rem') {
+                const descriptor = JSON.parse(await fs.readFile(effectFile(exportKey), 'utf8'));
+                // Offline declarations omit the weapon runtime input. Use the
+                // authored curve endpoint for an attractive preview, not as a
+                // recovered game value. Supplied runtime CP values override it.
+                descriptor.previewControlPointComponents = { 2: 1 };
+                await fs.writeFile(effectFile(exportKey), JSON.stringify(descriptor));
+            }
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };
         } finally {
