@@ -63,6 +63,7 @@ export interface SpriteSimParams {
   colorMin: Vec3; colorMax: Vec3; colorFade: Vec3 | null; colorFadeTime: [number, number]; colorEase: boolean;
   alpha: [number, number]; rotation: [number, number]; spin: [number, number];
   spawnRadius: number; spawnRadiusMin: number; spawnLocal: boolean; speed: [number, number];
+  spawnBox: { min: Vec3; max: Vec3 } | null;
   localSpeedMin: Vec3; localSpeedMax: Vec3; offsetLocal: boolean; offsetProportional: boolean;
   offsetMin: Vec3; offsetMax: Vec3; gravity: Vec3; drag: number;
   follow: boolean; followRotation: boolean; movement: boolean; overbright: number; alphaCurve: unknown; radiusCurve: unknown;
@@ -84,6 +85,9 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   if (findNode(d.initializers, 'C_INIT_CreateOnModel')) return null;
   const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter');
   const sphere = findNode(d.initializers, 'C_INIT_CreateWithinSphereTransform') ?? findNode(d.initializers, 'C_INIT_CreateWithinSphere');
+  const box = findNode(d.initializers, 'C_INIT_CreateWithinBox');
+  if (box && [box.params.m_vecMin, box.params.m_vecMax].some((v) =>
+    v !== undefined && (!Array.isArray(v) || v.length < 3 || !v.slice(0, 3).every(finite)))) return null;
   const offset = findNode(d.initializers, 'C_INIT_PositionOffset');
   const movement = findNode(d.operators, 'C_OP_BasicMovement');
   const randomColor = findNode(d.initializers, 'C_INIT_RandomColor');
@@ -94,7 +98,8 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const texture = renderer.textures.find((t) => !/noise|voronoi|detail|mask/i.test(t)) ?? renderer.textures[0] ?? null;
   const scalar = (v: unknown, fallback: number, max = 30) => Math.max(0, Math.min(max, paramScalar(v, fallback)));
   const emissionRate = (v: unknown) => v === undefined ? 100 : scalar(v, 0, 256);
-  const cp = (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
+  const cp = box ? paramScalar(box.params.m_nControlPointNumber, 0)
+    : (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
   const curve = (field: number) => d.operators.find((n) => n.class === 'C_OP_SetFloat'
     && paramScalar(n.params.m_nOutputField, 0) === field
     && n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE')?.params.m_InputValue;
@@ -131,7 +136,8 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
     spin: findNode(d.operators, 'C_OP_SpinUpdate') ? radians(fieldInit(d, 5)) : [0, 0],
     spawnRadius: Math.max(0, Math.min(128, paramScalar(sphere?.params.m_fRadiusMax, 0))),
     spawnRadiusMin: Math.max(0, Math.min(128, paramScalar(sphere?.params.m_fRadiusMin, 0))),
-    spawnLocal: sphere?.params.m_bLocalCoords === true,
+    spawnLocal: box ? box.params.m_bLocalSpace === true : sphere?.params.m_bLocalCoords === true,
+    spawnBox: box ? { min: vector(box.params.m_vecMin, [0, 0, 0]), max: vector(box.params.m_vecMax, [0, 0, 0]) } : null,
     speed: [sphere?.params.m_fSpeedMin, sphere?.params.m_fSpeedMax].map((v) => Math.max(-1024, Math.min(1024, paramScalar(v, 0)))) as [number, number],
     localSpeedMin: vector(sphere?.params.m_LocalCoordinateSystemSpeedMin, [0, 0, 0]),
     localSpeedMax: vector(sphere?.params.m_LocalCoordinateSystemSpeedMax, [0, 0, 0]),
@@ -217,7 +223,7 @@ export interface FxPreviewIssue { system: string; class: string; reason: string 
 export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
   const supported = new Set([
     'C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter', 'C_INIT_InitFloat', 'C_INIT_RandomSequence',
-    'C_INIT_CreateWithinSphere', 'C_INIT_CreateWithinSphereTransform', 'C_INIT_PositionOffset',
+    'C_INIT_CreateWithinSphere', 'C_INIT_CreateWithinSphereTransform', 'C_INIT_CreateWithinBox', 'C_INIT_PositionOffset',
     'C_INIT_RandomColor', 'C_OP_BasicMovement', 'C_OP_PositionLock', 'C_OP_SpinUpdate',
     'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites', 'C_OP_MovementRotateParticleAroundAxis',
   ]);

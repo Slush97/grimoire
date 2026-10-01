@@ -17,6 +17,19 @@ const descriptor = (): FxDescriptor => ({
     textures: ['materials/particle/noise.vtex', 'materials/particle/ring.vtex'] }], children: [],
 });
 describe('authored sprite attributes', () => {
+  it('preserves planar box bounds, local basis and exact control point', () => {
+    const d = descriptor();
+    d.controlPoints.unshift({ cp: 1, attachment: 'book_fx', attachType: 'PATTACH_POINT_FOLLOW', entity: 'self' });
+    d.initializers = [{ class: 'C_INIT_CreateWithinBox', params: {
+      m_vecMin: [0, -8, -16], m_vecMax: [0, 5, 15], m_nControlPointNumber: 1, m_bLocalSpace: true,
+    } }];
+    const p = spriteParamsFor(d)!;
+    expect(p.spawnBox).toEqual({ min: [0, -8, -16], max: [0, 5, 15] });
+    expect(p.spawnLocal).toBe(true); expect(p.attachment).toBe('book_fx');
+    expect(fxPreviewIssues(d).some((issue) => issue.class === 'C_INIT_CreateWithinBox')).toBe(false);
+    d.initializers[0].params.m_vecMin = { m_nType: 'PVEC_TYPE_CP_VALUE' };
+    expect(spriteParamsFor(d)).toBeNull();
+  });
   it('omits model-hitbox spawning until authored placement is supported, while preserving supported children', () => {
     const root = descriptor();
     root.initializers.push({ class: 'C_INIT_CreateOnModel', params: { m_vecHitBoxScale: [0.1, 0.1, 0.1] } });

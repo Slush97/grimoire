@@ -191,7 +191,14 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       const z = Math.random()*2 - 1, angle = Math.random()*Math.PI*2;
       const direction = new THREE.Vector3(Math.sqrt(1-z*z)*Math.cos(angle), Math.sqrt(1-z*z)*Math.sin(angle), z);
       const distance = THREE.MathUtils.lerp(Math.min(layer.spawnRadiusMin, layer.spawnRadius), Math.max(layer.spawnRadiusMin, layer.spawnRadius), Math.cbrt(Math.random()));
-      const offset = direction.clone().multiply(new THREE.Vector3(...layer.spawnBias)).multiplyScalar(distance*sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation);
+      // Authored local boxes are sampled in the CP frame. Keeping the planar
+      // axes intact matters for book glows; a sphere collapses their silhouette.
+      const offset = layer.spawnBox ? new THREE.Vector3(
+        THREE.MathUtils.lerp(layer.spawnBox.min[0], layer.spawnBox.max[0], Math.random()),
+        THREE.MathUtils.lerp(layer.spawnBox.min[1], layer.spawnBox.max[1], Math.random()),
+        THREE.MathUtils.lerp(layer.spawnBox.min[2], layer.spawnBox.max[2], Math.random())
+      ).multiplyScalar(sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation)
+        : direction.clone().multiply(new THREE.Vector3(...layer.spawnBias)).multiplyScalar(distance*sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation);
       const input = layer.radiusInput as { pf?: string; biasType?: string; bias?: number } | undefined;
       let radiusRandom = Math.random();
       if (input?.pf === 'PF_TYPE_RANDOM_BIASED' && input.biasType === 'PF_BIAS_TYPE_EXPONENTIAL') {

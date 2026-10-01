@@ -9,6 +9,14 @@ import { exportParticleBundle, particleDescriptor } from './heroParticleExport';
 const resource = (overrides = {}) => ({ _class: 'CParticleSystemDefinition', m_Renderers: [], ...overrides });
 afterEach(() => vi.resetAllMocks());
 describe('compiled particle export', () => {
+  it('selects one authored configuration instead of combining incompatible CP drivers', () => {
+    const raw = resource({ m_controlPointConfigurations: [
+      { m_name: 'game', m_drivers: [{ m_iControlPoint: 1, m_attachmentName: 'game_anchor' }] },
+      { m_name: 'preview', m_drivers: [{ m_iControlPoint: 1, m_attachmentName: 'preview_anchor' }] },
+    ] });
+    expect(particleDescriptor(raw, 'root', 'preview').controlPoints.map((cp) => cp.attachment)).toEqual(['preview_anchor']);
+    expect(particleDescriptor(raw, 'root').controlPoints.map((cp) => cp.attachment)).toEqual(['game_anchor']);
+  });
   it('resolves exact texture owners in skin, Citadel, core order without overriding higher priority', async () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-particle-mount-test-'));
     const textureNames = ['override', 'base', 'core'];

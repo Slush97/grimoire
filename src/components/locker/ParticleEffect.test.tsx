@@ -13,6 +13,24 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('samples local boxes through the authored CP orientation once', async () => {
+    const model = new THREE.Group();
+    const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    const anchor = new THREE.Bone(); anchor.name = 'book_fx'; anchor.position.set(10, 20, 30); anchor.rotation.z = Math.PI/2;
+    skeleton.add(anchor); model.add(skeleton);
+    const d: FxDescriptor = { ...descriptor, controlPoints: [{ cp: 1, attachment: 'book_fx', attachType: 'PATTACH_POINT_FOLLOW', entity: 'self' }],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }],
+      initializers: [{ class: 'C_INIT_CreateWithinBox', params: { m_vecMin: [0, 4, 2], m_vecMax: [0, 4, 2], m_nControlPointNumber: 1, m_bLocalSpace: true } }],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} /><ParticleEffect descriptor={d} textureBaseUrl="/" model={model} /></group>);
+    try {
+      await renderer.advanceFrames(1, 1/30);
+      let mesh: THREE.Mesh | undefined;
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      expect(p.getX(0)).toBeCloseTo(6*0.0254); expect(p.getY(0)).toBeCloseTo(20*0.0254); expect(p.getZ(0)).toBeCloseTo(32*0.0254);
+    } finally { await renderer.unmount(); }
+  });
   it('includes additive sprites in glass transmission input without writing depth', async () => {
     const model = new THREE.Group();
     const glass = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhysicalMaterial({ transmission: 0.9 }));

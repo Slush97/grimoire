@@ -33,9 +33,12 @@ function nodes(value: unknown): FxNode[] {
   }));
 }
 
-export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
+export function particleDescriptor(raw: unknown, name: string, configuration?: string): FxDescriptor {
   const r = row(raw);
   if (r._class !== 'CParticleSystemDefinition') throw new Error('Not a compiled particle system.');
+  const configurations = rows(r.m_controlPointConfigurations);
+  const selected = configuration ? configurations.find((c) => c.m_name === configuration) : undefined;
+  const drivers = rows((selected ?? configurations[0])?.m_drivers);
   const renderers: FxRenderer[] = rows(r.m_Renderers).slice(0, 16).map((renderer) => ({
     class: String(renderer._class ?? ''), params: parameter(renderer) as Row,
     mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : 'unsupported',
@@ -48,7 +51,7 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
     constantRadius: parameter(r.m_flConstantRadius) as FxDescriptor['constantRadius'],
     constantLifespan: parameter(r.m_flConstantLifespan) as FxDescriptor['constantLifespan'],
     constantColor: r.m_ConstantColor as number[],
-    controlPoints: rows(r.m_controlPointConfigurations).flatMap((c) => rows(c.m_drivers)).map((cp) => ({
+    controlPoints: drivers.map((cp) => ({
       cp: Number(cp.m_iControlPoint) || 0,
       attachType: typeof cp.m_iAttachType === 'string' ? cp.m_iAttachType : null,
       attachment: typeof cp.m_attachmentName === 'string' ? cp.m_attachmentName : null,
@@ -62,7 +65,7 @@ export function particleDescriptor(raw: unknown, name: string): FxDescriptor {
 
 /** v0.19.1's soundevents reader decodes any resource's KV3 DATA block. Use its
  * read-only JSON mode, then validate the particle class. No new CLI is required. */
-export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string, texturePaks: readonly string[] = []): Promise<void> {
+export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string, texturePaks: readonly string[] = [], configuration?: string): Promise<void> {
   if (texturePaks.length > 8) throw new Error('Particle package lookup exceeds preview limits.');
   const textures = new Set<string>();
   let systems = 0;
@@ -70,7 +73,7 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     if (++systems > 16 || ancestors.size > 4 || ancestors.has(path)) throw new Error('Particle graph exceeds preview limits.');
     if (!/^particles\/[a-zA-Z0-9_./-]+\.vpcf_c$/.test(path) || path.includes('..')) throw new Error('Invalid particle resource path.');
     const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', pak]));
-    const d = particleDescriptor(raw, path);
+    const d = particleDescriptor(raw, path, configuration);
     for (const renderer of d.renderers) for (const texture of renderer.textures) textures.add(texture);
     if (textures.size > 24) throw new Error('Particle textures exceed preview limits.');
     const chain = new Set(ancestors).add(path);

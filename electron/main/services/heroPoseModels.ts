@@ -312,13 +312,14 @@ function riggedVersionFile(key: string): string {
  * Curated per-hero ambient idle effect (`.vpcf_c`), keyed by display name. The
  * effects-preview axis is a hand-validated roster, NOT auto-discovered (the raw
  * "ambient candidate" metric over-counts ~20-56x); see
- * `docs/3d-preview-effects-feasibility.md`. Sprint 1: the two effects that render
- * correctly standalone: Wraith's hand energy (sprite + CP2 driver), Dynamo's
- * model-authored head effect (fixed sheet regions + head_fx), and Familiar's
- * body aura (CP0 + LockToBone). More land as the renderer grows
- * trail/rope + CP injection.
+ * `docs/3d-preview-effects-feasibility.md`. Effects currently supported in part:
+ * Wraith's hand energy (sprite + CP2 driver), Dynamo's
+ * model-authored head effect (fixed sheet regions + head_fx), and Abrams's
+ * model-declared preview book glow (local CP1 box). Familiar's unsupported
+ * hitbox-spawn layer is omitted. Ropes, snapshots and bone locking remain gaps.
  */
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
+    Abrams: 'particles/abilities/abrams/abrams_ambient_book.vpcf_c',
     Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
     Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
@@ -332,7 +333,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
  * through the pinned decoder and exports textures with Panorama dump. */
 // v4: retain authored fixed sheet regions and model particle scale.
 // v5: resolve authored core texture dependencies after the primary package.
-const EFFECT_CACHE_VERSION = '5';
+// v6: select a single CP configuration and support authored local box spawning.
+const EFFECT_CACHE_VERSION = '6';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1113,7 +1115,8 @@ export async function exportHeroEffect(
             await fs.rm(effectVersionFile(exportKey), { force: true });
             await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
                 heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
-                [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')]);
+                [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
+                heroName === 'Abrams' ? 'preview' : undefined);
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };
         } finally {
