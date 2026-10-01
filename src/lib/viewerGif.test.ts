@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { gifDimensions, gifFramePalette, GIF_RECORDING, recordViewerGif } from './viewerGif';
+import { quantize } from 'gifenc';
+import { captureViewerGif, encodeViewerGif, gifTrimBounds, gifDimensions, gifFramePalette, GIF_RECORDING, recordViewerGif } from './viewerGif';
+
+vi.mock('gifenc', async (original) => {
+  const actual = await original<typeof import('gifenc')>();
+  return { ...actual, quantize: vi.fn(actual.quantize) };
+});
 
 describe('Viewer GIF resource bounds', () => {
   it('reserves transparency separately from all 512 opaque three-bit cube colors', () => {
@@ -40,10 +46,28 @@ describe('Viewer GIF resource bounds', () => {
     }
     const frame = gifFramePalette(data);
     const colors = new Set<number>();
-    for (let i = 0; i < data.length; i += 4) colors.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+    const samples = vi.mocked(quantize).mock.calls.at(-1)![0];
+    for (let i = 0; i < samples.length; i += 4) colors.add((samples[i] << 16) | (samples[i + 1] << 8) | samples[i + 2]);
     expect(colors.size).toBeLessThanOrEqual(512);
     expect(frame.palette.length).toBeLessThanOrEqual(256);
     expect(frame.indices.length).toBe(480 * 480);
+  });
+  it('preserves substantially more than eight shading levels without modifying readback', () => {
+    const data = new Uint8ClampedArray(256 * 4);
+    for (let i = 0; i < 256; i++) data.set([i, i, i, 255], i * 4);
+    const original = data.slice();
+    const frame = gifFramePalette(data, 256);
+    expect(data).toEqual(original);
+    expect(new Set(frame.palette.map((rgb) => rgb[0])).size).toBeGreaterThan(24);
+    let error = 0;
+    for (let i = 0; i < 256; i++) error += Math.abs(frame.palette[frame.indices[i]][0] - i);
+    expect(error / 256).toBeLessThan(5);
+  });
+  it('keeps opaque black separate from transparency', () => {
+    const frame = gifFramePalette(new Uint8ClampedArray([0,0,0,0,0,0,0,255]));
+    expect(frame.indices[0]).toBe(0);
+    expect(frame.indices[1]).toBeGreaterThan(0);
+    expect(frame.palette[frame.indices[1]]).toEqual([0,0,0,255]);
   });
   it('bounds both portrait and landscape captures without stretching or enlarging', () => {
     expect(gifDimensions(1920, 1080)).toEqual([480, 270]);
@@ -82,5 +106,35 @@ describe('Viewer GIF lifecycle', () => {
     controller.abort();
     await expect(result).rejects.toThrow();
     expect([sample.width, sample.height]).toEqual([0, 0]);
+  });
+});
+
+
+describe('Viewer GIF trim', () => {
+  it.each([[-3, 60, [0,48]], [47,47,[47,48]], [9.8,12.2,[9,13]], [NaN,Infinity,[0,48]], [60,-9,[47,48]]])('bounds %s to %s', (start,end,expected) => {
+    expect(gifTrimBounds(48,start as number,end as number)).toEqual(expected);
+  });
+  it('rejects empty captures', () => expect(() => gifTrimBounds(0,0,0)).toThrow());
+  it('encodes only selected frames and cancels an encoding between frames', async () => {
+    const frames = [0,1,2].map((n) => new Uint8ClampedArray([n*80,0,0,255]));
+    const capture = { width:1,height:1,frames };
+    const bytes = await encodeViewerGif(capture,1,2,new AbortController().signal);
+    expect(Array.from(bytes).filter((n,i) => n === 0x21 && bytes[i+1] === 0xf9).length).toBe(1);
+    const controller = new AbortController();
+    const result = encodeViewerGif(capture,0,3,controller.signal);
+    controller.abort();
+    await expect(result).rejects.toThrow();
+    expect((await encodeViewerGif(capture,0,3,new AbortController().signal)).at(-1)).toBe(0x3b);
+  });
+  it('captures without quantizing during recording', async () => {
+    const sample = { width:0,height:0,getContext: () => ({ clearRect:vi.fn(),drawImage:vi.fn(),getImageData: () => ({data:new Uint8ClampedArray([0,0,0,255])}) }) };
+    vi.stubGlobal('document',{ createElement: () => sample });
+    vi.mocked(quantize).mockClear();
+    try {
+      const capture = await captureViewerGif({width:1,height:1} as HTMLCanvasElement,{signal:new AbortController().signal,shouldStop:()=>true});
+      expect(capture.frames).toHaveLength(1);
+      expect(quantize).not.toHaveBeenCalled();
+      expect(sample.width).toBe(0);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

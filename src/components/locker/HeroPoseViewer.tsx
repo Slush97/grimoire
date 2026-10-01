@@ -1266,7 +1266,7 @@ export default function HeroPoseViewer({
         const request = document.fullscreenElement ? document.exitFullscreen() : viewerRef.current?.requestFullscreen();
         request?.catch(() => setViewerError(t('locker.pose.fullscreenFailed')));
       }}
-      gifAvailable={!!scene} recording={gif.recording} onGif={() => { setViewerError(null); void gif.toggle(); }} onCancelGif={gif.cancel}
+      gifAvailable={!!scene} gif={gif} onGif={() => { setViewerError(null); void gif.toggle(); }}
     />
   );
 

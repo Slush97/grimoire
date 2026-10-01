@@ -1,8 +1,10 @@
 import { useEffect, useId, useState, type RefObject, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Camera, Expand, Film, Pause, Play, RotateCcw, RotateCw, Settings2, Square, X } from 'lucide-react';
-import { Button, IconButton, Toggle } from '../common/ui';
+import { IconButton, Toggle } from '../common/ui';
 import { Select } from '../common/forms';
+import { ViewerGifReview } from './ViewerGifReview';
+import type { ViewerGifControls } from '../../lib/useViewerGif';
 import { clampAnimationTime, groupHeroClips, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
 
 export type HeroViewerScene = 'midtown' | 'studio' | 'transparent';
@@ -35,9 +37,8 @@ interface Props {
   onScreenshot: () => void;
   onFullscreen: () => void;
   gifAvailable: boolean;
-  recording: boolean;
+  gif: ViewerGifControls;
   onGif: () => void;
-  onCancelGif: () => void;
 }
 
 function AnimationTimeline({ progressRef, onSeek }: Pick<Props, 'progressRef' | 'onSeek'>) {
@@ -121,6 +122,7 @@ export function HeroViewerToolbar(p: Props) {
           </div>
         </div>
       )}
+      {p.gif.capture && <ViewerGifReview gif={p.gif} />}
       {p.status && <p role="status" className="pointer-events-auto max-w-64 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">{p.status}</p>}
       <div className="pointer-events-auto w-80 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 backdrop-blur-sm">
         {p.animated && p.clips.length > 0 && (
@@ -128,14 +130,14 @@ export function HeroViewerToolbar(p: Props) {
             <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
           </div>
         )}
-        <div className="flex flex-wrap gap-1 p-1">
-        <Button size="sm" variant={open ? 'primary' : 'secondary'} icon={Settings2} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{t('locker.pose.controls')}</Button>
+        <div className="flex flex-nowrap items-center justify-between gap-1 p-1">
+        <IconButton size="sm" icon={Settings2} label={t('locker.pose.controls')} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)} />
         <IconButton size="sm" icon={p.paused ? Play : Pause} label={p.paused ? t('locker.pose.resumeAnimation') : t('locker.pose.pauseAnimation')} disabled={!p.animated || p.clips.length === 0} onClick={() => p.onPaused(!p.paused)} />
         <IconButton size="sm" icon={RotateCw} label={t('locker.pose.autoRotate')} aria-pressed={!p.spinPaused} className="aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-accent" onClick={() => p.onSpinPaused(!p.spinPaused)} />
         <IconButton size="sm" icon={RotateCcw} label={t('locker.pose.resetView')} onClick={p.onReset} />
         <IconButton size="sm" icon={Camera} label={t('locker.pose.screenshot')} onClick={p.onScreenshot} />
-        <IconButton size="sm" icon={p.recording ? Square : Film} label={p.recording ? t('locker.pose.stopGif') : t('locker.pose.recordGif')} aria-pressed={p.recording} disabled={!p.gifAvailable} className="aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-accent" onClick={p.onGif} />
-        {p.recording && <IconButton size="sm" icon={X} label={t('locker.pose.cancelGif')} onClick={p.onCancelGif} />}
+        <IconButton size="sm" icon={p.gif.recording ? Square : Film} label={p.gif.recording ? t('locker.pose.stopGif') : t('locker.pose.recordGif')} aria-pressed={p.gif.recording} disabled={!p.gifAvailable || p.gif.status === 'encoding' || p.gif.status === 'review'} className="aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-accent" onClick={p.onGif} />
+        <IconButton size="sm" icon={X} label={t('locker.pose.cancelGif')} disabled={p.gif.status === 'idle'} onClick={p.gif.cancel} />
         <IconButton size="sm" icon={Expand} label={t('locker.pose.fullscreen')} onClick={p.onFullscreen} />
         </div>
       </div>
