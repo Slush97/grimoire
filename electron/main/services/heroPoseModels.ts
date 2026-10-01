@@ -428,7 +428,11 @@ async function chooseRiggedClipForSelector(
     if (entryIndex >= 0) {
         const candidates = clips.filter((clip) => heroAnimationRecipe(clip.name, heroName));
         const metadata = await readHeroAnimationMetadata(vpk, pak01, selector[entryIndex + 1], candidates);
-        for (const clip of clips) Object.assign(clip, metadata.get(clip.name));
+        for (const clip of clips) {
+            const flags = metadata.get(clip.name);
+            if (flags?.additive) clip.additive = true;
+            if (flags?.rootMotion) clip.rootMotion = true;
+        }
     }
     return choosePreviewClips(clips, heroName);
 }
