@@ -257,12 +257,16 @@ export function glassTransmissionTexture(morphic: MorphicExtras): THREE.Texture 
   return isMeaningfulMask(glass) ? glass : null;
 }
 
-/** Map authored PBR glass to Three's transmission approximation, without adding
- * a second coating or overriding exported roughness/metalness. In the installed
+/** Map authored PBR glass to Three's transmission approximation. In the installed
  * glass-enabled Vulkan variant the red mask removes diffuse, preserves specular,
  * and adds scene color. Cloak factors control refraction, not mask opacity. */
 export function applyGlassParameters(physical: THREE.MeshPhysicalMaterial, morphic: MorphicExtras): void {
   physical.transmission = flag(morphic, 'F_GLASS') ? 1 : Math.max(physical.transmission ?? 0, 0.85);
+  // Preview compatibility: Valve's glass and Three's GGX surface do not produce
+  // equivalent highlights at exported roughness 1. A matched historical render
+  // isolated this value as the matte-glass regression. Restore the shared gloss
+  // ceiling while retaining authored masks, transmission blur and metalness.
+  physical.roughness = Math.min(physical.roughness, 0.18);
   physical.ior = firstNumber(morphic, ['g_flIOR'], physical.ior ?? 1.5);
   const floats = morphic.floats;
   if (floats?.g_flCloakRefractAmount !== undefined && floats.g_flFullyCloakedRefractFactor1 !== undefined) {

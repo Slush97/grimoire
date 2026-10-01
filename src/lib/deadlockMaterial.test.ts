@@ -297,6 +297,17 @@ describe('buildDeadlockMaterial detail textures', () => {
 });
 
 describe('buildDeadlockMaterial glass and translucency state', () => {
+  it('keeps rough glass glossy in the preview without changing opaque surfaces or the cached base', () => {
+    const glassBase = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 } });
+    glassBase.roughness = 1;
+    const opaqueBase = materialWithMorphic({ shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } });
+    opaqueBase.roughness = 1;
+    const glass = buildDeadlockMaterial(glassBase), opaque = buildDeadlockMaterial(opaqueBase);
+    expect((glass.material as THREE.MeshPhysicalMaterial).roughness).toBe(0.18);
+    expect((opaque.material as THREE.MeshStandardMaterial).roughness).toBe(1);
+    expect(glassBase.roughness).toBe(1);
+    glass.dispose(); opaque.dispose();
+  });
   it('preserves authored glass surface properties and uses full masked transmission without invented refraction', () => {
     const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
       floats: { g_flCloakFactor1: 0.905, g_flCloakRefractAmount: 0.075, g_flFullyCloakedRefractFactor1: 0, g_flCloakBlurAmount: 0 } });
