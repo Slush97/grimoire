@@ -60,7 +60,14 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
       if (frameRegion && previous === 0) chain += `if(vFrameClamp>.5)warped${i}=clamp(warped${i},vFrameRegion.xy,vFrameRegion.zw);`;
       chain += `t${i}=texture2D(tex${previous},warped${i});`;
     }
-    if (type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP') chain += `t${i}=vec4(texture2D(tex${i},vec2(dot(gammaColor(accum.rgb),vec3(.299,.587,.114)),.5)).rgb,accum.a);`;
+    if (type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP') {
+      // The RGBA ramp reads covered color, unlike an RGB-only ramp. VRF's
+      // MASK_RAMP_FLAGS (RGBA=1) premultiplies before gamma/luma.
+      // Otherwise faint detail fringes select the same bright ramp as its core.
+      // Keep the existing RGBALPHA coverage approximation unchanged here.
+      const rampSource = channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA' ? 'accum.rgb*accum.a' : 'accum.rgb';
+      chain += `t${i}=vec4(texture2D(tex${i},vec2(dot(gammaColor(${rampSource}),vec3(.299,.587,.114)),.5)).rgb,accum.a);`;
+    }
     // A color lookup inherits the incoming shape's coverage. RGB-to-alpha must
     // modulate that coverage, never resurrect transparent radial-mask corners.
     if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA') chain += `t${i}.a=${type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP' ? `t${i}.a*` : ''}dot(t${i}.rgb,vec3(.299,.587,.114));`;

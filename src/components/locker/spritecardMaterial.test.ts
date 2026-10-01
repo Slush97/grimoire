@@ -9,6 +9,21 @@ const renderer = (blendMode: string | null): FxRenderer => ({ class: 'C_OP_Rende
     m_TextureControls: { m_flFinalTextureOffsetV: { pf: 'PF_TYPE_COLLECTION_AGE', mult: .3 } } })),
 } });
 describe('shared authored spritecards', () => {
+  it('looks up RGBA ramps from covered color and preserves other supported ramp modes', () => {
+    for (const channel of ['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGB']) {
+      const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
+      const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
+      inputs[1].m_nTextureType = 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP';
+      inputs[1].m_nTextureChannels = channel;
+      inputs[1].m_nTextureBlendMode = 'SPRITECARD_TEXTURE_BLEND_REPLACE';
+      const result = spritecardMaterial(r, '/', 'void main(){}')!;
+      try {
+        expect(result.material.fragmentShader).toContain(channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA'
+          ? 'dot(gammaColor(accum.rgb*accum.a),vec3(.299,.587,.114))'
+          : 'dot(gammaColor(accum.rgb),vec3(.299,.587,.114))');
+      } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+    }
+  });
   it('places only the atlas layer in its selected frame and clamps distorted resampling', () => {
     const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
     const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
