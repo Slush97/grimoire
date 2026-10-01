@@ -657,6 +657,13 @@ describe('applySource2MaterialHints glass and cloak state', () => {
 });
 
 describe('NPR rim mask (F8)', () => {
+  it('uses light/up/AO gates for opaque cloth instead of a bleaching view-Fresnel lobe, retaining glass rim', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+    expect(patch).toContain('lightRim * upRamp * nprRimMaskG');
+    expect(patch).toContain('clamp(ambientOcclusion, 0.0, 1.0)');
+    expect(patch).toContain('uCitadelGlass > 0.5 ? 1.0 : opaqueRimAo');
+    expect(patch).not.toContain('nprFres * nprGate');
+  });
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('nprMask.g : uRimMaskDefault');

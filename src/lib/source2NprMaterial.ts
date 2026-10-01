@@ -1415,12 +1415,10 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float nprQ = celQuantize(clamp(nprLum, 0.0, 1.0), uBands, uStepSharpness);
             nprCel = mix(nprLit, nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0), nprSurfaceWeight);
           }
-          // Preview approximation: view Fresnel gated by a key light and mask G.
-          // Source's NPR rim instead needs per-light evaluation, an authored up
-          // ramp, AO and scene globals the current export does not supply.
+          // Citadel uses a light-normal wrap, world-up ramp, rim mask G and
+          // AO R. A view-Fresnel lobe bleaches front-facing vertical cloth.
+          // Scene light/up-ramp constants remain a preview approximation.
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
-          float nprFres = pow(clamp(1.0 - abs(dot(nprN, nprV)), 0.0, 1.0), uRimPower);
-          float nprGate = smoothstep(-uWrap, 1.0, dot(nprN, nprL));
           // Rim lighting is a separate additive lobe in Citadel glass. Coverage
           // removes diffuse, not this lobe; use lit albedo rather than tinting
           // the transmitted scene. Scene rim globals remain a preview approximation.
@@ -1431,7 +1429,12 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           float lightRim = pow(clamp((dot(nprN, nprL) + uWrap) / (lightWrap * lightWrap), 0.0, 1.0), uRimPower);
           vec3 worldUpView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
           float upRamp = clamp(dot(nprN, worldUpView), 0.0, 1.0);
-          nprRim = (uCitadelGlass > 0.5 ? lightRim * upRamp : nprFres * nprGate) * nprRimMaskG * uRimStrength;
+          float opaqueRimAo = 1.0;
+          #ifdef USE_AOMAP
+            opaqueRimAo = clamp(ambientOcclusion, 0.0, 1.0);
+          #endif
+          // Retain the verified glass path independently of opaque AO changes.
+          nprRim = lightRim * upRamp * nprRimMaskG * uRimStrength * (uCitadelGlass > 0.5 ? 1.0 : opaqueRimAo);
         }
 
         vec3 nprRimTint = mix(uRimColor, reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, 1.0 - nprSurfaceWeight);
