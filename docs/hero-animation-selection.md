@@ -1,37 +1,53 @@
 # Hero showcase animation selection
 
-The viewer exports a small menu of complete actions. A gameplay animgraph can combine a locomotion base, aim, upper-body casting, additive recoil and weapon attachments; exporting an individual graph leaf does not reproduce that action. `heroAnimationCatalog.ts` keeps reviewed recipes separate from raw asset names. Unknown clips require an explicit `standalone: true` declaration to join this menu.
+The viewer exports a bounded menu of complete actions. Gameplay graphs can
+combine locomotion, aiming, casting, recoil and weapon attachments; exporting an
+individual graph leaf does not reproduce that composition.
+`heroAnimationCatalog.ts` keeps reviewed recipes separate from raw asset names.
+Unknown clips require an explicit `standalone: true` declaration to join the menu.
 
-Positive metadata (`additive`, `delta`, `requiresBase`, `transition`, `rootMotion`, `hidden`, or `standalone: false`) excludes a clip even if its name is reviewed. For explicit model entries, the main process reads neighboring compiled NmClip metadata through the existing VPK reader and bundled KV3 decoder. It only associates those flags when the frame count and duration agree. Legacy embedded ANIM delta flags were all false in the inspected assets and do not establish standalone suitability. Missing modern metadata is not interpreted as proof of completeness. Basename-discovered model selectors retain the reviewed catalog fallback.
+## Metadata and selection
 
-Installed base-game research on 2026-10-01 covered 68 hero definitions, 64 models with embedded clips (11,355 records), 158 graph resources and 612 selected modern clips. The following recipes were also exported with explicit current model paths and inspected in the isolated viewer. No game assets or captures belong in this repository.
+Positive metadata (`additive`, `delta`, `requiresBase`, `transition`, `rootMotion`,
+`hidden`, or `standalone: false`) excludes a clip even if its name is reviewed.
+For explicit model entries, the main process reads neighboring compiled NmClip
+metadata through the VPK reader and bundled KV3 decoder. Flags are associated
+only when frame count and duration agree. Missing metadata is not proof that a
+clip is a complete action.
 
-| Hero | First choice | Playback | Supporting observation |
+Default selection follows recipe order, then known neutral/relaxed idles, then
+the first explicitly complete remaining action in deterministic name order.
+Per-recipe alternatives are fallbacks, not duplicate options. If no complete
+clip is available, the posed/2D fallback remains available. Export is bounded by
+eight actions and 10,000 frames; cache versions track selection-policy changes.
+
+Examples of default recipes:
+
+| Hero | First choice | Playback | Reason |
 | --- | --- | --- | --- |
-| Dynamo | `primary_stand_idle` | Loop | Whole body and gun, matching endpoints. `hero_pose` is a static floating pose and is a separate held choice. `ui_main_menu` has a nonzero endpoint discontinuity and is omitted. |
-| Wraith | `ui_shop_idle` | Loop | Shop/info graph entry; body and weapon return to matching poses. Cloth must be enabled for the coat. `ui_hero_select` is a distinct held choice. |
-| Mirage | `primary_ooc_stand_idle` | Loop | Relaxed whole-body gun stance; endpoint difference below 0.04 degrees. `ui_main_menu` is a static held choice. |
-| Yamato | `ui_hero_select` | Hold | Static sword-on-shoulder showcase pose. The almost-static `primary_stand_idle` is only a fallback, not a duplicate menu choice. |
-| Viscous | `ui_hero_select` | Loop | Complete ambient body motion with matching endpoints. `primary_stand_idle` reproduces the same body motion at another rate, so it is only a fallback. |
-| Celeste | `ui_shop` | Loop | Modern shop graph loops it; exported body/weapon endpoints differ below 0.01 degrees. Legacy loop flag is false. |
-| Rem | `ui_shop` | Hold | Whole-body pillow/candle showcase. Exported body channels differ by about 40 degrees at endpoints despite the shop graph's loop setting. Play once, then hold. |
-| Victor | `weapon_stand_idle` | Loop | Stable body/weapon idle, maximum measured endpoint difference about 0.84 degrees. Modern `ui_shop` is a different, very short clip and is not substituted by name. |
-| Graves | `weapon_stand_idle` | Loop | Complete standing body and spectral weapon pose. The shop pose parks the separately skinned hand near the floor, so it is omitted from the preview menu. Standing has little body movement but keeps the weapon and its authored effect coherent. |
+| Dynamo | `primary_stand_idle` | Loop | Whole body and gun idle. |
+| Wraith | `ui_shop_idle` | Loop | Whole body and weapon shop idle. |
+| Mirage | `primary_ooc_stand_idle` | Loop | Relaxed whole-body gun stance. |
+| Yamato | `ui_hero_select` | Hold | Sword-on-shoulder showcase pose. |
+| Celeste | `ui_shop` | Loop | Complete shop action. |
+| Rem | `ui_shop` | Hold | Showcase action with discontinuous endpoints. |
+| Victor | `weapon_stand_idle` | Loop | Body and weapon idle. |
+| Graves | `weapon_stand_idle` | Loop | Keeps the separately skinned hand beside the body. |
 
-Endpoint measurements used exported skeletal, weapon and pillow translation/quaternion channels, with midpoint samples to distinguish static poses. Captures sampled start, middle, end and the loop boundary; a second pass inspected cloth after warm-up. This verifies those base-model actions, not every skin, attachment combination or future game update. The private captures use the current viewer's materials/cloth and are not an assertion of game-render parity.
+Secondary Run/Reload recipes retain short action labels. Modern renamed aliases
+are scoped to the exact model and verified source filename/timing. Positive
+exclusion flags remain authoritative. Held actions use `LoopOnce` with clamping;
+looping is not inferred solely from an embedded legacy loop flag.
 
-Default selection follows recipe order, then known neutral standing/relaxed idles, then the first explicitly complete remaining action in deterministic name order. If none is available, existing posed/2D fallback applies. Respawn idles, aim/additive layers, transitions, split-body channels and root motion are excluded. Do not construct graph composites until the viewer can reproduce masks, layer modes, attachments and root-motion policy together.
+## Validation and limits
 
-Reviewed choices have localized short labels: Idle, Relaxed idle, Hero pose, Run and Reload. Unknown explicitly complete names retain their descriptive words and directional suffixes. Per-recipe alternatives are fallbacks rather than duplicate options. The export remains bounded by eight actions and 10,000 frames, and its cache version changes with the selection policy.
+Catalog and production tests cover selection, metadata timing, aliases,
+exclusions, default playback and bounded exports. Rendered acceptance should
+inspect body and weapon channels at the start, middle, end and loop boundary,
+including warmed cloth where applicable. A suitable base-model clip does not
+prove every skin or attachment combination is valid.
 
-The viewer passes hero context to default selection and labels, and uses `LoopOnce` with clamping for held recipes.
-
-Secondary choices follow the showcase defaults: Wraith `item_run_n` and Celeste `weapon_run_n` are looping forward runs; Dynamo, Wraith and Yamato `primary_stand_reload` are held reloads. These five actions have matching compiled frame counts/durations, non-additive flags, stationary roots and exported body/weapon tracks. Only those three heroes permit the neighboring modern `reload_idle.vnmclip_c` alias, after the same-name lookup. Timing checks still apply, positive exclusion flags still win, and quick reloads are not aliases. Other movement/combat actions remain unreviewed rather than categorically invalid.
-
-All 44 production heroes now have explicit catalog recipes and current body model entries. The production set comes from installed hero definitions with both `m_bDisabled` and `m_bInDevelopment` false, excluding the base rig and target dummy. Each chosen default exists in its exact current model and was exported with body/weapon channels for endpoint and root checks. This fixes missing generic defaults for Infernus (`shop_menu_base`), Billy (`primary_idle`), Baba (`outofcombat_stand_idle`) and Nurse Harrow (`weapon_stand_idle1`). The production availability tests use the installed default clip names, frame counts and rates, including heroes absent from older shared roster packages. Exact model entries also make compiled metadata reads available across the roster and let an active skin override the intended body path. Where modern clips were renamed, aliases are scoped to the exact installed model and verified source filename/timing; absent or mismatched metadata remains unknown.
-
-New secondary candidates are bounded to one forward run and one standing reload where matching modern frame counts, durations and source filenames establish non-additive clips with stationary roots. They follow the default and retain short Run/Reload labels. Positive exclusions remain unchanged; no blended gameplay graph is reconstructed. Exported endpoint differences also make Infernus, Calico and Billy default actions play once and hold instead of forcing a discontinuous loop.
-
-All 44 production defaults were subsequently captured in an isolated hidden viewer using the native Radeon renderer. Each loaded the exact expected default and exposed short readable menu labels; front and oblique views showed complete bodies and expected held props without a selection, T-pose, detached-part or model-loading failure. The private production roster matrix records exact model, metadata, track and capture evidence. This bounded base-model acceptance does not establish material/particle parity, every skin or every animation frame. Native captures and private game assets are not repository fixtures.
-
-The eleven additional Run/Reload choices across McGinnis, Paradox, Kelvin, Haze, Holliday, Calico, Grey Talon, Warden, Vyper and Silver also received two native hardware snapshots each. They show complete body/prop actions; forward runs stay in place and reloads reach held final poses. This checks the bounded secondary menu, not arbitrary gameplay leaves.
+The menu deliberately omits unreviewed graph layers and composites. It does not
+expose the entire gameplay animation library or synchronize arbitrary ability
+particle events. Reconstructing those actions requires matching masks, layer
+modes, attachments and root-motion policy, not simply allowing more filenames.

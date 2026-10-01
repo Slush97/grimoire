@@ -20,14 +20,16 @@ copies, preserving the raw preview and permitting repeated trimmed saves.
 The fixed toolbar keeps play/pause, auto-rotate, capture, cancel and fullscreen
 on one row. The review panel appears above it and has its own playback control.
 
-Focused tests cover palette bounds, grayscale error, transparent edges, opaque
-black, trim bounds, cancellation, repeat capture, source changes and unmount.
-Windows packaged interaction was checked with real Dynamo assets in a separate
-hidden test profile. A 44-frame capture trimmed to frames 2 through 42 produced
-a 41-frame 480 by 347 GIF. Idle, recording, encoding and review toolbar rows all
-measured 318 by 36 pixels, with no wrapping. Private screenshots and asset inputs
-remain outside source control.
+## Validation
 
-The single-timeline update adds focused keyboard, pointer-capture, cancel,
-unmount and encoding-disable checks. The separate packaged timeline candidate
-was rendered and inspected with the original package and profile preserved.
+Focused tests cover palette bounds, grayscale error, transparent edges, opaque
+black, trim bounds, keyboard/pointer capture, cancellation, repeated capture,
+source changes, unmount and controls disabled during encoding.
+
+```bash
+pnpm exec vitest run src/lib/viewerGif.test.ts src/lib/useViewerGif.test.tsx src/components/locker/ViewerGifTimeline.test.tsx
+```
+
+Packaged acceptance should decode saved output, verify frame count/dimensions,
+looping and transparency, and exercise retake, cancel and repeated trimmed saves.
+See [viewer development](viewer-development.md) for isolated runtime checks.

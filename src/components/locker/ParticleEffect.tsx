@@ -1,5 +1,5 @@
-/** Bounded sprite preview using authored rates and attributes. This intentionally
- * skips Source 2 rope/model renderers and unimplemented operator classes. */
+/** Bounded ambient preview using authored sprite attributes and shared rope
+ * layers. Unsupported model renderers and operator classes remain omitted. */
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import * as THREE from 'three';

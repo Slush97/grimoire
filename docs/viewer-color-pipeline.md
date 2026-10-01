@@ -21,10 +21,14 @@ The pinned exporter does not emit the compiled VTEX reflectivity. The viewer can
 
 The fallback is shared by all heroes and does not include the exported material tint. No individual hero is recolored to compensate for missing information. Exact pivot parity requires exporter support for the VTEX header, cache invalidation and fresh exports.
 
-## Verification
+## Verification and limits
 
-Numerical checks cover the complete nonidentity correction against an independently evaluated scale/rotation reference, channel-specific pivots, negative and HDR results, tint-domain/schema guards, unmodified ordinary factors, repeated builds, legacy restore/re-wrap, and linear pixel averages. Shader stage-order checks cover the production shared shader. The private four-hero fixtures were subsequently restored and audited through the actual browser GLTFLoader, texture resolver and production material builder. All 25 exported materials carry schema 2; 22 static factors satisfy the compatibility guard and three Mirage overlays retain their unresolved `$COLOR` fallback. Running texture resolution twice changes none of their factors. The only nonidentity contrast/saturation material is Mirage's body. Its browser-decoded linear average agrees with an independently computed full-PNG histogram mean to within 5e-12; this establishes the fallback computation for that input, not equivalence to its unavailable compiled VTEX header.
+Numerical regressions cover nonidentity correction, channel-specific pivots,
+negative/HDR results, schema/tint-domain guards, repeated builds, legacy restore
+and linear pixel averages. Shader tests cover stage ordering in the shared
+production material path.
 
-Dynamo's bag authors white tint in mod2x mode, so its doubled albedo follows the shared authored rule. Small 4x4 tint/rim textures remain bound as constant data; these are legitimate constants rather than missing masks. Mirage's nonwhite static body and urn factors decode once and move to the post-correction masked tint stage. The remaining dynamic overlay color is intentionally not evaluated without its scene attribute.
-
-Ignored diagnostic JSON captures material inputs, decoded mask statistics, browser factors/uniforms and the repeat-resolution check under `.codex-run/source2-physics`. The audit does not establish rendered parity with the game or reference viewer.
+Dynamic scene-attribute colors such as `$COLOR` remain unresolved without the
+corresponding runtime input. Constant tint/rim textures are valid authored data,
+not necessarily missing masks. A correct fallback average or static tint guard
+does not establish equivalence to compiled texture reflectivity or game lighting.

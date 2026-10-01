@@ -1,4 +1,4 @@
-"""Package private local viewer assets for a cloud workspace, without game VPKs."""
+"""Package exported viewer fixtures with integrity checks, without game VPKs."""
 import argparse
 import hashlib
 import json
