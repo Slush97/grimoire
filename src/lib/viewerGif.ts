@@ -7,21 +7,38 @@ export const GIF_RECORDING = { maxSeconds: 4, fps: 12, maxEdge: 480, maxBytes: 2
  * select an opaque color. Three bits per RGB channel bound gifenc's histogram
  * to 512 opaque colors plus transparency, avoiding its expensive nearest-pair
  * reduction over tens of thousands of colors on detailed backgrounds.
- * No raw sequence or extra frame buffer is retained. */
+ * No raw frame sequence is retained. */
 export function gifFramePalette(data: Uint8ClampedArray) {
   let hasAlpha = false;
+  let opaqueCount = 0;
   for (let i = 3; i < data.length; i += 4) {
     if (data[i] < 128) {
       data[i - 3] = data[i - 2] = data[i - 1] = data[i] = 0;
       hasAlpha = true;
     } else {
+      opaqueCount++;
       data[i] = 255;
       for (let channel = i - 3; channel < i; channel++) data[channel] = Math.round(data[channel] * 7 / 255) * 255 / 7;
     }
   }
-  const format = hasAlpha ? 'rgba4444' : 'rgb565';
-  const palette = quantize(data, 256, { format, oneBitAlpha: hasAlpha });
-  return { palette, indices: applyPalette(data, palette, format), transparentIndex: palette.findIndex((color) => color[3] === 0) };
+  if (!hasAlpha) {
+    const palette = quantize(data, 256, { format: 'rgb565' });
+    return { palette, indices: applyPalette(data, palette, 'rgb565'), transparentIndex: -1 };
+  }
+  // Alpha must not participate in nearest-color reduction: an opaque black
+  // entry can otherwise absorb the transparent slot when reducing >256 colors.
+  // This temporary single-frame buffer preserves opaque color frequencies.
+  const opaque = new Uint8ClampedArray(opaqueCount*4);
+  for (let i = 0, out = 0; i < data.length; i += 4) {
+    if (data[i+3] === 255) {
+      opaque[out++] = data[i]; opaque[out++] = data[i+1]; opaque[out++] = data[i+2]; opaque[out++] = 255;
+    }
+  }
+  const colors = opaqueCount ? quantize(opaque, 255, { format: 'rgb565' }) : [[0, 0, 0]];
+  const palette = [[0, 0, 0, 0], ...colors.map((color) => [...color.slice(0, 3), 255])];
+  const indices = applyPalette(data, colors, 'rgb565');
+  for (let i = 0; i < indices.length; i++) indices[i] = data[i*4+3] === 0 ? 0 : indices[i]+1;
+  return { palette, indices, transparentIndex: 0 };
 }
 
 export function gifDimensions(width: number, height: number): [number, number] {

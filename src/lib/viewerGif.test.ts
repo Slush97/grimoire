@@ -2,6 +2,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gifDimensions, gifFramePalette, GIF_RECORDING, recordViewerGif } from './viewerGif';
 
 describe('Viewer GIF resource bounds', () => {
+  it('reserves transparency separately from all 512 opaque three-bit cube colors', () => {
+    const data = new Uint8ClampedArray(513*4);
+    let pixel = 1;
+    for (let r = 0; r < 8; r++) for (let g = 0; g < 8; g++) for (let b = 0; b < 8; b++) {
+      data.set([r, g, b].map((n) => Math.round(n*255/7)).concat(255), pixel++*4);
+    }
+    const frame = gifFramePalette(data);
+    expect(frame.transparentIndex).toBe(0); expect(frame.indices[0]).toBe(0);
+    expect(frame.palette[0]).toEqual([0, 0, 0, 0]); expect(frame.palette.length).toBeLessThanOrEqual(256);
+    expect(Array.from(frame.indices.slice(1)).every((index) => index > 0 && frame.palette[index][3] === 255)).toBe(true);
+  });
+  it('keeps an entirely transparent frame representable', () => {
+    const frame = gifFramePalette(new Uint8ClampedArray(16));
+    expect(Array.from(frame.indices)).toEqual([0, 0, 0, 0]); expect(frame.palette[0][3]).toBe(0);
+  });
   it('maps faint white and colored edges to transparency while retaining opaque color', () => {
     const data = new Uint8ClampedArray([
       0, 0, 0, 0, 255, 255, 255, 1, 255, 255, 255, 120,
