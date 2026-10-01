@@ -10,13 +10,14 @@ export function fxTexturePngName(vtexPath: string): string {
 
 export type FxParam = number | {
   pf?: string; literal?: number; min?: number; max?: number;
-  in0?: number; in1?: number; out0?: number; out1?: number; cp?: number; curve?: unknown; bias?: number; biasType?: string;
+  in0?: number; in1?: number; out0?: number; out1?: number; cp?: number; field?: number; map?: string; mult?: number; curve?: unknown; bias?: number; biasType?: string;
 };
 export interface FxNode { class: string; params: Record<string, unknown> }
 export interface FxRenderer extends FxNode { mode: string; blendMode: string | null; textures: string[] }
 export interface FxControlPoint { cp: number | null; attachType: string | null; attachment: string | null; entity: string | null }
 export interface FxSheet { sequences: Array<{ id: number; clamp: boolean; uv: [number, number, number, number] }> }
 export interface FxDescriptor {
+  snapshot?: { points: Array<{ position: [number, number, number]; joints: string[]; weights: number[] }> };
   scale?: number; sheets?: Record<string, FxSheet>; startDelay?: number; attachments?: ModelAttachment[];
   name: string; class?: string; maxParticles?: number; constantRadius?: FxParam; constantLifespan?: FxParam;
   constantColor?: number[] | FxParam; controlPoints: FxControlPoint[];
@@ -54,10 +55,14 @@ const color = (v: unknown, fallback: Vec3): Vec3 => {
 };
 const findNode = (nodes: FxNode[], cls: string) => nodes.find((n) => n.class === cls);
 const fieldInit = (d: FxDescriptor, field: number) => {
-  const node = d.initializers.filter((n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, 0) === field).at(-1);
+  const node = d.initializers.filter((n) => n.class === 'C_INIT_InitFloat' && paramScalar(n.params.m_nOutputField, 3) === field).at(-1);
   return node ? node.params.m_InputValue ?? 0 : undefined;
 };
 export interface SpriteSimParams {
+  ring: { radius: [number, number]; thickness: [number, number] } | null;
+  normal: { axis: Vec3; angle: number; normalize: boolean } | null;
+  normalRotation: { axisMin: Vec3; axisMax: Vec3; rate: [number, number] } | null;
+  alignNormal: boolean; spinRate: number; alphaScale: number; alphaOnly: boolean; colorInitializers: FxNode[];
   scale: number; sheet: FxSheet | undefined; sequence: [number, number]; persistent: boolean; radiusInput: unknown; radiusScale: number;
   spawnBias: Vec3; offsets: Array<{ min: Vec3; max: Vec3; local: boolean; proportional: boolean }>;
   attachment: string | null; texture: string | null; additive: boolean; maxParticles: number;
@@ -82,7 +87,7 @@ export interface SpriteEmission {
 }
 export interface SpriteFade { fadeIn: [number, number]; fadeOut: [number, number]; startAlpha: number; endAlpha: number }
 
-/** Source particle attributes: radius=0, lifetime=1, roll=4, roll speed=5, alpha=7.
+/** Source particle attributes: position=0, lifetime=1, radius=3, roll=4, roll speed=5, alpha=7.
  * Omitted output fields mean radius, rather than position or lifetime. */
 export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r) => r.mode === 'sprite')): SpriteSimParams | null {
   if (!renderer) return null;
@@ -104,6 +109,9 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const fade = findNode(d.operators, 'C_OP_FadeAndKill');
   const orbit = findNode(d.operators, 'C_OP_MovementRotateParticleAroundAxis');
   const sequence = findNode(d.initializers, 'C_INIT_RandomSequence');
+  const ring = findNode(d.initializers, 'C_INIT_RingWave');
+  const normal = d.initializers.find((n) => n.class === 'C_INIT_RemapInitialDirectionToTransformToVector' && paramScalar(n.params.m_nFieldOutput, 0) === 21);
+  const normalRotation = d.operators.find((n) => n.class === 'C_OP_RotateVector' && paramScalar(n.params.m_nField, 21) === 21);
   const oscillate = d.operators.find((n) => n.class === 'C_OP_OscillateVector'
     && paramScalar(n.params.m_nField, 0) === 0 && n.params.m_bOffset !== true
     && n.params.m_bProportional !== false && n.params.m_bProportionalOp !== false);
@@ -116,11 +124,19 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const cp = box ? paramScalar(box.params.m_nControlPointNumber, 0)
     : (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
   const curve = (field: number) => d.operators.find((n) => n.class === 'C_OP_SetFloat'
-    && paramScalar(n.params.m_nOutputField, 0) === field
+    && paramScalar(n.params.m_nOutputField, 3) === field
     && n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE')?.params.m_InputValue;
   const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
     .map((v) => v * Math.PI / 180) as [number, number];
   return {
+    ring: ring ? { radius: boundedRange(ring.params.m_flInitialRadius, [0, 0], 0, 4096), thickness: boundedRange(ring.params.m_flThickness, [0, 0], 0, 4096) } : null,
+    normal: normal ? { axis: vector(normal.params.m_vecOffsetAxis, [0, 0, 1]), angle: paramScalar(normal.params.m_flOffsetRot, 0)*Math.PI/180, normalize: normal.params.m_bNormalize === true } : null,
+    normalRotation: normalRotation ? { axisMin: vector(normalRotation.params.m_vecRotAxisMin, [0, 0, 0]), axisMax: vector(normalRotation.params.m_vecRotAxisMax, [0, 0, 0]), rate: [paramScalar(normalRotation.params.m_flRotRateMin, 180), paramScalar(normalRotation.params.m_flRotRateMax, 180)].map((v) => Math.max(-3600, Math.min(3600, v))*Math.PI/180) as [number, number] } : null,
+    alignNormal: renderer.params.m_nOrientationType === 'PARTICLE_ORIENTATION_ALIGN_TO_PARTICLE_NORMAL',
+    spinRate: paramScalar(findNode(d.operators, 'C_OP_Spin')?.params.m_nSpinRateDegrees, 0)*Math.PI/180,
+    alphaScale: Math.max(0, Math.min(1, paramScalar(renderer.params.m_flAlphaScale, 1))),
+    alphaOnly: Array.isArray(renderer.params.m_vecTexturesInput) && renderer.params.m_vecTexturesInput.some((row) => row?.m_hTexture === texture && row?.m_nTextureChannels === 'SPRITECARD_TEXTURE_CHANNEL_MIX_A'),
+    colorInitializers: d.initializers.filter((n) => n.class === 'C_INIT_SetAttributeToScalarExpression' || n.class === 'C_INIT_InitVec').slice(0, 32),
     scale: 1, sheet: texture ? d.sheets?.[texture] : undefined,
     spawnBias: vector(sphere?.params.m_vecDistanceBias, [1, 1, 1]),
     offsets: d.initializers.filter((n) => n.class === 'C_INIT_PositionOffset').slice(0, 16).map((n) => ({
@@ -131,7 +147,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
       .map((v) => Math.floor(Math.max(0, Math.min(255, paramScalar(v, 0))))) as [number, number],
     persistent: d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState === 'PARTICLE_ENDCAP_ENDCAP_ON')
       && !d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState !== 'PARTICLE_ENDCAP_ENDCAP_ON'),
-    radiusInput: fieldInit(d, 0), radiusScale: Math.max(0, Math.min(16, paramScalar(renderer.params.m_flRadiusScale, 1))),
+    radiusInput: fieldInit(d, 3), radiusScale: Math.max(0, Math.min(16, paramScalar(renderer.params.m_flRadiusScale, 1))),
     attachment: d.controlPoints.find((point) => point.cp === cp && point.attachment)?.attachment
       ?? d.controlPoints.find((point) => point.attachment)?.attachment ?? null,
     texture,
@@ -140,7 +156,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
     emitRate: emitter ? emissionRate(emitter.params.m_flEmitRate) : 0,
     emitFirst: emitter?.params.m_bForceEmitOnFirstUpdate === true,
     lifetime: boundedRange(fieldInit(d, 1) ?? d.constantLifespan, [1, 1], 0.01, 30),
-    radius: boundedRange(fieldInit(d, 0) ?? d.constantRadius, [5, 5], 0, 128),
+    radius: boundedRange(fieldInit(d, 3) ?? d.constantRadius, [5, 5], 0, 128),
     colorMin: color(randomColor?.params.m_ColorMin ?? d.constantColor, [255, 255, 255]),
     colorMax: color(randomColor?.params.m_ColorMax ?? d.constantColor, [255, 255, 255]),
     colorFade: colorOp ? color(colorOp.params.m_ColorFade, [255, 255, 255]) : null,
@@ -167,7 +183,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
     followRotation: findNode(d.operators, 'C_OP_PositionLock')?.params.m_bLockRot === true,
     movement: !!movement,
     overbright: Math.max(0, Math.min(10, paramScalar(renderer.params.m_flOverbrightFactor, 1))),
-    alphaCurve: curve(7), radiusCurve: curve(0),
+    alphaCurve: curve(7), radiusCurve: curve(3),
     emissions: d.emitters.slice(0, 16).filter((n) => ['C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter'].includes(n.class)
       && n.params.m_bInitFromKilledParentParticles !== true).map((n) => ({
       kind: n.class === 'C_OP_ContinuousEmitter' ? 'continuous' : 'burst',
@@ -244,22 +260,65 @@ export function spriteFadeValue(fade: SpriteFade | null, age: number): number {
 
 /** Authored color-gradient stops are linear color bytes, unlike texture pixels.
  * This subset evaluates only normalized particle age and literal gradients. */
-export function spriteGradientColor(input: unknown, age: number): Vec3 | null {
+export function spriteGradientColor(input: unknown, age: number, scalarField?: number): Vec3 | null {
   if (!input || typeof input !== 'object') return null;
   const r = input as Record<string, unknown>;
   if (r.m_nType !== 'PVEC_TYPE_FLOAT_INTERP_GRADIENT'
-    || (r.m_FloatInterp as { pf?: string } | undefined)?.pf !== 'PF_TYPE_PARTICLE_AGE_NORMALIZED') return null;
+    || !((r.m_FloatInterp as { pf?: string } | undefined)?.pf === 'PF_TYPE_PARTICLE_AGE_NORMALIZED'
+      || (scalarField !== undefined && (r.m_FloatInterp as { pf?: string } | undefined)?.pf === 'PF_TYPE_PARTICLE_FLOAT'))) return null;
   const raw = (r.m_Gradient as { m_Stops?: unknown[] } | undefined)?.m_Stops;
   if (!Array.isArray(raw) || !raw.length || raw.length > 32) return null;
   const stops = raw.map((v) => v as { m_flPosition?: number; m_Color?: number[] });
   if (stops.some((s) => !finite(s?.m_flPosition) || !Array.isArray(s.m_Color) || s.m_Color.length < 3 || !s.m_Color.slice(0, 3).every(finite))) return null;
   const sorted = [...stops].sort((a, b) => a.m_flPosition! - b.m_flPosition!);
-  const t = normalizedWindow(age, [paramScalar(r.m_flInterpInput0, 0), paramScalar(r.m_flInterpInput1, 1)]);
+  const t = normalizedWindow(scalarField ?? age, [paramScalar(r.m_flInterpInput0, 0), paramScalar(r.m_flInterpInput1, 1)]);
   const next = sorted.findIndex((s) => s.m_flPosition! >= t);
   const b = sorted[next < 0 ? sorted.length - 1 : next];
   const a = sorted[Math.max(0, next < 0 ? sorted.length - 1 : next - 1)];
   const mix = normalizedWindow(t, [a.m_flPosition!, b.m_flPosition!]);
   return [0, 1, 2].map((i) => Math.max(0, Math.min(255, a.m_Color![i] + (b.m_Color![i] - a.m_Color![i]) * mix)) / 255) as Vec3;
+}
+
+/** Ordered scalar scratch values and replacement colors. Later replacement
+ * writes supersede earlier unsupported color expressions, never vice versa. */
+export function spriteInitialColor(nodes: FxNode[], particleNumber: number): Vec3 | null {
+  const fields = new Map<number, number>();
+  let result: Vec3 | null = null;
+  for (const node of nodes) {
+    const p = node.params;
+    if (node.class === 'C_INIT_SetAttributeToScalarExpression') {
+      const input = p.m_flInput1 as { pf?: string } | undefined;
+      const divisor = paramScalar(p.m_flInput2, 0);
+      if (p.m_nExpression === 'SCALAR_EXPRESSION_MOD' && input?.pf === 'PF_TYPE_PARTICLE_NUMBER' && divisor > 0) {
+        fields.set(paramScalar(p.m_nOutputField, 0), particleNumber % divisor);
+      }
+    }
+    if (node.class !== 'C_INIT_InitVec' || paramScalar(p.m_nOutputField, 6) !== 6
+      || (p.m_nSetMethod && p.m_nSetMethod !== 'PARTICLE_SET_REPLACE_VALUE')) continue;
+    const input = p.m_InputValue as Record<string, unknown> | undefined;
+    const interp = input?.m_FloatInterp as { field?: number } | undefined;
+    const gradient = spriteGradientColor(input, 0, fields.get(interp?.field ?? -1));
+    result = input?.m_nType === 'PVEC_TYPE_LITERAL_COLOR'
+      ? vector(input.m_LiteralColor, [0, 0, 0]).map((v) => Math.max(0, Math.min(255, v))/255) as Vec3
+      : gradient;
+  }
+  return result;
+}
+
+/** Source builds this matrix without normalizing its axis. */
+export function remapSpriteNormal(delta: Vec3, axis: Vec3, angle: number, normalize: boolean): Vec3 {
+  const [x, y, z] = axis, [a, b, d] = delta, c = Math.cos(angle), s = Math.sin(angle), r = 1-c;
+  const result: Vec3 = [
+    ((1-x*x)*c+x*x)*a + (x*y*r-z*s)*b + (x*z*r+y*s)*d,
+    (y*x*r+z*s)*a + ((1-y*y)*c+y*y)*b + (y*z*r-x*s)*d,
+    (x*z*r-y*s)*a + (y*z*r+x*s)*b + ((1-z*z)*c+z*z)*d,
+  ];
+  if (normalize) {
+    result[2] += 1.1920929e-7;
+    const length = Math.hypot(...result);
+    if (length > 0) return result.map((v) => v/length) as Vec3;
+  }
+  return result;
 }
 
 export interface FxPreviewIssue { system: string; class: string; reason: string }
@@ -290,14 +349,14 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
     for (const n of [...d.emitters, ...d.initializers, ...d.operators, ...d.renderers]) {
       if (!supported.has(n.class)) { report(n.class, 'unsupported-class'); continue; }
       if (n.class === 'C_OP_SetFloat' && (n.params.m_nSetMethod !== 'PARTICLE_SET_SCALE_INITIAL_VALUE'
-        || ![0, 7].includes(paramScalar(n.params.m_nOutputField, 0)))) report(n.class, 'unsupported-field-or-method');
+        || ![3, 7].includes(paramScalar(n.params.m_nOutputField, 3)))) report(n.class, 'unsupported-field-or-method');
       if (n.class === 'C_OP_SetVec' && (paramScalar(n.params.m_nOutputField, 6) !== 6
         || (n.params.m_nSetMethod && n.params.m_nSetMethod !== 'PARTICLE_SET_REPLACE_VALUE')
         || paramScalar(n.params.m_Lerp, 1) !== 1 || n.params.m_bNormalizedOutput === true
         || !spriteGradientColor(n.params.m_InputValue, 0))) report(n.class, 'unsupported-field-or-method');
       if (n.class === 'C_OP_OscillateVector' && (paramScalar(n.params.m_nField, 0) !== 0
         || n.params.m_bOffset === true || n.params.m_bProportional === false || n.params.m_bProportionalOp === false)) report(n.class, 'unsupported-field-or-method');
-      if (n.class === 'C_INIT_InitFloat' && ![0, 1, 4, 5, 7].includes(paramScalar(n.params.m_nOutputField, 0))) report(n.class, 'unsupported-field');
+      if (n.class === 'C_INIT_InitFloat' && ![3, 1, 4, 5, 7].includes(paramScalar(n.params.m_nOutputField, 3))) report(n.class, 'unsupported-field');
       if (n.class === 'C_INIT_InitFloat' && ((n.params.m_nSetMethod && n.params.m_nSetMethod !== 'PARTICLE_SET_REPLACE_VALUE')
         || paramScalar(n.params.m_InputStrength, 1) !== 1)) report(n.class, 'unsupported-field-or-method');
       if (n.class === 'C_OP_PositionLock' && (['m_flStartTime_min', 'm_flStartTime_max', 'm_flEndTime_min', 'm_flEndTime_max']

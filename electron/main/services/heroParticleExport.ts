@@ -4,7 +4,8 @@ import type { FxControlPoint, FxDescriptor, FxNode, FxRenderer } from '../../../
 import { fxTexturePngName } from '../../../src/components/locker/fxDescriptor';
 import { runVpkmerge, runVpkmergeStdout } from './modMerger';
 import { readParticleSheet } from './particleSheet';
-import { parseVpkDirectoryCached } from './vpk';
+import { parseVpkDirectoryCached, readVpkEntryBytes } from './vpk';
+import { readParticleSnapshot } from './particleSnapshot';
 import { exportModelAttachments } from './modelAttachments';
 
 type Row = Record<string, unknown>;
@@ -19,7 +20,7 @@ function parameter(v: unknown): unknown {
     return r.m_nType === 'PF_TYPE_LITERAL' ? r.m_flLiteralValue : {
       pf: r.m_nType, min: r.m_flRandomMin, max: r.m_flRandomMax, cp: r.m_nControlPoint,
       in0: r.m_flInput0, in1: r.m_flInput1, out0: r.m_flOutput0, out1: r.m_flOutput1,
-      curve: parameter(r.m_Curve),
+      curve: parameter(r.m_Curve), field: r.m_nScalarAttribute, map: r.m_nMapType, mult: r.m_flMultFactor,
       bias: r.m_flBiasParameter, biasType: r.m_nBiasType,
     };
   }
@@ -44,7 +45,7 @@ export function particleDescriptor(raw: unknown, name: string, configuration?: s
   const preview = row(selectedConfiguration?.m_previewState);
   const renderers: FxRenderer[] = rows(r.m_Renderers).slice(0, 16).map((renderer) => ({
     class: String(renderer._class ?? ''), params: parameter(renderer) as Row,
-    mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : 'unsupported',
+    mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : renderer._class === 'C_OP_RenderRopes' ? 'rope' : 'unsupported',
     blendMode: typeof renderer.m_nOutputBlendMode === 'string' ? renderer.m_nOutputBlendMode : null,
     textures: [...rows(renderer.m_vecTexturesInput).map((t) => t.m_hTexture), renderer.m_hTexture]
       .filter((t): t is string => typeof t === 'string' && /^materials\/[a-zA-Z0-9_./-]+\.vtex$/.test(t) && !t.includes('..')),
@@ -79,6 +80,16 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     if (!/^particles\/[a-zA-Z0-9_./-]+\.vpcf_c$/.test(path) || path.includes('..')) throw new Error('Invalid particle resource path.');
     const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', pak]));
     const d = particleDescriptor(raw, path, configuration);
+    const snapshot = row(raw).m_hSnapshot;
+    if (typeof snapshot === 'string') {
+      if (!/^particles\/[a-zA-Z0-9_./-]+\.vsnap$/.test(snapshot) || snapshot.includes('..')) throw new Error('Invalid particle snapshot path.');
+      const entry = `${snapshot}_c`;
+      const owner = [...new Set([...texturePaks, pak])].find((p) => parseVpkDirectoryCached(p)?.includes(entry));
+      const bytes = owner ? readVpkEntryBytes(owner, entry) : null;
+      if (!bytes || bytes.length > 4*1024*1024) throw new Error('Particle snapshot is unavailable or exceeds preview limits.');
+      const metadata: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', entry, '--from-vpk', owner!]));
+      d.snapshot = { points: readParticleSnapshot(bytes, metadata) };
+    }
     // Inherit missing CPs before loading descendants, so a child's partial
     // preview configuration does not erase authored parent attachment frames.
     d.controlPoints = [...new Map([...inherited, ...d.controlPoints, ...mapFrames(Number(row(raw).m_nGroupID) || 0)].map((cp) => [cp.cp, cp])).values()];

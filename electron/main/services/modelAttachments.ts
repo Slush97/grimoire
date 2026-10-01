@@ -8,7 +8,9 @@ import type { ModelAttachment } from '../../../src/types/modelAttachment';
 const MAX_RESOURCE_BYTES = 64 * 1024 * 1024;
 const MAX_BLOCKS = 4096;
 const MAX_METADATA_BLOCK_BYTES = 8 * 1024 * 1024;
-const MAX_METADATA_BLOCKS = 128;
+// Embedded mesh LODs can each carry MDAT (the current chessboard model exceeds
+// 128). Keep the byte budgets as well as a bounded block count.
+const MAX_METADATA_BLOCKS = 256;
 
 /** Preserve the compiled KV3 bytes, changing only their resource block wrapper.
  * The pinned CLI's generic KV3 decoder reads DATA from a loose resource.

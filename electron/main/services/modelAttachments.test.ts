@@ -60,8 +60,7 @@ describe('compiled metadata resource wrapper', () => {
         expect(attachmentMetadataResources(b)).toEqual([]);
     });
     it('rejects a truncated header', () => expect(attachmentMetadataResources(Buffer.alloc(15))).toEqual([]));
-    it('bounds repeated metadata headers even when they share one tiny payload', () => {
-        const count = 129;
+    it.each([129, 256, 257])('bounds %i metadata headers while retaining supported multi-LOD models', (count) => {
         const payload = 16 + 12 * count;
         const b = Buffer.alloc(payload + 4);
         b.writeUInt32LE(b.length, 0); b.writeUInt16LE(12, 4);
@@ -71,6 +70,6 @@ describe('compiled metadata resource wrapper', () => {
             b.write('MDAT', header); b.writeUInt32LE(payload - header - 4, header + 4);
             b.writeUInt32LE(4, header + 8);
         }
-        expect(attachmentMetadataResources(b)).toEqual([]);
+        expect(attachmentMetadataResources(b)).toHaveLength(count <= 256 ? count : 0);
     });
 });

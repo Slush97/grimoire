@@ -61,7 +61,7 @@ describe('authored sprite attributes', () => {
     expect(allSpriteLayers(root)).toHaveLength(1);
     expect(fxPreviewIssues(root)).toContainEqual(expect.objectContaining({ class: 'C_INIT_CreateOnModel' }));
   });
-  it('uses lifetime field 1, default radius field 0, and authored rate rather than filling the budget', () => {
+  it('uses lifetime field 1, default radius field 3, and authored rate rather than filling the budget', () => {
     const p = spriteParamsFor(descriptor())!;
     expect(p.lifetime).toEqual([2, 3]); expect(p.radius).toEqual([4, 6]); expect(p.emitRate).toBe(2);
     expect(p.emitFirst).toBe(true); expect(p.spawnRadius).toBe(0); expect(p.attachment).toBe('ability_cast');

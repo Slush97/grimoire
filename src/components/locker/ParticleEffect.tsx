@@ -4,9 +4,10 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
-import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, spriteFadeValue, spriteGradientColor,
+import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, remapSpriteNormal, spriteFadeValue, spriteGradientColor, spriteInitialColor,
   type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
 import { resolveParticleAttachment } from './particleAttachment';
+import { ParticleRopes } from './ParticleRopes';
 
 const VERT = /* glsl */ `
   attribute vec3 aPosition;
@@ -15,6 +16,9 @@ const VERT = /* glsl */ `
   attribute float aAlpha;
   attribute float aRotation;
   attribute vec4 aRegion;
+  attribute vec3 aRight;
+  attribute vec3 aUp;
+  uniform float uAlignNormal;
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha;
@@ -26,7 +30,8 @@ const VERT = /* glsl */ `
     vec2 corner = mat2(c, -s, s, c) * position.xy;
     vec4 viewPosition = modelViewMatrix * vec4(aPosition, 1.0);
     float modelScale = length(modelMatrix[0].xyz);
-    viewPosition.xy += corner * aRadius * modelScale;
+    if (uAlignNormal > 0.5) viewPosition += modelViewMatrix * vec4((aRight * corner.x + aUp * corner.y) * aRadius, 0.0);
+    else viewPosition.xy += corner * aRadius * modelScale;
     gl_Position = projectionMatrix * viewPosition;
   }
 `;
@@ -34,12 +39,14 @@ const FRAG = /* glsl */ `
   uniform sampler2D map;
   uniform float uHasMap;
   uniform float uAdditive;
+  uniform float uAlphaOnly;
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
     float d = length(vUv - vec2(0.5));
     vec4 tex = uHasMap > 0.5 ? texture2D(map, vUv) : vec4(1.0, 1.0, 1.0, 1.0 - smoothstep(0.0, 0.5, d));
+    if (uAlphaOnly > 0.5) tex.rgb = vec3(1.0);
     gl_FragColor = vec4(vColor * tex.rgb, tex.a * vAlpha);
     if (uAdditive > 0.5) {
       // Black adds no radiance. It must also add no canvas coverage, otherwise
@@ -59,6 +66,7 @@ interface Particle {
   velocity: THREE.Vector3; radius: number; rotation: number; spin: number;
   color: THREE.Color; alpha: number;
   region: [number, number, number, number];
+  normal: THREE.Vector3; normalAxis: THREE.Vector3; normalRate: number;
   oscillation: { rate: THREE.Vector3; frequency: THREE.Vector3; start: number; end: number } | null;
 }
 const sample = (range: [number, number]) => THREE.MathUtils.lerp(range[0], range[1], Math.random());
@@ -72,6 +80,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
   const emissionState = useRef<SpriteEmissionState[]>([]);
   const clock = useRef(0);
   const initialized = useRef(false);
+  const particleNumber = useRef(0);
   const texture = useMemo(() => {
     if (!layer.texture) return null;
     const tex = new THREE.TextureLoader().load(textureBaseUrl + fxTexturePngName(layer.texture));
@@ -101,6 +110,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     sourceOrientation: new THREE.Quaternion(), gravity: new THREE.Vector3(),
     previousOrientation: new THREE.Quaternion(), deltaOrientation: new THREE.Quaternion(),
     orbitAxis: new THREE.Vector3(), orbitRotation: new THREE.Quaternion(),
+    normalSource: new THREE.Vector3(), normalRight: new THREE.Vector3(), normalUp: new THREE.Vector3(), normalReference: new THREE.Vector3(),
     color: new THREE.Color(), fadeColor: layer.colorFade ? new THREE.Color().setRGB(...layer.colorFade) : null,
   }), [layer.colorFade]);
   const { geometry, material } = useMemo(() => {
@@ -109,27 +119,27 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     geom.setIndex(quad.index);
     geom.setAttribute('position', quad.getAttribute('position'));
     geom.setAttribute('uv', quad.getAttribute('uv'));
-    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4]] as const) {
+    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4], ['aRight', 3], ['aUp', 3]] as const) {
       geom.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(layer.maxParticles * size), size).setUsage(THREE.DynamicDrawUsage));
     }
     geom.instanceCount = 0;
     quad.dispose();
     return { geometry: geom, material: new THREE.ShaderMaterial({
-      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 } },
+      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
       // Three's transmission target includes only the opaque queue. Custom
       // additive blending still works there, after bodies and before glass, so
       // embedded sprites become transmitted scene radiance rather than failing
       // the glass depth test later. Models without glass retain the usual queue.
-      vertexShader: VERT, fragmentShader: FRAG, transparent: !beforeTransmission, depthWrite: false,
+      vertexShader: VERT, fragmentShader: FRAG, transparent: !beforeTransmission, depthWrite: false, side: THREE.DoubleSide,
       blending: layer.additive ? THREE.CustomBlending : THREE.NormalBlending,
       blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
       blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
-  }, [layer.maxParticles, layer.additive, texture, beforeTransmission]);
+  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, texture, beforeTransmission]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
   useEffect(() => {
-    particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false;
+    particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false; particleNumber.current = 0;
     if (meshRef.current) (meshRef.current.geometry as THREE.InstancedBufferGeometry).instanceCount = 0;
   }, [layer, geometry]);
 
@@ -200,6 +210,12 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
         THREE.MathUtils.lerp(layer.spawnBox.min[2], layer.spawnBox.max[2], Math.random())
       ).multiplyScalar(sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation)
         : direction.clone().multiply(new THREE.Vector3(...layer.spawnBias)).multiplyScalar(distance*sourceUnit).applyQuaternion(layer.spawnLocal ? orientation : sourceOrientation);
+      if (layer.ring) {
+        const ringAngle = Math.random()*Math.PI*2;
+        offset.copy(direction).multiplyScalar(Math.cbrt(Math.random())*sample(layer.ring.thickness))
+          .add(new THREE.Vector3(Math.cos(ringAngle), Math.sin(ringAngle), 0).multiplyScalar(sample(layer.ring.radius)))
+          .multiplyScalar(sourceUnit).applyQuaternion(orientation);
+      }
       const input = layer.radiusInput as { pf?: string; biasType?: string; bias?: number } | undefined;
       let radiusRandom = Math.random();
       if (input?.pf === 'PF_TYPE_RANDOM_BIASED' && input.biasType === 'PF_BIAS_TYPE_EXPONENTIAL') {
@@ -221,9 +237,16 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
           THREE.MathUtils.lerp(layer.localSpeedMin[2], layer.localSpeedMax[2], Math.random())
         ).multiplyScalar(sourceUnit).applyQuaternion(orientation));
       const tint = new THREE.Color().setRGB(...layer.colorMin).lerp(new THREE.Color().setRGB(...layer.colorMax), Math.random());
+      const initialColor = spriteInitialColor(layer.colorInitializers, particleNumber.current++);
+      if (initialColor) tint.setRGB(...initialColor);
+      const normalDelta = offset.clone().applyQuaternion(sourceOrientation.clone().invert());
+      const normal = layer.normal ? new THREE.Vector3(...remapSpriteNormal(normalDelta.toArray() as [number, number, number], layer.normal.axis, layer.normal.angle, layer.normal.normalize)) : new THREE.Vector3(0, 0, 1);
+      const normalRandom = Math.random();
+      const normalAxis = layer.normalRotation ? new THREE.Vector3(...layer.normalRotation.axisMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.normalRotation!.axisMax[i], normalRandom))).normalize() : new THREE.Vector3(0, 0, 1);
       live.push({ age: birthAge-delta, life: sample(layer.lifetime),
         position: offset.add(origin), velocity,
         radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region,
+        normal, normalAxis, normalRate: layer.normalRotation ? THREE.MathUtils.lerp(...layer.normalRotation.rate, normalRandom) : 0,
         oscillation: layer.oscillation ? {
           rate: new THREE.Vector3(...layer.oscillation.rateMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.rateMax[i], Math.random()))),
           frequency: new THREE.Vector3(...layer.oscillation.frequencyMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.frequencyMax[i], Math.random()))),
@@ -236,6 +259,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     const alpha = geometry.getAttribute('aAlpha') as THREE.InstancedBufferAttribute;
     const rotation = geometry.getAttribute('aRotation') as THREE.InstancedBufferAttribute;
     const region = geometry.getAttribute('aRegion') as THREE.InstancedBufferAttribute;
+    const right = geometry.getAttribute('aRight') as THREE.InstancedBufferAttribute;
+    const up = geometry.getAttribute('aUp') as THREE.InstancedBufferAttribute;
     let count = 0;
     for (const p of live) {
       p.age += delta;
@@ -257,7 +282,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
         p.position.sub(origin).applyQuaternion(scratch.orbitRotation).add(origin);
         p.velocity.applyQuaternion(scratch.orbitRotation);
       }
-      p.rotation += p.spin*step;
+      p.rotation += (p.spin + layer.spinRate)*step;
+      if (layer.normalRotation) p.normal.applyAxisAngle(p.normalAxis, p.normalRate*step).normalize();
       const t = p.age/p.life;
       if (layer.oscillation && p.oscillation) {
         const osc = layer.oscillation, state = p.oscillation;
@@ -279,14 +305,21 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       position.setXYZ(count, p.position.x, p.position.y, p.position.z);
       color.setXYZ(count, scratch.color.r*layer.overbright, scratch.color.g*layer.overbright, scratch.color.b*layer.overbright);
       radius.setX(count, Math.min(128*sourceUnit, p.radius*layer.radiusScale*Math.max(0, ageCurveValue(layer.radiusCurve, t))));
-      alpha.setX(count, p.alpha*spriteFadeValue(layer.fade, t)*THREE.MathUtils.clamp(ageCurveValue(layer.alphaCurve, t), 0, 1));
+      alpha.setX(count, p.alpha*layer.alphaScale*spriteFadeValue(layer.fade, t)*THREE.MathUtils.clamp(ageCurveValue(layer.alphaCurve, t), 0, 1));
+      scratch.normalSource.copy(p.normal).normalize();
+      scratch.normalReference.fromArray(Math.abs(p.normal.z) > 0.1 ? [0, -1, 0] : [0, 0, 1]);
+      scratch.normalUp.crossVectors(scratch.normalSource, scratch.normalReference).normalize();
+      scratch.normalRight.crossVectors(scratch.normalUp, scratch.normalSource);
+      scratch.normalUp.applyQuaternion(sourceOrientation); scratch.normalRight.applyQuaternion(sourceOrientation);
+      right.setXYZ(count, scratch.normalRight.x, scratch.normalRight.y, scratch.normalRight.z);
+      up.setXYZ(count, scratch.normalUp.x, scratch.normalUp.y, scratch.normalUp.z);
       rotation.setX(count, p.rotation);
       region.setXYZW(count, ...p.region);
       live[count++] = p;
     }
     live.length = count;
     (mesh.geometry as THREE.InstancedBufferGeometry).instanceCount = count;
-    for (const attr of [position, color, radius, alpha, rotation, region]) attr.needsUpdate = true;
+    for (const attr of [position, color, radius, alpha, rotation, region, right, up]) attr.needsUpdate = true;
     previous.copy(origin);
     scratch.previousOrientation.copy(orientation);
   });
@@ -300,5 +333,6 @@ export function ParticleEffect({ descriptor, textureBaseUrl, model, playback }: 
   playback?: { paused: boolean; speed: number };
 }) {
   const layers = useMemo(() => allSpriteLayers(descriptor), [descriptor]);
-  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} />)}</group>;
+  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} />)}
+    <ParticleRopes descriptor={descriptor} model={model} textureBaseUrl={textureBaseUrl} playback={playback} /></group>;
 }

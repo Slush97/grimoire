@@ -322,6 +322,8 @@ function riggedVersionFile(key: string): string {
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
     Abrams: 'particles/abilities/abrams/abrams_ambient_book.vpcf_c',
     Victor: 'particles/abilities/frank/frank_ambient.vpcf_c',
+    Solomon: 'particles/abilities/chessmaster/chessmaster_ambient.vpcf_c',
+    Celeste: 'particles/abilities/unicorn/unicorn_ambient_horn.vpcf_c',
     Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
     Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
@@ -337,7 +339,7 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 // v5: resolve authored core texture dependencies after the primary package.
 // v6: select a single CP configuration and support authored local box spawning.
 // v7: preserve child CP frame distribution and authored instance delays.
-const EFFECT_CACHE_VERSION = '7';
+const EFFECT_CACHE_VERSION = '8';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1119,7 +1121,7 @@ export async function exportHeroEffect(
             await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
                 heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
                 [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
-                heroName === 'Abrams' || heroName === 'Victor' ? 'preview' : undefined);
+                ['Abrams', 'Victor', 'Solomon', 'Celeste'].includes(heroName) ? 'preview' : undefined);
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };
         } finally {
