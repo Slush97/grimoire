@@ -141,6 +141,7 @@ describe('particle playback and model units', () => {
       expect((mesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(1);
       const uv = mesh!.geometry.getAttribute('aRegion');
       expect([uv.getX(0), uv.getY(0), uv.getZ(0), uv.getW(0)]).toEqual(expect.arrayContaining([expect.closeTo(0.1), expect.closeTo(0.4), expect.closeTo(0.8)]));
+      expect(mesh!.geometry.getAttribute('aFrameClamp').getX(0)).toBe(1);
       expect(mesh!.geometry.getAttribute('aRadius').getX(0)).toBeCloseTo(2*0.0254*0.82);
     } finally { await renderer.unmount(); load.mockRestore(); }
   });

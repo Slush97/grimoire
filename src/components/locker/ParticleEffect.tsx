@@ -17,14 +17,21 @@ const VERT = /* glsl */ `
   attribute float aAlpha;
   attribute float aRotation;
   attribute vec4 aRegion;
+  attribute float aFrameClamp;
   attribute vec3 aRight;
   attribute vec3 aUp;
   uniform float uAlignNormal;
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha;
+  varying vec2 vCardUv;
+  varying vec4 vFrameRegion;
+  varying float vFrameClamp;
   void main() {
     vUv = mix(aRegion.xy, aRegion.zw, uv);
+    vCardUv = uv;
+    vFrameRegion = aRegion;
+    vFrameClamp = aFrameClamp;
     vColor = aColor;
     vAlpha = aAlpha;
     float c = cos(aRotation), s = sin(aRotation);
@@ -67,6 +74,7 @@ interface Particle {
   velocity: THREE.Vector3; radius: number; rotation: number; spin: number;
   color: THREE.Color; alpha: number;
   region: [number, number, number, number];
+  frameClamp: boolean;
   normal: THREE.Vector3; normalAxis: THREE.Vector3; normalRate: number;
   oscillation: { rate: THREE.Vector3; frequency: THREE.Vector3; start: number; end: number } | null;
 }
@@ -119,7 +127,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     const renderer = layer.spritecard;
     if (!renderer || !Array.isArray(renderer.params.m_vecTexturesInput)
       || renderer.params.m_vecTexturesInput.length < 2) return null;
-    const result = spritecardMaterial(renderer, textureBaseUrl, VERT, true);
+    const result = spritecardMaterial(renderer, textureBaseUrl, VERT, true, true);
     if (result) {
       result.material.uniforms.uAlignNormal = { value: layer.alignNormal ? 1 : 0 };
       result.material.transparent = !beforeTransmission;
@@ -146,7 +154,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     geom.setIndex(quad.index);
     geom.setAttribute('position', quad.getAttribute('position'));
     geom.setAttribute('uv', quad.getAttribute('uv'));
-    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4], ['aRight', 3], ['aUp', 3]] as const) {
+    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4], ['aFrameClamp', 1], ['aRight', 3], ['aUp', 3]] as const) {
       geom.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(layer.maxParticles * size), size).setUsage(THREE.DynamicDrawUsage));
     }
     geom.instanceCount = 0;
@@ -300,7 +308,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       }
       live.push({ age: birthAge-delta, life: sample(layer.lifetime),
         position: spawnPosition, velocity,
-        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region,
+        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region, frameClamp: frame?.clamp === true,
         normal, normalAxis, normalRate: layer.normalRotation ? THREE.MathUtils.lerp(...layer.normalRotation.rate, normalRandom) : 0,
         oscillation: layer.oscillation ? {
           rate: new THREE.Vector3(...layer.oscillation.rateMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.rateMax[i], Math.random()))),
@@ -314,6 +322,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     const alpha = geometry.getAttribute('aAlpha') as THREE.InstancedBufferAttribute;
     const rotation = geometry.getAttribute('aRotation') as THREE.InstancedBufferAttribute;
     const region = geometry.getAttribute('aRegion') as THREE.InstancedBufferAttribute;
+    const frameClamp = geometry.getAttribute('aFrameClamp') as THREE.InstancedBufferAttribute;
     const right = geometry.getAttribute('aRight') as THREE.InstancedBufferAttribute;
     const up = geometry.getAttribute('aUp') as THREE.InstancedBufferAttribute;
     let count = 0;
@@ -370,11 +379,12 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       up.setXYZ(count, scratch.normalUp.x, scratch.normalUp.y, scratch.normalUp.z);
       rotation.setX(count, p.rotation);
       region.setXYZW(count, ...p.region);
+      frameClamp.setX(count, p.frameClamp ? 1 : 0);
       live[count++] = p;
     }
     live.length = count;
     (mesh.geometry as THREE.InstancedBufferGeometry).instanceCount = count;
-    for (const attr of [position, color, radius, alpha, rotation, region, right, up]) attr.needsUpdate = true;
+    for (const attr of [position, color, radius, alpha, rotation, region, frameClamp, right, up]) attr.needsUpdate = true;
     previous.copy(origin);
     scratch.previousOrientation.copy(orientation);
   });

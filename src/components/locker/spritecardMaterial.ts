@@ -11,7 +11,7 @@ const scalar = (v: unknown, age: number, fallback: number) => {
 
 /** Bounded self-illuminated spritecard chain: diffuse, UV-distortion and 1D
  * lookup, generated ramps, multiply/replace/subtract and RGBA/alpha channels. */
-export function spritecardMaterial(renderer: FxRenderer, base: string, vertexShader: string, vertexColor = false) {
+export function spritecardMaterial(renderer: FxRenderer, base: string, vertexShader: string, vertexColor = false, frameRegion = false) {
   const additive = (renderer.blendMode ?? '').includes('ADD');
   const inputs = Array.isArray(renderer.params.m_vecTexturesInput) ? renderer.params.m_vecTexturesInput.map(row).filter((r) => r.m_bEnabled !== false).slice(0, 5) : [];
   const selfIllum = paramScalar(renderer.params.m_flSelfIllumAmount, 0);
@@ -51,10 +51,15 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     uniforms[`rot${i}`] = { value: 0 }; uniforms[`dist${i}`] = { value: 0 };
     uniforms[`blend${i}`] = { value: 1 };
     declarations += `uniform sampler2D tex${i}; uniform vec4 uv${i}; uniform float rot${i}; uniform float dist${i}; uniform float blend${i};\n`;
-    chain += `vec2 p${i}=placeUv(vUv,uv${i},rot${i});`;
+    chain += `vec2 p${i}=placeUv(${frameRegion ? 'vCardUv' : 'vUv'},uv${i},rot${i});`;
     if (control.m_bClampUVs === true) chain += `p${i}=clamp(p${i},0.0,1.0);`;
+    if (frameRegion && i === 0) chain += 'p0=mix(vFrameRegion.xy,vFrameRegion.zw,p0);if(vFrameClamp>.5)p0=clamp(p0,vFrameRegion.xy,vFrameRegion.zw);';
     chain += `vec4 t${i}=texture2D(tex${i},p${i});`;
-    if (type === 'SPRITECARD_TEXTURE_UVDISTORTION' && i > 0) chain += `t${i}=texture2D(tex${previous},p${previous}-(gammaColor(t${i}.rgb).xy-0.5)*2.0*(dist${i}*0.125*t${i}.a));`;
+    if (type === 'SPRITECARD_TEXTURE_UVDISTORTION' && i > 0) {
+      chain += `vec2 warped${i}=p${previous}-(gammaColor(t${i}.rgb).xy-0.5)*2.0*(dist${i}*0.125*t${i}.a);`;
+      if (frameRegion && previous === 0) chain += `if(vFrameClamp>.5)warped${i}=clamp(warped${i},vFrameRegion.xy,vFrameRegion.zw);`;
+      chain += `t${i}=texture2D(tex${previous},warped${i});`;
+    }
     if (type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP') chain += `t${i}=vec4(texture2D(tex${i},vec2(dot(gammaColor(accum.rgb),vec3(.299,.587,.114)),.5)).rgb,accum.a);`;
     // A color lookup inherits the incoming shape's coverage. RGB-to-alpha must
     // modulate that coverage, never resurrect transparent radial-mask corners.
@@ -75,6 +80,7 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
   const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `
     ${declarations} uniform vec3 tint; uniform float overbright; uniform float addSelf; uniform float desat;
     varying vec2 vUv; varying float vAlpha; ${vertexColor ? "varying vec3 vColor;" : ""}
+    ${frameRegion ? 'varying vec2 vCardUv; varying vec4 vFrameRegion; varying float vFrameClamp;' : ''}
     vec3 gammaColor(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-.055,step(vec3(.0031308),c));}
     vec2 placeUv(vec2 p,vec4 ctl,float angle){float c=cos(angle),s=sin(angle);p-=.5;return vec2(c*p.x-s*p.y,s*p.x+c*p.y)/ctl.xy+fract(ctl.zw+.5);}
     void main(){vec4 accum=vec4(1.0);${chain}

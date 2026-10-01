@@ -9,6 +9,20 @@ const renderer = (blendMode: string | null): FxRenderer => ({ class: 'C_OP_Rende
     m_TextureControls: { m_flFinalTextureOffsetV: { pf: 'PF_TYPE_COLLECTION_AGE', mult: .3 } } })),
 } });
 describe('shared authored spritecards', () => {
+  it('places only the atlas layer in its selected frame and clamps distorted resampling', () => {
+    const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
+    const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
+    inputs[1].m_nTextureType = 'SPRITECARD_TEXTURE_UVDISTORTION';
+    const result = spritecardMaterial(r, '/', 'void main(){}', true, true)!;
+    try {
+      const shader = result.material.fragmentShader;
+      expect(shader).toContain('p0=placeUv(vCardUv,uv0,rot0)');
+      expect(shader).toContain('p0=mix(vFrameRegion.xy,vFrameRegion.zw,p0)');
+      expect(shader).toContain('p1=placeUv(vCardUv,uv1,rot1)');
+      expect(shader).not.toContain('p1=mix(vFrameRegion');
+      expect(shader).toContain('if(vFrameClamp>.5)warped1=clamp(warped1,vFrameRegion.xy,vFrameRegion.zw)');
+    } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+  });
   it('applies authored additive self radiance after saturation without changing coverage', () => {
     const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
     r.params.m_flAddSelfAmount = 3;
