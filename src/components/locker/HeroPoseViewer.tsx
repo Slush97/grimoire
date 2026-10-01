@@ -588,8 +588,8 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
   );
 }
 
-/** Image-based lighting from the baked Deadlock dusk probe. Loads the six .hdr
- *  faces once, runs them through PMREM, and assigns the result as
+/** Image-based lighting from a studio room or the legacy baked dusk probe.
+ *  Runs the selected source through PMREM and assigns the result as
  *  `scene.environment` so every MeshStandardMaterial gets real reflections and
  *  ambient instead of dead-flat directional-only shading. The PMREM target is
  *  bound to this Canvas's GL context, so it is generated per-mount (the per-hero
@@ -607,9 +607,15 @@ function Environment({ intensity, studio }: { intensity: number; studio: boolean
     const pmrem = new THREE.PMREMGenerator(gl);
     let envRT: THREE.WebGLRenderTarget | null = null;
     if (studio) {
-      // A room probe supplies distinct softbox reflections for glass and metal.
-      // Keep this separate from the authored dusk probe used by Midtown.
+      // Dark studio walls leave room for bright softbox highlights on glass and
+      // metal instead of covering the surface with a broad gray reflection.
       const room = new RoomEnvironment();
+      room.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          if (material instanceof THREE.MeshStandardMaterial) material.color.setRGB(0.05, 0.05, 0.05);
+        }
+      });
       envRT = pmrem.fromScene(room, 0.04);
       // eslint-disable-next-line react-hooks/immutability -- R3F owns this mutable Three.js scene.
       scene.environment = envRT.texture;
@@ -1287,7 +1293,7 @@ export default function HeroPoseViewer({
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
-        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} />
+        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio />
         <hemisphereLight args={[new THREE.Color(96 / 255, 135 / 255, 183 / 255), new THREE.Color(0.32, 0.25, 0.2), 1.5]} />
         <directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
