@@ -10,11 +10,12 @@ const scalar = (v: unknown, age: number, fallback: number) => {
 
 
 /** Bounded self-illuminated spritecard chain: diffuse, UV-distortion and 1D
- * lookup, generated ramps, multiply/replace and RGBA/RGB-alpha channel modes. */
+ * lookup, generated ramps, multiply/replace/subtract and RGBA/alpha channels. */
 export function spritecardMaterial(renderer: FxRenderer, base: string, vertexShader: string, vertexColor = false) {
   const additive = (renderer.blendMode ?? '').includes('ADD');
   const inputs = Array.isArray(renderer.params.m_vecTexturesInput) ? renderer.params.m_vecTexturesInput.map(row).filter((r) => r.m_bEnabled !== false).slice(0, 5) : [];
-  if (!inputs.length || paramScalar(renderer.params.m_flSelfIllumAmount, 0) !== 1 || paramScalar(renderer.params.m_flDiffuseAmount, 1) !== 0) return null;
+  const selfIllum = paramScalar(renderer.params.m_flSelfIllumAmount, 0);
+  if (!inputs.length || selfIllum <= 0 || selfIllum > 1 || paramScalar(renderer.params.m_flDiffuseAmount, 0) !== 0) return null;
   const textures: THREE.Texture[] = [];
   const uniforms: Record<string, THREE.IUniform> = {};
   let declarations = '', chain = '', previous = 0;
@@ -24,8 +25,8 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     const channel = input.m_nTextureChannels ?? 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA';
     const blend = input.m_nTextureBlendMode ?? 'SPRITECARD_TEXTURE_BLEND_MULTIPLY';
     if (!['SPRITECARD_TEXTURE_DIFFUSE', 'SPRITECARD_TEXTURE_UVDISTORTION', 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP'].includes(String(type))
-      || !['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA'].includes(String(channel))
-      || !['SPRITECARD_TEXTURE_BLEND_MULTIPLY', 'SPRITECARD_TEXTURE_BLEND_REPLACE'].includes(String(blend))) {
+      || !['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_A'].includes(String(channel))
+      || !['SPRITECARD_TEXTURE_BLEND_MULTIPLY', 'SPRITECARD_TEXTURE_BLEND_REPLACE', 'SPRITECARD_TEXTURE_BLEND_SUBTRACT'].includes(String(blend))) {
       textures.forEach((t) => t.dispose()); return null;
     }
     let texture: THREE.Texture;
@@ -56,13 +57,14 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     if (type === 'SPRITECARD_TEXTURE_UVDISTORTION' && i > 0) chain += `t${i}=texture2D(tex${previous},p${previous}-(gammaColor(t${i}.rgb).xy-0.5)*2.0*(dist${i}*0.125*t${i}.a));`;
     if (type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP') chain += `t${i}=vec4(texture2D(tex${i},vec2(dot(gammaColor(accum.rgb),vec3(.299,.587,.114)),.5)).rgb,accum.a);`;
     if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA') chain += `t${i}.a=dot(t${i}.rgb,vec3(.299,.587,.114));`;
-    chain += `accum=max(mix(accum,${blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? `t${i}` : `accum*t${i}`},blend${i}),vec4(0.0));`;
+    if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_A') chain += `t${i}=vec4(${blend === 'SPRITECARD_TEXTURE_BLEND_SUBTRACT' ? 'vec3(0.0)' : blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? 'accum.rgb' : 'vec3(1.0)'},t${i}.a);`;
+    chain += `accum=max(mix(accum,${blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? `t${i}` : blend === 'SPRITECARD_TEXTURE_BLEND_SUBTRACT' ? `accum-t${i}` : `accum*t${i}`},blend${i}),vec4(0.0));`;
     previous = i;
   }
   const color = row(renderer.params.m_vecColorScale);
   const colorScale = color.m_nType === 'PVEC_TYPE_LITERAL_COLOR' && Array.isArray(color.m_LiteralColor) ? color.m_LiteralColor : [255, 255, 255];
   uniforms.tint = { value: new THREE.Vector3(...colorScale.map((v) => Math.max(0, Math.min(255, Number(v)))/255) as [number, number, number]) };
-  uniforms.overbright = { value: Math.max(0, Math.min(32, paramScalar(renderer.params.m_flOverbrightFactor, 1))) };
+  uniforms.overbright = { value: selfIllum*Math.max(0, Math.min(32, paramScalar(renderer.params.m_flOverbrightFactor, 1))) };
   uniforms.desat = { value: Math.max(0, Math.min(1, paramScalar(renderer.params.m_flDesaturation, 0))) };
   const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `
     ${declarations} uniform vec3 tint; uniform float overbright; uniform float desat;
@@ -82,7 +84,8 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
   return { material, textures, update(age: number) {
     inputs.forEach((input, i) => {
       const c = row(input.m_TextureControls);
-      (uniforms[`uv${i}`].value as THREE.Vector4).set(Math.max(.001, scalar(c.m_flFinalTextureScaleU, age, 1)), Math.max(.001, scalar(c.m_flFinalTextureScaleV, age, 1)), scalar(c.m_flFinalTextureOffsetU, age, 0), scalar(c.m_flFinalTextureOffsetV, age, 0));
+      const signedScale = (v: unknown) => { const value = scalar(v, age, 1); return Math.abs(value) < .001 ? (value < 0 ? -.001 : .001) : value; };
+      (uniforms[`uv${i}`].value as THREE.Vector4).set(signedScale(c.m_flFinalTextureScaleU), signedScale(c.m_flFinalTextureScaleV), scalar(c.m_flFinalTextureOffsetU, age, 0), scalar(c.m_flFinalTextureOffsetV, age, 0));
       uniforms[`rot${i}`].value = scalar(c.m_flFinalTextureUVRotation, age, 0);
       uniforms[`dist${i}`].value = scalar(c.m_flDistortion, age, 0);
       uniforms[`blend${i}`].value = Math.max(0, Math.min(1, scalar(input.m_flTextureBlend, age, 1)));

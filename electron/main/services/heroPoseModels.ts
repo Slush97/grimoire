@@ -316,8 +316,9 @@ function riggedVersionFile(key: string): string {
  * Wraith's hand energy (sprite + CP2 driver), Dynamo's
  * model-authored head effect (fixed sheet regions + head_fx), and Abrams's
  * model-declared preview book glow (local CP1 box), and Victor's authored
- * independent bolt sparks (three transferred CP frames). Familiar's unsupported
- * hitbox-spawn layer is omitted. Ropes, snapshots and bone locking remain gaps.
+ * independent bolt sparks (three transferred CP frames), Celeste's horn and
+ * weapon roots, Solomon's ordered ring, and passive weapon roots declared by
+ * Familiar/Graves abilities. Unsupported runtime inputs and operators stay partial.
  */
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
     Abrams: 'particles/abilities/abrams/abrams_ambient_book.vpcf_c',
@@ -326,7 +327,8 @@ const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
     Celeste: 'particles/abilities/unicorn/unicorn_ambient_horn.vpcf_c',
     Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
-    Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
+    Rem: 'particles/abilities/familiar/familiar_ambient_candle.vpcf_c',
+    Graves: 'particles/heroes/necro/necro_weapon_ambient.vpcf_c',
 };
 
 const EFFECT_DESCRIPTOR_FILENAME = 'effect.json';
@@ -339,7 +341,9 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 // v5: resolve authored core texture dependencies after the primary package.
 // v6: select a single CP configuration and support authored local box spawning.
 // v7: preserve child CP frame distribution and authored instance delays.
-const EFFECT_CACHE_VERSION = '9';
+// v9: independent model/weapon roots and default spritecard texture inputs.
+// v10: passive weapon selections and their authored preview attachment frames.
+const EFFECT_CACHE_VERSION = '10';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1121,7 +1125,7 @@ export async function exportHeroEffect(
             await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
                 heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
                 [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
-                ['Abrams', 'Victor', 'Solomon', 'Celeste'].includes(heroName) ? 'preview' : undefined,
+                ['Abrams', 'Victor', 'Solomon', 'Celeste', 'Rem', 'Graves'].includes(heroName) ? 'preview' : undefined,
                 heroName === 'Celeste' ? ['particles/abilities/unicorn/unicorn_ambient_weapon.vpcf_c'] : []);
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };

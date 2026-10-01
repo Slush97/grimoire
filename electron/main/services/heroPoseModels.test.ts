@@ -65,6 +65,8 @@ describe('mounted ambient particle textures', () => {
     const sources = [{ metaKey: 'one_dir.vpk', priority: 0 }];
     const info = await exportHeroEffect(game(), 'Rem', sources);
     expect(info.hasEffect).toBe(true);
+    expect(h.particles.mock.calls[0][1]).toBe('particles/abilities/familiar/familiar_ambient_candle.vpcf_c');
+    expect(h.particles.mock.calls[0][6]).toBe('preview');
     expect(h.particles.mock.calls[0][5]).toEqual([skin, join(game(), 'game', 'citadel', 'pak01_dir.vpk'), join(game(), 'game', 'core', 'pak01_dir.vpk')]);
     expect((await getHeroEffectInfo(game(), 'Rem', sources)).hasEffect).toBe(true);
     expect((await getHeroEffectInfo(game(), 'Rem')).hasEffect).toBe(false);
