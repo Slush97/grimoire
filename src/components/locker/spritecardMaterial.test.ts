@@ -9,6 +9,17 @@ const renderer = (blendMode: string | null): FxRenderer => ({ class: 'C_OP_Rende
     m_TextureControls: { m_flFinalTextureOffsetV: { pf: 'PF_TYPE_COLLECTION_AGE', mult: .3 } } })),
 } });
 describe('shared authored spritecards', () => {
+  it('applies authored additive self radiance after saturation without changing coverage', () => {
+    const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
+    r.params.m_flAddSelfAmount = 3;
+    const result = spritecardMaterial(r, '/', 'void main(){}')!;
+    try {
+      expect(result.material.uniforms.addSelf.value).toBe(4);
+      const shader = result.material.fragmentShader;
+      expect(shader.indexOf('rgb*=addSelf;')).toBeGreaterThan(shader.indexOf('rgb=clamp(rgb,0.0,1.0);'));
+      expect(shader).toContain('float alpha=smoothstep(0.0,1.0,accum.a)*vAlpha;');
+    } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+  });
   it('keeps lookup RGB-alpha inside the incoming radial coverage and accepts a fifth RGB-only additive glow', () => {
     const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
     const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;

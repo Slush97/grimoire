@@ -68,15 +68,19 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
   const colorScale = color.m_nType === 'PVEC_TYPE_LITERAL_COLOR' && Array.isArray(color.m_LiteralColor) ? color.m_LiteralColor : [255, 255, 255];
   uniforms.tint = { value: new THREE.Vector3(...colorScale.map((v) => Math.max(0, Math.min(255, Number(v)))/255) as [number, number, number]) };
   uniforms.overbright = { value: selfIllum*Math.max(0, Math.min(32, paramScalar(renderer.params.m_flOverbrightFactor, 1))) };
+  // VRF b20af381 particle_spritecard.frag.slang: additive self color is applied
+  // after saturation, allowing authored glow to retain HDR radiance.
+  uniforms.addSelf = { value: 1 + Math.max(0, Math.min(32, paramScalar(renderer.params.m_flAddSelfAmount, 0))) };
   uniforms.desat = { value: Math.max(0, Math.min(1, paramScalar(renderer.params.m_flDesaturation, 0))) };
   const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `
-    ${declarations} uniform vec3 tint; uniform float overbright; uniform float desat;
+    ${declarations} uniform vec3 tint; uniform float overbright; uniform float addSelf; uniform float desat;
     varying vec2 vUv; varying float vAlpha; ${vertexColor ? "varying vec3 vColor;" : ""}
     vec3 gammaColor(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-.055,step(vec3(.0031308),c));}
     vec2 placeUv(vec2 p,vec4 ctl,float angle){float c=cos(angle),s=sin(angle);p-=.5;return vec2(c*p.x-s*p.y,s*p.x+c*p.y)/ctl.xy+fract(ctl.zw+.5);}
     void main(){vec4 accum=vec4(1.0);${chain}
       vec3 rgb=accum.rgb*tint${vertexColor ? "*vColor" : ""};rgb=mix(rgb,vec3(dot(rgb,vec3(.299,.587,.114))),desat)*overbright;
       ${renderer.params.m_bSaturateColorPreAlphaBlend === false ? '' : 'rgb=clamp(rgb,0.0,1.0);'}
+      rgb*=addSelf;
       float alpha=smoothstep(0.0,1.0,accum.a)*vAlpha;
       ${additive ? 'float coverage=clamp(max(max(rgb.r,rgb.g),rgb.b),0.0,1.0);alpha*=coverage;rgb/=max(coverage,.0001);' : ''}
       if(alpha<=.001)discard;gl_FragColor=vec4(rgb,alpha);
