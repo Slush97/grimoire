@@ -8,8 +8,10 @@ import { particleControlPointInputs } from './particleScalarInput';
 import { MovingParticleRope } from './MovingParticleRope';
 import { bindParticleSnapshot, skinnedSnapshotPosition } from './particleSnapshotSkinning';
 
-const VERT = `attribute float aAlpha; varying vec2 vUv; varying float vAlpha;
-  void main(){vUv=uv;vAlpha=aAlpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+const VERT = `uniform float ropeDepthBias; attribute float aAlpha; varying vec2 vUv; varying float vAlpha;
+  void main(){vUv=uv;vAlpha=aAlpha;vec4 viewPosition=modelViewMatrix*vec4(position,1.0);gl_Position=projectionMatrix*viewPosition;
+  if(ropeDepthBias!=0.0){viewPosition.z-=ropeDepthBias;vec4 biased=projectionMatrix*viewPosition;
+  gl_Position.z=max(gl_Position.w*(biased.z/biased.w),min(.001,gl_Position.z));}}`;
 const row = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 
 function attributeAt(d: FxDescriptor, field: number, index: number, fallback: number) {
@@ -39,7 +41,13 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     const fraction = i/(count-1)*(ordered.points.length-1), lo = Math.floor(fraction), hi = Math.min(lo+1, ordered.points.length-1);
     return THREE.MathUtils.lerp(ordered.points[lo][key], ordered.points[hi][key], fraction-lo);
   };
-  const resource = useMemo(() => spritecardMaterial(renderer, textureBaseUrl, VERT), [renderer, textureBaseUrl]);
+  const resource = useMemo(() => {
+    const result = spritecardMaterial(renderer, textureBaseUrl, VERT);
+    if (!result) return null;
+    const depthBias = { value: 0 };
+    result.material.uniforms.ropeDepthBias = depthBias;
+    return { ...result, setDepthBias(value: number) { depthBias.value = value; } };
+  }, [renderer, textureBaseUrl]);
   const geometry = useMemo(() => {
     const n = count, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*6), 3).setUsage(THREE.DynamicDrawUsage));
@@ -68,6 +76,8 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     }
     const positions = geometry.getAttribute('position'), uv = geometry.getAttribute('uv'), alpha = geometry.getAttribute('aAlpha');
     const sourceUnit = model.getObjectByName('skeleton')?.getWorldScale(state.worldScale).x ?? .0254;
+    // Authored world-unit bias changes depth only, preserving the ribbon silhouette.
+    resource.setDepthBias(paramScalar(renderer.params.m_flDepthBias, 0)*Math.abs(sourceUnit)*scale);
     const radiusScale = Math.max(0, Math.min(16, paramScalar(renderer.params.m_flRadiusScale, 1)));
     const worldVSize = Math.max(.001, paramScalar(renderer.params.m_flTextureVWorldSize, 1))*sourceUnit;
     let arc = 0;

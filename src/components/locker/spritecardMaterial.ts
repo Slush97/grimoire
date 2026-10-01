@@ -31,9 +31,13 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     }
     let texture: THREE.Texture;
     if (input.m_bReplaceTextureWithGradient === true) {
+      // Source 2 uses a white texture when an authored gradient has no stops.
+      // Rejecting it silently removes otherwise supported smoke ropes.
+      const stops = row(input.m_Gradient).m_Stops;
+      const emptyGradient = !Array.isArray(stops) || stops.length === 0;
       const bytes = new Uint8Array(256*4);
       for (let k = 0; k < 256; k++) {
-        const color = spriteGradientColor({ m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT', m_FloatInterp: { pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' }, m_Gradient: input.m_Gradient }, k/255);
+        const color = emptyGradient ? [1, 1, 1] : spriteGradientColor({ m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT', m_FloatInterp: { pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' }, m_Gradient: input.m_Gradient }, k/255);
         if (!color) { textures.forEach((t) => t.dispose()); return null; }
         bytes.set([...color.map((v) => Math.round(v*255)), 255], k*4);
       }
@@ -44,7 +48,7 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
       texture = new THREE.TextureLoader().load(base+fxTexturePngName(input.m_hTexture));
     }
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = texture.wrapT = control.m_bClampUVs === true ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+    texture.wrapS = texture.wrapT = input.m_bReplaceTextureWithGradient === true || control.m_bClampUVs === true ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
     textures.push(texture);
     uniforms[`tex${i}`] = { value: texture };
     uniforms[`uv${i}`] = { value: new THREE.Vector4(1, 1, 0, 0) };

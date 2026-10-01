@@ -94,6 +94,20 @@ describe('shared authored spritecards', () => {
       } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
     }
   });
+  it('keeps empty authored gradients white and clamps generated ramps', () => {
+    const r = renderer(null);
+    const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
+    inputs[0].m_Gradient = { m_Stops: [] };
+    const result = spritecardMaterial(r, '/', 'void main(){}')!;
+    try {
+      expect(result).not.toBeNull();
+      expect((result.textures[0] as THREE.DataTexture).image.data?.slice(0, 4)).toEqual(new Uint8Array([255, 255, 255, 255]));
+      for (const texture of result.textures) {
+        expect(texture.wrapS).toBe(THREE.ClampToEdgeWrapping);
+        expect(texture.wrapT).toBe(THREE.ClampToEdgeWrapping);
+      }
+    } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+  });
   it('omits unsupported material inputs rather than substituting a flat glow', () => {
     const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
     (r.params.m_vecTexturesInput as Array<Record<string, unknown>>)[1].m_nTextureType = 'SPRITECARD_TEXTURE_ANIMMOTIONVEC';
