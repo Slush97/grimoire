@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import {
   NPR_FRAGMENT,
   NPR_PATCH_MAP,
   NPR_VERTEX,
   applySource2MaterialHints,
+  citadelColorUniforms,
+  configureCitadelGlassPass,
   detailLayer,
   glassTransmissionTexture,
   hasDynamicAlphaOverride,
@@ -31,25 +34,144 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
   };
 }
 
+describe('Authored glass sampling', () => {
+  it('suppresses only the glass backface feedback pass while retaining the two-sided main draw', () => {
+    const material = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide });
+    const uniforms = citadelColorUniforms({ shader: 'pbr.vfx', ints: { F_GLASS: 1 }, floats: { g_flCloakBlurAmount: 0 } } as MorphicExtras);
+    const previous = vi.fn();
+    material.onBeforeRender = previous;
+    configureCitadelGlassPass(material, uniforms);
+    const render = () => material.onBeforeRender(null!, null!, null!, null!, null!, null!);
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(0);
+    material.side = THREE.BackSide;
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(1);
+    material.side = THREE.DoubleSide;
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(0);
+    expect(previous).toHaveBeenCalledTimes(3);
+    expect(NPR_FRAGMENT).toContain('if (uCitadelGlassBackfacePass > 0.5) discard;');
+  });
+  it('uses authored screen blur independently of specular roughness and retains dynamic fallback', () => {
+    const morphic = { shader: 'pbr.vfx', ints: { F_GLASS: 1 }, floats: { g_flCloakBlurAmount: 0.007 } } as MorphicExtras;
+    const uniforms = citadelColorUniforms(morphic);
+    expect(uniforms.uCitadelGlass.value).toBe(1);
+    expect(uniforms.uCitadelGlassBlur.value.toArray()).toEqual([0.007, 1, 1]);
+    expect(citadelColorUniforms({ ...morphic, dynamic_params: { g_flCloakBlurAmount: dynamicExpr() } }).uCitadelGlass.value).toBe(0);
+    expect(citadelColorUniforms({ ...morphic, ints: { F_GLASS: 0 } }).uCitadelGlass.value).toBe(0);
+  });
+
+  it('point-samples the decoded Citadel glass kernel without leaking across screen edges', () => {
+    const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
+    const offsets = [...patch.value.matchAll(/vec2\((-?\d+\.\d+), (-?\d+\.\d+)\)/g)]
+      .map((match) => [Number(match[1]), Number(match[2])]);
+    expect(offsets).toHaveLength(8);
+    expect(offsets[0]).toEqual([-0.0876, 0.9703]);
+    expect(offsets[7]).toEqual([0.6384, -0.4054]);
+    expect(offsets.every(([x, y]) => x * x + y * y <= 1)).toBe(true);
+    expect(patch.value).toContain('glassScene /= 9.0;');
+    expect(patch.value).toContain('texelFetch(transmissionSamplerMap, glassPixel, 0)');
+    expect(patch.value).toContain('clamp(ivec2(tapUv * vec2(glassSize)), ivec2(0), glassSize - 1)');
+    expect(patch.value).not.toContain('getTransmissionSample(');
+    expect(patch.value).toContain('transmitted = getIBLVolumeRefraction(');
+  });
+
+  it('applies the second coverage factor and removes transmitted metallic color', () => {
+    const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
+    const expression = patch.value.match(/transmitted.rgb = ([^;]+);/)![1];
+    const evaluate = new Function('glassScene', 'glassAbsorption', 'metalnessFactor', 'material', `return ${expression};`);
+    const transmitted = (coverage: number, metalness: number) => coverage * evaluate(
+      { rgb: 0.8 }, 0.5, metalness, { transmission: coverage },
+    ) as number;
+    expect(transmitted(1, 0)).toBeCloseTo(0.4);
+    expect(transmitted(0.5, 0)).toBeCloseTo(0.1);
+    expect(transmitted(0, 0)).toBe(0);
+    expect(transmitted(1, 1)).toBe(0);
+  });
+});
+
 describe('NPR_FRAGMENT vertex colors', () => {
-  it('applies Three vertex colors before tint and CSB', () => {
+  it('places authored vertex tint on the correct side of CSB and preserves alpha separately', () => {
     const colorGuard = '#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )';
-    const colorMultiply = 'csm_DiffuseColor *= vColor;';
-    const tintMix = 'csm_DiffuseColor.rgb = mix';
-    const csbApply = 'applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB)';
+    const before = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5)';
+    const after = 'if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5)';
+    const csbApply = 'applyAlbedoCSB(csm_DiffuseColor.rgb, uAlbedoCSB, uAlbedoReflectivity)';
 
     expect(NPR_FRAGMENT).toContain(colorGuard);
-    expect(NPR_FRAGMENT).toContain(colorMultiply);
-
-    expect(NPR_FRAGMENT.indexOf(colorGuard)).toBeLessThan(NPR_FRAGMENT.indexOf(tintMix));
-    expect(NPR_FRAGMENT.indexOf(colorMultiply)).toBeLessThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT.indexOf(before)).toBeLessThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT.indexOf(after)).toBeGreaterThan(NPR_FRAGMENT.indexOf(csbApply));
+    expect(NPR_FRAGMENT).toContain('(uMaskVertexColor > 0.5 ? nprMask.r : 1.0) * uVertexColorStrength');
+    expect(NPR_FRAGMENT).toContain('csm_DiffuseColor.a *= vColor.a');
+    expect(NPR_FRAGMENT).not.toContain('csm_DiffuseColor *= vColor;');
   });
 
   it('gates the vertex-color multiply on uApplyVertexColor (mask-only COLOR_0 is left alone)', () => {
     // GLTFLoader turns USE_COLOR on for any mesh with a COLOR_0 attribute, but a
     // tint-mask COLOR_0 (often (0,0,0)) must not multiply the albedo - that blacks
     // out Celeste's dress. The multiply has to be conditioned on the uniform.
-    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5) csm_DiffuseColor *= vColor;');
+    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb > 0.5)');
+    expect(NPR_FRAGMENT).toContain('if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5)');
+  });
+});
+
+describe('Preview diffuse lighting bands', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+  const light = patch.value.match(/float nprLightLum = ([^;]+);/)![1];
+  const quantized = patch.value.match(/float nprDirectQ = ([^;]+);/)![1];
+  const scale = patch.value.match(/nprDirectLum > 1e-4 \? ([^\n]+) : 1.0/)![1];
+  const evaluate = new Function('nprDirectLum', 'nprAlbedoLum', 'max', 'clamp', 'celQuantize', `
+    const uBands = 4, uStepSharpness = 0.08;
+    const nprLightLum = ${light};
+    const nprDirectQ = ${quantized};
+    return nprDirectLum > 1e-4 ? ${scale} : 1;
+  `);
+  const factor = (albedo: number, illumination: number) => evaluate(
+    albedo * illumination, albedo, Math.max,
+    (value: number, low: number, high: number) => Math.min(high, Math.max(low, value)),
+    (value: number, bands: number) => Math.round(value * bands) / bands,
+  ) as number;
+
+  it('gives dark and pale diffuse surfaces the same band under equal lighting', () => {
+    expect(factor(0.02, 0.22)).toBeCloseTo(factor(0.8, 0.22));
+    expect(factor(0.02, 0.22)).toBeCloseTo(0.25 / 0.22);
+  });
+
+  it('keeps black and unlit surfaces finite without adding diffuse light', () => {
+    expect(factor(0, 0.22)).toBe(1);
+    expect(factor(0.8, 0)).toBe(1);
+    expect(factor(1e-8, 0.22)).toBe(1);
+  });
+});
+
+describe('Citadel near-black specular rule', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+  // Evaluate the actual shader expression, rather than duplicating its formula.
+  const expression = patch.value.match(/float citadelSpecularFactor = ([^;]+);/)![1];
+  it.each([0, 1])('suppresses black and dark specular while preserving brighter material with metalness=%s', (metalness) => {
+    const evaluate = new Function('diffuseColor', 'max', 'clamp', `return (${expression});`);
+    const factor = (albedo: number) => evaluate(
+      { r: albedo, g: albedo, b: albedo }, Math.max,
+      (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
+    ) as number;
+    const specular = metalness ? 0.02 : 0.04;
+    expect(specular * factor(0)).toBe(0);
+    expect(specular * factor(0.02)).toBeCloseTo(specular / 2);
+    expect(specular * factor(0.04)).toBe(specular);
+    expect(specular * factor(0.8)).toBe(specular);
+    expect(patch.value).toContain('if (uCitadelSpecular > 0.5)');
+    expect(patch.value).toContain('reflectedLight.directSpecular *= citadelSpecularFactor;');
+    expect(patch.value).toContain('reflectedLight.indirectSpecular *= citadelSpecularFactor;');
+  });
+  it('disables both specular paths only at authored full roughness when opted in', () => {
+    const condition = patch.value.match(/if \((uNoSpecularAtFullRoughness[^)]+)\)/)![1];
+    const evaluate = new Function('uNoSpecularAtFullRoughness', 'roughnessFactor', `return (${condition});`);
+    const active = (flag: number, roughness: number) => evaluate(flag, roughness) as boolean;
+    expect(active(1, 1)).toBe(true);
+    expect(active(1, 0.999)).toBe(false);
+    expect(active(0, 1)).toBe(false);
+    expect(patch.value).toContain('reflectedLight.directSpecular = vec3(0.0);');
+    expect(patch.value).toContain('reflectedLight.indirectSpecular = vec3(0.0);');
   });
 });
 
@@ -251,6 +373,19 @@ describe('highlightLayer', () => {
     );
     expect(NPR_FRAGMENT).not.toContain('vNprWorldPosition');
     expect(NPR_FRAGMENT).not.toContain('uHighlightPositionWs');
+  });
+
+  it('owns a tint-mask clone without disposing the shared resolved sampler', () => {
+    const shared = texture(8);
+    const disposed = vi.spyOn(shared, 'dispose');
+    const base = new THREE.MeshStandardMaterial();
+    base.userData.morphic = morphic({ ints: { F_USE_NPR_LIGHTING: 1 }, resolvedTextures: { g_tTintMaskRimLightMask: shared } });
+    const result = wrapMaterialWithNpr(base)!;
+    expect(result.uniforms.uTintRimMask.value).not.toBe(shared);
+    expect(result.ownedTextures).toContain(result.uniforms.uTintRimMask.value);
+    result.ownedTextures.forEach((t) => t.dispose());
+    result.material.dispose();
+    expect(disposed).not.toHaveBeenCalled();
   });
 
   it('keeps legacy wrapper highlight uniforms identity even with authored F6 params', () => {
@@ -522,10 +657,27 @@ describe('applySource2MaterialHints glass and cloak state', () => {
 });
 
 describe('NPR rim mask (F8)', () => {
+  it('retains the preview light/up/AO approximation for opaque cloth and the separate glass rim', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+    expect(patch).toContain('lightRim * upRamp * nprRimMaskG');
+    expect(patch).toContain('clamp(ambientOcclusion, 0.0, 1.0)');
+    expect(patch).toContain('uCitadelGlass > 0.5 ? 1.0 : opaqueRimAo');
+    expect(patch).toContain('uCitadelGlass > 0.5 ? -dot(nprN, nprV) : dot(nprN, nprL)');
+    expect(patch).not.toContain('nprFres * nprGate');
+  });
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('nprMask.g : uRimMaskDefault');
-    expect(patch).toContain('uRimColor * nprRim');
+      expect(patch).toContain('nprRimTint * nprRim');
+  });
+
+    it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+    expect(patch).toContain('#ifdef USE_TRANSMISSION');
+    expect(patch).toContain('1.0 - clamp(material.transmission, 0.0, 1.0)');
+    expect(patch).toContain('mix(nprLit, nprLit *');
+      expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
+      expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
   });
 });
 
@@ -568,5 +720,62 @@ describe('NPR self-illum hue-preserving cap', () => {
     expect(patch).toContain('float detailGate = smoothstep');
     expect(patch).toContain('float headRegion = smoothstep(70.0, 78.0, vNprSourcePosition.z)');
     expect(patch).toContain('rawSiMask * rawSiMask * 8192.0 * inkGate');
+  });
+});
+
+
+describe('glass transmission shader integration', () => {
+  it('applies authored scene blur after CSM expands the transmission chunk', () => {
+    const material = new CustomShaderMaterial({
+      baseMaterial: new THREE.MeshPhysicalMaterial({ transmission: 1 }),
+      fragmentShader: NPR_FRAGMENT,
+      patchMap: NPR_PATCH_MAP,
+    });
+    const shader = {
+      vertexShader: THREE.ShaderLib.physical.vertexShader,
+      fragmentShader: THREE.ShaderLib.physical.fragmentShader,
+      uniforms: {},
+    };
+    material.onBeforeCompile(shader as Parameters<typeof material.onBeforeCompile>[0], {} as THREE.WebGLRenderer);
+    expect(shader.fragmentShader).toContain(
+      'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,'
+    );
+    expect(shader.fragmentShader).not.toContain('n, v, material.roughness,');
+    expect(shader.fragmentShader).toContain('if (uCitadelGlass > 0.5)');
+    expect(shader.fragmentShader).toContain('max(dot(n, v), 0.01)');
+    expect(shader.fragmentShader).toContain('(1.0 - metalnessFactor) * material.transmission');
+    expect(shader.fragmentShader).toContain('if (glassRadius > 0.0) glassScene.rgb *= 12.0;');
+    expect(shader.fragmentShader).toContain('uCitadelGlass > 0.5 ? max(material.roughness, 0.45) : material.roughness');
+    expect(shader.fragmentShader).not.toContain('#include <lights_fragment_maps>');
+    expect(shader.fragmentShader).toContain('material.attenuationDistance );\n      }');
+    material.dispose();
+  });
+});
+
+describe('NPR preview light coordinate space', () => {
+  const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+  it('uses the final view-space mapped normal and transforms the world key once', () => {
+    expect(patch).toContain('vec3 nprN = normal;');
+    expect(patch).toContain('vec3 nprL = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);');
+    expect(patch).not.toContain('vec3 nprN = normalize(vNormal)');
+    expect(patch).not.toContain('vec3 nprL = normalize(uKeyDir)');
+    // A direction has w=0, so camera translation must not affect the gate.
+    expect(patch).not.toContain('vec4(uKeyDir, 1.0)');
+  });
+  it('keeps the light-normal gate invariant under camera orbit and translation', () => {
+    const normalWorld = new THREE.Vector3(0.2, 0.8, 0.5).normalize();
+    const lightWorld = new THREE.Vector3(3, 5, 4).normalize();
+    const expected = normalWorld.dot(lightWorld);
+    for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 3]) {
+      const camera = new THREE.PerspectiveCamera();
+      camera.position.set(Math.sin(yaw) * 4, 2, Math.cos(yaw) * 4);
+      camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+      const rotation = new THREE.Matrix3().setFromMatrix4(camera.matrixWorldInverse);
+      const normalView = normalWorld.clone().applyMatrix3(rotation).normalize();
+      const lightView = lightWorld.clone().applyMatrix3(rotation).normalize();
+      expect(normalView.dot(lightView)).toBeCloseTo(expected, 12);
+      const upView = new THREE.Vector3(0, 1, 0).applyMatrix3(rotation).normalize();
+      expect(normalView.dot(upView)).toBeCloseTo(normalWorld.y, 12);
+    }
   });
 });

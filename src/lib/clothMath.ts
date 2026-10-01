@@ -10,12 +10,9 @@ export interface SimilarityFit {
   rmse: number;
 }
 
-export interface WeightedRigidFit {
+export interface ClothFitTransform {
+  position: THREE.Vector3;
   rotation: THREE.Quaternion;
-  sourceCenter: THREE.Vector3;
-  targetCenter: THREE.Vector3;
-  totalWeight: number;
-  rmse: number;
 }
 
 const EPS = 1e-9;
@@ -32,20 +29,6 @@ function centroid(points: Vec3[]): THREE.Vector3 {
   const c = new THREE.Vector3();
   for (const p of points) c.add(v3(p));
   return c.multiplyScalar(1 / points.length);
-}
-
-function weightedCentroid(points: Vec3[], weights: number[]): { center: THREE.Vector3; totalWeight: number } {
-  const center = new THREE.Vector3();
-  let totalWeight = 0;
-  for (let i = 0; i < points.length; i++) {
-    const weight = Number.isFinite(weights[i]) ? weights[i] : 0;
-    if (weight <= 0) continue;
-    center.addScaledVector(v3(points[i]), weight);
-    totalWeight += weight;
-  }
-  if (totalWeight <= EPS) throw new Error('weighted rigid fit requires positive total weight');
-  center.multiplyScalar(1 / totalWeight);
-  return { center, totalWeight };
 }
 
 function largestEigenvector4(m: number[][]): [number, number, number, number] {
@@ -122,7 +105,6 @@ function fitRotation(
   target: Vec3[],
   sourceCentroid: THREE.Vector3,
   targetCentroid: THREE.Vector3,
-  weights?: number[],
 ): THREE.Quaternion {
   let sxx = 0;
   let sxy = 0;
@@ -135,19 +117,17 @@ function fitRotation(
   let szz = 0;
 
   for (let i = 0; i < source.length; i++) {
-    const weight = weights ? (Number.isFinite(weights[i]) ? weights[i] : 0) : 1;
-    if (weight <= 0) continue;
     const x = v3(source[i]).sub(sourceCentroid);
     const y = v3(target[i]).sub(targetCentroid);
-    sxx += weight * x.x * y.x;
-    sxy += weight * x.x * y.y;
-    sxz += weight * x.x * y.z;
-    syx += weight * x.y * y.x;
-    syy += weight * x.y * y.y;
-    syz += weight * x.y * y.z;
-    szx += weight * x.z * y.x;
-    szy += weight * x.z * y.y;
-    szz += weight * x.z * y.z;
+    sxx += x.x * y.x;
+    sxy += x.x * y.y;
+    sxz += x.x * y.z;
+    syx += x.y * y.x;
+    syy += x.y * y.y;
+    syz += x.y * y.z;
+    szx += x.z * y.x;
+    szy += x.z * y.y;
+    szz += x.z * y.z;
   }
 
   const trace = sxx + syy + szz;
@@ -161,34 +141,94 @@ function fitRotation(
   return new THREE.Quaternion(x, y, z, w).normalize();
 }
 
-export function recoverWeightedRigidFit(source: Vec3[], target: Vec3[], weights: number[]): WeightedRigidFit {
-  if (source.length !== target.length || source.length !== weights.length || source.length < 3) {
-    throw new Error('recoverWeightedRigidFit requires at least three paired weighted points');
-  }
-
-  const { center: sourceCenter, totalWeight } = weightedCentroid(source, weights);
-  const { center: targetCenter } = weightedCentroid(target, weights);
-  const rotation = fitRotation(source, target, sourceCenter, targetCenter, weights);
-
-  let sourceSpread = 0;
-  let err2 = 0;
+export function recoverClothFit(source: Vec3[], target: Vec3[], weights: number[], restCenter: Vec3): ClothFitTransform | null {
+  if (!source.length || source.length !== target.length || source.length !== weights.length
+    || !restCenter.every(Number.isFinite)) return null;
+  const position = new THREE.Vector3();
+  let totalWeight = 0;
   for (let i = 0; i < source.length; i++) {
-    const weight = Number.isFinite(weights[i]) ? weights[i] : 0;
-    if (weight <= 0) continue;
-    const src = v3(source[i]).sub(sourceCenter);
-    sourceSpread += weight * src.lengthSq();
-    const p = src.applyQuaternion(rotation).add(targetCenter);
-    err2 += weight * p.distanceToSquared(v3(target[i]));
+    if (!source[i].every(Number.isFinite) || !target[i].every(Number.isFinite)
+      || !Number.isFinite(weights[i]) || weights[i] < 0) return null;
+    position.addScaledVector(v3(target[i]), weights[i]);
+    totalWeight += weights[i];
   }
-  if (sourceSpread <= EPS) throw new Error('recoverWeightedRigidFit source points are degenerate');
+  if (totalWeight <= 0) return null;
+  position.multiplyScalar(1 / totalWeight);
 
-  return {
-    rotation,
-    sourceCenter,
-    targetCenter,
-    totalWeight,
-    rmse: Math.sqrt(err2 / totalWeight),
-  };
+  const covariance = Array.from({ length: 3 }, () => [0, 0, 0]);
+  const center = position.toArray();
+  for (let n = 0; n < source.length; n++) {
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) {
+        covariance[row][col] += weights[n] * (target[n][row] - center[row]) * (source[n][col] - restCenter[col]);
+      }
+    }
+  }
+  const normal = Array.from({ length: 3 }, (_, row) => Array.from({ length: 3 }, (_, col) =>
+    covariance.reduce((sum, values) => sum + values[row] * values[col], 0)));
+  const eigenvectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const epsilon = 2 ** -23;
+
+  // The runtime uses at most six cyclic sweeps with approximate half-angle
+  // rotations. Keeping this order also defines the rank-deficient fallback.
+  for (let sweep = 0; sweep < 6; sweep++) {
+    let rotationSquared = 0;
+    for (const [i, j] of [[0, 1], [1, 2], [2, 0]]) {
+      let sine = normal[i][j];
+      let cosine = 2 * (normal[i][i] - normal[j][j]);
+      if (cosine * cosine > 5.828427314758301 * sine * sine) {
+        const inverse = 1 / Math.hypot(sine, cosine);
+        sine *= inverse;
+        cosine *= inverse;
+      } else {
+        sine = Math.sin(Math.PI / 8);
+        cosine = Math.cos(Math.PI / 8);
+      }
+      rotationSquared += sine * sine;
+      const c = cosine * cosine - sine * sine;
+      const s = 2 * cosine * sine;
+      for (let row = 0; row < 3; row++) {
+        const a = normal[row][i], b = normal[row][j];
+        normal[row][i] = c * a + s * b;
+        normal[row][j] = c * b - s * a;
+        const u = eigenvectors[row][i], v = eigenvectors[row][j];
+        eigenvectors[row][i] = c * u + s * v;
+        eigenvectors[row][j] = c * v - s * u;
+      }
+      for (let col = 0; col < 3; col++) {
+        const a = normal[i][col], b = normal[j][col];
+        normal[i][col] = c * a + s * b;
+        normal[j][col] = c * b - s * a;
+      }
+    }
+    if (rotationSquared <= epsilon) break;
+  }
+
+  const axes = [0, 1, 2].map((col) => new THREE.Vector3(...covariance.map((row) =>
+    row.reduce((sum, value, k) => sum + value * eigenvectors[k][col], 0))));
+  const x = normal[0][0], y = normal[1][1], z = normal[2][2];
+  // Strict comparisons retain the engine's tie order for line-shaped sources.
+  const order = x > y ? (y > z ? [0, 1, 2] : z > x ? [2, 0, 1] : [0, 2, 1])
+    : x > z ? [1, 0, 2] : z > y ? [2, 1, 0] : [1, 2, 0];
+  const [first, second, third] = order;
+  if (axes[first].length() < epsilon) return { position: new THREE.Vector3(), rotation: new THREE.Quaternion() };
+  axes[first].normalize();
+  axes[second].addScaledVector(axes[first], -axes[second].dot(axes[first]));
+  if (axes[second].length() <= epsilon) {
+    const { x: a, y: b, z: c } = axes[first];
+    axes[second].set(c + (1 - c) * b * b, 0, -a).normalize();
+    axes[second].addScaledVector(axes[first], -axes[second].dot(axes[first]));
+  }
+  axes[second].normalize();
+  const sign = (second - first + 3) % 3 === 1 ? 1 : -1;
+  axes[third].crossVectors(axes[first], axes[second]).multiplyScalar(sign);
+  const basis = new THREE.Matrix4().makeBasis(axes[0], axes[1], axes[2]);
+  const rightTranspose = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3().fromArray(eigenvectors[0]),
+    new THREE.Vector3().fromArray(eigenvectors[1]),
+    new THREE.Vector3().fromArray(eigenvectors[2]),
+  );
+  return { position, rotation: new THREE.Quaternion().setFromRotationMatrix(basis.multiply(rightTranspose)).normalize() };
 }
 
 export function recoverSimilarity(source: Vec3[], target: Vec3[]): SimilarityFit {
@@ -232,10 +272,19 @@ export function recoverSimilarity(source: Vec3[], target: Vec3[]): SimilarityFit
 }
 
 export function nodeBaseQuaternion(positions: Vec3[], base: ClothNodeBase): THREE.Quaternion {
-  const xSeed = v3(positions[base.x1]).sub(v3(positions[base.x0])).normalize();
-  const yAxis = v3(positions[base.y1]).sub(v3(positions[base.y0])).normalize();
-  const zAxis = new THREE.Vector3().crossVectors(xSeed, yAxis).normalize();
-  const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
+  const xAxis = v3(positions[base.x1]).sub(v3(positions[base.x0]));
+  const yAxis = v3(positions[base.y1]).sub(v3(positions[base.y0]));
+  if (yAxis.lengthSq() > 0) yAxis.normalize();
+  else yAxis.set(0, 0, 1);
+  xAxis.addScaledVector(yAxis, -xAxis.dot(yAxis));
+  // The runtime switches to a deterministic perpendicular when the projected
+  // span is at most 0.05 Source units, before normalizing that span.
+  if (xAxis.length() <= 0.05) {
+    xAxis.set(yAxis.z + (1 - yAxis.z) * yAxis.y ** 2, 0, -yAxis.x).normalize();
+    xAxis.addScaledVector(yAxis, -xAxis.dot(yAxis));
+  }
+  xAxis.normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis);
   const basis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
   return new THREE.Quaternion().setFromRotationMatrix(basis).multiply(q4(base.qAdjust)).normalize();
 }

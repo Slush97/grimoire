@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { clothIntegratorMode } from './feModel';
+import { applyGoalDampedAttraction, applyRawAttraction, hingeLimitExcess, projectHingeLimit, projectKelagerBend, projectQuadBatch, projectRodBatch, projectTriangleBatch, quadProjectionError, reconstructClothRope, reconstructClothTwist, triangleProjectionError } from './clothConstraints';
 import {
   applyOffset,
   nodeBaseQuaternion,
   recoverOffsetSign,
   recoverSimilarity,
-  recoverWeightedRigidFit,
+  recoverClothFit,
 } from './clothMath';
 import type {
   ClothBox,
   ClothCapsule,
+  ClothColliderFilter,
   ClothCollisionPlane,
   ClothModel,
   ClothReverseOffset,
@@ -46,19 +49,68 @@ interface Box {
 }
 
 const _cp = new THREE.Vector3();
+const _capsuleAxis = new THREE.Vector3();
+const _capsuleRadial = new THREE.Vector3();
 export function capsuleDepth(
   p: THREE.Vector3,
   c: Capsule,
   pr: number,
   outN: THREE.Vector3,
+  frictionEnabled = false,
 ): number {
-  const { point, t } = closestPointOnSegment(p, c.a, c.b, _cp);
+  _capsuleAxis.subVectors(c.b, c.a);
+  const length = _capsuleAxis.length();
+  let t = 0;
+  if (length < 1e-6) t = c.rb > c.ra ? 1 : 0;
+  else if (length - (c.rb - c.ra) <= 0.5) t = 1;
+  else {
+    _capsuleAxis.multiplyScalar(1 / length);
+    _capsuleRadial.subVectors(p, c.a);
+    const axial = _capsuleRadial.dot(_capsuleAxis);
+    const radial = _capsuleRadial.addScaledVector(_capsuleAxis, -axial).length();
+    // The tapered contact path shifts the sampled sphere toward the larger
+    // endpoint by radius slope * radial distance before projecting out of it.
+    t = THREE.MathUtils.clamp((axial + (c.rb - c.ra) / length * radial) / length, 0, 1);
+  }
+  _cp.copy(c.a).lerp(c.b, t);
   const r = c.ra + (c.rb - c.ra) * t + pr;
-  outN.copy(p).sub(point);
-  const d = outN.length();
-  if (d >= r || d < 1e-6) return 0;
+  outN.copy(p).sub(_cp);
+  const distanceSq = outN.lengthSq();
+  if (r <= 0 || distanceSq >= r * r) return 0;
+  // Friction uses a full-radius correction from the current particle near the
+  // center. The position-only kernel instead places it on the sphere's +Z pole.
+  if (frictionEnabled && distanceSq < Math.fround(0.01)) {
+    outN.set(0, 0, 1);
+    return r;
+  }
+  if (!frictionEnabled && distanceSq <= 2 ** -23) {
+    outN.negate();
+    outN.z += r;
+    const correction = outN.length();
+    outN.multiplyScalar(1 / correction);
+    return correction;
+  }
+  const d = Math.sqrt(distanceSq);
   outN.multiplyScalar(1 / d);
   return r - d;
+}
+
+const _contactTangent = new THREE.Vector3();
+export function projectClothContact(
+  position: THREE.Vector3,
+  previous: THREE.Vector3,
+  normal: THREE.Vector3,
+  depth: number,
+  friction: number,
+  colliderMotion: THREE.Matrix4,
+): void {
+  if (depth <= 0) return;
+  _contactTangent.copy(previous).applyMatrix4(colliderMotion).sub(position);
+  _contactTangent.addScaledVector(normal, -_contactTangent.dot(normal));
+  const distance = _contactTangent.length();
+  const limit = Math.max(0, friction) * depth;
+  if (distance > 0) position.addScaledVector(_contactTangent, Math.min(1, limit / distance));
+  position.addScaledVector(normal, depth);
 }
 
 const _push = new THREE.Vector3();
@@ -74,45 +126,46 @@ const _boxClosest = new THREE.Vector3();
 const _boxDelta = new THREE.Vector3();
 const _boxInvQ = new THREE.Quaternion();
 const _boxNormalLocal = new THREE.Vector3();
-export function boxDepth(p: THREE.Vector3, box: Box, pr: number, outN: THREE.Vector3): number {
+export function boxDepth(p: THREE.Vector3, box: Box, pr: number, outN: THREE.Vector3, frictionEnabled = false): number {
   const halfX = Math.max(0, box.halfSize.x);
   const halfY = Math.max(0, box.halfSize.y);
   const halfZ = Math.max(0, box.halfSize.z);
   _boxInvQ.copy(box.rotation).invert();
   _boxLocal.copy(p).sub(box.center).applyQuaternion(_boxInvQ);
-  _boxClosest.set(
-    THREE.MathUtils.clamp(_boxLocal.x, -halfX, halfX),
-    THREE.MathUtils.clamp(_boxLocal.y, -halfY, halfY),
-    THREE.MathUtils.clamp(_boxLocal.z, -halfZ, halfZ),
-  );
-
-  _boxDelta.copy(_boxLocal).sub(_boxClosest);
-  const outsideDistance = _boxDelta.length();
-  if (outsideDistance > 1e-6) {
-    if (outsideDistance >= pr) return 0;
-    outN.copy(_boxDelta).multiplyScalar(1 / outsideDistance).applyQuaternion(box.rotation);
-    return pr - outsideDistance;
+  if (frictionEnabled) {
+    _boxClosest.set(
+      THREE.MathUtils.clamp(_boxLocal.x, -halfX, halfX),
+      THREE.MathUtils.clamp(_boxLocal.y, -halfY, halfY),
+      THREE.MathUtils.clamp(_boxLocal.z, -halfZ, halfZ),
+    );
+    _boxDelta.copy(_boxLocal).sub(_boxClosest);
+    const outsideDistanceSq = _boxDelta.lengthSq();
+    if (outsideDistanceSq > Math.fround(1e-5)) {
+      const outsideDistance = Math.sqrt(outsideDistanceSq);
+      if (outsideDistance >= pr) return 0;
+      outN.copy(_boxDelta).multiplyScalar(1 / outsideDistance).applyQuaternion(box.rotation);
+      return pr - outsideDistance;
+    }
   }
 
-  const dx = halfX - Math.abs(_boxLocal.x);
-  const dy = halfY - Math.abs(_boxLocal.y);
-  const dz = halfZ - Math.abs(_boxLocal.z);
-  let axis: 'x' | 'y' | 'z' = 'x';
-  let depth = dx;
-  if (dy < depth) {
-    axis = 'y';
-    depth = dy;
+  // The position-only kernel expands each face by the particle radius and
+  // requires a unique nearest face. Friction uses rounded corners and breaks
+  // equal face distances in Z, Y, X order.
+  const expansion = frictionEnabled ? 0 : pr;
+  const dx = halfX + expansion - Math.abs(_boxLocal.x);
+  const dy = halfY + expansion - Math.abs(_boxLocal.y);
+  const dz = halfZ + expansion - Math.abs(_boxLocal.z);
+  const axis = dx < dy && dx < dz ? 'x' : dy < dz ? 'y' : 'z';
+  if (!frictionEnabled) {
+    if (dx < 0 || dy < 0 || dz < 0) return 0;
+    if (!(dx < dy && dx < dz) && !(dy < dx && dy < dz) && !(dz < dx && dz < dy)) return 0;
   }
-  if (dz < depth) {
-    axis = 'z';
-    depth = dz;
-  }
-
-  if (depth + pr <= 0) return 0;
+  const depth = (axis === 'x' ? dx : axis === 'y' ? dy : dz) + (frictionEnabled ? pr : 0);
+  if (depth <= 0) return 0;
   _boxNormalLocal.set(0, 0, 0);
   _boxNormalLocal[axis] = _boxLocal[axis] >= 0 ? 1 : -1;
   outN.copy(_boxNormalLocal).applyQuaternion(box.rotation);
-  return depth + pr;
+  return depth;
 }
 
 const _boxPush = new THREE.Vector3();
@@ -132,17 +185,12 @@ export const defaultClothTuning = {
   showNodes: false,
 };
 
-const DEFAULT_CONSTRAINT_ITERATIONS = 8;
-const MAX_CLOTH_FRAME_DT = 1 / 30;
+export const CLOTH_TIMESTEP = 1 / 120;
+const MAX_CLOTH_STEPS_PER_FRAME = 12;
+const CLOTH_RESUME_GAP = 0.25;
 const MIN_TIMESTEP_HISTORY_RATIO = 0.25;
-// Every shipped FeModel authors flPointDamping == 0, so an undamped Verlet pass
-// conserves energy and rings forever -- the cloth "never settles". Source 2's real
-// velocity sinks (rod-velocity smoothing, air drag) are not ported here, so we floor
-// the per-node damping with a small global value. This stays clear of the gravity==0
-// invariant: damping only scales carried velocity (pos - prev), never gravity, so a
-// node authored at rest with zero gravity still cannot move.
+// Legacy exports without integrator selectors keep the preview damping fallback.
 const MIN_VELOCITY_DAMPING = 0.02;
-export const DEFAULT_CLOTH_SUBSTEPS = 2;
 
 export const clothTuning = { ...defaultClothTuning };
 
@@ -212,7 +260,7 @@ export const clothKnobs: Array<{
   { k: 'collisionScale', min: 0, max: 1.5, step: 0.05 },
 ];
 
-// Authored per-node gravity (cm/s^2, Z-up) times the model's global gravity scale,
+// Authored per-node gravity (Source units/s^2, Z-up) times the model's global gravity scale,
 // matching CSoftbody::Predict: displacement = flGravity * m_flDefaultGravityScale * dt^2.
 // flGravity == 0 is Valve's intent for position-driven / reconstructed bones (Dynamo's
 // bag, Celeste's hair tresses, Yamato's tassels, Engineer's pouches, ...): they are
@@ -226,13 +274,8 @@ export function effectiveNodeGravity(nodeGravity: number, defaultGravityScale: n
   return g * scale;
 }
 
-// Per-step animation-attraction coefficients, ported verbatim from Source 2's
-// CSoftbody::AddAnimationAttraction (run once per frame over every dynamic node):
-//   posBlend   = min(1, flAnimationVertexAttraction * dt * g_flClothAttrPos)  // inertia-less
-//   velImpulse =        flAnimationForceAttraction  * dt * g_flClothAttrVel   // toward goal
-// with Valve's global convars g_flClothAttrPos = 1, g_flClothAttrVel = 2. Both terms are
-// linear in (animatedTarget - pos). This is the ONLY damping these models carry (every
-// flPointDamping / air-drag field is authored 0), so it must run unconditionally.
+// Existing preview approximation. S2V distinguishes raw and goal-damped compiled
+// integrators; its authoring conversions do not establish their runtime updates.
 export function animationAttraction(
   animVertex: number,
   animForce: number,
@@ -247,22 +290,16 @@ export function solverIterationPhases(
   model: Pick<ClothModel, 'extraIterations' | 'extraGoalIterations'>,
   iterationOverride = 0,
 ): { goalIterations: number; constraintIterations: number } {
+  const extra = Number.isFinite(model.extraIterations) ? model.extraIterations : 0;
+  const goalExtra = Number.isFinite(model.extraGoalIterations) ? model.extraGoalIterations : 0;
+  const override = Number.isFinite(iterationOverride) && iterationOverride > 0 ? iterationOverride : 0;
+  const constraintIterations = THREE.MathUtils.clamp(
+    Math.round(override || (extra + 1)), 1, 256,
+  );
   return {
-    goalIterations: Math.max(0, Math.round(model.extraGoalIterations || 0)),
-    constraintIterations: Math.max(
-      1,
-      Math.round(iterationOverride || model.extraIterations || DEFAULT_CONSTRAINT_ITERATIONS),
-    ),
+    goalIterations: THREE.MathUtils.clamp(Math.round(goalExtra + 1), 1, constraintIterations),
+    constraintIterations,
   };
-}
-
-export function fixedClothSubsteps(
-  delta: number,
-  substeps = DEFAULT_CLOTH_SUBSTEPS,
-): { count: number; dt: number } {
-  const count = Math.max(1, Math.round(Number.isFinite(substeps) ? substeps : DEFAULT_CLOTH_SUBSTEPS));
-  const frameDt = Math.max(0, Math.min(Number.isFinite(delta) ? delta : 0, MAX_CLOTH_FRAME_DT));
-  return { count, dt: frameDt / count };
 }
 
 export function verletVelocityScale(dt: number, lastDt: number | null | undefined, damping = 0): number {
@@ -282,18 +319,7 @@ export function isPositionDrivenNode(
   index: number,
   model: Pick<ClothModel, 'firstPositionDrivenNode' | 'fitMatrices'>,
 ): boolean {
-  if (model.fitMatrices.length > 0) return false;
   return Number.isFinite(model.firstPositionDrivenNode) && index >= model.firstPositionDrivenNode;
-}
-
-export function reverseOffsetDrivenNodeSet(
-  model: Pick<ClothModel, 'reverseOffsets'>,
-): Set<number> {
-  const nodes = new Set<number>();
-  for (const offset of model.reverseOffsets) {
-    if (Number.isInteger(offset.boneCtrl) && offset.boneCtrl >= 0) nodes.add(offset.boneCtrl);
-  }
-  return nodes;
 }
 
 export function fitMatrixDrivenNodeSet(
@@ -315,29 +341,6 @@ export function fitMatrixTargetNode(
   const hasCtrl = Number.isInteger(fit.ctrl) && fit.ctrl >= 0 && fit.ctrl < nodeCount;
   if (hasCtrl && fit.ctrl !== fit.node) return fit.ctrl;
   return hasNode ? fit.node : -1;
-}
-
-export function freeSimNodeSet(
-  model: Pick<ClothModel, 'nodes' | 'freeNodes'>,
-): Set<number> {
-  const authored = new Set<number>();
-  for (const index of model.freeNodes) {
-    if (Number.isInteger(index) && index >= 0 && index < model.nodes.length) authored.add(index);
-  }
-  if (authored.size > 0) return authored;
-
-  const fallback = new Set<number>();
-  model.nodes.forEach((node, index) => {
-    if (node.invMass > 0) fallback.add(index);
-  });
-  return fallback;
-}
-
-export function isFreeSimNode(
-  index: number,
-  model: Pick<ClothModel, 'nodes' | 'freeNodes'>,
-): boolean {
-  return freeSimNodeSet(model).has(index);
 }
 
 export function jiggleDrivenNodeSet(
@@ -434,18 +437,16 @@ export function rigidAnchorSeed(
 export function isKinematicNode(node: {
   pinned?: boolean;
   positionDriven?: boolean;
-  reverseOffsetDriven?: boolean;
   lockToGoal?: boolean;
   jiggleDriven?: boolean;
 }): boolean {
-  return Boolean(node.pinned || node.positionDriven || node.reverseOffsetDriven || node.lockToGoal || node.jiggleDriven);
+  return Boolean(node.pinned || node.positionDriven || node.lockToGoal || node.jiggleDriven);
 }
 
 export function restorePinnedSolverNodes(
   nodes: Iterable<{
     pinned: boolean;
     positionDriven?: boolean;
-    reverseOffsetDriven?: boolean;
     lockToGoal?: boolean;
     jiggleDriven?: boolean;
     pos: THREE.Vector3;
@@ -469,57 +470,66 @@ type AnimStrayRadiusNode = {
   target: THREE.Vector3;
   pinned?: boolean;
   positionDriven?: boolean;
-  reverseOffsetDriven?: boolean;
   lockToGoal?: boolean;
   jiggleDriven?: boolean;
+  kinematic?: boolean;
 };
 
 const _strayDelta = new THREE.Vector3();
-const _strayCorrection = new THREE.Vector3();
-// m_AnimStrayRadii is Source 2's anti-stray / anti-explosion clamp: it bounds how far
-// a node may drift from its animated goal (the bind/clip target), keeping cloth on the
-// body. The shipped data is self-referential -- nNode == [n, n] -- i.e. "clamp node n
-// to its OWN target", which is why the earlier node-vs-node reading was a no-op: it
-// measured a node against itself (distance 0, never fired). We clamp pos to within
-// maxDist of node.target and move prev by the same delta, so the clamp pulls a strayed
-// node back without injecting velocity. This is the high-stray-count mechanism on hair
-// heroes (Celeste authors 384) and the data-driven leash against "flies off into the
-// distance". Reverse-engineered from the shipped FeModel data (no reference impl);
-// honored only as a one-sided pull-in, never a push-out, so it cannot add energy.
+const _strayOutput = Array.from({ length: 4 }, () => new THREE.Vector3());
+const _strayWrite = [false, false, false, false];
+
+export function projectAnimStrayRadiusBatch(
+  nodes: readonly (AnimStrayRadiusNode | undefined)[],
+  radii: readonly ClothStrayRadius[],
+  scale = 1,
+): boolean {
+  let changed = false;
+  for (let lane = 0; lane < radii.length; lane++) {
+    const stray = radii[lane];
+    const goal = nodes[stray.node[0]];
+    const node = nodes[stray.node[1]];
+    _strayWrite[lane] = false;
+    if (!goal || !node || isKinematicNode(node) || node.kinematic) continue;
+    const { maxDist, relax } = stray;
+    if (!Number.isFinite(maxDist) || maxDist < 0 || !Number.isFinite(relax) || relax <= 0) continue;
+    _strayDelta.subVectors(node.pos, goal.target);
+    const distance = Math.sqrt(Math.max(_strayDelta.lengthSq(), 2 ** -30));
+    const correction = (Math.min(distance, maxDist * scale) / distance - 1) * relax;
+    _strayOutput[lane].copy(node.pos).addScaledVector(_strayDelta, correction);
+    _strayWrite[lane] = true;
+    changed ||= correction !== 0 && _strayDelta.lengthSq() !== 0;
+  }
+  // Every lane reads the original positions, including padding and shared
+  // particles. The compiled routine changes positions only, never history.
+  for (let lane = 0; lane < radii.length; lane++) {
+    if (_strayWrite[lane]) nodes[radii[lane].node[1]]!.pos.copy(_strayOutput[lane]);
+  }
+  return changed;
+}
+
 export function projectAnimStrayRadius(
   nodes: readonly (AnimStrayRadiusNode | undefined)[],
   stray: ClothStrayRadius,
 ): boolean {
-  const node = nodes[stray.node[0]];
-  if (!node || isKinematicNode(node)) return false;
-
-  const maxDist = stray.maxDist;
-  const relax = stray.relax;
-  if (!Number.isFinite(maxDist) || maxDist < 0 || !Number.isFinite(relax) || relax <= 0) return false;
-
-  _strayDelta.copy(node.pos).sub(node.target);
-  const distance = _strayDelta.length();
-  if (distance <= maxDist || distance < 1e-6) return false;
-
-  _strayCorrection.copy(_strayDelta).multiplyScalar(-((distance - maxDist) / distance) * relax);
-  node.pos.add(_strayCorrection);
-  node.prev?.add(_strayCorrection);
-  return true;
+  return projectAnimStrayRadiusBatch(nodes, [stray]);
 }
 
 interface NodeRuntime {
   index: number;
   name: string;
   bone: THREE.Bone | null;
-  bindPosition: THREE.Vector3 | null;
-  bindQuaternion: THREE.Quaternion | null;
-  bindScale: THREE.Vector3 | null;
+  animationPosition: THREE.Vector3 | null;
+  animationQuaternion: THREE.Quaternion | null;
+  animationScale: THREE.Vector3 | null;
   invMass: number;
   pinned: boolean;
   positionDriven: boolean;
-  reverseOffsetDriven: boolean;
   lockToGoal: boolean;
   jiggleDriven: boolean;
+  kinematic: boolean;
+  generatedTarget: boolean;
+  integratorMode: ReturnType<typeof clothIntegratorMode>;
   gravity: number;
   damping: number;
   animForce: number;
@@ -531,35 +541,46 @@ interface NodeRuntime {
   initRot: Vec4;
   pos: THREE.Vector3;
   prev: THREE.Vector3;
+  lastSolvedPos: THREE.Vector3;
   target: THREE.Vector3;
   solvedRot: THREE.Quaternion;
   targetRot: THREE.Quaternion;
 }
 
-interface RigidRuntime {
-  node: number;
+interface ColliderFilterRuntime {
   mask: number;
+  priority: number;
+  vertexNodes: ReadonlySet<number> | null;
+}
+
+interface RigidRuntime extends ColliderFilterRuntime {
+  node: number;
   sphere0: Vec4;
   sphere1: Vec4;
   dbgName: string;
 }
 
-interface BoxRuntime {
+interface BoxRuntime extends ColliderFilterRuntime {
   node: number;
-  mask: number;
   pos: Vec3;
   rot: Vec4;
-  size: Vec3;
+  halfSize: Vec3;
   dbgName: string;
 }
 
 interface CollisionPlaneRuntime {
+  priority?: number;
   ctrlParent: number;
   childNode: number;
   normal: Vec3;
   offset: number;
   strength: number;
 }
+
+type ColliderRuntime =
+  | { kind: 'capsule'; shape: RigidRuntime }
+  | { kind: 'box'; shape: BoxRuntime }
+  | { kind: 'plane'; shape: CollisionPlaneRuntime };
 
 interface OffsetRuntime {
   parent: number;
@@ -597,9 +618,13 @@ interface ClothRuntime {
   model: ClothModel;
   nodes: NodeRuntime[];
   rods: ClothModel['rods'];
+  animatedRodBatches: ClothModel['rodBatches'];
+  twistNodes: Set<number>;
+  rotationNodes: Set<number>;
   capsules: RigidRuntime[];
   boxes: BoxRuntime[];
-  collisionPlanes: CollisionPlaneRuntime[];
+  colliders: ColliderRuntime[];
+  colliderTransforms: Map<number, THREE.Matrix4>;
   ctrlOffsets: OffsetRuntime[];
   reverseOffsets: ReverseOffsetRuntime[];
   fitReconstructions: FitMatrixReconstruction[];
@@ -613,10 +638,29 @@ interface ClothRuntime {
   lastSubstepDt: number | null;
   warmStarted: boolean;
   clothAnchors: Map<number, number>;
+  writtenBones: Set<THREE.Bone>;
+  accumulator: number;
+  simulationSteps: number;
+  recoveryCount: number;
+  teleportDistance: number;
 }
 
-export interface ClothHarnessOptions {
-  substeps?: number;
+export interface ClothSimulationCoverage {
+  rods: number;
+  animatedRods: number;
+  twists: number;
+  kelagerBends: number;
+  hingeLimits: number;
+  triangles: number;
+  quads: number;
+  ropeChains: number;
+  pending: {
+    ropeChains: number;
+    jiggleBones: number;
+  };
+  integrators: Record<ReturnType<typeof clothIntegratorMode>, number>;
+  decodeIssues: number;
+  featureGaps: ClothModel['featureGaps'];
 }
 
 export interface ClothHarnessMetrics {
@@ -626,13 +670,58 @@ export interface ClothHarnessMetrics {
   maxDistanceFromTarget: number;
   maxDistanceFromInit: number;
   maxFrameMotion: number;
+  maxFrameMotionNode: string | null;
+  maxAnchorError: number;
+  maxBendExcess: number;
   nodeCount: number;
   kinematicCount: number;
+  simulationSteps: number;
+  recoveryCount: number;
+  coverage: ClothSimulationCoverage;
 }
 
 export interface ClothSimHarness {
-  step(delta: number): ClothHarnessMetrics;
+  step(delta: number, animate?: (delta: number) => void): ClothHarnessMetrics;
   metrics(): ClothHarnessMetrics;
+  snapshot(): ClothDebugSnapshot;
+  dispose(): void;
+}
+
+/** Detached solver data in Source units, with its current transform to world space. */
+export interface ClothDebugSnapshot {
+  modelToWorld: number[];
+  nodes: { name: string; position: Vec3; target: Vec3; kinematic: boolean; collisionMask: number }[];
+  capsules: { a: Vec3; b: Vec3; ra: number; rb: number; mask: number; node: number }[];
+  boxes: { center: Vec3; rotation: Vec4; halfSize: Vec3; mask: number; node: number }[];
+  rods: { a: number; b: number; min: number; max: number; error: number }[];
+  hinges: { node: number[]; excess: number | null }[];
+  triangles: { node: number[]; correction: number }[];
+  quads: { node: number[]; correction: number }[];
+  contacts: { node: number; shape: string; depth: number }[];
+}
+
+export function clothSimulationCoverage(model: ClothModel): ClothSimulationCoverage {
+  const integrators: ClothSimulationCoverage['integrators'] = { 'goal-damped': 0, raw: 0, unknown: 0 };
+  model.nodes.forEach((node, index) => {
+    if (!node.pinned) integrators[clothIntegratorMode(model, index)]++;
+  });
+  return {
+    rods: model.rods.length,
+    animatedRods: model.animatedRods.length,
+    twists: model.twists.length,
+    kelagerBends: model.kelagerBends.length,
+    hingeLimits: model.hingeLimits.length,
+    triangles: model.triangles.length,
+    quads: model.quads.length,
+    ropeChains: model.ropeChains.length,
+    pending: {
+      ropeChains: Math.max(0, model.ropeCount - model.ropeChains.length),
+      jiggleBones: model.jiggleBones.length,
+    },
+    integrators,
+    decodeIssues: model.decodeIssues.length,
+    featureGaps: model.featureGaps.map((gap) => ({ ...gap })),
+  };
 }
 
 function vec3(v: Vec3): THREE.Vector3 {
@@ -641,6 +730,15 @@ function vec3(v: Vec3): THREE.Vector3 {
 
 function quat(v: Vec4): THREE.Quaternion {
   return new THREE.Quaternion(v[0], v[1], v[2], v[3]).normalize();
+}
+
+function finiteVector(vector: THREE.Vector3): boolean {
+  return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z);
+}
+
+function finiteRotation(rotation: THREE.Quaternion): boolean {
+  return Number.isFinite(rotation.x) && Number.isFinite(rotation.y)
+    && Number.isFinite(rotation.z) && Number.isFinite(rotation.w) && rotation.lengthSq() > 1e-12;
 }
 
 function v3Array(v: THREE.Vector3): Vec3 {
@@ -673,8 +771,9 @@ function writeBoneQuaternion(root: THREE.Object3D, rt: ClothRuntime, bone: THREE
   setBoneWorldQuaternion(bone, modelToWorldQuat(root, rt, q));
 }
 
-function canCollide(nodeMask: number, rigidMask: number): boolean {
-  return rigidMask === 0 || (nodeMask & rigidMask) !== 0;
+function canCollide(node: Pick<NodeRuntime, 'index' | 'collisionMask'>, rigid: ColliderFilterRuntime): boolean {
+  if (rigid.vertexNodes !== null) return rigid.vertexNodes.has(node.index);
+  return (node.collisionMask & rigid.mask) !== 0;
 }
 
 type CollisionPlaneNode = {
@@ -683,7 +782,6 @@ type CollisionPlaneNode = {
   solvedRot: THREE.Quaternion;
   pinned?: boolean;
   positionDriven?: boolean;
-  reverseOffsetDriven?: boolean;
   lockToGoal?: boolean;
 };
 
@@ -693,7 +791,6 @@ const _planeDelta = new THREE.Vector3();
 export function projectCollisionPlane(
   nodes: readonly (CollisionPlaneNode | undefined)[],
   plane: Pick<ClothCollisionPlane, 'ctrlParent' | 'childNode' | 'normal' | 'offset' | 'strength'>,
-  particleRadius: number,
 ): boolean {
   const parent = nodes[plane.ctrlParent];
   const child = nodes[plane.childNode];
@@ -708,14 +805,12 @@ export function projectCollisionPlane(
   const strength = THREE.MathUtils.clamp(Number.isFinite(plane.strength) ? plane.strength : 0, 0, 1);
   if (strength <= 0) return false;
 
-  const radius = Number.isFinite(particleRadius) ? Math.max(0, particleRadius) : 0;
   _planePoint.copy(parent.pos).addScaledVector(_planeNormal, plane.offset);
   const signed = _planeDelta.copy(child.pos).sub(_planePoint).dot(_planeNormal);
-  if (signed >= radius) return false;
+  if (signed >= 0) return false;
 
-  _planeDelta.copy(_planeNormal).multiplyScalar((radius - signed) * strength);
+  _planeDelta.copy(_planeNormal).multiplyScalar(-signed * strength);
   child.pos.add(_planeDelta);
-  child.prev.add(_planeDelta);
   return true;
 }
 
@@ -723,32 +818,13 @@ export function reconstructReverseOffsetPosition(
   offset: { boneCtrl: number; targetNode: number; offset: Vec3; sign: 1 | -1 },
   nodes: Array<{
     pos: THREE.Vector3;
-    prev: THREE.Vector3;
     solvedRot: THREE.Quaternion;
   } | undefined>,
 ): THREE.Vector3 | null {
   const boneNode = nodes[offset.boneCtrl];
   const targetNode = nodes[offset.targetNode];
   if (!boneNode || !targetNode) return null;
-  const pos = targetNode.pos.clone().add(vec3(offset.offset).multiplyScalar(offset.sign).applyQuaternion(boneNode.solvedRot));
-  boneNode.pos.copy(pos);
-  boneNode.prev.copy(pos);
-  return pos;
-}
-
-export function applyReverseOffsetReconstructions(
-  offsets: Iterable<{ boneCtrl: number; targetNode: number; offset: Vec3; sign: 1 | -1 }>,
-  nodes: Array<{
-    pos: THREE.Vector3;
-    prev: THREE.Vector3;
-    solvedRot: THREE.Quaternion;
-  } | undefined>,
-): number {
-  let reconstructed = 0;
-  for (const offset of offsets) {
-    if (reconstructReverseOffsetPosition(offset, nodes)) reconstructed += 1;
-  }
-  return reconstructed;
+  return targetNode.pos.clone().add(vec3(offset.offset).multiplyScalar(offset.sign).applyQuaternion(boneNode.solvedRot));
 }
 
 export function buildFitMatrixReconstructions(
@@ -766,7 +842,7 @@ export function buildFitMatrixReconstructions(
       weights.push({ node: weight.node, weight: weight.weight });
     }
     const targetNode = fitMatrixTargetNode(fit, model.nodes.length);
-    if (targetNode >= 0 && weights.length >= 3) {
+    if (targetNode >= 0 && weights.length > 0) {
       reconstructions.push({
         node: fit.node,
         targetNode,
@@ -781,17 +857,14 @@ export function buildFitMatrixReconstructions(
   return reconstructions;
 }
 
-export function reconstructFitMatrixPosition(
+export function reconstructFitMatrixTransform(
   fit: FitMatrixReconstruction,
   nodes: Array<{
     initPos: Vec3;
     pos: THREE.Vector3;
-    prev: THREE.Vector3;
-    solvedRot: THREE.Quaternion;
   } | undefined>,
-): THREE.Vector3 | null {
-  const driven = nodes[fit.targetNode];
-  if (!driven) return null;
+): { position: THREE.Vector3; rotation: THREE.Quaternion } | null {
+  if (!nodes[fit.targetNode]) return null;
 
   const source: Vec3[] = [];
   const target: Vec3[] = [];
@@ -803,47 +876,14 @@ export function reconstructFitMatrixPosition(
     target.push(v3Array(node.pos));
     weights.push(entry.weight);
   }
-  if (source.length < 3) return null;
-
-  const rigid = recoverWeightedRigidFit(source, target, weights);
-  const reconstructed = rigid.targetCenter.clone().add(vec3(fit.bone).sub(vec3(fit.center)).applyQuaternion(rigid.rotation));
-  const reconstructedRot = rigid.rotation.clone().multiply(quat(fit.boneRot)).normalize();
-  driven.pos.copy(reconstructed);
-  driven.prev.copy(reconstructed);
-  driven.solvedRot.copy(reconstructedRot);
-  return reconstructed;
-}
-
-export function applyFitMatrixReconstructions(
-  fits: Iterable<FitMatrixReconstruction>,
-  nodes: Array<{
-    initPos: Vec3;
-    pos: THREE.Vector3;
-    prev: THREE.Vector3;
-    solvedRot: THREE.Quaternion;
-  } | undefined>,
-): number {
-  let reconstructed = 0;
-  for (const fit of fits) {
-    if (reconstructFitMatrixPosition(fit, nodes)) reconstructed += 1;
-  }
-  return reconstructed;
-}
-
-export function applyDrivenReconstructions(
-  reverseOffsets: Iterable<{ boneCtrl: number; targetNode: number; offset: Vec3; sign: 1 | -1 }>,
-  fits: Iterable<FitMatrixReconstruction>,
-  nodes: Array<{
-    initPos: Vec3;
-    pos: THREE.Vector3;
-    prev: THREE.Vector3;
-    solvedRot: THREE.Quaternion;
-  } | undefined>,
-): { reverseBefore: number; fit: number; reverseAfter: number } {
-  const reverseBefore = applyReverseOffsetReconstructions(reverseOffsets, nodes);
-  const fit = applyFitMatrixReconstructions(fits, nodes);
-  const reverseAfter = applyReverseOffsetReconstructions(reverseOffsets, nodes);
-  return { reverseBefore, fit, reverseAfter };
+  const rigid = recoverClothFit(source, target, weights, fit.center);
+  if (!rigid) return null;
+  // The compiled bone transform is already relative to the fit center. It is
+  // an output transform, separate from the particle and its integration history.
+  return {
+    position: rigid.position.add(vec3(fit.bone).applyQuaternion(rigid.rotation)),
+    rotation: rigid.rotation.clone().multiply(quat(fit.boneRot)).normalize(),
+  };
 }
 
 function rigidToCapsule(rt: ClothRuntime, rigid: RigidRuntime, out: Capsule): Capsule {
@@ -863,15 +903,23 @@ function rigidToBox(rt: ClothRuntime, rigid: BoxRuntime, out: Box): Box {
   out.center.copy(anchor.pos).add(center);
   out.rotation.copy(anchor.solvedRot).multiply(quat(rigid.rot)).normalize();
   out.halfSize
-    .set(Math.abs(rigid.size[0]), Math.abs(rigid.size[1]), Math.abs(rigid.size[2]))
-    .multiplyScalar(0.5 * clothTuning.collisionScale);
+    .set(Math.abs(rigid.halfSize[0]), Math.abs(rigid.halfSize[1]), Math.abs(rigid.halfSize[2]))
+    .multiplyScalar(clothTuning.collisionScale);
   return out;
+}
+
+function colliderFilter(collider: ClothColliderFilter): ColliderFilterRuntime {
+  return {
+    mask: collider.mask,
+    priority: collider.priority ?? 0,
+    vertexNodes: collider.vertexNodes === undefined ? null : new Set(collider.vertexNodes),
+  };
 }
 
 function fromCapsule(c: ClothCapsule): RigidRuntime {
   return {
+    ...colliderFilter(c),
     node: c.node,
-    mask: c.mask,
     sphere0: c.sphere0,
     sphere1: c.sphere1,
     dbgName: `node:${c.node}`,
@@ -880,8 +928,8 @@ function fromCapsule(c: ClothCapsule): RigidRuntime {
 
 function fromSphere(s: ClothSphere): RigidRuntime {
   return {
+    ...colliderFilter(s),
     node: s.node,
-    mask: s.mask,
     sphere0: s.sphere,
     sphere1: s.sphere,
     dbgName: `node:${s.node}`,
@@ -890,17 +938,18 @@ function fromSphere(s: ClothSphere): RigidRuntime {
 
 function fromBox(b: ClothBox): BoxRuntime {
   return {
+    ...colliderFilter(b),
     node: b.node,
-    mask: b.mask,
     pos: b.pos,
     rot: b.rot,
-    size: b.size,
+    halfSize: b.halfSize,
     dbgName: `node:${b.node}`,
   };
 }
 
 function fromCollisionPlane(p: ClothCollisionPlane): CollisionPlaneRuntime {
   return {
+    priority: p.priority,
     ctrlParent: p.ctrlParent,
     childNode: p.childNode,
     normal: p.normal,
@@ -941,11 +990,12 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
   if (source.length < 3) return null;
 
   const fit = recoverSimilarity(source, target);
+  if (![fit.scale, fit.rmse, ...fit.matrix.elements, ...fit.inverse.elements].every(Number.isFinite)
+    || Math.abs(fit.scale) < 1e-12) return null;
   const lockToGoalNodes = new Set(model.lockToGoal);
-  const freeSimNodes = freeSimNodeSet(model);
-  const reverseOffsetDrivenNodes = reverseOffsetDrivenNodeSet(model);
   const fitMatrixDrivenNodes = fitMatrixDrivenNodeSet(model);
   const jiggleDrivenNodes = jiggleDrivenNodeSet(model);
+  const generatedTargets = new Set([...model.ctrlOffsets, ...model.softOffsets].map((offset) => offset.child));
   const nodes: NodeRuntime[] = model.nodes.map((node, index) => {
     const bone = bones.get(node.name) ?? null;
     const initPos = vec3(node.initPos);
@@ -954,18 +1004,19 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
       index,
       name: node.name,
       bone,
-      bindPosition: bone ? bone.position.clone() : null,
-      bindQuaternion: bone ? bone.quaternion.clone() : null,
-      bindScale: bone ? bone.scale.clone() : null,
+      animationPosition: bone ? bone.position.clone() : null,
+      animationQuaternion: bone ? bone.quaternion.clone() : null,
+      animationScale: bone ? bone.scale.clone() : null,
       invMass: node.invMass,
-      // m_FreeNodes is Source 2's authored sim-positioned set. Positive invMass
-      // alone is too broad on several preview exports, so use invMass only when
-      // the payload does not provide m_FreeNodes.
-      pinned: node.pinned || !freeSimNodes.has(index),
+      // FreeNodes selects an orientation path; nodes with a reconstructed basis
+      // still simulate their positions. Explicit driven-node flags are separate.
+      pinned: node.pinned,
       positionDriven: isPositionDrivenNode(index, model) || fitMatrixDrivenNodes.has(index),
-      reverseOffsetDriven: reverseOffsetDrivenNodes.has(index),
       lockToGoal: lockToGoalNodes.has(index),
       jiggleDriven: jiggleDrivenNodes.has(index),
+      kinematic: false,
+      generatedTarget: generatedTargets.has(index),
+      integratorMode: clothIntegratorMode(model, index),
       gravity: effectiveNodeGravity(node.gravity, model.defaultGravityScale),
       damping: node.damping,
       animForce: node.animForce,
@@ -977,11 +1028,14 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
       initRot: node.initRot,
       pos: initPos.clone(),
       prev: initPos.clone(),
+      lastSolvedPos: initPos.clone(),
       target: initPos.clone(),
       solvedRot: initRot.clone(),
       targetRot: initRot.clone(),
     };
   });
+
+  for (const node of nodes) node.kinematic = isKinematicNode(node);
 
   const ctrlOffsets: OffsetRuntime[] = model.ctrlOffsets.map((offset) => ({
     ...offset,
@@ -1015,20 +1069,37 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
     };
   });
 
+  const capsules = [...model.capsules.map(fromCapsule).reverse(), ...model.spheres.map(fromSphere).reverse()].filter(
+    (rigid) => Number.isInteger(rigid.node) && rigid.node >= 0 && rigid.node < nodes.length,
+  );
+  const boxes = model.boxes.map(fromBox).reverse().filter((rigid) => Number.isInteger(rigid.node) && rigid.node >= 0 && rigid.node < nodes.length);
+  const collisionPlanes = model.collisionPlanes.map(fromCollisionPlane).filter((plane) => (
+    Number.isInteger(plane.ctrlParent) && Number.isInteger(plane.childNode)
+    && plane.ctrlParent >= 0 && plane.ctrlParent < nodes.length && plane.childNode >= 0 && plane.childNode < nodes.length
+  ));
+  const colliders: ColliderRuntime[] = [
+    ...capsules.map((shape) => ({ kind: 'capsule' as const, shape })),
+    ...boxes.map((shape) => ({ kind: 'box' as const, shape })),
+    ...collisionPlanes.map((shape) => ({ kind: 'plane' as const, shape })),
+  ];
+  // Stable sorting preserves each type's compiled traversal within a priority.
+  colliders.sort((a, b) => (b.shape.priority ?? 0) - (a.shape.priority ?? 0));
+
   return {
     model,
     nodes,
     rods: model.rods,
-    capsules: [...model.capsules.map(fromCapsule), ...model.spheres.map(fromSphere)].filter(
-      (rigid) => rigid.node >= 0 && rigid.node < nodes.length,
-    ),
-    boxes: model.boxes.map(fromBox).filter((rigid) => rigid.node >= 0 && rigid.node < nodes.length),
-    collisionPlanes: model.collisionPlanes.map(fromCollisionPlane).filter((plane) => (
-      plane.ctrlParent >= 0
-      && plane.ctrlParent < nodes.length
-      && plane.childNode >= 0
-      && plane.childNode < nodes.length
-    )),
+    animatedRodBatches: model.animatedRodBatches.map((batch) => batch.map((rod) => ({ ...rod, min: 0, max: 0 }))),
+    twistNodes: new Set(model.twists.map((link) => link.nodeOrient).filter((index) => (
+      index >= model.rotLockStaticNodeCount && index < nodes.length && !nodes[index].jiggleDriven
+    ))),
+    rotationNodes: new Set([...model.twists.map((link) => link.nodeOrient), ...model.ropeChains.flat()].filter((index) => (
+      index >= model.rotLockStaticNodeCount && index < nodes.length && !nodes[index].jiggleDriven
+    ))),
+    capsules,
+    boxes,
+    colliders,
+    colliderTransforms: new Map(),
     ctrlOffsets,
     reverseOffsets,
     fitReconstructions: buildFitMatrixReconstructions(model),
@@ -1042,52 +1113,79 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
     lastSubstepDt: null,
     warmStarted: false,
     clothAnchors: clothAnchorMap(model),
+    writtenBones: new Set(),
+    accumulator: 0,
+    simulationSteps: 0,
+    recoveryCount: 0,
+    // Source units. Ordinary animation remains untouched; discontinuous body
+    // motion spanning multiple rest-pose bounds starts a new drape.
+    teleportDistance: Math.max(128, new THREE.Box3().setFromPoints(nodes.map((node) => vec3(node.initPos))).getSize(new THREE.Vector3()).length() * 4),
   };
 }
 
-function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
-  root.updateWorldMatrix(true, true);
+function restoreAnimationPose(rt: ClothRuntime): void {
   for (const node of rt.nodes) {
-    if (node.bone && node.bindPosition && node.bindQuaternion && node.bindScale) {
-      restoreBoneBindTransform(node.bone, node.bindPosition, node.bindQuaternion, node.bindScale);
+    if (node.bone && rt.writtenBones.has(node.bone)
+      && node.animationPosition && node.animationQuaternion && node.animationScale) {
+      restoreBoneBindTransform(node.bone, node.animationPosition, node.animationQuaternion, node.animationScale);
     }
+  }
+  rt.writtenBones.clear();
+}
+
+function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
+  // Capture after the mixer update. Unkeyed channels must start the next update
+  // from this clean pose, while body anchors remain owned by animation.
+  for (const node of rt.nodes) {
+    if (!node.bone) continue;
+    // A malformed animation sample must not become next frame's restore pose.
+    if (!finiteVector(node.bone.position) || !finiteRotation(node.bone.quaternion) || !finiteVector(node.bone.scale)) {
+      if (node.animationPosition && node.animationQuaternion && node.animationScale) {
+        restoreBoneBindTransform(node.bone, node.animationPosition, node.animationQuaternion, node.animationScale);
+      }
+    }
+    node.animationPosition?.copy(node.bone.position);
+    node.animationQuaternion?.copy(node.bone.quaternion);
+    node.animationScale?.copy(node.bone.scale);
   }
   root.updateWorldMatrix(true, true);
 
   for (const node of rt.nodes) {
-    node.target.copy(vec3(node.initPos));
-    node.targetRot.copy(quat(node.initRot));
-    if (!node.bone) continue;
-    node.target.copy(worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3())));
-    node.targetRot.copy(worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion())));
+    if (!node.bone) {
+      node.target.copy(vec3(node.initPos));
+      node.targetRot.copy(quat(node.initRot));
+      continue;
+    }
+    const target = worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3()));
+    const rotation = worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion()));
+    if (!finiteVector(target) || !finiteRotation(rotation)) continue;
+    if (rt.warmStarted && node.kinematic && target.distanceTo(node.target) > rt.teleportDistance) {
+      resetRuntimeHistory(rt);
+    }
+    node.target.copy(target);
+    node.targetRot.copy(rotation);
   }
 
   for (const offset of rt.ctrlOffsets) {
     const parent = rt.nodes[offset.parent];
     const child = rt.nodes[offset.child];
-    if (!parent || !child || child.bone) continue;
+    if (!parent || !child) continue;
     child.target.copy(applyOffset(v3Array(parent.target), [parent.targetRot.x, parent.targetRot.y, parent.targetRot.z, parent.targetRot.w], offset.offset, offset.sign));
   }
 
-  const softPos = new Map<number, { pos: THREE.Vector3; weight: number }>();
   for (const offset of rt.softOffsets) {
     const parent = rt.nodes[offset.parent];
     const child = rt.nodes[offset.child];
-    if (!parent || !child || child.bone) continue;
+    if (!parent || !child || !Number.isFinite(offset.alpha)) continue;
     const target = applyOffset(
       v3Array(parent.target),
       [parent.targetRot.x, parent.targetRot.y, parent.targetRot.z, parent.targetRot.w],
       offset.offset,
       offset.sign,
-    ).multiplyScalar(offset.alpha);
-    const acc = softPos.get(offset.child) ?? { pos: new THREE.Vector3(), weight: 0 };
-    acc.pos.add(target);
-    acc.weight += offset.alpha;
-    softPos.set(offset.child, acc);
-  }
-  for (const [index, acc] of softPos) {
-    if (acc.weight <= 0) continue;
-    rt.nodes[index]?.target.lerp(acc.pos.multiplyScalar(1 / acc.weight), Math.min(acc.weight, 1));
+    );
+    // The serialized network is an ordered series of lerps. Alpha retains the
+    // previous result, while this parent's influence receives 1 - alpha.
+    child.target.lerp(target, 1 - THREE.MathUtils.clamp(offset.alpha, 0, 1));
   }
 
   const positions = rt.nodes.map((node) => v3Array(node.target));
@@ -1095,6 +1193,26 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
     const node = rt.nodes[base.node];
     if (node) node.targetRot.copy(nodeBaseQuaternion(positions, base));
   }
+}
+
+function resetRuntimeHistory(rt: ClothRuntime): void {
+  rt.warmStarted = false;
+  rt.lastSubstepDt = null;
+  rt.colliderTransforms.clear();
+  rt.recoveryCount++;
+}
+
+function recoverInvalidSolverState(rt: ClothRuntime): void {
+  const limit = Math.max(1e6, rt.teleportDistance * 1024);
+  if (rt.nodes.every((node) => (
+    finiteVector(node.pos) && finiteVector(node.prev) && finiteRotation(node.solvedRot)
+    // This is an emergency guard, far beyond ordinary cloth motion, rather
+    // than a replacement for authored constraints.
+    && node.pos.distanceToSquared(node.target) < limit * limit
+  ))) return;
+  resetRuntimeHistory(rt);
+  warmStartRuntime(rt, CLOTH_TIMESTEP);
+  for (const node of rt.nodes) node.lastSolvedPos.copy(node.pos);
 }
 
 const _seedTmp = new THREE.Vector3();
@@ -1123,15 +1241,6 @@ function warmStartRuntime(rt: ClothRuntime, substepDt: number): void {
   rt.warmStarted = true;
 }
 
-function applyRuntimeReverseOffsetReconstructions(rt: ClothRuntime): void {
-  applyReverseOffsetReconstructions(rt.reverseOffsets, rt.nodes);
-}
-
-function applyRuntimeSettledReconstructions(rt: ClothRuntime): void {
-  applyFitMatrixReconstructions(rt.fitReconstructions, rt.nodes);
-  applyReverseOffsetReconstructions(rt.reverseOffsets, rt.nodes);
-}
-
 function integrate(rt: ClothRuntime, gravity: THREE.Vector3, dt: number): void {
   const dt2 = dt * dt;
   const lastDt = rt.lastSubstepDt;
@@ -1139,12 +1248,12 @@ function integrate(rt: ClothRuntime, gravity: THREE.Vector3, dt: number): void {
     if (isKinematicNode(node)) {
       node.pos.copy(node.target);
       node.prev.copy(node.target);
-      node.solvedRot.copy(node.targetRot);
+      if (!rt.twistNodes.has(node.index)) node.solvedRot.copy(node.targetRot);
       continue;
     }
-    // Floor the authored damping (0 on every shipped model) so carried velocity
-    // actually decays each step; without this the integrator never settles.
-    const damping = Math.max(node.damping, MIN_VELOCITY_DAMPING);
+    const damping = node.integratorMode === 'unknown'
+      ? Math.max(node.damping, MIN_VELOCITY_DAMPING)
+      : Math.max(0, node.damping * dt);
     const velocity = node.pos.clone().sub(node.prev).multiplyScalar(
       verletVelocityScale(dt, lastDt, damping),
     );
@@ -1159,6 +1268,12 @@ const _goalDelta = new THREE.Vector3();
 function solveGoals(rt: ClothRuntime, dt: number): void {
   for (const node of rt.nodes) {
     if (isKinematicNode(node)) continue;
+    if (node.integratorMode === 'goal-damped') continue;
+    if (node.integratorMode === 'raw') {
+      applyRawAttraction(node.pos, node.prev, node.target,
+        node.animForce * clothTuning.attractionScale, node.animVertex * clothTuning.attractionScale, dt);
+      continue;
+    }
     const { posBlend, velImpulse } = animationAttraction(node.animVertex, node.animForce, dt);
     const pos = posBlend * clothTuning.attractionScale;
     const vel = velImpulse * clothTuning.attractionScale;
@@ -1171,7 +1286,19 @@ function solveGoals(rt: ClothRuntime, dt: number): void {
   }
 }
 
-function solveRods(rt: ClothRuntime): void {
+function solveGoalDampedNodes(rt: ClothRuntime): void {
+  for (const node of rt.nodes) {
+    if (node.kinematic || node.integratorMode !== 'goal-damped') continue;
+    applyGoalDampedAttraction(node.pos, node.prev, node.target,
+      node.animForce * clothTuning.attractionScale, node.animVertex * clothTuning.attractionScale);
+  }
+}
+
+function solveFixedRods(rt: ClothRuntime): void {
+  if (rt.model.rodBatches.length > 0) {
+    for (const batch of rt.model.rodBatches) projectRodBatch(rt.nodes, batch);
+    return;
+  }
   for (const rod of rt.rods) {
     const a = rt.nodes[rod.a];
     const b = rt.nodes[rod.b];
@@ -1187,8 +1314,8 @@ function solveRods(rt: ClothRuntime): void {
     const shares = rodCorrectionShares(rod.weight);
     if (shares.a <= 0 && shares.b <= 0) continue;
     const correction = delta.multiplyScalar(((d - wanted) / d) * rod.relax);
-    if (shares.a > 0) a.pos.addScaledVector(correction, shares.a);
-    if (shares.b > 0) b.pos.addScaledVector(correction, -shares.b);
+    if (shares.a > 0 && !a.kinematic) a.pos.addScaledVector(correction, shares.a);
+    if (shares.b > 0 && !b.kinematic) b.pos.addScaledVector(correction, -shares.b);
   }
 }
 
@@ -1200,92 +1327,166 @@ function solveCollisions(rt: ClothRuntime): void {
     halfSize: new THREE.Vector3(),
   };
   const normal = new THREE.Vector3();
-  for (const node of rt.nodes) {
-    if (isKinematicNode(node)) continue;
-    const particleRadius = node.collideRadius + rt.model.addWorldCollisionRadius;
-    // Position-only depenetration: push the node to the collider surface and leave the
-    // Verlet history (prev) alone, so Verlet derives the corrected velocity implicitly.
-    // The previous code also rewrote prev after the push (an inbound-velocity kill plus
-    // tangential friction); because cloth nodes rest INSIDE their own body capsules, that
-    // pumped outward velocity into the integrator every frame -> a self-sustaining limit
-    // cycle (the reported jitter / fly-off / clipping). A pure positional projection is
-    // the Source 2 contact behavior and is what makes the solver settle.
-    for (const rigid of rt.capsules) {
-      if (!canCollide(node.collisionMask, rigid.mask)) continue;
-      rigidToCapsule(rt, rigid, cap);
-      const depth = capsuleDepth(node.pos, cap, particleRadius, normal);
-      if (depth <= 0) continue;
-      node.pos.addScaledVector(normal, depth);
+  const transforms = new Map<number, THREE.Matrix4>();
+  const motions = new Map<number, THREE.Matrix4>();
+  const unitScale = new THREE.Vector3(1, 1, 1);
+  const motion = (index: number) => {
+    const cached = motions.get(index);
+    if (cached) return cached;
+    const parent = rt.nodes[index];
+    const transform = new THREE.Matrix4().compose(parent.pos, parent.solvedRot, unitScale);
+    const previous = rt.colliderTransforms.get(index);
+    const delta = previous ? transform.clone().multiply(previous.clone().invert()) : new THREE.Matrix4();
+    transforms.set(index, transform);
+    motions.set(index, delta);
+    return delta;
+  };
+  for (const collider of rt.colliders) {
+    if (collider.kind === 'plane') {
+      projectCollisionPlane(rt.nodes, collider.shape);
+      continue;
     }
-    for (const rigid of rt.boxes) {
-      if (!canCollide(node.collisionMask, rigid.mask)) continue;
-      rigidToBox(rt, rigid, box);
-      const depth = boxDepth(node.pos, box, particleRadius, normal);
-      if (depth <= 0) continue;
-      node.pos.addScaledVector(normal, depth);
-    }
-    for (const plane of rt.collisionPlanes) {
-      if (plane.childNode !== node.index) continue;
-      projectCollisionPlane(rt.nodes, plane, particleRadius);
+    if (collider.kind === 'capsule') rigidToCapsule(rt, collider.shape, cap);
+    else rigidToBox(rt, collider.shape, box);
+    const colliderMotion = motion(collider.shape.node);
+    for (const node of rt.nodes) {
+      if (node.kinematic) continue;
+      if (!canCollide(node, collider.shape)) continue;
+      const radius = Math.max(0, node.collideRadius);
+      const depth = collider.kind === 'capsule' ? capsuleDepth(node.pos, cap, radius, normal, rt.model.hasCollisionFriction) : boxDepth(node.pos, box, radius, normal, rt.model.hasCollisionFriction);
+      projectClothContact(node.pos, node.prev, normal, depth, node.friction, colliderMotion);
     }
   }
+  for (const [index, transform] of transforms) rt.colliderTransforms.set(index, transform);
 }
 
 function solveAnimStrayRadii(rt: ClothRuntime): void {
-  for (const stray of rt.model.strayRadii) projectAnimStrayRadius(rt.nodes, stray);
+  for (const batch of rt.model.strayRadiusBatches) projectAnimStrayRadiusBatch(rt.nodes, batch);
 }
 
 function updateSolvedRotations(rt: ClothRuntime): void {
   const positions = rt.nodes.map((node) => v3Array(node.pos));
-  for (const node of rt.nodes) node.solvedRot.copy(node.targetRot);
+  for (const node of rt.nodes) {
+    if (!rt.twistNodes.has(node.index)) node.solvedRot.copy(node.targetRot);
+  }
   for (const base of rt.model.nodeBases) {
     const node = rt.nodes[base.node];
     if (node) node.solvedRot.copy(nodeBaseQuaternion(positions, base));
   }
+  for (const chain of rt.model.ropeChains) {
+    reconstructClothRope(rt.nodes, chain, rt.rotationNodes);
+  }
+  for (const link of rt.model.twists) {
+    if (rt.twistNodes.has(link.nodeOrient)) reconstructClothTwist(rt.nodes, link);
+  }
+}
+
+function updateAnimatedRodLengths(rt: ClothRuntime): void {
+  for (const batch of rt.animatedRodBatches) {
+    for (const rod of batch) {
+      const length = Math.sqrt(Math.max(rt.nodes[rod.a].target.distanceToSquared(rt.nodes[rod.b].target), 2 ** -30));
+      rod.min = length;
+      rod.max = length;
+    }
+  }
+}
+
+function solveRods(rt: ClothRuntime): void {
+  solveFixedRods(rt);
+  for (const batch of rt.animatedRodBatches) projectRodBatch(rt.nodes, batch);
 }
 
 function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
+  recoverInvalidSolverState(rt);
   updateSolvedRotations(rt);
-  applyRuntimeSettledReconstructions(rt);
+  for (const node of rt.nodes) {
+    if (!finiteRotation(node.solvedRot)) node.solvedRot.copy(node.targetRot);
+  }
+
+  const fitWrites = new Map<THREE.Bone, { position: THREE.Vector3; rotation: THREE.Quaternion }>();
+  for (const fit of rt.fitReconstructions) {
+    const node = rt.nodes[fit.targetNode];
+    if (!node?.bone || node.jiggleDriven) continue;
+    const transform = reconstructFitMatrixTransform(fit, rt.nodes);
+    if (transform) fitWrites.set(node.bone, transform);
+  }
 
   const rotationWrites = new Map<THREE.Bone, THREE.Quaternion>();
+  for (const index of rt.rotationNodes) {
+    const node = rt.nodes[index];
+    if (node.bone) rotationWrites.set(node.bone, node.solvedRot.clone());
+  }
   for (const base of rt.model.nodeBases) {
     const node = rt.nodes[base.node];
-    if (node?.bone) rotationWrites.set(node.bone, node.solvedRot.clone());
+    if (node?.bone && !node.pinned && !node.jiggleDriven) {
+      rotationWrites.set(node.bone, node.solvedRot.clone());
+    }
   }
 
-  for (const fit of rt.fitReconstructions) {
-    const fitNode = rt.nodes[fit.targetNode];
-    if (fitNode?.bone) rotationWrites.set(fitNode.bone, fitNode.solvedRot.clone());
-  }
+  for (const [bone, transform] of fitWrites) rotationWrites.set(bone, transform.rotation);
 
+  for (const node of rt.nodes) {
+    if (!node.bone || rotationWrites.has(node.bone)) continue;
+    for (let parent = node.bone.parent; parent; parent = parent.parent) {
+      if (parent instanceof THREE.Bone && rotationWrites.has(parent)) {
+        rotationWrites.set(node.bone, node.targetRot.clone());
+        break;
+      }
+    }
+  }
   for (const [bone, rot] of orderBonesParentFirst(rotationWrites.entries())) {
     writeBoneQuaternion(root, rt, bone, rot);
+    rt.writtenBones.add(bone);
   }
 
+  const movedBones = new Set(rt.nodes.filter((node) => (!node.kinematic || node.generatedTarget) && node.bone).map((node) => node.bone));
   const positionWrites = new Map<THREE.Bone, THREE.Vector3>();
   for (const node of rt.nodes) {
-    if (!node.bone || isKinematicNode(node)) continue;
+    if (!node.bone) continue;
+    if (node.kinematic && !node.generatedTarget) {
+      // A simulated ancestor must not carry an animation-owned attachment away
+      // from its sampled world position, even when that ancestor only translates.
+      let parent: THREE.Object3D | null = node.bone;
+      while (parent && !(parent instanceof THREE.Bone && (rotationWrites.has(parent) || movedBones.has(parent)))) parent = parent.parent;
+      if (!parent) continue;
+    }
     positionWrites.set(node.bone, node.pos.clone());
   }
 
   for (const offset of rt.reverseOffsets) {
     const boneNode = rt.nodes[offset.boneCtrl];
-    if (!boneNode?.bone) continue;
-    positionWrites.set(boneNode.bone, boneNode.pos.clone());
+    if (!boneNode?.bone || boneNode.pinned || boneNode.jiggleDriven) continue;
+    // Reverse offsets place the rendered bone after orientation reconstruction.
+    // The particle and its integration history remain in the solver buffer.
+    const position = reconstructReverseOffsetPosition(offset, rt.nodes);
+    if (position) positionWrites.set(boneNode.bone, position);
   }
 
-  for (const fit of rt.fitReconstructions) {
-    const fitNode = rt.nodes[fit.targetNode];
-    if (!fitNode?.bone) continue;
-    positionWrites.set(fitNode.bone, fitNode.pos.clone());
-  }
+  for (const [bone, transform] of fitWrites) positionWrites.set(bone, transform.position);
 
   [...positionWrites.entries()]
     .sort(([a], [b]) => objectDepth(a) - objectDepth(b))
-    .forEach(([bone, pos]) => writeBonePosition(root, rt, bone, pos));
+    .forEach(([bone, pos]) => {
+      writeBonePosition(root, rt, bone, pos);
+      rt.writtenBones.add(bone);
+    });
 
   root.updateWorldMatrix(true, true);
+}
+
+function clearDebugGeometry(group: THREE.Group): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    geometries.add(object.geometry);
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      materials.add(material);
+    }
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((material) => material.dispose());
+  group.clear();
 }
 
 function updateDebug(root: THREE.Object3D, rt: ClothRuntime, debugRef: React.MutableRefObject<THREE.Group | null>): void {
@@ -1301,7 +1502,7 @@ function updateDebug(root: THREE.Object3D, rt: ClothRuntime, debugRef: React.Mut
   }
   const group = debugRef.current;
   group.visible = true;
-  group.clear();
+  clearDebugGeometry(group);
 
   if (clothTuning.showNodes) {
     const freeMat = new THREE.MeshBasicMaterial({ color: 0x22ff66, depthTest: false });
@@ -1351,47 +1552,61 @@ function stepClothRuntime(
   root: THREE.Object3D,
   rt: ClothRuntime,
   delta: number,
-  options: ClothHarnessOptions = {},
+  animate?: (delta: number) => void,
+  mode: 'simulation' | 'targets' = 'simulation',
 ): void {
-  const substep = fixedClothSubsteps(delta, options.substeps);
-
-  refreshTargets(root, rt);
-  warmStartRuntime(rt, substep.dt);
-  applyRuntimeReverseOffsetReconstructions(rt);
+  if (!Number.isFinite(delta) || delta <= 0) return;
+  if (delta > CLOTH_RESUME_GAP) {
+    rt.accumulator = 0;
+    resetRuntimeHistory(rt);
+    return;
+  }
+  rt.accumulator += Math.min(delta, MAX_CLOTH_STEPS_PER_FRAME * CLOTH_TIMESTEP);
+  const count = Math.min(MAX_CLOTH_STEPS_PER_FRAME, Math.floor((rt.accumulator + 1e-10) / CLOTH_TIMESTEP));
+  rt.accumulator = Math.max(0, rt.accumulator - count * CLOTH_TIMESTEP);
   const gravity = new THREE.Vector3(0, -1, 0)
     .applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()).invert())
     .applyQuaternion(rt.rootToModelRot);
 
-  const { constraintIterations } = solverIterationPhases(rt.model, clothTuning.iterationOverride);
-  for (let step = 0; step < substep.count; step++) {
-    integrate(rt, gravity, substep.dt);
-    applyRuntimeReverseOffsetReconstructions(rt);
+  const { constraintIterations, goalIterations } = solverIterationPhases(rt.model, clothTuning.iterationOverride);
+  const collideAfterConstraints = ((rt.model.dynamicNodeFlags ?? 0) & 0x2000) !== 0;
+  for (let step = 0; step < count; step++) {
+    restoreAnimationPose(rt);
+    animate?.(CLOTH_TIMESTEP);
+    refreshTargets(root, rt);
+    updateAnimatedRodLengths(rt);
+    warmStartRuntime(rt, CLOTH_TIMESTEP);
+    for (const node of rt.nodes) node.lastSolvedPos.copy(node.pos);
+    if (mode === 'targets') {
+      for (const node of rt.nodes) {
+        node.pos.copy(node.target);
+        node.prev.copy(node.target);
+        node.solvedRot.copy(node.targetRot);
+      }
+      writeBack(root, rt);
+      rt.simulationSteps++;
+      continue;
+    }
+    integrate(rt, gravity, CLOTH_TIMESTEP);
 
-    // Engine order: Predict (gravity) -> AddAnimationAttraction -> Collide -> constraints.
-    // Attraction is the cloth's only damper here, so each fixed substep gets one pass;
-    // it is NOT looped by m_nExtraGoalIterations (which gates the empty goal-spring set).
-    solveGoals(rt, substep.dt);
-    applyRuntimeReverseOffsetReconstructions(rt);
-    solveCollisions(rt);
-    applyRuntimeReverseOffsetReconstructions(rt);
+    solveGoals(rt, CLOTH_TIMESTEP);
+    if (!collideAfterConstraints) solveCollisions(rt);
 
     for (let i = 0; i < constraintIterations; i++) {
+      for (const bend of rt.model.kelagerBends) projectKelagerBend(rt.nodes, bend);
+      for (const hinge of rt.model.hingeLimits) projectHingeLimit(rt.nodes, hinge);
       solveRods(rt);
+      solveAnimStrayRadii(rt);
+      for (const batch of rt.model.quadBatches) projectQuadBatch(rt.nodes, batch);
+      for (const batch of rt.model.triangleBatches) projectTriangleBatch(rt.nodes, batch);
+      if (i >= constraintIterations - goalIterations) solveGoalDampedNodes(rt);
       restorePinnedSolverNodes(rt.nodes);
-      applyRuntimeReverseOffsetReconstructions(rt);
     }
-    // One final depenetration after the rods settle: the rod pass pulls nodes back
-    // toward the body and can leave them just inside a collider (the reported
-    // clipping). A single closing pass clears that without the outward over-push that
-    // colliding on every iteration causes. Position-only, so it stays energy-neutral.
-    solveCollisions(rt);
-    solveAnimStrayRadii(rt);
+    if (collideAfterConstraints) solveCollisions(rt);
     restorePinnedSolverNodes(rt.nodes);
-    applyRuntimeReverseOffsetReconstructions(rt);
-    applyRuntimeSettledReconstructions(rt);
+    writeBack(root, rt);
+    rt.simulationSteps++;
   }
-
-  writeBack(root, rt);
 }
 
 function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
@@ -1400,18 +1615,26 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
   let maxDistanceFromTarget = 0;
   let maxDistanceFromInit = 0;
   let maxFrameMotion = 0;
+  let maxFrameMotionNode: string | null = null;
+  let maxAnchorError = 0;
   let kinematicCount = 0;
 
   for (const node of rt.nodes) {
     const init = vec3(node.initPos);
     const targetDistance = node.pos.distanceTo(node.target);
     const initDistance = node.pos.distanceTo(init);
-    const frameMotion = node.pos.distanceTo(node.prev);
+    const frameMotion = node.pos.distanceTo(node.lastSolvedPos);
     targetErrorSq += targetDistance * targetDistance;
     maxDistanceFromTarget = Math.max(maxDistanceFromTarget, targetDistance);
     maxDistanceFromInit = Math.max(maxDistanceFromInit, initDistance);
-    maxFrameMotion = Math.max(maxFrameMotion, frameMotion);
-    if (isKinematicNode(node)) kinematicCount += 1;
+    if (frameMotion > maxFrameMotion) {
+      maxFrameMotion = frameMotion;
+      maxFrameMotionNode = node.name;
+    }
+    if (isKinematicNode(node)) {
+      kinematicCount += 1;
+      if (!node.positionDriven) maxAnchorError = Math.max(maxAnchorError, targetDistance);
+    }
 
     const values = [
       node.pos.x,
@@ -1435,6 +1658,13 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
   }
 
   const nodeCount = rt.nodes.length;
+  let maxBendExcess = 0;
+  for (const bend of rt.model.kelagerBends) {
+    const [a, b, c] = bend.node.map((index) => rt.nodes[index]);
+    if (!a || !b || !c) continue;
+    const height = a.pos.clone().multiplyScalar(2).sub(b.pos).sub(c.pos).length() / 3;
+    maxBendExcess = Math.max(maxBendExcess, height - bend.height0);
+  }
   return {
     finite,
     rmse: nodeCount > 0 ? Math.sqrt(targetErrorSq / nodeCount) : 0,
@@ -1442,26 +1672,76 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
     maxDistanceFromTarget,
     maxDistanceFromInit,
     maxFrameMotion,
+    maxFrameMotionNode,
+    maxAnchorError,
+    maxBendExcess,
     nodeCount,
     kinematicCount,
+    simulationSteps: rt.simulationSteps,
+    recoveryCount: rt.recoveryCount,
+    coverage: clothSimulationCoverage(rt.model),
   };
 }
 
 export function createClothSimHarness(
   root: THREE.Object3D,
   femodel: ClothModel,
-  options: ClothHarnessOptions = {},
+  options: { mode?: 'simulation' | 'targets' } = {},
 ): ClothSimHarness {
   const rt = buildRuntime(root, femodel);
   if (!rt) throw new Error('createClothSimHarness requires at least three matched cloth nodes');
-  const harnessOptions = { ...options };
   return {
-    step(delta: number): ClothHarnessMetrics {
-      stepClothRuntime(root, rt, delta, harnessOptions);
+    step(delta: number, animate?: (delta: number) => void): ClothHarnessMetrics {
+      stepClothRuntime(root, rt, delta, animate, options.mode);
       return collectClothHarnessMetrics(rt);
     },
     metrics(): ClothHarnessMetrics {
       return collectClothHarnessMetrics(rt);
+    },
+    snapshot(): ClothDebugSnapshot {
+      root.updateWorldMatrix(true, false);
+      const capsules = rt.capsules.map((rigid) => {
+        const cap = rigidToCapsule(rt, rigid, { a: new THREE.Vector3(), b: new THREE.Vector3(), ra: 0, rb: 0 });
+        return { a: v3Array(cap.a), b: v3Array(cap.b), ra: cap.ra, rb: cap.rb, mask: rigid.mask, node: rigid.node };
+      });
+      const boxes = rt.boxes.map((rigid) => {
+        const box = rigidToBox(rt, rigid, { center: new THREE.Vector3(), rotation: new THREE.Quaternion(), halfSize: new THREE.Vector3() });
+        return { center: v3Array(box.center), rotation: box.rotation.toArray(), halfSize: v3Array(box.halfSize), mask: rigid.mask, node: rigid.node };
+      });
+      const contacts: ClothDebugSnapshot['contacts'] = [];
+      const normal = new THREE.Vector3();
+      const cap = { a: new THREE.Vector3(), b: new THREE.Vector3(), ra: 0, rb: 0 };
+      const box = { center: new THREE.Vector3(), rotation: new THREE.Quaternion(), halfSize: new THREE.Vector3() };
+      for (const node of rt.nodes) {
+        if (node.kinematic) continue;
+        rt.capsules.forEach((rigid, index) => {
+          if (!canCollide(node, rigid)) return;
+          const depth = capsuleDepth(node.pos, rigidToCapsule(rt, rigid, cap), Math.max(0, node.collideRadius), normal, rt.model.hasCollisionFriction);
+          if (depth > 1e-6) contacts.push({ node: node.index, shape: `capsule:${index}`, depth });
+        });
+        rt.boxes.forEach((rigid, index) => {
+          if (!canCollide(node, rigid)) return;
+          const depth = boxDepth(node.pos, rigidToBox(rt, rigid, box), Math.max(0, node.collideRadius), normal, rt.model.hasCollisionFriction);
+          if (depth > 1e-6) contacts.push({ node: node.index, shape: `box:${index}`, depth });
+        });
+      }
+      return {
+        modelToWorld: root.matrixWorld.clone().multiply(rt.modelToRoot).toArray(),
+        nodes: rt.nodes.map((node) => ({ name: node.name, position: v3Array(node.pos), target: v3Array(node.target), kinematic: node.kinematic, collisionMask: node.collisionMask })),
+        capsules, boxes, contacts,
+        rods: [...rt.rods, ...rt.animatedRodBatches.flat()].map((rod) => {
+          const distance = rt.nodes[rod.a].pos.distanceTo(rt.nodes[rod.b].pos);
+          const error = Math.max(0, rod.min - distance, rod.max > 0 ? distance - rod.max : 0);
+          return { a: rod.a, b: rod.b, min: rod.min, max: rod.max, error };
+        }),
+        hinges: rt.model.hingeLimits.map((hinge) => ({ node: [...hinge.node], excess: hingeLimitExcess(rt.nodes, hinge) })),
+        triangles: rt.model.triangles.map((triangle) => ({ node: [...triangle.node], correction: triangleProjectionError(rt.nodes, triangle) })),
+        quads: rt.model.quads.map((quad) => ({ node: [...quad.node], correction: quadProjectionError(rt.nodes, quad) })),
+      };
+    },
+    dispose(): void {
+      restoreAnimationPose(rt);
+      root.updateWorldMatrix(true, true);
     },
   };
 }
@@ -1469,12 +1749,14 @@ export function createClothSimHarness(
 export function useClothSim(
   root: THREE.Object3D | null,
   femodel: ClothModel | null,
-): (delta: number) => void {
+  resetKey?: string,
+): (delta: number, animate: (delta: number) => void) => void {
   const runtime = useRef<ClothRuntime | null>(null);
   const debugGroup = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     if (debugGroup.current) {
+      clearDebugGeometry(debugGroup.current);
       debugGroup.current.removeFromParent();
       debugGroup.current = null;
     }
@@ -1482,13 +1764,26 @@ export function useClothSim(
     if (!root || !femodel) return;
     const rt = buildRuntime(root, femodel);
     runtime.current = rt;
-  }, [root, femodel]);
+    return () => {
+      if (rt) restoreAnimationPose(rt);
+      root.updateWorldMatrix(true, true);
+      runtime.current = null;
+      if (debugGroup.current) {
+        clearDebugGeometry(debugGroup.current);
+        debugGroup.current.removeFromParent();
+        debugGroup.current = null;
+      }
+    };
+  }, [root, femodel, resetKey]);
 
   return useCallback(
-    (delta: number) => {
+    (delta: number, animate: (delta: number) => void) => {
       const rt = runtime.current;
-      if (!root || !rt) return;
-      stepClothRuntime(root, rt, delta);
+      if (!root || !rt) {
+        if (Number.isFinite(delta) && delta > 0) animate(delta);
+        return;
+      }
+      stepClothRuntime(root, rt, delta, animate);
       updateDebug(root, rt, debugGroup);
     },
     [root],

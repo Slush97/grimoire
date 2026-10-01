@@ -30,6 +30,10 @@ import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
+import { exportParticleBundle } from './heroParticleExport';
+import { exportModelAttachments } from './modelAttachments';
+import { readHeroAnimationMetadata } from './heroAnimationMetadata';
+import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -85,8 +89,9 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
  * `--entry` reads the model from the skin VPK, so the override wins; verified that
  * `--entry ... --pose --require-pose` poses (the earlier "no pose clip" reason for
  * leaving Infernus on `--hero` is stale) and that the vanilla no-skin export is
- * unaffected. Deliberately NOT pinned: Billy (`punkgoat` ships the rig but no pose
- * clip and already falls back to 2D).
+ * unaffected. The reviewed production animation catalog also uses explicit current model
+ * entries below, so compiled metadata reads and selected skins refer to the
+ * same body. Billy now has a reviewed embedded `primary_idle` clip.
  */
 const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Abrams: 'models/heroes_wip/abrams/abrams.vmdl_c',
@@ -97,7 +102,42 @@ const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Infernus: 'models/heroes_wip/inferno/inferno.vmdl_c',
     Rem: 'models/heroes_wip/familiar/familiar_wip.vmdl_c',
     Viscous: 'models/heroes_staging/viscous/viscous.vmdl_c',
-    Wraith: 'models/heroes_wip/wraith/wraith.vmdl_c'
+    Wraith: 'models/heroes_wip/wraith/wraith.vmdl_c',
+    Mirage: 'models/heroes_staging/mirage_v2/mirage.vmdl_c',
+    Seven: 'models/heroes_staging/gigawatt_prisoner/gigawatt_prisoner.vmdl_c',
+    Vindicta: 'models/heroes_staging/hornet_v3/hornet.vmdl_c',
+    Paradox: 'models/heroes_staging/chrono/chrono.vmdl_c',
+    Dynamo: 'models/heroes_wip/dynamo/dynamo.vmdl_c',
+    Kelvin: 'models/heroes_staging/kelvin_v2/kelvin.vmdl_c',
+    Haze: 'models/heroes_staging/haze/haze.vmdl_c',
+    Holliday: 'models/heroes_staging/astro/astro.vmdl_c',
+    Bebop: 'models/heroes_staging/bebop/bebop.vmdl_c',
+    Calico: 'models/heroes_staging/nano/nano_v2/nano.vmdl_c',
+    'Grey Talon': 'models/heroes_staging/archer/archer.vmdl_c',
+    'Mo & Krill': 'models/heroes_staging/digger/digger.vmdl_c',
+    Shiv: 'models/heroes_staging/shiv/shiv.vmdl_c',
+    Warden: 'models/heroes_staging/warden/warden.vmdl_c',
+    Yamato: 'models/heroes_staging/yamato_v2/yamato.vmdl_c',
+    Lash: 'models/heroes_wip/lash/lash.vmdl_c',
+    Vyper: 'models/heroes_staging/viper/viper.vmdl_c',
+    Sinclair: 'models/heroes_staging/magician_v2/magician.vmdl_c',
+    Mina: 'models/heroes_wip/vampirebat/vampirebat.vmdl_c',
+    Drifter: 'models/heroes_wip/drifter/drifter.vmdl_c',
+    Venator: 'models/heroes_wip/priest/priest.vmdl_c',
+    Victor: 'models/heroes_wip/frank/frank.vmdl_c',
+    Paige: 'models/heroes_wip/bookworm/bookworm.vmdl_c',
+    Doorman: 'models/heroes_wip/doorman_v2/doorman.vmdl_c',
+    Billy: 'models/heroes_wip/punkgoat/punkgoat.vmdl_c',
+    Graves: 'models/heroes_wip/necro/necro.vmdl_c',
+    Apollo: 'models/heroes_wip/fencer/fencer.vmdl_c',
+    'Deadman Danny': 'models/heroes_wip/deadpack/deadpack.vmdl_c',
+    Silver: 'models/heroes_wip/werewolf/werewolf.vmdl_c',
+    Celeste: 'models/heroes_wip/unicorn/unicorn.vmdl_c',
+    'Rat King': 'models/heroes_wip/ratking/ratking.vmdl_c',
+    Solomon: 'models/heroes_wip/chessmaster/chessmaster.vmdl_c',
+    Violet: 'models/heroes_wip/artist/artist.vmdl_c',
+    'Nurse Harrow': 'models/heroes_wip/nurse/nurse.vmdl_c',
+    Baba: 'models/heroes_wip/baba/baba.vmdl_c',
 };
 
 /** Model codenames to try for a hero, most-specific first: any divergent
@@ -168,9 +208,11 @@ function modelDir(key: string): string {
 
 /** Static (`--pose`) baked still. The legacy/default glb. */
 const STATIC_MODEL_FILENAME = 'model.glb';
-/** Rigged (no `--pose`, single idle-clip) SkinnedMesh + animated glb. Sibling of
+/** Rigged (no `--pose`, bounded motion menu) SkinnedMesh + animated glb. Sibling of
  *  the static glb in the same entry dir; served over the same scheme. */
 const RIGGED_MODEL_FILENAME = 'model-rigged.glb';
+const RIGGED_CLOTH_FILENAME = 'cloth-rigged.json';
+const RIGGED_ATTACHMENTS_FILENAME = 'attachments.json';
 
 function modelFile(key: string): string {
     return join(modelDir(key), STATIC_MODEL_FILENAME);
@@ -178,6 +220,10 @@ function modelFile(key: string): string {
 
 function riggedModelFile(key: string): string {
     return join(modelDir(key), RIGGED_MODEL_FILENAME);
+}
+
+function riggedClothFile(key: string): string {
+    return join(modelDir(key), RIGGED_CLOTH_FILENAME);
 }
 
 /**
@@ -249,7 +295,7 @@ function riggedModelFile(key: string): string {
  * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
  * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_PIPELINE_VERSION = '14';
+const POSE_PIPELINE_VERSION = '15';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const POSE_VERSION_FILENAME = '.cache-version';
@@ -282,9 +328,17 @@ function versionFile(key: string): string {
  * v14; the rigged path shares modelSelectorsForHero). Pre-v7 Infernus rigged GLBs
  * baked the vanilla look over any active skin.
  *
+ * v8: cache physics beside the GLB using the same resolved source and selector,
+ * including a single-skin fallback. A null sidecar means animation only.
+ *
+ * v9: export a bounded menu of representative full-body motions.
+ * v10: preserve supported authored attachment frames beside the rigged model.
+ *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '7';
+// v14: Graves uses the complete standing weapon pose; shop parks its spectral
+// hand at the model origin. Refresh existing menus instead of reusing that pose.
+const RIGGED_PIPELINE_VERSION = '14';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -297,24 +351,39 @@ function riggedVersionFile(key: string): string {
  * Curated per-hero ambient idle effect (`.vpcf_c`), keyed by display name. The
  * effects-preview axis is a hand-validated roster, NOT auto-discovered (the raw
  * "ambient candidate" metric over-counts ~20-56x); see
- * `docs/3d-preview-effects-feasibility.md`. Sprint 1: the two effects that render
- * correctly standalone -- Wraith's hand energy (sprite + CP2 driver) and
- * Familiar's body aura (CP0 + LockToBone). More land as the renderer grows
- * trail/rope + CP injection.
+ * `docs/3d-preview-effects-feasibility.md`. Effects currently supported in part:
+ * Wraith's hand energy (sprite + CP2 driver), Dynamo's
+ * model-authored head effect (fixed sheet regions + head_fx), and Abrams's
+ * model-declared preview book glow (local CP1 box), and Victor's authored
+ * independent bolt sparks (three transferred CP frames), Celeste's horn and
+ * weapon roots, Solomon's ordered ring, and passive weapon roots declared by
+ * Familiar/Graves abilities. Unsupported runtime inputs and operators stay partial.
  */
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
+    Abrams: 'particles/abilities/abrams/abrams_ambient_book.vpcf_c',
+    Victor: 'particles/abilities/frank/frank_ambient.vpcf_c',
+    Solomon: 'particles/abilities/chessmaster/chessmaster_ambient.vpcf_c',
+    Celeste: 'particles/abilities/unicorn/unicorn_ambient_horn.vpcf_c',
+    Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
-    Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
+    Rem: 'particles/abilities/familiar/familiar_ambient_candle.vpcf_c',
+    Graves: 'particles/heroes/necro/necro_weapon_ambient.vpcf_c',
 };
 
 const EFFECT_DESCRIPTOR_FILENAME = 'effect.json';
 const EFFECT_TEX_DIRNAME = 'effect-tex';
 const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 
-/** Bump when the FX descriptor schema or the bundled vpkmerge particle exporter
- *  changes in a way that invalidates a cached `effect.json` + textures. v1:
- *  initial sprite-layer descriptor (export_fx_descriptor + --textures-dir). */
-const EFFECT_CACHE_VERSION = '1';
+/** Bump when descriptors or bundled textures change. v2 reads generic KV3 DATA
+ * through the pinned decoder and exports textures with Panorama dump. */
+// v4: retain authored fixed sheet regions and model particle scale.
+// v5: resolve authored core texture dependencies after the primary package.
+// v6: select a single CP configuration and support authored local box spawning.
+// v7: preserve child CP frame distribution and authored instance delays.
+// v9: independent model/weapon roots and default spritecard texture inputs.
+// v10: passive weapon selections and their authored preview attachment frames.
+// v11: preserve constant alpha and explicit preview-only scalar CP fallback.
+const EFFECT_CACHE_VERSION = '11';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -328,14 +397,7 @@ function effectVersionFile(key: string): string {
     return join(modelDir(key), EFFECT_VERSION_FILENAME);
 }
 
-interface ModelClipInfo {
-    name: string;
-    frameCount: number;
-    fps: number;
-    durationSeconds: number;
-    looping: boolean;
-    default: boolean;
-}
+type ModelClipInfo = HeroAnimationInfo;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -376,57 +438,18 @@ function parseModelClipsJson(json: string): ModelClipInfo[] {
             durationSeconds: numberField(row, 'durationSeconds', index),
             looping: booleanField(row, 'looping', index),
             default: booleanField(row, 'default', index),
+            ...Object.fromEntries(['additive', 'hidden', 'delta', 'requiresBase', 'transition', 'rootMotion', 'standalone']
+                .filter((field) => field in row).map((field) => [field, booleanField(row, field, index)])),
         };
     });
-}
-
-function clipNameHas(name: string, token: string): boolean {
-    return name.split(/[^a-z0-9]+/).includes(token);
-}
-
-function isAnimatedClip(clip: ModelClipInfo): boolean {
-    return clip.name.trim().length > 0 && clip.frameCount > 1 && clip.durationSeconds > 0.001;
-}
-
-function riggedClipScore(clip: ModelClipInfo): number {
-    const name = clip.name.toLowerCase();
-    let score = 0;
-    if (clip.looping) score += 500;
-    if (clip.default) score += 80;
-    if (clipNameHas(name, 'idle')) score += 350;
-    if (clipNameHas(name, 'stand')) score += 160;
-    if (clipNameHas(name, 'primary')) score += 60;
-    if (clipNameHas(name, 'menu') || clipNameHas(name, 'select')) score += 40;
-    if (clip.durationSeconds >= 1 && clip.durationSeconds <= 8) score += 50;
-    if (
-        ['ability', 'attack', 'cast', 'death', 'dash', 'jump', 'reload', 'run', 'turn', 'walk'].some(
-            (token) => clipNameHas(name, token)
-        )
-    ) {
-        score -= 120;
-    }
-    return score;
-}
-
-function chooseRiggedClip(clips: ModelClipInfo[]): ModelClipInfo | null {
-    const candidates = clips.filter(isAnimatedClip);
-    if (candidates.length === 0) return null;
-    return candidates.sort((a, b) => {
-        const byScore = riggedClipScore(b) - riggedClipScore(a);
-        if (byScore !== 0) return byScore;
-        const byLoop = Number(b.looping) - Number(a.looping);
-        if (byLoop !== 0) return byLoop;
-        const byDuration = b.durationSeconds - a.durationSeconds;
-        if (byDuration !== 0) return byDuration;
-        return a.name.localeCompare(b.name);
-    })[0];
 }
 
 async function chooseRiggedClipForSelector(
     vpk: string,
     pak01: string,
-    selector: string[]
-): Promise<ModelClipInfo | null> {
+    selector: string[],
+    heroName: string
+): Promise<ModelClipInfo[]> {
     const json = await runVpkmergeStdout([
         'model',
         'clips',
@@ -437,7 +460,24 @@ async function chooseRiggedClipForSelector(
         pak01,
         '--json',
     ]);
-    return chooseRiggedClip(parseModelClipsJson(json));
+    const clips = parseModelClipsJson(json);
+    const entryIndex = selector.indexOf('--entry');
+    if (entryIndex >= 0) {
+        const candidates = clips.filter((clip) => heroAnimationRecipe(clip.name, heroName));
+        const metadata = await readHeroAnimationMetadata(vpk, pak01, selector[entryIndex + 1], candidates);
+        for (const clip of clips) {
+            const flags = metadata.get(clip.name);
+            if (flags?.additive) clip.additive = true;
+            if (flags?.rootMotion) clip.rootMotion = true;
+        }
+    }
+    return choosePreviewClips(clips, heroName);
+}
+
+/** A bounded menu of full-body motions. Directional variants and additive
+ * aim layers can number in the hundreds; export representative motions only. */
+export function choosePreviewClips(clips: ModelClipInfo[], heroName?: string): ModelClipInfo[] {
+    return selectHeroAnimations(clips, heroName);
 }
 
 /**
@@ -514,11 +554,14 @@ async function runPoseCacheSweep(): Promise<void> {
         const version = await fs
             .readFile(join(dir, POSE_VERSION_FILENAME), 'utf8')
             .catch(() => '');
+        const riggedVersion = await fs
+            .readFile(join(dir, RIGGED_VERSION_FILENAME), 'utf8')
+            .catch(() => '');
         entries.push({
             dir,
             bytes,
             lastUsedMs,
-            stale: version.trim() !== POSE_CACHE_VERSION,
+            stale: version.trim() !== POSE_CACHE_VERSION && riggedVersion.trim() !== RIGGED_CACHE_VERSION,
         });
     }
 
@@ -740,6 +783,8 @@ async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
         if (version.trim() !== RIGGED_CACHE_VERSION) {
             return { hasModel: false, mtimeMs: null, key };
         }
+        await fs.access(riggedClothFile(key));
+        await fs.access(join(modelDir(key), RIGGED_ATTACHMENTS_FILENAME));
         return { hasModel: true, mtimeMs: stat.mtimeMs, key };
     } catch {
         return { hasModel: false, mtimeMs: null, key };
@@ -948,19 +993,20 @@ async function runRiggedHeroExportForSources(
         let foundUsableClip = false;
         let lastError: unknown;
         for (const selector of selectors) {
-            let clip: ModelClipInfo | null;
+            let clips: ModelClipInfo[];
             try {
-                clip = await chooseRiggedClipForSelector(source.vpk, pak01, selector);
+                clips = await chooseRiggedClipForSelector(source.vpk, pak01, selector, heroName);
                 listedAny = true;
             } catch (err) {
                 lastError = err;
                 continue;
             }
 
-            if (!clip) continue;
+            if (!clips.length) continue;
             foundUsableClip = true;
 
             try {
+                await fs.rm(riggedVersionFile(key), { force: true });
                 await runVpkmerge([
                     'model',
                     'export',
@@ -969,14 +1015,30 @@ async function runRiggedHeroExportForSources(
                     ...selector,
                     '--base',
                     pak01,
-                    // NO --pose: keep the skeleton + skin + clip. Exactly ONE
-                    // --clip: --clip is additive, so a list would keep multiple
-                    // competing loops on heroes carrying more than one.
-                    '--clip',
-                    clip.name,
+                    // The viewer plays one action at a time from this menu.
+                    ...clips.flatMap((clip) => ['--clip', clip.name]),
                     '--out',
                     out,
                 ]);
+                let cloth: unknown = null;
+                try {
+                    cloth = JSON.parse(await runVpkmergeStdout([
+                        'model', 'femodel', '--vpk', source.vpk, ...selector, '--base', pak01,
+                    ]));
+                } catch (error) {
+                    console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
+                }
+                await fs.writeFile(riggedClothFile(key), JSON.stringify(cloth));
+                let attachments: Awaited<ReturnType<typeof exportModelAttachments>> = [];
+                const entryIndex = selector.indexOf('--entry');
+                if (entryIndex >= 0 && selector[entryIndex + 1]) {
+                    try {
+                        attachments = await exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]);
+                    } catch (error) {
+                        console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
+                    }
+                }
+                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(attachments));
                 await fs.writeFile(riggedVersionFile(key), RIGGED_CACHE_VERSION);
                 return infoForRiggedKey(key);
             } catch (err) {
@@ -998,23 +1060,17 @@ async function runRiggedHeroExportForSources(
 
 export interface HeroEffectInfo {
     hasEffect: boolean;
-    /** Storage key (vanilla pose key: ambient FX is skin-independent). */
+    /** Content-addressed storage key for the selected skin texture stack. */
     key: string;
     /** The `.vpcf_c` entry the descriptor was built from, for diagnostics. */
     entry: string | null;
 }
 
-/** Ambient FX is skin-independent (it comes from the base pak), so one bundle per
- *  hero serves every skin: key it to the vanilla pose dir. */
-function effectKey(heroName: string): string {
-    return poseKey(heroName, []);
-}
-
 /** Whether a hero's ambient FX bundle (descriptor + textures) is cached and
  *  current. Mirrors getHeroPoseInfo. */
-export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
+export async function getHeroEffectInfo(deadlockPath: string, heroName: string, skinSources: HeroPoseSkinSource[] = []): Promise<HeroEffectInfo> {
     const entry = AMBIENT_EFFECTS[heroName] ?? null;
-    const key = effectKey(heroName);
+    const key = await resolvePoseKey(deadlockPath, heroName, skinSources);
     if (!entry) return { hasEffect: false, key, entry: null };
     try {
         await fs.access(effectFile(key));
@@ -1029,18 +1085,19 @@ export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInf
 const inFlightEffectExports = new Map<string, Promise<HeroEffectInfo>>();
 
 /**
- * Generate a hero's ambient FX bundle by running the bundled `vpkmerge particle`:
+ * Generate a hero's ambient FX bundle through the bundled vpkmerge KV3 reader:
  * the normalized descriptor (`effect.json`) plus every referenced texture decoded
  * to PNG (`effect-tex/`), both served over the `grimoire-hero:` scheme. Reads
- * straight from the base pak (ambient VFX is not skin-specific). No-op result for
+ * authored graph from the base pak, with selected skin texture overrides. No-op result for
  * a hero without a curated effect.
  */
 export async function exportHeroEffect(
     deadlockPath: string,
-    heroName: string
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = []
 ): Promise<HeroEffectInfo> {
     const entry = AMBIENT_EFFECTS[heroName];
-    const key = effectKey(heroName);
+    const key = await resolvePoseKey(deadlockPath, heroName, skinSources);
     if (!entry) return { hasEffect: false, key, entry: null };
 
     const existing = inFlightEffectExports.get(key);
@@ -1048,73 +1105,36 @@ export async function exportHeroEffect(
 
     const work = (async (): Promise<HeroEffectInfo> => {
         const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
-        const dir = modelDir(key);
-        await fs.mkdir(dir, { recursive: true });
-        await runVpkmerge([
-            'particle',
-            entry,
-            '--vpk',
-            pak01,
-            '--out',
-            effectFile(key),
-            '--textures-dir',
-            effectTexDir(key),
-        ]);
-        await fs.writeFile(effectVersionFile(key), EFFECT_CACHE_VERSION);
-        return { hasEffect: true, key, entry };
+        const source = await resolvePoseSource(deadlockPath, pak01, normalizeSkinSources(skinSources));
+        try {
+            const exportKey = poseKey(heroName, source.sources, source.fingerprint);
+            const dir = modelDir(exportKey);
+            await fs.mkdir(dir, { recursive: true });
+            await fs.rm(effectVersionFile(exportKey), { force: true });
+            await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
+                heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
+                [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
+                ['Abrams', 'Victor', 'Solomon', 'Celeste', 'Rem', 'Graves'].includes(heroName) ? 'preview' : undefined,
+                heroName === 'Celeste' ? ['particles/abilities/unicorn/unicorn_ambient_weapon.vpcf_c'] : []);
+            if (heroName === 'Rem') {
+                const descriptor = JSON.parse(await fs.readFile(effectFile(exportKey), 'utf8'));
+                // Offline declarations omit the weapon runtime input. Use the
+                // authored curve endpoint for an attractive preview, not as a
+                // recovered game value. Supplied runtime CP values override it.
+                descriptor.previewControlPointComponents = { 2: 1 };
+                await fs.writeFile(effectFile(exportKey), JSON.stringify(descriptor));
+            }
+            await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
+            return { hasEffect: true, key: exportKey, entry };
+        } finally {
+            if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+        }
     })();
     inFlightEffectExports.set(key, work);
     try {
         return await work;
     } finally {
         inFlightEffectExports.delete(key);
-    }
-}
-
-/**
- * The hero's cloth finite-element model (`PHYS.m_pFeModel`) as a parsed object:
- * the engine's own cloth-sim definition (collision capsules/spheres, nodes,
- * rods, integrator). The rigged preview's verlet reads it to drive the cloth
- * bones and, crucially, to stop them clipping through the body. Returned inline
- * (not cached to disk): it's derived from the same paks as the pose and fetched
- * once when the rigged model loads. Throws if the model carries no cloth.
- */
-export async function getHeroClothModel(
-    deadlockPath: string,
-    heroName: string,
-    skinSources?: HeroPoseSkinSource[]
-): Promise<unknown> {
-    const selectors = modelSelectorsForHero(heroName);
-    if (selectors.length === 0) throw new Error(`No known model codename for hero "${heroName}".`);
-
-    const normalized = normalizeSkinSources(skinSources);
-    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
-    const source = await resolvePoseSource(deadlockPath, pak01, normalized);
-    try {
-        let lastError: unknown;
-        for (const selector of selectors) {
-            try {
-                const json = await runVpkmergeStdout([
-                    'model',
-                    'femodel',
-                    '--vpk',
-                    source.vpk,
-                    ...selector,
-                    '--base',
-                    pak01,
-                ]);
-                return JSON.parse(json);
-            } catch (err) {
-                lastError = err;
-            }
-        }
-        throw lastError instanceof Error
-            ? lastError
-            : new Error(`No cloth model for "${heroName}".`);
-    } finally {
-        if (source.tempDir) {
-            await fs.rm(source.tempDir, { recursive: true, force: true });
-        }
     }
 }
 
@@ -1134,7 +1154,7 @@ export function registerHeroPoseProtocol(): void {
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
             // The trailing segment(s) name what's served: the static `model.glb`
-            // (default; legacy URLs omit it), the rigged `model-rigged.glb`, the
+            // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the
             // ambient FX descriptor `effect.json`, or a bundled effect texture
             // `effect-tex/<name>.png`. Everything is resolved against a fixed
             // allowlist / strict basename, so the key segment can never escape the
@@ -1151,17 +1171,23 @@ export function registerHeroPoseProtocol(): void {
                 file = join(effectTexDir(key), png);
             } else if (requested === RIGGED_MODEL_FILENAME) {
                 file = riggedModelFile(key);
+            } else if (requested === RIGGED_CLOTH_FILENAME) {
+                file = riggedClothFile(key);
+            } else if (requested === RIGGED_ATTACHMENTS_FILENAME) {
+                file = join(modelDir(key), RIGGED_ATTACHMENTS_FILENAME);
             } else {
                 file = modelFile(key);
             }
             await fs.access(file);
             // LRU touch for the cache sweep, which uses the newest file mtime
-            // in the entry dir as last-used. Touch the tiny static sidecar, not
+            // in the entry dir as last-used. Touch the tiny version marker, not
             // a GLB: the GLB mtime feeds the renderer's ?v= cache-buster and
             // must keep meaning "export time". Both glbs share the dir, so
             // touching the one sidecar protects the whole entry.
             const now = new Date();
-            void fs.utimes(versionFile(key), now, now).catch(() => { });
+            const version = requested === RIGGED_MODEL_FILENAME || requested === RIGGED_CLOTH_FILENAME || requested === RIGGED_ATTACHMENTS_FILENAME
+                ? riggedVersionFile(key) : versionFile(key);
+            void fs.utimes(version, now, now).catch(() => { });
             return net.fetch(pathToFileURL(file).toString());
         } catch {
             return new Response(null, { status: 404 });

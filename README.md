@@ -123,6 +123,9 @@ Package builds: `pnpm package:win` or `pnpm package:linux` (both require
 
 More detail in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+The Locker 3D preview has [architecture documentation](docs/viewer-architecture.md)
+and a [development and validation guide](docs/viewer-development.md).
+
 ## Security
 
 Grimoire is open source. Users are encouraged to read the code, build

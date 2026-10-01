@@ -1,0 +1,5716 @@
+{
+  "provenance": {
+    "binarySha256": "66b65fd571d8b301ed55fef5ced8ad2ed1206c67dedbd44782cd7c70bdb17ebe",
+    "rva": "0x234a20",
+    "membershipRva": "0x10c34b..0x10c3e3",
+    "method": "Synthetic self-collision passes evaluated in Unicorn 2.1.4, including runtime vertex-list construction from byte weights and unscoped layer filtering. No imported functions, friction or game assets. Previous-position buffers verified unchanged."
+  },
+  "cases": [
+    {
+      "name": "m_TaperedCapsuleRigids positive membership is binary",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 7,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0.2,
+          0.1,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 4,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          1,
+          64,
+          255
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          1.2000000476837158,
+          0.0,
+          2.0
+        ],
+        [
+          1.100000023841858,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": [
+        [
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "name": "m_TaperedCapsuleRigids empty scope",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 3,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          0,
+          0
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": [
+        []
+      ]
+    },
+    {
+      "name": "m_TaperedCapsuleRigids static members stay fixed",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 0,
+            "nVertexCount": 6,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255,
+          255,
+          255,
+          0,
+          255,
+          1
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": [
+        [
+          0,
+          1,
+          2,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "name": "m_SphereRigids positive membership is binary",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 7,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0.2,
+          0.1,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 4,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          1,
+          64,
+          255
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          1.2000000476837158,
+          0.0,
+          0.0
+        ],
+        [
+          1.100000023841858,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": [
+        [
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "name": "m_SphereRigids empty scope",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 3,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          0,
+          0
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": [
+        []
+      ]
+    },
+    {
+      "name": "m_SphereRigids static members stay fixed",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 0,
+            "nVertexCount": 6,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255,
+          255,
+          255,
+          0,
+          255,
+          1
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": [
+        [
+          0,
+          1,
+          2,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "name": "m_BoxRigids positive membership is binary",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 7,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0.2,
+          0.1,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 4,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          1,
+          64,
+          255
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.2000000476837158,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.100000023841858,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": [
+        [
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "name": "m_BoxRigids empty scope",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 3,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          0,
+          0
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": [
+        []
+      ]
+    },
+    {
+      "name": "m_BoxRigids static members stay fixed",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 0,
+            "nVertexCount": 6,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255,
+          255,
+          255,
+          0,
+          255,
+          1
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": [
+        [
+          0,
+          1,
+          2,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "name": "mixed types without priorities",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1.5,
+            0.3,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 4,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 1,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                4,
+                2
+              ]
+            ]
+          }
+        ],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              3,
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              2,
+              1,
+              1,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_CollisionPlanes": [
+          {
+            "nCtrlParent": 0,
+            "nChildNode": 3,
+            "m_Plane": {
+              "m_vNormal": [
+                0,
+                1,
+                0
+              ],
+              "m_flOffset": 0.75
+            },
+            "flStrength": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.75,
+          1.0
+        ]
+      ],
+      "memberships": [
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "name": "priority order 0,1,2,3",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1.5,
+            0.3,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 4,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 1,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255
+        ],
+        "m_RigidColliderPriorities": [
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 1,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 1,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          }
+        ],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                4,
+                2
+              ]
+            ]
+          }
+        ],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              3,
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              2,
+              1,
+              1,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_CollisionPlanes": [
+          {
+            "nCtrlParent": 0,
+            "nChildNode": 3,
+            "m_Plane": {
+              "m_vNormal": [
+                0,
+                1,
+                0
+              ],
+              "m_flOffset": 0.75
+            },
+            "flStrength": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.600000023841858,
+          1.2000000476837158,
+          1.0
+        ]
+      ],
+      "memberships": [
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "name": "priority order 3,0,2,1",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1.5,
+            0.3,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 4,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 1,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255
+        ],
+        "m_RigidColliderPriorities": [
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 1,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 1,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          }
+        ],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                4,
+                2
+              ]
+            ]
+          }
+        ],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              3,
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              2,
+              1,
+              1,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_CollisionPlanes": [
+          {
+            "nCtrlParent": 0,
+            "nChildNode": 3,
+            "m_Plane": {
+              "m_vNormal": [
+                0,
+                1,
+                0
+              ],
+              "m_flOffset": 0.75
+            },
+            "flStrength": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.8618987798690796,
+          0.75,
+          1.0
+        ]
+      ],
+      "memberships": [
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "name": "priority order 1,3,0,2",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1.5,
+            0.3,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 4,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 1,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          255
+        ],
+        "m_RigidColliderPriorities": [
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 0,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 0,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 0,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 0,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          },
+          {
+            "m_nTaperedCapsuleRigidIndex": 1,
+            "m_nSphereRigidIndex": 1,
+            "m_nBoxRigidIndex": 1,
+            "m_nCollisionPlaneIndex": 1,
+            "m_nSDFRigidIndex": 0
+          }
+        ],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                4,
+                2
+              ]
+            ]
+          }
+        ],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              3,
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              2,
+              1,
+              1,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_CollisionPlanes": [
+          {
+            "nCtrlParent": 0,
+            "nChildNode": 3,
+            "m_Plane": {
+              "m_vNormal": [
+                0,
+                1,
+                0
+              ],
+              "m_flOffset": 0.75
+            },
+            "flStrength": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.399999976158142,
+          1.2000000476837158,
+          1.0
+        ]
+      ],
+      "memberships": [
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "name": "overlapping selections",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1.5,
+            0.3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 6,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 3,
+            "nMapOffset": 0
+          },
+          {
+            "nVertexBase": 4,
+            "nVertexCount": 1,
+            "nMapOffset": 3
+          }
+        ],
+        "m_VertexMapValues": [
+          255,
+          255,
+          0,
+          128
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 1,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              3,
+              0,
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.9805806875228882,
+          0.1961161345243454,
+          0.0
+        ],
+        [
+          1.3584730625152588,
+          0.3283053934574127,
+          -0.09435129165649414
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": [
+        [
+          3,
+          4
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "name": "m_TaperedCapsuleRigids unscoped mask 0",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 0,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_TaperedCapsuleRigids unscoped mask 1",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 1,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_TaperedCapsuleRigids unscoped mask 2",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 2,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_TaperedCapsuleRigids unscoped mask 3",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 3,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_TaperedCapsuleRigids unscoped mask 65535",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_SphereRigids unscoped mask 0",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 0,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_SphereRigids unscoped mask 1",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 1,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_SphereRigids unscoped mask 2",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 2,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_SphereRigids unscoped mask 3",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 3,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_SphereRigids unscoped mask 65535",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_SphereRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 65535,
+            "vSphere": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_BoxRigids unscoped mask 0",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 0,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_BoxRigids unscoped mask 1",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 1,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_BoxRigids unscoped mask 2",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 2,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_BoxRigids unscoped mask 3",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 3,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "m_BoxRigids unscoped mask 65535",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0.1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [],
+        "m_VertexMapValues": [],
+        "m_RigidColliderPriorities": [],
+        "m_BoxRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 65535,
+            "nCollisionMask": 65535,
+            "tmFrame2": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "vSize": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ],
+        [
+          1.0,
+          0.10000000149011612,
+          0.0
+        ]
+      ],
+      "memberships": []
+    },
+    {
+      "name": "selection overrides zero collision mask",
+      "model": {
+        "m_CtrlName": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "m_InitPose": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            10,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            10,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0.5,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "m_NodeInvMasses": [
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        "m_nStaticNodes": 3,
+        "m_nRotLockStaticNodes": 3,
+        "m_nFirstPositionDrivenNode": 5,
+        "m_nDynamicNodeFlags": 128,
+        "m_nStaticNodeFlags": 128,
+        "m_NodeIntegrator": [
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          },
+          {
+            "flGravity": 0,
+            "flPointDamping": 0,
+            "flAnimationForceAttraction": 0,
+            "flAnimationVertexAttraction": 0
+          }
+        ],
+        "m_NodeCollisionRadii": [
+          0,
+          0
+        ],
+        "m_VertexMaps": [
+          {
+            "nVertexBase": 3,
+            "nVertexCount": 2,
+            "nMapOffset": 0
+          }
+        ],
+        "m_VertexMapValues": [
+          0,
+          1
+        ],
+        "m_RigidColliderPriorities": [],
+        "m_TaperedCapsuleRigids": [
+          {
+            "nNode": 0,
+            "nVertexMapIndex": 0,
+            "nCollisionMask": 0,
+            "vSphere": [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                4,
+                1
+              ]
+            ]
+          }
+        ],
+        "m_TreeCollisionMasks": [
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          10.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ]
+      ],
+      "memberships": [
+        [
+          4
+        ]
+      ]
+    }
+  ]
+}

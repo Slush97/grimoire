@@ -263,6 +263,7 @@
     }
   },
   "locker": {
+    "pose": {"recordGif": "Записать GIF", "stopGif": "Остановить и сохранить GIF", "cancelGif": "Отменить запись", "gifFailed": "Не удалось сохранить запись."},
     "soulImport": {
       "orient": {
         "label": "Позицанирование"

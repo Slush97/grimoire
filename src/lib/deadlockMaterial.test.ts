@@ -34,6 +34,45 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
 }
 
 describe('buildDeadlockMaterial vertex colors', () => {
+  it.each([0, 1])('honors authored vertex-color placement, mask and strength beforeCsb=%s', (before) => {
+    const base = materialWithMorphic({ shader: 'pbr.vfx',
+      ints: { F_USE_NPR_LIGHTING: 1, F_VERTEX_COLOR: 1, g_bApplyTintToVertexColors: before, g_bMaskVertexColorTint1: 1 },
+      floats: { g_fVertexColorStrength1: 0.4 },
+      vectors: { g_vAlbedoContrastSaturationBrightness1: [0.91, 0.89, 1.25, 0] },
+    });
+    const result = buildDeadlockMaterial(base);
+    const shader = { ...THREE.ShaderLib.standard, uniforms: {} } as Parameters<THREE.Material['onBeforeCompile']>[0];
+    result.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    expect(shader.uniforms).toMatchObject({
+      uApplyVertexColor: { value: 1 }, uVertexColorBeforeCsb: { value: before },
+      uMaskVertexColor: { value: 1 }, uVertexColorStrength: { value: 0.4 }, uCitadelSpecular: { value: 1 },
+    });
+    expect(shader.fragmentShader).toContain('reflectedLight.indirectSpecular *= citadelSpecularFactor;');
+    expect(shader.fragmentShader).toContain('uVertexColorBeforeCsb <= 0.5');
+    result.dispose();
+  });
+
+  it('uses the engine default placement after correction, and keeps other shader specular unchanged', () => {
+    for (const [shader, before, specular] of [['pbr.vfx', 0, 1], ['complex.vfx', 1, 0]] as const) {
+      const result = buildDeadlockMaterial(materialWithMorphic({ shader, ints: { F_USE_NPR_LIGHTING: 1 } }));
+      expect(result.uniforms.uVertexColorBeforeCsb.value).toBe(before);
+      expect(result.uniforms.uMaskVertexColor.value).toBe(shader === 'pbr.vfx' ? 1 : 0);
+      expect(result.uniforms.uVertexColorStrength.value).toBe(1);
+      expect(result.uniforms.uCitadelSpecular.value).toBe(specular);
+      result.dispose();
+    }
+  });
+
+  it.each([
+    ['pbr.vfx', 1, 1, 1], ['pbr.vfx', 1, 0, 0], ['pbr.vfx', 0, 1, 0], ['complex.vfx', 1, 1, 0],
+  ] as const)('gates authored full-roughness specular suppression for %s NPR=%s flag=%s', (shader, npr, noSpecular, expected) => {
+    const result = buildDeadlockMaterial(materialWithMorphic({ shader,
+      ints: { F_USE_NPR_LIGHTING: npr, F_NO_SPECULAR_AT_FULL_ROUGHNESS: noSpecular },
+    }));
+    expect(result.uniforms.uNoSpecularAtFullRoughness.value).toBe(expected);
+    result.dispose();
+  });
+
   it.each(['F_VERTEX_COLOR', 'F_PAINT_VERTEX_COLORS'])(
     'enables Three vertex colors when %s requires COLOR_0',
     (flagName) => {
@@ -258,6 +297,46 @@ describe('buildDeadlockMaterial detail textures', () => {
 });
 
 describe('buildDeadlockMaterial glass and translucency state', () => {
+  it('retains authored blurred-volume roughness without changing its blur or sharp-glass defaults', () => {
+    const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
+      floats: { g_flCloakBlurAmount: 0.007 } });
+    base.roughness = 1;
+    const result = buildDeadlockMaterial(base);
+    expect((result.material as THREE.MeshPhysicalMaterial).roughness).toBe(1);
+    expect(result.uniforms.uCitadelGlassBlur.value.toArray()).toEqual([0.007, 1, 1]);
+    expect(base.roughness).toBe(1);
+    result.dispose();
+  });
+  it('keeps rough glass glossy in the preview without changing opaque surfaces or the cached base', () => {
+    const glassBase = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 } });
+    glassBase.roughness = 1;
+    const opaqueBase = materialWithMorphic({ shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } });
+    opaqueBase.roughness = 1;
+    const glass = buildDeadlockMaterial(glassBase), opaque = buildDeadlockMaterial(opaqueBase);
+    expect((glass.material as THREE.MeshPhysicalMaterial).roughness).toBe(0.18);
+    expect((opaque.material as THREE.MeshStandardMaterial).roughness).toBe(1);
+    expect(glassBase.roughness).toBe(1);
+    glass.dispose(); opaque.dispose();
+  });
+  it('preserves authored glass surface properties and uses full masked transmission without invented refraction', () => {
+    const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
+      floats: { g_flCloakFactor1: 0.905, g_flCloakRefractAmount: 0.075, g_flFullyCloakedRefractFactor1: 0, g_flCloakBlurAmount: 0 } });
+    base.roughness = 0.067;
+    base.metalness = 0.116;
+    base.transmission = 0.9;
+    base.thickness = 0.12;
+    const result = buildDeadlockMaterial(base);
+    const glass = result.material as THREE.MeshPhysicalMaterial;
+    expect(glass.transmission).toBe(1);
+    expect(glass.thickness).toBe(0);
+    expect(glass.roughness).toBe(0.067);
+    expect(glass.metalness).toBe(0.116);
+    expect(glass.clearcoat).toBe(0);
+    expect(result.uniforms.uGlassTransmissionRoughness.value).toBe(0);
+    expect(base.transmission).toBe(0.9);
+    expect(base.thickness).toBe(0.12);
+    result.dispose();
+  });
   it('binds F_GLASS g_tGlass as an owned transmissionMap clone', () => {
     const sourceGlass = texture(16);
     const base = materialWithMorphic({
@@ -608,6 +687,16 @@ describe('buildDeadlockMaterial highlight uniforms', () => {
 });
 
 describe('buildDeadlockMaterial self-illum placeholder gate (Yamato shogun_body white-body)', () => {
+  it('retains small authored glass emission with a constant mask', () => {
+    const body = buildDeadlockMaterial(materialWithMorphic({
+      shader: 'pbr.vfx', ints: { F_GLASS: 1, F_SELF_ILLUM: 1, F_USE_NPR_LIGHTING: 1 },
+      floats: { g_flSelfIllumScale1: 0.02, g_flCloakBlurAmount: 0.007, g_flSelfIllumAlbedoFactor1: 1 },
+      vectors: { g_vSelfIllumTint1: [1, 1, 1, 1] }, self_illum_valid: false,
+    }));
+    expect(body.uniforms.uHasSelfIllum.value).toBe(1);
+    expect(body.uniforms.uSelfIllumScale.value).toBe(0.02);
+    body.dispose();
+  });
   it('does not glow a placeholder-mask self-illum at a modest scale (shogun_body 0.27)', () => {
     const body = buildDeadlockMaterial(
       materialWithMorphic({
