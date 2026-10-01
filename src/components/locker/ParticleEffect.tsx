@@ -9,6 +9,7 @@ import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName
 import { resolveParticleAttachment } from './particleAttachment';
 import { spritecardMaterial } from './spritecardMaterial';
 import { ParticleRopes } from './ParticleRopes';
+import { balanceSpritePreviewComposition } from './spritePreviewComposition';
 
 const VERT = /* glsl */ `
   attribute vec3 aPosition;
@@ -397,7 +398,7 @@ export function ParticleEffect({ descriptor, textureBaseUrl, model, playback }: 
   descriptor: FxDescriptor; textureBaseUrl: string; model?: THREE.Object3D;
   playback?: { paused: boolean; speed: number };
 }) {
-  const layers = useMemo(() => allSpriteLayers(descriptor), [descriptor]);
+  const layers = useMemo(() => balanceSpritePreviewComposition(allSpriteLayers(descriptor)), [descriptor]);
   const spawnEvents = useRef<SpawnEvents>(new SpawnEvents());
   useEffect(() => { spawnEvents.current = new SpawnEvents(); }, [descriptor]);
   return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} spawnEvents={spawnEvents} />)}
