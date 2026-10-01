@@ -45,6 +45,8 @@ describe('viewer playback bounds', () => {
     expect(heroClipLabel('primary_stand_idle', t)).toBe('locker.pose.clipLabels.idle');
     expect(heroClipLabel('ui_shop', t, 'Rem')).toBe('locker.pose.clipLabels.heroPose');
     expect(heroClipLabel('hero_pose', t, 'Dynamo')).toBe('locker.pose.clipLabels.heroPose');
+    expect(heroClipLabel('item_run_n', t, 'Wraith')).toBe('locker.pose.clipLabels.running');
+    expect(heroClipLabel('primary_stand_reload', t, 'Yamato')).toBe('locker.pose.clipLabels.reload');
     expect(heroClipLabel('custom_motion_right', t)).toBe('Custom motion right');
     expect(groupHeroClips(['primary_crouch_walk_reload', 'ui_shop'], 'Rem')).toEqual([
       { group: 'idle', clips: ['ui_shop'] },

@@ -8,6 +8,16 @@ import type { HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 
 type AnimationMetadata = Pick<HeroAnimationInfo, 'additive' | 'rootMotion'>;
 
+/** Only aliases verified against the selected legacy action's source and timing. */
+export function heroAnimationMetadataPaths(entry: string, name: string): string[] {
+  const folder = posix.dirname(entry);
+  const paths = [`${folder}/clips/${name}.vnmclip_c`];
+  if (name === 'primary_stand_reload' && /^models\/heroes[^/]*\/(?:dynamo|wraith|yamato)\/[^/]+\.vmdl_c$/.test(entry)) {
+    paths.push(`${folder}/clips/reload_idle.vnmclip_c`);
+  }
+  return paths;
+}
+
 /** NmClip and embedded legacy clips may share names but contain different
  * animation data. Only use compiled flags when frame count and duration agree. */
 export function parseHeroAnimationMetadata(raw: unknown, clip: HeroAnimationInfo): AnimationMetadata | null {
@@ -32,20 +42,21 @@ export async function readHeroAnimationMetadata(vpk: string, base: string, entry
   try {
     for (const [index, clip] of clips.slice(0, 8).entries()) {
       if (!/^[a-zA-Z0-9_-]+$/.test(clip.name)) continue;
-      const path = `${posix.dirname(entry)}/clips/${clip.name}.vnmclip_c`;
-      const bytes = readVpkEntryBytes(vpk, path) ?? (vpk !== base ? readVpkEntryBytes(base, path) : null);
-      if (!bytes || bytes.length > 2 * 1024 * 1024) continue;
-      const resource = attachmentMetadataResources(bytes)[0];
-      if (!resource) continue;
-      const file = join(dir, `${index}.vsndevts_c`);
-      await fs.writeFile(file, resource);
-      try {
-        const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', file]));
-        const flags = parseHeroAnimationMetadata(raw, clip);
-        if (flags) metadata.set(clip.name, flags);
-      } catch {
-        // Older exporters may not decode this graph generation. The reviewed
-        // catalog remains the fallback; missing flags are not invented.
+      for (const path of heroAnimationMetadataPaths(entry, clip.name)) {
+        const bytes = readVpkEntryBytes(vpk, path) ?? (vpk !== base ? readVpkEntryBytes(base, path) : null);
+        if (!bytes || bytes.length > 2 * 1024 * 1024) continue;
+        const resource = attachmentMetadataResources(bytes)[0];
+        if (!resource) continue;
+        const file = join(dir, `${index}.vsndevts_c`);
+        await fs.writeFile(file, resource);
+        try {
+          const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', file]));
+          const flags = parseHeroAnimationMetadata(raw, clip);
+          if (flags) { metadata.set(clip.name, flags); break; }
+        } catch {
+          // Older exporters may not decode this graph generation. The reviewed
+          // catalog remains the fallback; missing flags are not invented.
+        }
       }
     }
   } finally { await fs.rm(dir, { recursive: true, force: true }); }

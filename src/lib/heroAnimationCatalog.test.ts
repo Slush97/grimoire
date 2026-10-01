@@ -4,6 +4,23 @@ import { heroAnimationRecipe, isStandaloneHeroAnimation, preferredHeroAnimationN
 const clip = (name: string, extra: Partial<HeroAnimationInfo> = {}): HeroAnimationInfo => ({ name, frameCount: 61, fps: 30, durationSeconds: 2, looping: true, default: false, ...extra });
 
 describe('whole hero showcase actions', () => {
+  it('retains reviewed secondary actions without replacing showcase defaults', () => {
+    for (const [hero, idle, secondary] of [
+      ['Dynamo', 'primary_stand_idle', 'primary_stand_reload'],
+      ['Wraith', 'ui_shop_idle', 'item_run_n'],
+      ['Celeste', 'ui_shop', 'weapon_run_n'],
+      ['Yamato', 'ui_hero_select', 'primary_stand_reload'],
+    ]) {
+      const clips = [clip(secondary), clip(idle), clip('primary_crouch_reload')];
+      expect(selectHeroAnimations(clips, hero).map((c) => c.name)).toEqual([idle, secondary]);
+      expect(preferredHeroAnimationName(clips.map((c) => c.name), hero)).toBe(idle);
+      for (const flags of [{ additive: true }, { rootMotion: true }, { requiresBase: true }, { standalone: false }]) {
+        expect(selectHeroAnimations([clip(idle), clip(secondary, flags)], hero).map((c) => c.name)).toEqual([idle]);
+      }
+    }
+    expect(heroAnimationRecipe('primary_stand_reload', 'Wraith')?.playback).toBe('hold');
+    expect(heroAnimationRecipe('weapon_run_n', 'Celeste')?.playback).toBe('loop');
+  });
   it('chooses a reviewed shop idle even when its legacy loop flag is false', () => {
     const clips = [clip('respawn_countdown_idle'), clip('ui_shop', { looping: false }), clip('weapon_stand_idle')];
     expect(selectHeroAnimations(clips, 'Graves').map((c) => c.name)).toEqual(['ui_shop']);

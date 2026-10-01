@@ -2092,7 +2092,9 @@
       "clipLabels": {
         "idle": "Idle",
         "relaxedIdle": "Relaxed idle",
-        "heroPose": "Hero pose"
+        "heroPose": "Hero pose",
+        "running": "Run",
+        "reload": "Reload"
       }
     },
     "downloadSkins": {

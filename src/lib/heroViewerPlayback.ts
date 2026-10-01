@@ -49,6 +49,8 @@ export function heroClipLabel(name: string, t: ClipText, heroName?: string): str
   if (action === 'idle') return t('locker.pose.clipLabels.idle');
   if (action === 'relaxedIdle') return t('locker.pose.clipLabels.relaxedIdle');
   if (action === 'heroPose') return t('locker.pose.clipLabels.heroPose');
+  if (action === 'running') return t('locker.pose.clipLabels.running');
+  if (action === 'reload') return t('locker.pose.clipLabels.reload');
   const words = name.replace(/^.*[/\\]/, '').replace(/\.(?:vanim|vnmclip)(?:_c)?$/i, '')
     .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim();
   return words ? words[0].toUpperCase() + words.slice(1) : name;

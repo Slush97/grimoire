@@ -27,12 +27,12 @@ const recipe = (action: HeroAnimationAction, names: readonly string[], playback:
  * These are whole actions, not a reconstruction of gameplay graph layers.
  * See docs/hero-animation-selection.md for source and render limitations. */
 export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimationRecipe[]>> = {
-  Dynamo: [recipe('idle', ['primary_stand_idle']), recipe('heroPose', ['hero_pose'], 'hold')],
-  Wraith: [recipe('idle', ['ui_shop_idle', 'primary_stand_idle']), recipe('heroPose', ['ui_hero_select'], 'hold')],
+  Dynamo: [recipe('idle', ['primary_stand_idle']), recipe('heroPose', ['hero_pose'], 'hold'), recipe('reload', ['primary_stand_reload'], 'hold')],
+  Wraith: [recipe('idle', ['ui_shop_idle', 'primary_stand_idle']), recipe('heroPose', ['ui_hero_select'], 'hold'), recipe('running', ['item_run_n']), recipe('reload', ['primary_stand_reload'], 'hold')],
   Mirage: [recipe('relaxedIdle', ['primary_ooc_stand_idle']), recipe('heroPose', ['ui_main_menu'], 'hold')],
-  Yamato: [recipe('heroPose', ['ui_hero_select', 'primary_stand_idle'], 'hold')],
+  Yamato: [recipe('heroPose', ['ui_hero_select', 'primary_stand_idle'], 'hold'), recipe('reload', ['primary_stand_reload'], 'hold')],
   Viscous: [recipe('idle', ['ui_hero_select', 'primary_stand_idle'])],
-  Celeste: [recipe('idle', ['ui_shop', 'out_of_combat_stand_idle'])],
+  Celeste: [recipe('idle', ['ui_shop', 'out_of_combat_stand_idle']), recipe('running', ['weapon_run_n'])],
   Rem: [recipe('heroPose', ['ui_shop'], 'hold')],
   Victor: [recipe('idle', ['weapon_stand_idle'])],
   Graves: [recipe('idle', ['ui_shop', 'weapon_stand_idle'])],

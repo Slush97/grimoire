@@ -301,7 +301,7 @@ function versionFile(key: string): string {
  *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '11';
+const RIGGED_PIPELINE_VERSION = '12';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
