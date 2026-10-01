@@ -266,7 +266,11 @@ export function applyGlassParameters(physical: THREE.MeshPhysicalMaterial, morph
   // equivalent highlights at exported roughness 1. A matched historical render
   // isolated this value as the matte-glass regression. Restore the shared gloss
   // ceiling while retaining authored masks, transmission blur and metalness.
-  physical.roughness = Math.min(physical.roughness, 0.18);
+  // Blurred volumes retain their authored surface roughness. Applying the sharp
+  // glass ceiling to these materials turns the soft volume into a chrome shell.
+  if (firstNumber(morphic, ['g_flCloakBlurAmount'], 0) <= 0) {
+    physical.roughness = Math.min(physical.roughness, 0.18);
+  }
   physical.ior = firstNumber(morphic, ['g_flIOR'], physical.ior ?? 1.5);
   const floats = morphic.floats;
   if (floats?.g_flCloakRefractAmount !== undefined && floats.g_flFullyCloakedRefractFactor1 !== undefined) {
@@ -1315,7 +1319,12 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           }
           glassScene /= 9.0;
         }
-        vec3 glassAbsorption = min(vec3(1.0), pow(max(diffuseColor.rgb, vec3(0.01)), vec3(1.0 / max(dot(n, v), 0.01))));
+          // Preview lighting calibration for authored blurred volumes: our photo
+          // backdrop is LDR, unlike the engine's lit HDR scene-color buffer.
+          // Preserve black interior silhouettes rather than adding opaque glow.
+          // This exposure approximation leaves sharp glass unchanged.
+          if (glassRadius > 0.0) glassScene.rgb *= 12.0;
+          vec3 glassAbsorption = min(vec3(1.0), pow(max(diffuseColor.rgb, vec3(0.01)), vec3(1.0 / max(dot(n, v), 0.01))));
         // The existing mix applies coverage a second time, matching G squared.
         // Surface specular is accumulated separately and remains unchanged.
         transmitted.rgb = glassScene.rgb * glassAbsorption * (1.0 - metalnessFactor) * material.transmission;
@@ -1334,6 +1343,12 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       type: 'fs',
       value: 'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,',
     },
+    '#include <lights_fragment_maps>': THREE.ShaderChunk.lights_fragment_maps.replace(
+      'getIBLRadiance( geometryViewDir, geometryNormal, material.roughness )',
+      // A soft shared reflection probe prevents the studio's individual lights
+      // becoming white specks on glass; direct highlights remain independent.
+      'getIBLRadiance( geometryViewDir, geometryNormal, uCitadelGlass > 0.5 ? max(material.roughness, 0.45) : material.roughness )'
+    ),
     '#include <lights_fragment_end>': {
       type: 'fs',
       value: /* glsl */ `
@@ -1415,18 +1430,22 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float nprQ = celQuantize(clamp(nprLum, 0.0, 1.0), uBands, uStepSharpness);
             nprCel = mix(nprLit, nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0), nprSurfaceWeight);
           }
-          // Citadel uses a light-normal wrap, world-up ramp, rim mask G and
-          // AO R. A view-Fresnel lobe bleaches front-facing vertical cloth.
+          // The preview uses an opaque key-light gate, rim mask G and AO R.
+          // A broad view-Fresnel lobe bleaches front-facing vertical cloth.
           // Scene light/up-ramp constants remain a preview approximation.
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
           // Rim lighting is a separate additive lobe in Citadel glass. Coverage
           // removes diffuse, not this lobe; use lit albedo rather than tinting
           // the transmitted scene. Scene rim globals remain a preview approximation.
-          // Decoded Citadel glass evaluates a light-normal wrap and world-up
-          // ramp, rather than view Fresnel. Fresnel over the transmitted scene
-          // washes out opaque interior meshes. Scene globals remain approximate.
+          // Preview approximation: key-light wrap and world-up ramp avoid the
+          // broad opaque washout observed with the former view-Fresnel gate.
+          // Decoded glass confirms mask/AO inputs, but its camera-relative rim
+          // operand does not establish this opaque lighting approximation.
           float lightWrap = 1.0 + uWrap;
-          float lightRim = pow(clamp((dot(nprN, nprL) + uWrap) / (lightWrap * lightWrap), 0.0, 1.0), uRimPower);
+          // The decoded glass wrap uses camera-to-surface direction. Keep the
+          // visually calibrated opaque key-light approximation separate.
+          float rimDot = uCitadelGlass > 0.5 ? -dot(nprN, nprV) : dot(nprN, nprL);
+          float lightRim = pow(clamp((rimDot + uWrap) / (lightWrap * lightWrap), 0.0, 1.0), uRimPower);
           vec3 worldUpView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
           float upRamp = clamp(dot(nprN, worldUpView), 0.0, 1.0);
           float opaqueRimAo = 1.0;

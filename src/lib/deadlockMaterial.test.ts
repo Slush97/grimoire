@@ -297,6 +297,16 @@ describe('buildDeadlockMaterial detail textures', () => {
 });
 
 describe('buildDeadlockMaterial glass and translucency state', () => {
+  it('retains authored blurred-volume roughness without changing its blur or sharp-glass defaults', () => {
+    const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
+      floats: { g_flCloakBlurAmount: 0.007 } });
+    base.roughness = 1;
+    const result = buildDeadlockMaterial(base);
+    expect((result.material as THREE.MeshPhysicalMaterial).roughness).toBe(1);
+    expect(result.uniforms.uCitadelGlassBlur.value.toArray()).toEqual([0.007, 1, 1]);
+    expect(base.roughness).toBe(1);
+    result.dispose();
+  });
   it('keeps rough glass glossy in the preview without changing opaque surfaces or the cached base', () => {
     const glassBase = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 } });
     glassBase.roughness = 1;

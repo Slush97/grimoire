@@ -657,11 +657,12 @@ describe('applySource2MaterialHints glass and cloak state', () => {
 });
 
 describe('NPR rim mask (F8)', () => {
-  it('uses light/up/AO gates for opaque cloth instead of a bleaching view-Fresnel lobe, retaining glass rim', () => {
+  it('retains the preview light/up/AO approximation for opaque cloth and the separate glass rim', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('lightRim * upRamp * nprRimMaskG');
     expect(patch).toContain('clamp(ambientOcclusion, 0.0, 1.0)');
     expect(patch).toContain('uCitadelGlass > 0.5 ? 1.0 : opaqueRimAo');
+    expect(patch).toContain('uCitadelGlass > 0.5 ? -dot(nprN, nprV) : dot(nprN, nprL)');
     expect(patch).not.toContain('nprFres * nprGate');
   });
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
@@ -743,6 +744,9 @@ describe('glass transmission shader integration', () => {
     expect(shader.fragmentShader).toContain('if (uCitadelGlass > 0.5)');
     expect(shader.fragmentShader).toContain('max(dot(n, v), 0.01)');
     expect(shader.fragmentShader).toContain('(1.0 - metalnessFactor) * material.transmission');
+    expect(shader.fragmentShader).toContain('if (glassRadius > 0.0) glassScene.rgb *= 12.0;');
+    expect(shader.fragmentShader).toContain('uCitadelGlass > 0.5 ? max(material.roughness, 0.45) : material.roughness');
+    expect(shader.fragmentShader).not.toContain('#include <lights_fragment_maps>');
     expect(shader.fragmentShader).toContain('material.attenuationDistance );\n      }');
     material.dispose();
   });
