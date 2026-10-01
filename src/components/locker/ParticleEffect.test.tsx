@@ -13,6 +13,47 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('resolves effect-bundled authored frames when an older warm model sidecar is empty', async () => {
+    const model = new THREE.Group(), skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
+    const anchor = new THREE.Bone(); anchor.name = 'scapula_L'; anchor.position.set(10, 20, 30); skeleton.add(anchor); model.add(skeleton);
+    model.userData.grimoireAttachments = [];
+    const d: FxDescriptor = { ...descriptor, attachments: [{ name: 'ability_cast', bone: 'scapula_L', position: [2, 3, 4], rotation: [0, 0, 0, 1] }],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }] };
+    const renderer = await ReactThreeTestRenderer.create(<group><primitive object={model} /><ParticleEffect descriptor={d} textureBaseUrl="/" model={model} /></group>);
+    try {
+      await renderer.advanceFrames(1, 0.05);
+      let mesh: THREE.Mesh | undefined; renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const p = mesh!.geometry.getAttribute('aPosition');
+      expect([p.getX(0), p.getY(0), p.getZ(0)]).toEqual([expect.closeTo(12*0.0254), expect.closeTo(23*0.0254), expect.closeTo(34*0.0254)]);
+      expect(model.userData.grimoireAttachments).toEqual([]);
+    } finally { await renderer.unmount(); }
+  });
+  it('accumulates authored position oscillation and applies normalized-age color gradients', async () => {
+    const d: FxDescriptor = { ...descriptor, controlPoints: [], constantLifespan: 1,
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }], initializers: [],
+      operators: [
+        { class: 'C_OP_OscillateVector', params: { m_RateMin: [2, 0, 0], m_RateMax: [2, 0, 0],
+          m_FrequencyMin: [1, 1, 1], m_FrequencyMax: [1, 1, 1], m_flOscMult: 2, m_flRateScale: 0.5 } },
+        { class: 'C_OP_SetVec', params: { m_InputValue: { m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT',
+          m_FloatInterp: { pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' }, m_Gradient: { m_Stops: [
+            { m_flPosition: 0, m_Color: [255, 0, 0] }, { m_flPosition: 1, m_Color: [0, 255, 0] },
+          ] } } } },
+      ],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={d} textureBaseUrl="/" />);
+    try {
+      await renderer.advanceFrames(1, 0.1);
+      let mesh: THREE.Mesh | undefined; renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) mesh = o; });
+      const position = mesh!.geometry.getAttribute('aPosition'), color = mesh!.geometry.getAttribute('aColor');
+      // Source X maps to viewer Z without a skeleton; each step accumulates.
+      const first = Math.sin(Math.PI*0.7)*0.1*0.0254;
+      expect(position.getZ(0)).toBeCloseTo(first);
+      expect(color.getX(0)).toBeCloseTo(0.9); expect(color.getY(0)).toBeCloseTo(0.1);
+      await renderer.advanceFrames(1, 0.1);
+      expect(position.getZ(0)).toBeCloseTo(first + Math.sin(Math.PI*0.9)*0.1*0.0254);
+      expect(color.getX(0)).toBeCloseTo(0.8); expect(color.getY(0)).toBeCloseTo(0.2);
+    } finally { await renderer.unmount(); }
+  });
   it('samples local boxes through the authored CP orientation once', async () => {
     const model = new THREE.Group();
     const skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);

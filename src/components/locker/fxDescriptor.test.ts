@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxPreviewIssues, normalizedWindow, paramRange, spriteFadeValue,
+import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxPreviewIssues, normalizedWindow, paramRange, spriteFadeValue, spriteGradientColor,
   spriteParamsFor, type FxDescriptor, type SpriteEmissionState } from './fxDescriptor';
 const descriptor = (): FxDescriptor => ({
   name: 'sprite', maxParticles: 64, constantRadius: 15, constantColor: [255, 0, 0],
@@ -17,6 +17,29 @@ const descriptor = (): FxDescriptor => ({
     textures: ['materials/particle/noise.vtex', 'materials/particle/ring.vtex'] }], children: [],
 });
 describe('authored sprite attributes', () => {
+  it('interpolates authored normalized-age green gradients without inventing a texture transfer', () => {
+    const input = { m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT', m_FloatInterp: { pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' },
+      m_Gradient: { m_Stops: [{ m_flPosition: 0.3, m_Color: [157, 211, 125] }, { m_flPosition: 1, m_Color: [93, 147, 115] }] } };
+    expect(spriteGradientColor(input, 0)).toEqual([157/255, 211/255, 125/255]);
+    expect(spriteGradientColor(input, 0.65)).toEqual([125/255, 179/255, 120/255]);
+    expect(spriteGradientColor(input, 2)).toEqual([93/255, 147/255, 115/255]);
+    expect(spriteGradientColor({ ...input, m_FloatInterp: { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT' } }, 0.5)).toBeNull();
+  });
+  it('omits parent-event children rather than making their omitted rate an always-on glow', () => {
+    const d = descriptor(); d.emitters[0].params.m_bInitFromKilledParentParticles = true;
+    expect(spriteParamsFor(d)).toBeNull();
+    expect(allSpriteLayers(d)).toEqual([]);
+  });
+  it('adds nested instance delays without collapsing repeated sprites or delaying lifetime after birth', () => {
+    const spark = descriptor(); spark.startDelay = 0.15;
+    spark.emitters = [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 1 } }];
+    const parent = descriptor(); parent.renderers = []; parent.startDelay = 0.11; parent.children = [spark, { ...spark, startDelay: 0 }];
+    const layers = allSpriteLayers(parent);
+    expect(layers.map((layer) => layer.emissions[0].start)).toEqual([0.26, 0.11]);
+    expect(advanceSpriteEmission(layers[0].emissions, [], 0, 0.25, 10)).toEqual([]);
+    expect(advanceSpriteEmission(layers[0].emissions, [], 0.25, 0.3, 10)).toEqual([expect.closeTo(0.04)]);
+    expect(layers[0].lifetime).toEqual([2, 3]);
+  });
   it('preserves planar box bounds, local basis and exact control point', () => {
     const d = descriptor();
     d.controlPoints.unshift({ cp: 1, attachment: 'book_fx', attachType: 'PATTACH_POINT_FOLLOW', entity: 'self' });

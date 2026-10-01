@@ -12,12 +12,13 @@ export interface ParticleAttachmentResolution {
  * attachment metadata, so hand aliases provide only a bounded approximation.
  * A decoded authored frame supplies the bone and local transform when the
  * GLB omits its attachment nodes. Missing metadata retains the approximation. */
-export function resolveParticleAttachment(model: Object3D, attachment: string | null): ParticleAttachmentResolution {
+export function resolveParticleAttachment(model: Object3D, attachment: string | null, authoredFrames?: readonly ModelAttachment[]): ParticleAttachmentResolution {
   if (attachment) {
     const exact = model.getObjectByName(attachment);
     if (exact) return { object: exact, kind: 'exact' };
     const frames: ModelAttachment[] = model.userData.grimoireAttachments ?? [];
-    const frame = frames.find((candidate) => candidate.name === attachment);
+    const frame = authoredFrames?.find((candidate) => candidate.name === attachment)
+      ?? frames.find((candidate) => candidate.name === attachment);
     const bone = frame && model.getObjectByName(frame.bone);
     if (bone) return { object: bone, kind: 'exact', frame };
   }
@@ -41,7 +42,7 @@ export function particleAttachmentIssues(descriptor: FxDescriptor, model: Object
   for (const layer of allSpriteLayers(descriptor)) {
     if (checked.has(layer.attachment)) continue;
     checked.add(layer.attachment);
-    const resolution = resolveParticleAttachment(model, layer.attachment);
+    const resolution = resolveParticleAttachment(model, layer.attachment, layer.attachments);
     if (resolution.kind === 'missing' || resolution.kind === 'fallback') {
       issues.push({ system: descriptor.name, class: 'control-point',
         reason: resolution.kind === 'missing' ? 'missing-attachment' : 'attachment-fallback' });

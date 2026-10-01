@@ -315,11 +315,13 @@ function riggedVersionFile(key: string): string {
  * `docs/3d-preview-effects-feasibility.md`. Effects currently supported in part:
  * Wraith's hand energy (sprite + CP2 driver), Dynamo's
  * model-authored head effect (fixed sheet regions + head_fx), and Abrams's
- * model-declared preview book glow (local CP1 box). Familiar's unsupported
+ * model-declared preview book glow (local CP1 box), and Victor's authored
+ * independent bolt sparks (three transferred CP frames). Familiar's unsupported
  * hitbox-spawn layer is omitted. Ropes, snapshots and bone locking remain gaps.
  */
 const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
     Abrams: 'particles/abilities/abrams/abrams_ambient_book.vpcf_c',
+    Victor: 'particles/abilities/frank/frank_ambient.vpcf_c',
     Dynamo: 'particles/heroes/dynamo/dynamo_head_ambient.vpcf_c',
     Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
     Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
@@ -334,7 +336,8 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 // v4: retain authored fixed sheet regions and model particle scale.
 // v5: resolve authored core texture dependencies after the primary package.
 // v6: select a single CP configuration and support authored local box spawning.
-const EFFECT_CACHE_VERSION = '6';
+// v7: preserve child CP frame distribution and authored instance delays.
+const EFFECT_CACHE_VERSION = '7';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1116,7 +1119,7 @@ export async function exportHeroEffect(
             await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
                 heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
                 [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
-                heroName === 'Abrams' ? 'preview' : undefined);
+                heroName === 'Abrams' || heroName === 'Victor' ? 'preview' : undefined);
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };
         } finally {

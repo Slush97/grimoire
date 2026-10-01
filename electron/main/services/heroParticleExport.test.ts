@@ -2,13 +2,54 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-const h = vi.hoisted(() => ({ run: vi.fn(), stdout: vi.fn(), index: vi.fn() }));
+const h = vi.hoisted(() => ({ run: vi.fn(), stdout: vi.fn(), index: vi.fn(), attachments: vi.fn() }));
 vi.mock('./modMerger', () => ({ runVpkmerge: h.run, runVpkmergeStdout: h.stdout }));
 vi.mock('./vpk', () => ({ parseVpkDirectoryCached: h.index }));
+vi.mock('./modelAttachments', () => ({ exportModelAttachments: h.attachments }));
 import { exportParticleBundle, particleDescriptor } from './heroParticleExport';
 const resource = (overrides = {}) => ({ _class: 'CParticleSystemDefinition', m_Renderers: [], ...overrides });
 afterEach(() => vi.resetAllMocks());
 describe('compiled particle export', () => {
+  it('bundles the declared preview-model frames from mounted source without regenerating model geometry', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-declared-frames-test-'));
+    const frames = [{ name: 'bolt_fx', bone: 'scapula_L', position: [2, 3, 4], rotation: [0, 0, 0, 1] }];
+    h.attachments.mockResolvedValue(frames);
+    h.stdout.mockImplementation(async (args: string[]) => JSON.stringify(args[1] === 'particles/root.vpcf_c' ? resource({
+      m_controlPointConfigurations: [{ m_name: 'preview', m_previewState: { m_previewModel: 'models/heroes/frank.vmdl' } }],
+    }) : { m_modelInfo: { m_keyValueText: 'CitadelModelParticleSettings_t = { m_flScale = 0.91 }' } }));
+    try {
+      const file = join(dir, 'effect.json');
+      await exportParticleBundle('base.vpk', 'particles/root.vpcf_c', file, join(dir, 'tex'), undefined, ['skin.vpk', 'base.vpk'], 'preview');
+      expect(h.attachments).toHaveBeenCalledWith('skin.vpk', 'base.vpk', 'models/heroes/frank.vmdl_c');
+      expect(JSON.parse(await fs.readFile(file, 'utf8'))).toMatchObject({ attachments: frames, scale: 0.91 });
+      expect(h.run).not.toHaveBeenCalled();
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
+  it('preserves repeated child instances, sequential CP frame transfers and authored delays', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-child-frames-test-'));
+    const anchors = [11, 12, 13].map((cp) => ({ m_iControlPoint: cp, m_attachmentName: `bolt_${cp}`, m_iAttachType: 'PATTACH_POINT_FOLLOW' }));
+    const parent = resource({ m_controlPointConfigurations: [{ m_name: 'preview', m_drivers: anchors }],
+      m_Children: [{ m_ChildRef: 'particles/bolts.vpcf' }] });
+    const bolts = resource({ m_controlPointConfigurations: [{ m_name: 'preview', m_drivers: anchors.slice(0, 2) }],
+      m_PreEmissionOperators: [{ _class: 'C_OP_SetParentControlPointsToChildCP', m_nChildControlPoint: 11,
+        m_nNumControlPoints: 3, m_nFirstSourcePoint: 11, m_bSetOrientation: true }],
+      m_Children: [{ m_ChildRef: 'particles/other.vpcf' },
+        ...[0, 0.11, 0.15].map((m_flDelay) => ({ m_ChildRef: 'particles/spark.vpcf', m_flDelay, m_nGroupId: 99 }))] });
+    h.stdout.mockImplementation(async (args: string[]) => JSON.stringify(args[1] === 'particles/root.vpcf_c' ? parent
+      : args[1] === 'particles/bolts.vpcf_c' ? bolts : args[1] === 'particles/spark.vpcf_c'
+        ? resource({ m_Children: [{ m_ChildRef: 'particles/aura.vpcf' }] }) : resource({ m_nGroupID: 9 })));
+    try {
+      const file = join(dir, 'effect.json');
+      await exportParticleBundle('base.vpk', 'particles/root.vpcf_c', file, join(dir, 'tex'), undefined, [], 'preview');
+      const all = (JSON.parse(await fs.readFile(file, 'utf8')) as ReturnType<typeof particleDescriptor>).children[0].children;
+      expect(all[0].controlPoints.find((cp) => cp.cp === 11)?.attachment).toBe('bolt_11');
+      const children = all.slice(1);
+      expect(children).toHaveLength(3);
+      expect(children.map((d) => d.startDelay ?? 0)).toEqual([0, 0.11, 0.15]);
+      expect(children.map((d) => d.controlPoints.find((cp) => cp.cp === 11)?.attachment)).toEqual(['bolt_11', 'bolt_12', 'bolt_13']);
+      expect(children.map((d) => d.children[0].controlPoints.find((cp) => cp.cp === 11)?.attachment)).toEqual(['bolt_11', 'bolt_12', 'bolt_13']);
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
   it('selects one authored configuration instead of combining incompatible CP drivers', () => {
     const raw = resource({ m_controlPointConfigurations: [
       { m_name: 'game', m_drivers: [{ m_iControlPoint: 1, m_attachmentName: 'game_anchor' }] },

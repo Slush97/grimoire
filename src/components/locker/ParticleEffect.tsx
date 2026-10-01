@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
-import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, spriteFadeValue,
+import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, spriteFadeValue, spriteGradientColor,
   type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
 import { resolveParticleAttachment } from './particleAttachment';
 
@@ -59,6 +59,7 @@ interface Particle {
   velocity: THREE.Vector3; radius: number; rotation: number; spin: number;
   color: THREE.Color; alpha: number;
   region: [number, number, number, number];
+  oscillation: { rate: THREE.Vector3; frequency: THREE.Vector3; start: number; end: number } | null;
 }
 const sample = (range: [number, number]) => THREE.MathUtils.lerp(range[0], range[1], Math.random());
 
@@ -77,7 +78,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [layer.texture, textureBaseUrl]);
-  const attachment = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment) : null, [model, layer.attachment]);
+  const attachment = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment, layer.attachments) : null, [model, layer.attachment, layer.attachments]);
   const anchor = attachment?.object;
   const beforeTransmission = useMemo(() => {
     let glass = false;
@@ -222,7 +223,12 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       const tint = new THREE.Color().setRGB(...layer.colorMin).lerp(new THREE.Color().setRGB(...layer.colorMax), Math.random());
       live.push({ age: birthAge-delta, life: sample(layer.lifetime),
         position: offset.add(origin), velocity,
-        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region });
+        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region,
+        oscillation: layer.oscillation ? {
+          rate: new THREE.Vector3(...layer.oscillation.rateMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.rateMax[i], Math.random()))),
+          frequency: new THREE.Vector3(...layer.oscillation.frequencyMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.frequencyMax[i], Math.random()))),
+          start: sample(layer.oscillation.start), end: sample(layer.oscillation.end),
+        } : null });
     }
     const position = geometry.getAttribute('aPosition') as THREE.InstancedBufferAttribute;
     const color = geometry.getAttribute('aColor') as THREE.InstancedBufferAttribute;
@@ -253,7 +259,22 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       }
       p.rotation += p.spin*step;
       const t = p.age/p.life;
+      if (layer.oscillation && p.oscillation) {
+        const osc = layer.oscillation, state = p.oscillation;
+        const age = osc.proportional ? t : p.age;
+        if (age >= state.start && age < state.end) {
+          // Source adds a sinusoidal velocity-like offset every step in world
+          // axes. It does not replace the spawn position or rotate with the CP.
+          p.position.add(new THREE.Vector3(
+            state.rate.x*Math.sin(Math.PI*(age*state.frequency.x*osc.multiplier+osc.offset)),
+            state.rate.y*Math.sin(Math.PI*(age*state.frequency.y*osc.multiplier+osc.offset)),
+            state.rate.z*Math.sin(Math.PI*(age*state.frequency.z*osc.multiplier+osc.offset))
+          ).multiplyScalar(sourceUnit*step*osc.scale).applyQuaternion(sourceOrientation));
+        }
+      }
       scratch.color.copy(p.color);
+      const gradientColor = spriteGradientColor(layer.colorGradient, t);
+      if (gradientColor) scratch.color.setRGB(...gradientColor);
       if (scratch.fadeColor) scratch.color.lerp(scratch.fadeColor, normalizedWindow(t, layer.colorFadeTime, layer.colorEase));
       position.setXYZ(count, p.position.x, p.position.y, p.position.z);
       color.setXYZ(count, scratch.color.r*layer.overbright, scratch.color.g*layer.overbright, scratch.color.b*layer.overbright);
