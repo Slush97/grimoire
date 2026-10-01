@@ -666,6 +666,16 @@ describe('buildDeadlockMaterial highlight uniforms', () => {
 });
 
 describe('buildDeadlockMaterial self-illum placeholder gate (Yamato shogun_body white-body)', () => {
+  it('retains small authored glass emission with a constant mask', () => {
+    const body = buildDeadlockMaterial(materialWithMorphic({
+      shader: 'pbr.vfx', ints: { F_GLASS: 1, F_SELF_ILLUM: 1, F_USE_NPR_LIGHTING: 1 },
+      floats: { g_flSelfIllumScale1: 0.02, g_flCloakBlurAmount: 0.007, g_flSelfIllumAlbedoFactor1: 1 },
+      vectors: { g_vSelfIllumTint1: [1, 1, 1, 1] }, self_illum_valid: false,
+    }));
+    expect(body.uniforms.uHasSelfIllum.value).toBe(1);
+    expect(body.uniforms.uSelfIllumScale.value).toBe(0.02);
+    body.dispose();
+  });
   it('does not glow a placeholder-mask self-illum at a modest scale (shogun_body 0.27)', () => {
     const body = buildDeadlockMaterial(
       materialWithMorphic({

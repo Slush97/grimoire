@@ -26,6 +26,7 @@ import {
   detailLayer,
   highlightLayer,
   citadelColorUniforms,
+  configureCitadelGlassPass,
 } from './source2NprMaterial';
 import { compileScalarExpr, peakScalar } from './dynamicScalar';
 import { source2TintPlan } from './source2ColorCorrection';
@@ -333,7 +334,8 @@ export function buildDeadlockMaterial(
   // hints path, which the unified builder previously forgot to honor).
   const hasRealSelfIllumMask = morphic.self_illum_valid ?? isMeaningfulMask(selfIllumMap);
   const placeholderSelfIllumThreshold = additive ? SI_SCALE_EPS : PLACEHOLDER_SI_SCALE;
-  const hasSelfIllum = si.peak > (hasRealSelfIllumMask ? SI_SCALE_EPS : placeholderSelfIllumThreshold);
+  const authoredGlassIllum = glass && flag(morphic, 'F_SELF_ILLUM');
+  const hasSelfIllum = si.peak > (authoredGlassIllum ? 0 : hasRealSelfIllumMask ? SI_SCALE_EPS : placeholderSelfIllumThreshold);
   if (unlit && clone.emissive) {
     clone.emissive.copy(clone.color ?? new THREE.Color(1, 1, 1));
     clone.emissiveIntensity = Math.max(clone.emissiveIntensity ?? 1, 1.2);
@@ -404,7 +406,7 @@ export function buildDeadlockMaterial(
   // Infernus's body mask IS the tattoo pattern, so it must localize to the tattoos
   // rather than glow the whole skin (incl. the face).
   let illumMap: THREE.Texture | null = null;
-  if (hasSelfIllum && selfIllumMap && hasRealSelfIllumMask) {
+  if (hasSelfIllum && selfIllumMap && (hasRealSelfIllumMask || authoredGlassIllum)) {
     // Scroll wraps via fract(), so the sampler must repeat or the seam smears.
     illumMap = ownClone(selfIllumMap);
     illumMap.wrapS = THREE.RepeatWrapping;
@@ -535,6 +537,7 @@ export function buildDeadlockMaterial(
     uniforms,
     patchMap: NPR_PATCH_MAP,
   });
+  configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
 
   const dispose = () => {
     // CSM.dispose does NOT free its base material, so dispose the owned clone

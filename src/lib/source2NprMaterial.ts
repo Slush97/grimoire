@@ -520,6 +520,10 @@ export function albedoReflectivity(morphic: MorphicExtras): THREE.Vector3 {
  * according to the authored switch. Missing switches default to after. */
 export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THREE.IUniform> {
   const pbr = morphic.shader.toLowerCase() === 'pbr.vfx';
+  const glassBlur = firstNumber(morphic, ['g_flCloakBlurAmount'], Number.NaN);
+  const staticGlass = pbr && flag(morphic, 'F_GLASS') && Number.isFinite(glassBlur)
+    && !['g_flCloakBlurAmount', 'g_flCloakBlurFactorMinRoughness', 'g_flCloakBlurFactorMaxRoughness']
+      .some((name) => !!morphic.dynamic_params?.[name]);
   return {
     uVertexColorBeforeCsb: { value: !pbr || flag(morphic, 'g_bApplyTintToVertexColors') ? 1 : 0 },
     uMaskVertexColor: { value: pbr && scalar(morphic.ints?.g_bMaskVertexColorTint1, 1) !== 0 ? 1 : 0 },
@@ -529,9 +533,28 @@ export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THR
       uCitadelSpecular: { value: pbr ? 1 : 0 },
       // Authored zero blur is independent of the surface's specular roughness.
       uGlassTransmissionRoughness: { value: pbr && flag(morphic, 'F_GLASS') && morphic.floats?.g_flCloakBlurAmount === 0 ? 0 : -1 },
+      uCitadelGlass: { value: staticGlass ? 1 : 0 },
+      uCitadelGlassBackfacePass: { value: 0 },
+    // Source blur is a screen-UV radius, independent of specular roughness.
+    uCitadelGlassBlur: { value: new THREE.Vector3(
+      staticGlass ? Math.max(0, glassBlur) : 0,
+      firstNumber(morphic, ['g_flCloakBlurFactorMinRoughness'], 1),
+      firstNumber(morphic, ['g_flCloakBlurFactorMaxRoughness'], 1),
+    ) },
     uNoSpecularAtFullRoughness: {
       value: pbr && flag(morphic, 'F_USE_NPR_LIGHTING') && flag(morphic, 'F_NO_SPECULAR_AT_FULL_ROUGHNESS') ? 1 : 0,
     },
+  };
+}
+
+/** Keep authored two-sided glass out of Three's optional backface feedback pass.
+ * Its main draw remains two-sided; both faces sample the pre-glass scene. */
+export function configureCitadelGlassPass(material: THREE.Material, uniforms: Record<string, THREE.IUniform>): void {
+  const previous = material.onBeforeRender;
+  const twoSided = material.side === THREE.DoubleSide;
+  material.onBeforeRender = function (...args) {
+    previous.apply(this, args);
+    uniforms.uCitadelGlassBackfacePass.value = twoSided && uniforms.uCitadelGlass.value > 0.5 && this.side === THREE.BackSide ? 1 : 0;
   };
 }
 
@@ -1090,6 +1113,9 @@ uniform float uMaskVertexColor;
 uniform float uVertexColorStrength;
 uniform float uCitadelSpecular;
 uniform float uGlassTransmissionRoughness;
+uniform float uCitadelGlass;
+uniform float uCitadelGlassBackfacePass;
+uniform vec3 uCitadelGlassBlur;
 uniform float uNoSpecularAtFullRoughness;
 uniform float uTime;
 uniform sampler2D uSelfIllumMap;
@@ -1188,6 +1214,7 @@ vec2 detailUv() {
 void main() {
   // nprMask is declared in main() scope, so it is also visible at the post-light
   // patch site (same main() block, later in the chunk chain).
+  if (uCitadelGlassBackfacePass > 0.5) discard;
   vec4 nprMask = uHasTintMask > 0.5 ? texture2D(uTintRimMask, vNprUv) : vec4(1.0);
   vec3 nprDetail = vec3(0.0);
   float tintEnable = uHasTintMask > 0.5 ? nprMask.r : 0.0;
@@ -1231,6 +1258,15 @@ void main() {
     }
   }
 
+  // Authored glass self illumination tints the surface before lighting and
+  // absorption. A constant mask is valid data, even for a small authored scale.
+  if (uCitadelGlass > 0.5 && uHasSelfIllum > 0.5) {
+    float glassIllumMask = texture2D(uSelfIllumMap, fract(vNprUv + uSelfIllumScroll * uTime)).r;
+    vec3 glassIllumColor = mix(uSelfIllumTint, uSelfIllumTint * csm_DiffuseColor.rgb, uSelfIllumAlbedoFactor);
+    csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, glassIllumColor,
+      glassIllumMask * clamp(uSelfIllumScale * uSelfIllumPulse, 0.0, 1.0));
+  }
+
 }
 `;
 
@@ -1242,6 +1278,42 @@ void main() {
 // tonemaps our result downstream exactly like the PBR path.
 export const NPR_PATCH_MAP: CSMPatchMap = {
   '*': {
+    // CSM has already expanded Three's transmission chunk at this point.
+    // Keep Three's sampling/projection primitives, but use the authored glass
+    // coverage and view-dependent absorption instead of its volume BRDF tint.
+    'vec4 transmitted = getIBLVolumeRefraction(': {
+      type: 'fs',
+      value: /* glsl */ `
+      vec4 transmitted;
+      if (uCitadelGlass > 0.5) {
+        vec3 glassExit = pos + getVolumeTransmissionRay(n, v, material.thickness, material.ior, modelMatrix);
+        vec4 glassClip = projectionMatrix * viewMatrix * vec4(glassExit, 1.0);
+        vec2 glassUv = glassClip.xy / glassClip.w * 0.5 + 0.5;
+        float glassRadius = clamp(uCitadelGlassBlur.x * mix(uCitadelGlassBlur.y, uCitadelGlassBlur.z, material.roughness), 0.0, 1.0);
+        vec4 glassScene = getTransmissionSample(clamp(glassUv, 0.0, 1.0), 0.0, material.ior);
+        if (glassRadius > 0.0) {
+          // A compact symmetric filter approximates the authored UV blur. It
+          // deliberately does not invent the game's noise or depth-aware pass.
+          glassScene *= 2.0;
+          glassScene += getTransmissionSample(clamp(glassUv + vec2(glassRadius, 0.0), 0.0, 1.0), 0.0, material.ior);
+          glassScene += getTransmissionSample(clamp(glassUv - vec2(glassRadius, 0.0), 0.0, 1.0), 0.0, material.ior);
+          glassScene += getTransmissionSample(clamp(glassUv + vec2(0.0, glassRadius), 0.0, 1.0), 0.0, material.ior);
+          glassScene += getTransmissionSample(clamp(glassUv - vec2(0.0, glassRadius), 0.0, 1.0), 0.0, material.ior);
+          glassScene /= 6.0;
+        }
+        vec3 glassAbsorption = min(vec3(1.0), pow(max(diffuseColor.rgb, vec3(0.01)), vec3(1.0 / max(dot(n, v), 0.01))));
+        // The existing mix applies coverage a second time, matching G squared.
+        // Surface specular is accumulated separately and remains unchanged.
+        transmitted.rgb = glassScene.rgb * glassAbsorption * (1.0 - metalnessFactor) * material.transmission;
+        float glassAlphaWeight = dot(glassAbsorption, vec3(1.0 / 3.0)) * (1.0 - metalnessFactor);
+        transmitted.a = 1.0 - (1.0 - glassScene.a) * glassAlphaWeight;
+      } else {
+        transmitted = getIBLVolumeRefraction(`,
+    },
+    'material.attenuationColor, material.attenuationDistance );': {
+      type: 'fs',
+      value: 'material.attenuationColor, material.attenuationDistance );\n      }',
+    },
     // CSM expands transmission_fragment before applying custom patches. Match
     // the refraction call in that expanded chunk, rather than its removed include.
     'n, v, material.roughness,': {
@@ -1335,10 +1407,14 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
           float nprFres = pow(clamp(1.0 - abs(dot(nprN, nprV)), 0.0, 1.0), uRimPower);
           float nprGate = smoothstep(-uWrap, 1.0, dot(nprN, nprL));
-          nprRim = nprFres * nprGate * nprRimMaskG * uRimStrength * nprSurfaceWeight;
+          // Rim lighting is a separate additive lobe in Citadel glass. Coverage
+          // removes diffuse, not this lobe; use lit albedo rather than tinting
+          // the transmitted scene. Scene rim globals remain a preview approximation.
+          nprRim = nprFres * nprGate * nprRimMaskG * uRimStrength;
         }
 
-        vec3 nprOut = nprCel + uRimColor * nprRim;
+        vec3 nprRimTint = mix(uRimColor, reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, 1.0 - nprSurfaceWeight);
+        vec3 nprOut = nprCel + nprRimTint * nprRim;
 
         if (uHasTransmissive > 0.5) {
           vec3 trans = texture2D(uNprTransmissiveColor, vNprUv).rgb * uNprTransmissiveTint;
@@ -1384,7 +1460,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float inkGate = max(warmLine, brightLine) * detailGate * (1.0 - headRegion);
             siMask = clamp(rawSiMask * rawSiMask * 8192.0 * inkGate, 0.0, 1.0);
           }
-          vec3 siColor = mix(uSelfIllumTint, csm_DiffuseColor.rgb, uSelfIllumAlbedoFactor);
+          vec3 siColor = uCitadelGlass > 0.5 ? csm_DiffuseColor.rgb : mix(uSelfIllumTint, csm_DiffuseColor.rgb, uSelfIllumAlbedoFactor);
           float siLuma = dot(siColor, vec3(0.2126, 0.7152, 0.0722));
           siColor = max(mix(vec3(siLuma), siColor, uSelfIllumSat), 0.0);
           vec3 siAdd = siColor * (siMask * uSelfIllumScale);
@@ -1569,6 +1645,7 @@ export function wrapMaterialWithNpr(
     uniforms,
     patchMap: NPR_PATCH_MAP,
   });
+  configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
 
   // These clones are the only GPU resources this wrap created (the base material
   // and its standard maps are owned by disposeScene). Fallback samplers point at

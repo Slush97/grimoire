@@ -6,6 +6,8 @@ import {
   NPR_PATCH_MAP,
   NPR_VERTEX,
   applySource2MaterialHints,
+  citadelColorUniforms,
+  configureCitadelGlassPass,
   detailLayer,
   glassTransmissionTexture,
   hasDynamicAlphaOverride,
@@ -31,6 +33,48 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
     hash: 'test',
   };
 }
+
+describe('Authored glass sampling', () => {
+  it('suppresses only the glass backface feedback pass while retaining the two-sided main draw', () => {
+    const material = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide });
+    const uniforms = citadelColorUniforms({ shader: 'pbr.vfx', ints: { F_GLASS: 1 }, floats: { g_flCloakBlurAmount: 0 } } as MorphicExtras);
+    const previous = vi.fn();
+    material.onBeforeRender = previous;
+    configureCitadelGlassPass(material, uniforms);
+    const render = () => material.onBeforeRender(null!, null!, null!, null!, null!, null!);
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(0);
+    material.side = THREE.BackSide;
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(1);
+    material.side = THREE.DoubleSide;
+    render();
+    expect(uniforms.uCitadelGlassBackfacePass.value).toBe(0);
+    expect(previous).toHaveBeenCalledTimes(3);
+    expect(NPR_FRAGMENT).toContain('if (uCitadelGlassBackfacePass > 0.5) discard;');
+  });
+  it('uses authored screen blur independently of specular roughness and retains dynamic fallback', () => {
+    const morphic = { shader: 'pbr.vfx', ints: { F_GLASS: 1 }, floats: { g_flCloakBlurAmount: 0.007 } } as MorphicExtras;
+    const uniforms = citadelColorUniforms(morphic);
+    expect(uniforms.uCitadelGlass.value).toBe(1);
+    expect(uniforms.uCitadelGlassBlur.value.toArray()).toEqual([0.007, 1, 1]);
+    expect(citadelColorUniforms({ ...morphic, dynamic_params: { g_flCloakBlurAmount: dynamicExpr() } }).uCitadelGlass.value).toBe(0);
+    expect(citadelColorUniforms({ ...morphic, ints: { F_GLASS: 0 } }).uCitadelGlass.value).toBe(0);
+  });
+
+  it('applies the second coverage factor and removes transmitted metallic color', () => {
+    const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
+    const expression = patch.value.match(/transmitted.rgb = ([^;]+);/)![1];
+    const evaluate = new Function('glassScene', 'glassAbsorption', 'metalnessFactor', 'material', `return ${expression};`);
+    const transmitted = (coverage: number, metalness: number) => coverage * evaluate(
+      { rgb: 0.8 }, 0.5, metalness, { transmission: coverage },
+    ) as number;
+    expect(transmitted(1, 0)).toBeCloseTo(0.4);
+    expect(transmitted(0.5, 0)).toBeCloseTo(0.1);
+    expect(transmitted(0, 0)).toBe(0);
+    expect(transmitted(1, 1)).toBe(0);
+  });
+});
 
 describe('NPR_FRAGMENT vertex colors', () => {
   it('places authored vertex tint on the correct side of CSB and preserves alpha separately', () => {
@@ -601,15 +645,16 @@ describe('NPR rim mask (F8)', () => {
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('nprMask.g : uRimMaskDefault');
-    expect(patch).toContain('uRimColor * nprRim');
+      expect(patch).toContain('nprRimTint * nprRim');
   });
 
-  it('keeps transmitted scene color out of the surface cel and rim approximation', () => {
+    it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('#ifdef USE_TRANSMISSION');
     expect(patch).toContain('1.0 - clamp(material.transmission, 0.0, 1.0)');
     expect(patch).toContain('mix(nprLit, nprLit *');
-    expect(patch).toContain('uRimStrength * nprSurfaceWeight');
+      expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
+      expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
   });
 });
 
@@ -673,6 +718,10 @@ describe('glass transmission shader integration', () => {
       'n, v, uGlassTransmissionRoughness >= 0.0 ? uGlassTransmissionRoughness : material.roughness,'
     );
     expect(shader.fragmentShader).not.toContain('n, v, material.roughness,');
+    expect(shader.fragmentShader).toContain('if (uCitadelGlass > 0.5)');
+    expect(shader.fragmentShader).toContain('max(dot(n, v), 0.01)');
+    expect(shader.fragmentShader).toContain('(1.0 - metalnessFactor) * material.transmission');
+    expect(shader.fragmentShader).toContain('material.attenuationDistance );\n      }');
     material.dispose();
   });
 });
