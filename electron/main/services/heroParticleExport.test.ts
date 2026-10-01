@@ -170,7 +170,7 @@ describe('compiled particle export', () => {
   it('bounds graph and unique texture budgets before decoding textures', async () => {
     h.stdout.mockImplementation(async (args: string[]) => JSON.stringify(resource({
       m_Children: args[1] === 'particles/root.vpcf_c'
-        ? Array.from({ length: 16 }, (_, i) => ({ m_ChildRef: `particles/child${i}.vpcf` })) : [],
+        ? Array.from({ length: 32 }, (_, i) => ({ m_ChildRef: `particles/child${i}.vpcf` })) : [],
     })));
     await expect(exportParticleBundle('base.vpk', 'particles/root.vpcf_c', 'unused', 'unused')).rejects.toThrow('graph exceeds');
     expect(h.run).not.toHaveBeenCalled();
@@ -179,5 +179,31 @@ describe('compiled particle export', () => {
     }] })));
     await expect(exportParticleBundle('base.vpk', 'particles/root.vpcf_c', 'unused', 'unused')).rejects.toThrow('textures exceed');
     expect(h.run).not.toHaveBeenCalled();
+  });
+});
+import type { FxDescriptor } from '../../../src/components/locker/fxDescriptor';
+describe('independent authored ambient roots', () => {
+  it('keeps independent control-point frames and distributes two repeated children without merging instances', async () => {
+    const root = 'particles/test/head.vpcf_c', weapon = 'particles/test/weapon.vpcf_c', child = 'particles/test/end.vpcf_c';
+    const raw = {
+      [root]: { _class: 'CParticleSystemDefinition', m_controlPointConfigurations: [{ m_name: 'preview', m_drivers: [{ m_attachmentName: 'head', m_iAttachType: 'PATTACH_POINT_FOLLOW' }] }] },
+      [weapon]: { _class: 'CParticleSystemDefinition', m_controlPointConfigurations: [{ m_name: 'preview', m_drivers: [
+        { m_iControlPoint: 1, m_attachmentName: 'top' }, { m_iControlPoint: 2, m_attachmentName: 'bottom' }] }],
+        m_PreEmissionOperators: [{ _class: 'C_OP_SetParentControlPointsToChildCP', m_nChildControlPoint: 3, m_nFirstSourcePoint: 1, m_nNumControlPoints: 2, m_bSetOrientation: true }],
+        m_Children: [{ m_ChildRef: child }, { m_ChildRef: child }] },
+      [child]: { _class: 'CParticleSystemDefinition' },
+    };
+    h.stdout.mockImplementation(async ([pathType, path]) => { expect(pathType).toBe('soundevents'); return JSON.stringify(raw[path as keyof typeof raw]); });
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-ambient-roots-'));
+    try {
+      const file = join(dir, 'effect.json');
+      await exportParticleBundle('pak', root, file, join(dir, 'tex'), undefined, [], 'preview', [weapon, weapon, root]);
+      const d: FxDescriptor = JSON.parse(await fs.readFile(file, 'utf8'));
+      expect(d.controlPoints[0].attachment).toBe('head');
+      expect(d.children).toHaveLength(1);
+      expect(d.children[0].children.map(c => c.controlPoints.find(p => p.cp === 3)?.attachment)).toEqual(['top', 'bottom']);
+      expect(d.children[0].controlPoints.some(p => p.attachment === 'head')).toBe(false);
+      await expect(exportParticleBundle('pak', root, file, join(dir, 'tex'), undefined, [], 'preview', [weapon, weapon, weapon, weapon])).rejects.toThrow('roots exceed');
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
   });
 });

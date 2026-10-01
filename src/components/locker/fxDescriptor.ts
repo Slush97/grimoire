@@ -66,7 +66,7 @@ export interface SpriteSimParams {
   scale: number; sheet: FxSheet | undefined; sequence: [number, number]; persistent: boolean; radiusInput: unknown; radiusScale: number;
   spawnBias: Vec3; offsets: Array<{ min: Vec3; max: Vec3; local: boolean; proportional: boolean }>;
   attachment: string | null; texture: string | null; additive: boolean; maxParticles: number;
-  attachments?: ModelAttachment[];
+  attachments?: ModelAttachment[]; spritecard?: FxRenderer;
   emitRate: number; emitFirst: boolean; lifetime: [number, number]; radius: [number, number];
   colorMin: Vec3; colorMax: Vec3; colorFade: Vec3 | null; colorFadeTime: [number, number]; colorEase: boolean;
   colorGradient: unknown;
@@ -137,7 +137,7 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
     alphaScale: Math.max(0, Math.min(1, paramScalar(renderer.params.m_flAlphaScale, 1))),
     alphaOnly: Array.isArray(renderer.params.m_vecTexturesInput) && renderer.params.m_vecTexturesInput.some((row) => row?.m_hTexture === texture && row?.m_nTextureChannels === 'SPRITECARD_TEXTURE_CHANNEL_MIX_A'),
     colorInitializers: d.initializers.filter((n) => n.class === 'C_INIT_SetAttributeToScalarExpression' || n.class === 'C_INIT_InitVec').slice(0, 32),
-    scale: 1, sheet: texture ? d.sheets?.[texture] : undefined,
+    spritecard: renderer, scale: 1, sheet: texture ? d.sheets?.[texture] : undefined,
     spawnBias: vector(sphere?.params.m_vecDistanceBias, [1, 1, 1]),
     offsets: d.initializers.filter((n) => n.class === 'C_INIT_PositionOffset').slice(0, 16).map((n) => ({
       min: vector(n.params.m_OffsetMin, [0, 0, 0]), max: vector(n.params.m_OffsetMax, [0, 0, 0]),
@@ -334,7 +334,7 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
   const issues: FxPreviewIssue[] = [];
   let visited = 0;
   const visit = (d: FxDescriptor, depth: number) => {
-    if (++visited > 16 || depth > 4) {
+    if (++visited > 32 || depth > 4) {
       if (issues.length < 128) issues.push({ system: d.name, class: '', reason: 'graph-budget' });
       return;
     }
@@ -419,7 +419,7 @@ export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
   let remaining = 512;
   let systems = 0;
   const visit = (system: FxDescriptor, depth: number, parentDelay: number) => {
-    if (++systems > 16 || depth > 4 || layers.length >= 16 || remaining <= 0) return;
+    if (++systems > 32 || depth > 4 || layers.length >= 16 || remaining <= 0) return;
     const delay = parentDelay + Math.max(0, Math.min(30, paramScalar(system.startDelay, 0)));
     for (const renderer of system.renderers) {
       if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;

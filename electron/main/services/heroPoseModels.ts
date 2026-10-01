@@ -339,7 +339,7 @@ const EFFECT_VERSION_FILENAME = '.effect-cache-version';
 // v5: resolve authored core texture dependencies after the primary package.
 // v6: select a single CP configuration and support authored local box spawning.
 // v7: preserve child CP frame distribution and authored instance delays.
-const EFFECT_CACHE_VERSION = '8';
+const EFFECT_CACHE_VERSION = '9';
 
 function effectFile(key: string): string {
     return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
@@ -1121,7 +1121,8 @@ export async function exportHeroEffect(
             await exportParticleBundle(pak01, entry, effectFile(exportKey), effectTexDir(exportKey),
                 heroName === 'Dynamo' ? 'models/heroes_wip/dynamo/dynamo.vmdl_c' : MODEL_ENTRY_OVERRIDES[heroName],
                 [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
-                ['Abrams', 'Victor', 'Solomon', 'Celeste'].includes(heroName) ? 'preview' : undefined);
+                ['Abrams', 'Victor', 'Solomon', 'Celeste'].includes(heroName) ? 'preview' : undefined,
+                heroName === 'Celeste' ? ['particles/abilities/unicorn/unicorn_ambient_weapon.vpcf_c'] : []);
             await fs.writeFile(effectVersionFile(exportKey), EFFECT_CACHE_VERSION);
             return { hasEffect: true, key: exportKey, entry };
         } finally {

@@ -71,15 +71,25 @@ export function particleDescriptor(raw: unknown, name: string, configuration?: s
 
 /** v0.19.1's soundevents reader decodes any resource's KV3 DATA block. Use its
  * read-only JSON mode, then validate the particle class. No new CLI is required. */
-export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string, texturePaks: readonly string[] = [], configuration?: string): Promise<void> {
+export async function exportParticleBundle(pak: string, entry: string, descriptorFile: string, textureDir: string, modelEntry?: string, texturePaks: readonly string[] = [], configuration?: string, additionalEntries: readonly string[] = []): Promise<void> {
+  if (additionalEntries.length > 3) throw new Error('Particle roots exceed preview limits.');
   if (texturePaks.length > 8) throw new Error('Particle package lookup exceeds preview limits.');
   const textures = new Set<string>();
   let systems = 0;
   const load = async (path: string, ancestors: Set<string>, inherited: FxControlPoint[] = [], mapFrames: (group: number) => FxControlPoint[] = () => []): Promise<FxDescriptor> => {
-    if (++systems > 16 || ancestors.size > 4 || ancestors.has(path)) throw new Error('Particle graph exceeds preview limits.');
+    if (++systems > 32 || ancestors.size > 4 || ancestors.has(path)) throw new Error('Particle graph exceeds preview limits.');
     if (!/^particles\/[a-zA-Z0-9_./-]+\.vpcf_c$/.test(path) || path.includes('..')) throw new Error('Invalid particle resource path.');
     const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', pak]));
     const d = particleDescriptor(raw, path, configuration);
+    for (const renderer of d.renderers) {
+      // Source spritecards use base_sprite when an enabled layer names no texture.
+      if (renderer.mode !== 'sprite' || !Array.isArray(renderer.params.m_vecTexturesInput)) continue;
+      for (const input of renderer.params.m_vecTexturesInput.map(row)) {
+        if (input.m_bEnabled === false || input.m_bReplaceTextureWithGradient === true || input.m_hTexture) continue;
+        input.m_hTexture = 'materials/particle/base_sprite.vtex';
+        renderer.textures.push(input.m_hTexture as string);
+      }
+    }
     const snapshot = row(raw).m_hSnapshot;
     if (typeof snapshot === 'string') {
       if (!/^particles\/[a-zA-Z0-9_./-]+\.vsnap$/.test(snapshot) || snapshot.includes('..')) throw new Error('Invalid particle snapshot path.');
@@ -122,6 +132,7 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     return d;
   };
   const descriptor = await load(entry, new Set());
+  for (const additional of [...new Set(additionalEntries)].filter((p) => p !== entry)) descriptor.children.push(await load(additional, new Set()));
   const modelResource = modelEntry ?? descriptor.preview?.model?.replace(/\.vmdl(?:_c)?$/, '.vmdl_c');
   const declaredModel = modelResource && /^models\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(modelResource) && !modelResource.includes('..') ? modelResource : undefined;
   if (declaredModel) {

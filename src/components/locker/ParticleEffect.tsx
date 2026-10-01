@@ -7,6 +7,7 @@ import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
 import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, remapSpriteNormal, spriteFadeValue, spriteGradientColor, spriteInitialColor,
   type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
 import { resolveParticleAttachment } from './particleAttachment';
+import { spritecardMaterial } from './spritecardMaterial';
 import { ParticleRopes } from './ParticleRopes';
 
 const VERT = /* glsl */ `
@@ -99,6 +100,17 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     });
     return layer.additive && glass;
   }, [model, layer.additive]);
+  const spritecard = useMemo(() => {
+    const renderer = layer.spritecard;
+    if (!renderer || !Array.isArray(renderer.params.m_vecTexturesInput)
+      || renderer.params.m_vecTexturesInput.length < 2) return null;
+    const result = spritecardMaterial(renderer, textureBaseUrl, VERT, true);
+    if (result) {
+      result.material.uniforms.uAlignNormal = { value: layer.alignNormal ? 1 : 0 };
+      result.material.transparent = !beforeTransmission;
+    }
+    return result;
+  }, [layer.spritecard, layer.alignNormal, textureBaseUrl, beforeTransmission]);
   const attachmentRotation = useMemo(() => attachment?.frame ? new THREE.Quaternion(...attachment.frame.rotation) : null, [attachment]);
   // morphic converts Source inches to meters at the skeleton root. The effect
   // sits alongside that root, so apply the same units exactly once.
@@ -124,7 +136,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     }
     geom.instanceCount = 0;
     quad.dispose();
-    return { geometry: geom, material: new THREE.ShaderMaterial({
+    return { geometry: geom, material: spritecard?.material ?? new THREE.ShaderMaterial({
       uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
       // Three's transmission target includes only the opaque queue. Custom
       // additive blending still works there, after bodies and before glass, so
@@ -135,8 +147,9 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
       blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
-  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, texture, beforeTransmission]);
+  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, texture, beforeTransmission, spritecard]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
+  useEffect(() => () => { spritecard?.textures.forEach((t) => t.dispose()); }, [spritecard]);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
   useEffect(() => {
     particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false; particleNumber.current = 0;
@@ -148,6 +161,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     const speed = playback?.speed ?? 1;
     const delta = Number.isFinite(deltaRaw) && Number.isFinite(speed) ? Math.max(0, Math.min(deltaRaw * speed, 0.1)) : 0;
     if (delta <= 0) return;
+    spritecard?.update(clock.current);
     const mesh = meshRef.current;
     if (!mesh?.parent) return;
     const { origin, previous, orientation, parentOrientation, sourceOrientation, gravity } = scratch;
@@ -303,7 +317,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       if (gradientColor) scratch.color.setRGB(...gradientColor);
       if (scratch.fadeColor) scratch.color.lerp(scratch.fadeColor, normalizedWindow(t, layer.colorFadeTime, layer.colorEase));
       position.setXYZ(count, p.position.x, p.position.y, p.position.z);
-      color.setXYZ(count, scratch.color.r*layer.overbright, scratch.color.g*layer.overbright, scratch.color.b*layer.overbright);
+      color.setXYZ(count, scratch.color.r*(spritecard ? 1 : layer.overbright), scratch.color.g*(spritecard ? 1 : layer.overbright), scratch.color.b*(spritecard ? 1 : layer.overbright));
       radius.setX(count, Math.min(128*sourceUnit, p.radius*layer.radiusScale*Math.max(0, ageCurveValue(layer.radiusCurve, t))));
       alpha.setX(count, p.alpha*layer.alphaScale*spriteFadeValue(layer.fade, t)*THREE.MathUtils.clamp(ageCurveValue(layer.alphaCurve, t), 0, 1));
       scratch.normalSource.copy(p.normal).normalize();
