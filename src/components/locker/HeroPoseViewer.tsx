@@ -41,6 +41,7 @@ import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { ViewerBackdrop, ViewerBackdropControls } from './ViewerBackdrop';
 import { useViewerBackdrop } from '../../lib/useViewerBackdrop';
+import { useViewerGif } from '../../lib/useViewerGif';
 import { clampAnimationTime, clampPlaybackSpeed, type HeroPlaybackProgress, type HeroPlaybackSeek } from '../../lib/heroViewerPlayback';
 import {
   isNprMaterial,
@@ -1002,6 +1003,8 @@ export default function HeroPoseViewer({
   const partialEffect = useMemo(() => effect ? fxPreviewIssues(effect.descriptor).length > 0
     || (scene ? particleAttachmentIssues(effect.descriptor, scene).length > 0 : false) : false, [effect, scene]);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
+  const gifError = useCallback(() => setViewerError(t('locker.pose.gifFailed')), [t]);
+  const gif = useViewerGif(canvasRef, `${heroName}:${sourceKey}:${scene?.uuid ?? ''}`, heroName, gifError);
   const [devFlags, setDevFlags] = useState<DevPreviewFlags>(initialHeroPreviewFlags);
   const [bloomParams, setBloomParams] = useState<BloomParams>(() => ({
     intensity: BLOOM_INTENSITY,
@@ -1255,6 +1258,7 @@ export default function HeroPoseViewer({
         const request = document.fullscreenElement ? document.exitFullscreen() : viewerRef.current?.requestFullscreen();
         request?.catch(() => setViewerError(t('locker.pose.fullscreenFailed')));
       }}
+      gifAvailable={!!scene} recording={gif.recording} onGif={() => { setViewerError(null); void gif.toggle(); }} onCancelGif={gif.cancel}
     />
   );
 

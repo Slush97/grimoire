@@ -1425,6 +1425,7 @@
     }
   },
   "locker": {
+    "pose": {"recordGif": "Enregistrer un GIF", "stopGif": "Arrêter et sauvegarder le GIF", "cancelGif": "Annuler l’enregistrement", "gifFailed": "Impossible de sauvegarder l’enregistrement."},
     "empty": {
       "noGamePath": "Définissez votre chemin Deadlock ou activez le mode développeur."
     },
