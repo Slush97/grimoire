@@ -13,6 +13,38 @@ const descriptor: FxDescriptor = {
   renderers: [{ class: 'C_OP_RenderSprites', mode: 'sprite', blendMode: 'ADD', params: {}, textures: [] }], children: [],
 };
 describe('particle playback and model units', () => {
+  it('emits spawn-event children once per system, consumes full slots, and pauses both clocks', async () => {
+    const child: FxDescriptor = { ...descriptor, name: 'spawn-child', controlPoints: [], maxParticles: 1, constantLifespan: 0.05,
+      initializers: [], operators: [], children: [],
+      emitters: [{ class: 'C_OP_ContinuousEmitter', params: {
+        m_bInitFromKilledParentParticles: true, m_nEventType: 'PARTICLE_EVENT_TYPE_MASK_SPAWNED',
+      } }],
+    };
+    const d: FxDescriptor = { ...descriptor, controlPoints: [], constantLifespan: 1,
+      initializers: [{ class: 'C_INIT_CreateWithinBox', params: { m_vecMin: [10, 20, 30], m_vecMax: [10, 20, 30] } }], operators: [],
+      emitters: [{ class: 'C_OP_InstantaneousEmitter', params: { m_nParticlesToEmit: 2 } }],
+      renderers: [descriptor.renderers[0], descriptor.renderers[0]], children: [child],
+    };
+    const renderer = await ReactThreeTestRenderer.create(<ParticleEffect descriptor={d} textureBaseUrl="/" />);
+    const counts = () => { const result: number[] = []; renderer.scene.instance.traverse((o) => {
+      if (o instanceof THREE.Mesh) result.push((o.geometry as THREE.InstancedBufferGeometry).instanceCount);
+    }); return result; };
+    try {
+      await renderer.advanceFrames(1, 0.02);
+      expect(counts()).toEqual([2, 2, 1]);
+      const positions: number[][] = [];
+      renderer.scene.instance.traverse((o) => { if (o instanceof THREE.Mesh) {
+        const p = o.geometry.getAttribute('aPosition'); positions.push([p.getX(0), p.getY(0), p.getZ(0)]);
+      } });
+      expect(positions[2]).toEqual(positions[0]);
+      await renderer.update(<ParticleEffect descriptor={d} textureBaseUrl="/" playback={{ paused: true, speed: 1 }} />);
+      await renderer.advanceFrames(10, 0.1);
+      expect(counts()).toEqual([2, 2, 1]);
+      await renderer.update(<ParticleEffect descriptor={d} textureBaseUrl="/" playback={{ paused: false, speed: 1 }} />);
+      await renderer.advanceFrames(2, 0.02);
+      expect(counts()).toEqual([2, 2, 0]);
+    } finally { await renderer.unmount(); }
+  });
   it('resolves effect-bundled authored frames when an older warm model sidecar is empty', async () => {
     const model = new THREE.Group(), skeleton = new THREE.Group(); skeleton.name = 'skeleton'; skeleton.scale.setScalar(0.0254);
     const anchor = new THREE.Bone(); anchor.name = 'scapula_L'; anchor.position.set(10, 20, 30); skeleton.add(anchor); model.add(skeleton);

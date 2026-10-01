@@ -9,6 +9,23 @@ const renderer = (blendMode: string | null): FxRenderer => ({ class: 'C_OP_Rende
     m_TextureControls: { m_flFinalTextureOffsetV: { pf: 'PF_TYPE_COLLECTION_AGE', mult: .3 } } })),
 } });
 describe('shared authored spritecards', () => {
+  it('keeps lookup RGB-alpha inside the incoming radial coverage and accepts a fifth RGB-only additive glow', () => {
+    const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
+    const inputs = r.params.m_vecTexturesInput as Array<Record<string, unknown>>;
+    inputs.push({ ...inputs[0], m_nTextureType: 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP',
+      m_nTextureChannels: 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', m_nTextureBlendMode: 'SPRITECARD_TEXTURE_BLEND_REPLACE' });
+    inputs.push({ ...inputs[0] }, { ...inputs[0], m_nTextureChannels: 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGB',
+      m_nTextureBlendMode: 'SPRITECARD_TEXTURE_BLEND_ADD' });
+    const result = spritecardMaterial(r, '/', 'void main(){}')!;
+    try {
+      expect(result.textures).toHaveLength(5);
+      const shader = result.material.fragmentShader;
+      expect(shader).toContain('t2.a=t2.a*dot(t2.rgb,vec3(.299,.587,.114));');
+      expect(shader).toContain('t4.a=0.0;');
+      expect(shader).toContain('accum+t4');
+      expect(result.material.userData.previewBloom).toBe(true);
+    } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
+  });
   it('preserves RGB when subtracting an alpha-only erosion mask and keeps mirrored UVs', () => {
     const r = renderer('PARTICLE_OUTPUT_BLEND_MODE_ADD');
     r.params.m_flSelfIllumAmount = .9;

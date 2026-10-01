@@ -25,8 +25,8 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     const channel = input.m_nTextureChannels ?? 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA';
     const blend = input.m_nTextureBlendMode ?? 'SPRITECARD_TEXTURE_BLEND_MULTIPLY';
     if (!['SPRITECARD_TEXTURE_DIFFUSE', 'SPRITECARD_TEXTURE_UVDISTORTION', 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP'].includes(String(type))
-      || !['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_A'].includes(String(channel))
-      || !['SPRITECARD_TEXTURE_BLEND_MULTIPLY', 'SPRITECARD_TEXTURE_BLEND_REPLACE', 'SPRITECARD_TEXTURE_BLEND_SUBTRACT'].includes(String(blend))) {
+      || !['SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA', 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGB', 'SPRITECARD_TEXTURE_CHANNEL_MIX_A'].includes(String(channel))
+      || !['SPRITECARD_TEXTURE_BLEND_MULTIPLY', 'SPRITECARD_TEXTURE_BLEND_REPLACE', 'SPRITECARD_TEXTURE_BLEND_SUBTRACT', 'SPRITECARD_TEXTURE_BLEND_ADD'].includes(String(blend))) {
       textures.forEach((t) => t.dispose()); return null;
     }
     let texture: THREE.Texture;
@@ -56,9 +56,12 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     chain += `vec4 t${i}=texture2D(tex${i},p${i});`;
     if (type === 'SPRITECARD_TEXTURE_UVDISTORTION' && i > 0) chain += `t${i}=texture2D(tex${previous},p${previous}-(gammaColor(t${i}.rgb).xy-0.5)*2.0*(dist${i}*0.125*t${i}.a));`;
     if (type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP') chain += `t${i}=vec4(texture2D(tex${i},vec2(dot(gammaColor(accum.rgb),vec3(.299,.587,.114)),.5)).rgb,accum.a);`;
-    if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA') chain += `t${i}.a=dot(t${i}.rgb,vec3(.299,.587,.114));`;
+    // A color lookup inherits the incoming shape's coverage. RGB-to-alpha must
+    // modulate that coverage, never resurrect transparent radial-mask corners.
+    if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGBA_RGBALPHA') chain += `t${i}.a=${type === 'SPRITECARD_TEXTURE_1D_COLOR_LOOKUP' ? `t${i}.a*` : ''}dot(t${i}.rgb,vec3(.299,.587,.114));`;
+    if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_RGB') chain += `t${i}.a=${blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? 'accum.a' : blend === 'SPRITECARD_TEXTURE_BLEND_MULTIPLY' ? '1.0' : '0.0'};`;
     if (channel === 'SPRITECARD_TEXTURE_CHANNEL_MIX_A') chain += `t${i}=vec4(${blend === 'SPRITECARD_TEXTURE_BLEND_SUBTRACT' ? 'vec3(0.0)' : blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? 'accum.rgb' : 'vec3(1.0)'},t${i}.a);`;
-    chain += `accum=max(mix(accum,${blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? `t${i}` : blend === 'SPRITECARD_TEXTURE_BLEND_SUBTRACT' ? `accum-t${i}` : `accum*t${i}`},blend${i}),vec4(0.0));`;
+    chain += `accum=max(mix(accum,${blend === 'SPRITECARD_TEXTURE_BLEND_REPLACE' ? `t${i}` : blend === 'SPRITECARD_TEXTURE_BLEND_SUBTRACT' ? `accum-t${i}` : blend === 'SPRITECARD_TEXTURE_BLEND_ADD' ? `accum+t${i}` : `accum*t${i}`},blend${i}),vec4(0.0));`;
     previous = i;
   }
   const color = row(renderer.params.m_vecColorScale);
@@ -81,6 +84,7 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
     blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
+  material.userData.previewBloom = true;
   return { material, textures, update(age: number) {
     inputs.forEach((input, i) => {
       const c = row(input.m_TextureControls);

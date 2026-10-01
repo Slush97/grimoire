@@ -7,7 +7,7 @@ import { DEADLOCK_TONE_SHADER } from './heroViewerTone';
 import { isSelfIllumMaterial } from '../../lib/source2NprMaterial';
 
 /**
- * Optional selective bloom for preview glow materials, default off.
+ * Selective bloom for preview glow materials and authored emissive particles.
  *
  * Built on @react-three/postprocessing so the HDR pipeline + tonemapping/colorspace are
  * handled by a maintained lib instead of hand-rolled composer wiring (which kept
@@ -19,7 +19,7 @@ import { isSelfIllumMaterial } from '../../lib/source2NprMaterial';
 // Self-illum (morphic F_SELF_ILLUM) or unlit (toneMapped=false) surfaces bloom. Metal
 // intentionally does not.
 function isBloomMaterial(mat: THREE.Material): boolean {
-  return mat.toneMapped === false || isSelfIllumMaterial(mat);
+  return mat.userData.previewBloom === true || mat.toneMapped === false || isSelfIllumMaterial(mat);
 }
 
 function meshBlooms(obj: THREE.Object3D): boolean {

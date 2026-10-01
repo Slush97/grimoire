@@ -1,7 +1,7 @@
 /** Bounded sprite preview using authored rates and attributes. This intentionally
  * skips Source 2 rope/model renderers and unimplemented operator classes. */
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import * as THREE from 'three';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
 import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, remapSpriteNormal, spriteFadeValue, spriteGradientColor, spriteInitialColor,
@@ -71,10 +71,24 @@ interface Particle {
   oscillation: { rate: THREE.Vector3; frequency: THREE.Vector3; start: number; end: number } | null;
 }
 const sample = (range: [number, number]) => THREE.MathUtils.lerp(range[0], range[1], Math.random());
+interface SpawnEvent { id: number; time: number; position: THREE.Vector3 }
+class SpawnEvents {
+  private nextId = 0;
+  private systems = new Map<string, SpawnEvent[]>();
+  read(system: string): readonly SpawnEvent[] { return this.systems.get(system) ?? []; }
+  publish(system: string, time: number, position: THREE.Vector3) {
+    const events = this.systems.get(system) ?? [];
+    events.push({ id: ++this.nextId, time, position: position.clone() });
+    // Consumers run later in the same frame. Bound history across renderers.
+    if (events.length > 256) events.splice(0, events.length - 256);
+    this.systems.set(system, events);
+  }
+}
 
-function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
+function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
   layer: SpriteSimParams; textureBaseUrl: string; model?: THREE.Object3D;
   playback?: { paused: boolean; speed: number };
+  spawnEvents: RefObject<SpawnEvents>;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const particles = useRef<Particle[]>([]);
@@ -82,6 +96,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
   const clock = useRef(0);
   const initialized = useRef(false);
   const particleNumber = useRef(0);
+  const lastParentEvent = useRef(0);
   const texture = useMemo(() => {
     if (!layer.texture) return null;
     const tex = new THREE.TextureLoader().load(textureBaseUrl + fxTexturePngName(layer.texture));
@@ -136,7 +151,9 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     }
     geom.instanceCount = 0;
     quad.dispose();
+    const glow = layer.additive || (typeof layer.spritecard?.params.m_flSelfIllumAmount === 'number' && layer.spritecard.params.m_flSelfIllumAmount > 0);
     return { geometry: geom, material: spritecard?.material ?? new THREE.ShaderMaterial({
+      userData: { previewBloom: glow },
       uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
       // Three's transmission target includes only the opaque queue. Custom
       // additive blending still works there, after bodies and before glass, so
@@ -147,12 +164,12 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
       blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
-  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, texture, beforeTransmission, spritecard]);
+  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, layer.spritecard, texture, beforeTransmission, spritecard]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
   useEffect(() => () => { spritecard?.textures.forEach((t) => t.dispose()); }, [spritecard]);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
   useEffect(() => {
-    particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false; particleNumber.current = 0;
+    particles.current = []; emissionState.current = []; clock.current = 0; initialized.current = false; particleNumber.current = 0; lastParentEvent.current = 0;
     if (meshRef.current) (meshRef.current.geometry as THREE.InstancedBufferGeometry).instanceCount = 0;
   }, [layer, geometry]);
 
@@ -202,9 +219,29 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
     // frame after birth. Pausing freezes this clock and delayed emitters too.
     const live = list.filter((p) => layer.persistent || p.age + delta < p.life);
     particles.current = live;
-    const births = advanceSpriteEmission(layer.emissions, emissionState.current, clock.current, clock.current + delta, layer.maxParticles - live.length);
+    const capacity = layer.maxParticles - live.length;
+    const births: Array<{ age: number; parentPosition?: THREE.Vector3 }> = advanceSpriteEmission(
+      layer.emissions, emissionState.current, clock.current, clock.current + delta, capacity).map((age) => ({ age }));
+    if (layer.parentSpawnEvents && layer.parentSystemId) {
+      const events = spawnEvents.current.read(layer.parentSystemId);
+      const window = layer.parentSpawnWindow;
+      let emitted = 0;
+      for (const event of events) {
+        if (event.id <= lastParentEvent.current) continue;
+        // Consume even when full: a dropped event must not become a later burst.
+        lastParentEvent.current = event.id;
+        if (births.length < capacity && emitted < (window?.perFrame ?? 256)
+          && event.time >= (window?.start ?? 0)
+          && (!window?.duration || event.time < window.start + window.duration)
+          && event.time >= clock.current && event.time <= clock.current + delta) {
+          births.push({ age: clock.current + delta - event.time, parentPosition: event.position });
+          emitted++;
+        }
+      }
+    }
     clock.current += delta;
-    for (const birthAge of births) {
+    for (const birth of births) {
+      const birthAge = birth.age;
       const lo = Math.min(...layer.sequence), hi = Math.max(...layer.sequence);
       const id = lo + Math.min(hi - lo, Math.floor(Math.random() * (hi - lo + 1)));
       const frame = layer.sheet?.sequences.find((s) => s.id === id);
@@ -257,8 +294,12 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback }: {
       const normal = layer.normal ? new THREE.Vector3(...remapSpriteNormal(normalDelta.toArray() as [number, number, number], layer.normal.axis, layer.normal.angle, layer.normal.normalize)) : new THREE.Vector3(0, 0, 1);
       const normalRandom = Math.random();
       const normalAxis = layer.normalRotation ? new THREE.Vector3(...layer.normalRotation.axisMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.normalRotation!.axisMax[i], normalRandom))).normalize() : new THREE.Vector3(0, 0, 1);
+      const spawnPosition = offset.add(layer.spawnAtParent && birth.parentPosition ? birth.parentPosition : origin);
+      if (layer.publishesSpawnEvents && layer.systemId) {
+        spawnEvents.current.publish(layer.systemId, clock.current - birthAge, spawnPosition);
+      }
       live.push({ age: birthAge-delta, life: sample(layer.lifetime),
-        position: offset.add(origin), velocity,
+        position: spawnPosition, velocity,
         radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region,
         normal, normalAxis, normalRate: layer.normalRotation ? THREE.MathUtils.lerp(...layer.normalRotation.rate, normalRandom) : 0,
         oscillation: layer.oscillation ? {
@@ -347,6 +388,8 @@ export function ParticleEffect({ descriptor, textureBaseUrl, model, playback }: 
   playback?: { paused: boolean; speed: number };
 }) {
   const layers = useMemo(() => allSpriteLayers(descriptor), [descriptor]);
-  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} />)}
+  const spawnEvents = useRef<SpawnEvents>(new SpawnEvents());
+  useEffect(() => { spawnEvents.current = new SpawnEvents(); }, [descriptor]);
+  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} spawnEvents={spawnEvents} />)}
     <ParticleRopes descriptor={descriptor} model={model} textureBaseUrl={textureBaseUrl} playback={playback} /></group>;
 }

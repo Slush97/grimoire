@@ -61,6 +61,9 @@ const fieldInit = (d: FxDescriptor, field: number) => {
   return node ? node.params.m_InputValue ?? 0 : undefined;
 };
 export interface SpriteSimParams {
+  systemId?: string; parentSystemId?: string; publishesSpawnEvents?: boolean;
+  parentSpawnEvents?: boolean; spawnAtParent?: boolean;
+  parentSpawnWindow?: { start: number; duration: number; perFrame: number };
   ring: { radius: [number, number]; thickness: [number, number] } | null;
   normal: { axis: Vec3; angle: number; normalize: boolean } | null;
   normalRotation: { axisMin: Vec3; axisMax: Vec3; rate: [number, number] } | null;
@@ -98,7 +101,12 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   if (findNode(d.initializers, 'C_INIT_CreateOnModel')) return null;
   // Spawn-event children need the parent's particle positions and event clock.
   // Treating them as independent continuous systems invents detached glows.
-  if (d.emitters.length && d.emitters.every((node) => node.params.m_bInitFromKilledParentParticles === true)) return null;
+  const parentEmitters = d.emitters.filter((node) => node.params.m_bInitFromKilledParentParticles === true);
+  // Support only authored spawn events. Death/collision events need additional
+  // simulation data; they must never become independent continuous emission.
+  if (parentEmitters.some((node) => node.class !== 'C_OP_ContinuousEmitter'
+    || node.params.m_nEventType !== 'PARTICLE_EVENT_TYPE_MASK_SPAWNED')) return null;
+  if (parentEmitters.length && (parentEmitters.length !== 1 || d.emitters.length !== 1)) return null;
   const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter');
   const sphere = findNode(d.initializers, 'C_INIT_CreateWithinSphereTransform') ?? findNode(d.initializers, 'C_INIT_CreateWithinSphere');
   const box = findNode(d.initializers, 'C_INIT_CreateWithinBox');
@@ -131,6 +139,14 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
     .map((v) => v * Math.PI / 180) as [number, number];
   return {
+    parentSpawnEvents: parentEmitters.length > 0,
+    parentSpawnWindow: parentEmitters.length ? {
+      start: scalar(parentEmitters[0].params.m_flStartTime, 0),
+      duration: scalar(parentEmitters[0].params.m_flEmissionDuration, 0),
+      perFrame: paramScalar(parentEmitters[0].params.m_nMaxEmittedPerFrame, -1) < 0 ? 256
+        : Math.floor(scalar(parentEmitters[0].params.m_nMaxEmittedPerFrame, 256, 256)),
+    } : undefined,
+    spawnAtParent: !sphere && !box,
     ring: ring ? { radius: boundedRange(ring.params.m_flInitialRadius, [0, 0], 0, 4096), thickness: boundedRange(ring.params.m_flThickness, [0, 0], 0, 4096) } : null,
     normal: normal ? { axis: vector(normal.params.m_vecOffsetAxis, [0, 0, 1]), angle: paramScalar(normal.params.m_flOffsetRot, 0)*Math.PI/180, normalize: normal.params.m_bNormalize === true } : null,
     normalRotation: normalRotation ? { axisMin: vector(normalRotation.params.m_vecRotAxisMin, [0, 0, 0]), axisMax: vector(normalRotation.params.m_vecRotAxisMax, [0, 0, 0]), rate: [paramScalar(normalRotation.params.m_flRotRateMin, 180), paramScalar(normalRotation.params.m_flRotRateMax, 180)].map((v) => Math.max(-3600, Math.min(3600, v))*Math.PI/180) as [number, number] } : null,
@@ -420,22 +436,30 @@ export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
   const layers: SpriteSimParams[] = [];
   let remaining = 512;
   let systems = 0;
-  const visit = (system: FxDescriptor, depth: number, parentDelay: number) => {
+  const visit = (system: FxDescriptor, depth: number, parentDelay: number, systemId: string, parentSystemId?: string) => {
     if (++systems > 32 || depth > 4 || layers.length >= 16 || remaining <= 0) return;
     const delay = parentDelay + Math.max(0, Math.min(30, paramScalar(system.startDelay, 0)));
+    let publishesSpawnEvents = false;
     for (const renderer of system.renderers) {
       if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;
       const layer = spriteParamsFor({ ...system, sheets: d.sheets }, renderer);
       if (!layer) continue;
+      if (layer.parentSpawnEvents && !parentSystemId) continue;
+      layer.systemId = systemId;
+      layer.parentSystemId = parentSystemId;
+      layer.publishesSpawnEvents = !publishesSpawnEvents;
+      publishesSpawnEvents = true;
       layer.scale = Math.max(0.001, Math.min(16, paramScalar(d.scale, 1)));
       layer.attachments = d.attachments;
       layer.emissions = layer.emissions.map((emission) => ({ ...emission, start: emission.start + delay }));
+      if (layer.parentSpawnWindow) layer.parentSpawnWindow.start += delay;
       layer.maxParticles = Math.min(remaining, layer.maxParticles);
       remaining -= layer.maxParticles;
       layers.push(layer);
     }
-    for (const child of system.children.slice(0, 16)) visit(child, depth + 1, delay);
+    system.children.slice(0, 16).forEach((child, i) => visit(child, depth + 1, delay,
+      `${systemId}/${i}`, publishesSpawnEvents ? systemId : undefined));
   };
-  visit(d, 0, 0);
+  visit(d, 0, 0, 'root');
   return layers;
 }

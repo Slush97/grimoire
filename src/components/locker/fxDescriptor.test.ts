@@ -17,6 +17,18 @@ const descriptor = (): FxDescriptor => ({
     textures: ['materials/particle/noise.vtex', 'materials/particle/ring.vtex'] }], children: [],
 });
 describe('authored sprite attributes', () => {
+  it('requires a simulated parent for spawn events and rejects other event types', () => {
+    const d = descriptor();
+    d.emitters = [{ class: 'C_OP_ContinuousEmitter', params: {
+      m_bInitFromKilledParentParticles: true, m_nEventType: 'PARTICLE_EVENT_TYPE_MASK_SPAWNED',
+    } }];
+    expect(allSpriteLayers(d)).toEqual([]);
+    const parent = descriptor(); parent.children = [d];
+    expect(allSpriteLayers(parent).map((layer) => [layer.systemId, layer.parentSystemId, layer.parentSpawnEvents]))
+      .toEqual([['root', undefined, false], ['root/0', 'root', true]]);
+    d.emitters[0].params.m_nEventType = 'PARTICLE_EVENT_TYPE_MASK_KILLED';
+    expect(spriteParamsFor(d)).toBeNull();
+  });
   it('interpolates authored normalized-age green gradients without inventing a texture transfer', () => {
     const input = { m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT', m_FloatInterp: { pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' },
       m_Gradient: { m_Stops: [{ m_flPosition: 0.3, m_Color: [157, 211, 125] }, { m_flPosition: 1, m_Color: [93, 147, 115] }] } };
