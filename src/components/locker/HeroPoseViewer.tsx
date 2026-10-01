@@ -1220,9 +1220,7 @@ export default function HeroPoseViewer({
           if (viewerScene === 'transparent') setViewerScene('studio');
           void backdrop.choose(file);
         }} onClear={backdrop.clear} />}
-      status={viewerError ?? backdropError ?? (scene && features.riggedPreviewEnabled && !rigged
-            ? t('locker.pose.animationUnavailable') : effectPreviewEnabled && partialEffect
-              ? t('locker.pose.particlesPartial') : null)}
+      status={viewerError ?? backdropError}
       onAnimated={(v) => {
         writePreviewFlag('grimoire.preview.animated', v);
         if (!v) {
@@ -1261,7 +1259,11 @@ export default function HeroPoseViewer({
   );
 
   return (
-    <div ref={viewerRef} data-particle-availability={effectUnavailable ? 'unavailable' : effect ? 'ready' : 'pending'} className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
+    <div ref={viewerRef}
+      data-particle-availability={effectUnavailable ? 'unavailable' : partialEffect ? 'partial' : effect ? 'ready' : 'pending'}
+      data-animation-availability={scene ? rigged ? 'ready' : 'unavailable' : 'pending'}
+      data-cloth-availability={scene ? clothModel ? 'ready' : 'unavailable' : 'pending'}
+      className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
         <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
       ) : <Canvas
