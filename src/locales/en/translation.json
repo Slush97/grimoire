@@ -2088,7 +2088,12 @@
       "fullscreenFailed": "Fullscreen is unavailable.",
       "particlesPartial": "Some particle effects are unsupported.",
       "particlesUnavailable": "No supported ambient particle preview is available for this hero.",
-      "animationUnavailable": "An animated preview is unavailable for this model."
+      "animationUnavailable": "An animated preview is unavailable for this model.",
+      "clipLabels": {
+        "idle": "Idle",
+        "relaxedIdle": "Relaxed idle",
+        "heroPose": "Hero pose"
+      }
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"

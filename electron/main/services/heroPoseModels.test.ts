@@ -27,6 +27,7 @@ vi.mock('./deadlock', () => ({
   getDisabledPath: (path: string) => join(path, 'game', 'citadel', '.disabled'),
 }));
 
+vi.mock('./heroAnimationMetadata', () => ({ readHeroAnimationMetadata: async () => new Map() }));
 import { choosePreviewClips, exportHeroEffect, getHeroEffectInfo, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
 
 const container = resolve('.codex-run', 'hero-preview-tests');
@@ -37,10 +38,10 @@ const cacheDir = (key: string) => join(h.userData, 'hero-poses', key.toLowerCase
 
 describe('animation menu exports', () => {
   const clip = (name: string, frames = 100) => ({ name, frameCount: frames, fps: 30, durationSeconds: frames / 30, looping: true, default: false });
-  it('keeps idle first, representative full-body motions, and unique names', () => {
+  it('exports reviewed whole actions rather than raw category matches', () => {
     const menu = choosePreviewClips([clip('primary_stand_idle'), clip('primary_run_n'), clip('ui_hero_pose'),
       clip('reload'), clip('additive_aim_reload'), clip('bind_pose', 1)]);
-    expect(menu.map((c) => c.name)).toEqual(['primary_stand_idle', 'ui_hero_pose', 'primary_run_n', 'reload']);
+    expect(menu.map((c) => c.name)).toEqual(['primary_stand_idle', 'ui_hero_pose']);
   });
   it('bounds decoded animation frames and refuses clipless meshes', () => {
     const menu = choosePreviewClips([clip('primary_stand_idle'), ...Array.from({ length: 100 }, (_, i) => clip(`attack_${i}`, 6000))]);

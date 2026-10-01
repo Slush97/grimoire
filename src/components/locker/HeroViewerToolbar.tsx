@@ -6,11 +6,12 @@ import { Select } from '../common/forms';
 import { ViewerGifReview } from './ViewerGifReview';
 import { ViewerFullscreenButton } from './ViewerFullscreenButton';
 import type { ViewerGifControls } from '../../lib/useViewerGif';
-import { clampAnimationTime, groupHeroClips, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
+import { clampAnimationTime, groupHeroClips, heroClipLabel, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
 
 export type HeroViewerScene = 'midtown' | 'studio' | 'transparent';
 
 interface Props {
+  heroName?: string;
   animated: boolean;
   clips: string[];
   clip: string;
@@ -76,7 +77,7 @@ export function HeroViewerToolbar(p: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const clipGroups = groupHeroClips(p.clips);
+  const clipGroups = groupHeroClips(p.clips, p.heroName);
   const clipGroupLabel = {
     idle: t('locker.pose.clipGroups.idle'),
     movement: t('locker.pose.clipGroups.movement'),
@@ -95,7 +96,7 @@ export function HeroViewerToolbar(p: Props) {
                 <Select inputSize="sm" value={p.clip} onChange={(e) => p.onClip(e.target.value)}>
                   {clipGroups.map(({ group, clips }) => (
                     <optgroup key={group} label={clipGroupLabel[group]}>
-                      {clips.map((clip) => <option key={clip} value={clip}>{clip.replace(/_/g, ' ')}</option>)}
+                      {clips.map((clip) => <option key={clip} value={clip}>{heroClipLabel(clip, t, p.heroName)}</option>)}
                     </optgroup>
                   ))}
                 </Select>

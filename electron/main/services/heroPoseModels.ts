@@ -32,6 +32,8 @@ import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
 import { exportParticleBundle } from './heroParticleExport';
 import { exportModelAttachments } from './modelAttachments';
+import { readHeroAnimationMetadata } from './heroAnimationMetadata';
+import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -299,7 +301,7 @@ function versionFile(key: string): string {
  *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '10';
+const RIGGED_PIPELINE_VERSION = '11';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -358,14 +360,7 @@ function effectVersionFile(key: string): string {
     return join(modelDir(key), EFFECT_VERSION_FILENAME);
 }
 
-interface ModelClipInfo {
-    name: string;
-    frameCount: number;
-    fps: number;
-    durationSeconds: number;
-    looping: boolean;
-    default: boolean;
-}
+type ModelClipInfo = HeroAnimationInfo;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -406,56 +401,17 @@ function parseModelClipsJson(json: string): ModelClipInfo[] {
             durationSeconds: numberField(row, 'durationSeconds', index),
             looping: booleanField(row, 'looping', index),
             default: booleanField(row, 'default', index),
+            ...Object.fromEntries(['additive', 'hidden', 'delta', 'requiresBase', 'transition', 'rootMotion', 'standalone']
+                .filter((field) => field in row).map((field) => [field, booleanField(row, field, index)])),
         };
     });
-}
-
-function clipNameHas(name: string, token: string): boolean {
-    return name.split(/[^a-z0-9]+/).includes(token);
-}
-
-function isAnimatedClip(clip: ModelClipInfo): boolean {
-    return clip.name.trim().length > 0 && clip.frameCount > 1 && clip.durationSeconds > 0.001;
-}
-
-function riggedClipScore(clip: ModelClipInfo): number {
-    const name = clip.name.toLowerCase();
-    let score = 0;
-    if (clip.looping) score += 500;
-    if (clip.default) score += 80;
-    if (clipNameHas(name, 'idle')) score += 350;
-    if (clipNameHas(name, 'stand')) score += 160;
-    if (clipNameHas(name, 'primary')) score += 60;
-    if (clipNameHas(name, 'menu') || clipNameHas(name, 'select')) score += 40;
-    if (clip.durationSeconds >= 1 && clip.durationSeconds <= 8) score += 50;
-    if (
-        ['ability', 'attack', 'cast', 'death', 'dash', 'jump', 'reload', 'run', 'turn', 'walk'].some(
-            (token) => clipNameHas(name, token)
-        )
-    ) {
-        score -= 120;
-    }
-    return score;
-}
-
-function chooseRiggedClip(clips: ModelClipInfo[]): ModelClipInfo | null {
-    const candidates = clips.filter(isAnimatedClip);
-    if (candidates.length === 0) return null;
-    return candidates.sort((a, b) => {
-        const byScore = riggedClipScore(b) - riggedClipScore(a);
-        if (byScore !== 0) return byScore;
-        const byLoop = Number(b.looping) - Number(a.looping);
-        if (byLoop !== 0) return byLoop;
-        const byDuration = b.durationSeconds - a.durationSeconds;
-        if (byDuration !== 0) return byDuration;
-        return a.name.localeCompare(b.name);
-    })[0];
 }
 
 async function chooseRiggedClipForSelector(
     vpk: string,
     pak01: string,
-    selector: string[]
+    selector: string[],
+    heroName: string
 ): Promise<ModelClipInfo[]> {
     const json = await runVpkmergeStdout([
         'model',
@@ -467,29 +423,20 @@ async function chooseRiggedClipForSelector(
         pak01,
         '--json',
     ]);
-    return choosePreviewClips(parseModelClipsJson(json));
+    const clips = parseModelClipsJson(json);
+    const entryIndex = selector.indexOf('--entry');
+    if (entryIndex >= 0) {
+        const candidates = clips.filter((clip) => heroAnimationRecipe(clip.name, heroName));
+        const metadata = await readHeroAnimationMetadata(vpk, pak01, selector[entryIndex + 1], candidates);
+        for (const clip of clips) Object.assign(clip, metadata.get(clip.name));
+    }
+    return choosePreviewClips(clips, heroName);
 }
 
 /** A bounded menu of full-body motions. Directional variants and additive
  * aim layers can number in the hundreds; export representative motions only. */
-export function choosePreviewClips(clips: ModelClipInfo[]): ModelClipInfo[] {
-    const idle = chooseRiggedClip(clips);
-    if (!idle) return [];
-    const result = [idle];
-    const categories = [/(?:hero.?pose|menu|select)/i, /run.*(?:_n|forward)$/i,
-        /(?:jump|airborne)/i, /reload/i, /(?:melee|attack)/i, /(?:ability|cast)/i, /(?:crouch|slide)/i];
-    let frames = idle.frameCount;
-    for (const category of categories) {
-        const matches = clips.filter((clip) => isAnimatedClip(clip) && category.test(clip.name)
-            && !/additive|layer|aim|delta/i.test(clip.name) && !result.some((c) => c.name === clip.name))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        for (const clip of matches.slice(0, 2)) {
-            if (frames + clip.frameCount > 10000) continue;
-            result.push(clip);
-            frames += clip.frameCount;
-        }
-    }
-    return result;
+export function choosePreviewClips(clips: ModelClipInfo[], heroName?: string): ModelClipInfo[] {
+    return selectHeroAnimations(clips, heroName);
 }
 
 /**
@@ -1007,7 +954,7 @@ async function runRiggedHeroExportForSources(
         for (const selector of selectors) {
             let clips: ModelClipInfo[];
             try {
-                clips = await chooseRiggedClipForSelector(source.vpk, pak01, selector);
+                clips = await chooseRiggedClipForSelector(source.vpk, pak01, selector, heroName);
                 listedAny = true;
             } catch (err) {
                 lastError = err;

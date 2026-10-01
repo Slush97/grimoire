@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampAnimationTime, clampPlaybackSpeed, groupHeroClips } from './heroViewerPlayback';
+import { clampAnimationTime, clampPlaybackSpeed, groupHeroClips, heroClipLabel } from './heroViewerPlayback';
 
 describe('viewer playback bounds', () => {
   it('clamps seeks without wrapping the final pose or accepting invalid time', () => {
@@ -37,6 +37,18 @@ describe('viewer playback bounds', () => {
     expect(groupHeroClips(['primary_run355_n', 'primary_run275_e', 'item_run_600_n', 'runaway', 'runner'])).toEqual([
       { group: 'movement', clips: ['primary_run355_n', 'primary_run275_e', 'item_run_600_n'] },
       { group: 'other', clips: ['runaway', 'runner'] },
+    ]);
+  });
+
+  it('labels reviewed actions and preserves meaningful unknown names', () => {
+    const t = (key: string) => key;
+    expect(heroClipLabel('primary_stand_idle', t)).toBe('locker.pose.clipLabels.idle');
+    expect(heroClipLabel('ui_shop', t, 'Rem')).toBe('locker.pose.clipLabels.heroPose');
+    expect(heroClipLabel('hero_pose', t, 'Dynamo')).toBe('locker.pose.clipLabels.heroPose');
+    expect(heroClipLabel('custom_motion_right', t)).toBe('Custom motion right');
+    expect(groupHeroClips(['primary_crouch_walk_reload', 'ui_shop'], 'Rem')).toEqual([
+      { group: 'idle', clips: ['ui_shop'] },
+      { group: 'combat', clips: ['primary_crouch_walk_reload'] },
     ]);
   });
 });
