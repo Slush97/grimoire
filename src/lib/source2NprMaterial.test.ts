@@ -748,6 +748,8 @@ describe('NPR preview light coordinate space', () => {
       const normalView = normalWorld.clone().applyMatrix3(rotation).normalize();
       const lightView = lightWorld.clone().applyMatrix3(rotation).normalize();
       expect(normalView.dot(lightView)).toBeCloseTo(expected, 12);
+      const upView = new THREE.Vector3(0, 1, 0).applyMatrix3(rotation).normalize();
+      expect(normalView.dot(upView)).toBeCloseTo(normalWorld.y, 12);
     }
   });
 });

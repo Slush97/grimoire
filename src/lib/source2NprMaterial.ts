@@ -1411,7 +1411,14 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           // Rim lighting is a separate additive lobe in Citadel glass. Coverage
           // removes diffuse, not this lobe; use lit albedo rather than tinting
           // the transmitted scene. Scene rim globals remain a preview approximation.
-          nprRim = nprFres * nprGate * nprRimMaskG * uRimStrength;
+          // Decoded Citadel glass evaluates a light-normal wrap and world-up
+          // ramp, rather than view Fresnel. Fresnel over the transmitted scene
+          // washes out opaque interior meshes. Scene globals remain approximate.
+          float lightWrap = 1.0 + uWrap;
+          float lightRim = pow(clamp((dot(nprN, nprL) + uWrap) / (lightWrap * lightWrap), 0.0, 1.0), uRimPower);
+          vec3 worldUpView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          float upRamp = clamp(dot(nprN, worldUpView), 0.0, 1.0);
+          nprRim = (uCitadelGlass > 0.5 ? lightRim * upRamp : nprFres * nprGate) * nprRimMaskG * uRimStrength;
         }
 
         vec3 nprRimTint = mix(uRimColor, reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, 1.0 - nprSurfaceWeight);
