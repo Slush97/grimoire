@@ -17,6 +17,14 @@ const descriptor = (): FxDescriptor => ({
     textures: ['materials/particle/noise.vtex', 'materials/particle/ring.vtex'] }], children: [],
 });
 describe('authored sprite attributes', () => {
+  it('omits model-hitbox spawning until authored placement is supported, while preserving supported children', () => {
+    const root = descriptor();
+    root.initializers.push({ class: 'C_INIT_CreateOnModel', params: { m_vecHitBoxScale: [0.1, 0.1, 0.1] } });
+    root.children.push(descriptor());
+    expect(spriteParamsFor(root)).toBeNull();
+    expect(allSpriteLayers(root)).toHaveLength(1);
+    expect(fxPreviewIssues(root)).toContainEqual(expect.objectContaining({ class: 'C_INIT_CreateOnModel' }));
+  });
   it('uses lifetime field 1, default radius field 0, and authored rate rather than filling the budget', () => {
     const p = spriteParamsFor(descriptor())!;
     expect(p.lifetime).toEqual([2, 3]); expect(p.radius).toEqual([4, 6]); expect(p.emitRate).toBe(2);

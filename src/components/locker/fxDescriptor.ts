@@ -79,6 +79,9 @@ export interface SpriteFade { fadeIn: [number, number]; fadeOut: [number, number
  * Omitted output fields mean radius, rather than position or lifetime. */
 export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r) => r.mode === 'sprite')): SpriteSimParams | null {
   if (!renderer) return null;
+  // Model hitbox spawning needs authored hitboxes and their animated transforms.
+  // Falling back to the origin creates a large detached glow, not an ambient effect.
+  if (findNode(d.initializers, 'C_INIT_CreateOnModel')) return null;
   const emitter = findNode(d.emitters, 'C_OP_ContinuousEmitter');
   const sphere = findNode(d.initializers, 'C_INIT_CreateWithinSphereTransform') ?? findNode(d.initializers, 'C_INIT_CreateWithinSphere');
   const offset = findNode(d.initializers, 'C_INIT_PositionOffset');
@@ -302,7 +305,8 @@ export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
     if (++systems > 16 || depth > 4 || layers.length >= 16 || remaining <= 0) return;
     for (const renderer of system.renderers) {
       if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;
-      const layer = spriteParamsFor({ ...system, sheets: d.sheets }, renderer)!;
+      const layer = spriteParamsFor({ ...system, sheets: d.sheets }, renderer);
+      if (!layer) continue;
       layer.scale = Math.max(0.001, Math.min(16, paramScalar(d.scale, 1)));
       layer.maxParticles = Math.min(remaining, layer.maxParticles);
       remaining -= layer.maxParticles;
