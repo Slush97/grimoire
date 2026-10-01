@@ -8,12 +8,32 @@ import type { HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 
 type AnimationMetadata = Pick<HeroAnimationInfo, 'additive' | 'rootMotion'>;
 
+/** Exact model/source/timing associations from the installed production catalog. */
+const PRODUCTION_CLIP_ALIASES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'models/heroes_wip/inferno/inferno.vmdl_c': { shop_menu_base: 'ui_shop_idle' },
+  'models/heroes_staging/hornet_v3/hornet.vmdl_c': { primary_stand_idle: 'weapon_stand_idle' },
+  'models/heroes_wip/abrams/abrams.vmdl_c': { shop_menu_base: 'ui_shop_idle' },
+  'models/heroes_wip/wraith/wraith.vmdl_c': { primary_stand_reload: 'reload_idle' },
+  'models/heroes_wip/mcginnis/mcginnis.vmdl_c': { primary_stand_reload: 'reload_idle' },
+  'models/heroes_staging/chrono/chrono.vmdl_c': { shop_menu_base: 'ui_shop_idle', primary_stand_reload: 'reload_idle' },
+  'models/heroes_wip/dynamo/dynamo.vmdl_c': { primary_stand_idle: 'weapon_stand_idle', primary_stand_reload: 'reload_idle' },
+  'models/heroes_staging/haze/haze.vmdl_c': { shop_menu_base: 'ui_shop_idle', primary_stand_reload: 'reload_idle' },
+  'models/heroes_staging/bebop/bebop.vmdl_c': { primary_stand_idle: 'weapon_stand_idle' },
+  'models/heroes_staging/nano/nano_v2/nano.vmdl_c': { primary_stand_idle: 'ui_shop_idle', primary_stand_reload: 'reload_idle' },
+  'models/heroes_staging/archer/archer.vmdl_c': { shop_menu_base: 'ui_shop_idle', primary_stand_reload: 'reload_idle' },
+  'models/heroes_staging/digger/digger.vmdl_c': { primary_stand_idle: 'weapon_stand_idle' },
+  'models/heroes_staging/viper/viper.vmdl_c': { primary_run_n: 'weapon_run_n' },
+};
+
 /** Only aliases verified against the selected legacy action's source and timing. */
 export function heroAnimationMetadataPaths(entry: string, name: string): string[] {
   const folder = posix.dirname(entry);
   const paths = [`${folder}/clips/${name}.vnmclip_c`];
+  const alias = PRODUCTION_CLIP_ALIASES[entry]?.[name];
+  if (alias) paths.push(`${folder}/clips/${alias}.vnmclip_c`);
   if (name === 'primary_stand_reload' && /^models\/heroes[^/]*\/(?:dynamo|wraith|yamato)\/[^/]+\.vmdl_c$/.test(entry)) {
-    paths.push(`${folder}/clips/reload_idle.vnmclip_c`);
+    const reload = `${folder}/clips/reload_idle.vnmclip_c`;
+    if (!paths.includes(reload)) paths.push(reload);
   }
   return paths;
 }

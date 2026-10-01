@@ -89,8 +89,9 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
  * `--entry` reads the model from the skin VPK, so the override wins; verified that
  * `--entry ... --pose --require-pose` poses (the earlier "no pose clip" reason for
  * leaving Infernus on `--hero` is stale) and that the vanilla no-skin export is
- * unaffected. Deliberately NOT pinned: Billy (`punkgoat` ships the rig but no pose
- * clip and already falls back to 2D).
+ * unaffected. The reviewed production animation catalog also uses explicit current model
+ * entries below, so compiled metadata reads and selected skins refer to the
+ * same body. Billy now has a reviewed embedded `primary_idle` clip.
  */
 const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Abrams: 'models/heroes_wip/abrams/abrams.vmdl_c',
@@ -103,6 +104,40 @@ const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Viscous: 'models/heroes_staging/viscous/viscous.vmdl_c',
     Wraith: 'models/heroes_wip/wraith/wraith.vmdl_c',
     Mirage: 'models/heroes_staging/mirage_v2/mirage.vmdl_c',
+    Seven: 'models/heroes_staging/gigawatt_prisoner/gigawatt_prisoner.vmdl_c',
+    Vindicta: 'models/heroes_staging/hornet_v3/hornet.vmdl_c',
+    Paradox: 'models/heroes_staging/chrono/chrono.vmdl_c',
+    Dynamo: 'models/heroes_wip/dynamo/dynamo.vmdl_c',
+    Kelvin: 'models/heroes_staging/kelvin_v2/kelvin.vmdl_c',
+    Haze: 'models/heroes_staging/haze/haze.vmdl_c',
+    Holliday: 'models/heroes_staging/astro/astro.vmdl_c',
+    Bebop: 'models/heroes_staging/bebop/bebop.vmdl_c',
+    Calico: 'models/heroes_staging/nano/nano_v2/nano.vmdl_c',
+    'Grey Talon': 'models/heroes_staging/archer/archer.vmdl_c',
+    'Mo & Krill': 'models/heroes_staging/digger/digger.vmdl_c',
+    Shiv: 'models/heroes_staging/shiv/shiv.vmdl_c',
+    Warden: 'models/heroes_staging/warden/warden.vmdl_c',
+    Yamato: 'models/heroes_staging/yamato_v2/yamato.vmdl_c',
+    Lash: 'models/heroes_wip/lash/lash.vmdl_c',
+    Vyper: 'models/heroes_staging/viper/viper.vmdl_c',
+    Sinclair: 'models/heroes_staging/magician_v2/magician.vmdl_c',
+    Mina: 'models/heroes_wip/vampirebat/vampirebat.vmdl_c',
+    Drifter: 'models/heroes_wip/drifter/drifter.vmdl_c',
+    Venator: 'models/heroes_wip/priest/priest.vmdl_c',
+    Victor: 'models/heroes_wip/frank/frank.vmdl_c',
+    Paige: 'models/heroes_wip/bookworm/bookworm.vmdl_c',
+    Doorman: 'models/heroes_wip/doorman_v2/doorman.vmdl_c',
+    Billy: 'models/heroes_wip/punkgoat/punkgoat.vmdl_c',
+    Graves: 'models/heroes_wip/necro/necro.vmdl_c',
+    Apollo: 'models/heroes_wip/fencer/fencer.vmdl_c',
+    'Deadman Danny': 'models/heroes_wip/deadpack/deadpack.vmdl_c',
+    Silver: 'models/heroes_wip/werewolf/werewolf.vmdl_c',
+    Celeste: 'models/heroes_wip/unicorn/unicorn.vmdl_c',
+    'Rat King': 'models/heroes_wip/ratking/ratking.vmdl_c',
+    Solomon: 'models/heroes_wip/chessmaster/chessmaster.vmdl_c',
+    Violet: 'models/heroes_wip/artist/artist.vmdl_c',
+    'Nurse Harrow': 'models/heroes_wip/nurse/nurse.vmdl_c',
+    Baba: 'models/heroes_wip/baba/baba.vmdl_c',
 };
 
 /** Model codenames to try for a hero, most-specific first: any divergent
@@ -301,7 +336,7 @@ function versionFile(key: string): string {
  *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '12';
+const RIGGED_PIPELINE_VERSION = '13';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';

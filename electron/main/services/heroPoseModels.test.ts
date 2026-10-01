@@ -91,7 +91,7 @@ beforeEach(async () => {
     await fs.writeFile(out, 'synthetic model');
   });
   h.stdout.mockImplementation(async (args) => args[1] === 'clips' ? clips : JSON.stringify({
-    source: argument(args, '--vpk'), selector: argument(args, '--hero'),
+    source: argument(args, '--vpk'), selector: argument(args, args.includes('--entry') ? '--entry' : '--hero'),
   }));
   h.fetch.mockImplementation(async (url) => new Response(await fs.readFile(fileURLToPath(url), 'utf8')));
 });
@@ -114,12 +114,13 @@ describe('rigged preview physics bundle', () => {
     await sweepHeroPoseCache();
     expect(info.hasModel).toBe(true);
     const cloth = JSON.parse(await fs.readFile(join(cacheDir(info.key), 'cloth-rigged.json'), 'utf8'));
-    expect(cloth.selector).toBe('gigawatt');
+    expect(cloth.selector).toBe('models/heroes_staging/gigawatt_prisoner/gigawatt_prisoner.vmdl_c');
     const meshArgs = h.run.mock.calls.at(-1)![0];
     const clothArgs = h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel');
     expect(clothArgs).toHaveLength(1);
     expect(cloth.source).toBe(argument(meshArgs, '--vpk'));
     expect(argument(clothArgs[0][0], '--base')).toBe(argument(meshArgs, '--base'));
+    expect(argument(clothArgs[0][0], '--entry')).toBe(argument(meshArgs, '--entry'));
   });
 
   it('keeps the single-skin fallback model and physics on the same source', async () => {
@@ -181,7 +182,7 @@ describe('rigged preview physics bundle', () => {
     const handler = h.handle.mock.calls.at(-1)![1] as (request: Request) => Promise<Response>;
     const response = await handler(new Request(`grimoire-hero://m/${encodeURIComponent(info.key)}/cloth-rigged.json?v=42`));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ selector: 'yamato' });
+    expect(await response.json()).toMatchObject({ selector: 'models/heroes_staging/yamato_v2/yamato.vmdl_c' });
     expect(fileURLToPath(h.fetch.mock.calls.at(-1)![0])).toBe(join(cacheDir(info.key), 'cloth-rigged.json'));
   });
 });
