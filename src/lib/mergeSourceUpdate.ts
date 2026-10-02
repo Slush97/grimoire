@@ -1,10 +1,11 @@
-import type { GameBananaFile } from '../types/gamebanana';
 import type { MergedModSource } from '../types/mod';
-import { resolveUpdateTarget } from './updateFileMatch';
+import { classifyModFiles, type FileUpdateState, type UpdateFileRow } from './updateFileMatch';
 
-/** A merge source that can be swapped for a specific current GameBanana file. */
+/** Merge sources that can be swapped for a specific current GameBanana file. */
 export interface ResolvedMergeSourceUpdate {
-  source: MergedModSource;
+  /** Every source cut from the same stale GameBanana file. A multi-VPK
+   *  archive yields several, and they share one replacement download. */
+  sources: MergedModSource[];
   gameBananaId: number;
   fileId: number;
   fileName: string;
@@ -17,7 +18,7 @@ export type UnresolvedReason =
   | 'no-provenance'
   /** The mod page's file list could not be fetched. */
   | 'files-unavailable'
-  /** The stored file is gone and no single current file is a confident
+  /** The stored file is no longer current and no current file is a confident
    *  replacement. Guessing here would silently swap unrelated content. */
   | 'no-match';
 
@@ -57,19 +58,14 @@ export interface MergeSourceUpdateOutcome {
  *
  * This is the merge-side counterpart to the resolution `runUpdate` does for
  * standalone mods, kept as a pure function so it can be tested without any
- * download or rebuild. It deliberately does not touch `runUpdate`: the bulk
- * update path is load-bearing and unifying the two is a follow-up.
+ * download or rebuild.
  *
- * Resolution per source, mirroring the standalone rules:
- * 1. `resolveUpdateTarget` on description then filename-token overlap. The
- *    FULL file list (archived included) goes in, because the archived row for
- *    the retired file is the best source of its old name and description.
- * 2. A single-current-file fallback, for the common case of an author
- *    consolidating several uploads into one.
- *
- * Anything that survives both without a confident match becomes `unresolved`
- * rather than a guess. Each candidate file is claimed at most once, so two
- * outdated sources from the same GameBanana mod can never both swap to it.
+ * Resolution uses the same classifier as standalone files (`classifyModFiles`)
+ * over the FULL file list, archived rows included, because the archived row
+ * for the retired file is the best source of its old name and description.
+ * Only a confident successor resolves. Anything else becomes `unresolved`
+ * rather than a guess, a successor is claimed by at most one stale file, and
+ * sources from one stale file resolve together so it is downloaded once.
  *
  * @param staleSources merge sources whose recorded file id is no longer live
  * @param filesByModId full file lists keyed by GameBanana mod id, archived
@@ -79,12 +75,17 @@ export interface MergeSourceUpdateOutcome {
  */
 export function planMergeSourceUpdates(
   staleSources: readonly MergedModSource[],
-  filesByModId: ReadonlyMap<number, GameBananaFile[]>,
+  filesByModId: ReadonlyMap<number, readonly UpdateFileRow[]>,
   alreadyClaimedFileIds?: ReadonlySet<number>,
 ): MergeSourceUpdatePlan {
-  const resolved: ResolvedMergeSourceUpdate[] = [];
+  const resolvedByFileId = new Map<number, ResolvedMergeSourceUpdate>();
   const unresolved: UnresolvedMergeSource[] = [];
-  const claimed = new Set<number>(alreadyClaimedFileIds ?? []);
+  const statesByModId = new Map<number, Map<number, FileUpdateState>>();
+  const entries = staleSources.map((source) => ({
+    id: source.fileName,
+    gameBananaId: source.gameBananaId,
+    gameBananaFileId: source.gameBananaFileId,
+  }));
 
   for (const source of staleSources) {
     const gameBananaId = source.gameBananaId;
@@ -100,37 +101,31 @@ export function planMergeSourceUpdates(
       continue;
     }
 
-    const section = source.section ?? 'Mod';
-    const match = resolveUpdateTarget({ installedFileId }, files, claimed);
-    if (match) {
-      claimed.add(match.id);
-      resolved.push({
-        source,
-        gameBananaId,
-        fileId: match.id,
-        fileName: match.fileName,
-        section,
-      });
+    let states = statesByModId.get(gameBananaId);
+    if (!states) {
+      states = classifyModFiles(gameBananaId, files, entries, alreadyClaimedFileIds).states;
+      statesByModId.set(gameBananaId, states);
+    }
+    const state = states.get(installedFileId);
+    if (state?.kind !== 'update') {
+      unresolved.push({ source, reason: 'no-match' });
       continue;
     }
-
-    const liveFiles = files.filter((f) => !f.isArchived);
-    if (liveFiles.length === 1 && !claimed.has(liveFiles[0].id)) {
-      claimed.add(liveFiles[0].id);
-      resolved.push({
-        source,
-        gameBananaId,
-        fileId: liveFiles[0].id,
-        fileName: liveFiles[0].fileName,
-        section,
-      });
+    const shared = resolvedByFileId.get(installedFileId);
+    if (shared) {
+      shared.sources.push(source);
       continue;
     }
-
-    unresolved.push({ source, reason: 'no-match' });
+    resolvedByFileId.set(installedFileId, {
+      sources: [source],
+      gameBananaId,
+      fileId: state.target.id,
+      fileName: state.target.fileName,
+      section: source.section ?? 'Mod',
+    });
   }
 
-  return { resolved, unresolved };
+  return { resolved: [...resolvedByFileId.values()], unresolved };
 }
 
 /** GameBanana mod ids whose file lists a plan needs, deduped. */

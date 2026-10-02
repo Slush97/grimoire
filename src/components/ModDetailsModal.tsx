@@ -27,6 +27,8 @@ import {
   Link2,
   CloudOff,
   EyeOff,
+  Archive,
+  Replace,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type {
@@ -41,11 +43,13 @@ import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
-import { ArchivedTag, Button, IconButton } from './common/ui';
+import { ArchivedTag, Button, IconButton, Tag } from './common/ui';
+import { ConfirmModal } from './common/PageComponents';
 import ImageContextMenu from './ImageContextMenu';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import { showToast } from '../stores/toastStore';
 import { selectFileDownloadActivity, useDownloadActivity } from '../lib/downloadActivity';
+import type { ReplaceableFile } from '../lib/updateActions';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -80,6 +84,15 @@ interface ModDetailsModalProps {
    *  separate from the mod-level badge prevents alternate variants from all
    *  being mislabeled as updates. */
   updateFileIds?: Set<number>;
+  /** The installed file was archived by its author and no clear replacement
+   *  was found. Shown as a quiet tag: it is not an update. */
+  archivedByAuthor?: boolean;
+  /** Installed files the author deleted with no confident successor. Every
+   *  current row offers "Replace <file> with this" (installed rows included,
+   *  which only removes the old file), confirming exactly what gets deleted
+   *  before calling `onReplace`. */
+  replaceableFiles?: ReplaceableFile[];
+  onReplace?: (fileId: number, fileName: string, replacedFileId: number) => void;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
    *  installed-mod path; Browse leaves both undefined. */
@@ -135,6 +148,9 @@ function ModDetailsModal({
   navigationLabel,
   updateAvailable,
   updateFileIds = new Set<number>(),
+  archivedByAuthor = false,
+  replaceableFiles = [],
+  onReplace,
   ignoreUpdates,
   onToggleIgnoreUpdates,
   onClose,
@@ -247,6 +263,9 @@ function ModDetailsModal({
   const [imageRatios, setImageRatios] = useState<Record<number, number>>({});
   const [deleteCandidate, setDeleteCandidate] = useState<{ modId: string; fileName: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [replaceCandidate, setReplaceCandidate] = useState<
+    { fileId: number; fileName: string; installed: boolean; replaced: ReplaceableFile } | null
+  >(null);
   // Backdrop dismissal for the two nested overlays. The hook ignores drags
   // that only end on the backdrop, so releasing a text selection (or the
   // lightbox drag) outside the panel no longer closes them.
@@ -363,6 +382,8 @@ function ModDetailsModal({
           if (!deleteInProgress) setDeleteCandidate(null);
           return;
         }
+        // The confirmation dialog closes itself on Escape; this overlay stays.
+        if (replaceCandidate) return;
         // Lightbox eats ESC before the modal does, so users can dismiss the
         // zoomed view without losing their place on the detail card.
         if (lightboxOpen) {
@@ -376,7 +397,7 @@ function ModDetailsModal({
       if (lightboxOpen && images.length > 1) {
         if (e.key === 'ArrowLeft') goToPrevious();
         if (e.key === 'ArrowRight') goToNext();
-      } else if (!deleteCandidate && !isNavigating) {
+      } else if (!deleteCandidate && !replaceCandidate && !isNavigating) {
         const target = e.target as HTMLElement | null;
         const tag = target?.tagName?.toLowerCase();
         const editing =
@@ -431,6 +452,7 @@ function ModDetailsModal({
     lightboxOpen,
     deleteCandidate,
     deleteInProgress,
+    replaceCandidate,
     isNavigating,
     onNavigatePrevious,
     onNavigateNext,
@@ -458,12 +480,11 @@ function ModDetailsModal({
   };
 
   const actionLabel = (fileId: number, archived = false) => {
-    // A file you already own re-downloads itself = "Reinstall". A not-installed
-    // current file shown while an update is available is the update target:
-    // clicking it replaces the now-superseded installed version, so call it
-    // "Update". Archived files are never update targets (they're the old ones).
-    // Both hosts set updateAvailable, so a file the author replaced reads the
-    // same way whether you reach it from Installed or from Browse.
+    // A file you already own re-downloads itself = "Reinstall". A current file
+    // in updateFileIds is the confident successor of a stale install: clicking
+    // it replaces that install, so it reads "Update". Every other file is a
+    // plain Install that deletes nothing. Both hosts classify the same way, so
+    // a file reads the same from Installed or from Browse.
     if (updateFileIds.has(fileId) && !archived) return t('profiles.actions.update');
     if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
     return t('modDetails.actions.install');
@@ -560,9 +581,9 @@ function ModDetailsModal({
 
   const renderFileRow = (file: GameBananaFile, archived = false) => {
     const isInstalled = installedFileIds.has(file.id);
-    // Highlight the actual replacement target, not every uninstalled sibling.
-    // A target can already be installed: in that case Update promotes it and
-    // removes the stale predecessor without downloading a duplicate.
+    // Highlight the actual replacement target, not every sibling. A target can
+    // already be installed: then Update promotes it and removes the stale
+    // predecessor without downloading a duplicate.
     const isUpdate = updateFileIds.has(file.id) && !archived;
     const installedFileState = installedFileStates?.get(file.id);
     const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true;
@@ -582,6 +603,9 @@ function ModDetailsModal({
       !!onEnableFile &&
       !isBusyThis;
     const showDeleteButton = !!installedFileState && !!onDeleteFile;
+    const replaceOptions = !archived && onReplace ? replaceableFiles : [];
+    const pickReplacement = (replaced: ReplaceableFile) =>
+      setReplaceCandidate({ fileId: file.id, fileName: file.fileName, installed: isInstalled, replaced });
     const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
     const pct = fileProgress && fileProgress.total > 0
       ? Math.round((fileProgress.downloaded / fileProgress.total) * 100)
@@ -677,6 +701,28 @@ function ModDetailsModal({
               onClick={() => setDeleteCandidate({ modId: installedFileState.modId, fileName: file.fileName })}
               disabled={isBusyThis || deleteInProgress}
             />
+          )}
+          {replaceOptions.length === 1 && (
+            <IconButton
+              icon={Replace}
+              label={t('modDetails.replace.action', { name: replaceOptions[0].label })}
+              onClick={() => pickReplacement(replaceOptions[0])}
+              disabled={isBusyThis}
+            />
+          )}
+          {replaceOptions.length > 1 && (
+            <MenuRoot kind="dropdown">
+              <MenuTrigger asChild disabled={isBusyThis}>
+                <IconButton icon={Replace} label={t('modDetails.replace.menu')} disabled={isBusyThis} />
+              </MenuTrigger>
+              <MenuContent>
+                {replaceOptions.map((replaced) => (
+                  <MenuItem key={replaced.fileId} onSelect={() => pickReplacement(replaced)}>
+                    {t('modDetails.replace.action', { name: replaced.label })}
+                  </MenuItem>
+                ))}
+              </MenuContent>
+            </MenuRoot>
           )}
           <Button
             type="button"
@@ -964,6 +1010,11 @@ function ModDetailsModal({
                 {t('modDetails.status.installed')}
               </span>
             )}
+            {archivedByAuthor && (
+              <Tag icon={Archive} title={t('modDetails.status.archivedByAuthorTitle')}>
+                {t('modDetails.status.archivedByAuthor')}
+              </Tag>
+            )}
             {/* Only surface the ignore-updates pill in the installed-mod
                 context (handler provided) and when it's actually relevant:
                 either there's an update available now, or the user already
@@ -1143,6 +1194,30 @@ function ModDetailsModal({
               </div>
             </div>
           </div>
+        )}
+
+        {replaceCandidate && onReplace && (
+          <ConfirmModal
+            isOpen
+            title={t('modDetails.replace.confirmTitle')}
+            message={
+              replaceCandidate.installed
+                ? t('modDetails.replace.confirmBodyInstalled', {
+                    newName: replaceCandidate.fileName,
+                    oldName: replaceCandidate.replaced.label,
+                  })
+                : t('modDetails.replace.confirmBody', {
+                    newName: replaceCandidate.fileName,
+                    oldName: replaceCandidate.replaced.label,
+                  })
+            }
+            confirmLabel={t('modDetails.replace.confirm')}
+            onCancel={() => setReplaceCandidate(null)}
+            onConfirm={() => {
+              setReplaceCandidate(null);
+              onReplace(replaceCandidate.fileId, replaceCandidate.fileName, replaceCandidate.replaced.fileId);
+            }}
+          />
         )}
 
         {offline && (

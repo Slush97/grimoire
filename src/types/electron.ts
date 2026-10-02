@@ -101,6 +101,12 @@ export interface DownloadModArgs {
     modName?: string;
     section?: string;
     categoryId?: number;
+    /** The download replaces installed content (an update, a confirmed
+     *  replace, a reinstall, or a merge-source refresh). The caller removes
+     *  what it replaces and restores the enabled and Global state itself, so
+     *  the backend leaves the mod's other files enabled instead of switching
+     *  sibling variants off. */
+    isReplacement?: boolean;
 }
 
 export interface GetCategoriesArgs {

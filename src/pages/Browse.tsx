@@ -73,7 +73,10 @@ import { HiddenCreatorsModal } from '../components/HiddenCreatorsManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
-import { hasPendingUpdate, planFileUpdates } from '../lib/updateFileMatch';
+import { classifyModFiles } from '../lib/updateFileMatch';
+import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
+import { mergeSourceFileIds } from '../lib/updateCheck';
+import { visibleInstalledMods } from '../lib/visibleMods';
 import {
   createEnabledVpkRestoreSnapshot,
   createGlobalVpkRestoreSnapshot,
@@ -404,6 +407,10 @@ export default function Browse() {
   const toggleMod = useAppStore((s) => s.toggleMod);
   const setModPriorityFolder = useAppStore((s) => s.setModPriorityFolder);
   const installedMods = useAppStore((s) => s.mods);
+  // Absorbed merge sources and Locker artifacts are not installs of their own:
+  // update state and replacements run over the same visible set as Installed.
+  const visibleMods = useMemo(() => visibleInstalledMods(installedMods), [installedMods]);
+  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
   const soundVolume = useAppStore((s) => s.soundVolume);
   const setSoundVolume = useAppStore((s) => s.setSoundVolume);
   const browseUi = useAppStore((s) => s.browseUi);
@@ -1812,17 +1819,22 @@ export default function Browse() {
   // Stable identity (useStableCallback) so the memoized ModDetailsModal does
   // not re-render every time this large component does (e.g. on every
   // virtualizer range change while the docked sidebar is open).
-  const handleDownload = useStableCallback(async (fileId: number, fileName: string) => {
+  const handleDownload = useStableCallback(async (fileId: number, fileName: string, replaceFileId?: number) => {
     if (!selectedMod || !activeDeadlockPath) return;
     if (!requestDownload({ modId: selectedMod.id, fileId, fileName, modName: selectedMod.name })) return;
 
     try {
-      const updateSourceIds = selectedUpdateSourcesByTargetFileId.get(fileId) ?? [];
-      const replacementTargets = updateSourceIds.length > 0
-        ? installedMods.filter((mod) => updateSourceIds.includes(mod.id))
-        : installedMods.filter(
-            (mod) => mod.gameBananaId === selectedMod.id && mod.gameBananaFileId === fileId,
-          );
+      // Only the stale file this is the confident successor of, a stale file
+      // the user confirmed replacing, or the same file on a reinstall gets
+      // replaced. A plain install deletes nothing.
+      const decision = decideFileDownload(
+        fileId,
+        selectedUpdate.classification,
+        visibleMods.filter((mod) => mod.gameBananaId === selectedMod.id),
+        { replaceFileId },
+      );
+      const replacedIds = new Set(decision.replacedModIds);
+      const replacementTargets = visibleMods.filter((mod) => replacedIds.has(mod.id));
       const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
       const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
       if (restoreGlobal.ambiguous) {
@@ -1837,23 +1849,31 @@ export default function Browse() {
         }
       }
 
-      const installedReplacementIds =
-        updateSourceIds.length > 0
-          ? installedMods
-              .filter(
-                (mod) =>
-                  mod.gameBananaId === selectedMod.id &&
-                  mod.gameBananaFileId === fileId &&
-                  !updateSourceIds.includes(mod.id),
-              )
-              .map((mod) => mod.id)
-          : [];
+      // When the user already has the picked file (an update onto an installed
+      // successor, or a confirmed replace onto it), nothing is downloaded: the
+      // replaced file is deleted and its state restored onto the installed one.
+      const installedReplacementIds = visibleMods
+        .filter(
+          (mod) =>
+            mod.gameBananaId === selectedMod.id &&
+            mod.gameBananaFileId === fileId &&
+            !replacedIds.has(mod.id),
+        )
+        .map((mod) => mod.id);
 
       if (installedReplacementIds.length === 0) {
         // Snapshot capture can leave an optimistic row on screen long enough
         // for the user to cancel it. Do not cross IPC after that cancellation.
         if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
-        await downloadMod(selectedMod.id, fileId, fileName, selectedDetailsSection, effectiveCategoryId);
+        await downloadMod(
+          selectedMod.id,
+          fileId,
+          fileName,
+          selectedDetailsSection,
+          effectiveCategoryId,
+          selectedMod.name,
+          decision.replacedModIds.length > 0,
+        );
         await loadMods();
         const installedAfterDownload = useAppStore.getState().mods;
         const targetIds = findReplacementTargetIdsAfterInstall(
@@ -2024,16 +2044,18 @@ export default function Browse() {
     return map;
   }, [installedMods]);
 
-  // Track installed file IDs for per-file "Reinstall" button state
+  // Track installed file IDs for per-file "Reinstall" button state. A file
+  // held only inside a merge does not count: reinstalling it would not touch
+  // the merge.
   const installedFileIds = useMemo(() => {
     const ids = new Set<number>();
-    for (const mod of installedMods) {
+    for (const mod of visibleMods) {
       if (typeof mod.gameBananaFileId === 'number') {
         ids.add(mod.gameBananaFileId);
       }
     }
     return ids;
-  }, [installedMods]);
+  }, [visibleMods]);
 
   // Per-file install map for the details modal. Lets a row that's installed
   // but currently disabled surface an inline "Enable" pill — matches the
@@ -2042,7 +2064,7 @@ export default function Browse() {
   // representative since that's the actionable state.
   const installedFileStates = useMemo(() => {
     const map = new Map<number, { modId: string; enabled: boolean }>();
-    for (const mod of installedMods) {
+    for (const mod of visibleMods) {
       if (typeof mod.gameBananaFileId !== 'number') continue;
       const existing = map.get(mod.gameBananaFileId);
       if (!existing || (mod.enabled && !existing.enabled)) {
@@ -2050,67 +2072,29 @@ export default function Browse() {
       }
     }
     return map;
-  }, [installedMods]);
+  }, [visibleMods]);
 
   // Without this, a file the author re-uploaded renders as a plain "Install" and
   // the mod reads as never downloaded, even though the Installed page flags the
   // same mod as updatable. The open modal's file list is already the live list,
-  // so the check costs no extra request here.
-  const selectedModUpdateAvailable = useMemo(
-    () => (selectedMod ? hasPendingUpdate(selectedMod.id, selectedMod.files ?? [], installedMods) : false),
-    [selectedMod, installedMods]
-  );
-  const selectedUpdatePlan = useMemo(() => {
-    if (!selectedMod) {
-      return { sourcesByTargetFileId: new Map<number, string[]>(), unresolvedSourceIds: [] };
-    }
-    return planFileUpdates(
-      selectedMod.id,
-      selectedMod.files ?? [],
-      installedMods
-        .filter(
-          (mod) =>
-            mod.gameBananaId === selectedMod.id &&
-            typeof mod.gameBananaFileId === 'number',
-        )
-        .map((mod) => ({
-          id: mod.id,
-          gameBananaId: mod.gameBananaId,
-          gameBananaFileId: mod.gameBananaFileId,
-          ignoreUpdates: mod.ignoreUpdates,
-          installedFileId: mod.gameBananaFileId!,
-          fileDescription: mod.fileDescription,
-          sourceFileName: mod.sourceFileName,
-        })),
+  // so the check costs no extra request here. Same classifier, rules and
+  // visible set as the Installed page, over every installed file of the mod.
+  const selectedUpdate = useMemo(() => {
+    const classification = classifyModFiles(
+      selectedMod?.id ?? -1,
+      selectedMod?.files ?? [],
+      visibleMods,
+      mergedFileIds,
     );
-  }, [selectedMod, installedMods]);
-  const selectedUpdateSourcesByTargetFileId = useMemo(() => {
-    const sources = new Map(selectedUpdatePlan.sourcesByTargetFileId);
-    if (
-      !selectedMod ||
-      sources.size > 0 ||
-      selectedUpdatePlan.unresolvedSourceIds.length === 0
-    ) return sources;
-
-    // If every unresolved local VPK came from the same old GameBanana file,
-    // the ambiguity is only "which new variant does the user want?". Let every
-    // current row be an explicit Update choice. Distinct stale file ids remain
-    // unlabelled because collapsing several variants into one would be unsafe.
-    const unresolved = installedMods.filter((mod) =>
-      selectedUpdatePlan.unresolvedSourceIds.includes(mod.id),
-    );
-    const oldFileIds = new Set(unresolved.map((mod) => mod.gameBananaFileId));
-    if (oldFileIds.size === 1) {
-      for (const file of selectedMod.files ?? []) {
-        if (!file.isArchived) sources.set(file.id, [...selectedUpdatePlan.unresolvedSourceIds]);
-      }
-    }
-    return sources;
-  }, [selectedMod, selectedUpdatePlan, installedMods]);
-  const selectedUpdateFileIds = useMemo(
-    () => new Set(selectedUpdateSourcesByTargetFileId.keys()),
-    [selectedUpdateSourcesByTargetFileId],
-  );
+    const summary = summarizeUpdateScope(classification);
+    return {
+      classification,
+      flagged: summary.flagged,
+      archived: summary.archived,
+      updateFileIds: new Set(summary.targets.keys()),
+      replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
+    };
+  }, [selectedMod, visibleMods, mergedFileIds]);
 
   const queuedByModId = useMemo(() => {
     const map = new Map<number, QueuedDownloadState>();
@@ -2457,8 +2441,11 @@ export default function Browse() {
         mod={selectedMod}
         section={selectedDetailsSection}
         installed={installedIds.has(selectedMod.id)}
-        updateAvailable={selectedModUpdateAvailable}
-        updateFileIds={selectedUpdateFileIds}
+        updateAvailable={selectedUpdate.flagged}
+        updateFileIds={selectedUpdate.updateFileIds}
+        archivedByAuthor={selectedUpdate.archived}
+        replaceableFiles={selectedUpdate.replaceableFiles}
+        onReplace={handleDownload}
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
         onEnableFile={toggleMod}

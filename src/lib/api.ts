@@ -894,9 +894,12 @@ export async function downloadMod(
   fileName: string,
   section?: string,
   categoryId?: number,
-  modName?: string
+  modName?: string,
+  isReplacement?: boolean
 ): Promise<void> {
-  return withGameRunningWarning(() => window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName }));
+  return withGameRunningWarning(() =>
+    window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName, isReplacement })
+  );
 }
 
 export async function getGamebananaSections(): Promise<GameBananaSection[]> {

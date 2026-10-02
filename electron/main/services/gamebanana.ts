@@ -841,14 +841,15 @@ export async function fetchModDetails(
 
 interface ModFileListRaw {
     _idRow: number;
-    _aFiles?: Array<{ _idRow: number; _bIsArchived?: boolean }>;
+    _aFiles?: FileRaw[];
 }
 
 /**
  * Slim variant of fetchModDetails that asks GameBanana for only the file list.
  * The Installed page's update check uses this to scan every installed mod
  * cheaply on mount - the full details payload (description, preview media,
- * category) is wasteful when we only compare file ids.
+ * category) is wasteful when we only need the file rows. `_aFiles` carries
+ * archived rows too, each with its name, description and upload date.
  */
 export async function fetchModFileList(
     modId: number,
@@ -860,7 +861,10 @@ export async function fetchModFileList(
         id: raw._idRow,
         files: (raw._aFiles ?? []).map((f) => ({
             id: f._idRow,
+            fileName: f._sFile,
             isArchived: f._bIsArchived ?? false,
+            description: f._sDescription,
+            dateAdded: f._tsDateAdded,
         })),
     };
 }

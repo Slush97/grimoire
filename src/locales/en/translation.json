@@ -2775,7 +2775,9 @@
       "queued": "Queued",
       "starting": "Starting",
       "extracting": "Extracting...",
-      "updatesIgnored": "Updates ignored"
+      "updatesIgnored": "Updates ignored",
+      "archivedByAuthor": "Archived by author",
+      "archivedByAuthorTitle": "The author archived the file you have. Grimoire found no clear replacement for it, so it is not treated as an update."
     },
     "actions": {
       "enable": "Enable",
@@ -2819,6 +2821,14 @@
     "deleteFile": {
       "title": "Delete installed file?",
       "body": "Delete <name>{{fileName}}</name> from your installed mods? This action cannot be undone."
+    },
+    "replace": {
+      "action": "Replace {{name}} with this",
+      "menu": "Replace an installed file with this",
+      "confirmTitle": "Replace file?",
+      "confirmBody": "{{oldName}} is no longer on GameBanana. Grimoire will install {{newName}} and delete {{oldName}}, keeping its enabled and Global settings.",
+      "confirmBodyInstalled": "{{oldName}} is no longer on GameBanana. Grimoire will delete it and keep {{newName}}, which you already have, moving its enabled and Global settings over.",
+      "confirm": "Replace"
     },
     "aria": {
       "loadingDetails": "Loading mod details",

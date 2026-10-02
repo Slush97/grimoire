@@ -789,6 +789,75 @@ async function disableSiblingVariants(
     return disabledPeers;
 }
 
+interface PostInstallTarget {
+    /** GameBanana ids of the freshly installed file; siblings share the mod id. */
+    modId: number | undefined;
+    fileId: number | undefined;
+    /** Ids reported in the mods-auto-disabled event. */
+    eventModId: number;
+    eventFileId: number;
+    /** The install replaces content its caller removes afterwards. */
+    isReplacement: boolean;
+}
+
+/**
+ * Settle which freshly installed VPKs end up enabled.
+ *
+ * Switching variants: when the user installs a different file of a mod they
+ * already have enabled, the previously enabled siblings are disabled and the
+ * new pick is enabled, so sibling variants (which usually touch the same game
+ * files) don't conflict. That only applies to plain installs (Browse,
+ * one-click, collection import). An install that replaces specific files
+ * leaves the siblings alone: its caller deletes the replaced files afterwards
+ * and restores their enabled and Global state onto the new file, and
+ * disabling siblings would switch off the user's other files from the same
+ * mod (an announcer pack beside the main file it updated).
+ * Opt-out: settings.autoDisableSiblingVariants = false keeps every variant
+ * enabled (e.g. a mod page whose separate files are meant to run together).
+ */
+export async function applyPostInstallEnableRules(
+    deadlockPath: string,
+    installedVpks: string[],
+    target: PostInstallTarget,
+    mainWindow: BrowserWindow | null,
+    logPrefix: string,
+): Promise<void> {
+    const settings = loadSettings();
+    let enabledInstalledVpks = false;
+    if (!target.isReplacement && settings.autoDisableSiblingVariants !== false) {
+        try {
+            const disabledPeers = await disableSiblingVariants(deadlockPath, installedVpks, target.modId, target.fileId);
+            // Downloads land in /disabled by default, so just disabling the
+            // previously-enabled sibling would leave the mod entirely off.
+            // When we kick an enabled variant, move the freshly-downloaded
+            // VPK(s) into the addons folder so the new variant ends up active.
+            if (disabledPeers.length > 0 && installedVpks.length > 0) {
+                await enableInstalledVpks(deadlockPath, installedVpks, 'sibling-variant');
+                enabledInstalledVpks = true;
+                mainWindow?.webContents.send('mods-auto-disabled', {
+                    reason: 'sibling-variant',
+                    modId: target.eventModId,
+                    fileId: target.eventFileId,
+                    disabled: disabledPeers,
+                });
+            }
+        } catch (err) {
+            console.warn(`${logPrefix} Failed to auto-disable sibling variants:`, err);
+        }
+    }
+
+    if (settings.autoEnableDownloads === true && !enabledInstalledVpks) {
+        // The install already succeeded; an enable failure (e.g. scanMods
+        // hitting a transient FS error) must not reject the download promise
+        // and report the whole download as failed.
+        try {
+            await enableInstalledVpks(deadlockPath, installedVpks, 'auto-enable-downloads');
+        } catch (err) {
+            console.warn(`${logPrefix} Failed to auto-enable new downloads:`, err);
+        }
+    }
+}
+
 /**
  * Execute the actual download (internal, called from queue)
  */
@@ -1083,51 +1152,13 @@ async function executeDownload(
         await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
     }
 
-    // Switching variants: when the user installs a different file of a mod they
-    // already have enabled, disable the previously-enabled sibling so only the
-    // new pick is active. Avoids file-conflict warnings between sibling variants
-    // (they usually touch the same in-game files). This only matters for non-
-    // update installs (Browse, one-click, collection import); the explicit
-    // update paths delete the old file before downloading, so there is no
-    // enabled sibling left for this to act on.
-    // Opt-out: settings.autoDisableSiblingVariants = false keeps every variant
-    // enabled (e.g. a mod page whose separate files are meant to run together).
-    const settings = loadSettings();
-    let enabledInstalledVpks = false;
-    if (settings.autoDisableSiblingVariants !== false) {
-        try {
-            const disabledPeers = await disableSiblingVariants(deadlockPath, installedVpks, modId, fileId);
-            // Downloads land in /disabled by default, so just disabling the
-            // previously-enabled sibling would leave the mod entirely off
-            // ("the newest pick is the active one" in the surrounding comment
-            // requires actually promoting the new pick). When we kick an
-            // enabled variant, move the freshly-downloaded VPK(s) into the
-            // addons folder so the user ends up with the new variant active.
-            if (disabledPeers.length > 0 && installedVpks.length > 0) {
-                await enableInstalledVpks(deadlockPath, installedVpks, 'sibling-variant');
-                enabledInstalledVpks = true;
-                mainWindow?.webContents.send('mods-auto-disabled', {
-                    reason: 'sibling-variant',
-                    modId,
-                    fileId,
-                    disabled: disabledPeers,
-                });
-            }
-        } catch (err) {
-            console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
-        }
-    }
-
-    if (settings.autoEnableDownloads === true && !enabledInstalledVpks) {
-        // The install already succeeded; an enable failure (e.g. scanMods
-        // hitting a transient FS error) must not reject the download promise
-        // and report the whole download as failed.
-        try {
-            await enableInstalledVpks(deadlockPath, installedVpks, 'auto-enable-downloads');
-        } catch (err) {
-            console.warn(`[downloadMod] Failed to auto-enable new downloads:`, err);
-        }
-    }
+    await applyPostInstallEnableRules(
+        deadlockPath,
+        installedVpks,
+        { modId, fileId, eventModId: modId, eventFileId: fileId, isReplacement: !!args.isReplacement },
+        mainWindow,
+        '[downloadMod]',
+    );
 
     // Notify completion
     console.log(`[downloadMod] Sending download-complete event`);
@@ -1594,12 +1625,10 @@ async function executeOneClickDownload(
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
-    const settings = loadSettings();
-
     // Opt-in self-identifying embed (path B). Same as executeDownload: imprint each
     // freshly installed VPK in place while it is still disabled and pristine,
     // before the sibling / auto-enable logic renames it. Best-effort.
-    if (settings.experimentalVpkImprinting) {
+    if (loadSettings().experimentalVpkImprinting) {
         await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
 
@@ -1607,39 +1636,19 @@ async function executeOneClickDownload(
         await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
     }
 
-    let enabledInstalledVpks = false;
-    if (settings.autoDisableSiblingVariants !== false) {
-        try {
-            const disabledPeers = await disableSiblingVariants(
-                deadlockPath,
-                installedVpks,
-                realModId,
-                resolvedFileId
-            );
-            if (disabledPeers.length > 0 && installedVpks.length > 0) {
-                await enableInstalledVpks(deadlockPath, installedVpks, 'sibling-variant');
-                enabledInstalledVpks = true;
-                mainWindow?.webContents.send('mods-auto-disabled', {
-                    reason: 'sibling-variant',
-                    modId: realModId ?? modId,
-                    fileId: resolvedFileId ?? fileId,
-                    disabled: disabledPeers,
-                });
-            }
-        } catch (err) {
-            console.warn(`[oneClickInstall] Failed to auto-disable sibling variants:`, err);
-        }
-    }
-
-    if (settings.autoEnableDownloads === true && !enabledInstalledVpks) {
-        // Same as executeDownload: the install already succeeded, so an
-        // enable failure must not reject the download promise.
-        try {
-            await enableInstalledVpks(deadlockPath, installedVpks, 'auto-enable-downloads');
-        } catch (err) {
-            console.warn(`[oneClickInstall] Failed to auto-enable new downloads:`, err);
-        }
-    }
+    await applyPostInstallEnableRules(
+        deadlockPath,
+        installedVpks,
+        {
+            modId: realModId,
+            fileId: resolvedFileId,
+            eventModId: realModId ?? modId,
+            eventFileId: resolvedFileId ?? fileId,
+            isReplacement: false,
+        },
+        mainWindow,
+        '[oneClickInstall]',
+    );
 
     mainWindow?.webContents.send('download-complete', { modId, fileId });
     return { installedVpks };
