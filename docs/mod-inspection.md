@@ -1,6 +1,13 @@
 # Mod inspection
 
-Grimoire checks VPK content before downloads finish, before local imports become
+Off by default: turn it on under Settings > Experimental Features > Mod safety.
+It was built against a Deadlock bug that let a HUD script point a
+`CitadelHTMLPanel` at `javascript:` or `file://` URLs and read local files.
+Valve has since closed that: `SetURL` now blanks anything not starting with
+`https://`. With the review off, every gate below passes without reading the
+archive, startup skips the installed-mod check, and local imports land enabled.
+
+With it on, Grimoire checks VPK content before downloads finish, before local imports become
 active, before enabling mods, when applying profiles or batches, before committing
 merge/repack outputs, before joining a Deadworks server, at startup, and before
 launching a modded game. DMM adoption and vanilla-stash restoration also pass
@@ -60,9 +67,12 @@ bytes. Neither script contents nor nested packages are executed during inspectio
 
 Trust is local to this Grimoire installation and keyed by SHA-256 of the full
 physical package, referenced chunks, and policy version. It is not imported from
-mod metadata, profiles, a filename, an author, or a GameBanana ID. Every gate
-rehashes current bytes. Inspection reports are cached locally by content hash and
-scanner version, so unchanged packages do not need decoding and analysis again.
+mod metadata, profiles, a filename, an author, or a GameBanana ID. Inspection
+reports are cached locally by content hash and scanner version, so unchanged
+packages do not need decoding and analysis again. A gate rehashes a package
+unless every file it covers keeps the device, inode, size, mtime and ctime it had
+when last hashed, so startup and launch checks don't reread an unchanged library.
+Rewriting a file while restoring its ctime takes code already running as the user.
 Acceptance rechecks the current bytes against the reviewed fingerprint. Merges,
 merge rebuilds and imprints are new bytes built only from installed archives
 plus Grimoire's own `addoninfo.txt`/`modinfo.json` entries. When every source is

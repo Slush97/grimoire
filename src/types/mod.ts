@@ -1126,6 +1126,12 @@ export interface AppSettings {
    *  by default. Also surfaces the retroactive "Imprint installed mods" bulk action
    *  on the Installed page. */
   experimentalVpkImprinting: boolean;
+  /** Opt-in mod safety review (docs/mod-inspection.md): inspect each VPK for
+   *  scripts and other executable content, ask before activating a flagged
+   *  version, and import local mods disabled until reviewed. Off by default
+   *  since Valve closed the CEF file:// read it was built against. When off,
+   *  every safety gate passes without reading the archive. */
+  experimentalModSafety: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

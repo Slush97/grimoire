@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getActiveDeadlockPath } from '../services/settings';
+import { getActiveDeadlockPath, loadSettings } from '../services/settings';
 import {
     launchModded,
     launchVanilla,
@@ -17,7 +17,7 @@ import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
 import { auditInstalledSafety } from '../services/modSafetyAudit';
-import { pruneModQuarantine } from '../services/modSafety';
+import { pruneModQuarantine, pruneModSafetyPathCache } from '../services/modSafety';
 import {
     captureEmptyGameMods,
     captureLoadedGameMods,
@@ -155,13 +155,16 @@ ipcMain.handle('restore-vanilla-stash', async (): Promise<RestoreResult> => {
  */
 export async function runStartupRecovery(): Promise<void> {
     await pruneModQuarantine().catch(err => console.warn('[mod-safety] Could not prune quarantine:', err));
+    void pruneModSafetyPathCache();
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) return;
-    try {
-        await auditInstalledSafety(deadlockPath);
-    } catch (err) {
-        // The prelaunch gate still fails closed if startup enumeration fails.
-        console.error('[mod-safety] Startup inspection failed:', err);
+    if (loadSettings().experimentalModSafety) {
+        try {
+            await auditInstalledSafety(deadlockPath);
+        } catch (err) {
+            // The prelaunch gate still fails closed if startup enumeration fails.
+            console.error('[mod-safety] Startup inspection failed:', err);
+        }
     }
     try {
         const result = await recoverFromStashOnStartup(deadlockPath);

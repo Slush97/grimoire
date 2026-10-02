@@ -22,6 +22,7 @@ const COMPILED_TEXT = new Set(['vjs_c', 'vts_c', 'vcss_c', 'vsvg_c']);
 const EXECUTABLE = new Set(['ts', 'vts', 'lua', 'nut', 'cfg']);
 const PROGRAMS = new Set(['exe', 'dll', 'com', 'bat', 'cmd', 'ps1', 'vbs', 'lnk', 'msi', 'so', 'dylib', 'wasm']);
 interface ScanBudget { archives: number; nestedBytes: number; entries: number; sourceBytes: number }
+interface Observed { files: string[]; signature: string[] }
 interface Entry { path: string; extension: string; preload: Buffer; file: string; offset: number; length: number }
 
 function requireCondition(condition: unknown): asserts condition {
@@ -106,6 +107,14 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
         requireCondition(cursor === tree.length && entries.length > 0);
         return { entries, files: [...sizes.keys()] };
     } finally { await handle.close(); }
+}
+
+/** What each file looked like on disk, to notice a rewrite without reading it. */
+async function signature(files: string[]): Promise<string[]> {
+    return Promise.all(files.map(async f => {
+        const s = await fs.stat(f, { bigint: true });
+        return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+    }));
 }
 
 async function hashFiles(files: string[]): Promise<string> {
@@ -198,7 +207,40 @@ async function readCachedReport(cacheDir: string, fingerprint: string): Promise<
     } catch { return undefined; }
 }
 
-async function scanArchive(path: string, binary: string | undefined, budget: ScanBudget, depth: number, cacheDir?: string): Promise<ModSafetyReport> {
+function pathEntry(cacheDir: string, path: string): string {
+    return join(cacheDir, 'paths', `${createHash('sha256').update(path).digest('hex')}.json`);
+}
+
+/** Drops path entries whose archive is gone: staged copies, deleted mods, renamed slots. */
+export async function prunePathEntries(cacheDir: string): Promise<void> {
+    const dir = join(cacheDir, 'paths');
+    for (const name of await fs.readdir(dir).catch(() => [])) {
+        const entry = join(dir, name);
+        try {
+            await fs.access(JSON.parse(await fs.readFile(entry, 'utf8')).files[0]);
+        } catch { await fs.unlink(entry).catch(() => {}); }
+    }
+}
+
+/**
+ * The cached report for `path` while every file it covers keeps the device,
+ * inode, size, mtime and ctime it had when last hashed. Rewriting a file and
+ * restoring its ctime takes code already running as the user, which no mod
+ * review can stop anyway.
+ */
+export async function cachedModSafetyReport(path: string, cacheDir: string): Promise<ModSafetyReport | undefined> {
+    try {
+        const entry = JSON.parse(await fs.readFile(pathEntry(cacheDir, path), 'utf8'));
+        requireCondition(Array.isArray(entry.files) && entry.files[0] === path && Array.isArray(entry.signature)
+            && entry.signature.length === entry.files.length && /^[a-f0-9]{64}$/.test(entry.fingerprint));
+        const current = await signature(entry.files);
+        requireCondition(current.every((s, i) => s === entry.signature[i]));
+        return await readCachedReport(cacheDir, entry.fingerprint);
+    } catch { return undefined; }
+}
+
+async function scanArchive(path: string, binary: string | undefined, budget: ScanBudget, depth: number,
+    cacheDir?: string, observed?: Observed): Promise<ModSafetyReport> {
     const findings: ModSafetyFinding[] = [];
     let fingerprint = '';
     let blocked = false;
@@ -211,17 +253,18 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
             && findings[199].reason !== 'unreadable-archive')) findings[199] = finding;
     };
     try {
-        const initial = await fs.stat(path);
+        const [initial] = await signature([path]);
         const { entries, files } = await directory(path);
         budget.entries += entries.length;
         requireCondition(budget.entries <= MAX_ENTRIES);
-        const before = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
-        requireCondition(before[0] === `${initial.size}:${initial.mtimeMs}:${initial.ctimeMs}`);
+        const before = await signature(files);
+        requireCondition(before[0] === initial);
+        if (observed) Object.assign(observed, { files, signature: before });
         fingerprint = await hashFiles(files);
         if (cacheDir) {
             const cached = await readCachedReport(cacheDir, fingerprint);
             if (cached) {
-                const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
+                const after = await signature(files);
                 requireCondition(before.every((s, i) => s === after[i]));
                 return cached;
             }
@@ -290,7 +333,7 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
                 }
             }
         }
-        const after = await Promise.all(files.map(async f => { const s = await fs.stat(f); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; }));
+        const after = await signature(files);
         requireCondition(before.every((s, i) => s === after[i]));
     } catch (err) {
         add({ entry: basename(path), reason: err instanceof InspectionIncomplete ? 'inspection-failed' : 'unreadable-archive' });
@@ -303,16 +346,20 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
 }
 
 export async function scanModSafety(path: string, binary?: string, cacheDir?: string): Promise<ModSafetyReport> {
-    const report = await scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0, cacheDir);
+    const observed: Observed = { files: [], signature: [] };
+    const report = await scanArchive(path, binary, { archives: 0, nestedBytes: 0, entries: 0, sourceBytes: 0 }, 0, cacheDir, observed);
     if (cacheDir && (report.verdict === 'no-findings' || report.verdict === 'requires-trust')) {
         const temp = join(cacheDir, `${randomUUID()}.tmp`);
         try {
-            await fs.mkdir(cacheDir, { recursive: true });
+            await fs.mkdir(join(cacheDir, 'paths'), { recursive: true });
             // Keep an existing valid report untouched on cache hits.
             if (!await readCachedReport(cacheDir, report.fingerprint)) {
                 await fs.writeFile(temp, JSON.stringify({ scannerVersion: MOD_SAFETY_SCANNER_VERSION, report }));
                 await fs.rename(temp, join(cacheDir, `${report.fingerprint}.json`));
             }
+            // Taken before hashing and unchanged when the scan finished, so it describes the hashed bytes.
+            await fs.writeFile(temp, JSON.stringify({ fingerprint: report.fingerprint, ...observed }));
+            await fs.rename(temp, pathEntry(cacheDir, path));
         } catch { /* Cache failures do not change the scan result. */ }
         finally { await fs.unlink(temp).catch(() => {}); }
     }

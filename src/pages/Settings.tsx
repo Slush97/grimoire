@@ -64,6 +64,7 @@ export default function Settings() {
   }, [loadSettings]);
 
   const socialEnabled = settings?.experimentalSocial ?? false;
+  const modSafetyEnabled = settings?.experimentalModSafety ?? false;
 
   const navGroups = useMemo<SettingsNavGroup[]>(() => [
     {
@@ -81,7 +82,9 @@ export default function Settings() {
         { id: 'appearance', label: <Tx k="settings.sections.appearance" fallback="Appearance" />, icon: Palette },
         { id: 'preferences', label: <Tx k="settings.sections.preferences" fallback="Preferences" />, icon: SlidersHorizontal },
         { id: 'privacy', label: <Tx k="settings.nav.privacy" fallback="Privacy & Content" />, icon: Shield },
-        { id: 'mod-safety', label: <Tx k="modSafety.manage" fallback="Mod safety" />, icon: ShieldCheck },
+        ...(modSafetyEnabled
+          ? [{ id: 'mod-safety', label: <Tx k="modSafety.manage" fallback="Mod safety" />, icon: ShieldCheck }]
+          : []),
         ...(socialEnabled
           ? [{ id: 'social', label: <Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />, icon: Globe }]
           : []),
@@ -97,11 +100,14 @@ export default function Settings() {
         { id: 'support', label: <Tx k="settings.sections.support" fallback="Support" />, icon: LifeBuoy },
       ],
     },
-  ], [socialEnabled]);
+  ], [socialEnabled, modSafetyEnabled]);
 
-  // Turning the social flag back off while its pane is open would otherwise
-  // leave the page on a section that has no nav entry.
-  const section: SectionId = activeSection === 'social' && !socialEnabled ? 'preferences' : activeSection;
+  // Turning a flag back off while its pane is open would otherwise leave the
+  // page on a section that has no nav entry.
+  const section: SectionId =
+    (activeSection === 'social' && !socialEnabled) || (activeSection === 'mod-safety' && !modSafetyEnabled)
+      ? 'preferences'
+      : activeSection;
 
   if (settingsLoading && !settings) {
     return <LoadingState />;
