@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
     experimentalVpkImprinting: false,
+    experimentalModSafety: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

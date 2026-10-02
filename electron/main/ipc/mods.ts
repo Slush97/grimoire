@@ -9,6 +9,7 @@ import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/s
 import {
     scanMods,
     enableMod,
+    enableModUnlocked,
     disableMod,
     deleteMod,
     assertReplacementSafety,
@@ -1588,6 +1589,22 @@ async function importCustomModSource(
     } finally {
         if (tempDir) {
             await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
+    }
+
+    // Imports land disabled to wait for the safety review. With the review off
+    // they go live like any install; one that can't get a slot stays disabled.
+    if (!loadSettings().experimentalModSafety) {
+        const mods = await scanMods(deadlockPath);
+        for (const { destPath, metaKey } of importWrites) {
+            try {
+                const enabled = await enableModUnlocked(deadlockPath, mods.find((m) => m.path === destPath)!.id);
+                for (const target of thumbnailFetchTargets) {
+                    if (target.metaKey === metaKey) target.metaKey = enabled.metaKey;
+                }
+            } catch (err) {
+                console.warn(`[import] ${basename(destPath)} stays disabled:`, err);
+            }
         }
     }
 

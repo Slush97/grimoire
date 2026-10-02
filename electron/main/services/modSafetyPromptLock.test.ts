@@ -62,6 +62,7 @@ describe('safety prompts raised under the mod lock', () => {
         for (const dir of [join(addons, '.disabled'), join(h.dl, 'game', 'citadel', 'grimoire'), h.userData]) {
             mkdirSync(dir, { recursive: true });
         }
+        writeFileSync(join(h.userData, 'settings.json'), JSON.stringify({ experimentalModSafety: true }));
         writeFileSync(join(h.dl, 'game', 'citadel', 'gameinfo.gi'), 'GameInfo {}\n');
         writeVpk(join(addons, '.disabled', 'hud_timer_dir.vpk'));
         setModMetadata('hud_timer_dir.vpk', { modName: 'HUD Timer' });

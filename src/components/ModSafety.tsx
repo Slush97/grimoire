@@ -17,7 +17,8 @@ export function ModSafetyBadge({ id, name, snapshot, variant = 'inline' }: {
 }) {
     const { t } = useTranslation();
     const open = useModSafetyStore(s => s.openDetail);
-    if (!snapshot || snapshot.report.verdict === 'no-findings') return null;
+    const enabled = useAppStore(s => s.settings?.experimentalModSafety);
+    if (!enabled || !snapshot || snapshot.report.verdict === 'no-findings') return null;
     const unchecked = snapshot.report.verdict === 'blocked';
     const incomplete = snapshot.report.verdict === 'incomplete';
     const Icon = unchecked || incomplete ? ShieldQuestion : snapshot.trusted ? ShieldCheck : ShieldQuestion;
@@ -85,8 +86,9 @@ export function ModSafetyBanner() {
     const location = useLocation();
     const { installed, prompts, dismissed, dismiss } = useModSafetyStore();
     const mods = useAppStore(s => s.mods);
+    const enabled = useAppStore(s => s.settings?.experimentalModSafety);
     const pending = pendingSafetyKeys(safetyReviewRows(mods, installed, prompts));
-    if (location.pathname === '/settings/mod-safety' || !hasNewSafetyReview(pending, dismissed)) return null;
+    if (!enabled || location.pathname === '/settings/mod-safety' || !hasNewSafetyReview(pending, dismissed)) return null;
     return <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-hl/5 bg-bg-secondary px-4 py-2 text-xs">
         <span className="text-state-warning">
             {t('modSafety.attention', { count: pending.length })}

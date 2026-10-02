@@ -94,6 +94,15 @@ export default function ExperimentalSection() {
           <div className="h-px bg-hl/5" />
 
           <Toggle
+            checked={settings?.experimentalModSafety ?? false}
+            onChange={(checked) => update({ experimentalModSafety: checked })}
+            label={<Tx k="modSafety.manage" fallback="Mod safety" />}
+            description={<Tx k="settings.toggles.modSafety" fallback="Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them." />}
+          />
+
+          <div className="h-px bg-hl/5" />
+
+          <Toggle
             checked={settings?.experimentalDeadworksServers ?? false}
             onChange={(checked) => update({ experimentalDeadworksServers: checked })}
             label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}

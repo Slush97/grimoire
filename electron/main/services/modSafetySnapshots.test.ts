@@ -37,6 +37,7 @@ beforeEach(async () => {
     addons = join(root, 'game', 'citadel', 'addons');
     h.userData = join(root, 'userdata');
     for (const dir of [join(addons, '.disabled'), join(root, 'game', 'citadel', 'grimoire'), h.userData]) await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ experimentalModSafety: true }));
     saveMetadata({});
 });
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
