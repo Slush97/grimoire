@@ -32,23 +32,23 @@ Maps land in `citadel/maps`; addons in `citadel/deadworks_addons/vpks`.
 
 ## gameinfo.gi integration (the load-bearing part)
 
-Grimoire **owns and rewrites the entire `SearchPaths` block** of `gameinfo.gi`
-(`system.ts`, canonical `SEARCH_PATHS_BLOCK`). A Deadworks-style `addonroot`
-line added out-of-band would be erased the next time the user runs Fix
-Configuration. So the Deadworks content path is a first-class, conditional line
-**inside grimoire's own canonical block**, exactly like overflow folders:
+Grimoire merges its managed `Game` entries into `SearchPaths` in `gameinfo.gi`
+(`system.ts`, `gameinfoSearchPaths.ts`). Valve's language/low-violence mounts,
+comments, and unrelated custom paths are preserved. Missing stock mounts from
+older Grimoire rewrites are restored. The Deadworks content path is a conditional
+member of the managed addon group, exactly like overflow folders:
 
 - `deadlock.ts` exposes `DEADWORKS_SEARCH_PATH = 'citadel/deadworks_addons/vpks'`
   and `hasDeadworksContentRoot()`.
-- `buildSearchPathsBlock(overflow, includeDeadworks)` appends
+- `buildSearchPathsBlock(overflow, includeDeadworks, body, eol)` appends
   `Game  citadel/deadworks_addons/vpks` as the **last** entry of the addon group
   (lowest precedence, so user mods always win a file collision).
 - `getGameinfoStatus` / `fixGameinfo` treat the deadworks line as required
   **whenever content has been provisioned** (the vpks folder exists), so a game
   update that resets `gameinfo.gi` is flagged and repaired, and the line
-  survives every canonical rewrite.
+  survives every repair.
 - `ensureDeadworksSearchPath()` is the connect-time guard: a no-op when the
-  block is already correct, otherwise a canonical rewrite. It runs *before*
+  block is already correct, otherwise a preserving merge. It runs *before*
   downloading so a locked/unparseable `gameinfo.gi` fails fast with a clear
   "close Deadlock and try again" message.
 

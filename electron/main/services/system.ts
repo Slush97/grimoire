@@ -2,47 +2,13 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from
 import { join, extname } from 'path';
 import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getModScanRootPaths, hasDeadworksContentRoot, DEADWORKS_SEARCH_PATH } from './deadlock';
 import { ensureReplayFolderLink } from './replayFolder';
-
-// The canonical SearchPaths block for Deadlock with mod support
-const SEARCH_PATHS_BLOCK = `SearchPaths
-	{
-		Game				citadel/grimoire
-		Game				citadel/addons
-		Mod				citadel
-		Write				citadel
-		Game				citadel
-		Write				core
-		Mod				core
-		Game				core
-		AddonRoot			citadel_addons
-		OfficialAddonRoot		citadel_community_addons
-	}`;
-
-// The canonical block with one extra `Game citadel/addonsN` line per overflow
-// folder, inserted right after the base citadel/addons line and reusing its
-// indentation. Per Model A precedence (earlier line wins), base addons outranks
-// addons1 outranks addons2, etc.
-//
-// When `includeDeadworks` is set, a final `Game citadel/deadworks_addons/vpks`
-// line is appended to the addon group (lowest precedence, so user mods always
-// win a collision). This is what keeps Deadworks server content mounted across
-// a Fix Configuration: grimoire owns and rewrites the whole SearchPaths block,
-// so the deadworks path has to live inside the canonical block, not as a
-// separate `addonroot` line the rewrite would erase.
-//
-// With no overflow folders and no deadworks content this is byte-identical to
-// SEARCH_PATHS_BLOCK, so existing installs are unaffected.
-function buildSearchPathsBlock(overflowFolderNames: string[], includeDeadworks: boolean): string {
-    if (overflowFolderNames.length === 0 && !includeDeadworks) return SEARCH_PATHS_BLOCK;
-    return SEARCH_PATHS_BLOCK.replace(
-        /^([^\S\n]*Game[^\S\n]+)citadel\/addons[^\S\n]*$/m,
-        (line, prefix: string) => {
-            const extra = overflowFolderNames.map((name) => `${prefix}citadel/${name}`);
-            if (includeDeadworks) extra.push(`${prefix}${DEADWORKS_SEARCH_PATH}`);
-            return [line, ...extra].join('\n');
-        }
-    );
-}
+import {
+    buildSearchPathsBlock,
+    findSearchPathsBlock,
+    hasActivePath,
+    hasRequiredSearchPaths,
+    insertSearchPaths,
+} from './gameinfoSearchPaths';
 
 export interface GameinfoStatus {
     configured: boolean;
@@ -74,69 +40,6 @@ function findGameinfoCandidates(deadlockPath: string): string[] {
 // gameinfo.gi, so a bad patch is recoverable without verifying/reinstalling.
 const GAMEINFO_BACKUP_SUFFIX = '.grimoire-bak';
 
-// Locate the first SearchPaths { ... } block using balanced-brace scanning.
-// The previous regex (/SearchPaths\s*\{[^}]*\}/) stops at the first '}', so any
-// nested brace would truncate the match and corrupt the replacement. A foreign
-// gameinfo.gi left by another mod manager could be matched wrong or missed
-// entirely. Returns the block's bounds (relative to content) and inner body,
-// or null when there's no parseable SearchPaths section.
-function findSearchPathsBlock(
-    content: string
-): { start: number; end: number; body: string } | null {
-    const keyword = /SearchPaths\s*\{/g;
-    const match = keyword.exec(content);
-    if (!match) return null;
-
-    const braceStart = match.index + match[0].length - 1; // index of the '{'
-    let depth = 0;
-    for (let i = braceStart; i < content.length; i++) {
-        const ch = content[i];
-        if (ch === '{') depth++;
-        else if (ch === '}') {
-            depth--;
-            if (depth === 0) {
-                return {
-                    start: match.index,
-                    end: i + 1,
-                    body: content.slice(braceStart + 1, i),
-                };
-            }
-        }
-    }
-    return null; // unbalanced braces
-}
-
-// True when the SearchPaths body has an active (non-commented) entry pointing the
-// engine at the given citadel-relative folder. Matched as a COMPLETE path token,
-// ignoring // comments, so: a stray path in a comment doesn't read as configured
-// (the false positive that let a DLM-mangled gameinfo.gi look healthy); a
-// subfolder like citadel/addons/profile_default (Deadlock Mod Manager's profile
-// mode) does NOT satisfy citadel/addons; and citadel/addons does NOT satisfy a
-// query for citadel/addons1 (or vice versa).
-function hasActivePath(searchPathsBody: string, relPath: string): boolean {
-    const pattern = relPath.replace(/[/\\]/g, '[\\\\/]+');
-    const re = new RegExp(`${pattern}(?![\\\\/\\w])`, 'i');
-    return searchPathsBody.split(/\r?\n/).some((line) => re.test(line.split('//')[0]));
-}
-
-function hasActiveAddonPath(searchPathsBody: string): boolean {
-    return hasActivePath(searchPathsBody, 'citadel/addons');
-}
-
-// citadel/grimoire is the Grimoire-managed override folder (Locker cards +
-// ability sounds), listed first in the canonical block so it outranks every mod.
-function hasActiveGrimoirePath(searchPathsBody: string): boolean {
-    return hasActivePath(searchPathsBody, 'citadel/grimoire');
-}
-
-// Both required search paths are present and active. The grimoire path is what
-// makes applied Locker cards/sounds win, so an install missing it (e.g. a
-// pre-grimoire 1.13.x user, or a game update that reset gameinfo.gi) reads as
-// not-yet-configured and Fix Configuration rewrites the canonical block.
-function hasRequiredSearchPaths(searchPathsBody: string): boolean {
-    return hasActiveAddonPath(searchPathsBody) && hasActiveGrimoirePath(searchPathsBody);
-}
-
 // Preserve the first version we touch. Never overwrites an existing backup so the
 // oldest (closest-to-original) copy is kept. Best-effort: a failed backup must
 // not block the repair itself.
@@ -148,16 +51,6 @@ function backupGameinfoOnce(gameinfoPath: string, original: string): void {
     } catch {
         // Ignore: recovery backup is a nice-to-have, not a hard requirement.
     }
-}
-
-// Insert the canonical SearchPaths block just inside the FileSystem section, for
-// the case where another tool stripped SearchPaths out entirely. Returns null if
-// there's no FileSystem block to repair (don't guess at an unknown structure).
-function insertSearchPaths(content: string, block: string): string | null {
-    const match = /FileSystem\s*\{/.exec(content);
-    if (!match) return null;
-    const insertAt = match.index + match[0].length;
-    return `${content.slice(0, insertAt)}\n\t\t${block}${content.slice(insertAt)}`;
 }
 
 // CleanupResult is single-sourced in src/types/electron.ts; re-exported
@@ -223,13 +116,13 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             };
         }
 
-        // A SearchPaths block exists but doesn't load citadel/addons: fixable in place.
+        // A SearchPaths block exists but lacks required mod or stock mounts.
         if (block) {
             return {
                 configured: false,
                 missing: false,
                 reason: 'mods-not-loaded',
-                message: 'Addon search paths are missing from gameinfo.gi',
+                message: 'Required search paths are missing from gameinfo.gi',
                 candidates: [],
             };
         }
@@ -256,8 +149,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
 }
 
 /**
- * Replace the SearchPaths section in gameinfo.gi with the canonical block
- * This ensures consistent mod loading regardless of the original file state
+ * Restore required mounts while preserving existing Valve and custom search paths.
  */
 export function fixGameinfo(deadlockPath: string): GameinfoStatus {
     const gameinfoPath = getGameinfoPath(deadlockPath);
@@ -287,12 +179,11 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         const content = readFileSync(gameinfoPath, 'utf-8');
         const block = findSearchPathsBlock(content);
 
-        // The canonical block includes a Game line for every overflow folder that
-        // currently exists on disk (plus the Deadworks content path when present),
-        // so a user-triggered repair restores them too.
+        // Include each provisioned mod root and restore stock mounts removed by
+        // older Grimoire versions. Keep all other entries from the live file.
         const overflow = getOverflowFolderNames(deadlockPath);
         const includeDeadworks = hasDeadworksContentRoot(deadlockPath);
-        const canonical = buildSearchPathsBlock(overflow, includeDeadworks);
+        const canonical = buildSearchPathsBlock(overflow, includeDeadworks, block?.body, content.includes('\r\n') ? '\r\n' : '\n');
 
         // Already correct: a real SearchPaths block with the required base paths,
         // every existing overflow folder's Game line, AND the deadworks path when
@@ -314,8 +205,8 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
 
         let next: string;
         if (block) {
-            // Canonicalize: swap whatever SearchPaths block is present (including
-            // one a different mod manager rewrote) for our known-good version.
+            // Merge into the existing block without discarding language mounts
+            // or unrelated third-party paths.
             next = content.slice(0, block.start) + canonical + content.slice(block.end);
         } else if (!/SearchPaths/.test(content)) {
             // Another tool stripped SearchPaths out entirely. Rebuild it inside the
@@ -372,12 +263,11 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
 /**
  * Ensure gameinfo.gi mounts the Deadworks content search path before a connect.
  *
- * Call this after the deadworks_addons/vpks folder exists. If the canonical
- * block is already correct (it now requires the deadworks line whenever content
- * is provisioned) this is a cheap no-op; otherwise it rewrites the canonical
- * block, which includes the deadworks path. Returns the resulting status so the
- * connect flow can surface a "close Deadlock and retry" message when the file is
- * locked or unparseable.
+ * Call this after the deadworks_addons/vpks folder exists. If the search-path
+ * block is already correct this is a cheap no-op; otherwise it merges in the
+ * missing paths, including the provisioned Deadworks content root. Returns the
+ * resulting status so the connect flow can surface a "close Deadlock and retry"
+ * message when the file is locked or unparseable.
  */
 export function ensureDeadworksSearchPath(deadlockPath: string): GameinfoStatus {
     const status = getGameinfoStatus(deadlockPath);
