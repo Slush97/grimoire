@@ -1414,7 +1414,8 @@
       "confirmMessage": "Are you sure you want to delete <name>{{name}}</name>? This action cannot be undone.",
       "bulkConfirm": "Delete {{name}}",
       "groupConfirm_one": "Delete {{count}}",
-      "groupConfirm_other": "Delete {{count}}"
+      "groupConfirm_other": "Delete {{count}}",
+      "progress": "Deleting {{done}} of {{total}}..."
     },
     "details": {
       "loading": "Loading mod details...",

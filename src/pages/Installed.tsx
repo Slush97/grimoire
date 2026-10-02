@@ -131,6 +131,7 @@ import { HeroTagLabel } from '../components/installed/chips';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
+import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
 import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/installed/unknown/UnknownFixModals';
@@ -875,14 +876,7 @@ export default function Installed() {
   // every mod is in exactly one pair — when one mod conflicts with multiple
   // peers, that math produces fractional or wrong totals.
   const [conflictPairCount, setConflictPairCount] = useState(0);
-  // Delete confirmation. `ids` is a list so the same prompt can drive
-  // single-mod, group, and bulk-selection deletions.
-  const [modToDelete, setModToDelete] = useState<{
-    ids: string[];
-    name: string;
-    isGroup: boolean;
-    isBulk?: boolean;
-  } | null>(null);
+  const [modToDelete, setModToDelete] = useState<DeleteModsTarget | null>(null);
   const [localEditMod, setLocalEditMod] = useState<Mod | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
   // Sources for the in-progress merge. Non-null means the modal is open.
@@ -2570,16 +2564,9 @@ export default function Installed() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectMode, bulkProgress, modToDelete, setSelectedIds]);
 
-  const handleDeleteConfirm = async () => {
-    if (!modToDelete) return;
-    const wasBulk = !!modToDelete.isBulk;
-    // Sequential to keep priority renames coherent — parallel deletes have
-    // raced renameVpks before.
-    for (const id of modToDelete.ids) {
-      await deleteMod(id);
-    }
+  const handleDeleted = (target: DeleteModsTarget) => {
     setModToDelete(null);
-    if (wasBulk) exitSelectMode();
+    if (target.isBulk) exitSelectMode();
   };
 
   const isEntrySelected = (entry: ModEntry): boolean => {
@@ -4894,46 +4881,10 @@ export default function Installed() {
         </div>
       )}
 
-      <ConfirmModal
-        isOpen={!!modToDelete}
-        title={
-          modToDelete?.isBulk
-            ? t('installed.delete.bulkTitle', { name: modToDelete.name })
-            : modToDelete?.isGroup
-              ? t('installed.delete.groupTitle', { count: modToDelete.ids.length })
-              : t('installed.delete.title')
-        }
-        message={
-          modToDelete?.isBulk ? (
-            <Trans
-              i18nKey="installed.delete.bulkMessage"
-              values={{ name: modToDelete.name }}
-              components={{ name: <span className="font-medium text-text-primary" /> }}
-            />
-          ) : modToDelete?.isGroup ? (
-            <Trans
-              i18nKey="installed.delete.groupMessage"
-              values={{ count: modToDelete.ids.length, name: modToDelete.name }}
-              components={{ name: <span className="font-medium text-text-primary" /> }}
-            />
-          ) : (
-            <Trans
-              i18nKey="installed.delete.confirmMessage"
-              values={{ name: modToDelete?.name ?? '' }}
-              components={{ name: <span className="font-medium text-text-primary" /> }}
-            />
-          )
-        }
-        confirmLabel={
-          modToDelete?.isBulk
-            ? t('installed.delete.bulkConfirm', { name: modToDelete.name })
-            : modToDelete?.isGroup
-              ? t('installed.delete.groupConfirm', { count: modToDelete.ids.length })
-              : t('common.actions.delete')
-        }
-        variant="danger"
-        onConfirm={handleDeleteConfirm}
+      <DeleteModsModal
+        target={modToDelete}
         onCancel={() => setModToDelete(null)}
+        onDeleted={handleDeleted}
       />
 
       {localEditMod && (
