@@ -43,7 +43,9 @@ function tokens(content: string): Token[] {
 }
 
 function findBlock(content: string, name: string): Block | null {
-    const list = tokens(content);
+    let list: Token[];
+    // An unterminated quote leaves no boundary that is safe to edit.
+    try { list = tokens(content); } catch { return null; }
     for (let i = 0; i < list.length - 1; i++) {
         if (list[i].value.toLowerCase() !== name.toLowerCase() ||
             !list[i + 1].brace || list[i + 1].value !== '{') continue;
@@ -78,10 +80,12 @@ export function insertSearchPaths(content: string, block: string): string | null
     return content.slice(0, fileSystem.bodyStart) + eol + '\t\t' + block + content.slice(fileSystem.bodyStart);
 }
 
-function readPaths(body: string): SearchPath[] {
+// Null when the body is not flat key/path pairs, such as a nested block or a
+// [$PLATFORM] conditional left by another tool. Repair then rebuilds the block.
+function readPaths(body: string): SearchPath[] | null {
     const list = tokens(body);
-    if (list.length % 2 !== 0 || list.some((token) => token.brace)) {
-        throw new Error('SearchPaths must contain key/path pairs');
+    if (list.length % 2 !== 0 || list.some((token) => token.brace || token.value.startsWith('['))) {
+        return null;
     }
     const paths: SearchPath[] = [];
     for (let i = 0; i < list.length; i += 2) {
@@ -96,39 +100,49 @@ function normalizePath(path: string): string {
 }
 
 export function hasActivePath(body: string, path: string, key = 'Game'): boolean {
-    return readPaths(body).some((entry) => entry.key === key.toLowerCase() && entry.path === normalizePath(path));
+    return !!readPaths(body)?.some((entry) => entry.key === key.toLowerCase() && entry.path === normalizePath(path));
 }
 
+// Valve's stock SearchPaths as of the 2026-09-29 update.
 const STOCK_PATHS = [
     ['Game_UILanguage', 'citadel_*LANGUAGE*'],
     ['Game_LowViolence', 'citadel_lv'],
-    ['Mod', 'citadel'],
-    ['Write', 'citadel'],
     ['Game', 'citadel'],
-    ['Write', 'core'],
-    ['Mod', 'core'],
     ['Game', 'core'],
-    ['AddonRoot', 'citadel_addons'],
-    ['OfficialAddonRoot', 'citadel_community_addons'],
 ] as const;
 
 export function hasRequiredSearchPaths(body: string): boolean {
-    return hasActivePath(body, 'citadel/grimoire') && hasActivePath(body, 'citadel/addons') &&
-        hasActivePath(body, 'citadel_*LANGUAGE*', 'Game_UILanguage') &&
+    return hasActivePath(body, 'citadel/grimoire') && hasActivePath(body, 'citadel/addons');
+}
+
+// Grimoire 1.29.0 and earlier rewrote SearchPaths without these, which hid
+// localized hero-name art even with every mod off.
+export function hasLanguageSearchPaths(body: string): boolean {
+    return hasActivePath(body, 'citadel_*LANGUAGE*', 'Game_UILanguage') &&
         hasActivePath(body, 'citadel_lv', 'Game_LowViolence');
 }
 
 // Replace only Grimoire's managed Game entries. Valve's optional mounts and
-// third-party entries survive, in their original relative order.
+// third-party entries survive, in their original relative order. Mounts under
+// citadel/addons (DMM profile folders) are dropped: their VPKs would load
+// behind Grimoire's back. A body that doesn't parse is rebuilt from stock.
 export function buildSearchPathsBlock(
     overflow: string[], includeDeadworks: boolean, body = '', eol = '\n'
 ): string {
     const paths = readPaths(body);
-    const managed = paths.filter(({ key, path }) => key === 'game' &&
-        (/^citadel\/(grimoire|addons\d*)$/.test(path) || path === DEADWORKS_SEARCH_PATH));
-    let preserved = body;
-    for (const entry of [...managed].reverse()) {
-        preserved = preserved.slice(0, entry.start) + preserved.slice(entry.end);
+    const managed = (paths ?? []).filter(({ key, path }) => key === 'game' &&
+        (/^citadel\/(grimoire|addons\d*)(\/|$)/.test(path) || path === DEADWORKS_SEARCH_PATH));
+    let preserved = paths ? body : '';
+    for (const { start, end } of [...managed].reverse()) {
+        // Take the whole line when the entry is alone on it, so repeat repairs
+        // don't leave blank lines behind.
+        const lineStart = preserved.lastIndexOf('\n', start - 1) + 1;
+        const newline = preserved.indexOf('\n', end);
+        const lineEnd = newline === -1 ? preserved.length : newline + 1;
+        const alone = !preserved.slice(lineStart, start).trim() && !preserved.slice(end, lineEnd).trim();
+        preserved = alone
+            ? preserved.slice(0, lineStart) + preserved.slice(lineEnd)
+            : preserved.slice(0, start) + preserved.slice(end);
     }
     const gamePaths = ['citadel/grimoire', 'citadel/addons', ...overflow.map((name) => `citadel/${name}`)];
     if (includeDeadworks) gamePaths.push(DEADWORKS_SEARCH_PATH);
@@ -137,7 +151,8 @@ export function buildSearchPathsBlock(
     const optional = missing.filter(([key]) => key.startsWith('Game_'));
     const base = missing.filter(([key]) => !key.startsWith('Game_'));
     const line = ([key, path]: readonly string[]) => `\t\t\t${key}\t\t${path}`;
-    const prefix = [...gamePaths.map((path) => line(['Game', path])), ...optional.map(line)].join(eol);
-    const suffix = base.length ? eol + base.map(line).join(eol) : '';
-    return `SearchPaths${eol}\t\t{${eol}${prefix}${preserved}${suffix}${eol}\t\t}`;
+    const kept = preserved.replace(/^[^\S\r\n]*\r?\n/, '').trimEnd();
+    const lines = [...gamePaths.map((path) => line(['Game', path])), ...optional.map(line),
+        ...(kept ? [kept] : []), ...base.map(line)];
+    return `SearchPaths${eol}\t\t{${eol}${lines.join(eol)}${eol}\t\t}`;
 }

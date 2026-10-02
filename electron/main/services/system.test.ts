@@ -51,7 +51,7 @@ describe('gameinfo search-path repair', () => {
         const after = findSearchPathsBlock(repaired)!;
         expect(repaired.slice(0, after.start)).toBe(original.slice(0, before.start));
         expect(repaired.slice(after.end)).toBe(original.slice(before.end));
-        expect(after.body).toContain(before.body);
+        expect(after.body).toContain(before.body.trim());
         expect(hasActivePath(after.body, 'citadel_*LANGUAGE*', key)).toBe(true);
         expect(hasActivePath(after.body, 'citadel_*LANGUAGE*', 'Game_UILanguage')).toBe(true);
         expect(after.body.indexOf('citadel/grimoire')).toBeLessThan(after.body.indexOf('citadel/addons'));
@@ -63,7 +63,7 @@ describe('gameinfo search-path repair', () => {
     it.each(['\n', '\r\n'])('detects and repairs a previously configured install (%j)', (eol) => {
         const original = config(legacyBody).replace(/\r?\n/g, eol);
         const game = install(original);
-        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'mods-not-loaded' });
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'language-paths-missing' });
         expect(fixGameinfo(game.root).configured).toBe(true);
         const repaired = game.read();
         const body = findSearchPathsBlock(repaired)!.body;
@@ -154,9 +154,59 @@ describe('gameinfo search-path repair', () => {
         expect(game.read()).toContain('ConVars { fps_max 144 }');
     });
 
+    it('reports missing mod folders ahead of missing language mounts', () => {
+        const game = install(config(legacyBody));
+        mkdirSync(join(game.citadel, 'addons1'));
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'mods-not-loaded' });
+        expect(fixGameinfo(game.root).configured).toBe(true);
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: true, reason: 'ok' });
+    });
+
+    it('drops DMM profile mounts so their copies stop loading', () => {
+        const dmm = '\n// Deadlock Mod Manager - Start\nGame citadel/addons/profile_default\n' +
+            'Game citadel/addons\nGame_UILanguage citadel_*LANGUAGE*\nGame citadel\nGame core\n// Deadlock Mod Manager - End\n';
+        const game = install(config(dmm));
+        expect(fixGameinfo(game.root).configured).toBe(true);
+        const body = findSearchPathsBlock(game.read())!.body;
+        expect(body).not.toContain('profile_default');
+        expect(body).toContain('// Deadlock Mod Manager - Start');
+        expect(hasActivePath(body, 'citadel/addons')).toBe(true);
+    });
+
+    it('keeps the block stable across repeated repairs', () => {
+        const game = install(stock.replace('Game_Language', 'Game_UILanguage'));
+        fixGameinfo(game.root);
+        const first = game.read();
+        mkdirSync(join(game.citadel, 'addons1'));
+        fixGameinfo(game.root);
+        rmSync(join(game.citadel, 'addons1'), { recursive: true });
+        mkdirSync(join(game.citadel, 'deadworks_addons', 'vpks'), { recursive: true });
+        fixGameinfo(game.root);
+        rmSync(join(game.citadel, 'deadworks_addons'), { recursive: true });
+        writeFileSync(game.path, game.read().replace('Game_UILanguage', 'Game_Language'));
+        fixGameinfo(game.root);
+        expect(game.read()).toBe(first.replace('citadel/addons\n', 'citadel/addons\n\t\t\tGame_UILanguage\t\tcitadel_*LANGUAGE*\n')
+            .replace('Game_UILanguage "', 'Game_Language "'));
+    });
+
+    it.each([
+        'Nested { Game citadel }',
+        'Game citadel/addons [$WIN64]',
+        'Game citadel/addons [$WIN64]\nGame citadel [$LINUX]',
+    ])('offers a repair and rebuilds a SearchPaths body that is not flat pairs: %s', (entry) => {
+        const game = install(config(`\n${entry}\n`));
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'mods-not-loaded' });
+        expect(fixGameinfo(game.root).configured).toBe(true);
+        expect(getGameinfoStatus(game.root).configured).toBe(true);
+        const body = findSearchPathsBlock(game.read())!.body;
+        expect(body).not.toContain('[$');
+        expect(body).not.toContain('Nested');
+        expect(hasActivePath(body, 'citadel')).toBe(true);
+        expect(hasActivePath(body, 'core')).toBe(true);
+    });
+
     it.each([
         'GameInfo { FileSystem { SearchPaths { Game citadel',
-        'GameInfo { FileSystem { SearchPaths { Nested { Game citadel } } } }',
         'GameInfo { FileSystem { SearchPaths { Game "unterminated } } }',
         'GameInfo { ConVars { fps_max 144 } }',
     ])('does not write an unrepairable configuration: %s', (original) => {

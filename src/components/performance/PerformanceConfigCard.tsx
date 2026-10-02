@@ -78,7 +78,9 @@ export default function PerformanceConfigCard() {
   const wiped = status?.state === 'wiped';
   // A game update resets the search paths too, so a file that still loads mods
   // had the config taken out on purpose.
-  const gameinfoLoadsMods = useGameinfoStore((s) => s.gameinfo?.configured === true);
+  const gameinfoLoadsMods = useGameinfoStore(
+    (s) => s.gameinfo?.configured === true || s.gameinfo?.reason === 'language-paths-missing'
+  );
 
   // While a config is in the file, the file is the truth. Otherwise show the
   // saved choice, falling back to the recommended preset.

@@ -6,6 +6,7 @@ import {
     buildSearchPathsBlock,
     findSearchPathsBlock,
     hasActivePath,
+    hasLanguageSearchPaths,
     hasRequiredSearchPaths,
     insertSearchPaths,
 } from './gameinfoSearchPaths';
@@ -13,8 +14,8 @@ import {
 export interface GameinfoStatus {
     configured: boolean;
     /** Why, as a code the renderer can word for users; `message` stays the
-     *  technical detail. */
-    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'unrepairable' | 'error';
+     *  technical detail. 'language-paths-missing' still loads mods. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];
@@ -98,6 +99,15 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
                 ...missingOverflow,
                 ...(missingDeadworks ? ['deadworks_addons'] : []),
             ];
+            if (missing.length === 0 && !hasLanguageSearchPaths(block.body)) {
+                return {
+                    configured: false,
+                    missing: false,
+                    reason: 'language-paths-missing',
+                    message: 'Language search paths are missing from gameinfo.gi',
+                    candidates: [],
+                };
+            }
             if (missing.length === 0) {
                 return {
                     configured: true,
@@ -116,13 +126,13 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             };
         }
 
-        // A SearchPaths block exists but lacks required mod or stock mounts.
+        // A SearchPaths block exists but doesn't load citadel/addons: fixable in place.
         if (block) {
             return {
                 configured: false,
                 missing: false,
                 reason: 'mods-not-loaded',
-                message: 'Required search paths are missing from gameinfo.gi',
+                message: 'Addon search paths are missing from gameinfo.gi',
                 candidates: [],
             };
         }
@@ -191,6 +201,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         if (
             block &&
             hasRequiredSearchPaths(block.body) &&
+            hasLanguageSearchPaths(block.body) &&
             overflow.every((name) => hasActivePath(block.body, `citadel/${name}`)) &&
             (!includeDeadworks || hasActivePath(block.body, DEADWORKS_SEARCH_PATH))
         ) {

@@ -27,13 +27,15 @@ export default function GameinfoBanner() {
   const text =
     reason === 'mods-not-loaded'
       ? t(perfWiped ? 'layout.gameinfo.modsAndPerfOff' : 'layout.gameinfo.modsOff')
-      : reason === 'not-found'
-        ? t('layout.gameinfo.notFound')
-        : reason === 'unrepairable'
-          ? t('layout.gameinfo.unrepairable')
-          : reason === 'error'
-            ? t('layout.gameinfo.error')
-            : null;
+      : reason === 'language-paths-missing'
+        ? t('layout.gameinfo.languageOff')
+        : reason === 'not-found'
+          ? t('layout.gameinfo.notFound')
+          : reason === 'unrepairable'
+            ? t('layout.gameinfo.unrepairable')
+            : reason === 'error'
+              ? t('layout.gameinfo.error')
+              : null;
   const canFix = reason !== 'not-found' && reason !== 'error';
 
   if (!text || text === dismissed) return null;

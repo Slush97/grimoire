@@ -50,7 +50,7 @@ export const useGameinfoStore = create<GameinfoState>((set, get) => ({
     // block, so the user or another tool removed it on purpose.
     set({
       gameinfo,
-      perfWiped: perf?.state === 'wiped' && !perf.canRestoreBackup && !gameinfo.configured,
+      perfWiped: perf?.state === 'wiped' && !perf.canRestoreBackup && gameinfo.reason === 'mods-not-loaded',
     });
   },
 
