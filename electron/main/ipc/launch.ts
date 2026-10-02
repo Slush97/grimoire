@@ -17,7 +17,7 @@ import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
 import { auditInstalledSafety } from '../services/modSafetyAudit';
-import { pruneModQuarantine } from '../services/modSafety';
+import { pruneModQuarantine, pruneModSafetyPathCache } from '../services/modSafety';
 import {
     captureEmptyGameMods,
     captureLoadedGameMods,
@@ -155,6 +155,7 @@ ipcMain.handle('restore-vanilla-stash', async (): Promise<RestoreResult> => {
  */
 export async function runStartupRecovery(): Promise<void> {
     await pruneModQuarantine().catch(err => console.warn('[mod-safety] Could not prune quarantine:', err));
+    void pruneModSafetyPathCache();
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) return;
     if (loadSettings().experimentalModSafety) {

@@ -211,6 +211,17 @@ function pathEntry(cacheDir: string, path: string): string {
     return join(cacheDir, 'paths', `${createHash('sha256').update(path).digest('hex')}.json`);
 }
 
+/** Drops path entries whose archive is gone: staged copies, deleted mods, renamed slots. */
+export async function prunePathEntries(cacheDir: string): Promise<void> {
+    const dir = join(cacheDir, 'paths');
+    for (const name of await fs.readdir(dir).catch(() => [])) {
+        const entry = join(dir, name);
+        try {
+            await fs.access(JSON.parse(await fs.readFile(entry, 'utf8')).files[0]);
+        } catch { await fs.unlink(entry).catch(() => {}); }
+    }
+}
+
 /**
  * The cached report for `path` while every file it covers keeps the device,
  * inode, size, mtime and ctime it had when last hashed. Rewriting a file and

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { cachedModSafetyReport, scanModSafety } from './modSafetyScan';
+import { cachedModSafetyReport, prunePathEntries, scanModSafety } from './modSafetyScan';
 import { safetyChunkedVpk, safetyLayout, safetyResource, safetyVpk } from './modSafetyFixtures';
 import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import * as policy from './modSafetyPolicy';
@@ -56,6 +56,20 @@ describe('VPK safety inspection', () => {
         const renamed = join(root, 'enabled_dir.vpk');
         await fs.rename(path, renamed);
         expect(await cachedModSafetyReport(renamed, cache)).toBeUndefined();
+    });
+    it('prunes path entries for archives that are gone and keeps the rest', async () => {
+        const cache = join(root, 'reports');
+        const kept = join(root, 'kept_dir.vpk');
+        const gone = join(root, 'gone_dir.vpk');
+        for (const path of [kept, gone]) {
+            await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from(`run("${path}");`) }]));
+            await scanModSafety(path, undefined, cache);
+        }
+        await fs.writeFile(join(cache, 'paths', 'broken.json'), '{');
+        await fs.rm(gone);
+        await prunePathEntries(cache);
+        expect(await fs.readdir(join(cache, 'paths'))).toHaveLength(1);
+        expect(await cachedModSafetyReport(kept, cache)).toBeDefined();
     });
     it('stops handing back the cached report once the file is rewritten with its size and mtime kept', async () => {
         const path = join(root, 'test_dir.vpk');

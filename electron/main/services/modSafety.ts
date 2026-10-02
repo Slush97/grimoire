@@ -5,7 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ModSafetyReport, ModSafetyPrompt, ModSafetySnapshot } from '../../../src/types/modSafety';
 import { MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
-import { cachedModSafetyReport } from './modSafetyScan';
+import { cachedModSafetyReport, prunePathEntries } from './modSafetyScan';
 import { vpkmergeBinaryPath } from './modMerger';
 import { loadSettings } from './settings';
 
@@ -140,7 +140,7 @@ export function inspectVpkSafety(path: string): Promise<ModSafetyReport> {
     }
     // Taken before the worker reads, so bytes replaced mid-inspection never match.
     const inspected = fs.stat(path).catch(() => null);
-    const cacheDir = join(app.getPath('userData'), 'mod-safety-reports');
+    const cacheDir = reportCacheDir();
     const task = scanQueue.then(async () => {
         let binary: string | undefined;
         // Without a decoder only archives with compiled layouts come back incomplete.
@@ -232,6 +232,10 @@ async function retainRejectedPackage(path: string, report: ModSafetyReport): Pro
         await fs.rename(temp, root);
     } finally { await fs.rm(temp, { recursive: true, force: true }); }
 }
+
+function reportCacheDir(): string { return join(app.getPath('userData'), 'mod-safety-reports'); }
+
+export function pruneModSafetyPathCache(): Promise<void> { return prunePathEntries(reportCacheDir()); }
 
 /** Startup: retained packages are diagnostic only, so keep the newest 30 days up to 2 GiB. */
 export async function pruneModQuarantine(): Promise<void> {

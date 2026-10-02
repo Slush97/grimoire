@@ -1578,6 +1578,7 @@
     "batchImport": {
       "title": "Import Local Mods",
       "help": "Add .vpk files or archives (.zip, .7z, .rar). Mods are imported disabled so you can review them before enabling them.",
+      "helpEnabled": "Add .vpk files or archives (.zip, .7z, .rar). Mods are enabled as soon as they're imported.",
       "selectFiles": "Select VPK files or archives",
       "ariaBrowse": "Drop .vpk files or archives here, or press Enter to browse",
       "dropFilesHere": "Drop <code>.vpk</code> files or archives here",
