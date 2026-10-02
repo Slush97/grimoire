@@ -12,6 +12,7 @@ import {
     enableModUnlocked,
     disableMod,
     deleteMod,
+    deleteMods,
     assertReplacementSafety,
     setModPriority,
     reorderMods,
@@ -455,6 +456,16 @@ ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
         throw new Error('No Deadlock path configured');
     }
     await deleteMod(deadlockPath, modId);
+});
+
+// delete-mods: the Installed delete dialog's ids as one locked batch. Streams a
+// tick per removed mod to the requesting renderer via 'delete-mods-progress'.
+ipcMain.handle('delete-mods', async (event, modIds: string[]): Promise<void> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    await deleteMods(deadlockPath, modIds, (progress) => event.sender.send('delete-mods-progress', progress));
 });
 
 ipcMain.handle('assert-replacement-safety', async (_, modIds: string[]): Promise<void> => {

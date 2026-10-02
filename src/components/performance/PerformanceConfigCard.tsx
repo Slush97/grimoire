@@ -55,11 +55,12 @@ interface Notice {
   tone: 'warning' | 'danger' | 'neutral';
   text: string;
   action?: { label: string; run: () => void };
+  secondary?: { label: string; run: () => void };
 }
 
 // Settings card for the bundled community performance configs. Picking a
 // config, version or gameplay setting writes it to gameinfo.gi straight away;
-// the only other action is putting it back after something removed it.
+// the only other actions put it back after something removed it, or forget it.
 export default function PerformanceConfigCard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<PerformanceConfigStatus | null>(null);
@@ -75,6 +76,9 @@ export default function PerformanceConfigCard() {
 
   const applied = status?.state === 'applied';
   const wiped = status?.state === 'wiped';
+  // A game update resets the search paths too, so a file that still loads mods
+  // had the config taken out on purpose.
+  const gameinfoLoadsMods = useGameinfoStore((s) => s.gameinfo?.configured === true);
 
   // While a config is in the file, the file is the truth. Otherwise show the
   // saved choice, falling back to the recommended preset.
@@ -322,24 +326,31 @@ export default function PerformanceConfigCard() {
             text: t('performance.notice.damaged'),
             action: { label: t('performance.restoreBackup'), run: () => void run(restorePerformanceConfigBackup) },
           }
-        : wiped
+        : wiped && gameinfoLoadsMods
           ? {
-              tone: 'warning',
-              text: t('performance.notice.wiped'),
+              tone: 'neutral',
+              text: t('performance.notice.removed'),
               action: { label: t('performance.restore'), run: () => void run(reapplyWipedPerformanceConfig) },
+              secondary: { label: t('common.actions.dismiss'), run: () => void run(removePerformanceConfig) },
             }
-          : updateAvailable && selected
+          : wiped
             ? {
-                tone: 'neutral',
-                text: t('performance.notice.update'),
-                action: {
-                  label: t('performance.update'),
-                  run: () => void write(selected, selectedVersion, selectedOptIns),
-                },
+                tone: 'warning',
+                text: t('performance.notice.wiped'),
+                action: { label: t('performance.restore'), run: () => void run(reapplyWipedPerformanceConfig) },
               }
-            : applied && status.handEdited
-              ? { tone: 'neutral', text: t('performance.notice.handEdited') }
-              : null;
+            : updateAvailable && selected
+              ? {
+                  tone: 'neutral',
+                  text: t('performance.notice.update'),
+                  action: {
+                    label: t('performance.update'),
+                    run: () => void write(selected, selectedVersion, selectedOptIns),
+                  },
+                }
+              : applied && status.handEdited
+                ? { tone: 'neutral', text: t('performance.notice.handEdited') }
+                : null;
 
   const overrideCount = status?.overrideCount ?? 0;
   const sortedPresets = sortPresetsByTier(presets);
@@ -373,11 +384,18 @@ export default function PerformanceConfigCard() {
           >
             {notice.text}
           </p>
-          {notice.action && (
-            <Button size="sm" onClick={notice.action.run} isLoading={busy}>
-              {notice.action.label}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {notice.secondary && (
+              <Button size="sm" variant="secondary" onClick={notice.secondary.run} disabled={busy}>
+                {notice.secondary.label}
+              </Button>
+            )}
+            {notice.action && (
+              <Button size="sm" onClick={notice.action.run} isLoading={busy}>
+                {notice.action.label}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

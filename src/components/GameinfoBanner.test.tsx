@@ -126,10 +126,11 @@ describe('GameinfoBanner', () => {
     expect(host.textContent).toContain('layout.gameinfo.modsAndPerfOff');
   });
 
-  it('flags a removed performance config on its own', async () => {
+  it('leaves a performance config taken out of a file that still loads mods to the settings card', async () => {
     perf = PERF_WIPED;
     await render();
-    expect(host.textContent).toContain('layout.perfWiped');
+    expect(host.textContent).toBe('');
+    expect(useGameinfoStore.getState().perfWiped).toBe(false);
   });
 
   it('ignores a damaged file the performance card handles with its own backup restore', async () => {
@@ -168,8 +169,10 @@ describe('GameinfoBanner', () => {
   });
 
   it('clears itself when something else fixed the problem', async () => {
+    gameinfo = MODS_OFF;
     perf = PERF_WIPED;
     await render();
+    gameinfo = OK;
     perf = PERF_ON;
     await act(async () => {
       await useGameinfoStore.getState().recheck();
@@ -196,11 +199,11 @@ describe('GameinfoBanner', () => {
   });
 
   it('hides until a different problem appears', async () => {
-    perf = PERF_WIPED;
+    gameinfo = MODS_OFF;
     await render();
     await click(host.querySelector('button[aria-label="layout.hideGameinfoBanner"]'));
     expect(host.textContent).toBe('');
-    gameinfo = MODS_OFF;
+    perf = PERF_WIPED;
     await act(async () => {
       window.dispatchEvent(new Event('focus'));
     });

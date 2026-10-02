@@ -702,6 +702,12 @@ export interface Mod {
   imprintStale?: boolean;
 }
 
+// Progress tick emitted after each mod a batch delete removes.
+export interface DeleteModsProgress {
+  done: number;
+  total: number;
+}
+
 export interface MergeModsArgs {
   modIds: string[];
   name: string;

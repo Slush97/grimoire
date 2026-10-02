@@ -45,7 +45,13 @@ export const useGameinfoStore = create<GameinfoState>((set, get) => ({
       getGameinfoStatus().catch(readError),
       getPerformanceConfigStatus().catch(() => null),
     ]);
-    set({ gameinfo, perfWiped: perf?.state === 'wiped' && !perf.canRestoreBackup });
+    // A game update resets the whole file, taking Grimoire's search paths out
+    // with the performance block. A file that still loads mods lost only the
+    // block, so the user or another tool removed it on purpose.
+    set({
+      gameinfo,
+      perfWiped: perf?.state === 'wiped' && !perf.canRestoreBackup && !gameinfo.configured,
+    });
   },
 
   recheck: async () => {

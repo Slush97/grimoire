@@ -231,6 +231,10 @@ interface ConfirmModalProps {
     variant?: 'danger' | 'primary';
     onConfirm: () => void;
     onCancel: () => void;
+    /** The confirmed action is running: blocks dismissal and disables both buttons. */
+    busy?: boolean;
+    /** Rendered under the message, e.g. progress while `busy`. */
+    children?: ReactNode;
 }
 
 export function ConfirmModal({
@@ -242,19 +246,22 @@ export function ConfirmModal({
     variant = 'primary',
     onConfirm,
     onCancel,
+    busy = false,
+    children,
 }: ConfirmModalProps) {
     const titleId = useId();
     return (
-        <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size="sm">
+        <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size="sm" dismissable={!busy}>
             <ModalBody className="pt-5">
                 <h2 id={titleId} className="mb-2 font-reaver text-base font-semibold text-text-primary">{title}</h2>
                 <div className="text-sm text-text-secondary">{message}</div>
+                {children}
             </ModalBody>
             <ModalFooter>
-                <Button variant="secondary" onClick={onCancel}>
+                <Button variant="secondary" onClick={onCancel} disabled={busy}>
                     {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
                 </Button>
-                <Button variant={variant} onClick={onConfirm}>
+                <Button variant={variant} onClick={onConfirm} isLoading={busy}>
                     {confirmLabel ?? <Tx k="common.actions.confirm" fallback="Confirm" />}
                 </Button>
             </ModalFooter>

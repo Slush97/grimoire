@@ -18,6 +18,7 @@ import {
     beginModMutationRunningScope,
     endModMutationRunningScope,
 } from './gameSessionMods';
+import type { DeleteModsProgress } from '../../../src/types/mod';
 
 /** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
  *  main.log (captured by the diagnostic report) so a desync between the UI and
@@ -1260,6 +1261,35 @@ async function deleteModImpl(deadlockPath: string, modId: string): Promise<void>
     // is assigned the same slot will inherit the deleted mod's gameBananaId,
     // thumbnail, category, etc. via setModMetadata's merge.
     removeModMetadata(targetMod.metaKey);
+}
+
+/**
+ * Delete several mods as one locked batch with a single scan up front (deleteMod
+ * per id rescans the whole library for every file). Deleting never renames the
+ * survivors, so the scan's ids stay valid across the batch. Ids missing from the
+ * scan are already gone and count as done. A loaded mod refuses the whole batch
+ * before anything is deleted, like applyProfile.
+ */
+export function deleteMods(
+    deadlockPath: string,
+    modIds: string[],
+    onProgress?: (progress: DeleteModsProgress) => void
+): Promise<void> {
+    return withModMutationLock(async () => {
+        const mods = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(mods);
+        const byId = new Map(mods.map((m) => [m.id, m]));
+        const targets = modIds.map((id) => byId.get(id));
+        assertCanMoveLoadedGameMods(targets.filter((m) => m !== undefined));
+
+        for (const [i, target] of targets.entries()) {
+            if (target) {
+                await deleteVpkSet(target.path);
+                removeModMetadata(target.metaKey);
+            }
+            onProgress?.({ done: i + 1, total: targets.length });
+        }
+    });
 }
 
 /**
