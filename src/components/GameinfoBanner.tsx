@@ -6,9 +6,9 @@ import { Button } from './common/ui';
 import { showToast } from '../stores/toastStore';
 import { useGameinfoStore } from '../stores/gameinfoStore';
 
-// App-wide warning when gameinfo.gi no longer loads mods or a game update
-// removed the performance config. Worded for players: the technical detail from
-// the main process is kept as a tooltip for bug reports.
+// App-wide warning when gameinfo.gi no longer loads mods, mentioning the
+// performance config when the same reset removed it. Worded for players: the
+// technical detail from the main process is kept as a tooltip for bug reports.
 export default function GameinfoBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -33,9 +33,7 @@ export default function GameinfoBanner() {
           ? t('layout.gameinfo.unrepairable')
           : reason === 'error'
             ? t('layout.gameinfo.error')
-            : perfWiped
-              ? t('layout.perfWiped')
-              : null;
+            : null;
   const canFix = reason !== 'not-found' && reason !== 'error';
 
   if (!text || text === dismissed) return null;

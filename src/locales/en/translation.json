@@ -2861,7 +2861,6 @@
   "layout": {
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
-    "perfWiped": "A game update removed your performance config.",
     "perfRestored": "Performance config restored.",
     "openSettings": "Open settings",
     "hideGameinfoBanner": "Hide gameinfo banner until next launch",
@@ -3044,6 +3043,7 @@
     "switched": "Switched to {{preset}}.",
     "notice": {
       "wiped": "A game update removed your performance config.",
+      "removed": "Your performance config is no longer in gameinfo.gi. Restore it, or dismiss this if you took it out on purpose.",
       "damaged": "Your game's config file is empty or damaged. Restore the backup Grimoire made, or verify game files in Steam.",
       "update": "A newer version of this config is available.",
       "handEdited": "Includes changes you made to the file by hand."
