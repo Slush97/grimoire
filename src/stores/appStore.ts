@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { Mod, AppSettings, AppearanceSurface, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
@@ -433,6 +433,9 @@ interface AppState {
   toggleMod: (modId: string) => Promise<boolean>;
   clearModsNotice: () => void;
   deleteMod: (modId: string) => Promise<void>;
+  /** Deletes the ids as one locked main-process batch, with a progress tick
+   *  per removed mod. Never throws. */
+  deleteMods: (modIds: string[], onProgress?: (progress: DeleteModsProgress) => void) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
@@ -888,6 +891,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (isGameRunningModLockError(err)) {
         return;
       }
+      set({ modsError: String(err) });
+    }
+  },
+
+  // A failed batch may have deleted some files before stopping, so resync
+  // instead of guessing which ids are gone.
+  deleteMods: async (modIds, onProgress) => {
+    try {
+      await api.deleteMods(modIds, onProgress);
+      const removed = new Set(modIds);
+      set({ mods: get().mods.filter((m) => !removed.has(m.id)) });
+    } catch (err) {
+      await get().loadMods({ silent: true, force: true });
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
