@@ -757,6 +757,19 @@
     "hiddenToast": "Uploads from {{name}} are now hidden.",
     "shownToast": "Uploads from {{name}} are visible again."
   },
+  "hiddenMods": {
+    "title": "Hidden mods",
+    "description": "Hide individual GameBanana mods from Browse. Installed mods remain visible.",
+    "manage": "Manage hidden mods",
+    "emptyTitle": "No hidden mods",
+    "emptyDescription": "Use Hide mod from a mod's details to add it here.",
+    "gamebananaId": "GameBanana item #{{id}}",
+    "showMod": "Show mod",
+    "hideMod": "Hide mod",
+    "hiddenToast": "{{name}} is now hidden from Browse.",
+    "shownToast": "{{name}} is visible in Browse again.",
+    "none": "No mods are hidden right now."
+  },
   "settings": {
     "header": {
       "description": "Game paths, preferences, and maintenance"

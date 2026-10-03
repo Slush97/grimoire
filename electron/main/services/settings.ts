@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     nsfwContentMode: 'blur',
     hideOutdatedMods: false,
     hiddenCreators: [],
+    hiddenMods: [],
     lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
     autoEnableDownloads: false,
@@ -48,10 +49,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     forgeLocalInstallEnabled: false,
 };
 
-/** Normalize user-editable settings.json data into a small, deterministic
- *  creator list. Invalid ids are ignored and duplicate ids keep the most
- *  recently listed display name. */
-function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] {
+/** Normalize a user-editable hidden creator/mod list from settings.json into a
+ *  small, deterministic list. Invalid ids are ignored and duplicate ids keep
+ *  the most recently listed display name. */
+function normalizeHiddenEntries(value: unknown): { id: number; name: string }[] {
     if (!Array.isArray(value)) return [];
 
     const byId = new Map<number, string>();
@@ -106,7 +107,8 @@ export function loadSettings(): AppSettings {
         return {
             ...DEFAULT_SETTINGS,
             ...settings,
-            hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
+            hiddenCreators: normalizeHiddenEntries(settings.hiddenCreators),
+            hiddenMods: normalizeHiddenEntries(settings.hiddenMods),
             nsfwContentMode:
                 settings.nsfwContentMode ??
                 migrateNsfwContentMode(browseNsfwContentMode, installedHideNsfwPreviews ?? hideNsfwPreviews),

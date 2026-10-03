@@ -60,7 +60,7 @@ import {
   useAppStore,
 } from '../stores/appStore';
 import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
-import type { NsfwContentMode, HiddenCreator } from '../types/mod';
+import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -69,7 +69,7 @@ import { Button } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
-import { HiddenCreatorsModal } from '../components/HiddenCreatorsManager';
+import { HiddenCreatorsModal, HiddenModsModal } from '../components/HiddenContentManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
@@ -426,6 +426,8 @@ export default function Browse() {
   const hiddenCreatorIds = useMemo(() => hiddenCreators.map((creator) => creator.id), [hiddenCreators]);
   const hiddenCreatorIdSet = useMemo(() => new Set(hiddenCreatorIds), [hiddenCreatorIds]);
   const hiddenCreatorsStamp = useMemo(() => hiddenCreatorIdsStamp(hiddenCreators), [hiddenCreators]);
+  const hiddenMods = useMemo(() => settings?.hiddenMods ?? [], [settings?.hiddenMods]);
+  const hiddenModIdSet = useMemo(() => new Set(hiddenMods.map((mod) => mod.id)), [hiddenMods]);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
   const { search, layout, sort, section, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
@@ -585,6 +587,7 @@ export default function Browse() {
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
   const [creatorToHide, setCreatorToHide] = useState<HiddenCreator | null>(null);
+  const [hiddenModsOpen, setHiddenModsOpen] = useState(false);
   const [browseCardDesign, setBrowseCardDesignState] = useState<BrowseCardDesign>(() => {
     if (typeof window === 'undefined') return 'readable';
     return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'classic' ? 'classic' : 'readable';
@@ -2189,6 +2192,12 @@ export default function Browse() {
     let nextMods = !allowHiddenSubmitter && hiddenCreatorIdSet.size > 0
       ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
+    // Hidden mods filter here rather than in the fetch: one hidden item never
+    // empties a page, and keeping it out of the fetch stamp means hiding a mod
+    // does not refetch the grid or lose the scroll position.
+    if (hiddenModIdSet.size > 0) {
+      nextMods = nextMods.filter((m) => !hiddenModIdSet.has(m.id));
+    }
     if (settings?.hideOutdatedMods) {
       nextMods = nextMods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified));
     }
@@ -2206,8 +2215,8 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw, hiddenCreatorIdSet, allowHiddenSubmitter]);
-  // Client-side filters (Hide mode, hidden creators, outdated) can empty a
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw, hiddenCreatorIdSet, hiddenModIdSet, allowHiddenSubmitter]);
+  // Client-side filters (Hide mode, hidden creators/mods, outdated) can empty a
   // remote page entirely. The sentinel sits below the fold then, so page on
   // until something survives or the results run out.
   const pagingPastFilteredPage = displayMods.length === 0 && mods.length > 0 && hasMore && !autoLoadPaused;
@@ -2333,6 +2342,39 @@ export default function Browse() {
   const showHiddenCreator = useStableCallback(async (creator: HiddenCreator) => {
     await updateHiddenCreators((current) => current.filter((entry) => entry.id !== creator.id));
     showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
+  });
+
+  const updateHiddenMods = useStableCallback(async (
+    updater: (current: HiddenMod[]) => HiddenMod[]
+  ) => {
+    const currentSettings = useAppStore.getState().settings;
+    if (!currentSettings) return;
+    await saveSettings({
+      ...currentSettings,
+      hiddenMods: updater(currentSettings.hiddenMods ?? []),
+    });
+  });
+
+  const hideMod = useStableCallback(async (mod: HiddenMod) => {
+    if (!mod.id || hiddenModIdSet.has(mod.id)) return;
+    if (selectedMod?.id === mod.id) closeSelectedMod();
+    await updateHiddenMods((current) => [
+      ...current.filter((entry) => entry.id !== mod.id),
+      mod,
+    ]);
+    showToast(t('hiddenMods.hiddenToast', { name: mod.name }), {
+      tone: 'success',
+      duration: 8000,
+      actionLabel: t('common.actions.undo'),
+      onAction: () => {
+        void updateHiddenMods((current) => current.filter((entry) => entry.id !== mod.id));
+      },
+    });
+  });
+
+  const showHiddenMod = useStableCallback(async (mod: HiddenMod) => {
+    await updateHiddenMods((current) => current.filter((entry) => entry.id !== mod.id));
+    showToast(t('hiddenMods.shownToast', { name: mod.name }), { tone: 'success' });
   });
 
   // Artist mode can be entered from Installed as well as Browse. Respect the
@@ -2464,6 +2506,7 @@ export default function Browse() {
         onDeleteFile={deleteMod}
         onViewArtist={viewArtist}
         onHideArtist={requestHideCreator}
+        onHideMod={hideMod}
         onOpenGameBananaItem={handleOpenGameBananaItem}
       />
     ) : null;
@@ -2726,7 +2769,7 @@ export default function Browse() {
                     />
                   </div>
 
-                  <div className="border-t border-border pt-3">
+                  <div className="space-y-1 border-t border-border pt-3">
                     <Button
                       type="button"
                       variant="ghost"
@@ -2740,6 +2783,21 @@ export default function Browse() {
                       <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
                       <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
                         {hiddenCreators.length}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      icon={EyeOff}
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setHiddenModsOpen(true);
+                      }}
+                      className="w-full justify-start px-2 text-text-primary"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-left">{t('hiddenMods.manage')}</span>
+                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
+                        {hiddenMods.length}
                       </span>
                     </Button>
                   </div>
@@ -3226,6 +3284,13 @@ export default function Browse() {
         onClose={() => setHiddenCreatorsOpen(false)}
         creators={hiddenCreators}
         onRemove={showHiddenCreator}
+      />
+
+      <HiddenModsModal
+        open={hiddenModsOpen}
+        onClose={() => setHiddenModsOpen(false)}
+        mods={hiddenMods}
+        onRemove={showHiddenMod}
       />
 
       <ConfirmModal

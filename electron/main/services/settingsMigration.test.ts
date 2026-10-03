@@ -96,6 +96,33 @@ describe('loadSettings hidden creator normalization', () => {
   });
 });
 
+describe('loadSettings hidden mod normalization', () => {
+  it('defaults hidden mods to an empty list for existing settings', () => {
+    writeFileSync(settingsPath(), JSON.stringify({}));
+    expect(loadSettings().hiddenMods).toEqual([]);
+  });
+
+  it('keeps valid entries and drops malformed ones', () => {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hiddenMods: [
+          { id: 723290, name: ' Kitty Paw Cursor ' },
+          { id: 0, name: 'Zero' },
+          { id: '5', name: 'String id' },
+          { id: 723290, name: 'Kitty Paw Cursor v2' },
+          { id: 11, name: 'Other mod' },
+        ],
+      })
+    );
+
+    expect(loadSettings().hiddenMods).toEqual([
+      { id: 723290, name: 'Kitty Paw Cursor v2' },
+      { id: 11, name: 'Other mod' },
+    ]);
+  });
+});
+
 describe('loadSettings OLED mode', () => {
   it('defaults OLED mode to off for existing settings', () => {
     writeFileSync(settingsPath(), JSON.stringify({}));

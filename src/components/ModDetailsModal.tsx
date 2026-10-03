@@ -121,6 +121,9 @@ interface ModDetailsModalProps {
   /** Browse-only visibility action. Installed details intentionally omit it so
    *  hiding a creator never implies hiding content the user already owns. */
   onHideArtist?: (artist: { id: number; name: string }) => void;
+  /** Browse-only: hide this one submission from Browse results. Omitted in
+   *  Installed for the same reason as onHideArtist. */
+  onHideMod?: (mod: { id: number; name: string }) => void;
   /**
    * When provided, primary-clicks on GameBanana *item* links inside HTML bodies
    * (description, changelog, comments) open that mod in-app instead of the
@@ -164,6 +167,7 @@ function ModDetailsModal({
   onChangeView,
   onViewArtist,
   onHideArtist,
+  onHideMod,
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
@@ -1129,6 +1133,13 @@ function ModDetailsModal({
               </div>
             );
           })()}
+          {onHideMod && !isNavigating && (
+            <IconButton
+              icon={EyeOff}
+              label={t('hiddenMods.hideMod')}
+              onClick={() => onHideMod({ id: mod.id, name: mod.name })}
+            />
+          )}
           {onChangeView && (
             <IconButton
               icon={isSidebar ? Maximize2 : PanelRight}
