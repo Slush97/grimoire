@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ run: vi.fn(), stdout: vi.fn(), index: vi.fn(), attachments: vi.fn() }));
 vi.mock('./modMerger', () => ({ runVpkmerge: h.run, runVpkmergeStdout: h.stdout }));
-vi.mock('./vpk', () => ({ parseVpkDirectoryCached: h.index }));
+vi.mock('./vpk', () => ({ parseVpkDirectoryCached: h.index, vpkHasEntry: (path: string, entry: string) => (h.index(path) as string[] | null)?.includes(entry) ?? false }));
 vi.mock('./modelAttachments', () => ({ exportModelAttachments: h.attachments }));
 import { exportParticleBundle, particleDescriptor } from './heroParticleExport';
 const resource = (overrides = {}) => ({ _class: 'CParticleSystemDefinition', m_Renderers: [], ...overrides });
@@ -87,7 +87,6 @@ describe('compiled particle export', () => {
       for (const [name, owner] of [['override', 'skin.vpk'], ['base', 'base.vpk'], ['core', 'core.vpk']]) {
         expect(await fs.readFile(join(dir, 'tex', `materials_particle_${name}_vtex.png`), 'utf8')).toBe(owner);
       }
-      expect(h.index).toHaveBeenCalledTimes(3);
       expect(h.run).toHaveBeenCalledTimes(3);
       expect(h.stdout.mock.calls[0][0]).toContain('base.vpk');
       expect(await fs.readdir(join(dir, 'tex'))).toHaveLength(3);

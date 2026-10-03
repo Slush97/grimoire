@@ -4,7 +4,7 @@ import type { FxControlPoint, FxDescriptor, FxNode, FxRenderer } from '../../../
 import { fxTexturePngName } from '../../../src/components/locker/fxDescriptor';
 import { runVpkmerge, runVpkmergeStdout } from './modMerger';
 import { readParticleSheet } from './particleSheet';
-import { parseVpkDirectoryCached, readVpkEntryBytes } from './vpk';
+import { readVpkEntryBytes, vpkHasEntry } from './vpk';
 import { readParticleSnapshot } from './particleSnapshot';
 import { exportModelAttachments } from './modelAttachments';
 
@@ -95,7 +95,7 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     if (typeof snapshot === 'string') {
       if (!/^particles\/[a-zA-Z0-9_./-]+\.vsnap$/.test(snapshot) || snapshot.includes('..')) throw new Error('Invalid particle snapshot path.');
       const entry = `${snapshot}_c`;
-      const owner = [...new Set([...texturePaks, pak])].find((p) => parseVpkDirectoryCached(p)?.includes(entry));
+      const owner = [...new Set([...texturePaks, pak])].find((p) => vpkHasEntry(p, entry));
       const bytes = owner ? readVpkEntryBytes(owner, entry) : null;
       if (!bytes || bytes.length > 4*1024*1024) throw new Error('Particle snapshot is unavailable or exceeds preview limits.');
       const metadata: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', entry, '--from-vpk', owner!]));
@@ -160,9 +160,9 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     const owners = new Map<string, string[]>();
     // Caller supplies mounted priority: selected skin stack, Citadel, core.
     // Exact entries avoid decoding the same texture from a lower-priority VPK.
-    const indexes = texturePaks.length ? [...new Set(texturePaks)].map((path) => ({ path, entries: new Set(parseVpkDirectoryCached(path) ?? []) })) : null;
+    const mounted = texturePaks.length ? [...new Set(texturePaks)] : null;
     for (const texture of textures) {
-      const owner = indexes ? indexes.find(({ entries }) => entries.has(`${texture}_c`))?.path : pak;
+      const owner = mounted ? mounted.find((path) => vpkHasEntry(path, `${texture}_c`)) : pak;
       if (!owner) throw new Error(`Particle texture is absent from mounted packages: ${texture}`);
       const group = owners.get(owner) ?? [];
       group.push(texture);
