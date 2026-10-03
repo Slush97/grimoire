@@ -643,6 +643,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
 
+    // Cursor packs
+    getCursorPacks: () => ipcRenderer.invoke('cursors:get'),
+    setActiveCursorPack: (id: string | null) => ipcRenderer.invoke('cursors:set-active', id),
+    deleteCursorPack: (id: string) => ipcRenderer.invoke('cursors:delete', id),
+    getCursorPreview: (id: string | null) => ipcRenderer.invoke('cursors:preview', id),
+    importCursorPack: (paths: string[]) => ipcRenderer.invoke('cursors:import-files', paths),
+
     // Updater
     updater: {
         getVersion: () => ipcRenderer.invoke('updater:getVersion'),

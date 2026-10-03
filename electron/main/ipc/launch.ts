@@ -13,6 +13,7 @@ import {
 } from '../services/launch';
 import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
 import { healLockerVpks } from '../services/lockerVpk';
+import { reconcileCursorPack } from '../services/cursorPacks';
 import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
@@ -42,6 +43,8 @@ ipcMain.handle('launch-modded', async (): Promise<void> => {
             deadlockPath,
             onRestoreComplete: emitRestore,
             beforeLaunch: async () => {
+                await reconcileCursorPack(deadlockPath).catch((err) =>
+                    console.error('[launch] Cursor pack reconcile failed:', err));
                 captureLoadedGameMods(await scanMods(deadlockPath));
                 markLaunchGrace();
             },
@@ -189,6 +192,12 @@ export async function runStartupRecovery(): Promise<void> {
         await healLockerVpks(deadlockPath);
     } catch (err) {
         console.error('[launch] Locker VPK heal failed:', err);
+    }
+
+    try {
+        await reconcileCursorPack(deadlockPath);
+    } catch (err) {
+        console.error('[launch] Cursor pack reconcile failed:', err);
     }
 
     // Replay downloads land in whichever mod folder gameinfo lists first, so the

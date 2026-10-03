@@ -6,6 +6,7 @@ import { BrowserWindow } from 'electron';
 import { assertVpkSafety } from './modSafety';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, type ExtractedVpk } from './extract';
+import { getCursorPacks, installCursorArchive, setActiveCursorPack, type CursorPackSource } from './cursorPacks';
 import { buildVpkIndexBySize } from './vpkVariantIndex';
 import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
@@ -685,6 +686,33 @@ interface RenamedVpk {
     sourceFileName: string;
 }
 
+/**
+ * Cursor mods ship loose BMPs instead of a VPK (see cursorFiles.ts), so an
+ * archive with no VPK gets a second look for cursor sets. Applied right away
+ * only when downloads auto-enable, like any other mod, except that reinstalling
+ * the active pack always reapplies it so the game gets the new files. True
+ * when the archive was a cursor mod.
+ */
+async function installAsCursorMod(
+    deadlockPath: string,
+    archivePath: string,
+    workDir: string,
+    source: CursorPackSource
+): Promise<boolean> {
+    const packs = await installCursorArchive(archivePath, workDir, source);
+    if (packs.length === 0) return false;
+    const { activeId } = await getCursorPacks();
+    const target = packs.find((p) => p.id === activeId)
+        ?? (loadSettings().autoEnableDownloads === true ? packs[0] : undefined);
+    if (target) {
+        // The pack is installed either way; failing to apply it (e.g. the game's
+        // cursor folder is missing) must not report the download as failed.
+        await setActiveCursorPack(deadlockPath, target.id).catch((err) =>
+            console.error('[downloadMod] Installed cursor pack could not be applied:', err));
+    }
+    return true;
+}
+
 /** Title-case a variant folder for display: `Tailed_mod_Beard` -> `Tailed Mod Beard`. */
 function prettifyVariant(folder: string): string {
     return folder
@@ -1032,6 +1060,15 @@ async function executeDownload(
             throw extractError;
         }
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
+
+        if (extractedVpks.length === 0 && await installAsCursorMod(deadlockPath, downloadPath, workDir, {
+            name: details.name,
+            gameBananaId: modId,
+            gameBananaFileId: fileId,
+        })) {
+            mainWindow?.webContents.send('download-complete', { modId, fileId });
+            return { installedVpks: [] };
+        }
 
         // Rename VPKs to avoid conflicts
         const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
@@ -1532,6 +1569,15 @@ async function executeOneClickDownload(
                 await fs.unlink(downloadPath).catch(() => { });
             }
             throw extractError;
+        }
+
+        if (extractedVpks.length === 0 && await installAsCursorMod(deadlockPath, downloadPath, workDir, {
+            name: oneClickModName,
+            gameBananaId: realModId,
+            gameBananaFileId: resolvedFileId,
+        })) {
+            mainWindow?.webContents.send('download-complete', { modId, fileId });
+            return { installedVpks: [] };
         }
 
         const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);

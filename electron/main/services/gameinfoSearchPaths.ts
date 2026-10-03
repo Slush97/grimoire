@@ -111,6 +111,21 @@ const STOCK_PATHS = [
     ['Game', 'core'],
 ] as const;
 
+// Valve's block declares no Mod or Write paths and boots fine, but with
+// Grimoire's folders mounted ahead of citadel the game dies on launch with
+// "Unable to read default keybinding configuration" (1.30.0 shipped that).
+// Grimoire 1.29 and DMM always declared these.
+const MOD_PATHS = [
+    ['Mod', 'citadel'],
+    ['Write', 'citadel'],
+    ['Mod', 'core'],
+    ['Write', 'core'],
+] as const;
+
+export function hasModSearchPaths(body: string): boolean {
+    return MOD_PATHS.every(([key, path]) => hasActivePath(body, path, key));
+}
+
 export function hasRequiredSearchPaths(body: string): boolean {
     return hasActivePath(body, 'citadel/grimoire') && hasActivePath(body, 'citadel/addons');
 }
@@ -146,7 +161,7 @@ export function buildSearchPathsBlock(
     }
     const gamePaths = ['citadel/grimoire', 'citadel/addons', ...overflow.map((name) => `citadel/${name}`)];
     if (includeDeadworks) gamePaths.push(DEADWORKS_SEARCH_PATH);
-    const missing = STOCK_PATHS.filter(([key, path]) => !hasActivePath(body, path, key));
+    const missing = [...STOCK_PATHS, ...MOD_PATHS].filter(([key, path]) => !hasActivePath(body, path, key));
     // Language and low-violence mounts must precede base game content.
     const optional = missing.filter(([key]) => key.startsWith('Game_'));
     const base = missing.filter(([key]) => !key.startsWith('Game_'));

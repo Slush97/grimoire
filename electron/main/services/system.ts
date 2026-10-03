@@ -7,6 +7,7 @@ import {
     findSearchPathsBlock,
     hasActivePath,
     hasLanguageSearchPaths,
+    hasModSearchPaths,
     hasRequiredSearchPaths,
     insertSearchPaths,
 } from './gameinfoSearchPaths';
@@ -14,8 +15,9 @@ import {
 export interface GameinfoStatus {
     configured: boolean;
     /** Why, as a code the renderer can word for users; `message` stays the
-     *  technical detail. 'language-paths-missing' still loads mods. */
-    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'unrepairable' | 'error';
+     *  technical detail. 'language-paths-missing' and 'boot-paths-missing'
+     *  still load mods. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'boot-paths-missing' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];
@@ -99,6 +101,15 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
                 ...missingOverflow,
                 ...(missingDeadworks ? ['deadworks_addons'] : []),
             ];
+            if (missing.length === 0 && !hasModSearchPaths(block.body)) {
+                return {
+                    configured: false,
+                    missing: false,
+                    reason: 'boot-paths-missing',
+                    message: 'Mod and Write search paths are missing from gameinfo.gi',
+                    candidates: [],
+                };
+            }
             if (missing.length === 0 && !hasLanguageSearchPaths(block.body)) {
                 return {
                     configured: false,
@@ -202,6 +213,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
             block &&
             hasRequiredSearchPaths(block.body) &&
             hasLanguageSearchPaths(block.body) &&
+            hasModSearchPaths(block.body) &&
             overflow.every((name) => hasActivePath(block.body, `citadel/${name}`)) &&
             (!includeDeadworks || hasActivePath(block.body, DEADWORKS_SEARCH_PATH))
         ) {

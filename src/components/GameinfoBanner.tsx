@@ -27,7 +27,9 @@ export default function GameinfoBanner() {
   const text =
     reason === 'mods-not-loaded'
       ? t(perfWiped ? 'layout.gameinfo.modsAndPerfOff' : 'layout.gameinfo.modsOff')
-      : reason === 'language-paths-missing'
+      : reason === 'boot-paths-missing'
+        ? t('layout.gameinfo.bootPathsOff')
+        : reason === 'language-paths-missing'
         ? t('layout.gameinfo.languageOff')
         : reason === 'not-found'
           ? t('layout.gameinfo.notFound')
