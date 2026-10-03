@@ -3,7 +3,7 @@ import CustomShaderMaterial, { type CSMPatchMap } from 'three-custom-shader-mate
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
-import { decodedAlbedoAverage, source2TintPlan, SOURCE2_SATURATION_WEIGHTS } from './source2ColorCorrection';
+import { decodedAlbedoAverage, source2TintPlan, sourceAlbedoAverage, SOURCE2_SATURATION_WEIGHTS } from './source2ColorCorrection';
 
 /**
  * Source 2 NPR (cel / rim / tint) restyle for the Locker hero preview.
@@ -415,6 +415,7 @@ export async function resolveMorphicTextures(gltf: GLTF): Promise<void> {
     (Array.isArray(mat) ? mat : [mat]).forEach((m) => materials.add(m));
   });
 
+  const averages: Promise<void>[] = [];
   for (const material of materials) {
     const morphic = getMorphic(material);
     if (!morphic || morphic.shader.toLowerCase() !== 'pbr.vfx') continue;
@@ -423,10 +424,13 @@ export async function resolveMorphicTextures(gltf: GLTF): Promise<void> {
     const tint = source2TintPlan(morphic, standard.color);
     if (tint.ownsExportedFactor) standard.color.copy(tint.linearTint);
     if (!morphic.texture_reflectivity?.g_tColor && !morphic.preview_albedo_average) {
-      const average = decodedAlbedoAverage(standard.map);
-      if (average) morphic.preview_albedo_average = average.toArray();
+      averages.push(sourceAlbedoAverage(gltf.parser, standard.map).then((average) => {
+        average ??= decodedAlbedoAverage(standard.map);
+        if (average) morphic.preview_albedo_average = average.toArray();
+      }));
     }
   }
+  await Promise.all(averages);
   const targets = [...materials].filter((m) => getMorphic(m)?.textures);
   if (targets.length === 0) return;
 
