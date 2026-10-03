@@ -11,6 +11,23 @@ const MAX_METADATA_BLOCK_BYTES = 8 * 1024 * 1024;
 // Embedded mesh LODs can each carry MDAT (the current chessboard model exceeds
 // 128). Keep the byte budgets as well as a bounded block count.
 const MAX_METADATA_BLOCKS = 256;
+// Each decode is a separate vpkmerge process; run a few at once instead of
+// one after another (a hero model can carry 100+ metadata blocks).
+const DECODE_CONCURRENCY = 8;
+
+/** Map with at most `limit` calls in flight; results keep input order. */
+export async function mapConcurrent<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await fn(items[index], index);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+}
 
 /** Preserve the compiled KV3 bytes, changing only their resource block wrapper.
  * The pinned CLI's generic KV3 decoder reads DATA from a loose resource.
@@ -93,10 +110,12 @@ export async function exportModelAttachments(vpk: string, base: string, entry: s
     const attachments = new Map<string, ModelAttachment>();
     const conflicts = new Set<string>();
     try {
-        for (let i = 0; i < resources.length; i++) {
+        const decoded = await mapConcurrent(resources, DECODE_CONCURRENCY, async (resource, i) => {
             const file = join(dir, `${i}.vsndevts_c`);
-            await fs.writeFile(file, resources[i]);
-            const data: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', file]));
+            await fs.writeFile(file, resource);
+            return JSON.parse(await runVpkmergeStdout(['soundevents', file])) as unknown;
+        });
+        for (const data of decoded) {
             for (const attachment of parseModelAttachments(data)) {
                 const existing = attachments.get(attachment.name);
                 if (existing && JSON.stringify(existing) !== JSON.stringify(attachment)) conflicts.add(attachment.name);
