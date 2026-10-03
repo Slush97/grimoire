@@ -6,6 +6,9 @@ import {
   composeDmmAdoptionPlan,
   planToPreview,
   submissionIdFromVpkName,
+  parseDmmModId,
+  dmmIdFromVpkName,
+  interchangeKeyForEntry,
 } from './dmmMigration';
 import { parseDmmState, selectDmmProfile, indexDmmStateBySubmission } from './dmmState';
 import type { DmmManifest } from './dmmManifest';
@@ -371,5 +374,81 @@ describe('planToPreview', () => {
     expect(m.modName).toBe('Holographic Haze Vyper');
     expect(m.enabled).toBe(true);
     expect(preview.find((p) => p.submissionId === 777)!.hasFileId).toBe(false);
+  });
+});
+
+describe('DMM 2.x ids and shards', () => {
+  const UUID = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
+  it('parses every DMM id shape', () => {
+    expect(parseDmmModId('123')).toEqual({ kind: 'mod', dmmId: '123', submissionId: 123 });
+    expect(parseDmmModId('snd-42')).toEqual({ kind: 'sound', dmmId: 'snd-42', submissionId: 42 });
+    expect(parseDmmModId(`local-${UUID.toUpperCase()}`)).toMatchObject({ kind: 'local', localId: UUID });
+    expect(parseDmmModId('local-thing')).toBeNull();
+    expect(parseDmmModId('0123')).toBeNull();
+    expect(dmmIdFromVpkName(`local-${UUID}_cool_dir.vpk`)).toBe(`local-${UUID}`);
+    expect(dmmIdFromVpkName('snd-42_x.vpk')).toBe('snd-42');
+    expect(dmmIdFromVpkName('pak01_dir.vpk')).toBeNull();
+  });
+
+  it('plans sound and local mods and keeps same-named slots in different shards apart', () => {
+    const manifest: DmmManifest = {
+      version: 3,
+      mods: {
+        '1': { enabled: true, order: 0, shard: 1, currentVpks: ['pak01_dir.vpk'] },
+        '2': { enabled: true, order: 1, shard: 2, currentVpks: ['pak01_dir.vpk'] },
+        'snd-3': { enabled: false, order: 2, disabledVpks: ['snd-3_voice.vpk'] },
+        [`local-${UUID}`]: { enabled: true, order: 3, shard: 1, currentVpks: ['pak02_dir.vpk'] },
+      },
+    };
+    const plan = planDmmAdoption(manifest, null, {
+      stateByDmmId: new Map([
+        [`local-${UUID}`, { remoteId: `local-${UUID}`, submissionId: NaN, name: 'My Local', author: 'me' }],
+      ]),
+    });
+    expect(plan.entries.map((e) => [e.dmmId, e.kind, e.shard])).toEqual([
+      ['1', 'mod', 1],
+      ['2', 'mod', 2],
+      ['snd-3', 'sound', 1],
+      [`local-${UUID}`, 'local', 1],
+    ]);
+    const local = plan.entries[3];
+    expect(local).toMatchObject({ submissionId: 0, localId: UUID, modName: 'My Local', author: 'me' });
+    expect(interchangeKeyForEntry(local)).toBe(`local:${UUID}`);
+    expect(interchangeKeyForEntry(plan.entries[2])).toBe('gamebanana:sound:3');
+    // The file-id warning only counts GameBanana entries.
+    expect(plan.warnings.some((w) => w.startsWith('3 mod(s)'))).toBe(true);
+  });
+
+  it('falls back to the mod store names when no addon file is recorded', () => {
+    const plan = planDmmAdoption({ version: 3, mods: { '9': { enabled: true, order: 0 } } }, null, {
+      stateByDmmId: new Map([['9', { remoteId: '9', submissionId: 9, selectedVpkNames: ['blue.vpk'] }]]),
+    });
+    expect(plan.entries[0].vpkFiles).toEqual(['blue.vpk']);
+  });
+
+  it('reads DMM 2.x gamebanana-file download urls', () => {
+    const state = parseDmmState(
+      JSON.stringify({
+        'local-config': JSON.stringify({
+          state: {
+            localMods: [
+              {
+                remoteId: '5',
+                selectedDownloads: [{ url: 'gamebanana-file://5/777', name: 'x.zip' }],
+                images: ['data:image/svg+xml;utf8,x', 'https://img/x.png'],
+                installedFileTree: { files: [{ name: 'a.vpk', is_selected: true }, { name: 'b.vpk', is_selected: false }] },
+              },
+            ],
+            profiles: {},
+          },
+        }),
+      })
+    );
+    expect(state.localMods[0]).toMatchObject({
+      fileId: 777,
+      thumbnailUrl: 'https://img/x.png',
+      selectedVpkNames: ['a.vpk'],
+    });
   });
 });

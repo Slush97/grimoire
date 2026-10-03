@@ -99,8 +99,8 @@ import './ipc/saltIngest';
 import './ipc/servers';
 import './ipc/foundry';
 import './ipc/performanceConfig';
-import './ipc/dmmMigrate';
 import './ipc/forge';
+import './ipc/modInterchange';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';

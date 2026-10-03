@@ -275,7 +275,7 @@ export function parseGameBananaItemUrl(input: string): GameBananaItemRef | null 
   }
 }
 
-export function getModThumbnail(mod: GameBananaMod): string | undefined {
+export function getModThumbnail(mod: Pick<GameBananaMod, 'previewMedia'>): string | undefined {
   const images = mod.previewMedia?.images;
   if (!images || images.length === 0) return undefined;
 

@@ -74,6 +74,7 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 
 | Area | Doc |
 |---|---|
+| Manager-neutral mod transfer | `docs/mod-interchange.md` |
 | Portable profiles (`mp1:` codes, `.modprofile.json`) | `docs/profile-spec.md` |
 | Social layer, ADRs (append-only, never edit a shipped ADR) | `docs/social-architecture.md`, `docs/social-architecture-decisions.md` |
 | `gameinfo.gi` handling, Deadworks servers | `docs/deadworks-servers.md` |
@@ -89,6 +90,7 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 
 ## Working conventions
 
+- Mod transfer uses the interchange format. DMM input is converted through the reader in `electron/main/services/modInterchange/`, and new source managers are registered in `electron/main/ipc/modInterchange.ts`.
 - `Installed.tsx` and `Browse.tsx` are god files (thousands of lines). Put new features in their own components under `src/components/<feature>/` rather than growing them. When splitting, make move-only PRs with no behavior or visual change mixed in.
 - Experimental features are gated behind `experimental*` settings (see `AppSettings`) and default off.
 - Commits: imperative, conventional-style subjects (`fix(installed): ...`, `feat: ...`). PRs are squash-merged. Branch protection has no required checks, so `gh pr merge --auto` merges immediately: check `gh pr checks` first.
