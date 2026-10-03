@@ -122,8 +122,9 @@ export interface CleanupResult {
 export interface GameinfoStatus {
     configured: boolean;
     /** Why, as a code the renderer can word for users; `message` stays the
-     *  technical detail. 'language-paths-missing' still loads mods. */
-    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'unrepairable' | 'error';
+     *  technical detail. 'language-paths-missing' and 'boot-paths-missing'
+     *  still load mods. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'boot-paths-missing' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];

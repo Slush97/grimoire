@@ -136,7 +136,8 @@ describe('gameinfo search-path repair', () => {
 
     it('matches quoted and case-insensitive keys and paths exactly', () => {
         const body = `"GAME" "citadel\\addons"\n"Game" "citadel/grimoire"\n` +
-            '"game_uilanguage" "citadel_*LANGUAGE*"\n"Game_LowViolence" "citadel_lv"\n';
+            '"game_uilanguage" "citadel_*LANGUAGE*"\n"Game_LowViolence" "citadel_lv"\n' +
+            '"MOD" "Citadel"\nwrite citadel\nMod "core/"\nWrite core\n';
         const game = install(config(body));
         expect(getGameinfoStatus(game.root).configured).toBe(true);
         fixGameinfo(game.root);
@@ -158,6 +159,26 @@ describe('gameinfo search-path repair', () => {
         const game = install(config(legacyBody));
         mkdirSync(join(game.citadel, 'addons1'));
         expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'mods-not-loaded' });
+        expect(fixGameinfo(game.root).configured).toBe(true);
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: true, reason: 'ok' });
+    });
+
+    it('declares Mod and Write paths when mounting mods ahead of a stock block', () => {
+        const game = install(stock.replace('Game_Language', 'Game_UILanguage'));
+        expect(fixGameinfo(game.root).configured).toBe(true);
+        const body = findSearchPathsBlock(game.read())!.body;
+        for (const [key, path] of [['Mod', 'citadel'], ['Write', 'citadel'], ['Mod', 'core'], ['Write', 'core']]) {
+            expect(hasActivePath(body, path, key)).toBe(true);
+        }
+        // The first Write path is where the game saves.
+        expect(body.indexOf('Write\t\tcitadel')).toBeLessThan(body.indexOf('Write\t\tcore'));
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: true, reason: 'ok' });
+    });
+
+    it('flags and repairs a 1.30.0 repair that left out Mod and Write paths', () => {
+        const game = install(config('\n Game citadel/grimoire\n Game citadel/addons\n' +
+            ' Game_UILanguage citadel_*LANGUAGE*\n Game_LowViolence citadel_lv\n Game citadel\n Game core\n'));
+        expect(getGameinfoStatus(game.root)).toMatchObject({ configured: false, reason: 'boot-paths-missing' });
         expect(fixGameinfo(game.root).configured).toBe(true);
         expect(getGameinfoStatus(game.root)).toMatchObject({ configured: true, reason: 'ok' });
     });

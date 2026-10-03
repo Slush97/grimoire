@@ -2893,6 +2893,7 @@
       "modsOff": "Your mods aren't loading. A game update or another mod manager changed Deadlock's config.",
       "modsAndPerfOff": "Your mods aren't loading and your performance config was removed. A game update or another mod manager changed Deadlock's config.",
       "languageOff": "An older Grimoire removed Deadlock's language paths, so translated art like hero names may not show. Fix puts them back.",
+      "bootPathsOff": "Deadlock's config is missing paths the game needs to start, so it can crash on launch. Fix puts them back.",
       "notFound": "Grimoire can't find Deadlock's config file. Check the game folder in Settings.",
       "unrepairable": "Grimoire couldn't repair Deadlock's config. Verify the game files in Steam, then try again.",
       "error": "Grimoire couldn't read Deadlock's config. Check the game folder in Settings."
