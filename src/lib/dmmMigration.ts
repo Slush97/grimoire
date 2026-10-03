@@ -23,7 +23,7 @@
  * anyway. That inference is the "auto recognize" behavior we want.
  */
 
-import { parseDmmManifest, type DmmManifest } from './dmmManifest';
+import { parseDmmManifest, type DmmManifest, type DmmManifestEntry } from './dmmManifest';
 import {
   parseDmmState,
   selectDmmProfile,
@@ -141,15 +141,45 @@ export function planDmmAdoption(
   const manifestEntries = Object.entries(manifest.mods ?? {});
   const isStr = (v: unknown): v is string => typeof v === 'string' && !!v;
 
-  // Compute the trailing priority for order-less mods over kept (valid) keys
-  // only, so a skipped mod doesn't reserve an empty slot.
+  const stateInfo = (identity: DmmModIdentity): DmmStateMod | undefined =>
+    options.stateByDmmId?.get(identity.dmmId) ??
+    (identity.kind === 'mod' ? stateIndex?.get(identity.submissionId) : undefined);
+  // DMM writes `order: null` into .dmm.json; the load order it shows lives in
+  // state.json's installOrder. The manifest's own order is the fallback.
+  const orderOf = (key: string, e: DmmManifestEntry | undefined): number | undefined => {
+    const identity = parseDmmModId(key);
+    const installOrder = identity ? stateInfo(identity)?.installOrder : undefined;
+    if (typeof installOrder === 'number' && Number.isFinite(installOrder)) return installOrder;
+    return typeof e?.order === 'number' && Number.isFinite(e.order) ? e.order : undefined;
+  };
+
+  // Order-less mods trail the ordered ones over kept (valid) keys only, so a
+  // skipped mod doesn't reserve an empty slot. Object key order means nothing
+  // (numeric ids sort first), so enabled mods follow the pakNN slots DMM laid
+  // them out in, then disabled ones.
   let maxOrder = -1;
+  const orderless: Array<[string, DmmManifestEntry | undefined]> = [];
   for (const [key, e] of manifestEntries) {
-    if (parseDmmModId(key) && e && typeof e.order === 'number') {
-      maxOrder = Math.max(maxOrder, e.order);
-    }
+    if (!parseDmmModId(key)) continue;
+    const order = orderOf(key, e);
+    if (order !== undefined) maxOrder = Math.max(maxOrder, order);
+    else orderless.push([key, e]);
   }
-  let trailing = maxOrder + 1;
+  const slotOf = (e: DmmManifestEntry | undefined): number => {
+    if (e?.enabled !== true) return Number.MAX_SAFE_INTEGER;
+    const pak = (e.currentVpks ?? [])
+      .map((name) => /^pak(\d+)_dir\.vpk$/i.exec(name)?.[1])
+      .filter((n): n is string => n !== undefined)
+      .map(Number);
+    const shard = typeof e.shard === 'number' && e.shard >= 1 ? e.shard : 1;
+    return pak.length > 0 ? shard * 1000 + Math.min(...pak) : Number.MAX_SAFE_INTEGER - 1;
+  };
+  const trailingOrder = new Map(
+    orderless
+      .map(([key, e], index) => ({ key, slot: slotOf(e), index }))
+      .sort((a, b) => a.slot - b.slot || a.index - b.index)
+      .map(({ key }, index) => [key, maxOrder + 1 + index])
+  );
 
   // First pass: resolve each mod's full set of live on-disk VPK files. A DMM mod
   // can ship several VPKs (its `currentVpks`/`disabledVpks` list has >1 entry),
@@ -175,7 +205,7 @@ export function planDmmAdoption(
     const submissionId = identity.kind === 'local' ? 0 : identity.submissionId;
     const e = rawEntry ?? {};
     const enabled = e.enabled === true;
-    const priority = typeof e.order === 'number' ? e.order : trailing++;
+    const priority = orderOf(key, e) ?? trailingOrder.get(key) ?? maxOrder + 1;
     const shard =
       typeof e.shard === 'number' && Number.isInteger(e.shard) && e.shard >= 1 ? e.shard : 1;
 
@@ -195,9 +225,7 @@ export function planDmmAdoption(
       ).slice();
     }
 
-    const info =
-      options.stateByDmmId?.get(identity.dmmId) ??
-      (identity.kind === 'mod' ? stateIndex?.get(submissionId) : undefined);
+    const info = stateInfo(identity);
     // Last resort: DMM's mod store keeps every downloaded VPK under its
     // original name, so a mod whose addon files are gone can still come
     // across. The reader resolves these names against the store folder.

@@ -388,6 +388,9 @@ export interface InterchangeImportResult {
   status: 'imported' | 'skipped' | 'failed';
   reason?: string;
   installedAs?: string;
+  /** Every adopted VPK a profile loads for this mod (multi-VPK mods have
+   *  several); unselected variants are left out. */
+  installedKeys?: string[];
   /** Grimoire mod id of the (first) adopted VPK. */
   modId?: string;
   /** True when the mod arrived without a GameBanana identity. */

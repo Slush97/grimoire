@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getActiveDeadlockPath } from '../services/settings';
+import { isDeadlockRunning } from '../services/launch';
 import { getModById, getModCount } from '../services/modDatabase';
 import { writeSnapshot } from '../services/snapshots';
 import { detectDmm, readDmmDocument } from '../services/modInterchange/dmmReader';
@@ -108,6 +109,11 @@ ipcMain.handle(
         req: { document: InterchangeDocument; selection: InterchangeImportSelection }
     ): Promise<InterchangeImportReport> => {
         const deadlockPath = requireDeadlockPath();
+        // The import moves and renames files in the addons folder the running
+        // game has open; Grimoire never touches loaded mods mid-session.
+        if (await isDeadlockRunning()) {
+            throw new Error('Close Deadlock before importing mods.');
+        }
         const fromDmm = req.document.source.manager === 'deadlock-mod-manager';
         try {
             await writeSnapshot(deadlockPath, fromDmm ? 'pre-dmm-import' : 'pre-mod-import');

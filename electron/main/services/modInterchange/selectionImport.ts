@@ -91,7 +91,9 @@ export async function importInterchangeSelection(
       opts.onProgress?.({ stage: 'mods', current, total, name }),
   });
   const installedAs = new Map(
-    outcome.results.filter((r) => r.installedAs).map((r) => [r.key, r.installedAs as string])
+    outcome.results
+      .filter((r) => r.installedAs)
+      .map((r) => [r.key, r.installedKeys?.length ? r.installedKeys : [r.installedAs as string]])
   );
 
   const report: InterchangeImportReport = {
@@ -107,20 +109,27 @@ export async function importInterchangeSelection(
     opts.onProgress?.({ stage: 'profiles', current: index, total: profiles.length, name: profile.name });
     const mods: ProfileMod[] = [];
     let dropped = 0;
-    for (const entry of profile.mods) {
-      const metaKey = installedAs.get(entry.modKey);
-      if (!metaKey) {
+    // Grimoire profiles list the files to turn on, in load order. Entries are
+    // matched back by GameBanana ids, then by content hash (the only stable
+    // identity a local mod has), so both are recorded with the file name.
+    const ordered = [...profile.mods].sort((a, b) => a.order - b.order);
+    for (const [position, entry] of ordered.entries()) {
+      const metaKeys = installedAs.get(entry.modKey);
+      if (!metaKeys) {
         dropped++;
         continue;
       }
-      const meta = getModMetadata(metaKey);
-      mods.push({
-        fileName: basename(metaKey),
-        enabled: entry.enabled,
-        priority: entry.order,
-        ...(meta?.gameBananaId !== undefined ? { gameBananaId: meta.gameBananaId } : {}),
-        ...(meta?.gameBananaFileId !== undefined ? { gameBananaFileId: meta.gameBananaFileId } : {}),
-      });
+      for (const metaKey of metaKeys) {
+        const meta = getModMetadata(metaKey);
+        mods.push({
+          fileName: basename(metaKey),
+          enabled: entry.enabled,
+          priority: position,
+          ...(meta?.gameBananaId !== undefined ? { gameBananaId: meta.gameBananaId } : {}),
+          ...(meta?.gameBananaFileId !== undefined ? { gameBananaFileId: meta.gameBananaFileId } : {}),
+          ...(meta?.sha256 ? { sha256: meta.sha256.toLowerCase() } : {}),
+        });
+      }
     }
     const name = uniqueName(profile.name, takenNames);
     takenNames.push(name);

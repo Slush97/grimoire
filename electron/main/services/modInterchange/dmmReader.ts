@@ -20,6 +20,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import { existsSync, promises as fs } from 'fs';
 
 import { getAddonFolderPaths, getAddonsPath, getDisabledPath } from '../deadlock';
+import { hashFileSha256 } from '../metadata';
 import {
   composeDmmAdoptionPlan,
   dmmIdFromVpkName,
@@ -208,13 +209,21 @@ async function vpksUnder(dir: string): Promise<string[]> {
   return found.sort();
 }
 
-/** Resolve one recorded file name for a planned entry. */
+const PAK_SLOT_RE = /^pak\d+_dir\.vpk$/i;
+
+/** Resolve one recorded file name for a planned entry. A `pakNN_dir.vpk` slot
+ *  name only means something in the folder DMM recorded it for: every folder
+ *  (shard, profile) has its own pak01, so it is never looked up elsewhere. */
 async function locateFile(
   name: string,
   entry: DmmAdoptionEntry,
   baseDir: string
 ): Promise<string | null> {
   if (isAbsolute(name)) return existsSync(name) ? name : null;
+  if (PAK_SLOT_RE.test(name)) {
+    const slot = join(entry.enabled ? dmmShardDir(baseDir, entry.shard) : baseDir, name);
+    return existsSync(slot) ? slot : null;
+  }
   const candidates = [
     entry.enabled ? join(dmmShardDir(baseDir, entry.shard), name) : null,
     join(baseDir, name),
@@ -222,6 +231,9 @@ async function locateFile(
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;
   }
+  // A parked `<dmmId>_<name>.vpk` is unique to its mod, so it may be found in
+  // a nested folder; anything else could belong to another profile.
+  if (dmmIdFromVpkName(name) !== entry.dmmId) return null;
   const subdirs = await fs.readdir(baseDir, { withFileTypes: true }).catch(() => []);
   for (const dirent of subdirs) {
     if (!dirent.isDirectory()) continue;
@@ -251,6 +263,9 @@ async function resolveFromStore(
 
 export interface DmmReadOptions extends DmmMigrationRequest {
   deadlockPath: string;
+  /** Read exactly this folder's `.dmm.json` (a known profile's own folder)
+   *  instead of searching for one. */
+  manifestDir?: string;
 }
 
 export interface DmmReadResult {
@@ -296,8 +311,15 @@ export async function readDmmLibrary(opts: DmmReadOptions): Promise<DmmReadResul
       preferredFolder = null;
     }
   }
-  const manifestHit = await findDmmManifest(searchDir, preferredFolder);
-  const baseDir = manifestHit?.dir ?? (preferredFolder ? join(searchDir, preferredFolder) : searchDir);
+  // A known profile reads only its own folder: falling back to another
+  // folder's manifest would hand this profile someone else's mods.
+  const manifestHit = opts.manifestDir
+    ? await manifestIn(opts.manifestDir)
+    : await findDmmManifest(searchDir, preferredFolder);
+  const baseDir =
+    opts.manifestDir ??
+    manifestHit?.dir ??
+    (preferredFolder ? join(searchDir, preferredFolder) : searchDir);
 
   const mode: DmmMigrationMode =
     resolve(baseDir) === resolve(grimoireAddons) ? 'in-place' : 'copy';
@@ -476,65 +498,125 @@ function readDmmCrosshairs(stateJson: string | null, document: InterchangeDocume
   if (document.crosshairs.length > 0) includeSection(document, 'crosshairs');
 }
 
+/** DMM names a profile folder `<profileId>_<sanitized name>` with a
+ *  `profile_<timestamp>_<random>` id. Recover a readable name from it. */
+export function dmmProfileNameFromFolder(folder: string): string {
+  const name = folder.replace(/^profile_\d+_[a-z0-9]+_/i, '').replace(/[-_]+/g, ' ').trim();
+  return name || folder;
+}
+
+interface DmmProfileSource {
+  id: string;
+  name: string;
+  manifestDir: string;
+}
+
+/** Without state.json (DMM uninstalled with its data, or a picked folder) the
+ *  profiles are still on disk: the folder itself, then every subfolder that
+ *  holds a `.dmm.json`. */
+async function discoverDmmProfiles(searchDir: string): Promise<DmmProfileSource[]> {
+  const found: DmmProfileSource[] = [];
+  if (existsSync(join(searchDir, DMM_MANIFEST_FILENAME))) {
+    found.push({ id: 'default', name: 'Default Profile', manifestDir: searchDir });
+  }
+  const subdirs = await fs.readdir(searchDir, { withFileTypes: true }).catch(() => []);
+  for (const dirent of subdirs) {
+    if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue;
+    const dir = join(searchDir, dirent.name);
+    if (!existsSync(join(dir, DMM_MANIFEST_FILENAME))) continue;
+    found.push({ id: `folder:${dirent.name}`, name: dmmProfileNameFromFolder(dirent.name), manifestDir: dir });
+  }
+  return found;
+}
+
 /**
  * Read DMM completely: every profile (each is its own addons folder), the
  * union of their mods as the library, and the crosshairs. The library's
  * enabled/order is the active profile's state; mods only other profiles use
  * come after it, disabled. A profile that cannot be read costs only itself.
+ *
+ * DMM's default profile lives in the folders Grimoire scans, so its files are
+ * Grimoire mods the moment Grimoire looks. Every such file is therefore part
+ * of the library (as the mod's source, or as a kept variant), so the import
+ * consumes it instead of leaving a stray copy for the game to load.
  */
 export async function readDmmDocument(opts: DmmReadOptions): Promise<InterchangeDocument> {
   const statePath = opts.dmmStatePath ?? defaultDmmStatePath();
   const stateJson = await readTextOrNull(statePath);
-  let profiles: ReturnType<typeof parseDmmState>['profiles'] = [];
+  const addons = getAddonsPath(opts.deadlockPath);
+  let sources: DmmProfileSource[] = [];
   let activeId: string | undefined;
+  let fromState = false;
   if (stateJson && !opts.dmmAddonsDir) {
     try {
       const state = parseDmmState(stateJson);
-      profiles = state.profiles;
+      sources = state.profiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        manifestDir: profile.folderName ? join(addons, profile.folderName) : addons,
+      }));
       activeId = selectDmmProfile(state, opts.profileId)?.id;
+      fromState = sources.length > 0;
     } catch {
-      profiles = [];
+      sources = [];
     }
   }
+  if (sources.length === 0) {
+    sources = await discoverDmmProfiles(opts.dmmAddonsDir ?? addons);
+    activeId = sources[0]?.id;
+  }
 
-  if (profiles.length === 0) {
-    // A picked folder, or no usable state.json: one unnamed profile.
+  if (sources.length === 0) {
+    // Nothing on disk but maybe a state.json: one unnamed profile.
     const single = await readDmmLibrary(opts);
     readDmmCrosshairs(stateJson, single.document);
     return single.document;
   }
 
-  const ordered = [...profiles].sort(
+  const ordered = [...sources].sort(
     (a, b) => Number(b.id === activeId) - Number(a.id === activeId)
   );
   const document = newInterchangeDocument({
     manager: DMM_MANAGER_ID,
     profileName: ordered[0].name,
   });
-  const libraryKeys = new Set<string>();
+  const scanned = [...getAddonFolderPaths(opts.deadlockPath), getDisabledPath(opts.deadlockPath)].map(
+    (dir) => resolve(dir).toLowerCase()
+  );
+  const inGrimoireScan = (path: string) => scanned.includes(resolve(dirname(path)).toLowerCase());
+  const library = new Map<string, InterchangeMod>();
   const warnings = new Set<string>();
-  for (const profile of ordered) {
-    const isActive = profile.id === activeId;
+  for (const source of ordered) {
+    const isActive = source.id === activeId;
     let read: DmmReadResult;
     try {
-      read = await readDmmLibrary({ ...opts, profileId: profile.id, profileName: profile.name });
+      read = await readDmmLibrary({
+        ...opts,
+        profileId: fromState ? source.id : undefined,
+        profileName: source.name,
+        manifestDir: source.manifestDir,
+      });
     } catch (err) {
       document.warnings.push(
-        `Profile ${profile.name} could not be read: ${
+        `Profile ${source.name} could not be read: ${
           err instanceof Error ? err.message.split('\n')[0] : String(err)
         }`
       );
       continue;
     }
-    for (const w of read.document.warnings) warnings.add(isActive ? w : `${profile.name}: ${w}`);
+    for (const w of read.document.warnings) warnings.add(isActive ? w : `${source.name}: ${w}`);
     for (const mod of read.document.mods) {
-      if (libraryKeys.has(mod.key)) continue;
-      libraryKeys.add(mod.key);
-      document.mods.push({ ...mod, enabled: isActive ? mod.enabled : false });
+      const existing = library.get(mod.key);
+      if (!existing) {
+        library.set(mod.key, { ...mod, enabled: isActive ? mod.enabled : false, files: [...mod.files] });
+        document.mods.push(library.get(mod.key)!);
+        continue;
+      }
+      await mergeScannedFiles(existing, mod, inGrimoireScan);
     }
     document.profiles.push({
-      key: `profile:${profile.id}`,
-      name: profile.name,
+      key: `profile:${source.id}`,
+      name: source.name,
       active: isActive,
       description: null,
       mods: read.document.mods.map((mod) => ({
@@ -553,4 +635,38 @@ export async function readDmmDocument(opts: DmmReadOptions): Promise<Interchange
   includeSection(document, 'profiles');
   readDmmCrosshairs(stateJson, document);
   return document;
+}
+
+/** Another profile's copy of a library mod. When that copy sits where
+ *  Grimoire scans, it must be consumed by the import: an identical copy
+ *  becomes the source (so it is adopted, not left behind), a different one is
+ *  kept as an unselected variant of the same mod. */
+async function mergeScannedFiles(
+  library: InterchangeMod,
+  other: InterchangeMod,
+  inGrimoireScan: (path: string) => boolean
+): Promise<void> {
+  const known = new Set(library.files.map((f) => resolve(f.path).toLowerCase()));
+  for (const file of other.files) {
+    if (!inGrimoireScan(file.path) || known.has(resolve(file.path).toLowerCase())) continue;
+    const hash = await hashFileSha256(file.path).catch(() => null);
+    if (!hash) continue;
+    let replaced = false;
+    for (const current of library.files) {
+      if (inGrimoireScan(current.path)) continue;
+      const currentHash = await hashFileSha256(current.path).catch(() => null);
+      if (currentHash && currentHash.toLowerCase() === hash.toLowerCase()) {
+        current.path = file.path;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      const taken = new Set(library.files.map((f) => f.name.toLowerCase()));
+      let name = file.name;
+      for (let n = 2; taken.has(name.toLowerCase()); n++) name = file.name.replace(/(_dir)?\.vpk$/i, `_${n}$1.vpk`);
+      library.files.push({ ...file, name, selected: false });
+    }
+    known.add(resolve(file.path).toLowerCase());
+  }
 }
