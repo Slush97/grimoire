@@ -66,6 +66,41 @@ describe('decideFileDownload', () => {
   const resolved = classifyModFiles(QOL, qolFiles, qolInstall);
   const unmatched = classifyModFiles(QOL, qolFiles, unmatchedInstall);
 
+  it.each([
+    { archived: true, descriptions: true },
+    { archived: true, descriptions: false },
+    { archived: false, descriptions: true },
+    { archived: false, descriptions: false },
+  ])('preserves a red variant when only blue remains: %j', ({ archived, descriptions }) => {
+    const installed = [vpk('red', 10, {
+      sourceFileName: 'mina_red_v1',
+      fileDescription: descriptions ? 'Mina 红色' : undefined,
+    })];
+    const files: UpdateFileRow[] = [{
+      id: 20, fileName: 'mina_v2_blue.zip', isArchived: false, dateAdded: 100_000,
+      description: descriptions ? 'Mina 蓝色' : undefined,
+    }];
+    if (archived) files.push({
+      id: 10, fileName: 'mina_red_v1.zip', isArchived: true, dateAdded: 1000,
+      description: installed[0].fileDescription,
+    });
+    const classification = classifyModFiles(QOL, files, installed);
+
+    expect(classification.states.get(10)).toEqual({ kind: archived ? 'archived' : 'needs-pick' });
+    expect(summarizeUpdateScope(classification).targets.size).toBe(0);
+    expect(resolveUpdateRun(classification, installed)).toEqual([
+      { modId: 'red', kind: archived ? 'skip' : 'needs-pick' },
+    ]);
+    expect(decideFileDownload(20, classification, installed)).toEqual({
+      kind: 'install', replacedModIds: [],
+    });
+    if (!archived) {
+      expect(decideFileDownload(20, classification, installed, { replaceFileId: 10 })).toEqual({
+        kind: 'replace', replacedModIds: ['red'],
+      });
+    }
+  });
+
   it('replaces only the stale file when its confident successor is picked', () => {
     expect(decideFileDownload(HOTFIX, resolved, qolInstall)).toEqual({ kind: 'update', replacedModIds: ['main'] });
   });

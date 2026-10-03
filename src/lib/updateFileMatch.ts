@@ -19,7 +19,7 @@ export interface InstalledUpdateEntry {
   sourceFileName?: string;
 }
 
-export type SuccessorEvidence = 'description' | 'name' | 'sole-current';
+export type SuccessorEvidence = 'description' | 'name';
 
 export type FileUpdateState =
   /** The installed file id is still a current (non-archived) row. */
@@ -103,10 +103,9 @@ interface Proposal extends Winner {
  * the outcome: when two stale files want the same successor the stronger match
  * wins and a tie leaves both unresolved.
  *
- * Only after that, a stale file may fall back to the mod's sole current file
- * when it shares a filename word or the description with it, it is the only
- * unresolved stale file that does, the sole file is newer than its upload
- * session, and the user does not already have the sole file.
+ * A sole current upload must satisfy the same matching rules. Sharing one
+ * filename word is not enough: it may be the remaining color or optional
+ * variant, rather than a successor of the installed file.
  *
  * @param otherInstalledFileIds file ids installed outside `installed` (inside
  *  a merge, or standalone when classifying merge sources), which are never
@@ -172,20 +171,6 @@ export function classifyModFiles(
     }
   }
 
-  if (currentRows.length === 1) {
-    const sole = currentRows[0];
-    const soleTaken =
-      groups.has(sole.id) ||
-      !!otherInstalledFileIds?.has(sole.id) ||
-      [...winners.values()].some((winner) => winner.target.id === sole.id);
-    const fitting = soleTaken
-      ? []
-      : stale.filter((file) => !winners.has(file.fileId) && fitsSoleCurrent(file, sole));
-    if (fitting.length === 1) {
-      winners.set(fitting[0].fileId, { target: sole, via: 'sole-current', promote: false });
-    }
-  }
-
   for (const file of stale) {
     const winner = winners.get(file.fileId);
     states.set(
@@ -238,30 +223,6 @@ function proposeSuccessor(
     strength: byDescription && byName ? 2 : 1,
     nameScore: byName?.score ?? 0,
   };
-}
-
-/** Filename words an author uses to keep an alternate next to the main file. */
-const ALTERNATE_MARKERS = new Set(['legacy', 'old']);
-
-/** The sole-current fallback needs some shared identity: a filename word or
- *  the description. Without it an addon ("killstreak_fx") would "update" to
- *  the main file just because the main file is all that is left. A stale name
- *  that is the sole file's name plus qualifiers ("juno_paradox_no_physics",
- *  "..._widefov") or that carries an alternate marker ("_legacy") is a variant
- *  of the main file, not an old version of it. */
-function fitsSoleCurrent(file: StaleFile, sole: UpdateFileRow): boolean {
-  if (newerThanSession(file, [sole]).length === 0) return false;
-  const staleTokens = tokenizeFileName(file.fileName);
-  const soleTokens = tokenizeFileName(sole.fileName);
-  if ([...staleTokens].some((token) => ALTERNATE_MARKERS.has(token))) return false;
-  const qualifiesSole =
-    soleTokens.size > 0 &&
-    staleTokens.size > soleTokens.size &&
-    [...soleTokens].every((token) => staleTokens.has(token));
-  if (qualifiesSole) return false;
-  const description = normalizeText(file.description);
-  if (description && description === normalizeText(sole.description ?? '')) return true;
-  return [...staleTokens].some((token) => soleTokens.has(token));
 }
 
 /** Stronger claims sort first. 0 means indistinguishable. */

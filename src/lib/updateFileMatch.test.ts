@@ -235,11 +235,10 @@ describe('classifyModFiles on real GameBanana data', () => {
 
     it('does not match "Default" when it also labelled an alternative uploaded alongside', () => {
       // day_default2 and day_alt3 were uploaded 11 seconds apart, both "Default",
-      // so the description says nothing. Sunlock keeps one current file, and it
-      // shares the "day" name, so the sole-current fallback still applies.
+      // so the description says nothing. Keeping only the alt line current
+      // must not turn the default line into an automatic replacement.
       const state = stateOf(688340, files, [installedRow(688340, 1759220)], 1759220);
-      expect(state).toMatchObject({ kind: 'update', via: 'sole-current' });
-      expect(targetOf(state)).toBe(1834618);
+      expect(state).toEqual({ kind: 'archived' });
     });
 
     it('still updates the alt line to its successor', () => {
@@ -330,15 +329,12 @@ describe('classifyModFiles rules', () => {
     expect(states.get(4)).toEqual({ kind: 'needs-pick' });
   });
 
-  describe('sole current file fallback', () => {
-    it('maps a deleted file onto a sole current file that shares a name word', () => {
+  describe('sole current file safety', () => {
+    it('requires a pick when a deleted file only shares a name word', () => {
       const files = [file(2, 'galaxy_remastered.7z')];
 
       expect(stateOf(gb, files, [entry('old', 1, { sourceFileName: 'galaxy_rem_gold' })], 1)).toEqual({
-        kind: 'update',
-        target: files[0],
-        via: 'sole-current',
-        promote: false,
+        kind: 'needs-pick',
       });
     });
 
@@ -349,14 +345,14 @@ describe('classifyModFiles rules', () => {
       expect(targetOf(stateOf(gb, files, installed, 1))).toBe(2);
     });
 
-    it('applies to an archived renamed version bump uploaded after its session', () => {
-      // 571935: hoglin_piglin_1_2 was archived when hoglin_krill_ognb replaced it.
+    it('keeps an archived rename without sufficient matching evidence', () => {
+      // 571935: even a real rename cannot safely resolve from one shared word.
       const files = [
         file(1, 'hoglin_piglin_1_2.zip', { isArchived: true, dateAdded: 1_757_000_000 }),
         file(2, 'hoglin_krill_ognb.zip', { dateAdded: 1_771_000_000 }),
       ];
 
-      expect(targetOf(stateOf(gb, files, [entry('hoglin', 1, { sourceFileName: 'hoglin_piglin_1_2' })], 1))).toBe(2);
+      expect(stateOf(gb, files, [entry('hoglin', 1, { sourceFileName: 'hoglin_piglin_1_2' })], 1)).toEqual({ kind: 'archived' });
     });
 
     it('never maps a file that shares nothing with the sole file, archived or deleted', () => {

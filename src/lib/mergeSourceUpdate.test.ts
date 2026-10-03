@@ -50,12 +50,13 @@ describe('planMergeSourceUpdates', () => {
     });
   });
 
-  it('falls back to the single remaining current file that shares a name word', () => {
+  it('leaves a source unresolved when the sole current file only shares a name word', () => {
     const files = [file(1000, 'galaxy_rem_gold.zip', true), file(1500, 'galaxy_remastered.7z')];
 
     const plan = planMergeSourceUpdates([source()], new Map([[700, files]]));
 
-    expect(plan.resolved[0]).toMatchObject({ fileId: 1500, fileName: 'galaxy_remastered.7z' });
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved).toEqual([{ source: source(), reason: 'no-match' }]);
   });
 
   it('leaves a deleted source with nothing to go on unresolved', () => {
