@@ -27,13 +27,19 @@ export function gameCursorsDir(deadlockPath: string): string {
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
+// Only a missing file means a fresh start. Treating an unreadable one as empty
+// would forget `applied`, and the next write would back up the applied pack's
+// files as stock.
 async function loadState(): Promise<StoredState> {
+    let raw: string;
     try {
-        const parsed = JSON.parse(await fs.readFile(statePath(), 'utf-8')) as Partial<StoredState>;
-        return { packs: parsed.packs ?? [], activeId: parsed.activeId ?? null, applied: parsed.applied ?? {} };
-    } catch {
-        return { packs: [], activeId: null, applied: {} };
+        raw = await fs.readFile(statePath(), 'utf-8');
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { packs: [], activeId: null, applied: {} };
+        throw err;
     }
+    const parsed = JSON.parse(raw) as Partial<StoredState>;
+    return { packs: parsed.packs ?? [], activeId: parsed.activeId ?? null, applied: parsed.applied ?? {} };
 }
 
 async function saveState(state: StoredState): Promise<void> {
@@ -74,23 +80,28 @@ async function refreshStockBackup(dir: string, state: StoredState): Promise<void
     }
 }
 
+/**
+ * The saved `applied` record must cover every pack file on disk at every point,
+ * or refreshStockBackup would mistake one for stock after a failed write. So
+ * the new pack is read in full first, the old one is restored while the old
+ * record still stands, and the new record is saved before any of its files land.
+ */
 async function writeActive(dir: string, state: StoredState, pack: CursorPack | null): Promise<void> {
+    const incoming = new Map<string, Buffer>();
+    if (pack) {
+        for (const name of pack.files) incoming.set(name, await fs.readFile(join(packDir(pack.id), name)));
+    }
+
     for (const name of Object.keys(state.applied)) {
         const stock = join(stockDir(), name);
         if (existsSync(stock)) await fs.copyFile(stock, join(dir, name));
         else await fs.rm(join(dir, name), { force: true });
     }
-    state.applied = {};
-    state.activeId = null;
-    if (pack) {
-        for (const name of pack.files) {
-            const bytes = await fs.readFile(join(packDir(pack.id), name));
-            await fs.writeFile(join(dir, name), bytes);
-            state.applied[name] = sha256(bytes);
-        }
-        state.activeId = pack.id;
-    }
+
+    state.applied = Object.fromEntries([...incoming].map(([name, bytes]) => [name, sha256(bytes)]));
+    state.activeId = pack?.id ?? null;
     await saveState(state);
+    for (const [name, bytes] of incoming) await fs.writeFile(join(dir, name), bytes);
 }
 
 export function getCursorPacks(): Promise<CursorPacksState> {
@@ -113,9 +124,16 @@ export function deleteCursorPack(deadlockPath: string, id: string): Promise<Curs
     return exclusive(async () => {
         const state = await loadState();
         if (state.activeId === id) {
-            const dir = await requireCursorsDir(deadlockPath);
-            await refreshStockBackup(dir, state);
-            await writeActive(dir, state, null);
+            // A missing folder (Deadlock moved or uninstalled) leaves nothing
+            // to restore, and must not block removing the pack.
+            const dir = gameCursorsDir(deadlockPath);
+            if (existsSync(dir)) {
+                await refreshStockBackup(dir, state);
+                await writeActive(dir, state, null);
+            } else {
+                state.applied = {};
+                state.activeId = null;
+            }
         }
         state.packs = state.packs.filter((p) => p.id !== id);
         await saveState(state);

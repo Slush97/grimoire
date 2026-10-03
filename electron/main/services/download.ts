@@ -6,7 +6,7 @@ import { BrowserWindow } from 'electron';
 import { assertVpkSafety } from './modSafety';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, type ExtractedVpk } from './extract';
-import { installCursorArchive, setActiveCursorPack, type CursorPackSource } from './cursorPacks';
+import { getCursorPacks, installCursorArchive, setActiveCursorPack, type CursorPackSource } from './cursorPacks';
 import { buildVpkIndexBySize } from './vpkVariantIndex';
 import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
@@ -689,8 +689,9 @@ interface RenamedVpk {
 /**
  * Cursor mods ship loose BMPs instead of a VPK (see cursorFiles.ts), so an
  * archive with no VPK gets a second look for cursor sets. Applied right away
- * only when downloads auto-enable, like any other mod. True when the archive
- * was a cursor mod.
+ * only when downloads auto-enable, like any other mod, except that reinstalling
+ * the active pack always reapplies it so the game gets the new files. True
+ * when the archive was a cursor mod.
  */
 async function installAsCursorMod(
     deadlockPath: string,
@@ -700,8 +701,14 @@ async function installAsCursorMod(
 ): Promise<boolean> {
     const packs = await installCursorArchive(archivePath, workDir, source);
     if (packs.length === 0) return false;
-    if (loadSettings().autoEnableDownloads === true) {
-        await setActiveCursorPack(deadlockPath, packs[0].id);
+    const { activeId } = await getCursorPacks();
+    const target = packs.find((p) => p.id === activeId)
+        ?? (loadSettings().autoEnableDownloads === true ? packs[0] : undefined);
+    if (target) {
+        // The pack is installed either way; failing to apply it (e.g. the game's
+        // cursor folder is missing) must not report the download as failed.
+        await setActiveCursorPack(deadlockPath, target.id).catch((err) =>
+            console.error('[downloadMod] Installed cursor pack could not be applied:', err));
     }
     return true;
 }

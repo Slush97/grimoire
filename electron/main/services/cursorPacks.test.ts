@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import AdmZip from 'adm-zip';
@@ -135,6 +135,35 @@ describe('cursor packs', () => {
         const stock = await getCursorPreview(deadlockPath, null);
         expect(Object.keys(stock)).toEqual(['cursor.bmp', 'cursor_ping.bmp']);
         expect(Buffer.from(stock['cursor.bmp'].split(',')[1], 'base64').toString()).toBe('BM-stock');
+    });
+
+    it('a switch that fails partway leaves the stock backup intact', async () => {
+        const [a] = await install({ 'cursor.bmp': 'BM-a' }, 10);
+        const [b] = await install({ 'cursor.bmp': 'BM-b', 'cursor_ping.bmp': 'BM-b-ping' }, 11);
+        await setActiveCursorPack(deadlockPath, a.id);
+        rmSync(join(harness.userData, 'cursor-packs', 'packs', b.id, 'cursor_ping.bmp'));
+
+        await expect(setActiveCursorPack(deadlockPath, b.id)).rejects.toThrow();
+        expect(read('cursor.bmp')).toBe('BM-a');
+        await setActiveCursorPack(deadlockPath, null);
+        expect(read('cursor.bmp')).toBe('BM-stock');
+    });
+
+    it('refuses to touch the game folder when its state file is unreadable', async () => {
+        const [pack] = await install({ 'cursor.bmp': 'BM-kitty' });
+        await setActiveCursorPack(deadlockPath, pack.id);
+        writeFileSync(join(harness.userData, 'cursor-packs', 'state.json'), '{ not json');
+
+        await expect(setActiveCursorPack(deadlockPath, null)).rejects.toThrow();
+        expect(readFileSync(join(harness.userData, 'cursor-packs', 'stock', 'cursor.bmp'), 'utf8')).toBe('BM-stock');
+    });
+
+    it('deletes the active pack even when the game folder is gone', async () => {
+        const [pack] = await install({ 'cursor.bmp': 'BM-kitty' });
+        await setActiveCursorPack(deadlockPath, pack.id);
+        rmSync(cursors, { recursive: true });
+
+        expect(await deleteCursorPack(deadlockPath, pack.id)).toEqual({ packs: [], activeId: null });
     });
 
     it('installs sibling folders as separate variants', async () => {
