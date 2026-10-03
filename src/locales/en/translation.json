@@ -2130,6 +2130,24 @@
       "unfavorite": "Unfavorite",
       "lockerSections": "Locker sections",
       "hero3dModel": "{{hero}} 3D model"
+    },
+    "cursors": {
+      "tab": "Cursors",
+      "default": "Default",
+      "defaultSubtitle": "Deadlock's own cursors",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files",
+      "import": "Import",
+      "importTitle": "Import a cursor mod",
+      "importFilter": "Cursor images and archives",
+      "imported": "Cursor imported and applied. Restart Deadlock if it's running.",
+      "applied": "{{name}} applied. Restart Deadlock if it's running.",
+      "restored": "Default cursors restored. Restart Deadlock if it's running.",
+      "find": "Find cursors in Browse",
+      "empty": "Cursor mods swap the game's mouse pointer. Download one from Browse or import its BMP files, then pick it here.",
+      "deleteNamed": "Delete {{name}}",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteMessage": "This removes the cursor pack from Grimoire. If it is the active one, the default cursors come back."
     }
   },
   "profiles": {

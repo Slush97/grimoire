@@ -84,6 +84,7 @@ import {
 } from '../lib/vpkRestore';
 import { findReplacementTargetIdsAfterInstall } from '../lib/replacementCleanup';
 import { showToast } from '../stores/toastStore';
+import { useCursorPackStore } from '../stores/cursorPackStore';
 import { BrowseArtistBanner } from '../components/browse/BrowseArtistBanner';
 import { MemoizedModCard, ModCardSkeleton } from '../components/browse/BrowseModCard';
 import {
@@ -407,6 +408,8 @@ export default function Browse() {
   const toggleMod = useAppStore((s) => s.toggleMod);
   const setModPriorityFolder = useAppStore((s) => s.setModPriorityFolder);
   const installedMods = useAppStore((s) => s.mods);
+  const cursorPacks = useCursorPackStore((s) => s.packs);
+  const loadCursorPacks = useCursorPackStore((s) => s.load);
   // Absorbed merge sources and Locker artifacts are not installs of their own:
   // update state and replacements run over the same visible set as Installed.
   const visibleMods = useMemo(() => visibleInstalledMods(installedMods), [installedMods]);
@@ -1587,12 +1590,17 @@ export default function Browse() {
       // an open details overlay would otherwise keep offering "Install" for a
       // mod that is now on disk.
       loadMods();
+      void loadCursorPacks();
     });
 
     return () => {
       completeUnsub();
     };
-  }, [loadMods]);
+  }, [loadMods, loadCursorPacks]);
+
+  useEffect(() => {
+    void loadCursorPacks();
+  }, [loadCursorPacks]);
 
   // Infinite scroll observer
   // Infinite scroll observer
@@ -2023,8 +2031,12 @@ export default function Browse() {
         ids.add(mod.gameBananaId);
       }
     }
+    // Cursor mods install as packs outside the VPK list.
+    for (const pack of cursorPacks) {
+      if (typeof pack.gameBananaId === 'number') ids.add(pack.gameBananaId);
+    }
     return ids;
-  }, [installedMods]);
+  }, [installedMods, cursorPacks]);
 
   // Per-card lookup so each ModCard knows the local mod's id + enabled state.
   // Drives the inline "Enable" affordance: once a download finishes, the
