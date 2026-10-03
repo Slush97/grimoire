@@ -166,6 +166,20 @@ describe('rigged preview physics bundle', () => {
     expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
   });
 
+  it('records a clipless rigged export once and skips re-exporting it', async () => {
+    const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, animations: [] }).padEnd(48, ' '));
+    const glb = Buffer.alloc(20 + json.length);
+    glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8);
+    glb.writeUInt32LE(json.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); json.copy(glb, 20);
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), glb));
+    expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect(h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel')).toHaveLength(0);
+    const spawns = h.run.mock.calls.length + h.stdout.mock.calls.length;
+    expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect(h.run.mock.calls.length + h.stdout.mock.calls.length).toBe(spawns);
+  });
+
   it('preserves a current rigged-only cache when sweeping old static entries', async () => {
     const info = await exportRiggedHeroPose(game(), 'Yamato');
     await sweepHeroPoseCache();

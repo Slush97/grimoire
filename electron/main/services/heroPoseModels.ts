@@ -347,6 +347,39 @@ function riggedVersionFile(key: string): string {
     return join(modelDir(key), RIGGED_VERSION_FILENAME);
 }
 
+// Some skins list clips that the exporter then drops, leaving a rigged GLB with
+// no animation. The viewer can only discover that after a full GLB load, so
+// record it once and let the preview go straight to the static pose.
+const RIGGED_NO_CLIPS_FILENAME = '.rigged-no-clips';
+
+function riggedNoClipsFile(key: string): string {
+    return join(modelDir(key), RIGGED_NO_CLIPS_FILENAME);
+}
+
+async function hasNoRiggedClips(key: string): Promise<boolean> {
+    const marker = await fs.readFile(riggedNoClipsFile(key), 'utf8').catch(() => '');
+    return marker.trim() === RIGGED_CACHE_VERSION;
+}
+
+/** Animation count from a GLB's JSON chunk, without reading the binary chunk.
+ *  Null when the file is not a readable GLB, so only a proven zero is recorded. */
+async function glbAnimationCount(file: string): Promise<number | null> {
+    const handle = await fs.open(file, 'r');
+    try {
+        const header = Buffer.alloc(20);
+        const { bytesRead } = await handle.read(header, 0, 20, 0);
+        if (bytesRead < 20 || header.readUInt32LE(0) !== 0x46546c67 || header.readUInt32LE(16) !== 0x4e4f534a) return null;
+        const json = Buffer.alloc(header.readUInt32LE(12));
+        await handle.read(json, 0, json.length, 20);
+        const parsed = JSON.parse(json.toString('utf8')) as { animations?: unknown[] };
+        return Array.isArray(parsed.animations) ? parsed.animations.length : 0;
+    } catch {
+        return null;
+    } finally {
+        await handle.close();
+    }
+}
+
 /**
  * Curated per-hero ambient idle effect (`.vpcf_c`), keyed by display name. The
  * effects-preview axis is a hand-validated roster, NOT auto-discovered (the raw
@@ -778,6 +811,7 @@ export async function getHeroPoseInfo(
 
 async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
     try {
+        if (await hasNoRiggedClips(key)) return { hasModel: false, mtimeMs: null, key };
         const stat = await fs.stat(riggedModelFile(key));
         const version = await fs.readFile(riggedVersionFile(key), 'utf8').catch(() => '');
         if (version.trim() !== RIGGED_CACHE_VERSION) {
@@ -940,6 +974,8 @@ export async function exportRiggedHeroPose(
     const requestKey = poseKey(heroName, normalized);
     const existing = inFlightRiggedExports.get(requestKey);
     if (existing) return existing;
+    const cachedKey = await resolvePoseKey(deadlockPath, heroName, normalized);
+    if (await hasNoRiggedClips(cachedKey)) return { hasModel: false, mtimeMs: null, key: cachedKey };
 
     const work = runRiggedHeroExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
     inFlightRiggedExports.set(requestKey, work);
@@ -1020,6 +1056,11 @@ async function runRiggedHeroExportForSources(
                     '--out',
                     out,
                 ]);
+                if (await glbAnimationCount(out) === 0) {
+                    await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
+                    return { hasModel: false, mtimeMs: null, key };
+                }
+                await fs.rm(riggedNoClipsFile(key), { force: true });
                 let cloth: unknown = null;
                 try {
                     cloth = JSON.parse(await runVpkmergeStdout([
@@ -1046,6 +1087,7 @@ async function runRiggedHeroExportForSources(
             }
         }
         if (listedAny && !foundUsableClip) {
+            await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
             return { hasModel: false, mtimeMs: null, key };
         }
         throw lastError instanceof Error
