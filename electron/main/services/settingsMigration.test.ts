@@ -107,18 +107,37 @@ describe('loadSettings hidden mod normalization', () => {
       settingsPath(),
       JSON.stringify({
         hiddenMods: [
-          { id: 723290, name: ' Kitty Paw Cursor ' },
-          { id: 0, name: 'Zero' },
-          { id: '5', name: 'String id' },
-          { id: 723290, name: 'Kitty Paw Cursor v2' },
-          { id: 11, name: 'Other mod' },
+          { id: 723290, name: ' Kitty Paw Cursor ', section: 'Mod' },
+          { id: 0, name: 'Zero', section: 'Mod' },
+          { id: '5', name: 'String id', section: 'Mod' },
+          { id: 723290, name: 'Kitty Paw Cursor v2', section: 'Mod' },
+          { id: 12, name: 'No section' },
+          { id: 13, name: 'Unknown section', section: 'Tool' },
+          { id: 11, name: 'Other mod', section: 'Mod' },
         ],
       })
     );
 
     expect(loadSettings().hiddenMods).toEqual([
-      { id: 723290, name: 'Kitty Paw Cursor v2' },
-      { id: 11, name: 'Other mod' },
+      { id: 723290, name: 'Kitty Paw Cursor v2', section: 'Mod' },
+      { id: 11, name: 'Other mod', section: 'Mod' },
+    ]);
+  });
+
+  it('keeps the same id hidden in different sections apart', () => {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hiddenMods: [
+          { id: 95100, name: 'A sound', section: 'Sound' },
+          { id: 95100, name: 'A wip', section: 'Wip' },
+        ],
+      })
+    );
+
+    expect(loadSettings().hiddenMods).toEqual([
+      { id: 95100, name: 'A sound', section: 'Sound' },
+      { id: 95100, name: 'A wip', section: 'Wip' },
     ]);
   });
 });

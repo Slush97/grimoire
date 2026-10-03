@@ -65,7 +65,9 @@ export default function PrivacySection() {
     if (!settings) return;
     await saveSettings({
       ...settings,
-      hiddenMods: (settings.hiddenMods ?? []).filter((entry) => entry.id !== mod.id),
+      hiddenMods: (settings.hiddenMods ?? []).filter(
+        (entry) => entry.id !== mod.id || entry.section !== mod.section
+      ),
     });
     showToast(t('hiddenMods.shownToast', { name: mod.name }), { tone: 'success' });
   };

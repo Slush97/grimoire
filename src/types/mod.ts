@@ -1069,11 +1069,14 @@ export interface HiddenCreator {
   name: string;
 }
 
-/** A single GameBanana submission the user has hidden from Browse. Same shape
- *  as HiddenCreator: the id is the identity, the name only labels Settings. */
+/** A single GameBanana submission the user has hidden from Browse. GameBanana
+ *  numbers Mods, Sounds and WiPs separately, so section + id is the identity;
+ *  the name only labels Settings. */
 export interface HiddenMod {
   id: number;
   name: string;
+  /** GameBanana model name: "Mod", "Sound" or "Wip". */
+  section: string;
 }
 
 export interface AppSettings {

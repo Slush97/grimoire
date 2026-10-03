@@ -8,7 +8,11 @@ import { Button, ModalHeader } from './common/ui';
 interface HiddenEntry {
   id: number;
   name: string;
+  /** Hidden mods only: ids repeat across GameBanana sections. */
+  section?: string;
 }
+
+const entryKey = (entry: HiddenEntry) => `${entry.section ?? ''}:${entry.id}`;
 
 interface HiddenListCopy {
   emptyTitle: string;
@@ -28,7 +32,7 @@ interface HiddenListProps<T extends HiddenEntry> {
  *  dialogs. Keeping removal in one component prevents the entry points from
  *  drifting in behavior or accessibility. */
 function HiddenList<T extends HiddenEntry>({ entries, onRemove, copy, className = '' }: HiddenListProps<T>) {
-  const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const sortedEntries = useMemo(
     () => [...entries].sort((a, b) => a.name.localeCompare(b.name)),
     [entries]
@@ -48,7 +52,7 @@ function HiddenList<T extends HiddenEntry>({ entries, onRemove, copy, className 
     <div className={`space-y-2 ${className}`}>
       {sortedEntries.map((entry) => (
         <div
-          key={entry.id}
+          key={entryKey(entry)}
           className="flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/45 px-3 py-2.5"
         >
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent/10 font-semibold uppercase text-accent">
@@ -63,14 +67,14 @@ function HiddenList<T extends HiddenEntry>({ entries, onRemove, copy, className 
             variant="secondary"
             size="sm"
             icon={Eye}
-            isLoading={pendingId === entry.id}
-            disabled={pendingId !== null}
+            isLoading={pendingKey === entryKey(entry)}
+            disabled={pendingKey !== null}
             onClick={async () => {
-              setPendingId(entry.id);
+              setPendingKey(entryKey(entry));
               try {
                 await onRemove(entry);
               } finally {
-                setPendingId(null);
+                setPendingKey(null);
               }
             }}
           >
