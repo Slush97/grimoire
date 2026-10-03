@@ -643,6 +643,11 @@ interface ClothRuntime {
   simulationSteps: number;
   recoveryCount: number;
   teleportDistance: number;
+  /** Scene depth of each node bone; bones are not reparented during a runtime. */
+  boneDepth: Map<THREE.Object3D, number>;
+  /** Every node bone and its ancestors auto-update their matrices, so the
+   *  incremental world-matrix paths are exact. */
+  fastBoneWrites: boolean;
 }
 
 export interface ClothSimulationCoverage {
@@ -769,6 +774,78 @@ function writeBonePosition(root: THREE.Object3D, rt: ClothRuntime, bone: THREE.B
 
 function writeBoneQuaternion(root: THREE.Object3D, rt: ClothRuntime, bone: THREE.Bone, q: THREE.Quaternion): void {
   setBoneWorldQuaternion(bone, modelToWorldQuat(root, rt, q));
+}
+
+const _writeWorld = new THREE.Vector3();
+const _writeInverse = new THREE.Matrix4();
+const _writeWorldQuat = new THREE.Quaternion();
+const _writeParentQuat = new THREE.Quaternion();
+const _writeModelQuat = new THREE.Quaternion();
+const _decomposePos = new THREE.Vector3();
+const _decomposeScale = new THREE.Vector3();
+
+// Same arithmetic as setBoneWorldPosition/setBoneWorldQuaternion, without the
+// per-write subtree recursion. Writes run parent-first, so a parent written
+// earlier in the same pass (in `fresh`) already reflects every ancestor write;
+// any other parent gets the same full ancestor walk. The trailing
+// root.updateWorldMatrix(true, true) refreshes the rest of the tree.
+function freshParent(bone: THREE.Bone, fresh: Set<THREE.Object3D>): THREE.Object3D | null {
+  const parent = bone.parent;
+  if (parent && !fresh.has(parent)) parent.updateWorldMatrix(true, false);
+  return parent;
+}
+
+function writeBonePositionFresh(
+  root: THREE.Object3D, rt: ClothRuntime, bone: THREE.Bone, pos: THREE.Vector3, fresh: Set<THREE.Object3D>,
+): void {
+  const local = _writeWorld.copy(pos).applyMatrix4(rt.modelToRoot).applyMatrix4(root.matrixWorld);
+  const parent = freshParent(bone, fresh);
+  if (parent) local.applyMatrix4(_writeInverse.copy(parent.matrixWorld).invert());
+  bone.position.copy(local);
+  bone.updateWorldMatrix(false, false);
+  fresh.add(bone);
+}
+
+function writeBoneQuaternionFresh(
+  rootQuat: THREE.Quaternion, rt: ClothRuntime, bone: THREE.Bone, q: THREE.Quaternion, fresh: Set<THREE.Object3D>,
+): void {
+  const world = _writeWorldQuat.copy(rootQuat).multiply(_writeModelQuat.copy(rt.modelToRootRot).multiply(q)).normalize();
+  const parent = freshParent(bone, fresh);
+  if (parent) parent.matrixWorld.decompose(_decomposePos, _writeParentQuat, _decomposeScale);
+  else _writeParentQuat.identity();
+  bone.quaternion.copy(_writeParentQuat.invert().multiply(world).normalize());
+  bone.updateWorldMatrix(false, false);
+  fresh.add(bone);
+}
+
+/** Memoized `start` or any ancestor satisfies `matches`. Valid while the
+ *  matched set only grows by objects that already have a matching ancestor. */
+function ancestorMatches(
+  start: THREE.Object3D | null, matches: (obj: THREE.Object3D) => boolean, memo: Map<THREE.Object3D, boolean>,
+): boolean {
+  const path: THREE.Object3D[] = [];
+  let result = false;
+  for (let obj = start; obj; obj = obj.parent) {
+    const known = memo.get(obj);
+    if (known !== undefined) {
+      result = known;
+      break;
+    }
+    path.push(obj);
+    if (matches(obj)) {
+      result = true;
+      break;
+    }
+  }
+  for (const obj of path) memo.set(obj, result);
+  return result;
+}
+
+function autoUpdatedChain(bone: THREE.Object3D): boolean {
+  for (let obj: THREE.Object3D | null = bone; obj; obj = obj.parent) {
+    if (!obj.matrixAutoUpdate || !obj.matrixWorldAutoUpdate) return false;
+  }
+  return true;
 }
 
 function canCollide(node: Pick<NodeRuntime, 'index' | 'collisionMask'>, rigid: ColliderFilterRuntime): boolean {
@@ -1120,6 +1197,8 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
     // Source units. Ordinary animation remains untouched; discontinuous body
     // motion spanning multiple rest-pose bounds starts a new drape.
     teleportDistance: Math.max(128, new THREE.Box3().setFromPoints(nodes.map((node) => vec3(node.initPos))).getSize(new THREE.Vector3()).length() * 4),
+    boneDepth: new Map(nodes.flatMap((node) => (node.bone ? [[node.bone, objectDepth(node.bone)] as const] : []))),
+    fastBoneWrites: nodes.every((node) => !node.bone || autoUpdatedChain(node.bone)),
   };
 }
 
@@ -1133,6 +1212,12 @@ function restoreAnimationPose(rt: ClothRuntime): void {
   rt.writtenBones.clear();
 }
 
+const _refreshRootInverse = new THREE.Matrix4();
+const _refreshRootQuat = new THREE.Quaternion();
+const _refreshTarget = new THREE.Vector3();
+const _refreshBoneQuat = new THREE.Quaternion();
+const _refreshRotation = new THREE.Quaternion();
+const _refreshRelative = new THREE.Quaternion();
 function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
   // Capture after the mixer update. Unkeyed channels must start the next update
   // from this clean pose, while body anchors remain owned by animation.
@@ -1149,6 +1234,10 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
     node.animationScale?.copy(node.bone.scale);
   }
   root.updateWorldMatrix(true, true);
+  // The full update above leaves every node bone's matrixWorld current, so the
+  // fast path reads it directly instead of re-walking ancestors per node.
+  const rootInverse = _refreshRootInverse.copy(root.matrixWorld).invert();
+  const rootInverseQuat = root.getWorldQuaternion(_refreshRootQuat).invert();
 
   for (const node of rt.nodes) {
     if (!node.bone) {
@@ -1156,8 +1245,16 @@ function refreshTargets(root: THREE.Object3D, rt: ClothRuntime): void {
       node.targetRot.copy(quat(node.initRot));
       continue;
     }
-    const target = worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3()));
-    const rotation = worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion()));
+    let target: THREE.Vector3;
+    let rotation: THREE.Quaternion;
+    if (rt.fastBoneWrites) {
+      target = _refreshTarget.setFromMatrixPosition(node.bone.matrixWorld).applyMatrix4(rootInverse).applyMatrix4(rt.rootToModel);
+      node.bone.matrixWorld.decompose(_decomposePos, _refreshBoneQuat, _decomposeScale);
+      rotation = _refreshRotation.copy(rt.rootToModelRot).multiply(_refreshRelative.copy(rootInverseQuat).multiply(_refreshBoneQuat)).normalize();
+    } else {
+      target = worldToModelPos(root, rt, node.bone.getWorldPosition(new THREE.Vector3()));
+      rotation = worldToModelQuat(root, rt, node.bone.getWorldQuaternion(new THREE.Quaternion()));
+    }
     if (!finiteVector(target) || !finiteRotation(rotation)) continue;
     if (rt.warmStarted && node.kinematic && target.distanceTo(node.target) > rt.teleportDistance) {
       resetRuntimeHistory(rt);
@@ -1241,6 +1338,7 @@ function warmStartRuntime(rt: ClothRuntime, substepDt: number): void {
   rt.warmStarted = true;
 }
 
+const _integrateVelocity = new THREE.Vector3();
 function integrate(rt: ClothRuntime, gravity: THREE.Vector3, dt: number): void {
   const dt2 = dt * dt;
   const lastDt = rt.lastSubstepDt;
@@ -1254,7 +1352,7 @@ function integrate(rt: ClothRuntime, gravity: THREE.Vector3, dt: number): void {
     const damping = node.integratorMode === 'unknown'
       ? Math.max(node.damping, MIN_VELOCITY_DAMPING)
       : Math.max(0, node.damping * dt);
-    const velocity = node.pos.clone().sub(node.prev).multiplyScalar(
+    const velocity = _integrateVelocity.copy(node.pos).sub(node.prev).multiplyScalar(
       verletVelocityScale(dt, lastDt, damping),
     );
     node.prev.copy(node.pos);
@@ -1294,6 +1392,7 @@ function solveGoalDampedNodes(rt: ClothRuntime): void {
   }
 }
 
+const _rodDelta = new THREE.Vector3();
 function solveFixedRods(rt: ClothRuntime): void {
   if (rt.model.rodBatches.length > 0) {
     for (const batch of rt.model.rodBatches) projectRodBatch(rt.nodes, batch);
@@ -1303,7 +1402,7 @@ function solveFixedRods(rt: ClothRuntime): void {
     const a = rt.nodes[rod.a];
     const b = rt.nodes[rod.b];
     if (!a || !b) continue;
-    const delta = b.pos.clone().sub(a.pos);
+    const delta = _rodDelta.copy(b.pos).sub(a.pos);
     const d = delta.length();
     if (d < 1e-6) continue;
     let wanted = d;
@@ -1396,6 +1495,7 @@ function solveRods(rt: ClothRuntime): void {
   for (const batch of rt.animatedRodBatches) projectRodBatch(rt.nodes, batch);
 }
 
+const _writeRootQuat = new THREE.Quaternion();
 function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
   recoverInvalidSolverState(rt);
   updateSolvedRotations(rt);
@@ -1425,31 +1525,41 @@ function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
 
   for (const [bone, transform] of fitWrites) rotationWrites.set(bone, transform.rotation);
 
+  // A bone added below already has a rotated ancestor, so growing the set
+  // during the loop cannot change any memoized answer.
+  const rotatedAncestorMemo = new Map<THREE.Object3D, boolean>();
+  const isRotatedBone = (obj: THREE.Object3D) => obj instanceof THREE.Bone && rotationWrites.has(obj);
   for (const node of rt.nodes) {
     if (!node.bone || rotationWrites.has(node.bone)) continue;
-    for (let parent = node.bone.parent; parent; parent = parent.parent) {
-      if (parent instanceof THREE.Bone && rotationWrites.has(parent)) {
-        rotationWrites.set(node.bone, node.targetRot.clone());
-        break;
-      }
+    if (ancestorMatches(node.bone.parent, isRotatedBone, rotatedAncestorMemo)) {
+      rotationWrites.set(node.bone, node.targetRot.clone());
     }
   }
-  for (const [bone, rot] of orderBonesParentFirst(rotationWrites.entries())) {
-    writeBoneQuaternion(root, rt, bone, rot);
-    rt.writtenBones.add(bone);
+  const depthOf = (bone: THREE.Object3D) => rt.boneDepth.get(bone) ?? objectDepth(bone);
+  const rotationOrder = [...rotationWrites.entries()].sort(([a], [b]) => depthOf(a) - depthOf(b));
+  if (rt.fastBoneWrites) {
+    const rootQuat = root.getWorldQuaternion(_writeRootQuat);
+    const fresh = new Set<THREE.Object3D>();
+    for (const [bone, rot] of rotationOrder) {
+      writeBoneQuaternionFresh(rootQuat, rt, bone, rot, fresh);
+      rt.writtenBones.add(bone);
+    }
+  } else {
+    for (const [bone, rot] of rotationOrder) {
+      writeBoneQuaternion(root, rt, bone, rot);
+      rt.writtenBones.add(bone);
+    }
   }
 
   const movedBones = new Set(rt.nodes.filter((node) => (!node.kinematic || node.generatedTarget) && node.bone).map((node) => node.bone));
   const positionWrites = new Map<THREE.Bone, THREE.Vector3>();
+  const ownerMemo = new Map<THREE.Object3D, boolean>();
+  const isSimulatedOwner = (obj: THREE.Object3D) => obj instanceof THREE.Bone && (rotationWrites.has(obj) || movedBones.has(obj));
   for (const node of rt.nodes) {
     if (!node.bone) continue;
-    if (node.kinematic && !node.generatedTarget) {
-      // A simulated ancestor must not carry an animation-owned attachment away
-      // from its sampled world position, even when that ancestor only translates.
-      let parent: THREE.Object3D | null = node.bone;
-      while (parent && !(parent instanceof THREE.Bone && (rotationWrites.has(parent) || movedBones.has(parent)))) parent = parent.parent;
-      if (!parent) continue;
-    }
+    // A simulated ancestor must not carry an animation-owned attachment away
+    // from its sampled world position, even when that ancestor only translates.
+    if (node.kinematic && !node.generatedTarget && !ancestorMatches(node.bone, isSimulatedOwner, ownerMemo)) continue;
     positionWrites.set(node.bone, node.pos.clone());
   }
 
@@ -1464,12 +1574,13 @@ function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
 
   for (const [bone, transform] of fitWrites) positionWrites.set(bone, transform.position);
 
-  [...positionWrites.entries()]
-    .sort(([a], [b]) => objectDepth(a) - objectDepth(b))
-    .forEach(([bone, pos]) => {
-      writeBonePosition(root, rt, bone, pos);
-      rt.writtenBones.add(bone);
-    });
+  const positionOrder = [...positionWrites.entries()].sort(([a], [b]) => depthOf(a) - depthOf(b));
+  const fresh = new Set<THREE.Object3D>();
+  for (const [bone, pos] of positionOrder) {
+    if (rt.fastBoneWrites) writeBonePositionFresh(root, rt, bone, pos, fresh);
+    else writeBonePosition(root, rt, bone, pos);
+    rt.writtenBones.add(bone);
+  }
 
   root.updateWorldMatrix(true, true);
 }
