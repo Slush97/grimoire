@@ -606,8 +606,23 @@ export interface SoundSwapInfo {
   pool: 'all' | 'collapse';
 }
 
+/** A game `.vdata_c` the mod ships that predates the game's copy (from
+ *  `vpkmerge vdata-check`). The mod replaces the whole file, so every game
+ *  field its copy lacks is deleted in game. */
+export interface OutdatedVdata {
+  /** VPK entry, e.g. `scripts/heroes.vdata_c`. */
+  entry: string;
+  /** Game fields the mod's copy lacks. */
+  missing: number;
+  /** Fields only the mod's copy has (the game dropped them since). */
+  extra: number;
+  /** First few missing key paths, shallowest first. */
+  sample: string[];
+}
+
 export interface Mod {
   safety?: import('./modSafety').ModSafetySnapshot;
+  outdatedVdata?: OutdatedVdata[];
   id: string;
   name: string;
   fileName: string;

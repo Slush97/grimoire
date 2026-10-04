@@ -853,6 +853,8 @@ export interface ElectronAPI {
     rescanModSafety: () => Promise<InstalledModSafety[]>;
     reviewModSafety: (id: string, fingerprint: string) => Promise<Mod>;
     onModSafetyChanged: (callback: () => void) => () => void;
+    /** Fires when the background outdated-vdata check flags a mod. */
+    onModVdataChecked: (callback: () => void) => () => void;
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;

@@ -185,6 +185,13 @@ export default function Layout() {
     return unsubscribe;
   }, []);
 
+  useEffect(
+    () => window.electronAPI.onModVdataChecked(() => {
+      void useAppStore.getState().loadMods({ force: true, silent: true });
+    }),
+    []
+  );
+
   // Surface GameBanana rate limiting app-wide. The heavy "Fix Unknown"
   // auto-detect is the usual trigger, but any tab can hit it, so the warning
   // lives here rather than inside one page.

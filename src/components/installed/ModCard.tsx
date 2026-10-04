@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { revealModInFolder } from '../../lib/api';
@@ -27,6 +27,7 @@ interface ModCardProps {
   mod: {
     safety?: Mod['safety'];
     safetyTarget?: Pick<Mod, 'id' | 'name' | 'safety'>;
+    outdatedVdata?: Mod['outdatedVdata'];
     id: string;
     name: string;
     fileName: string;
@@ -523,6 +524,23 @@ function EditableModTitle({
   );
 }
 
+function OutdatedVdataTag({ outdated, variant }: { outdated?: Mod['outdatedVdata']; variant: 'overlay' | 'inline' }) {
+  const { t } = useTranslation();
+  if (!outdated?.length) return null;
+  const title = outdated
+    .map((v) =>
+      v.missing > 0
+        ? t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') })
+        : t('installed.card.outdatedDataExtraTitle', { file: v.entry })
+    )
+    .join('\n\n');
+  return (
+    <Tag tone="warning" variant={variant} icon={FileWarning} title={title}>
+      {t('installed.card.outdatedData')}
+    </Tag>
+  );
+}
+
 function ModListRowContent({
   mod,
   taxonomy,
@@ -630,6 +648,7 @@ function ModListRowContent({
         />
         <div className="min-w-0">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
+          <OutdatedVdataTag outdated={mod.outdatedVdata} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
@@ -1391,6 +1410,7 @@ export function ModCard({
                   {t('installed.card.conflict')}
                 </Tag>
               )}
+              <OutdatedVdataTag outdated={mod.outdatedVdata} variant="overlay" />
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"

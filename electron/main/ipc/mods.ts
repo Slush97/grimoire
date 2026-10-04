@@ -1,5 +1,6 @@
 import { ipcMain, shell } from 'electron';
 import { modSafetySnapshot } from '../services/modSafety';
+import { checkOutdatedVdata, outdatedVdataSnapshot } from '../services/vdataCheck';
 import { importDisabledVpk } from '../services/importDisabledVpk';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
@@ -231,6 +232,7 @@ function enrichMod(mod: Mod): WireMod {
         return {
             ...mod,
             safety: modSafetySnapshot(mod.path),
+            outdatedVdata: outdatedVdataSnapshot(mod.path),
             // Use the stored mod name from GameBanana if available
             name: metadata.modName || mod.name,
             thumbnailUrl: metadata.thumbnailUrl,
@@ -268,7 +270,7 @@ function enrichMod(mod: Mod): WireMod {
     // No metadata row (a VPK dropped straight into addons): still file-tree tag
     // the hero so unknown skins get their Locker chip like downloaded mods.
     const { lockerHero, lockerHeroSource } = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
-    return { ...mod, safety: modSafetySnapshot(mod.path), isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
+    return { ...mod, safety: modSafetySnapshot(mod.path), outdatedVdata: outdatedVdataSnapshot(mod.path), isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
 /**
@@ -368,6 +370,7 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
         await parseVpkDirectoriesAsync(warmPaths);
     }
     const enriched = visible.map(enrichMod);
+    checkOutdatedVdata(deadlockPath, visible.map((m) => m.path));
     if (settings.verboseModTrace) {
         const hidden = mods.length - visible.length;
         // The renderer (Installed.tsx visibleMods) also hides disabled source

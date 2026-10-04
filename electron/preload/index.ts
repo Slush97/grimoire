@@ -129,6 +129,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('mod-safety-changed', listener);
         return () => ipcRenderer.removeListener('mod-safety-changed', listener);
     },
+    onModVdataChecked: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('mod-vdata-checked', listener);
+        return () => ipcRenderer.removeListener('mod-vdata-checked', listener);
+    },
     getMods: () => ipcRenderer.invoke('get-mods'),
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),

@@ -438,6 +438,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       mod={{
         ...entry.primary,
         safetyTarget,
+        outdatedVdata: entry.variants.find(v => v.outdatedVdata)?.outdatedVdata,
         // Group's overall enable state is "one or more files enabled", not
         // the primary's individual flag (matches sort + section choice).
         enabled: entry.enabledVariants.length > 0,
