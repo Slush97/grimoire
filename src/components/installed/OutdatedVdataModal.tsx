@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmModal } from '../common/PageComponents';
 import { Button } from '../common/ui';
+import ModThumbnail from '../ModThumbnail';
+import { inferHeroFromTitle } from '../../lib/lockerUtils';
+import { shouldBlurNsfw } from '../../lib/appSettings';
 import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
 
-const SAMPLE_PATHS = 3;
+/** `scripts/heroes.vdata_c` reads as `heroes.vdata`. */
+const vdataName = (entry: string) => entry.slice(entry.lastIndexOf('/') + 1).replace(/_c$/, '');
 
 interface OutdatedVdataModalProps {
   /** Enabled mods with `outdatedVdata`. */
@@ -18,6 +22,7 @@ interface OutdatedVdataModalProps {
 export function OutdatedVdataModal({ mods, open, onClose }: OutdatedVdataModalProps) {
   const { t } = useTranslation();
   const toggleMod = useAppStore((s) => s.toggleMod);
+  const hideNsfw = useAppStore((s) => shouldBlurNsfw(s.settings));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -42,24 +47,28 @@ export function OutdatedVdataModal({ mods, open, onClose }: OutdatedVdataModalPr
       onCancel={onClose}
     >
       <ul className="mt-4 space-y-2">
-        {mods.map((mod) => (
-          <li key={mod.id} className="flex items-start gap-3 rounded-sm border border-hl/10 bg-bg-tertiary px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-text-primary">{mod.name}</p>
-              {mod.outdatedVdata?.map((v) => (
-                <div key={v.entry} className="mt-0.5 text-xs text-text-secondary">
-                  <p>{t('installed.outdatedData.removes', { count: v.missing, file: v.entry })}</p>
-                  <p className="truncate font-mono text-text-muted" title={v.sample.join('\n')}>
-                    {v.sample.slice(0, SAMPLE_PATHS).join(', ')}
+        {mods.map((mod) => {
+          const hero = mod.sourceSection === 'Sound' && !mod.thumbnailUrl
+            ? mod.lockerHero ?? inferHeroFromTitle(mod.name) : undefined;
+          return (
+            <li key={mod.id} className="flex items-center gap-3 rounded-sm border border-border bg-bg-primary p-3">
+              <ModThumbnail src={mod.thumbnailUrl} alt="" nsfw={mod.nsfw} hideNsfw={hideNsfw}
+                heroPortrait={hero ?? undefined} mergedSources={mod.merged?.sources} forgeInstalled={!!mod.forgeInstall}
+                enableImageContextMenu={false} className="h-16 w-24 shrink-0 rounded-sm bg-bg-tertiary" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-mod-title text-sm text-text-primary">{mod.name}</p>
+                {mod.outdatedVdata?.map((v) => (
+                  <p key={v.entry} className="mt-1 text-xs text-text-secondary" title={v.sample.join('\n')}>
+                    {t('installed.outdatedData.removes', { count: v.missing, file: vdataName(v.entry) })}
                   </p>
-                </div>
-              ))}
-            </div>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void disable([mod.id])}>
-              {t('installed.outdatedData.disable')}
-            </Button>
-          </li>
-        ))}
+                ))}
+              </div>
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void disable([mod.id])}>
+                {t('installed.outdatedData.disable')}
+              </Button>
+            </li>
+          );
+        })}
       </ul>
     </ConfirmModal>
   );
