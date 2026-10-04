@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CursorPacksState } from '../types/electron';
+import type { CursorImageFile, CursorPacksState } from '../types/electron';
 
 // Cursor packs live outside the VPK mod list (loose BMPs the game loads via
 // SDL), so they get their own small store. Shared by the Locker's Cursor tab,
@@ -13,6 +13,7 @@ interface CursorPackStore extends CursorPacksState {
   setActive: (id: string | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
   importPaths: (paths: string[]) => Promise<void>;
+  create: (name: string, files: CursorImageFile[]) => Promise<void>;
 }
 
 export const useCursorPackStore = create<CursorPackStore>((set, get) => {
@@ -35,5 +36,6 @@ export const useCursorPackStore = create<CursorPackStore>((set, get) => {
     setActive: (id) => mutate(() => window.electronAPI.setActiveCursorPack(id)),
     remove: (id) => mutate(() => window.electronAPI.deleteCursorPack(id)),
     importPaths: (paths) => mutate(() => window.electronAPI.importCursorPack(paths)),
+    create: (name, files) => mutate(() => window.electronAPI.createCursorPack(name, files)),
   };
 });

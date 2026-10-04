@@ -2052,6 +2052,8 @@
       "imageLoadFailed": "That image could not be loaded. Try a different PNG or JPG.",
       "noCanvasContext": "Could not render the crop (no 2D canvas context).",
       "title": "Crop {{variant}} card",
+      "fitTitle": "Frame the {{variant}} image",
+      "fitInstructions": "Drag to move, scroll or use the slider to resize. Whatever the image doesn't cover stays transparent. The crosshair marks where clicks land: it finds the tip on its own, and a click moves it.",
       "resetZoom": "Reset zoom",
       "upscaleWarning": "Source is {{sourceWidth}} x {{sourceHeight}}, smaller than the {{targetWidth}} x {{targetHeight}} target, so it will be upscaled and may look soft.",
       "instructions": "Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's aspect so the result is not stretched.",
@@ -2237,7 +2239,27 @@
       "empty": "Cursor mods swap the game's mouse pointer. Download one from Browse or import its BMP files, then pick it here.",
       "deleteNamed": "Delete {{name}}",
       "deleteTitle": "Delete {{name}}?",
-      "deleteMessage": "This removes the cursor pack from Grimoire. If it is the active one, the default cursors come back."
+      "deleteMessage": "This removes the cursor pack from Grimoire. If it is the active one, the default cursors come back.",
+      "create": {
+        "open": "Create",
+        "title": "Create a cursor",
+        "subtitle": "Pick an image for each cursor you want to change. The rest stay as they are.",
+        "nameLabel": "Name",
+        "defaultName": "My cursor",
+        "pointer": "Pointer",
+        "ping": "Ping",
+        "shop": "Shop",
+        "commend": "Commend",
+        "chooseImage": "Choose an image for {{cursor}}",
+        "imageFilter": "Images",
+        "clear": "Clear {{cursor}}",
+        "hint": "Transparent PNGs work best. The tip of your pointer is found on its own, and you can move it while framing the image.",
+        "submit": "Create and apply",
+        "export": "Export",
+        "exportTitle": "Export {{name}}",
+        "exportFilter": "Zip archive",
+        "exported": "Exported to {{path}}"
+      }
     }
   },
   "profiles": {

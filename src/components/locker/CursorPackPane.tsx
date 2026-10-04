@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Check, Search, Trash2, Upload } from 'lucide-react';
+import { Check, ImagePlus, Search, Trash2, Upload } from 'lucide-react';
 import { Button, IconButton, Tag } from '../common/ui';
 import { ConfirmModal } from '../common/PageComponents';
 import { showOpenDialogMulti } from '../../lib/api';
@@ -9,6 +9,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useCursorPackStore } from '../../stores/cursorPackStore';
 import { showToast } from '../../stores/toastStore';
 import type { CursorPack, CursorPreview } from '../../types/electron';
+import CursorCreateModal from './CursorCreateModal';
 
 // Session cache: previews are read off disk once per pack install.
 const previewCache = new Map<string, CursorPreview>();
@@ -196,10 +197,11 @@ export default function CursorPackPane() {
   );
 }
 
-/** Header action for the Cursor tab: pick an archive or loose BMPs and apply them. */
-export function CursorImportButton() {
+/** Header actions for the Cursor tab: build a pack from images, or import an archive or loose BMPs. */
+export function CursorPaneActions() {
   const { t } = useTranslation();
   const { busy, importPaths } = useCursorPackStore();
+  const [creating, setCreating] = useState(false);
 
   const pick = async () => {
     const paths = await showOpenDialogMulti({
@@ -216,8 +218,14 @@ export function CursorImportButton() {
   };
 
   return (
-    <Button size="sm" icon={Upload} isLoading={busy} onClick={pick} className="ml-auto">
-      {t('locker.cursors.import')}
-    </Button>
+    <div className="ml-auto flex items-center gap-2 self-center">
+      <Button size="sm" variant="secondary" icon={ImagePlus} disabled={busy} onClick={() => setCreating(true)}>
+        {t('locker.cursors.create.open')}
+      </Button>
+      <Button size="sm" icon={Upload} isLoading={busy} onClick={pick}>
+        {t('locker.cursors.import')}
+      </Button>
+      {creating && <CursorCreateModal onClose={() => setCreating(false)} />}
+    </div>
   );
 }

@@ -12,7 +12,9 @@ vi.mock('../utils/paths', () => ({
 }));
 
 import {
+    createCursorPack,
     deleteCursorPack,
+    exportCursorZip,
     gameCursorsDir,
     getCursorPacks,
     getCursorPreview,
@@ -20,6 +22,7 @@ import {
     reconcileCursorPack,
     setActiveCursorPack,
 } from './cursorPacks';
+import { parseCursorRes } from './cursorFiles';
 
 let root: string;
 let deadlockPath: string;
@@ -164,6 +167,59 @@ describe('cursor packs', () => {
         rmSync(cursors, { recursive: true });
 
         expect(await deleteCursorPack(deadlockPath, pack.id)).toEqual({ packs: [], activeId: null });
+    });
+
+    const built = (fileName: string, content: string, hotspot = { x: 0, y: 0 }) => ({
+        fileName,
+        bytes: new Uint8Array(Buffer.from(content)),
+        hotspot,
+    });
+
+    it('creates a pack from built images, keeping only valid cursor files', async () => {
+        const [pack] = await createCursorPack(deadlockPath, 'Mine', [
+            built('Cursor.bmp', 'BM-mine'),
+            built('cursor_ping.bmp', 'not a bitmap'),
+            built('../cursor_shop.bmp', 'BM-escape'),
+            built('cursor.res', '"evil" {}'),
+        ]);
+        expect(pack.name).toBe('Mine');
+        expect(pack.files).toEqual(['cursor.bmp', 'cursor.res']);
+
+        await setActiveCursorPack(deadlockPath, pack.id);
+        expect(read('cursor.bmp')).toBe('BM-mine');
+        expect(read('cursor_ping.bmp')).toBe('BM-stock-ping');
+    });
+
+    it('writes the built hotspots into the stock cursor.res', async () => {
+        writeFileSync(
+            join(cursors, 'cursor.res'),
+            '"resource/cursor/cursor.res"\n{\n\tcursor_commend\n\t{\n\t\t"hotx" "22"\n\t\t"hoty" "2"\n\t}\n}\n'
+        );
+        const [pack] = await createCursorPack(deadlockPath, 'Mine', [built('cursor.bmp', 'BM-mine', { x: 9, y: 4 })]);
+        await setActiveCursorPack(deadlockPath, pack.id);
+
+        expect(parseCursorRes(read('cursor.res'))).toEqual(
+            new Map([
+                ['cursor_commend', { x: 22, y: 2 }],
+                ['cursor', { x: 9, y: 4 }],
+            ])
+        );
+        await setActiveCursorPack(deadlockPath, null);
+        expect(parseCursorRes(read('cursor.res')).has('cursor')).toBe(false);
+    });
+
+    it('exports built images as a zip that imports back as the same pack', async () => {
+        const dest = join(root, 'Mine.zip');
+        await exportCursorZip(deadlockPath, dest, [built('cursor.bmp', 'BM-mine'), built('notes.txt', 'BM-nope')]);
+        expect(new AdmZip(dest).getEntries().map((e) => e.entryName)).toEqual(['cursor.bmp', 'cursor.res']);
+
+        const [pack] = await installCursorArchive(dest, mkdtempSync(join(root, 'work-')), { name: 'Mine' });
+        expect(pack.files).toEqual(['cursor.bmp', 'cursor.res']);
+    });
+
+    it('creates nothing when no image is usable', async () => {
+        expect(await createCursorPack(deadlockPath, 'Mine', [built('cursor.bmp', '')])).toEqual([]);
+        expect((await getCursorPacks()).packs).toEqual([]);
     });
 
     it('installs sibling folders as separate variants', async () => {
