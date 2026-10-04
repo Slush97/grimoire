@@ -16,7 +16,8 @@ import {
   isMeaningfulMask,
   isTrueGlassMaterial,
   hasDynamicAlphaOverride,
-  glassTransmissionTexture,
+    glassTransmissionTexture,
+    applyGlassParameters,
   translucentAlphaTexture,
   staticOpacityScale,
   requiresVertexColors,
@@ -24,8 +25,11 @@ import {
   albedoCsb,
   detailLayer,
   highlightLayer,
+  citadelColorUniforms,
+  configureCitadelGlassPass,
 } from './source2NprMaterial';
 import { compileScalarExpr, peakScalar } from './dynamicScalar';
+import { source2TintPlan } from './source2ColorCorrection';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
 
@@ -229,6 +233,8 @@ export function buildDeadlockMaterial(
   const physical = needsPhysical(morphic, base);
   const clone = cloneOwned(base, physical);
   const phys = clone as THREE.MeshPhysicalMaterial;
+  const tintPlan = source2TintPlan(morphic, clone.color);
+  if (tintPlan.ownsExportedFactor) clone.color.setRGB(1, 1, 1);
   // requiresVertexColors checks F_VERTEX_COLOR / F_PAINT_VERTEX_COLORS. The vpkmerge
   // GLB exporter writes COLOR_n on a SUPERSET of those flags (also the tint-mask
   // bools), so vertexColors=true here always implies the geometry shipped a COLOR_0
@@ -266,10 +272,6 @@ export function buildDeadlockMaterial(
   if (backfaces) clone.side = THREE.DoubleSide;
 
   if (glass) {
-    // F_GLASS keeps the current treatment: transmission is for GLASS ONLY.
-    clone.roughness = Math.min(clone.roughness ?? 1, 0.18);
-    clone.metalness = Math.min(clone.metalness ?? 0, 0.05);
-    clone.envMapIntensity = Math.max(clone.envMapIntensity ?? 1, 1.35);
     // needsPhysical() returns true on the SAME isTrueGlassMaterial predicate as
     // `glass`, so the clone is always a MeshPhysicalMaterial here. Guard the
     // physical-only writes anyway so the invariant is explicit at the write site
@@ -277,11 +279,7 @@ export function buildDeadlockMaterial(
     // clone-class decision can never write undefined physical fields onto a
     // standard clone.
     if (phys.isMeshPhysicalMaterial) {
-      phys.transmission = Math.max(phys.transmission ?? 0, 0.85);
-      phys.thickness = Math.max(phys.thickness ?? 0, 0.12);
-      phys.ior = firstNumber(morphic, ['g_flIOR'], phys.ior ?? 1.5);
-      phys.clearcoat = Math.max(phys.clearcoat ?? 0, 0.45);
-      phys.clearcoatRoughness = Math.min(phys.clearcoatRoughness ?? 0.25, 0.18);
+      applyGlassParameters(phys, morphic);
       const transmissionMap = glassTransmissionTexture(morphic);
       phys.transmissionMap = transmissionMap ? ownClone(transmissionMap) : null;
     }
@@ -336,7 +334,8 @@ export function buildDeadlockMaterial(
   // hints path, which the unified builder previously forgot to honor).
   const hasRealSelfIllumMask = morphic.self_illum_valid ?? isMeaningfulMask(selfIllumMap);
   const placeholderSelfIllumThreshold = additive ? SI_SCALE_EPS : PLACEHOLDER_SI_SCALE;
-  const hasSelfIllum = si.peak > (hasRealSelfIllumMask ? SI_SCALE_EPS : placeholderSelfIllumThreshold);
+  const authoredGlassIllum = glass && flag(morphic, 'F_SELF_ILLUM');
+  const hasSelfIllum = si.peak > (authoredGlassIllum ? 0 : hasRealSelfIllumMask ? SI_SCALE_EPS : placeholderSelfIllumThreshold);
   if (unlit && clone.emissive) {
     clone.emissive.copy(clone.color ?? new THREE.Color(1, 1, 1));
     clone.emissiveIntensity = Math.max(clone.emissiveIntensity ?? 1, 1.2);
@@ -387,9 +386,9 @@ export function buildDeadlockMaterial(
   clone.needsUpdate = true;
 
   // --- CSM uniforms (cel + rim + tint + self-illum scroll). ------------------
-  // Default tint is white (identity); g_vColorTint1 is already baked into the
-  // base color factor by vpkmerge, so it must NOT be re-applied here.
-  const sharedTint = morphic.resolvedTextures?.g_tTintMaskRimLightMask;
+  // The proven exported factor was removed from our owned clone above. Its
+  // linear authored tint matrix runs after correction; this is only live recolor.
+  const sharedTint = morphic.resolvedTextures?.g_tTintMaskRimLightMask ?? morphic.resolvedTextures?.g_tTintMask;
   const tintMask = sharedTint ? ownClone(sharedTint) : null;
   const tintColor = tintOverride ?? new THREE.Color(1, 1, 1);
   const sharedTransmissive = morphic.resolvedTextures?.g_tNprTransmissiveColor;
@@ -407,7 +406,7 @@ export function buildDeadlockMaterial(
   // Infernus's body mask IS the tattoo pattern, so it must localize to the tattoos
   // rather than glow the whole skin (incl. the face).
   let illumMap: THREE.Texture | null = null;
-  if (hasSelfIllum && selfIllumMap && hasRealSelfIllumMask) {
+  if (hasSelfIllum && selfIllumMap && (hasRealSelfIllumMask || authoredGlassIllum)) {
     // Scroll wraps via fract(), so the sampler must repeat or the seam smears.
     illumMap = ownClone(selfIllumMap);
     illumMap.wrapS = THREE.RepeatWrapping;
@@ -473,6 +472,9 @@ export function buildDeadlockMaterial(
     uTintRimMask: { value: tintMask ?? whiteFallback() },
     uHasTintMask: { value: tintMask ? 1.0 : 0.0 },
     uApplyVertexColor: { value: requiresVertexColors(morphic) ? 1.0 : 0.0 },
+    ...citadelColorUniforms(morphic),
+    uSource2ColorTint: { value: tintPlan.matrix },
+    uSource2ColorTintOffset: { value: tintPlan.offset },
     uTime: { value: 0 },
     uSelfIllumMap: { value: illumMap ?? whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },
@@ -535,6 +537,7 @@ export function buildDeadlockMaterial(
     uniforms,
     patchMap: NPR_PATCH_MAP,
   });
+  configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
 
   const dispose = () => {
     // CSM.dispose does NOT free its base material, so dispose the owned clone

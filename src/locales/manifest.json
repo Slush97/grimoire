@@ -1,29 +1,29 @@
 {
   "sourceLanguage": "en",
-  "totalKeys": 2486,
+  "totalKeys": 2539,
   "languages": [
     {
       "code": "bg",
       "name": "български",
-      "translatedKeys": 1917,
-      "pct": 77
+      "translatedKeys": 1915,
+      "pct": 75
     },
     {
       "code": "en",
       "name": "English",
-      "translatedKeys": 2486,
+      "translatedKeys": 2539,
       "pct": 100
     },
     {
       "code": "fr",
       "name": "français",
-      "translatedKeys": 2116,
-      "pct": 85
+      "translatedKeys": 2114,
+      "pct": 83
     },
     {
       "code": "ru",
       "name": "русский",
-      "translatedKeys": 174,
+      "translatedKeys": 178,
       "pct": 7
     }
   ]

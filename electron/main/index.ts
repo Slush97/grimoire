@@ -505,7 +505,7 @@ if (!gotTheLock) {
                             // `grimoire-foundry:` serves Foundry's cached texture
                             // thumbnails, rendered as <img>, so they must be allowed
                             // here or the browse grid is blank under the prod CSP.
-                            "img-src 'self' data: https: blob: grimoire-foundry:; " +
+                            "img-src 'self' data: https: blob: grimoire-foundry: grimoire-hero:; " +
                             // Foundry voice-line auditions are served as `data:audio/mpeg`
                             // URLs into an <audio> element (the clip MP3 is sliced out of
                             // the `.vsnd_c` in the main process), so `data:` must be allowed

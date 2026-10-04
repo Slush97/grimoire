@@ -58,6 +58,7 @@
     "dompurify": "^3.4.16",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "gifenc": "1.0.3",
     "i18next": "^26.4.2",
     "lucide-react": "^0.562.0",
     "node-7z": "^3.0.0",

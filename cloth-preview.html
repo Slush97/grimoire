@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Source 2 physics preview</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#181c24;color:#eef0f5;font:14px system-ui}main{display:grid;grid-template-columns:300px 1fr;height:100vh}aside{padding:20px;background:#11141a;overflow:auto}h1{font-size:24px;margin:0 0 8px}p{line-height:1.5;color:#b7bfce}label{display:block;margin:12px 0 4px}button,select,input[type=number]{font:inherit;color:inherit;background:#2b3240;border:1px solid #47546a;border-radius:6px;padding:8px;margin:4px 4px 4px 0}select{width:100%}input[type=number]{width:100px}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #b3c8ff}#viewport{min-width:0;min-height:0;overflow:hidden;position:relative}canvas{display:block;width:100%;height:100%}pre{font:12px/1.5 monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#b6d3cc}#status{color:#c9d5ee;white-space:pre-line}small{color:#b7bfce}a{color:#aebfff}details{margin:16px 0}summary{cursor:pointer;color:#c9d5ee}.pane-label{position:absolute;top:16px;left:16px;padding:7px 10px;border-radius:5px;background:#10141ddd;color:#e0e6f3;pointer-events:none;font-size:12px;z-index:1}.pane-label[hidden]{display:none}#reference-label{left:calc(50% + 16px)}#viewport.comparison:after{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:1px solid #47546a;pointer-events:none}.legend{font-size:12px}.legend span{white-space:nowrap;margin-right:8px}.legend .anchor{color:#ffd14d}.legend .particle{color:#63edc2}.legend .target{color:#ff78dc}.legend .body{color:#ffb86b}
+  </style>
+</head>
+<body>
+  <main>
+    <aside>
+      <h1 id="hero-name">Physics testbed</h1><p>Source 2 physics preview<br><small>Development comparison. Exported from your installed game.</small></p>
+      <p><a id="grimoire-link" href="/hero-preview.html" hidden>Open in Grimoire's viewer</a></p>
+      <label for="case">Model</label><select id="case"></select>
+      <label for="clip">Animation</label><select id="clip"></select>
+      <label><input id="physics" type="checkbox" checked /> Physics</label>
+      <p id="coverage-note" style="font-size:12px"></p>
+      <label><input id="frozen" type="checkbox" /> Freeze animation</label>
+      <div><button id="play">Play</button><button id="reset">Reset</button><button id="tick">Step 1 tick</button><button id="step">Step 1 second</button><button id="settle">Settle 10 seconds</button></div>
+      <label for="speed">Playback speed</label><select id="speed"><option value="1">1x</option><option value="0.5">0.5x</option><option value="0.25">0.25x</option></select>
+      <label for="seek-time">Replay from start to time (seconds)</label><input id="seek-time" type="number" min="0" max="60" step="0.1" value="1" /><button id="seek">Replay to time</button>
+      <label for="view">Camera</label><select id="view"><option>Front</option><option>Back</option><option>Side</option></select>
+      <label for="comparison">Reference</label><select id="comparison"><option value="off">Single view</option><option value="reference">Animation without physics</option><option value="targets">Generated animation targets</option></select>
+      <p id="reference-note"><small>Loading reference...</small></p>
+      <label><input id="neutral" type="checkbox" /> Neutral material</label>
+      <label><input id="align-motion" type="checkbox" checked /> Align reference motion</label>
+      <details><summary>Solver overlays</summary>
+        <label><input id="skeleton" type="checkbox" /> Bones</label>
+        <label><input id="nodes" type="checkbox" /> Particles and rods</label>
+        <label><input id="targets" type="checkbox" /> Animation targets</label>
+        <label><input id="colliders" type="checkbox" /> Body colliders</label>
+        <p class="legend"><span class="anchor">Anchor</span><span class="particle">Particle</span><span class="target">Target</span><span class="body">Body</span></p>
+      </details>
+      <p id="status" role="status">Loading assets...</p><pre id="diagnostics"></pre>
+      <details><summary>All solver metrics</summary><pre id="metrics"></pre></details>
+      <button id="checks">Run checks</button><button id="report">Save report</button>
+      <p id="report-result" role="status" style="font-size:12px;overflow-wrap:anywhere"></p>
+      <details><summary id="checks-summary">Check results</summary><pre id="checks-result"></pre></details>
+    </aside>
+    <div id="viewport"><div class="pane-label">Grimoire preview</div><div class="pane-label" id="reference-label" hidden></div></div>
+  </main>
+  <script type="module" src="/src/dev/clothPreview.ts"></script>
+</body>
+</html>
