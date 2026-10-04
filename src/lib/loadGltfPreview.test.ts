@@ -1,9 +1,9 @@
+import * as THREE from 'three';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTF, GLTFParser } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const loaderMock = vi.hoisted(() => ({
-  loadCreateImageBitmapValues: [] as unknown[],
-  parseCreateImageBitmapValues: [] as unknown[],
+  textureLoaders: [] as unknown[],
 }));
 
 const source2Mock = vi.hoisted(() => ({
@@ -24,13 +24,30 @@ function fakeGltf(): GLTF {
 
 vi.mock('three/examples/jsm/loaders/GLTFLoader.js', () => ({
   GLTFLoader: class {
+    private plugins: ((parser: GLTFParser) => { name: string })[] = [];
+
+    register(callback: (parser: GLTFParser) => { name: string }): this {
+      this.plugins.push(callback);
+      return this;
+    }
+
+    // Mirrors GLTFLoader: the parser picks ImageBitmapLoader, then plugins run.
+    private runParser(): void {
+      const parser = {
+        options: { manager: undefined, crossOrigin: 'anonymous', requestHeader: {} },
+        textureLoader: 'image-bitmap-loader',
+      } as unknown as GLTFParser;
+      this.plugins.forEach((plugin) => plugin(parser));
+      loaderMock.textureLoaders.push(parser.textureLoader);
+    }
+
     load(_url: string, onLoad: (gltf: GLTF) => void): void {
-      loaderMock.loadCreateImageBitmapValues.push(globalThis.createImageBitmap);
+      this.runParser();
       onLoad(fakeGltf());
     }
 
     parse(_buffer: ArrayBuffer, _path: string, onLoad: (gltf: GLTF) => void): void {
-      loaderMock.parseCreateImageBitmapValues.push(globalThis.createImageBitmap);
+      this.runParser();
       onLoad(fakeGltf());
     }
   },
@@ -40,42 +57,68 @@ vi.mock('./source2NprMaterial', () => ({
   resolveMorphicTextures: source2Mock.resolveMorphicTextures,
 }));
 
-function setCreateImageBitmap(value: Window['createImageBitmap'] | undefined): void {
-  Object.defineProperty(globalThis, 'createImageBitmap', {
-    configurable: true,
-    writable: true,
-    value,
-  });
-}
-
-describe('loadGltfPreview createImageBitmap guard', () => {
+describe('loadGltfPreview texture decoding', () => {
   beforeEach(() => {
-    loaderMock.loadCreateImageBitmapValues = [];
-    loaderMock.parseCreateImageBitmapValues = [];
+    loaderMock.textureLoaders = [];
     source2Mock.resolveMorphicTextures.mockReset();
     source2Mock.resolveMorphicTextures.mockResolvedValue(undefined);
   });
 
-  it('suppresses createImageBitmap while parsing in-memory GLB bytes and restores it', async () => {
-    const sentinel = (() => Promise.resolve({})) as unknown as Window['createImageBitmap'];
-    setCreateImageBitmap(sentinel);
+  it('decodes with <img> textures by default, per parser', async () => {
+    const { loadGltfPreview, parseGltfPreview } = await import('./loadGltfPreview');
+    const loaded = await loadGltfPreview('grimoire-hero://m/test/model.glb?v=1');
+    const parsed = await parseGltfPreview(new ArrayBuffer(4));
 
-    const { parseGltfPreview } = await import('./loadGltfPreview');
-    const gltf = await parseGltfPreview(new ArrayBuffer(4));
-
-    expect(loaderMock.parseCreateImageBitmapValues).toEqual([undefined]);
-    expect(globalThis.createImageBitmap).toBe(sentinel);
-    expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(gltf);
+    expect(loaderMock.textureLoaders).toHaveLength(2);
+    loaderMock.textureLoaders.forEach((loader) =>
+      expect(loader).toBeInstanceOf(THREE.TextureLoader)
+    );
+    expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(loaded);
+    expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(parsed);
   });
 
-  it('removes createImageBitmap after URL loads when it was originally absent', async () => {
-    delete (globalThis as { createImageBitmap?: Window['createImageBitmap'] }).createImageBitmap;
-
+  it('keeps the ImageBitmap loader when imageBitmaps is set', async () => {
     const { loadGltfPreview } = await import('./loadGltfPreview');
-    const gltf = await loadGltfPreview('grimoire-hero://m/test/model.glb?v=1');
+    const gltf = await loadGltfPreview('grimoire-hero://m/test/model.glb?v=1', {
+      imageBitmaps: true,
+    });
 
-    expect(loaderMock.loadCreateImageBitmapValues).toEqual([undefined]);
-    expect('createImageBitmap' in globalThis).toBe(false);
+    expect(loaderMock.textureLoaders).toEqual(['image-bitmap-loader']);
     expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(gltf);
+  });
+});
+
+describe('texture disposal', () => {
+  it('lists every texture a material holds', async () => {
+    const { materialTextures } = await import('./loadGltfPreview');
+    const map = new THREE.Texture();
+    const sheen = new THREE.Texture();
+    const material = new THREE.MeshPhysicalMaterial({ map, sheenColorMap: sheen });
+
+    expect(materialTextures(material)).toEqual(expect.arrayContaining([map, sheen]));
+    expect(materialTextures(material)).toHaveLength(2);
+  });
+
+  it('closes an ImageBitmap-backed texture when disposing it', async () => {
+    const { disposeTexture } = await import('./loadGltfPreview');
+    const close = vi.fn();
+    class FakeImageBitmap {
+      width = 4;
+      height = 4;
+      close = close;
+    }
+    vi.stubGlobal('ImageBitmap', FakeImageBitmap);
+    try {
+      const texture = new THREE.Texture(new FakeImageBitmap() as unknown as ImageBitmap);
+      const onDispose = vi.fn();
+      texture.addEventListener('dispose', onDispose);
+
+      disposeTexture(texture);
+
+      expect(onDispose).toHaveBeenCalledOnce();
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

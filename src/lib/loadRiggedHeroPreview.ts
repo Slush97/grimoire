@@ -34,7 +34,7 @@ export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean
   // Resolve both before mounting the mixer: cloth calibration needs the bind
   // pose, and a fallback export's physics must follow its returned cache key.
   const [gltf, clothModel, attachments] = await Promise.all([
-    loadGltfPreview(`${base}/model-rigged.glb?v=${version}`),
+    loadGltfPreview(`${base}/model-rigged.glb?v=${version}`, { imageBitmaps: true }),
     physics ? loadClothSidecar(`${base}/cloth-rigged.json?v=${version}`) : null,
     loadAttachments(`${base}/attachments.json?v=${version}`),
   ]);
