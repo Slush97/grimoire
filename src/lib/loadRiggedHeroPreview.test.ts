@@ -42,7 +42,7 @@ describe('loadRiggedHeroPreview', () => {
     await Promise.resolve();
     expect(ready).toBe(false);
     const base = 'grimoire-hero://m/Yamato%3A%3Aaddons2%2Fskin_dir.vpk%3A%3Ac123';
-    expect(loadGltfPreview).toHaveBeenCalledWith(`${base}/model-rigged.glb?v=42`);
+    expect(loadGltfPreview).toHaveBeenCalledWith(`${base}/model-rigged.glb?v=42`, { imageBitmaps: true });
     expect(fetch).toHaveBeenCalledWith(`${base}/cloth-rigged.json?v=42`);
     complete(Response.json(raw));
     const result = await loading;
