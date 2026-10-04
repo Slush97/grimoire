@@ -32,9 +32,9 @@
   "baseline": {
     "$comment": "Stock gameinfo.gi. Every preset is stored as a diff against this, which is what lets Grimoire patch in place instead of replacing the user's file.",
     "repo": "Sqooky/OptimizationLock",
-    "commit": "96ff42d1db29ca9fe44afb3df749fa763bb87b87",
+    "commit": "2b994f62a84ba90cd666c7c63674a7aab3127aca",
     "path": "clean gameinfo.gi/gameinfo.gi",
-    "sha256": "0ba6d49dab17a428f210bb2413af8d3b9724064aab091eb52aea124c3902936b"
+    "sha256": "b96954f5607e381b94b3d5ba2214bf1bcee2b65a16bb1a231b5f840586466955"
   },
   "sources": {
     "optimizationlock": {
@@ -45,22 +45,22 @@
       "refKind": "prose",
       "releases": [
         {
-          "ref": "2.9",
-          "commit": "96ff42d1db29ca9fe44afb3df749fa763bb87b87",
-          "date": "2026-08-17"
+          "ref": "3.4",
+          "commit": "2b994f62a84ba90cd666c7c63674a7aab3127aca",
+          "date": "2026-10-03"
         },
         {
-          "ref": "2.8.2",
-          "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442",
-          "date": "2026-08-02"
+          "ref": "3.3",
+          "commit": "48c2dc029253b2526abc6ccc02351e4d8cbc699a",
+          "date": "2026-10-02"
         },
         {
-          "ref": "2.7",
-          "commit": "271befb5cf9f8c9431da81e39ea4147895604d3e",
-          "date": "2026-07-25"
+          "ref": "3.2",
+          "commit": "ff247d8dc62c6d79affb570db1cb4df1900e3741",
+          "date": "2026-09-30"
         }
       ],
-      "$comment": "Upstream publishes no git tags or releases; each 'ref' is the version stated in that release's commit message and in the config's own header comment. Pins are the commit SHAs. The newest release is also the baseline pin. If Sqooky starts tagging, switch refKind to 'tag' and pin the tags' resolved SHAs."
+      "$comment": "Upstream publishes no git tags or releases; each 'ref' is the version stated in that release's commit message and in the config's own header comment. Pins are the commit SHAs. Sqooky follows a release with fix-up pushes (3.3 was fixed by \"IWRONG VALUE\" minutes later), so each pin is the last commit of that release's push burst, not the commit titled with the version. The newest release is also the baseline pin. If Sqooky starts tagging, switch refKind to 'tag' and pin the tags' resolved SHAs."
     },
     "optilock": {
       "repo": "dacooderr/OptiLock",
@@ -70,22 +70,22 @@
       "refKind": "tag",
       "releases": [
         {
+          "ref": "v5.1",
+          "commit": "7f7a54a1b8237d9b66348067d09f93174c47d303",
+          "date": "2026-10-02"
+        },
+        {
+          "ref": "v5.0",
+          "commit": "a8be8027d5223aa5fcd52ba6c69912d905303f8b",
+          "date": "2026-09-03"
+        },
+        {
           "ref": "v4.6",
           "commit": "6caab13036711d09ae439b4de4406bdb9972e148",
           "date": "2026-08-15"
-        },
-        {
-          "ref": "v4.2",
-          "commit": "fdfce93a95db176c539d3dbcb601238e181008b9",
-          "date": "2026-07-15"
-        },
-        {
-          "ref": "v4.0d",
-          "commit": "465590a35d8d47d84b78031837fa209f5a2b5ce7",
-          "date": "2026-07-12"
         }
       ],
-      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so rolling back one step from v4.2 lands on v4.0d. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. Tags older than v4.1 are not offered because the preset paths churn (v4.0 and v4.0a-c are each missing one of the two preset files). Tag v4.2 resolved to this commit on 2026-07-29, rechecked 2026-08-03. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. KNOWN ISSUE: one day after tagging v4.2, upstream commit 40788927 flipped r_render_portals back to \"true\" in the FPS preset because \"false\" broke Doorman's door. That fix is on main but not in any release, so a tag-pinned refresh cannot pick it up. Rather than pin past the tag (which would make the card claim a release the code is not from), r_render_portals is excluded outright below, so Grimoire never writes either value and the engine default stands. Drop that exclusion once upstream tags a release containing the fix."
+      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder once tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so tag names do not reliably sort into release order. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. The v5.1 GitHub release is titled \"OptiLock v5.0\"; the tag is what we pin and show."
     }
   },
   "presets": [
@@ -97,9 +97,9 @@
       "source": "optimizationlock",
       "path": "Sqooky's .gi/gameinfo.gi",
       "sha256": {
-        "2.9": "b31825fea70a48412b304b5f3dd06c24d5c29d9feb98d559d337eaef928457f3",
-        "2.8.2": "6c3753fabda7c724a01c9a9747e4a14c8618fe3815ecddae929623252e60db5c",
-        "2.7": "c34801cc66cdd93e3dc0bfea275c98fa9c2a3cc29ee17a1f0397314a2310aeca"
+        "3.4": "041ebe91c92548c7a45dc4832d22383cf5ce190d8d75b0bb734075f203c02113",
+        "3.3": "dbb91f6e0ba60e9e9493fa823108036f13f2cf90997766f589296520319fb925",
+        "3.2": "6bcc472f5f4132f9c39efbf88e747f266805952b3d00d8ab96bec5ae87d181f5"
       },
       "author": "Sqooky"
     },
@@ -110,9 +110,9 @@
       "source": "optimizationlock",
       "path": "test_cfg/gameinfo.gi",
       "sha256": {
-        "2.9": "362c7c577c37f821cf9f484f4505c7a21afecc014e3064e77798ede620189d55",
-        "2.8.2": "7cb2c5d0f7100d90e6f4ddd4fa8b067533d2bcd3a520ebe936fec75263c4084b",
-        "2.7": "b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf"
+        "3.4": "9f77fb7a2ece33cb2a085a0cc2c23be6dd9e5bb61fa212e5ebe90dcb998e0037",
+        "3.3": "b7b2d540fdb74d91ca8544cb50354ca6ef1cc78dd9a24bc59ad0f5180e29abe1",
+        "3.2": "93a375143673eae81e98adb0ddf7f24aeeb428a9bd7c696717d2db6ddaf46808"
       },
       "author": "Sqooky",
       "unstable": true
@@ -124,9 +124,9 @@
       "source": "optimizationlock",
       "path": "boot's maxium fps config/gameinfo.gi",
       "sha256": {
-        "2.9": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
-        "2.8.2": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
-        "2.7": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5"
+        "3.4": "f09e6cea24a0f01b549d3b0b87277de51a7f0f1802305cfb9e6da63bce2d2a09",
+        "3.3": "f09e6cea24a0f01b549d3b0b87277de51a7f0f1802305cfb9e6da63bce2d2a09",
+        "3.2": "f09e6cea24a0f01b549d3b0b87277de51a7f0f1802305cfb9e6da63bce2d2a09"
       },
       "author": "boot"
     },
@@ -137,9 +137,9 @@
       "source": "optimizationlock",
       "path": "kaizuchanerus minimum spec/gameinfo.gi",
       "sha256": {
-        "2.9": "16e9e739b90941543f2fabeea8161fd15327df5f16d812377fbd2bf4e75a98a4",
-        "2.8.2": "e4be5933e6f24de0c368c77957dd7579ef8e2e8169fe4e9740977c09db08fa68",
-        "2.7": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9"
+        "3.4": "afda3762de652cf04f325015cfe16496be4a0080e587de83e46baf753c3a36ad",
+        "3.3": "e85b31c337752597faaf25a4e628d687f67684fdf5284607141b13e2554c7b74",
+        "3.2": "e1a58a6dc07df47a0e08bdc031fefec90da89070094e5c4a248872bc020cc80d"
       },
       "author": "kaizuchanerus"
     },
@@ -157,9 +157,9 @@
         "v4.0d": "OptiLock FPS Preset/gameinfo.gi"
       },
       "sha256": {
-        "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
-        "v4.2": "34873789e25b552829cff843b111b7c5f7f3127651a31d6e3f7fd1d67a2e1291",
-        "v4.0d": "a0017f99282415dc027a687fdf01b06de707d6d28c5fbd161339493db4f1f618"
+        "v5.1": "f98c6f6e08cecfd3c44b5f65eb31991d3dabc7be366a0223c9c559c2f9765889",
+        "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
+        "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
       },
       "author": "dacooder"
     },
@@ -176,9 +176,9 @@
         "v4.0d": "OptiLock Max FPS Preset/gameinfo.gi"
       },
       "sha256": {
-        "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703",
-        "v4.2": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326",
-        "v4.0d": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326"
+        "v5.1": "a810f532ee993d9d1dd8aaf2c38bdabc5bf77bbd24b14a17da5abeb50d65d064",
+        "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6",
+        "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703"
       },
       "author": "dacooder"
     }
@@ -238,7 +238,7 @@
       },
       {
         "key": "r_render_portals",
-        "why": "OptiLock v4.2's FPS preset sets this to false, which breaks Doorman's door. Upstream fixed it (v4.6 dropped the key entirely), but v4.2 stays bundled for rollback, so the exclusion must outlive it: remove this only when no bundled release sets the key."
+        "why": "OptiLock v4.2's FPS preset set this to false, which breaks Doorman's door. Every bundled release now omits it or sets the stock \"true\", so excluding it costs nothing; it stays as a guard on the track-latest path in case an upstream reintroduces false."
       },
       {
         "key": "DistanceField",
@@ -378,6 +378,16 @@
         "why": "Scales the health bar. The author's own comment says it LOWERS performance and they set it anyway for readability, which makes it the clearest case in the family of a look preference rather than a frame-rate setting."
       },
       {
+        "key": "citadel_unit_status_stamina_low_pips",
+        "group": "visibility",
+        "why": "Keeps the stamina pips on screen whenever stamina is below this many; Sqooky 3.3 raised it from the stock 3 to 7 (his \"stamina command\"). How much of your own HUD stays visible is a readability preference, not render cost."
+      },
+      {
+        "key": "citadel_unit_status_recent_active_damage_time",
+        "group": "visibility",
+        "why": "How long recent damage stays highlighted on a health bar; Sqooky test_cfg 3.2/3.3 set 999, so it never fades. Same class as citadel_unit_status_delta_decay_delay: how long damage can be read off a bar is gameplay information."
+      },
+      {
         "key": "r_particle_timescale",
         "group": "visibility",
         "why": "Speeds up particle simulation so effects visibly end sooner than they actually last; Sqooky's own comment names the Infernus ult desync and he commented it out of his config in 2.9, while OptiLock still ships 1.1. How long an ult LOOKS active is gameplay information, so it stays an explicit per-user choice. Was riding silently in the OptiLock bodies until the timescale pattern caught it."
@@ -445,6 +455,11 @@
       {
         "key": "citadel_camera_pitch_min",
         "group": "camera"
+      },
+      {
+        "key": "citadel_camera_pitch_default",
+        "group": "camera",
+        "why": "The resting camera pitch. Sqooky sets 0 alongside the rest of his camera block. Framing, same class as citadel_camera_pitch_max/min."
       },
       {
         "key": "citadel_hideout_enable_testing_tools",

@@ -21,6 +21,7 @@ import type {
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
     AssociateUnknownModArgs,
+    DeleteModsProgress,
     GlobalModType,
     EditLocalModArgs,
     LockerClearScope,
@@ -132,6 +133,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
+    deleteMods: (modIds: string[]) => ipcRenderer.invoke('delete-mods', modIds),
+    onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: DeleteModsProgress) => callback(progress);
+        ipcRenderer.on('delete-mods-progress', handler);
+        return () => ipcRenderer.removeListener('delete-mods-progress', handler);
+    },
     assertReplacementSafety: (modIds: string[]) => ipcRenderer.invoke('assert-replacement-safety', modIds),
     revealModInFolder: (modId: string) => ipcRenderer.invoke('reveal-mod-in-folder', modId),
     detectUnknownModFilters: (modId: string, requestId?: string) =>
@@ -633,6 +640,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     importCrosshairFromGame: (gamePath: string) => ipcRenderer.invoke('crosshair:importFromGame', gamePath),
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
+
+    // Cursor packs
+    getCursorPacks: () => ipcRenderer.invoke('cursors:get'),
+    setActiveCursorPack: (id: string | null) => ipcRenderer.invoke('cursors:set-active', id),
+    deleteCursorPack: (id: string) => ipcRenderer.invoke('cursors:delete', id),
+    getCursorPreview: (id: string | null) => ipcRenderer.invoke('cursors:preview', id),
+    importCursorPack: (paths: string[]) => ipcRenderer.invoke('cursors:import-files', paths),
 
     // Updater
     updater: {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scanModSafety } from './modSafetyScan';
+import { cachedModSafetyReport, prunePathEntries, scanModSafety } from './modSafetyScan';
 import { safetyChunkedVpk, safetyLayout, safetyResource, safetyVpk } from './modSafetyFixtures';
 import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import * as policy from './modSafetyPolicy';
@@ -46,6 +46,51 @@ describe('VPK safety inspection', () => {
         expect(changed.fingerprint).not.toBe(first.fingerprint);
         expect(changed.findings).toContainEqual({ entry: 'test.js', reason: 'dynamic-code' });
         expect(inspect).toHaveBeenCalledTimes(2);
+    });
+    it('hands back the cached report while the file is untouched, but not under another path', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        const report = await scanModSafety(path, undefined, cache);
+        expect(await cachedModSafetyReport(path, cache)).toEqual(report);
+        const renamed = join(root, 'enabled_dir.vpk');
+        await fs.rename(path, renamed);
+        expect(await cachedModSafetyReport(renamed, cache)).toBeUndefined();
+    });
+    it('prunes path entries for archives that are gone and keeps the rest', async () => {
+        const cache = join(root, 'reports');
+        const kept = join(root, 'kept_dir.vpk');
+        const gone = join(root, 'gone_dir.vpk');
+        for (const path of [kept, gone]) {
+            await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from(`run("${path}");`) }]));
+            await scanModSafety(path, undefined, cache);
+        }
+        await fs.writeFile(join(cache, 'paths', 'broken.json'), '{');
+        await fs.rm(gone);
+        await prunePathEntries(cache);
+        expect(await fs.readdir(join(cache, 'paths'))).toHaveLength(1);
+        expect(await cachedModSafetyReport(kept, cache)).toBeDefined();
+    });
+    it('stops handing back the cached report once the file is rewritten with its size and mtime kept', async () => {
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('run(1);') }]));
+        const before = await fs.stat(path);
+        await scanModSafety(path, undefined, cache);
+        await fs.writeFile(path, safetyVpk([{ path: 'test.js', bytes: Buffer.from('eval(x)') }]));
+        await fs.utimes(path, before.atime, before.mtime);
+        expect(await cachedModSafetyReport(path, cache)).toBeUndefined();
+    });
+    it('stops handing back the cached report once a chunk changes', async () => {
+        const { dir, chunk } = safetyChunkedVpk([{ path: 'panorama/scripts/hud.js', bytes: Buffer.from('run("a")') }]);
+        const path = join(root, 'test_dir.vpk');
+        const cache = join(root, 'reports');
+        await fs.writeFile(path, dir);
+        await fs.writeFile(join(root, 'test_000.vpk'), chunk);
+        const report = await scanModSafety(path, undefined, cache);
+        expect(await cachedModSafetyReport(path, cache)).toEqual(report);
+        await fs.writeFile(join(root, 'test_000.vpk'), Buffer.from(chunk.toString().replace('"a"', '"b"')));
+        expect(await cachedModSafetyReport(path, cache)).toBeUndefined();
     });
     it.each(['old-scanner', 'old-policy', 'wrong-hash', 'invalid-report', 'broken-json'])(
         'reanalyzes when the persisted cache has %s', async kind => {
@@ -127,6 +172,17 @@ describe('VPK safety inspection', () => {
         const report = await scanModSafety(path, pinnedDecoder);
         expect(report.verdict).toBe('requires-trust');
         expect(report.findings).toContainEqual({ entry: 'panorama/layout/hud.vxml_c', reason: 'local-file' });
+    });
+    it.skipIf(!existsSync(pinnedDecoder)).each([0, 120])('inspects every layout across batches with %s extra path characters', async extra => {
+        const path = join(root, 'test_dir.vpk');
+        await fs.writeFile(path, safetyVpk(Array.from({ length: 129 }, (_, i) => ({
+            path: `panorama/layout/${'x'.repeat(extra)}hud_${i}.vxml_c`,
+            bytes: safetyLayout(i === 128 ? 'run("file:///example.txt");' : 'run(1);'),
+        }))));
+        const report = await scanModSafety(path, pinnedDecoder);
+        expect(report.verdict).toBe('requires-trust');
+        expect(report.findings).toContainEqual({ entry: `panorama/layout/${'x'.repeat(extra)}hud_128.vxml_c`, reason: 'local-file' });
+        expect(report.findings.some((finding) => finding.reason === 'unreadable-archive')).toBe(false);
     });
     it('still blocks layouts the decoder runs on but rejects', async () => {
         const path = join(root, 'test_dir.vpk');

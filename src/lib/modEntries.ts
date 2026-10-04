@@ -150,6 +150,14 @@ export function entryPrimaryMod(entry: ModEntry): Mod {
   return entry.kind === 'single' ? entry.mod : entry.primary;
 }
 
+/** The file a details view opens on. For a group that is a variant flagged
+ *  for update when there is one, so its update state and actions are what the
+ *  view shows (the primary may be current while a sibling is stale). */
+export function entryDetailsAnchor(entry: ModEntry, isFlagged: (modId: string) => boolean): Mod {
+  if (entry.kind === 'single') return entry.mod;
+  return entry.variants.find((variant) => isFlagged(variant.id)) ?? entry.primary;
+}
+
 /** Most recent install time across an entry's files (ISO string, so it sorts
  *  lexically = chronologically). Groups use their newest variant so a freshly
  *  downloaded file pulls the whole card to the top of "Recently added". */

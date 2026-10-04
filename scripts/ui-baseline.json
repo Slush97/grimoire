@@ -211,7 +211,7 @@
   },
   "src/pages/Installed.tsx": {
     "focus-ring": 2,
-    "em-dash": 10
+    "em-dash": 9
   },
   "src/pages/Locker.tsx": {
     "raw-hex": 1,

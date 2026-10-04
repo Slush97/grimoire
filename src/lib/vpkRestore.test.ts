@@ -146,6 +146,21 @@ describe('Global placement restore', () => {
     expect(failures).toEqual([]);
   });
 
+  it('enables the replacement that landed disabled when the replaced file was enabled', async () => {
+    // Update downloads no longer auto-disable siblings (which used to enable
+    // the new file as a side effect), so this restore is what turns it on.
+    const enable = vi.fn(async () => {});
+
+    await restoreReplacementVpkState(
+      [mod({ id: 'replacement', enabled: false })],
+      createEnabledVpkRestoreSnapshot([{ enabled: true }]),
+      createGlobalVpkRestoreSnapshot([{ priorityMod: false }]),
+      { setGlobal: vi.fn(async () => {}), enable },
+    );
+
+    expect(enable).toHaveBeenCalledWith('replacement');
+  });
+
   it('restores Global placement before enabling the replacement', async () => {
     const calls: string[] = [];
     const fresh = [mod({ id: 'replacement', enabled: false })];

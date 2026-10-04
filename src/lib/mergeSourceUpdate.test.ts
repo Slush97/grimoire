@@ -50,25 +50,38 @@ describe('planMergeSourceUpdates', () => {
     });
   });
 
-  it('falls back to the single remaining current file', () => {
-    // Author consolidated everything into one upload, so token overlap with
-    // the old name is worthless but the answer is unambiguous.
-    const files = [file(1000, 'old_name.zip', true), file(1500, 'all_in_one.7z')];
+  it('leaves a source unresolved when the sole current file only shares a name word', () => {
+    const files = [file(1000, 'galaxy_rem_gold.zip', true), file(1500, 'galaxy_remastered.7z')];
 
     const plan = planMergeSourceUpdates([source()], new Map([[700, files]]));
 
-    expect(plan.resolved[0]).toMatchObject({ fileId: 1500, fileName: 'all_in_one.7z' });
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved).toEqual([{ source: source(), reason: 'no-match' }]);
+  });
+
+  it('leaves a deleted source with nothing to go on unresolved', () => {
+    // A merge records no filename or description, so a deleted source has no
+    // signal at all; the sole current file is not assumed to replace it.
+    const plan = planMergeSourceUpdates([source()], new Map([[700, [file(1500, 'all_in_one.7z')]]]));
+
+    expect(plan.unresolved).toEqual([{ source: source(), reason: 'no-match' }]);
+  });
+
+  it('never maps an archived source onto the single current file', () => {
+    // Before: the single-current fallback swapped an archived addon for the
+    // main file. An archived row is often a retired addon, not an old version.
+    const files = [file(1000, 'optional_addon_icons.zip', true), file(1500, 'main_v3.zip')];
+
+    const plan = planMergeSourceUpdates([source()], new Map([[700, files]]));
+
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved).toEqual([{ source: source(), reason: 'no-match' }]);
   });
 
   it('never lets two outdated sources claim the same replacement file', () => {
-    // Both sources come from one GB mod and both are stale. Only one current
-    // file exists, so exactly one can take it; guessing for the other would
-    // swap unrelated content into the merge.
-    const files = [
-      file(1000, 'first_variant.zip', true),
-      file(1001, 'second_variant.zip', true),
-      file(1500, 'only_current.zip'),
-    ];
+    // Both sources are deleted and only one current file exists. Picking
+    // either would swap unrelated content into the merge, so neither does.
+    const files = [file(1500, 'only_current.zip')];
     const sources = [
       source({ fileName: 'a_dir.vpk', gameBananaFileId: 1000 }),
       source({ fileName: 'b_dir.vpk', gameBananaFileId: 1001 }),
@@ -76,13 +89,35 @@ describe('planMergeSourceUpdates', () => {
 
     const plan = planMergeSourceUpdates(sources, new Map([[700, files]]));
 
-    expect(plan.resolved).toHaveLength(1);
-    expect(plan.resolved[0].fileId).toBe(1500);
-    expect(plan.unresolved).toEqual([{ source: sources[1], reason: 'no-match' }]);
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved).toEqual([
+      { source: sources[0], reason: 'no-match' },
+      { source: sources[1], reason: 'no-match' },
+    ]);
+  });
+
+  it('resolves several outdated sources of one mod to their own successors', () => {
+    const files = [
+      file(1000, 'skin_red_v1.zip', true),
+      file(1001, 'skin_blue_v1.zip', true),
+      file(1500, 'skin_red_v2.zip'),
+      file(1501, 'skin_blue_v2.zip'),
+    ];
+    const sources = [
+      source({ fileName: 'a_dir.vpk', gameBananaFileId: 1001 }),
+      source({ fileName: 'b_dir.vpk', gameBananaFileId: 1000 }),
+    ];
+
+    const plan = planMergeSourceUpdates(sources, new Map([[700, files]]));
+
+    expect(plan.resolved.map((entry) => [entry.sources[0].fileName, entry.fileId])).toEqual([
+      ['a_dir.vpk', 1501],
+      ['b_dir.vpk', 1500],
+    ]);
   });
 
   it('respects file ids already claimed outside the plan', () => {
-    const files = [file(1000, 'old.zip', true), file(1500, 'only_current.zip')];
+    const files = [file(1500, 'only_current.zip')];
 
     const plan = planMergeSourceUpdates(
       [source()],
@@ -122,7 +157,7 @@ describe('planMergeSourceUpdates', () => {
   });
 
   it('carries the source section through so the download hits the right endpoint', () => {
-    const files = [file(1000, 'old.zip', true), file(1500, 'new.zip')];
+    const files = [file(1000, 'voice_pack_v1.zip', true), file(1500, 'voice_pack_v2.zip')];
 
     const plan = planMergeSourceUpdates(
       [source({ section: 'Sound' })],
@@ -132,7 +167,21 @@ describe('planMergeSourceUpdates', () => {
     expect(plan.resolved[0].section).toBe('Sound');
   });
 
-  it('prefers an exact description match over filename overlap', () => {
+  it('follows the archived row description when the filename says nothing', () => {
+    const files = [
+      file(1000, 'pack_a.zip', true, 'Red variant'),
+      file(1501, 'blue_upload.zip', false, 'Blue variant'),
+      file(1502, 'completely_renamed.zip', false, 'Red variant'),
+    ];
+
+    const plan = planMergeSourceUpdates([source()], new Map([[700, files]]));
+
+    expect(plan.resolved[0].fileId).toBe(1502);
+  });
+
+  it('refuses a description match that the filename contradicts', () => {
+    // Before: the description always won. Authors sometimes swap descriptions
+    // between re-uploads, so a disagreement is not a confident successor.
     const files = [
       file(1000, 'pack_a.zip', true, 'Red variant'),
       file(1501, 'pack_a_updated.zip', false, 'Blue variant'),
@@ -141,7 +190,23 @@ describe('planMergeSourceUpdates', () => {
 
     const plan = planMergeSourceUpdates([source()], new Map([[700, files]]));
 
-    expect(plan.resolved[0].fileId).toBe(1502);
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved[0].reason).toBe('no-match');
+  });
+
+  it('resolves every VPK cut from one stale file together, so it downloads once', () => {
+    const files = [file(1000, 'pack_v1.zip', true), file(1500, 'pack_v2.zip'), file(1501, 'extras.zip')];
+    const sources = [
+      source({ fileName: 'pak10_dir.vpk', gameBananaFileId: 1000 }),
+      source({ fileName: 'pak11_dir.vpk', gameBananaFileId: 1000 }),
+    ];
+
+    const plan = planMergeSourceUpdates(sources, new Map([[700, files]]));
+
+    expect(plan.resolved).toEqual([
+      { sources, gameBananaId: 700, fileId: 1500, fileName: 'pack_v2.zip', section: 'Mod' },
+    ]);
+    expect(plan.unresolved).toEqual([]);
   });
 });
 

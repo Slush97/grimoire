@@ -107,9 +107,15 @@ export interface GameBananaModDetails {
   submitter?: GameBananaSubmitter;
 }
 
+/** One row of a mod's file list as the Installed update check reads it. */
 export interface GameBananaModFileListEntry {
   id: number;
+  fileName: string;
   isArchived: boolean;
+  description?: string;
+  /** Unix timestamp (seconds) of the upload. Rows never change, so a later
+   *  upload is always a new row with a later date. */
+  dateAdded?: number;
 }
 
 export interface GameBananaModFileList {

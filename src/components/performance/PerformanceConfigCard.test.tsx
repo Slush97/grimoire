@@ -10,6 +10,7 @@ import { useToastStore } from '../../stores/toastStore';
 import { useGameinfoStore } from '../../stores/gameinfoStore';
 import type { AppSettings } from '../../types/mod';
 import type {
+  GameinfoStatus,
   PerformanceConfigStatus,
   PerformanceLatestInfo,
   PerformanceOptIn,
@@ -163,6 +164,7 @@ describe('PerformanceConfigCard', () => {
       setBrowseUi: vi.fn(),
     } as never);
     useToastStore.setState({ toasts: [] });
+    useGameinfoStore.setState({ gameinfo: null, perfWiped: false, fixing: false });
   });
 
   afterEach(() => {
@@ -378,6 +380,21 @@ describe('PerformanceConfigCard', () => {
       expect(api.reapplyWipedPerformanceConfig).toHaveBeenCalled();
       expect(api.applyPerformanceConfig).not.toHaveBeenCalled();
       expect(powerSwitch().checked).toBe(true);
+    });
+
+    it('lets the user forget a config they took out of the file themselves', async () => {
+      const ok: GameinfoStatus = { configured: true, reason: 'ok', message: '', missing: false, candidates: [] };
+      api.getGameinfoStatus = vi.fn(async () => ok);
+      useGameinfoStore.setState({ gameinfo: ok });
+      status = { ...NOT_APPLIED, state: 'wiped', appliedPresetId: 'sqooky-default' };
+      await render();
+      expect(host.textContent).toContain('performance.notice.removed');
+      expect(host.textContent).not.toContain('performance.notice.wiped');
+      expect(button('performance.restore')).toBeTruthy();
+      await click(button('common.actions.dismiss'));
+      expect(api.removePerformanceConfig).toHaveBeenCalled();
+      expect(host.textContent).not.toContain('performance.notice.removed');
+      expect(powerSwitch().checked).toBe(false);
     });
 
     it('offers the backup, and blocks switching on, when the game file is damaged', async () => {

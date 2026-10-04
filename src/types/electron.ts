@@ -2,6 +2,7 @@ import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type {
     Mod,
     AppSettings,
+    DeleteModsProgress,
     GlobalModType,
     ModConflict,
     UnknownModDetectionProgress,
@@ -100,6 +101,12 @@ export interface DownloadModArgs {
     modName?: string;
     section?: string;
     categoryId?: number;
+    /** The download replaces installed content (an update, a confirmed
+     *  replace, a reinstall, or a merge-source refresh). The caller removes
+     *  what it replaces and restores the enabled and Global state itself, so
+     *  the backend leaves the mod's other files enabled instead of switching
+     *  sibling variants off. */
+    isReplacement?: boolean;
 }
 
 export interface GetCategoriesArgs {
@@ -115,8 +122,9 @@ export interface CleanupResult {
 export interface GameinfoStatus {
     configured: boolean;
     /** Why, as a code the renderer can word for users; `message` stays the
-     *  technical detail. */
-    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'unrepairable' | 'error';
+     *  technical detail. 'language-paths-missing' and 'boot-paths-missing'
+     *  still load mods. */
+    reason: 'ok' | 'not-found' | 'mods-not-loaded' | 'language-paths-missing' | 'boot-paths-missing' | 'unrepairable' | 'error';
     message: string;
     missing: boolean;
     candidates: string[];
@@ -722,6 +730,26 @@ export interface CrosshairSettings {
     pipBorder: boolean;
 }
 
+export interface CursorPack {
+    id: string;
+    name: string;
+    /** Archive folder this set came from when the mod shipped several. */
+    variant?: string;
+    /** Lowercased file names the pack writes into the game's cursor folder. */
+    files: string[];
+    installedAt: string;
+    gameBananaId?: number;
+    gameBananaFileId?: number;
+}
+
+export interface CursorPacksState {
+    packs: CursorPack[];
+    /** The applied pack, or null when the game has its stock cursors. */
+    activeId: string | null;
+}
+
+export type CursorPreview = Record<string, string>;
+
 export interface CrosshairPreset {
     id: string;
     name: string;
@@ -829,6 +857,8 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
+    deleteMods: (modIds: string[]) => Promise<void>;
+    onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => () => void;
     assertReplacementSafety: (modIds: string[]) => Promise<void>;
     revealModInFolder: (modId: string) => Promise<void>;
     detectUnknownModFilters: (modId: string, requestId?: string) => Promise<UnknownModFilterGuess>;
@@ -1264,6 +1294,16 @@ export interface ElectronAPI {
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
+
+    // Cursor packs (loose BMPs over game/citadel/resource/cursors, not VPKs)
+    getCursorPacks: () => Promise<CursorPacksState>;
+    /** Write a pack's files over the game's cursors, or put the stock set back for null. */
+    setActiveCursorPack: (id: string | null) => Promise<CursorPacksState>;
+    deleteCursorPack: (id: string) => Promise<CursorPacksState>;
+    /** Image data URLs by file name, for a pack or (null) the stock set. */
+    getCursorPreview: (id: string | null) => Promise<CursorPreview>;
+    /** Install one archive or a set of loose cursor files, then apply it. */
+    importCursorPack: (paths: string[]) => Promise<CursorPacksState>;
 
     // Updater
     updater: {

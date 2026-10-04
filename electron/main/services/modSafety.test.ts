@@ -31,6 +31,7 @@ beforeEach(async () => {
     h.userData = await fs.mkdtemp(join(tmpdir(), 'safety-consent-test-'));
     candidate = join(h.userData, 'test.vpk');
     await fs.writeFile(candidate, 'inert');
+    await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ experimentalModSafety: true }));
     h.reports = [];
     h.messages = [];
 });
@@ -45,6 +46,14 @@ async function prompt() {
 }
 
 describe('mod safety authorization', () => {
+    it('lets every archive through unread while the review is off', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ experimentalModSafety: false }));
+        h.reports.push(script());
+        await assertVpkSafety(candidate);
+        expect(await carryVpkSafety([candidate], candidate)).toBe('trusted');
+        expect(h.messages).toHaveLength(0);
+        expect(getModSafetyPrompts()).toHaveLength(0);
+    });
     it('approves the exact inline-reviewed version without a second prompt', async () => {
         h.reports.push(script(), script());
         expect(await approveVpkSafety(candidate, 'a'.repeat(64))).toBe(false);

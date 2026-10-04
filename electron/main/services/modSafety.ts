@@ -5,10 +5,12 @@ import { basename, dirname, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ModSafetyReport, ModSafetyPrompt, ModSafetySnapshot } from '../../../src/types/modSafety';
 import { MOD_SAFETY_POLICY_VERSION } from './modSafetyPolicy';
+import { cachedModSafetyReport, prunePathEntries } from './modSafetyScan';
 import { vpkmergeBinaryPath } from './modMerger';
+import { loadSettings } from './settings';
 
 const pending = new Map<string, { prompt: ModSafetyPrompt; finish: (accepted: boolean) => void }>();
-// Presentation only. Permission decisions hash current bytes before reusing a report.
+// Presentation only. Permission decisions inspect the file again before reusing a report.
 // Renames carry an entry along; the size and mtime of the inspected file drop
 // it once its path holds other bytes, whichever writer put them there.
 const snapshots = new Map<string, ModSafetySnapshot & { size: number; mtimeMs: number }>();
@@ -127,15 +129,23 @@ function inspectionFailure(path: string): ModSafetyReport {
         findings: [{ entry: basename(path), reason: 'inspection-failed' }] };
 }
 
-/** Always hashes current bytes. UI snapshots are never authorization caches. */
+/**
+ * Rehashes unless the archive's files are untouched since they were last
+ * hashed. UI snapshots are never authorization caches. With the review turned
+ * off every archive passes unread.
+ */
 export function inspectVpkSafety(path: string): Promise<ModSafetyReport> {
+    if (!loadSettings().experimentalModSafety) {
+        return Promise.resolve({ policyVersion: MOD_SAFETY_POLICY_VERSION, fingerprint: '', verdict: 'no-findings', findings: [] });
+    }
     // Taken before the worker reads, so bytes replaced mid-inspection never match.
     const inspected = fs.stat(path).catch(() => null);
+    const cacheDir = reportCacheDir();
     const task = scanQueue.then(async () => {
         let binary: string | undefined;
         // Without a decoder only archives with compiled layouts come back incomplete.
         try { binary = vpkmergeBinaryPath(); } catch { binary = undefined; }
-        const report = await new Promise<ModSafetyReport>((resolve) => {
+        const report = await cachedModSafetyReport(path, cacheDir) ?? await new Promise<ModSafetyReport>((resolve) => {
             let worker: Worker;
             try { worker = new Worker(join(__dirname, 'vpkSafetyWorker.js'), {
                 resourceLimits: { maxOldGenerationSizeMb: 256, stackSizeMb: 8 },
@@ -153,7 +163,7 @@ export function inspectVpkSafety(path: string): Promise<ModSafetyReport> {
             worker.once('message', finish);
             worker.once('error', () => finish(inspectionFailure(path)));
             worker.once('exit', () => finish(inspectionFailure(path)));
-            worker.postMessage({ path, binary, cacheDir: join(app.getPath('userData'), 'mod-safety-reports') });
+            worker.postMessage({ path, binary, cacheDir });
         });
         const stat = await inspected;
         if (stat) snapshots.set(path, { report, trusted: await isModSafetyTrusted(report), size: stat.size, mtimeMs: stat.mtimeMs });
@@ -222,6 +232,10 @@ async function retainRejectedPackage(path: string, report: ModSafetyReport): Pro
         await fs.rename(temp, root);
     } finally { await fs.rm(temp, { recursive: true, force: true }); }
 }
+
+function reportCacheDir(): string { return join(app.getPath('userData'), 'mod-safety-reports'); }
+
+export function pruneModSafetyPathCache(): Promise<void> { return prunePathEntries(reportCacheDir()); }
 
 /** Startup: retained packages are diagnostic only, so keep the newest 30 days up to 2 GiB. */
 export async function pruneModQuarantine(): Promise<void> {

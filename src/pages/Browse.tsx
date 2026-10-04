@@ -60,7 +60,7 @@ import {
   useAppStore,
 } from '../stores/appStore';
 import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
-import type { NsfwContentMode, HiddenCreator } from '../types/mod';
+import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -69,11 +69,14 @@ import { Button } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
-import { HiddenCreatorsModal } from '../components/HiddenCreatorsManager';
+import { HiddenCreatorsModal, HiddenModsModal } from '../components/HiddenContentManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
-import { hasPendingUpdate, planFileUpdates } from '../lib/updateFileMatch';
+import { classifyModFiles } from '../lib/updateFileMatch';
+import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
+import { mergeSourceFileIds } from '../lib/updateCheck';
+import { visibleInstalledMods } from '../lib/visibleMods';
 import {
   createEnabledVpkRestoreSnapshot,
   createGlobalVpkRestoreSnapshot,
@@ -81,6 +84,7 @@ import {
 } from '../lib/vpkRestore';
 import { findReplacementTargetIdsAfterInstall } from '../lib/replacementCleanup';
 import { showToast } from '../stores/toastStore';
+import { useCursorPackStore } from '../stores/cursorPackStore';
 import { BrowseArtistBanner } from '../components/browse/BrowseArtistBanner';
 import { MemoizedModCard, ModCardSkeleton } from '../components/browse/BrowseModCard';
 import {
@@ -125,6 +129,10 @@ type ModDetailsNavigationDirection = 'previous' | 'next';
 // shape as Mods, so they browse and install through the existing parameterized
 // section path. The section list is otherwise data-driven from CategoryTree.
 const SECTION_WHITELIST = new Set(['Mod', 'Sound', 'Wip']);
+
+// GameBanana numbers Mods, Sounds and WiPs separately, so a hidden mod is
+// identified by section + id.
+const hiddenModKey = (section: string, id: number) => `${section}:${id}`;
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
 // Below this window width the docked sidebar would crush the grid, so we force
@@ -404,6 +412,12 @@ export default function Browse() {
   const toggleMod = useAppStore((s) => s.toggleMod);
   const setModPriorityFolder = useAppStore((s) => s.setModPriorityFolder);
   const installedMods = useAppStore((s) => s.mods);
+  const cursorPacks = useCursorPackStore((s) => s.packs);
+  const loadCursorPacks = useCursorPackStore((s) => s.load);
+  // Absorbed merge sources and Locker artifacts are not installs of their own:
+  // update state and replacements run over the same visible set as Installed.
+  const visibleMods = useMemo(() => visibleInstalledMods(installedMods), [installedMods]);
+  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
   const soundVolume = useAppStore((s) => s.soundVolume);
   const setSoundVolume = useAppStore((s) => s.setSoundVolume);
   const browseUi = useAppStore((s) => s.browseUi);
@@ -419,6 +433,11 @@ export default function Browse() {
   const hiddenCreatorIds = useMemo(() => hiddenCreators.map((creator) => creator.id), [hiddenCreators]);
   const hiddenCreatorIdSet = useMemo(() => new Set(hiddenCreatorIds), [hiddenCreatorIds]);
   const hiddenCreatorsStamp = useMemo(() => hiddenCreatorIdsStamp(hiddenCreators), [hiddenCreators]);
+  const hiddenMods = useMemo(() => settings?.hiddenMods ?? [], [settings?.hiddenMods]);
+  const hiddenModKeys = useMemo(
+    () => new Set(hiddenMods.map((mod) => hiddenModKey(mod.section, mod.id))),
+    [hiddenMods]
+  );
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
   const { search, layout, sort, section, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
@@ -578,6 +597,7 @@ export default function Browse() {
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
   const [creatorToHide, setCreatorToHide] = useState<HiddenCreator | null>(null);
+  const [hiddenModsOpen, setHiddenModsOpen] = useState(false);
   const [browseCardDesign, setBrowseCardDesignState] = useState<BrowseCardDesign>(() => {
     if (typeof window === 'undefined') return 'readable';
     return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'classic' ? 'classic' : 'readable';
@@ -1580,12 +1600,17 @@ export default function Browse() {
       // an open details overlay would otherwise keep offering "Install" for a
       // mod that is now on disk.
       loadMods();
+      void loadCursorPacks();
     });
 
     return () => {
       completeUnsub();
     };
-  }, [loadMods]);
+  }, [loadMods, loadCursorPacks]);
+
+  useEffect(() => {
+    void loadCursorPacks();
+  }, [loadCursorPacks]);
 
   // Infinite scroll observer
   // Infinite scroll observer
@@ -1812,17 +1837,22 @@ export default function Browse() {
   // Stable identity (useStableCallback) so the memoized ModDetailsModal does
   // not re-render every time this large component does (e.g. on every
   // virtualizer range change while the docked sidebar is open).
-  const handleDownload = useStableCallback(async (fileId: number, fileName: string) => {
+  const handleDownload = useStableCallback(async (fileId: number, fileName: string, replaceFileId?: number) => {
     if (!selectedMod || !activeDeadlockPath) return;
     if (!requestDownload({ modId: selectedMod.id, fileId, fileName, modName: selectedMod.name })) return;
 
     try {
-      const updateSourceIds = selectedUpdateSourcesByTargetFileId.get(fileId) ?? [];
-      const replacementTargets = updateSourceIds.length > 0
-        ? installedMods.filter((mod) => updateSourceIds.includes(mod.id))
-        : installedMods.filter(
-            (mod) => mod.gameBananaId === selectedMod.id && mod.gameBananaFileId === fileId,
-          );
+      // Only the stale file this is the confident successor of, a stale file
+      // the user confirmed replacing, or the same file on a reinstall gets
+      // replaced. A plain install deletes nothing.
+      const decision = decideFileDownload(
+        fileId,
+        selectedUpdate.classification,
+        visibleMods.filter((mod) => mod.gameBananaId === selectedMod.id),
+        { replaceFileId },
+      );
+      const replacedIds = new Set(decision.replacedModIds);
+      const replacementTargets = visibleMods.filter((mod) => replacedIds.has(mod.id));
       const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
       const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
       if (restoreGlobal.ambiguous) {
@@ -1837,23 +1867,31 @@ export default function Browse() {
         }
       }
 
-      const installedReplacementIds =
-        updateSourceIds.length > 0
-          ? installedMods
-              .filter(
-                (mod) =>
-                  mod.gameBananaId === selectedMod.id &&
-                  mod.gameBananaFileId === fileId &&
-                  !updateSourceIds.includes(mod.id),
-              )
-              .map((mod) => mod.id)
-          : [];
+      // When the user already has the picked file (an update onto an installed
+      // successor, or a confirmed replace onto it), nothing is downloaded: the
+      // replaced file is deleted and its state restored onto the installed one.
+      const installedReplacementIds = visibleMods
+        .filter(
+          (mod) =>
+            mod.gameBananaId === selectedMod.id &&
+            mod.gameBananaFileId === fileId &&
+            !replacedIds.has(mod.id),
+        )
+        .map((mod) => mod.id);
 
       if (installedReplacementIds.length === 0) {
         // Snapshot capture can leave an optimistic row on screen long enough
         // for the user to cancel it. Do not cross IPC after that cancellation.
         if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
-        await downloadMod(selectedMod.id, fileId, fileName, selectedDetailsSection, effectiveCategoryId);
+        await downloadMod(
+          selectedMod.id,
+          fileId,
+          fileName,
+          selectedDetailsSection,
+          effectiveCategoryId,
+          selectedMod.name,
+          decision.replacedModIds.length > 0,
+        );
         await loadMods();
         const installedAfterDownload = useAppStore.getState().mods;
         const targetIds = findReplacementTargetIdsAfterInstall(
@@ -2003,8 +2041,12 @@ export default function Browse() {
         ids.add(mod.gameBananaId);
       }
     }
+    // Cursor mods install as packs outside the VPK list.
+    for (const pack of cursorPacks) {
+      if (typeof pack.gameBananaId === 'number') ids.add(pack.gameBananaId);
+    }
     return ids;
-  }, [installedMods]);
+  }, [installedMods, cursorPacks]);
 
   // Per-card lookup so each ModCard knows the local mod's id + enabled state.
   // Drives the inline "Enable" affordance: once a download finishes, the
@@ -2024,16 +2066,18 @@ export default function Browse() {
     return map;
   }, [installedMods]);
 
-  // Track installed file IDs for per-file "Reinstall" button state
+  // Track installed file IDs for per-file "Reinstall" button state. A file
+  // held only inside a merge does not count: reinstalling it would not touch
+  // the merge.
   const installedFileIds = useMemo(() => {
     const ids = new Set<number>();
-    for (const mod of installedMods) {
+    for (const mod of visibleMods) {
       if (typeof mod.gameBananaFileId === 'number') {
         ids.add(mod.gameBananaFileId);
       }
     }
     return ids;
-  }, [installedMods]);
+  }, [visibleMods]);
 
   // Per-file install map for the details modal. Lets a row that's installed
   // but currently disabled surface an inline "Enable" pill — matches the
@@ -2042,7 +2086,7 @@ export default function Browse() {
   // representative since that's the actionable state.
   const installedFileStates = useMemo(() => {
     const map = new Map<number, { modId: string; enabled: boolean }>();
-    for (const mod of installedMods) {
+    for (const mod of visibleMods) {
       if (typeof mod.gameBananaFileId !== 'number') continue;
       const existing = map.get(mod.gameBananaFileId);
       if (!existing || (mod.enabled && !existing.enabled)) {
@@ -2050,67 +2094,29 @@ export default function Browse() {
       }
     }
     return map;
-  }, [installedMods]);
+  }, [visibleMods]);
 
   // Without this, a file the author re-uploaded renders as a plain "Install" and
   // the mod reads as never downloaded, even though the Installed page flags the
   // same mod as updatable. The open modal's file list is already the live list,
-  // so the check costs no extra request here.
-  const selectedModUpdateAvailable = useMemo(
-    () => (selectedMod ? hasPendingUpdate(selectedMod.id, selectedMod.files ?? [], installedMods) : false),
-    [selectedMod, installedMods]
-  );
-  const selectedUpdatePlan = useMemo(() => {
-    if (!selectedMod) {
-      return { sourcesByTargetFileId: new Map<number, string[]>(), unresolvedSourceIds: [] };
-    }
-    return planFileUpdates(
-      selectedMod.id,
-      selectedMod.files ?? [],
-      installedMods
-        .filter(
-          (mod) =>
-            mod.gameBananaId === selectedMod.id &&
-            typeof mod.gameBananaFileId === 'number',
-        )
-        .map((mod) => ({
-          id: mod.id,
-          gameBananaId: mod.gameBananaId,
-          gameBananaFileId: mod.gameBananaFileId,
-          ignoreUpdates: mod.ignoreUpdates,
-          installedFileId: mod.gameBananaFileId!,
-          fileDescription: mod.fileDescription,
-          sourceFileName: mod.sourceFileName,
-        })),
+  // so the check costs no extra request here. Same classifier, rules and
+  // visible set as the Installed page, over every installed file of the mod.
+  const selectedUpdate = useMemo(() => {
+    const classification = classifyModFiles(
+      selectedMod?.id ?? -1,
+      selectedMod?.files ?? [],
+      visibleMods,
+      mergedFileIds,
     );
-  }, [selectedMod, installedMods]);
-  const selectedUpdateSourcesByTargetFileId = useMemo(() => {
-    const sources = new Map(selectedUpdatePlan.sourcesByTargetFileId);
-    if (
-      !selectedMod ||
-      sources.size > 0 ||
-      selectedUpdatePlan.unresolvedSourceIds.length === 0
-    ) return sources;
-
-    // If every unresolved local VPK came from the same old GameBanana file,
-    // the ambiguity is only "which new variant does the user want?". Let every
-    // current row be an explicit Update choice. Distinct stale file ids remain
-    // unlabelled because collapsing several variants into one would be unsafe.
-    const unresolved = installedMods.filter((mod) =>
-      selectedUpdatePlan.unresolvedSourceIds.includes(mod.id),
-    );
-    const oldFileIds = new Set(unresolved.map((mod) => mod.gameBananaFileId));
-    if (oldFileIds.size === 1) {
-      for (const file of selectedMod.files ?? []) {
-        if (!file.isArchived) sources.set(file.id, [...selectedUpdatePlan.unresolvedSourceIds]);
-      }
-    }
-    return sources;
-  }, [selectedMod, selectedUpdatePlan, installedMods]);
-  const selectedUpdateFileIds = useMemo(
-    () => new Set(selectedUpdateSourcesByTargetFileId.keys()),
-    [selectedUpdateSourcesByTargetFileId],
-  );
+    const summary = summarizeUpdateScope(classification);
+    return {
+      classification,
+      flagged: summary.flagged,
+      archived: summary.archived,
+      updateFileIds: new Set(summary.targets.keys()),
+      replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
+    };
+  }, [selectedMod, visibleMods, mergedFileIds]);
 
   const queuedByModId = useMemo(() => {
     const map = new Map<number, QueuedDownloadState>();
@@ -2205,6 +2211,12 @@ export default function Browse() {
     let nextMods = !allowHiddenSubmitter && hiddenCreatorIdSet.size > 0
       ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
+    // Hidden mods filter here rather than in the fetch: one hidden item never
+    // empties a page, and keeping it out of the fetch stamp means hiding a mod
+    // does not refetch the grid or lose the scroll position.
+    if (hiddenModKeys.size > 0) {
+      nextMods = nextMods.filter((m) => !hiddenModKeys.has(hiddenModKey(section, m.id)));
+    }
     if (settings?.hideOutdatedMods) {
       nextMods = nextMods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified));
     }
@@ -2222,8 +2234,8 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw, hiddenCreatorIdSet, allowHiddenSubmitter]);
-  // Client-side filters (Hide mode, hidden creators, outdated) can empty a
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw, hiddenCreatorIdSet, hiddenModKeys, allowHiddenSubmitter]);
+  // Client-side filters (Hide mode, hidden creators/mods, outdated) can empty a
   // remote page entirely. The sentinel sits below the fold then, so page on
   // until something survives or the results run out.
   const pagingPastFilteredPage = displayMods.length === 0 && mods.length > 0 && hasMore && !autoLoadPaused;
@@ -2351,6 +2363,42 @@ export default function Browse() {
     showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
   });
 
+  const updateHiddenMods = useStableCallback(async (
+    updater: (current: HiddenMod[]) => HiddenMod[]
+  ) => {
+    const currentSettings = useAppStore.getState().settings;
+    if (!currentSettings) return;
+    await saveSettings({
+      ...currentSettings,
+      hiddenMods: updater(currentSettings.hiddenMods ?? []),
+    });
+  });
+
+  const withoutHiddenMod = (mod: HiddenMod) => (current: HiddenMod[]) =>
+    current.filter((entry) => hiddenModKey(entry.section, entry.id) !== hiddenModKey(mod.section, mod.id));
+
+  // The details modal knows only id + name; the section is whichever one it
+  // was opened in, which differs from the grid's for a cross-section link.
+  const hideMod = useStableCallback(async ({ id, name }: { id: number; name: string }) => {
+    const mod: HiddenMod = { id, name, section: selectedDetailsSection };
+    if (!id || hiddenModKeys.has(hiddenModKey(mod.section, id))) return;
+    if (selectedMod?.id === id) closeSelectedMod();
+    await updateHiddenMods((current) => [...withoutHiddenMod(mod)(current), mod]);
+    showToast(t('hiddenMods.hiddenToast', { name }), {
+      tone: 'success',
+      duration: 8000,
+      actionLabel: t('common.actions.undo'),
+      onAction: () => {
+        void updateHiddenMods(withoutHiddenMod(mod));
+      },
+    });
+  });
+
+  const showHiddenMod = useStableCallback(async (mod: HiddenMod) => {
+    await updateHiddenMods(withoutHiddenMod(mod));
+    showToast(t('hiddenMods.shownToast', { name: mod.name }), { tone: 'success' });
+  });
+
   // Artist mode can be entered from Installed as well as Browse. Respect the
   // hidden-creator setting unless this exact navigation supplied the narrow
   // trusted override used by the Performance credit link.
@@ -2457,8 +2505,11 @@ export default function Browse() {
         mod={selectedMod}
         section={selectedDetailsSection}
         installed={installedIds.has(selectedMod.id)}
-        updateAvailable={selectedModUpdateAvailable}
-        updateFileIds={selectedUpdateFileIds}
+        updateAvailable={selectedUpdate.flagged}
+        updateFileIds={selectedUpdate.updateFileIds}
+        archivedByAuthor={selectedUpdate.archived}
+        replaceableFiles={selectedUpdate.replaceableFiles}
+        onReplace={handleDownload}
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
         onEnableFile={toggleMod}
@@ -2477,6 +2528,7 @@ export default function Browse() {
         onDeleteFile={deleteMod}
         onViewArtist={viewArtist}
         onHideArtist={requestHideCreator}
+        onHideMod={hiddenModKeys.has(hiddenModKey(selectedDetailsSection, selectedMod.id)) ? undefined : hideMod}
         onOpenGameBananaItem={handleOpenGameBananaItem}
       />
     ) : null;
@@ -2739,7 +2791,7 @@ export default function Browse() {
                     />
                   </div>
 
-                  <div className="border-t border-border pt-3">
+                  <div className="space-y-1 border-t border-border pt-3">
                     <Button
                       type="button"
                       variant="ghost"
@@ -2753,6 +2805,21 @@ export default function Browse() {
                       <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
                       <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
                         {hiddenCreators.length}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      icon={EyeOff}
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setHiddenModsOpen(true);
+                      }}
+                      className="w-full justify-start px-2 text-text-primary"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-left">{t('hiddenMods.manage')}</span>
+                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
+                        {hiddenMods.length}
                       </span>
                     </Button>
                   </div>
@@ -3239,6 +3306,13 @@ export default function Browse() {
         onClose={() => setHiddenCreatorsOpen(false)}
         creators={hiddenCreators}
         onRemove={showHiddenCreator}
+      />
+
+      <HiddenModsModal
+        open={hiddenModsOpen}
+        onClose={() => setHiddenModsOpen(false)}
+        mods={hiddenMods}
+        onRemove={showHiddenMod}
       />
 
       <ConfirmModal

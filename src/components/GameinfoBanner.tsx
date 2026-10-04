@@ -6,9 +6,9 @@ import { Button } from './common/ui';
 import { showToast } from '../stores/toastStore';
 import { useGameinfoStore } from '../stores/gameinfoStore';
 
-// App-wide warning when gameinfo.gi no longer loads mods or a game update
-// removed the performance config. Worded for players: the technical detail from
-// the main process is kept as a tooltip for bug reports.
+// App-wide warning when gameinfo.gi no longer loads mods, mentioning the
+// performance config when the same reset removed it. Worded for players: the
+// technical detail from the main process is kept as a tooltip for bug reports.
 export default function GameinfoBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -27,14 +27,16 @@ export default function GameinfoBanner() {
   const text =
     reason === 'mods-not-loaded'
       ? t(perfWiped ? 'layout.gameinfo.modsAndPerfOff' : 'layout.gameinfo.modsOff')
-      : reason === 'not-found'
-        ? t('layout.gameinfo.notFound')
-        : reason === 'unrepairable'
-          ? t('layout.gameinfo.unrepairable')
-          : reason === 'error'
-            ? t('layout.gameinfo.error')
-            : perfWiped
-              ? t('layout.perfWiped')
+      : reason === 'boot-paths-missing'
+        ? t('layout.gameinfo.bootPathsOff')
+        : reason === 'language-paths-missing'
+        ? t('layout.gameinfo.languageOff')
+        : reason === 'not-found'
+          ? t('layout.gameinfo.notFound')
+          : reason === 'unrepairable'
+            ? t('layout.gameinfo.unrepairable')
+            : reason === 'error'
+              ? t('layout.gameinfo.error')
               : null;
   const canFix = reason !== 'not-found' && reason !== 'error';
 

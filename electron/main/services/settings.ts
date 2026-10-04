@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     nsfwContentMode: 'blur',
     hideOutdatedMods: false,
     hiddenCreators: [],
+    hiddenMods: [],
     lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
     autoEnableDownloads: false,
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
     experimentalVpkImprinting: false,
+    experimentalModSafety: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
@@ -47,23 +49,46 @@ const DEFAULT_SETTINGS: AppSettings = {
     forgeLocalInstallEnabled: false,
 };
 
-/** Normalize user-editable settings.json data into a small, deterministic
- *  creator list. Invalid ids are ignored and duplicate ids keep the most
- *  recently listed display name. */
+/** One hidden creator/mod entry from user-editable settings.json, or null when
+ *  its id or name is unusable. */
+function parseHiddenEntry(candidate: unknown): { id: number; name: string } | null {
+    if (!candidate || typeof candidate !== 'object') return null;
+    const { id, name } = candidate as { id?: unknown; name?: unknown };
+    if (!Number.isSafeInteger(id) || (id as number) <= 0 || typeof name !== 'string') return null;
+    const trimmedName = name.trim();
+    if (!trimmedName) return null;
+    return { id: id as number, name: trimmedName.slice(0, 200) };
+}
+
+/** Normalize settings.json data into a small, deterministic creator list.
+ *  Invalid entries are ignored and duplicate ids keep the most recently listed
+ *  display name. */
 function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] {
     if (!Array.isArray(value)) return [];
 
-    const byId = new Map<number, string>();
+    const byId = new Map<number, AppSettings['hiddenCreators'][number]>();
     for (const candidate of value) {
-        if (!candidate || typeof candidate !== 'object') continue;
-        const { id, name } = candidate as { id?: unknown; name?: unknown };
-        if (!Number.isSafeInteger(id) || (id as number) <= 0 || typeof name !== 'string') continue;
-        const trimmedName = name.trim();
-        if (!trimmedName) continue;
-        byId.set(id as number, trimmedName.slice(0, 200));
+        const entry = parseHiddenEntry(candidate);
+        if (entry) byId.set(entry.id, entry);
     }
+    return [...byId.values()];
+}
 
-    return [...byId.entries()].map(([id, name]) => ({ id, name }));
+const HIDDEN_MOD_SECTIONS = new Set(['Mod', 'Sound', 'Wip']);
+
+/** Same for hidden mods, keyed by section too: GameBanana numbers Mods, Sounds
+ *  and WiPs separately, so a bare id can name two different submissions. */
+function normalizeHiddenMods(value: unknown): AppSettings['hiddenMods'] {
+    if (!Array.isArray(value)) return [];
+
+    const byKey = new Map<string, AppSettings['hiddenMods'][number]>();
+    for (const candidate of value) {
+        const entry = parseHiddenEntry(candidate);
+        const section = (candidate as { section?: unknown } | null)?.section;
+        if (!entry || typeof section !== 'string' || !HIDDEN_MOD_SECTIONS.has(section)) continue;
+        byKey.set(`${section}:${entry.id}`, { ...entry, section });
+    }
+    return [...byKey.values()];
 }
 
 /** The three NSFW keys that `nsfwContentMode` replaced. */
@@ -106,6 +131,7 @@ export function loadSettings(): AppSettings {
             ...DEFAULT_SETTINGS,
             ...settings,
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
+            hiddenMods: normalizeHiddenMods(settings.hiddenMods),
             nsfwContentMode:
                 settings.nsfwContentMode ??
                 migrateNsfwContentMode(browseNsfwContentMode, installedHideNsfwPreviews ?? hideNsfwPreviews),

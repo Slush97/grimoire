@@ -757,6 +757,19 @@
     "hiddenToast": "Uploads from {{name}} are now hidden.",
     "shownToast": "Uploads from {{name}} are visible again."
   },
+  "hiddenMods": {
+    "title": "Hidden mods",
+    "description": "Hide individual GameBanana mods from Browse. Installed mods remain visible.",
+    "manage": "Manage hidden mods",
+    "emptyTitle": "No hidden mods",
+    "emptyDescription": "Use Hide mod from a mod's details to add it here.",
+    "gamebananaId": "GameBanana item #{{id}}",
+    "showMod": "Show mod",
+    "hideMod": "Hide mod",
+    "hiddenToast": "{{name}} is now hidden from Browse.",
+    "shownToast": "{{name}} is visible in Browse again.",
+    "none": "No mods are hidden right now."
+  },
   "settings": {
     "header": {
       "description": "Game paths, preferences, and maintenance"
@@ -1030,6 +1043,7 @@
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, two download keys, and a fixed \"grimoire\" client tag: no account id, no player name, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "vpkImprint": "Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have.",
+      "modSafety": "Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting."
     },
     "privacy": {
@@ -1414,7 +1428,8 @@
       "confirmMessage": "Are you sure you want to delete <name>{{name}}</name>? This action cannot be undone.",
       "bulkConfirm": "Delete {{name}}",
       "groupConfirm_one": "Delete {{count}}",
-      "groupConfirm_other": "Delete {{count}}"
+      "groupConfirm_other": "Delete {{count}}",
+      "progress": "Deleting {{done}} of {{total}}..."
     },
     "details": {
       "loading": "Loading mod details...",
@@ -1576,6 +1591,7 @@
     "batchImport": {
       "title": "Import Local Mods",
       "help": "Add .vpk files or archives (.zip, .7z, .rar). Mods are imported disabled so you can review them before enabling them.",
+      "helpEnabled": "Add .vpk files or archives (.zip, .7z, .rar). Mods are enabled as soon as they're imported.",
       "selectFiles": "Select VPK files or archives",
       "ariaBrowse": "Drop .vpk files or archives here, or press Enter to browse",
       "dropFilesHere": "Drop <code>.vpk</code> files or archives here",
@@ -2186,6 +2202,24 @@
       "unfavorite": "Unfavorite",
       "lockerSections": "Locker sections",
       "hero3dModel": "{{hero}} 3D model"
+    },
+    "cursors": {
+      "tab": "Cursors",
+      "default": "Default",
+      "defaultSubtitle": "Deadlock's own cursors",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files",
+      "import": "Import",
+      "importTitle": "Import a cursor mod",
+      "importFilter": "Cursor images and archives",
+      "imported": "Cursor imported and applied. Restart Deadlock if it's running.",
+      "applied": "{{name}} applied. Restart Deadlock if it's running.",
+      "restored": "Default cursors restored. Restart Deadlock if it's running.",
+      "find": "Find cursors in Browse",
+      "empty": "Cursor mods swap the game's mouse pointer. Download one from Browse or import its BMP files, then pick it here.",
+      "deleteNamed": "Delete {{name}}",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteMessage": "This removes the cursor pack from Grimoire. If it is the active one, the default cursors come back."
     }
   },
   "profiles": {
@@ -2831,7 +2865,9 @@
       "queued": "Queued",
       "starting": "Starting",
       "extracting": "Extracting...",
-      "updatesIgnored": "Updates ignored"
+      "updatesIgnored": "Updates ignored",
+      "archivedByAuthor": "Archived by author",
+      "archivedByAuthorTitle": "The author archived the file you have. Grimoire found no clear replacement for it, so it is not treated as an update."
     },
     "actions": {
       "enable": "Enable",
@@ -2875,6 +2911,14 @@
     "deleteFile": {
       "title": "Delete installed file?",
       "body": "Delete <name>{{fileName}}</name> from your installed mods? This action cannot be undone."
+    },
+    "replace": {
+      "action": "Replace {{name}} with this",
+      "menu": "Replace an installed file with this",
+      "confirmTitle": "Replace file?",
+      "confirmBody": "{{oldName}} is no longer on GameBanana. Grimoire will install {{newName}} and delete {{oldName}}, keeping its enabled and Global settings.",
+      "confirmBodyInstalled": "{{oldName}} is no longer on GameBanana. Grimoire will delete it and keep {{newName}}, which you already have, moving its enabled and Global settings over.",
+      "confirm": "Replace"
     },
     "aria": {
       "loadingDetails": "Loading mod details",
@@ -2920,7 +2964,6 @@
   "layout": {
     "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
     "fixNow": "Fix now",
-    "perfWiped": "A game update removed your performance config.",
     "perfRestored": "Performance config restored.",
     "openSettings": "Open settings",
     "hideGameinfoBanner": "Hide gameinfo banner until next launch",
@@ -2939,6 +2982,8 @@
     "gameinfo": {
       "modsOff": "Your mods aren't loading. A game update or another mod manager changed Deadlock's config.",
       "modsAndPerfOff": "Your mods aren't loading and your performance config was removed. A game update or another mod manager changed Deadlock's config.",
+      "languageOff": "An older Grimoire removed Deadlock's language paths, so translated art like hero names may not show. Fix puts them back.",
+      "bootPathsOff": "Deadlock's config is missing paths the game needs to start, so it can crash on launch. Fix puts them back.",
       "notFound": "Grimoire can't find Deadlock's config file. Check the game folder in Settings.",
       "unrepairable": "Grimoire couldn't repair Deadlock's config. Verify the game files in Steam, then try again.",
       "error": "Grimoire couldn't read Deadlock's config. Check the game folder in Settings."
@@ -3103,6 +3148,7 @@
     "switched": "Switched to {{preset}}.",
     "notice": {
       "wiped": "A game update removed your performance config.",
+      "removed": "Your performance config is no longer in gameinfo.gi. Restore it, or dismiss this if you took it out on purpose.",
       "damaged": "Your game's config file is empty or damaged. Restore the backup Grimoire made, or verify game files in Steam.",
       "update": "A newer version of this config is available.",
       "handEdited": "Includes changes you made to the file by hand."

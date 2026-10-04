@@ -270,6 +270,33 @@ export function Slider({
     );
 }
 
+interface ProgressBarProps {
+    value: number;
+    max: number;
+    /** Accessible name; pass the visible progress text. */
+    label?: string;
+    className?: string;
+}
+
+export function ProgressBar({ value, max, label, className = '' }: ProgressBarProps) {
+    const percentage = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+    return (
+        <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={max}
+            aria-valuenow={value}
+            aria-label={label}
+            className={`h-1.5 w-full overflow-hidden rounded-sm bg-bg-tertiary ${className}`}
+        >
+            <div
+                className="h-full rounded-sm bg-accent transition-[width] duration-200 ease-out"
+                style={{ width: `${percentage}%` }}
+            />
+        </div>
+    );
+}
+
 interface ToggleProps {
     checked: boolean;
     onChange: (checked: boolean) => void;

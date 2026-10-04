@@ -702,6 +702,12 @@ export interface Mod {
   imprintStale?: boolean;
 }
 
+// Progress tick emitted after each mod a batch delete removes.
+export interface DeleteModsProgress {
+  done: number;
+  total: number;
+}
+
 export interface MergeModsArgs {
   modIds: string[];
   name: string;
@@ -1063,6 +1069,16 @@ export interface HiddenCreator {
   name: string;
 }
 
+/** A single GameBanana submission the user has hidden from Browse. GameBanana
+ *  numbers Mods, Sounds and WiPs separately, so section + id is the identity;
+ *  the name only labels Settings. */
+export interface HiddenMod {
+  id: number;
+  name: string;
+  /** GameBanana model name: "Mod", "Sound" or "Wip". */
+  section: string;
+}
+
 export interface AppSettings {
   deadlockPath: string | null;
   devMode: boolean;
@@ -1086,6 +1102,9 @@ export interface AppSettings {
   /** GameBanana submitters whose Mods, Sounds, and WiPs are excluded from
    *  Browse. This does not hide or disable content already installed. */
   hiddenCreators: HiddenCreator[];
+  /** Individual GameBanana submissions excluded from Browse. Like
+   *  hiddenCreators, this never hides or disables installed content. */
+  hiddenMods: HiddenMod[];
   /** Open Locker list-view hero cards expanded on first load. */
   lockerCardsExpandedByDefault: boolean;
   /** Installing a different file of an already-enabled mod disables the
@@ -1120,6 +1139,12 @@ export interface AppSettings {
    *  by default. Also surfaces the retroactive "Imprint installed mods" bulk action
    *  on the Installed page. */
   experimentalVpkImprinting: boolean;
+  /** Opt-in mod safety review (docs/mod-inspection.md): inspect each VPK for
+   *  scripts and other executable content, ask before activating a flagged
+   *  version, and import local mods disabled until reviewed. Off by default
+   *  since Valve closed the CEF file:// read it was built against. When off,
+   *  every safety gate passes without reading the archive. */
+  experimentalModSafety: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

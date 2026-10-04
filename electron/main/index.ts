@@ -79,6 +79,7 @@ import './ipc/profiles';
 import './ipc/snapshots';
 import './ipc/modDatabase';
 import './ipc/crosshairPresets';
+import './ipc/cursorPacks';
 import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';

@@ -130,6 +130,7 @@ export default function ImportCustomModsModal({
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const safetyReview = useAppStore(s => s.settings?.experimentalModSafety ?? false);
   const reviewAfterClose = useRef(false);
   const close = () => {
     onClose();
@@ -478,7 +479,9 @@ export default function ImportCustomModsModal({
         <p className="text-xs leading-5 text-text-secondary">
           {addToGroup
             ? t('installed.batchImport.addVariantsHelp', { name: addToGroup.modName })
-            : t('installed.batchImport.help')}
+            : safetyReview
+              ? t('installed.batchImport.help')
+              : t('installed.batchImport.helpEnabled')}
         </p>
 
         {rows.length === 0 ? (

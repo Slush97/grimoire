@@ -105,7 +105,7 @@ interface ModCardProps {
    *  details / firing toggle / delete. */
   selectMode?: boolean;
   selected?: boolean;
-  onSelectToggle?: () => void;
+  onSelectToggle?: React.MouseEventHandler<HTMLButtonElement>;
   /** Personal pin, settable from either section, but it only reorders the
    *  disabled section (favorites sort ahead of other disabled entries). The
    *  enabled section is real load order, so starring an enabled card is a pure

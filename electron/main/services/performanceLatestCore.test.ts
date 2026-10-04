@@ -153,14 +153,14 @@ describe('buildLatestRelease gates', () => {
         expect(tagged.ok).toBe(true);
         if (tagged.ok) expect(tagged.release.version).toBe('9.9-beta.1');
 
-        // v4.2 is a bundled optilock-fps release; different content under the
-        // same tag must not impersonate it.
+        // Different content under a bundled release's tag must not impersonate it.
+        const bundled = getFamily('optilock-fps').releases[0];
         const colliding = buildLatestRelease(
-            input({ presetId: 'optilock-fps', refKind: 'tag', ref: 'v4.2' })
+            input({ presetId: 'optilock-fps', refKind: 'tag', ref: bundled.ref })
         );
         expect(colliding.ok).toBe(true);
         if (colliding.ok) {
-            expect(colliding.release.version).toBe('4.2.abcdef01');
+            expect(colliding.release.version).toBe(`${bundled.version}.abcdef01`);
         }
     });
 

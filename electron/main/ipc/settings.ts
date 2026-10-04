@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
-import { loadSettings, saveSettings, type AppSettings } from '../services/settings';
+import { getActiveDeadlockPath, loadSettings, saveSettings, type AppSettings } from '../services/settings';
+import { auditInstalledSafety } from '../services/modSafetyAudit';
 import { syncWindowBackgroundWithSettings } from '../services/windowBackground';
 import { detectDeadlockPath, looksLikeDeadlockPath } from '../services/deadlock';
 import { ensureDevDeadlockPath } from '../services/dev';
@@ -29,9 +30,16 @@ ipcMain.handle('get-settings', (): AppSettings => {
 
 // set-settings
 ipcMain.handle('set-settings', (_, settings: AppSettings): void => {
+    const safetyWasOn = loadSettings().experimentalModSafety;
     saveSettings(settings);
     syncWindowBackgroundWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must
     // actually close the socket, not just start refusing requests on it.
     void syncForgeBridgeWithSettings();
+    // Startup skips the installed-mod check while the review is off, so turning
+    // it on checks the library now instead of at the next launch.
+    const deadlockPath = getActiveDeadlockPath();
+    if (settings.experimentalModSafety && !safetyWasOn && deadlockPath) {
+        auditInstalledSafety(deadlockPath).catch(err => console.error('[mod-safety] Inspection failed:', err));
+    }
 });

@@ -15,6 +15,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
+import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
 import CategoryModPicker from '../components/locker/CategoryModPicker';
 import { CreateCategoryModal, ManageCategoriesModal } from '../components/locker/ManageCategoriesModal';
 import {
@@ -97,6 +98,7 @@ import {
   type StableKeyPreferencesMigratedDetail,
 } from '../lib/stableKeyMigration';
 import { showToast } from '../stores/toastStore';
+import { useCursorPackStore } from '../stores/cursorPackStore';
 import {
   appendHeroTypeaheadCharacter,
   backspaceHeroTypeahead,
@@ -356,6 +358,9 @@ export default function Locker() {
     }
   }, [activeDeadlockPath, loadMods]);
 
+  const cursorPackCount = useCursorPackStore((s) => s.packs.length);
+  const loadCursorPacks = useCursorPackStore((s) => s.load);
+
   // Refresh on any completed download so a newly-installed mod (and its
   // freshly-classified globalType) surfaces here without leaving the page,
   // matching the Installed page's behavior.
@@ -363,9 +368,14 @@ export default function Locker() {
     if (!activeDeadlockPath) return;
     const unsubscribe = window.electronAPI.onDownloadComplete(() => {
       loadMods();
+      void loadCursorPacks();
     });
     return unsubscribe;
-  }, [activeDeadlockPath, loadMods]);
+  }, [activeDeadlockPath, loadMods, loadCursorPacks]);
+
+  useEffect(() => {
+    void loadCursorPacks();
+  }, [loadCursorPacks]);
 
   useEffect(() => {
     let active = true;
@@ -523,9 +533,9 @@ export default function Locker() {
   const globalCount = useMemo(
     () => mods.reduce(
       (count, mod) => count + (getEffectiveGlobalType(mod) || mod.priorityMod ? 1 : 0),
-      0
+      cursorPackCount
     ),
-    [mods]
+    [mods, cursorPackCount]
   );
   const [globalPickerOpen, setGlobalPickerOpen] = useState(false);
   // Sequential on purpose: each call renames a VPK under the main-process
@@ -537,8 +547,9 @@ export default function Locker() {
   const globalTypeCount = useMemo(
     () =>
       GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length +
-      (priorityMods.length > 0 ? 1 : 0),
-    [globalGroups, priorityMods]
+      (priorityMods.length > 0 ? 1 : 0) +
+      (cursorPackCount > 0 ? 1 : 0),
+    [globalGroups, priorityMods, cursorPackCount]
   );
 
   // User-defined categories for the General drill-in (see lib/lockerCategories.ts).
@@ -1815,6 +1826,13 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
 const PRIORITY_TAB = 'priority' as const;
 
 /**
+ * Synthetic tab id for cursor packs. Not a GlobalModType either: cursor mods
+ * are loose BMPs over the game's cursor folder, not VPKs, so they have no
+ * Mod entry to classify (see CursorPackPane).
+ */
+const CURSOR_TAB = 'cursor' as const;
+
+/**
  * Tab id namespace for a user-defined category (src/lib/lockerCategories.ts).
  * Namespaced so a category id can never be mistaken for a GlobalModType or for
  * PRIORITY_TAB: categories are a third, view-only axis, and the same rule that
@@ -1822,7 +1840,7 @@ const PRIORITY_TAB = 'priority' as const;
  */
 const CUSTOM_TAB_PREFIX = 'custom:';
 type CustomTabId = `${typeof CUSTOM_TAB_PREFIX}${string}`;
-type GeneralTabId = GlobalModType | typeof PRIORITY_TAB | CustomTabId;
+type GeneralTabId = GlobalModType | typeof PRIORITY_TAB | typeof CURSOR_TAB | CustomTabId;
 
 function customTabId(categoryId: string): CustomTabId {
   return `${CUSTOM_TAB_PREFIX}${categoryId}`;
@@ -1846,6 +1864,7 @@ function generalTabLabel(
   categories: readonly LockerCategory[]
 ): string {
   if (tab === PRIORITY_TAB) return t('installed.priority.chip');
+  if (tab === CURSOR_TAB) return t('locker.cursors.tab');
   if (isCustomTab(tab)) {
     const id = customTabCategoryId(tab);
     return categories.find((category) => category.id === id)?.name ?? '';
@@ -1924,9 +1943,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // different question ("does this mod win?") than the types above it ("what
   // kind of mod is this?"). The user's own categories follow, behind a second
   // separator, as a third axis again ("which pile did I put it in?").
-  const fixedTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, PRIORITY_TAB];
+  const cursorPackCount = useCursorPackStore((s) => s.packs.length);
+  const fixedTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB, PRIORITY_TAB];
   const countForTab = (tab: GeneralTabId) => {
     if (tab === PRIORITY_TAB) return priorityMods.length;
+    if (tab === CURSOR_TAB) return cursorPackCount;
     if (isCustomTab(tab)) return categoryGroups.get(customTabCategoryId(tab))?.length ?? 0;
     return groups[tab].length;
   };
@@ -1970,6 +1991,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // `?? []` on every render would recompute them for nothing.
   const activeMods: Mod[] = useMemo(() => {
     if (activeType === PRIORITY_TAB) return priorityMods;
+    if (activeType === CURSOR_TAB) return [];
     if (isCustomTab(activeType)) return categoryGroups.get(customTabCategoryId(activeType)) ?? [];
     return groups[activeType] ?? [];
   }, [activeType, priorityMods, categoryGroups, groups]);
@@ -1997,11 +2019,14 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Never true on a custom tab either: a category is a view grouping, so its
   // cards stay ordinary multi-toggle cards whatever they are classified as.
   const isPropContainer =
-    activeType !== PRIORITY_TAB && !isCustomTab(activeType) && isPropContainerType(activeType);
+    activeType !== PRIORITY_TAB &&
+    activeType !== CURSOR_TAB &&
+    !isCustomTab(activeType) &&
+    isPropContainerType(activeType);
   const total = new Set([
     ...GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id)),
     ...priorityMods.map((mod) => mod.id),
-  ]).size;
+  ]).size + cursorPackCount;
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -2277,8 +2302,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   {generalTabLabel(activeType, t, categories)}
                 </h3>
                 <span className="text-xs text-white/60">
-                  {t('locker.page.modCount', { count: activeMods.length })}
+                  {t('locker.page.modCount', { count: countForTab(activeType) })}
                 </span>
+                {activeType === CURSOR_TAB && <CursorImportButton />}
                 {isPriorityTab && (
                   <button
                     type="button"
@@ -2330,7 +2356,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 )}
               </div>
-              {activeMods.length === 0 && isPropContainer ? (
+              {activeType === CURSOR_TAB ? (
+                <CursorPackPane />
+              ) : activeMods.length === 0 && isPropContainer ? (
                 <div className={emptyTabClass}>
                   {activeType === 'spirit-urn' ? (
                     <Box className="h-8 w-8 text-white/40" />

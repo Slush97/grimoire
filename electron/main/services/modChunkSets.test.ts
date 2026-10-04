@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Real mods.ts file moves on real folders. Only the content check is faked.
-const h = vi.hoisted(() => ({ userData: '', assertVpkSafety: vi.fn() }));
+const h = vi.hoisted(() => ({ userData: '', assertVpkSafety: vi.fn(), running: false }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
-vi.mock('./launch', () => ({ isDeadlockRunning: async () => false, readStash: async () => null }));
+vi.mock('./launch', () => ({ isDeadlockRunning: async () => h.running, readStash: async () => null }));
 vi.mock('./modSafety', () => ({ assertVpkSafety: h.assertVpkSafety, moveSafetySnapshot: vi.fn(), forgetSafetySnapshot: vi.fn() }));
 
-import { deleteMod, enableMod, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
-import { saveMetadata } from './metadata';
+import { deleteMod, deleteMods, enableMod, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
+import { getModMetadata, saveMetadata, setModMetadata } from './metadata';
+import { clearLoadedGameMods } from './gameSessionMods';
+import type { DeleteModsProgress } from '../../../src/types/mod';
 
 let root: string;
 let addons: string;
@@ -23,6 +25,8 @@ beforeEach(async () => {
     for (const dir of [disabled, join(root, 'game', 'citadel', 'grimoire'), h.userData]) await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(join(root, 'game', 'citadel', 'gameinfo.gi'), 'GameInfo {}\n');
     saveMetadata({});
+    h.running = false;
+    clearLoadedGameMods();
     h.assertVpkSafety.mockReset();
     h.assertVpkSafety.mockResolvedValue(undefined);
 });
@@ -98,6 +102,38 @@ describe('chunked mods move and delete as one set', () => {
         const [dir] = Object.keys(parked).filter((name) => name.endsWith('_dir.vpk'));
         expect(parked).toEqual({ [dir.replace(/_dir\.vpk$/, '_000.vpk')]: 'other0', [dir]: 'other' });
         expect(dir).not.toMatch(/^pak/);
+    });
+});
+
+describe('deleteMods', () => {
+    it('deletes every target with its chunks and metadata, one tick per id, ids already gone included', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0', 'pak03_dir.vpk': 'keep' });
+        await put(disabled, { 'skin_dir.vpk': 's' });
+        const a = await idAt(join(addons, 'pak01_dir.vpk'));
+        const b = await idAt(join(addons, 'pak02_dir.vpk'));
+        const skin = await idAt(join(disabled, 'skin_dir.vpk'));
+        setModMetadata('pak01_dir.vpk', { modName: 'A' });
+        const ticks: DeleteModsProgress[] = [];
+
+        await deleteMods(root, [a, 'already-gone', b, skin], (progress) => ticks.push(progress));
+
+        expect(await contents(addons)).toEqual({ 'pak03_dir.vpk': 'keep' });
+        expect(await contents(disabled)).toEqual({});
+        expect(getModMetadata('pak01_dir.vpk')).toBeUndefined();
+        expect(ticks).toEqual([1, 2, 3, 4].map((done) => ({ done, total: 4 })));
+    });
+
+    it('refuses the whole batch before deleting anything when the game has a target loaded', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        await put(disabled, { 'skin_dir.vpk': 's' });
+        const loaded = await idAt(join(addons, 'pak01_dir.vpk'));
+        const skin = await idAt(join(disabled, 'skin_dir.vpk'));
+        h.running = true;
+
+        await expect(deleteMods(root, [skin, loaded])).rejects.toThrow('Game is running');
+
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'loaded' });
+        expect(await contents(disabled)).toEqual({ 'skin_dir.vpk': 's' });
     });
 });
 

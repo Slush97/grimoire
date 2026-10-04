@@ -5,15 +5,16 @@ import { useAppStore } from '../../../stores/appStore';
 import { showToast } from '../../../stores/toastStore';
 import { Badge, Button, Card, SegmentedControl, Toggle } from '../../common/ui';
 import Tx from '../../translation/Tx';
-import { HiddenCreatorsManager, HiddenCreatorsModal } from '../../HiddenCreatorsManager';
+import { HiddenCreatorsManager, HiddenCreatorsModal, HiddenModsManager, HiddenModsModal } from '../../HiddenContentManager';
 import type { SaltIngestStatus } from '../../../types/electron';
-import type { HiddenCreator, NsfwContentMode } from '../../../types/mod';
+import type { HiddenCreator, HiddenMod, NsfwContentMode } from '../../../types/mod';
 
 // What Grimoire shows you and what it shares on your behalf.
 export default function PrivacySection() {
   const { t } = useTranslation();
   const { settings, saveSettings } = useAppStore();
   const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
+  const [hiddenModsOpen, setHiddenModsOpen] = useState(false);
   const [saltIngestStatus, setSaltIngestStatus] = useState<SaltIngestStatus | null>(null);
 
   const refreshSaltIngestStatus = useCallback(async () => {
@@ -60,7 +61,19 @@ export default function PrivacySection() {
     showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
   };
 
+  const handleShowMod = async (mod: HiddenMod) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      hiddenMods: (settings.hiddenMods ?? []).filter(
+        (entry) => entry.id !== mod.id || entry.section !== mod.section
+      ),
+    });
+    showToast(t('hiddenMods.shownToast', { name: mod.name }), { tone: 'success' });
+  };
+
   const hiddenCreators = settings?.hiddenCreators ?? [];
+  const hiddenMods = settings?.hiddenMods ?? [];
 
   return (
     <>
@@ -137,11 +150,46 @@ export default function PrivacySection() {
         )}
       </Card>
 
+      <Card
+        title={<Tx k="hiddenMods.title" fallback="Hidden mods" />}
+        description={<Tx k="hiddenMods.description" fallback="Hide individual GameBanana mods from Browse. Installed mods remain visible." />}
+        icon={EyeOff}
+        action={
+          <div className="flex items-center gap-2">
+            <Badge>{hiddenMods.length}</Badge>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={EyeOff}
+              onClick={() => setHiddenModsOpen(true)}
+            >
+              <Tx k="hiddenMods.manage" fallback="Manage hidden mods" />
+            </Button>
+          </div>
+        }
+      >
+        {hiddenMods.length > 0 ? (
+          <HiddenModsManager mods={hiddenMods} onRemove={handleShowMod} />
+        ) : (
+          <p className="text-xs text-text-secondary">
+            <Tx k="hiddenMods.none" fallback="No mods are hidden right now." />
+          </p>
+        )}
+      </Card>
+
       <HiddenCreatorsModal
         open={hiddenCreatorsOpen}
         onClose={() => setHiddenCreatorsOpen(false)}
         creators={hiddenCreators}
         onRemove={handleShowCreator}
+      />
+
+      <HiddenModsModal
+        open={hiddenModsOpen}
+        onClose={() => setHiddenModsOpen(false)}
+        mods={hiddenMods}
+        onRemove={handleShowMod}
       />
     </>
   );

@@ -159,23 +159,28 @@ function uniqueDestName(fileName: string, taken: Set<string>): string {
     return candidate;
 }
 
+function isVpkFileName(fileName: string): boolean {
+    return extname(fileName).toLowerCase() === '.vpk';
+}
+
 /**
- * Extract an archive to a destination directory
- * Returns the list of extracted VPK files
+ * Extract the files `accept` matches by basename (VPKs unless told otherwise)
+ * from an archive into a destination directory, flattened.
  */
 export async function extractArchive(
     archivePath: string,
-    destDir: string
+    destDir: string,
+    accept: (fileName: string) => boolean = isVpkFileName
 ): Promise<ExtractedVpk[]> {
     const ext = extname(archivePath).toLowerCase();
 
     switch (ext) {
         case '.zip':
-            return extractZip(archivePath, destDir);
+            return extractZip(archivePath, destDir, accept);
         case '.7z':
-            return extract7z(archivePath, destDir);
+            return extract7z(archivePath, destDir, accept);
         case '.rar':
-            return extractRar(archivePath, destDir);
+            return extractRar(archivePath, destDir, accept);
         default:
             throw new Error(`Unknown archive format: ${ext}`);
     }
@@ -184,7 +189,7 @@ export async function extractArchive(
 /**
  * Extract a ZIP archive
  */
-function extractZip(archivePath: string, destDir: string): ExtractedVpk[] {
+function extractZip(archivePath: string, destDir: string, accept: (fileName: string) => boolean): ExtractedVpk[] {
     const zip = new AdmZip(archivePath);
     const extracted: ExtractedVpk[] = [];
     const taken = new Set<string>();
@@ -193,7 +198,7 @@ function extractZip(archivePath: string, destDir: string): ExtractedVpk[] {
         if (entry.isDirectory) continue;
 
         const fileName = basename(entry.entryName);
-        if (extname(fileName).toLowerCase() !== '.vpk') continue;
+        if (!accept(fileName)) continue;
 
         // Write straight to the chosen name rather than extractEntryTo, which can
         // only flatten to the entry's own basename and so clobbers same-named
@@ -209,14 +214,14 @@ function extractZip(archivePath: string, destDir: string): ExtractedVpk[] {
 /**
  * Extract a 7z archive using the bundled 7za binary (falls back to system 7z).
  */
-async function extract7z(archivePath: string, destDir: string): Promise<ExtractedVpk[]> {
+async function extract7z(archivePath: string, destDir: string, accept: (fileName: string) => boolean): Promise<ExtractedVpk[]> {
     const tempDir = createTempDir('modmanager-7z');
 
     try {
         for (const tool of find7zPath()) {
             try {
                 await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
-                const vpks = collectVpks(tempDir);
+                const vpks = collectFiles(tempDir, accept);
                 return copyVpksToDest(vpks, destDir, tempDir);
             } catch {
                 // Try next tool
@@ -240,7 +245,7 @@ async function extract7z(archivePath: string, destDir: string): Promise<Extracte
  * default; falls back to the bundled 7za or system unrar if the in-process
  * extractor fails (e.g. RAR5-specific features it can't handle).
  */
-async function extractRar(archivePath: string, destDir: string): Promise<ExtractedVpk[]> {
+async function extractRar(archivePath: string, destDir: string, accept: (fileName: string) => boolean): Promise<ExtractedVpk[]> {
     // Primary path: pure-JS in-process RAR extractor (no install required).
     try {
         const data = readFileSync(archivePath);
@@ -249,7 +254,7 @@ async function extractRar(archivePath: string, destDir: string): Promise<Extract
         const extractor = await createExtractorFromData({ data: ab });
 
         const extracted = extractor.extract({
-            files: (header) => !header.flags.directory && extname(header.name).toLowerCase() === '.vpk',
+            files: (header) => !header.flags.directory && accept(basename(header.name)),
         });
 
         const extractedVpks: ExtractedVpk[] = [];
@@ -281,7 +286,7 @@ async function extractRar(archivePath: string, destDir: string): Promise<Extract
                 } else {
                     await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
                 }
-                const vpks = collectVpks(tempDir);
+                const vpks = collectFiles(tempDir, accept);
                 return copyVpksToDest(vpks, destDir, tempDir);
             } catch {
                 // Try next tool
@@ -346,9 +351,9 @@ function runCommand(cmd: string, args: string[], timeoutMs = 300000): Promise<vo
 }
 
 /**
- * Recursively collect VPK files from a directory
+ * Recursively collect the files `accept` matches from a directory
  */
-function collectVpks(dir: string): string[] {
+function collectFiles(dir: string, accept: (fileName: string) => boolean): string[] {
     const vpks: string[] = [];
 
     function walk(currentDir: string): void {
@@ -359,7 +364,7 @@ function collectVpks(dir: string): string[] {
             const fullPath = join(currentDir, entry.name);
             if (entry.isDirectory()) {
                 walk(fullPath);
-            } else if (extname(entry.name).toLowerCase() === '.vpk') {
+            } else if (accept(entry.name)) {
                 vpks.push(fullPath);
             }
         }
