@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'fs';
 import { basename, join } from 'path';
 import type { CursorPack, CursorPacksState, CursorPreview } from '../../../src/types/electron';
 import { getUserDataPath } from '../utils/paths';
-import { groupCursorFiles, isCursorFileName, isUsableCursorFile } from './cursorFiles';
+import { bmpWithExplicitAlpha, groupCursorFiles, isCursorFileName, isUsableCursorFile } from './cursorFiles';
 import { getCitadelPath } from './deadlock';
 import { extractArchive, type ExtractedVpk } from './extract';
 
@@ -173,7 +173,7 @@ async function readPreviewDir(dir: string, names: readonly string[]): Promise<Cu
         if (!name.endsWith('.bmp')) continue;
         const path = join(dir, name);
         if (!existsSync(path)) continue;
-        preview[name] = `data:image/bmp;base64,${(await fs.readFile(path)).toString('base64')}`;
+        preview[name] = `data:image/bmp;base64,${bmpWithExplicitAlpha(await fs.readFile(path)).toString('base64')}`;
     }
     return preview;
 }

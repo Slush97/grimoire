@@ -21,6 +21,45 @@ export function isUsableCursorFile(fileName: string, bytes: Uint8Array): boolean
     return bytes[0] === 0x42 && bytes[1] === 0x4d;
 }
 
+const FILE_HEADER = 14;
+const V5_HEADER = 124;
+
+/**
+ * The stock cursors are 32-bit BI_RGB BMPs whose reserved fourth byte is alpha.
+ * SDL reads it, but Chromium treats it as padding and paints the transparent
+ * pixels (stored white) opaque. Re-header those as BITMAPV5 with an explicit
+ * alpha mask so a preview matches the game. Anything else passes through.
+ */
+export function bmpWithExplicitAlpha(bytes: Buffer): Buffer {
+    if (bytes.length < FILE_HEADER + 40) return bytes;
+    if (bytes.readUInt32LE(14) !== 40 || bytes.readUInt16LE(28) !== 32 || bytes.readUInt32LE(30) !== 0) return bytes;
+    const pixels = bytes.subarray(bytes.readUInt32LE(10));
+    // SDL loads an all-zero alpha channel as opaque, which the file already previews as.
+    let hasAlpha = false;
+    for (let i = 3; i < pixels.length; i += 4) {
+        if (pixels[i] !== 0) {
+            hasAlpha = true;
+            break;
+        }
+    }
+    if (!hasAlpha) return bytes;
+
+    const offset = FILE_HEADER + V5_HEADER;
+    const out = Buffer.alloc(offset + pixels.length);
+    bytes.copy(out, 0, 0, FILE_HEADER + 40);
+    out.writeUInt32LE(out.length, 2);
+    out.writeUInt32LE(offset, 10);
+    out.writeUInt32LE(V5_HEADER, 14);
+    out.writeUInt32LE(3, 30); // BI_BITFIELDS
+    out.writeUInt32LE(0x00ff0000, 54);
+    out.writeUInt32LE(0x0000ff00, 58);
+    out.writeUInt32LE(0x000000ff, 62);
+    out.writeUInt32LE(0xff000000, 66);
+    out.write('BGRs', 70, 'latin1'); // LCS_sRGB, little-endian
+    pixels.copy(out, offset);
+    return out;
+}
+
 export interface CursorSourceFile {
     path: string;
     fileName: string;
