@@ -1938,19 +1938,23 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   const [selectedType, setSelectedType] = useState<GeneralTabId>(
     () => firstPopulated[0] ?? 'soul-container'
   );
-  // Tab order: the seven classification types, then Global (the precedence
-  // axis). Global is deliberately last and visually separated: it answers a
-  // different question ("does this mod win?") than the types above it ("what
-  // kind of mod is this?"). The user's own categories follow, behind a second
-  // separator, as a third axis again ("which pile did I put it in?").
+  // Tab order: the classification types, Cursors, then Global (the precedence
+  // axis), with populated tabs pulled above empty ones so a mostly-empty rail
+  // leads with what is installed. The user's own categories follow, behind a
+  // separator, in their own order ("which pile did I put it in?").
   const cursorPackCount = useCursorPackStore((s) => s.packs.length);
-  const fixedTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB, PRIORITY_TAB];
   const countForTab = (tab: GeneralTabId) => {
     if (tab === PRIORITY_TAB) return priorityMods.length;
     if (tab === CURSOR_TAB) return cursorPackCount;
     if (isCustomTab(tab)) return categoryGroups.get(customTabCategoryId(tab))?.length ?? 0;
     return groups[tab].length;
   };
+  const builtinTabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, CURSOR_TAB, PRIORITY_TAB];
+  const fixedTabIds = [
+    ...builtinTabIds.filter((tab) => countForTab(tab) > 0),
+    ...builtinTabIds.filter((tab) => countForTab(tab) === 0),
+  ];
+  const fixedTabOrder = fixedTabIds.join();
   // Sliding active-tab highlight, mirroring the main sidebar's glide: one
   // indicator element animates between the tab rows rather than each row
   // toggling its own background (which snaps). Refs feed its measured position.
@@ -2006,12 +2010,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   }, [selectedType, categories, landingTab]);
   // Track the active row's box so the highlight can glide to it. Measured in a
   // layout effect (pre-paint) to avoid a one-frame jump on first mount. Also
-  // re-measured when the category count changes: adding or deleting one moves
-  // the rows below it without the active tab changing.
+  // re-measured when the rows move without the active tab changing: a category
+  // added or deleted, or a tab filling up or emptying out.
   useLayoutEffect(() => {
     const el = tabRefs.current.get(activeType);
     if (el) setTabIndicator({ top: el.offsetTop, height: el.offsetHeight });
-  }, [activeType, categories.length]);
+  }, [activeType, categories.length, fixedTabOrder]);
   // Soul containers and spirit urns share the single-select + live-3D-tile
   // treatment (frosted glass, content-stable key, active badge, import button).
   // Never true for the Global tab: priority mods are ordinary multi-toggle
