@@ -1041,6 +1041,21 @@ async function runRiggedHeroExportForSources(
             if (!clips.length) continue;
             foundUsableClip = true;
 
+            // Physics and attachments read the model entry, not the exported GLB,
+            // so they decode while the export runs instead of after it.
+            const cloth = runVpkmergeStdout(['model', 'femodel', '--vpk', source.vpk, ...selector, '--base', pak01])
+                .then((json): unknown => JSON.parse(json))
+                .catch((error: unknown) => {
+                    console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
+                    return null;
+                });
+            const entryIndex = selector.indexOf('--entry');
+            const attachments = entryIndex >= 0 && selector[entryIndex + 1]
+                ? exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]).catch((error: unknown) => {
+                    console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
+                    return [];
+                })
+                : Promise.resolve([]);
             try {
                 await fs.rm(riggedVersionFile(key), { force: true });
                 await runVpkmerge([
@@ -1061,25 +1076,8 @@ async function runRiggedHeroExportForSources(
                     return { hasModel: false, mtimeMs: null, key };
                 }
                 await fs.rm(riggedNoClipsFile(key), { force: true });
-                let cloth: unknown = null;
-                try {
-                    cloth = JSON.parse(await runVpkmergeStdout([
-                        'model', 'femodel', '--vpk', source.vpk, ...selector, '--base', pak01,
-                    ]));
-                } catch (error) {
-                    console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
-                }
-                await fs.writeFile(riggedClothFile(key), JSON.stringify(cloth));
-                let attachments: Awaited<ReturnType<typeof exportModelAttachments>> = [];
-                const entryIndex = selector.indexOf('--entry');
-                if (entryIndex >= 0 && selector[entryIndex + 1]) {
-                    try {
-                        attachments = await exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]);
-                    } catch (error) {
-                        console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
-                    }
-                }
-                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(attachments));
+                await fs.writeFile(riggedClothFile(key), JSON.stringify(await cloth));
+                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(await attachments));
                 await fs.writeFile(riggedVersionFile(key), RIGGED_CACHE_VERSION);
                 return infoForRiggedKey(key);
             } catch (err) {

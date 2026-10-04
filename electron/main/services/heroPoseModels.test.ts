@@ -139,7 +139,8 @@ describe('rigged preview physics bundle', () => {
     expect(info.key).toContain('::one_dir.vpk::');
     const cloth = JSON.parse(await fs.readFile(join(cacheDir(info.key), 'cloth-rigged.json'), 'utf8'));
     expect(cloth.source).toBe(join(addons, 'one_dir.vpk'));
-    expect(h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel')).toHaveLength(1);
+    const physics = h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel');
+    expect(argument(physics.at(-1)![0], '--vpk')).toBe(join(addons, 'one_dir.vpk'));
   });
 
   it('retains animation with an explicit null sidecar when physics extraction fails', async () => {
@@ -173,7 +174,7 @@ describe('rigged preview physics bundle', () => {
     glb.writeUInt32LE(json.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); json.copy(glb, 20);
     h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), glb));
     expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
-    expect(h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel')).toHaveLength(0);
+    expect(await fs.readFile(join(cacheDir((await getRiggedHeroPose(game(), 'Yamato')).key), 'cloth-rigged.json'), 'utf8').catch(() => null)).toBeNull();
     const spawns = h.run.mock.calls.length + h.stdout.mock.calls.length;
     expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
     expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
