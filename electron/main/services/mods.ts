@@ -10,6 +10,7 @@ import { resolveVpkIdentity, readEmbeddedAddonInfo, carryForwardOriginalIdentity
 import { findChunkSiblingNames } from './vpk';
 import { loadSettings } from './settings';
 import { assertVpkSafety, moveSafetySnapshot, forgetSafetySnapshot } from './modSafety';
+import { forgetVdataSnapshot, moveVdataSnapshot } from './vdataCheck';
 import { isStaleModTemp, modTempPath } from './modTemps';
 import {
     assertCanMoveLoadedGameMod,
@@ -109,6 +110,7 @@ async function renameVpkSet(from: string, to: string): Promise<void> {
         throw err;
     }
     moveSafetySnapshot(from, to);
+    moveVdataSnapshot(from, to);
 }
 
 /**
@@ -142,6 +144,7 @@ async function deleteVpkSet(path: string): Promise<void> {
     const chunks = findChunkSiblingNames(basename(path), await fs.readdir(dirname(path)));
     await fs.unlink(path);
     forgetSafetySnapshot(path);
+    forgetVdataSnapshot(path);
     for (const chunk of chunks) await fs.unlink(join(dirname(path), chunk));
 }
 

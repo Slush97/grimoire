@@ -370,7 +370,7 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
         await parseVpkDirectoriesAsync(warmPaths);
     }
     const enriched = visible.map(enrichMod);
-    checkOutdatedVdata(deadlockPath, visible.map((m) => m.path));
+    void checkOutdatedVdata(deadlockPath, visible.map((m) => m.path));
     if (settings.verboseModTrace) {
         const hidden = mods.length - visible.length;
         // The renderer (Installed.tsx visibleMods) also hides disabled source

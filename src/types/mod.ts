@@ -614,8 +614,6 @@ export interface OutdatedVdata {
   entry: string;
   /** Game fields the mod's copy lacks. */
   missing: number;
-  /** Fields only the mod's copy has (the game dropped them since). */
-  extra: number;
   /** First few missing key paths, shallowest first. */
   sample: string[];
 }

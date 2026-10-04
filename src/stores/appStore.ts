@@ -844,6 +844,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         mods: get().mods.map((m) => (m.id === modId ? updatedMod : m)),
       });
+      const outdated = updatedMod.enabled ? updatedMod.outdatedVdata?.[0] : undefined;
+      if (outdated) {
+        showToast(
+          i18n.t('installed.outdatedData.enabledToast', { name: updatedMod.name, count: outdated.missing, file: outdated.entry }),
+          { tone: 'warning', duration: 10000 }
+        );
+      }
       return true;
     } catch (err) {
       // The 99-enabled cap is an expected, recoverable outcome - surface it as

@@ -3,6 +3,7 @@ import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
 import { inspectVpkSafety, isModSafetyTrusted, moveSafetySnapshot } from './modSafety';
+import { moveVdataSnapshot } from './vdataCheck';
 import { assertActiveModsSafety, moveToDisabledLibrary } from './modSafetyAudit';
 import { runExclusiveModMutation } from './mods';
 import { migrateModMetadata } from './metadata';
@@ -294,6 +295,7 @@ export async function stashEnabledMods(deadlockPath: string): Promise<VanillaSta
         await fs.mkdir(dirname(to), { recursive: true });
         await fs.rename(from, to);
         moveSafetySnapshot(from, to);
+        moveVdataSnapshot(from, to);
     }
 
     stash.status = 'active';
@@ -383,6 +385,7 @@ export async function restoreFromStash(
                 try {
                     await fs.rename(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
                     moveSafetySnapshot(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
+                    moveVdataSnapshot(stashSlotPath(disabledPath, folder, name), join(targetDir, name));
                     ok = true;
                     break;
                 } catch (err) {

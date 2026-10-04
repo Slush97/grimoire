@@ -50,6 +50,7 @@ import {
   GripVertical,
   ClipboardList,
   Fingerprint,
+  FileWarning,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
@@ -134,6 +135,7 @@ import { HeroTagLabel } from '../components/installed/chips';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
+import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
@@ -433,12 +435,14 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
+  const outdatedVariant = entry.enabledVariants.find(v => v.outdatedVdata) ?? entry.variants.find(v => v.outdatedVdata);
   return (
     <ModCard
       mod={{
         ...entry.primary,
         safetyTarget,
-        outdatedVdata: entry.variants.find(v => v.outdatedVdata)?.outdatedVdata,
+        outdatedVdata: outdatedVariant?.outdatedVdata,
+        outdatedVdataEnabled: !!outdatedVariant?.enabled,
         // Group's overall enable state is "one or more files enabled", not
         // the primary's individual flag (matches sort + section choice).
         enabled: entry.enabledVariants.length > 0,
@@ -1214,6 +1218,7 @@ export default function Installed() {
   // { done, total } so the button can render "Updating 2/5…" and stay disabled
   // for the duration of the run.
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
+  const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
   // Mods whose file the author deleted with no confident successor, found
@@ -3547,6 +3552,7 @@ export default function Installed() {
   const unknownMods = mods
     .filter((mod) => mod.isUnknown)
     .sort((a, b) => a.priority - b.priority);
+  const outdatedVdataMods = mods.filter((mod) => mod.enabled && mod.outdatedVdata?.length);
   const unknownFilterCacheById: Record<string, UnknownModFilterGuess> = {};
   for (const mod of unknownMods) {
     const cached = getUnknownCache(mod);
@@ -4049,9 +4055,20 @@ export default function Installed() {
   // action bar's right cluster (next to Fix Order). The right cluster wraps when
   // cramped, so there's no need to relocate them to a section header.
   const hasStatusButtons =
-    conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
+    outdatedVdataMods.length > 0 || conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
+      {outdatedVdataMods.length > 0 && (
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => setOutdatedVdataOpen(true)}
+          icon={FileWarning}
+          title={t('installed.outdatedData.buttonHint')}
+        >
+          {t('installed.outdatedData.button', { count: outdatedVdataMods.length })}
+        </Button>
+      )}
       {conflictCount > 0 && (
         <Button
           variant="warning"
@@ -4719,6 +4736,12 @@ export default function Installed() {
           )}
         </div>
       )}
+
+      <OutdatedVdataModal
+        mods={outdatedVdataMods}
+        open={outdatedVdataOpen}
+        onClose={() => setOutdatedVdataOpen(false)}
+      />
 
       <DeleteModsModal
         target={modToDelete}

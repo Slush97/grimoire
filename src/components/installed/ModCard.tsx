@@ -28,6 +28,8 @@ interface ModCardProps {
     safety?: Mod['safety'];
     safetyTarget?: Pick<Mod, 'id' | 'name' | 'safety'>;
     outdatedVdata?: Mod['outdatedVdata'];
+    /** Group cards: whether the flagged variant is the enabled one. Defaults to `enabled`. */
+    outdatedVdataEnabled?: boolean;
     id: string;
     name: string;
     fileName: string;
@@ -524,18 +526,14 @@ function EditableModTitle({
   );
 }
 
-function OutdatedVdataTag({ outdated, variant }: { outdated?: Mod['outdatedVdata']; variant: 'overlay' | 'inline' }) {
+function OutdatedVdataTag({ outdated, enabled, variant }: { outdated?: Mod['outdatedVdata']; enabled: boolean; variant: 'overlay' | 'inline' }) {
   const { t } = useTranslation();
   if (!outdated?.length) return null;
   const title = outdated
-    .map((v) =>
-      v.missing > 0
-        ? t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') })
-        : t('installed.card.outdatedDataExtraTitle', { file: v.entry })
-    )
+    .map((v) => t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') }))
     .join('\n\n');
   return (
-    <Tag tone="warning" variant={variant} icon={FileWarning} title={title}>
+    <Tag tone={enabled ? 'danger' : 'warning'} variant={variant} icon={FileWarning} title={title}>
       {t('installed.card.outdatedData')}
     </Tag>
   );
@@ -648,7 +646,7 @@ function ModListRowContent({
         />
         <div className="min-w-0">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
-          <OutdatedVdataTag outdated={mod.outdatedVdata} variant="inline" />
+          <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
@@ -1410,7 +1408,7 @@ export function ModCard({
                   {t('installed.card.conflict')}
                 </Tag>
               )}
-              <OutdatedVdataTag outdated={mod.outdatedVdata} variant="overlay" />
+              <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="overlay" />
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"

@@ -1333,6 +1333,21 @@
       "conflictCount_one": "{{count}} conflict",
       "conflictCount_other": "{{count}} conflicts"
     },
+    "outdatedData": {
+      "button_one": "{{count}} outdated mod",
+      "button_other": "{{count}} outdated mods",
+      "buttonHint": "Enabled mods that ship an old copy of a game data file and remove what Valve added since",
+      "title_one": "{{count}} enabled mod ships outdated game data",
+      "title_other": "{{count}} enabled mods ship outdated game data",
+      "message": "Each of these replaces a whole game data file with an old copy, so anything Valve added after the mod was built is gone in game: new heroes, abilities, stats. Disable them until the author updates.",
+      "removes_one": "Removes {{count}} game field from {{file}}",
+      "removes_other": "Removes {{count}} game fields from {{file}}",
+      "disable": "Disable",
+      "disableAll_one": "Disable it",
+      "disableAll_other": "Disable all {{count}}",
+      "enabledToast_one": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game field Valve added since is removed in game.",
+      "enabledToast_other": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game fields Valve added since are removed in game."
+    },
     "unknown": {
       "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
       "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
@@ -1536,7 +1551,6 @@
       "outdatedData": "Outdated data",
       "outdatedDataTitle_one": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} field added to Deadlock since the mod was built is removed in game: {{sample}}",
       "outdatedDataTitle_other": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} fields added to Deadlock since the mod was built are removed in game, starting with: {{sample}}",
-      "outdatedDataExtraTitle": "Ships an old copy of {{file}} with fields the game no longer has. It replaces the game's copy and may break things in game.",
       "unknown": "Unknown",
       "unknownTitle": "This local mod has no saved GameBanana or custom metadata",
       "updateAvailableTitle": "A newer version is available on GameBanana",
