@@ -289,14 +289,28 @@ function riggedClothFile(key: string): string {
  * Pre-v14 Infernus GLBs were baked via `--hero inferno`, which read the base pak
  * and so cached the vanilla look over any active skin; force a re-export.
  *
+ * v16: textures are baked at PREVIEW_MAX_TEXTURE (`--max-texture`). Pre-v16 GLBs
+ * carry full-size 2048/4096 textures (35-70 MB) that load several times slower.
+ *
  * The Source 2 extras schema version (SOURCE2_EXTRAS_VERSION) is folded into the
  * effective key below, so a material-extras schema bump auto-busts this cache
  * with no manual edit here, and the cache version cannot drift from the parser's
  * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
  * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_PIPELINE_VERSION = '15';
+const POSE_PIPELINE_VERSION = '16';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
+
+/**
+ * Longest texture edge baked into preview GLBs (`model export --max-texture`):
+ * each texture embeds at its largest mip that fits. Full-size hero textures
+ * (2048/4096) are far more than the Locker viewport shows, and they dominate
+ * export time, GLB size, and the renderer's decode + GPU upload. 1024 cuts a
+ * hero GLB ~3x (drifter skin: 39 -> 14 MB). Raising it to 2048 keeps fine print
+ * sharp at the closest zoom but costs ~300 MB more renderer memory per loaded
+ * hero (decoded ImageBitmaps; see loadGltfPreview).
+ */
+const PREVIEW_MAX_TEXTURE = '1024';
 
 const POSE_VERSION_FILENAME = '.cache-version';
 
@@ -334,11 +348,13 @@ function versionFile(key: string): string {
  * v9: export a bounded menu of representative full-body motions.
  * v10: preserve supported authored attachment frames beside the rigged model.
  *
+ * v15: textures baked at PREVIEW_MAX_TEXTURE (same as POSE_CACHE_VERSION v16).
+ *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
 // v14: Graves uses the complete standing weapon pose; shop parks its spectral
 // hand at the model origin. Refresh existing menus instead of reusing that pose.
-const RIGGED_PIPELINE_VERSION = '14';
+const RIGGED_PIPELINE_VERSION = '15';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -899,6 +915,8 @@ async function runHeroPoseExportForSources(
                     // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
                     // Locker falls back to the 2D portrait instead of an unposed model.
                     '--require-pose',
+                    '--max-texture',
+                    PREVIEW_MAX_TEXTURE,
                     '--out',
                     out,
                 ]);
@@ -1017,6 +1035,8 @@ async function runRiggedHeroExportForSources(
                     pak01,
                     // The viewer plays one action at a time from this menu.
                     ...clips.flatMap((clip) => ['--clip', clip.name]),
+                    '--max-texture',
+                    PREVIEW_MAX_TEXTURE,
                     '--out',
                     out,
                 ]);

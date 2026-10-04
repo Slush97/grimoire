@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeTexture, materialTextures } from '../../lib/loadGltfPreview';
 
 /**
  * Shared helpers for the Locker's Global soul-container previews.
@@ -53,11 +54,9 @@ export function disposeScene(root: THREE.Object3D): void {
     mesh.geometry?.dispose();
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const m of mats) {
-      const sm = m as THREE.MeshStandardMaterial;
-      [sm.map, sm.normalMap, sm.roughnessMap, sm.metalnessMap, sm.emissiveMap, sm.aoMap].forEach(
-        (t) => t?.dispose()
-      );
-      m?.dispose();
+      if (!m) continue;
+      materialTextures(m).forEach(disposeTexture);
+      m.dispose();
     }
   });
 }
