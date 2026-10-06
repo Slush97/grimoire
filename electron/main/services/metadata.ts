@@ -139,6 +139,32 @@ export interface ModMetadata {
 
 export type ModMetadataMap = Record<string, ModMetadata>;
 
+/**
+ * Whether a sidecar row records an identity: a GameBanana link, a name, a
+ * Grimoire-built VPK, or a choice the user made about the file. Startup gives
+ * every unknown VPK a row too (the sha256 backfill, the inferred hero and
+ * global type), so the mere presence of a row, a hash or a `lockerHero` does
+ * not mean Grimoire manages the file.
+ */
+export function hasModIdentity(meta: ModMetadata): boolean {
+    return (
+        meta.gameBananaId !== undefined ||
+        (typeof meta.modName === 'string' && meta.modName.trim().length > 0) ||
+        meta.lockerHeroSource === 'manual' ||
+        meta.merged !== undefined ||
+        meta.forgeInstall !== undefined ||
+        meta.lockerCosmetics !== undefined ||
+        meta.lockerSounds !== undefined ||
+        meta.lockerColors !== undefined ||
+        meta.lockerTrippySkins !== undefined ||
+        meta.soulImport !== undefined ||
+        meta.urnImport !== undefined ||
+        meta.soundSwap !== undefined ||
+        meta.localGroupId !== undefined ||
+        meta.priorityMod !== undefined
+    );
+}
+
 // In-memory cache of the parsed metadata.json. Without this, every enrichMod
 // call (one per installed mod) re-reads + re-parses the whole sidecar from
 // disk on the main thread; users with many mods see noticeable freezes on

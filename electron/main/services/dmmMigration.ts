@@ -26,12 +26,14 @@ import {
   allocateEnabledVpkPath,
   makeDisabledFileName,
   runExclusiveModMutation,
+  scanMods,
 } from './mods';
 import {
   setModMetadataWithHash,
   getModMetadata,
   removeModMetadata,
   loadMetadata,
+  hasModIdentity,
   hashFileSha256,
   backupMetadataSidecar,
   type ModMetadata,
@@ -247,24 +249,6 @@ function isLiveDisabledSlot(src: string, disabledPath: string): boolean {
   return resolve(dirname(src)) === resolve(disabledPath);
 }
 
-/** Whether a metadata entry shows Grimoire already manages this VPK: a prior
- *  GameBanana install/import, a merged build, a Locker-managed surface, or a
- *  user-assigned hero. Adopting over such an entry in place would hijack a real
- *  mod's identity, so we skip it instead. */
-function isGrimoireManaged(meta: ModMetadata): boolean {
-  return (
-    meta.gameBananaId !== undefined ||
-    meta.merged !== undefined ||
-    meta.lockerCosmetics !== undefined ||
-    meta.lockerSounds !== undefined ||
-    meta.lockerColors !== undefined ||
-    meta.lockerTrippySkins !== undefined ||
-    meta.soulImport !== undefined ||
-    meta.urnImport !== undefined ||
-    meta.lockerHero !== undefined
-  );
-}
-
 function metadataFor(entry: DmmAdoptionEntry): ModMetadata {
   return {
     modName: entry.modName,
@@ -356,9 +340,14 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
   const allMetadata = loadMetadata();
   const managedSubmissionIds = new Set<number>();
   const managedHashes = new Set<string>();
-  for (const meta of Object.values(allMetadata)) {
+  // Unknown VPKs carry a hash too (startup backfills one for every file), but
+  // they are what this import exists to identify, so they are not "managed".
+  const unknownKeyByHash = new Map<string, string>();
+  for (const [metaKey, meta] of Object.entries(allMetadata)) {
     if (meta.gameBananaId !== undefined) managedSubmissionIds.add(meta.gameBananaId);
-    if (meta.sha256) managedHashes.add(meta.sha256.toLowerCase());
+    if (!meta.sha256) continue;
+    if (hasModIdentity(meta)) managedHashes.add(meta.sha256.toLowerCase());
+    else unknownKeyByHash.set(meta.sha256.toLowerCase(), metaKey);
   }
 
   const adoptableEntries: DmmAdoptionEntry[] = [];
@@ -431,6 +420,9 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
         ? (await fs.readdir(disabledPath)).map((n) => n.toLowerCase())
         : []
     );
+    let pathByKey: Map<string, string> | null = null;
+    const installedPaths = async () =>
+      (pathByKey ??= new Map((await scanMods(opts.deadlockPath)).map((m) => [m.metaKey, m.path])));
 
     for (const entry of ordered) {
       // A DMM mod may own several VPKs; adopt each one, tagging all with the
@@ -474,7 +466,15 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
         try {
           let destPath: string;
           await assertVpkSafety(src, { context: 'installation', name: entry.modName });
-          if (entry.enabled) {
+          // Grimoire may already list these exact bytes as an unknown mod in
+          // another file (DMM's live copy while this one sits in a profile
+          // folder, or the same mod dropped in by hand): identify that file
+          // rather than adding a second copy of the mod.
+          const twinKey = unknownKeyByHash.get(srcHash);
+          const twinPath = twinKey ? (await installedPaths()).get(twinKey) : undefined;
+          if (twinPath && resolve(twinPath) !== resolve(src)) {
+            destPath = twinPath;
+          } else if (entry.enabled) {
             if (mode === 'in-place' && isLiveEnabledSlot(src, addonRoots)) {
               // Already a live pakNN_dir.vpk slot Grimoire scans: adopt by
               // metadata only, no copy.
@@ -483,7 +483,7 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
               // Skip anything Grimoire already manages (a prior import, or a
               // local/Locker VPK that happens to occupy this slot): re-tagging it
               // would hijack its identity. Only a truly unmanaged file is adopted.
-              if (existing && isGrimoireManaged(existing)) {
+              if (existing && hasModIdentity(existing)) {
                 fileSkips.push(`${vpkName} (already managed by Grimoire)`);
                 continue;
               }
@@ -503,7 +503,7 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
             const existing = getModMetadata(metaKeyFor(destPath));
             // Don't re-tag a file Grimoire already manages (a prior import or a
             // Locker/local surface parked here): that would hijack its identity.
-            if (existing && isGrimoireManaged(existing)) {
+            if (existing && hasModIdentity(existing)) {
               fileSkips.push(`${vpkName} (already managed by Grimoire)`);
               continue;
             }
@@ -528,6 +528,7 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
           removeModMetadata(metaKey);
           await setModMetadataWithHash(metaKey, meta, destPath);
           managedHashes.add(srcHash);
+          unknownKeyByHash.delete(srcHash);
           adoptedKeys.push(metaKey);
         } catch (err) {
           fileSkips.push(`${vpkName} (${err instanceof Error ? err.message : String(err)})`);

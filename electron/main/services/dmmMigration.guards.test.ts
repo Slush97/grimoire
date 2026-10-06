@@ -151,6 +151,81 @@ describe('idempotency: a second run adopts nothing and mints no duplicates', () 
   });
 });
 
+describe('unknown-mod rows from startup do not count as managed', () => {
+  const sha = (content: Buffer) => createHash('sha256').update(content).digest('hex');
+
+  it('adopts shared-folder files that only carry the backfilled hash and inferred hero', async () => {
+    const sb = makeSandbox();
+    const enabledBytes = Buffer.from('DMM-ENABLED-SKIN-111');
+    const disabledBytes = Buffer.from('DMM-DISABLED-HUD-222');
+    const liveSlot = join(sb.addons, 'pak50_dir.vpk');
+    const disabledSlot = join(sb.disabled, 'hud_thing_dir.vpk');
+    writeFileSync(liveSlot, enabledBytes);
+    writeFileSync(disabledSlot, disabledBytes);
+    // What backfillMissingMetadataHashes + enrichMod leave on unknown VPKs.
+    writeFileSync(
+      join(sb.userData, 'mod-metadata.json'),
+      JSON.stringify({
+        'pak50_dir.vpk': {
+          sha256: sha(enabledBytes),
+          globalType: null,
+          globalTypeClassifierVersion: 4,
+          lockerHero: 'Mina',
+          lockerHeroVpkChecked: true,
+          abilitySounds: null,
+        },
+        'hud_thing_dir.vpk': { sha256: sha(disabledBytes), globalType: 'hud', globalTypeClassifierVersion: 4 },
+      })
+    );
+    writeState(sb, [
+      { id: 111, name: 'Enabled Skin', enabled: true, vpks: [liveSlot] },
+      { id: 222, name: 'Hud Thing', enabled: false, vpks: [disabledSlot] },
+    ]);
+
+    const addonsBefore = fileNames(sb.addons);
+    const report = await run(sb);
+    expect(report.adopted.map((a) => a.submissionId).sort()).toEqual([111, 222]);
+    const meta = JSON.parse(readFileSync(join(sb.userData, 'mod-metadata.json'), 'utf-8'));
+    expect(meta['pak50_dir.vpk'].gameBananaId).toBe(111);
+    expect(meta['hud_thing_dir.vpk'].gameBananaId).toBe(222);
+    // Adopted in place: no extra slot, no copy.
+    expect(fileNames(sb.addons)).toEqual(addonsBefore);
+  });
+
+  it('a hero the user assigned by hand still protects the file', async () => {
+    const sb = makeSandbox();
+    const bytes = Buffer.from('USERS-OWN-SKIN');
+    const liveSlot = join(sb.addons, 'pak50_dir.vpk');
+    writeFileSync(liveSlot, bytes);
+    writeFileSync(
+      join(sb.userData, 'mod-metadata.json'),
+      JSON.stringify({ 'pak50_dir.vpk': { sha256: sha(bytes), lockerHero: 'Mina', lockerHeroSource: 'manual' } })
+    );
+    writeState(sb, [{ id: 111, name: 'Enabled Skin', enabled: true, vpks: [liveSlot] }]);
+
+    const report = await run(sb);
+    expect(report.adopted).toEqual([]);
+    expect(report.skipped[0].reason).toContain('already managed');
+  });
+
+  it('identifies an unknown twin instead of copying the same bytes again', async () => {
+    const sb = makeSandbox();
+    const bytes = Buffer.from('PROFILE-COPY-333');
+    const profileVpk = join(sb.separate, 'pak01_dir.vpk');
+    const twin = join(sb.addons, 'pak50_dir.vpk');
+    writeFileSync(profileVpk, bytes);
+    writeFileSync(twin, bytes);
+    writeFileSync(join(sb.userData, 'mod-metadata.json'), JSON.stringify({ 'pak50_dir.vpk': { sha256: sha(bytes) } }));
+    writeState(sb, [{ id: 333, name: 'Profile Mod', enabled: true, vpks: [profileVpk] }]);
+
+    const addonsBefore = fileNames(sb.addons);
+    const report = await run(sb);
+    expect(report.adopted.map((a) => [a.submissionId, a.installedAs])).toEqual([[333, 'pak50_dir.vpk']]);
+    expect(fileNames(sb.addons)).toEqual(addonsBefore);
+    expect(existsSync(profileVpk)).toBe(true);
+  });
+});
+
 describe('staleness guard: stale DMM records cannot hijack reused slots', () => {
   it('skips a bare pakNN slot that is newer than the record claiming it', async () => {
     const sb = makeSandbox();
