@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bmpWithExplicitAlpha, groupCursorFiles, isCursorFileName, isUsableCursorFile } from './cursorFiles';
+import {
+    bmpWithExplicitAlpha,
+    formatCursorRes,
+    groupCursorFiles,
+    isCursorFileName,
+    isUsableCursorFile,
+    parseCursorRes,
+} from './cursorFiles';
 
 describe('isCursorFileName', () => {
     it('accepts the stock cursor set, size variants and cursor.res', () => {
@@ -21,6 +28,45 @@ describe('isUsableCursorFile', () => {
         expect(isUsableCursorFile('cursor.bmp', Buffer.from('\x89PNG'))).toBe(false);
         expect(isUsableCursorFile('cursor.res', Buffer.from('"resource/cursor/cursor.res" {}'))).toBe(true);
         expect(isUsableCursorFile('cursor.bmp', Buffer.alloc(0))).toBe(false);
+    });
+});
+
+describe('cursor.res', () => {
+    const stock = `// This file is only needed when using SDL, since it opens the cursors
+// as BMP files instead of loading .ani files.
+"resource/cursor/cursor.res"
+{
+	cursor_default
+	{
+		"hotx"		"0"
+		"hoty"		"0"
+	}
+
+	// Aim with the tip of the thumb.
+	cursor_commend
+	{
+		"hotx"		"22"
+		"hoty"		"2"
+	}
+
+}
+`;
+
+    it('reads the stock file', () => {
+        expect(parseCursorRes(stock)).toEqual(
+            new Map([
+                ['cursor_default', { x: 0, y: 0 }],
+                ['cursor_commend', { x: 22, y: 2 }],
+            ])
+        );
+    });
+
+    it('writes a file that reads back the same', () => {
+        const hotspots = new Map([
+            ['cursor', { x: 9, y: 4 }],
+            ['cursor_commend', { x: 22, y: 2 }],
+        ]);
+        expect(parseCursorRes(formatCursorRes(hotspots))).toEqual(hotspots);
     });
 });
 

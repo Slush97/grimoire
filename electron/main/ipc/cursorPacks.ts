@@ -1,9 +1,11 @@
 import { ipcMain, app } from 'electron';
 import { promises as fs } from 'fs';
 import { basename, dirname, extname, join } from 'path';
-import type { CursorPacksState, CursorPreview } from '../../../src/types/electron';
+import type { CursorImageFile, CursorPacksState, CursorPreview } from '../../../src/types/electron';
 import {
+    createCursorPack,
     deleteCursorPack,
+    exportCursorZip,
     getCursorPacks,
     getCursorPreview,
     installCursorArchive,
@@ -56,3 +58,14 @@ ipcMain.handle('cursors:import-files', async (_, paths: string[]): Promise<Curso
     }
     return setActiveCursorPack(deadlockPath, installed[0].id);
 });
+
+ipcMain.handle('cursors:create', async (_, name: string, files: CursorImageFile[]): Promise<CursorPacksState> => {
+    const deadlockPath = requireDeadlockPath();
+    const [pack] = await createCursorPack(deadlockPath, name, files);
+    if (!pack) throw new Error('None of the cursor images could be used.');
+    return setActiveCursorPack(deadlockPath, pack.id);
+});
+
+ipcMain.handle('cursors:export', (_, destPath: string, files: CursorImageFile[]): Promise<void> =>
+    exportCursorZip(getActiveDeadlockPath(), destPath, files)
+);

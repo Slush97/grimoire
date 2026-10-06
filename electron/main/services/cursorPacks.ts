@@ -1,9 +1,17 @@
 import { createHash, randomUUID } from 'crypto';
 import { existsSync, promises as fs } from 'fs';
 import { basename, join } from 'path';
-import type { CursorPack, CursorPacksState, CursorPreview } from '../../../src/types/electron';
+import AdmZip from 'adm-zip';
+import type { CursorImageFile, CursorPack, CursorPacksState, CursorPreview } from '../../../src/types/electron';
 import { getUserDataPath } from '../utils/paths';
-import { bmpWithExplicitAlpha, groupCursorFiles, isCursorFileName, isUsableCursorFile } from './cursorFiles';
+import {
+    bmpWithExplicitAlpha,
+    formatCursorRes,
+    groupCursorFiles,
+    isCursorFileName,
+    isUsableCursorFile,
+    parseCursorRes,
+} from './cursorFiles';
 import { getCitadelPath } from './deadlock';
 import { extractArchive, type ExtractedVpk } from './extract';
 
@@ -178,6 +186,11 @@ async function readPreviewDir(dir: string, names: readonly string[]): Promise<Cu
     return preview;
 }
 
+// With no pack applied the game folder holds the stock set; otherwise the
+// backup taken before the first apply does.
+const stockSourceDir = (state: StoredState, deadlockPath: string | null) =>
+    state.activeId === null && deadlockPath ? gameCursorsDir(deadlockPath) : stockDir();
+
 /** Data URLs of a pack's cursor images, or of the stock set when `id` is null. */
 export async function getCursorPreview(deadlockPath: string | null, id: string | null): Promise<CursorPreview> {
     const state = await loadState();
@@ -185,9 +198,7 @@ export async function getCursorPreview(deadlockPath: string | null, id: string |
         const pack = state.packs.find((p) => p.id === id);
         return pack ? readPreviewDir(packDir(id), pack.files) : {};
     }
-    // With no pack applied the game folder holds the stock set; otherwise the
-    // backup taken before the first apply does.
-    const dir = state.activeId === null && deadlockPath ? gameCursorsDir(deadlockPath) : stockDir();
+    const dir = stockSourceDir(state, deadlockPath);
     if (!existsSync(dir)) return {};
     const names = (await fs.readdir(dir)).map((n) => n.toLowerCase()).filter(isCursorFileName).sort();
     return readPreviewDir(dir, names);
@@ -199,34 +210,31 @@ export interface CursorPackSource {
     gameBananaFileId?: number;
 }
 
-async function installGroups(
-    extracted: readonly ExtractedVpk[],
-    source: CursorPackSource
-): Promise<CursorPack[]> {
-    const groups = groupCursorFiles(extracted);
-    if (groups.length === 0) return [];
+interface CursorSet {
+    variant?: string;
+    /** Lowercased destination name -> usable file bytes. */
+    files: Map<string, Buffer>;
+}
+
+async function installSets(sets: readonly CursorSet[], source: CursorPackSource): Promise<CursorPack[]> {
+    // A lone cursor.res changes nothing visible.
+    const usable = sets.filter(({ files }) => [...files.keys()].some((name) => name.endsWith('.bmp')));
+    if (usable.length === 0) return [];
     return exclusive(async () => {
         const state = await loadState();
         const installed: CursorPack[] = [];
-        for (const group of groups) {
-            const files = new Map<string, Buffer>();
-            for (const [name, path] of group.files) {
-                const bytes = await fs.readFile(path);
-                if (isUsableCursorFile(name, bytes)) files.set(name, bytes);
-            }
-            if (![...files.keys()].some((name) => name.endsWith('.bmp'))) continue;
-
-            const variant = group.variant?.replace(/[_-]+/g, ' ').trim();
-            const name = variant ? `${source.name} (${variant})` : source.name;
+        for (const { variant, files } of usable) {
+            const label = variant?.replace(/[_-]+/g, ' ').trim();
+            const name = label ? `${source.name} (${label})` : source.name;
             // Reinstalling the same GameBanana file replaces its pack in place.
             const existing = source.gameBananaFileId === undefined
                 ? undefined
                 : state.packs.find((p) =>
-                    p.gameBananaFileId === source.gameBananaFileId && p.variant === group.variant);
+                    p.gameBananaFileId === source.gameBananaFileId && p.variant === variant);
             const pack: CursorPack = {
                 id: existing?.id ?? randomUUID(),
                 name,
-                variant: group.variant,
+                variant,
                 files: [...files.keys()].sort(),
                 installedAt: new Date().toISOString(),
                 gameBananaId: source.gameBananaId,
@@ -241,6 +249,66 @@ async function installGroups(
         await saveState(state);
         return installed;
     });
+}
+
+async function installGroups(
+    extracted: readonly ExtractedVpk[],
+    source: CursorPackSource
+): Promise<CursorPack[]> {
+    const sets: CursorSet[] = [];
+    for (const group of groupCursorFiles(extracted)) {
+        const files = new Map<string, Buffer>();
+        for (const [name, path] of group.files) {
+            const bytes = await fs.readFile(path);
+            if (isUsableCursorFile(name, bytes)) files.set(name, bytes);
+        }
+        sets.push({ variant: group.variant, files });
+    }
+    return installSets(sets, source);
+}
+
+/**
+ * BMPs built in the renderer plus a cursor.res with their hotspots. The game
+ * reads every cursor's hotspot from that one file, so it starts from the stock
+ * copy: cursors left alone keep theirs (the commend one is not at 0, 0).
+ */
+async function builtCursorFiles(
+    deadlockPath: string | null,
+    images: readonly CursorImageFile[]
+): Promise<Map<string, Buffer>> {
+    const files = new Map<string, Buffer>();
+    const stockRes = join(stockSourceDir(await loadState(), deadlockPath), 'cursor.res');
+    const hotspots = parseCursorRes(existsSync(stockRes) ? await fs.readFile(stockRes, 'utf-8') : '');
+    for (const { fileName, bytes, hotspot } of images) {
+        const lower = fileName.toLowerCase();
+        if (!lower.endsWith('.bmp') || !isCursorFileName(lower) || !isUsableCursorFile(lower, bytes)) continue;
+        files.set(lower, Buffer.from(bytes));
+        hotspots.set(lower.slice(0, -'.bmp'.length), hotspot);
+    }
+    if (files.size > 0) files.set('cursor.res', Buffer.from(formatCursorRes(hotspots)));
+    return files;
+}
+
+/** Install BMPs built in the renderer (the Create cursor dialog) as one pack. */
+export async function createCursorPack(
+    deadlockPath: string | null,
+    name: string,
+    images: readonly CursorImageFile[]
+): Promise<CursorPack[]> {
+    return installSets([{ files: await builtCursorFiles(deadlockPath, images) }], { name });
+}
+
+/** Zip BMPs built in the renderer so they can be shared and imported elsewhere. */
+export async function exportCursorZip(
+    deadlockPath: string | null,
+    destPath: string,
+    images: readonly CursorImageFile[]
+): Promise<void> {
+    const files = await builtCursorFiles(deadlockPath, images);
+    if (files.size === 0) throw new Error('None of the cursor images could be used.');
+    const zip = new AdmZip();
+    for (const [name, bytes] of files) zip.addFile(name, bytes);
+    await fs.writeFile(destPath, zip.toBuffer());
 }
 
 /**

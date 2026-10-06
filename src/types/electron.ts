@@ -750,6 +750,19 @@ export interface CursorPacksState {
 
 export type CursorPreview = Record<string, string>;
 
+/** Where a cursor clicks, in pixels from its top-left corner. */
+export interface CursorHotspot {
+    x: number;
+    y: number;
+}
+
+/** A cursor BMP built in the renderer, named for the game's cursor folder. */
+export interface CursorImageFile {
+    fileName: string;
+    bytes: Uint8Array;
+    hotspot: CursorHotspot;
+}
+
 export interface CrosshairPreset {
     id: string;
     name: string;
@@ -1306,6 +1319,10 @@ export interface ElectronAPI {
     getCursorPreview: (id: string | null) => Promise<CursorPreview>;
     /** Install one archive or a set of loose cursor files, then apply it. */
     importCursorPack: (paths: string[]) => Promise<CursorPacksState>;
+    /** Install BMPs built from the user's own images as a new pack, then apply it. */
+    createCursorPack: (name: string, files: CursorImageFile[]) => Promise<CursorPacksState>;
+    /** Write BMPs built from the user's own images to a zip at `destPath`. */
+    exportCursorImages: (destPath: string, files: CursorImageFile[]) => Promise<void>;
 
     // Updater
     updater: {

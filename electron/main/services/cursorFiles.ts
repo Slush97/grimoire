@@ -6,6 +6,8 @@
  * optional cursor.res holding the hotspots.
  */
 
+import type { CursorHotspot } from '../../../src/types/electron';
+
 const CURSOR_IMAGE_RE = /^cursor(?:_[a-z0-9]+)*\.bmp$/;
 
 export const MAX_CURSOR_FILE_BYTES = 4 * 1024 * 1024;
@@ -19,6 +21,29 @@ export function isUsableCursorFile(fileName: string, bytes: Uint8Array): boolean
     if (bytes.length === 0 || bytes.length > MAX_CURSOR_FILE_BYTES) return false;
     if (fileName.toLowerCase().endsWith('.res')) return true;
     return bytes[0] === 0x42 && bytes[1] === 0x4d;
+}
+
+/**
+ * The hotspots in a cursor.res, keyed by cursor name. The game looks a BMP up
+ * by its file stem (cursor_ping.bmp reads `cursor_ping`) and uses 0, 0 for a
+ * cursor the file does not list.
+ */
+export function parseCursorRes(text: string): Map<string, CursorHotspot> {
+    const hotspots = new Map<string, CursorHotspot>();
+    const body = text.replace(/\/\/[^\n]*/g, '');
+    for (const [, name, entry] of body.matchAll(/"?([\w.-]+)"?\s*\{([^{}]*)\}/g)) {
+        const x = /"hotx"\s+"(-?\d+)"/i.exec(entry);
+        const y = /"hoty"\s+"(-?\d+)"/i.exec(entry);
+        hotspots.set(name.toLowerCase(), { x: x ? Number(x[1]) : 0, y: y ? Number(y[1]) : 0 });
+    }
+    return hotspots;
+}
+
+export function formatCursorRes(hotspots: ReadonlyMap<string, CursorHotspot>): string {
+    const entries = [...hotspots].map(
+        ([name, { x, y }]) => `\t${name}\n\t{\n\t\t"hotx"\t\t"${x}"\n\t\t"hoty"\t\t"${y}"\n\t}\n`
+    );
+    return `"resource/cursor/cursor.res"\n{\n${entries.join('\n')}}\n`;
 }
 
 const FILE_HEADER = 14;

@@ -15,7 +15,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
-import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
+import CursorPackPane, { CursorPaneActions } from '../components/locker/CursorPackPane';
 import CategoryModPicker from '../components/locker/CategoryModPicker';
 import { CreateCategoryModal, ManageCategoriesModal } from '../components/locker/ManageCategoriesModal';
 import {
@@ -2308,7 +2308,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 <span className="text-xs text-white/60">
                   {t('locker.page.modCount', { count: countForTab(activeType) })}
                 </span>
-                {activeType === CURSOR_TAB && <CursorImportButton />}
+                {activeType === CURSOR_TAB && <CursorPaneActions />}
                 {isPriorityTab && (
                   <button
                     type="button"

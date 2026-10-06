@@ -73,6 +73,7 @@ import type {
     UpdateStatus,
     LockerImageVariant,
     CropRect,
+    CursorImageFile,
 } from '../../src/types/electron';
 import type { AppearanceSurface } from '../../src/types/mod';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
@@ -652,6 +653,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteCursorPack: (id: string) => ipcRenderer.invoke('cursors:delete', id),
     getCursorPreview: (id: string | null) => ipcRenderer.invoke('cursors:preview', id),
     importCursorPack: (paths: string[]) => ipcRenderer.invoke('cursors:import-files', paths),
+    createCursorPack: (name: string, files: CursorImageFile[]) => ipcRenderer.invoke('cursors:create', name, files),
+    exportCursorImages: (destPath: string, files: CursorImageFile[]) =>
+        ipcRenderer.invoke('cursors:export', destPath, files),
 
     // Updater
     updater: {
