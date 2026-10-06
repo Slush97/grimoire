@@ -1,5 +1,15 @@
 import type { Mod, AppSettings, DeleteModsProgress, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
-import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
+import type {
+  InterchangeDocument,
+  InterchangeExportReport,
+  InterchangeExportSelection,
+  InterchangeImportReport,
+  InterchangeImportSelection,
+  InterchangePreview,
+  InterchangeProgress,
+  InterchangeSourceInfo,
+  InterchangeSourceRequest,
+} from './modInterchange';
 import type {
   HeroPortrait,
   CustomCardSlot,
@@ -89,13 +99,31 @@ export async function setSettings(settings: AppSettings): Promise<void> {
   return window.electronAPI.setSettings(settings);
 }
 
-// Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
-export async function dmmMigrateScan(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
-  return window.electronAPI.dmmMigrate.scan(req);
+// Mod transfer between mod managers (neutral interchange format; no cloud)
+export async function listInterchangeSources(): Promise<InterchangeSourceInfo[]> {
+  return window.electronAPI.interchange.sources();
 }
 
-export async function dmmMigrateExecute(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
-  return window.electronAPI.dmmMigrate.execute(req);
+export function onInterchangeProgress(callback: (progress: InterchangeProgress) => void): () => void {
+  return window.electronAPI.interchange.onProgress(callback);
+}
+
+export async function readInterchangeSource(req: InterchangeSourceRequest): Promise<InterchangePreview> {
+  return window.electronAPI.interchange.read(req);
+}
+
+export async function importInterchangeSelection(
+  document: InterchangeDocument,
+  selection: InterchangeImportSelection
+): Promise<InterchangeImportReport> {
+  return window.electronAPI.interchange.import({ document, selection });
+}
+
+export async function exportModsForOtherManagers(
+  destinationDir: string,
+  selection: InterchangeExportSelection
+): Promise<InterchangeExportReport> {
+  return window.electronAPI.interchange.export({ destinationDir, selection });
 }
 
 // Mods

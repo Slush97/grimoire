@@ -306,3 +306,40 @@ export function parseMachineConvarsCrosshair(content: string): Partial<Crosshair
     }
     return out;
 }
+
+/** Crosshair settings from game convars (the mod-interchange crosshair
+ *  format). Unknown convars are ignored; missing fields take defaults. */
+export function crosshairSettingsFromConvars(convars: Record<string, string>): CrosshairSettings | null {
+    const out: Partial<CrosshairSettings> = {};
+    const target = out as Record<string, number | boolean>;
+    let known = false;
+    for (const [convar, field, kind] of CONVAR_FIELDS) {
+        const v = convars[convar];
+        if (v === undefined) continue;
+        known = true;
+        if (kind === 'boolean') {
+            target[field] = v === 'true' || v === '1';
+        } else {
+            const n = parseFloat(v);
+            if (Number.isFinite(n)) target[field] = Math.round(n * 100) / 100;
+        }
+    }
+    // Managers with a single on/off pip border (DMM) only send the legacy flag.
+    const legacyBorder = convars['citadel_crosshair_pip_border'];
+    if (legacyBorder !== undefined && out.pipOutlineBorder === undefined) {
+        known = true;
+        out.pipBorder = legacyBorder === 'true' || legacyBorder === '1';
+    }
+    return known ? normalizeCrosshairSettings(out) : null;
+}
+
+/** The full convar set for settings, keyed by convar name. */
+export function crosshairConvarsFromSettings(raw: Partial<CrosshairSettings>): Record<string, string> {
+    const convars: Record<string, string> = {};
+    for (const line of generateCrosshairCommands(raw).split('\n')) {
+        const [name, ...rest] = line.split(' ');
+        if (name) convars[name] = rest.join(' ');
+    }
+    convars['citadel_crosshair_pip_border'] = String(normalizeCrosshairSettings(raw).pipBorder);
+    return convars;
+}

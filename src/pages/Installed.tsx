@@ -28,6 +28,7 @@ import {
   Trash2,
   AlertTriangle,
   FolderOpen,
+  FileOutput,
   FilePlus,
   Files,
   X,
@@ -57,7 +58,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, assertReplacementSafety, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteMod as deleteModApi, assertReplacementSafety, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
@@ -69,6 +70,8 @@ import {
   type MergeSourceUpdateSkip,
 } from '../lib/mergeSourceUpdate';
 import ModDetailsModal from '../components/ModDetailsModal';
+import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
+import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
 import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import MergeModsModal from '../components/MergeModsModal';
@@ -1015,20 +1018,9 @@ export default function Installed() {
     cancelled?: boolean;
   } | null>(null);
   const [unknownFixMode, setUnknownFixMode] = useState<'single' | 'bulk' | null>(null);
-  // Synchronous re-entry guard for the DMM auto-import step (one click only,
-  // even if the button is mashed before the first run resolves). A ref, not
-  // state, so two clicks in the same tick can't both read a stale `false`.
-  const dmmAutoImportInFlightRef = useRef(false);
-  const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const soloBusyRef = useRef(false);
   const [soloBusy, setSoloBusy] = useState(false);
-  // Pending DMM-import consent dialog. Holds the promise resolver so
-  // autoImportDmmMods can await the user's answer; null = no dialog.
-  const [dmmConfirm, setDmmConfirm] = useState<{
-    count: number;
-    profileName: string;
-    resolve: (ok: boolean) => void;
-  } | null>(null);
   const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
   const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
   const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
@@ -1635,95 +1627,12 @@ export default function Installed() {
     );
   };
 
-  // Adopt any Deadlock Mod Manager install as the first step of the unknown-fix
-  // flow. DMM detection is purely local (reads DMM's on-disk data, no
-  // GameBanana, no rate limit), so it runs regardless of the auto-match toggle.
-  // Importing tags the matching unknown VPKs with GameBanana metadata, so they
-  // drop out of the unknown set before the manual modal opens. Returns the
-  // unknown mods that remain afterward (the input list unchanged when there's
-  // no DMM install or nothing new to adopt).
-  const autoImportDmmMods = async (currentUnknowns: Mod[]): Promise<Mod[]> => {
-    if (currentUnknowns.length === 0) return currentUnknowns;
-
-    // Probe for a DMM install. Scan throws when there's no DMM data on this
-    // machine (the common case): handled silently so the manual flow proceeds.
-    let scan;
-    try {
-      scan = await dmmMigrateScan({});
-    } catch {
-      return currentUnknowns;
-    }
-
-    // Only act on DMM mods Grimoire isn't already managing. Without this gate a
-    // user with DMM installed would see "detected, importing" on every Fix
-    // Unknown click, even after everything had already been adopted.
-    const managedGbIds = new Set(
-      useAppStore
-        .getState()
-        .mods.map((m) => m.gameBananaId)
-        .filter((id): id is number => !!id)
-    );
-    const freshEntries = scan.preview.filter((p) => !managedGbIds.has(p.submissionId));
-    if (freshEntries.length === 0) return currentUnknowns;
-
-    // Consent gate: importing writes mod identities in batch, so it never
-    // runs on a toast alone. The dialog says what was found; declining goes
-    // straight to manual identification.
-    const consent = await new Promise<boolean>((resolve) =>
-      setDmmConfirm({ count: freshEntries.length, profileName: scan.profileName, resolve })
-    );
-    if (!consent) return currentUnknowns;
-
-    showToast(t('installed.unknown.dmmDetected'), { tone: 'info', duration: 4000 });
-
-    let report;
-    try {
-      report = await dmmMigrateExecute({});
-    } catch (err) {
-      showToast(
-        t('installed.unknown.dmmImportFailed') + ': ' + (err instanceof Error ? err.message : String(err)),
-        { tone: 'error', duration: 8000, dismissable: true }
-      );
-      return currentUnknowns;
-    }
-
-    await loadMods();
-    const remaining = useAppStore
-      .getState()
-      .mods.filter((m) => m.isUnknown)
-      .sort((a, b) => a.priority - b.priority);
-
-    if (report.adopted.length > 0) {
-      showToast(t('installed.unknown.dmmImported', { count: report.adopted.length }), {
-        tone: 'success',
-        duration: 5000,
-      });
-    }
-    return remaining;
-  };
-
-  const openBulkUnknownFix = async (unknowns: Mod[]) => {
-    // Ignore re-entrant clicks while a DMM auto-import is mid-flight: the import
-    // mutates files + reloads mods, so a second concurrent run would race the
-    // first (main-process serialization keeps it safe, but it's wasted work and
-    // a double toast). The button also shows a loading state via dmmAutoImporting.
-    if (dmmAutoImportInFlightRef.current) return;
-    dmmAutoImportInFlightRef.current = true;
-    setDmmAutoImporting(true);
-    let remaining: Mod[];
-    try {
-      // First adopt any Deadlock Mod Manager mods automatically, then open the
-      // manual modal on whatever unknowns are left.
-      remaining = await autoImportDmmMods(unknowns);
-    } finally {
-      dmmAutoImportInFlightRef.current = false;
-      setDmmAutoImporting(false);
-    }
-    const first = remaining[0];
+  const openBulkUnknownFix = (unknowns: Mod[]) => {
+    const first = unknowns[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
-    // The heavy auto-detect sweep is no longer kicked on open. The bulk modal
-    // lists the unknowns so the user can search/link each one manually; the
+    // The heavy auto-detect sweep is not kicked on open. The bulk modal lists
+    // the unknowns so the user can search/link each one manually; the
     // "Auto-detect all" button (behind a rate-limit confirm) still runs the
     // CRC matcher across the batch when explicitly requested.
   };
@@ -4044,6 +3953,7 @@ export default function Installed() {
               <Button variant="secondary" onClick={() => openBatchImport()} icon={FilePlus}>
                 {t('installed.actions.importCustomMod')}
               </Button>
+              <ImportSourceMenu onImported={() => void loadMods()} />
             </div>
           }
         />
@@ -4122,8 +4032,6 @@ export default function Installed() {
               setFixUnknownHidden(true);
             }}
             icon={HelpCircle}
-            isLoading={dmmAutoImporting}
-            disabled={dmmAutoImporting}
             title={t('installed.unknown.fixButtonHint')}
           >
             {t('installed.unknown.fixButton', { count: unknownMods.length })}
@@ -4437,6 +4345,15 @@ export default function Installed() {
               className="!px-2.5"
               aria-label={t('installed.actions.addCustomMod')}
               title={t('installed.actions.addCustomModHint')}
+            />
+            <ImportSourceMenu compact onImported={() => void loadMods()} />
+            <Button
+              variant="secondary"
+              onClick={() => setExportOpen(true)}
+              icon={FileOutput}
+              className="!px-2.5"
+              aria-label={t('interchange.exportMenu')}
+              title={t('interchange.exportHint')}
             />
             <Button
               variant="secondary"
@@ -4985,25 +4902,7 @@ export default function Installed() {
         />
       )}
 
-      {/* Consent gate for the DMM auto-import step of Fix Unknown Mods. */}
-      <ConfirmModal
-        isOpen={dmmConfirm !== null}
-        title={t('installed.unknown.dmmConfirmTitle')}
-        message={t('installed.unknown.dmmConfirmMessage', {
-          count: dmmConfirm?.count ?? 0,
-          profile: dmmConfirm?.profileName ?? '',
-        })}
-        confirmLabel={t('installed.unknown.dmmConfirmImport')}
-        cancelLabel={t('installed.unknown.dmmConfirmSkip')}
-        onConfirm={() => {
-          dmmConfirm?.resolve(true);
-          setDmmConfirm(null);
-        }}
-        onCancel={() => {
-          dmmConfirm?.resolve(false);
-          setDmmConfirm(null);
-        }}
-      />
+      {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
 
       {customUnknownMod && (
         <MakeCustomModModal

@@ -64,7 +64,17 @@ import type {
     DeadworksConnectProgress,
     DeadworksRelayStats,
 } from './deadworks';
-import type { DmmMigrationRequest, DmmMigrationReport } from '../lib/dmmMigration';
+import type {
+    InterchangeDocument,
+    InterchangeExportReport,
+    InterchangeExportSelection,
+    InterchangeImportReport,
+    InterchangeImportSelection,
+    InterchangePreview,
+    InterchangeProgress,
+    InterchangeSourceInfo,
+    InterchangeSourceRequest,
+} from '../lib/modInterchange';
 
 export interface BrowseModsArgs {
     page: number;
@@ -828,10 +838,19 @@ export interface ElectronAPI {
     getSettings: () => Promise<AppSettings>;
     setSettings: (settings: AppSettings) => Promise<void>;
 
-    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
-    dmmMigrate: {
-        scan: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
-        execute: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
+    // Mod transfer between mod managers (neutral interchange format; no cloud)
+    interchange: {
+        sources: () => Promise<InterchangeSourceInfo[]>;
+        read: (req: InterchangeSourceRequest) => Promise<InterchangePreview>;
+        import: (req: {
+            document: InterchangeDocument;
+            selection: InterchangeImportSelection;
+        }) => Promise<InterchangeImportReport>;
+        export: (req: {
+            destinationDir: string;
+            selection: InterchangeExportSelection;
+        }) => Promise<InterchangeExportReport>;
+        onProgress: (callback: (progress: InterchangeProgress) => void) => () => void;
     };
 
     // Discord Rich Presence (opt-in; talks only to the local Discord client)

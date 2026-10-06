@@ -30,6 +30,8 @@ export interface DmmStateMod {
   /** Parsed numeric submission id, or NaN if non-numeric (local mod). */
   submissionId: number;
   name?: string;
+  author?: string;
+  description?: string;
   category?: string;
   /** DMM's hero codename (heroOverride > detectedHero > hero). Informational
    *  only: we let Grimoire's VPK-tree inference assign the canonical hero. */
@@ -43,6 +45,9 @@ export interface DmmStateMod {
   installOrder?: number;
   /** On-disk VPK basenames DMM recorded for this mod, when present. */
   installedVpks?: string[];
+  /** Original VPK names the user selected (DMM's installedFileTree), used to
+   *  pick the right files from DMM's mod store when the addon files are gone. */
+  selectedVpkNames?: string[];
 }
 
 export interface DmmStateProfile {
@@ -64,14 +69,17 @@ export interface DmmState {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Recover the GameBanana file id from a DMM download URL. DMM stores only the
- *  `_sDownloadUrl` (`https://gamebanana.com/dl/<fileId>`), so the trailing
- *  `/dl/<n>` integer is the file `_idRow`. Returns undefined if not present. */
+/** Recover the GameBanana file id from a DMM download URL. DMM 1.x stores the
+ *  `_sDownloadUrl` (`https://gamebanana.com/dl/<fileId>`), DMM 2.x its own
+ *  `gamebanana-file://<remoteId>/<fileId>`; either way the trailing integer is
+ *  the file `_idRow`. Returns undefined if not present. */
 export function fileIdFromDownloadUrl(url: unknown): number | undefined {
   if (typeof url !== 'string') return undefined;
   // Anchor to the GameBanana host so an unrelated mirror/CDN link that merely
-  // contains a `/dl/<n>` segment can't masquerade as a file id.
-  const m = url.match(/gamebanana\.com\/dl\/(\d+)/i);
+  // contains a `/dl/<n>` segment can't masquerade as a file id. DMM 2.x stores
+  // its own `gamebanana-file://<remoteId>/<fileId>` scheme instead.
+  const m =
+    url.match(/^gamebanana-file:\/\/[^/]+\/(\d+)$/i) ?? url.match(/gamebanana\.com\/dl\/(\d+)/i);
   if (!m) return undefined;
   const id = Number(m[1]);
   return Number.isInteger(id) && id > 0 ? id : undefined;
@@ -105,8 +113,20 @@ function normalizeMod(raw: unknown): DmmStateMod | null {
   const idDownload = downloadObjs.find((d) => fileIdFromDownloadUrl(d.url) !== undefined);
   const labelDownload = idDownload ?? downloadObjs[0];
 
+  // Local DMM mods keep an inline data: URL preview; only real URLs are
+  // useful to Grimoire (the sidecar stores a URL, not image bytes).
   const images = Array.isArray(raw.images) ? raw.images : [];
-  const thumbnailUrl = images.find((i): i is string => typeof i === 'string' && !!i);
+  const thumbnailUrl = images.find(
+    (i): i is string => typeof i === 'string' && /^https?:\/\//i.test(i)
+  );
+
+  const tree = isObject(raw.installedFileTree) ? raw.installedFileTree : null;
+  const selectedVpkNames = Array.isArray(tree?.files)
+    ? (tree.files as unknown[])
+        .filter(isObject)
+        .filter((f) => f.is_selected !== false && typeof f.name === 'string')
+        .map((f) => f.name as string)
+    : undefined;
 
   const installedVpks = Array.isArray(raw.installedVpks)
     ? raw.installedVpks.filter((v): v is string => typeof v === 'string')
@@ -116,6 +136,9 @@ function normalizeMod(raw: unknown): DmmStateMod | null {
     remoteId,
     submissionId: Number(remoteId),
     name: typeof raw.name === 'string' ? raw.name : undefined,
+    author: typeof raw.author === 'string' && raw.author.trim() ? raw.author : undefined,
+    description:
+      typeof raw.description === 'string' && raw.description.trim() ? raw.description : undefined,
     category: typeof raw.category === 'string' ? raw.category : undefined,
     hero: pickHero(raw),
     thumbnailUrl,
@@ -124,6 +147,7 @@ function normalizeMod(raw: unknown): DmmStateMod | null {
       labelDownload && typeof labelDownload.name === 'string' ? labelDownload.name : undefined,
     installOrder: typeof raw.installOrder === 'number' ? raw.installOrder : undefined,
     installedVpks,
+    selectedVpkNames: selectedVpkNames && selectedVpkNames.length > 0 ? selectedVpkNames : undefined,
   };
 }
 
@@ -239,6 +263,25 @@ export function indexDmmStateBySubmission(
         index.set(mod.submissionId, mod);
       } else if (existing.fileId === undefined && mod.fileId !== undefined) {
         index.set(mod.submissionId, mod);
+      }
+    }
+  }
+  return index;
+}
+
+/** Build a DMM-id -> DmmStateMod lookup (`123`, `snd-123`, `local-<uuid>`).
+ *  Unlike indexDmmStateBySubmission this keeps sound and local mods, which
+ *  have no numeric submission id of their own. Profile entries win. */
+export function indexDmmStateByRemoteId(
+  state: DmmState,
+  profile?: DmmStateProfile | null
+): Map<string, DmmStateMod> {
+  const index = new Map<string, DmmStateMod>();
+  for (const list of [profile?.mods ?? [], state.localMods]) {
+    for (const mod of list) {
+      const existing = index.get(mod.remoteId);
+      if (!existing || (existing.fileId === undefined && mod.fileId !== undefined)) {
+        index.set(mod.remoteId, mod);
       }
     }
   }

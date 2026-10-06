@@ -57,6 +57,37 @@ export function addProfile(profile: Profile): Profile {
 }
 
 /**
+ * Replace a stored profile by id. Used by re-imports that refresh a profile
+ * an earlier import created.
+ */
+export function replaceProfile(profile: Profile): Profile {
+    const profiles = loadProfiles();
+    const index = profiles.findIndex((p) => p.id === profile.id);
+    if (index === -1) throw new Error(`Profile not found: ${profile.id}`);
+    profiles[index] = profile;
+    saveProfiles(profiles);
+    return profile;
+}
+
+/**
+ * Profile entries for chosen installed VPKs, with the same stable ids and
+ * VPK indexes a saved profile carries. `installed` is the full scan, so
+ * multi-VPK indexes are inferred the way applyProfile's resolver infers them.
+ */
+export function profileModsForKeys(
+    installed: Array<{ metaKey: string; fileName: string; size: number }>,
+    picks: Array<{ metaKey: string; enabled: boolean; priority: number }>
+): ProfileMod[] {
+    const byKey = new Map(installed.map((mod) => [mod.metaKey, mod]));
+    const inferredVpkIndexes = inferMissingVpkIndexes(installed);
+    return picks.flatMap((pick) => {
+        const mod = byKey.get(pick.metaKey);
+        if (!mod) return [];
+        return [toProfileMod({ ...mod, priority: pick.priority }, pick.enabled, inferredVpkIndexes)];
+    });
+}
+
+/**
  * Load all profiles from disk
  */
 export function loadProfiles(): Profile[] {

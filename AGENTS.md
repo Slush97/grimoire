@@ -30,7 +30,7 @@ Electron multi-process with context isolation on and `nodeIntegration` off.
 
 **Adding an IPC method:** declare it once in the `ElectronAPI` interface in `src/types/electron.ts`, add the one-line bridge in `electron/preload/index.ts` (checked with `satisfies ElectronAPI`), then the handler in `electron/main/ipc/*`. **Adding a setting:** field in `AppSettings` (`src/types/mod.ts`) plus its default in `electron/main/services/settings.ts`.
 
-Runtime data lives in the Electron `userData` dir: `mods-cache.db` (GameBanana catalog mirror + FTS5), `stats.db` (player stats), `unknown-crc-cache.db`, `settings.json`, `mod-metadata.json`, `profiles.json`, plus asset caches.
+Runtime data lives in the Electron `userData` dir: `mods-cache.db` (GameBanana catalog mirror + FTS5), `stats.db` (player stats), `unknown-crc-cache.db`, `settings.json`, `mod-metadata.json`, `profiles.json`, `interchange-ledger.json`, plus asset caches.
 
 Heavy VPK/model/texture/sound work shells out to the bundled `vpkmerge` CLI (`resources/vpkmerge/`, version + sha256 pinned in `scripts/fetch-vpkmerge.mjs`).
 
@@ -74,6 +74,7 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 
 | Area | Doc |
 |---|---|
+| Manager-neutral mod transfer | `docs/mod-interchange.md` |
 | Portable profiles (`mp1:` codes, `.modprofile.json`) | `docs/profile-spec.md` |
 | Social layer, ADRs (append-only, never edit a shipped ADR) | `docs/social-architecture.md`, `docs/social-architecture-decisions.md` |
 | `gameinfo.gi` handling, Deadworks servers | `docs/deadworks-servers.md` |
@@ -89,6 +90,7 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 
 ## Working conventions
 
+- Mod transfer uses the interchange format. DMM input is converted through the reader in `electron/main/services/modInterchange/`, and new source managers are registered in `electron/main/ipc/modInterchange.ts`.
 - `Installed.tsx` and `Browse.tsx` are god files (thousands of lines). Put new features in their own components under `src/components/<feature>/` rather than growing them. When splitting, make move-only PRs with no behavior or visual change mixed in.
 - Experimental features are gated behind `experimental*` settings (see `AppSettings`) and default off.
 - Commits: imperative, conventional-style subjects (`fix(installed): ...`, `feat: ...`). PRs are squash-merged. Branch protection has no required checks, so `gh pr merge --auto` merges immediately: check `gh pr checks` first.

@@ -231,7 +231,7 @@ function parseVpkPriority(filename: string): number | null {
  * and `addons{N}/<file>` for overflow mods, which keeps IDs unique when the same
  * pakNN_dir.vpk name exists in more than one addon folder.
  */
-function generateModId(metaKey: string): string {
+export function generateModId(metaKey: string): string {
     return createHash('md5').update(metaKey).digest('hex').slice(0, 16);
 }
 
