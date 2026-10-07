@@ -191,7 +191,7 @@ export interface PerformancePresetSummary {
     name: string;
     /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
     version: string;
-    tier: 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
+    tier: 'light' | 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
     author: string;
     /** Upstream itself labels this config experimental. */
     unstable: boolean;

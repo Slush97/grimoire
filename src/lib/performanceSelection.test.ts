@@ -50,7 +50,7 @@ function preset(
 const settings = (partial: Partial<AppSettings>) => partial as AppSettings;
 
 describe('sortPresetsByTier', () => {
-  it('orders mildest to strongest with the preview config last', () => {
+  it('puts the recommended default first, then mildest to strongest with the preview config last', () => {
     const sorted = sortPresetsByTier([
       preset('p', 'preview'),
       preset('m', 'maximum'),
@@ -58,9 +58,11 @@ describe('sortPresetsByTier', () => {
       preset('pot', 'potato'),
       preset('a', 'aggressive'),
       preset('c', 'competitive'),
+      preset('l', 'light'),
     ]);
     expect(sorted.map((p) => p.tier)).toEqual([
       'balanced',
+      'light',
       'competitive',
       'aggressive',
       'maximum',

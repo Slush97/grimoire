@@ -29,6 +29,7 @@ import {
 import {
     generatePresetBody,
     parseConfig,
+    pathExcluded,
     validateGameinfoText,
     validateGeneratedBody,
 } from './performancePresetGen';
@@ -249,7 +250,12 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
             refKind: release.refKind,
             commit: release.commit,
         },
-        sectionOps: release.sectionOps,
+        // A cached body was classified by whichever Grimoire fetched it.
+        // Today's section exclusions still apply: RenderModes was excluded
+        // after older builds had cached bodies that wrote to it.
+        sectionOps: release.sectionOps.filter(
+            (op) => !pathExcluded(op.path, CLASSIFICATION.excludeSections)
+        ),
         convars: release.convars,
         // Groups come from the same manifest tables the bundled data was
         // generated with, so the cast is between two views of one source.

@@ -162,7 +162,7 @@ export function parseConfig(text: string): ParsedConfig {
 // Diff + classification
 // ---------------------------------------------------------------------------
 
-function pathExcluded(path: string[], excludedSections: ReadonlyArray<readonly string[]>): boolean {
+export function pathExcluded(path: string[], excludedSections: ReadonlyArray<readonly string[]>): boolean {
     return excludedSections.some((ex) => ex.every((seg, i) => path[i] === seg));
 }
 

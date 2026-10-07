@@ -25,14 +25,17 @@
     "",
     "To update a pin deliberately:  pnpm perf:presets --refresh <presetId|all>",
     "then  pnpm perf:presets  to regenerate, and review the diff.",
-    "Never hand-edit electron/main/services/performanceConfigData.ts."
+    "Never hand-edit electron/main/services/performanceConfigData.ts.",
+    "",
+    "A preset added upstream after a source's older releases records null for",
+    "those releases: the file did not exist yet, so there is nothing to bundle."
   ],
   "historyDepth": 3,
   "$historyDepthComment": "How many upstream releases to bundle per source, newest first. --refresh prepends the new release and ages out the oldest. Raising it grows the main-process bundle by roughly 25 KB per preset per release; lowering it shortens how far a user can roll back.",
   "baseline": {
     "$comment": "Stock gameinfo.gi. Every preset is stored as a diff against this, which is what lets Grimoire patch in place instead of replacing the user's file.",
     "repo": "Sqooky/OptimizationLock",
-    "commit": "2b994f62a84ba90cd666c7c63674a7aab3127aca",
+    "commit": "e2e9925cdd9d564a1a0bb19f28185211fb0dea75",
     "path": "clean gameinfo.gi/gameinfo.gi",
     "sha256": "b96954f5607e381b94b3d5ba2214bf1bcee2b65a16bb1a231b5f840586466955"
   },
@@ -46,8 +49,8 @@
       "releases": [
         {
           "ref": "3.4",
-          "commit": "2b994f62a84ba90cd666c7c63674a7aab3127aca",
-          "date": "2026-10-03"
+          "commit": "e2e9925cdd9d564a1a0bb19f28185211fb0dea75",
+          "date": "2026-10-05"
         },
         {
           "ref": "3.3",
@@ -60,7 +63,7 @@
           "date": "2026-09-30"
         }
       ],
-      "$comment": "Upstream publishes no git tags or releases; each 'ref' is the version stated in that release's commit message and in the config's own header comment. Pins are the commit SHAs. Sqooky follows a release with fix-up pushes (3.3 was fixed by \"IWRONG VALUE\" minutes later), so each pin is the last commit of that release's push burst, not the commit titled with the version. The newest release is also the baseline pin. If Sqooky starts tagging, switch refKind to 'tag' and pin the tags' resolved SHAs."
+      "$comment": "Upstream publishes no git tags or releases; each 'ref' is the version stated in that release's commit message and in the config's own header comment. Pins are the commit SHAs. Sqooky follows a release with fix-up pushes (3.3 was fixed by \"IWRONG VALUE\" minutes later), so each pin is the last commit of that release's push burst, not the commit titled with the version. The newest release is also the baseline pin. If Sqooky starts tagging, switch refKind to 'tag' and pin the tags' resolved SHAs. 3.4 is pinned past its push burst to e2e9925c (2026-10-05): those later commits only reformatted the bundled files (no key changes) and added Eskay's config, and upstream still states 3.4."
     },
     "optilock": {
       "repo": "dacooderr/OptiLock",
@@ -97,11 +100,25 @@
       "source": "optimizationlock",
       "path": "Sqooky's .gi/gameinfo.gi",
       "sha256": {
-        "3.4": "041ebe91c92548c7a45dc4832d22383cf5ce190d8d75b0bb734075f203c02113",
+        "3.4": "c1e451134cd1d4d57d0f665673f9bbe732d6335c2b48ee6617079c23254222c7",
         "3.3": "dbb91f6e0ba60e9e9493fa823108036f13f2cf90997766f589296520319fb925",
         "3.2": "6bcc472f5f4132f9c39efbf88e747f266805952b3d00d8ab96bec5ae87d181f5"
       },
       "author": "Sqooky"
+    },
+    {
+      "id": "eskay",
+      "name": "Eskay's Config",
+      "tier": "light",
+      "source": "optimizationlock",
+      "path": "Eskay's config/gameinfo.gi",
+      "$comment": "Added upstream after 3.3, so older releases are null. A minor fork of Sqooky's default that drops the far-clip and fade-distance culling (r_farz, r_mapextents, sc_fade_distance_scale_override), so no building or player pop-in.",
+      "sha256": {
+        "3.4": "c7a496cd9c4b62de03ae03f4bbfda9cd8228bf97cdd1a0824aafe441809dd3ba",
+        "3.3": null,
+        "3.2": null
+      },
+      "author": "Eskay"
     },
     {
       "id": "sqooky-testing",
@@ -110,7 +127,7 @@
       "source": "optimizationlock",
       "path": "test_cfg/gameinfo.gi",
       "sha256": {
-        "3.4": "9f77fb7a2ece33cb2a085a0cc2c23be6dd9e5bb61fa212e5ebe90dcb998e0037",
+        "3.4": "96ed6e4ceb5ec482cadb38756012cd317203694fe3aa6dcbb082c39d41f98ecc",
         "3.3": "b7b2d540fdb74d91ca8544cb50354ca6ef1cc78dd9a24bc59ad0f5180e29abe1",
         "3.2": "93a375143673eae81e98adb0ddf7f24aeeb428a9bd7c696717d2db6ddaf46808"
       },
@@ -137,7 +154,7 @@
       "source": "optimizationlock",
       "path": "kaizuchanerus minimum spec/gameinfo.gi",
       "sha256": {
-        "3.4": "afda3762de652cf04f325015cfe16496be4a0080e587de83e46baf753c3a36ad",
+        "3.4": "46abb89c15bebdabef6234959cbe597df289176d3e2a19cf826381107e103bc6",
         "3.3": "e85b31c337752597faaf25a4e628d687f67684fdf5284607141b13e2554c7b74",
         "3.2": "e1a58a6dc07df47a0e08bdc031fefec90da89070094e5c4a248872bc020cc80d"
       },
@@ -184,7 +201,7 @@
     }
   ],
   "exclude": {
-    "$comment": "Never emitted into a preset, whatever upstream sets.",
+    "$comment": "Never emitted into a preset, whatever upstream sets. MaterialSystem2/RenderModes is a list of seven `game` entries, not key/value pairs: a config written before Valve added ShadowSilhouette diffed to a single `game \"FrontDepth\"` op, and the patcher, which edits every occurrence of a key, collapsed all seven render modes into FrontDepth.",
     "patterns": [
       {
         "pattern": "^(host_)?timescale$",
@@ -213,6 +230,10 @@
       ],
       [
         "SteamAudio"
+      ],
+      [
+        "MaterialSystem2",
+        "RenderModes"
       ]
     ],
     "keys": [

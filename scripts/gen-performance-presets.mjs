@@ -51,12 +51,15 @@ function fail(msg) {
 // Fetch
 // ---------------------------------------------------------------------------
 
-async function fetchAt(repo, commit, path) {
+// `optional` turns a 404 into null instead of a failure. Only --refresh uses
+// it, to record a preset whose file did not exist yet at an older release.
+async function fetchAt(repo, commit, path, { optional = false } = {}) {
     const url = `https://raw.githubusercontent.com/${repo}/${commit}/${path
         .split('/')
         .map(encodeURIComponent)
         .join('/')}`;
     const res = await fetch(url);
+    if (optional && res.status === 404) return null;
     if (!res.ok) fail(`Fetch failed (${res.status}) for ${repo}@${commit.slice(0, 8)} ${path}`);
     return res.text();
 }
@@ -514,13 +517,36 @@ async function main() {
         // release changes relative to today's stock file", which is the only
         // thing that can be patched into the file the user actually has.
         const releases = [];
+        let absentAt = null;
         for (const release of source.releases) {
             const expected = entry.sha256[release.ref];
-            if (!expected) {
+            if (expected === undefined) {
                 fail(
                     `Preset ${entry.id} has no sha256 for release ${release.ref}.\n` +
                         `  Every release listed on source "${entry.source}" needs one, or the\n` +
                         `  content gate silently stops covering that version.`
+                );
+            }
+            // An explicit null records that the file did not exist upstream
+            // yet at this release (a config added after the source's older
+            // bundled releases). Only a trailing run of older releases may be
+            // absent: a file missing at the newest release was moved or
+            // deleted, which needs a pathByRef, not a silent skip.
+            if (expected === null) {
+                if (!releases.length) {
+                    fail(
+                        `Preset ${entry.id} has no file at ${release.ref}, the newest release of "${entry.source}".\n` +
+                            `  Upstream moved or deleted ${pathFor(entry, release.ref)}. Point "path" at its new\n` +
+                            `  location (with a pathByRef for older releases) or drop the preset.`
+                    );
+                }
+                absentAt ??= release.ref;
+                continue;
+            }
+            if (absentAt) {
+                fail(
+                    `Preset ${entry.id} is absent at ${absentAt} but present at the older ${release.ref}.\n` +
+                        `  Only releases older than the preset's first appearance may be null.`
                 );
             }
             const path = pathFor(entry, release.ref);
@@ -736,9 +762,10 @@ async function refreshPins(manifest, target) {
         const source = manifest.sources[entry.source];
         const hashes = {};
         for (const release of source.releases) {
-            hashes[release.ref] = sha256(
-                await fetchAt(source.repo, release.commit, pathFor(entry, release.ref))
-            );
+            const text = await fetchAt(source.repo, release.commit, pathFor(entry, release.ref), {
+                optional: true,
+            });
+            hashes[release.ref] = text === null ? null : sha256(text);
         }
         entry.sha256 = hashes;
     }

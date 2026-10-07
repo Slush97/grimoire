@@ -5,7 +5,7 @@ strategy is "curate one upstream" rather than "ingest any config from
 GameBanana." Read this before touching `performanceConfig.ts`,
 `performanceConfigData.ts`, or building the planned manifest/preset UI.
 
-Status: six selectable presets shipped, generated from pinned upstream commits.
+Status: seven selectable presets shipped, generated from pinned upstream commits.
 The research that drove the scope decision is recorded below and still holds;
 "What shipped" records where the delivered design differs from the plan it
 replaced.
@@ -98,7 +98,7 @@ intersection is extractable and safe; everything beyond it is author-specific.
 
 ## What shipped
 
-Six presets selected by id: `sqooky-default` (balanced, default), `sqooky-testing`
+Seven presets selected by id: `sqooky-default` (balanced, default), `eskay` (light), `sqooky-testing`
 (preview), `boot-max-fps` (aggressive), `kaizu-min-spec` (potato), `optilock-fps`
 (competitive), `optilock-max` (maximum). Each is a section/key diff of a pinned
 upstream `gameinfo.gi` against the stock baseline, generated into
@@ -132,6 +132,15 @@ broken `r_render_portals=0` value and boot's `DistanceField=0` section
 edit. The latter access-violates in the current Deadlock build when combined
 with boot's convar body; live launch bisection confirmed the full boot preset
 stays running without that one edit. No other bundled preset currently sets it.
+
+`MaterialSystem2/RenderModes` is excluded as a whole section because it is a
+list (seven `game` entries), not key/value pairs. The parser keeps the last
+duplicate and the patcher edits every occurrence of a key, so configs written
+before Valve added `ShadowSilhouette` (boot, OptiLock) diffed to
+`game "FrontDepth"` and collapsed all seven render modes into one. Track-latest
+users on v1.30.x hit this at runtime; `latestAsPreset` re-applies today's
+section exclusions to cached bodies so the fix reaches them without a refetch.
+Any future list-valued section needs the same treatment.
 
 ### Marker grammar
 
