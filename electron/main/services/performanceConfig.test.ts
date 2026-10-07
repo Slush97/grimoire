@@ -20,7 +20,8 @@ import {
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
 } from './performanceConfig';
-import { getPreset } from './performanceConfigData';
+import { CLASSIFICATION, getPreset } from './performanceConfigData';
+import { pathExcluded } from './performancePresetGen';
 
 const STOCK = readFileSync(join(__dirname, '__fixtures__/stock-gameinfo.gi'), 'utf-8');
 const STOCK_CRLF = STOCK.split('\n').join('\r\n');
@@ -174,6 +175,14 @@ describe('preset version history', () => {
             const versions = preset.versions.map((v) => v.version);
             expect(new Set(versions).size).toBe(versions.length);
         }
+    });
+
+    // `perf:presets --check` is not in CI (it needs the network), so this is
+    // the offline guard against a regenerated body editing an excluded
+    // section, e.g. the list-valued RenderModes.
+    it.each(ALL)('%s v%s: no section op lands in an excluded section', (id, version) => {
+        const ops = getPreset(id, version).sectionOps;
+        expect(ops.filter((op) => pathExcluded(op.path, CLASSIFICATION.excludeSections))).toEqual([]);
     });
 
     it.each(ALL)('%s v%s: apply then remove restores the file byte for byte', (id, version) => {

@@ -164,6 +164,28 @@ describe('buildLatestRelease gates', () => {
         }
     });
 
+    it('leaves the list-valued RenderModes section alone', () => {
+        // Stock lists seven `game` render modes; a config written before Valve
+        // added ShadowSilhouette ends on FrontDepth, which used to diff to a
+        // `game "FrontDepth"` op that the patcher wrote over every mode.
+        const withModes = (text: string, modes: string[]) =>
+            text.replace(
+                /\n\}\n$/,
+                `\n\tMaterialSystem2\n\t{\n\t\tRenderModes\n\t\t{\n${modes
+                    .map((m) => `\t\t\tgame "${m}"`)
+                    .join('\n')}\n\t\t}\n\t}\n}\n`
+            );
+        const result = buildLatestRelease(
+            input({
+                baselineText: withModes(baselineText(), ['Default', 'FrontDepth', 'ShadowSilhouette']),
+                configText: withModes(configText(), ['Default', 'FrontDepth']),
+            })
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.release.sectionOps.some((op) => op.path[0] === 'MaterialSystem2')).toBe(false);
+    });
+
     it('refuses implausible texts', () => {
         expect(buildLatestRelease(input({ configText: 'tiny' })).ok).toBe(false);
         expect(
@@ -268,6 +290,18 @@ describe('cache round-trip and resolution', () => {
         expect(preset.upstream.commit).toBe(r.commit);
         expect(preset.convars).toEqual(r.convars);
         expect(preset.optIn[0].group).toBe('visibility');
+    });
+
+    it('drops ops an older build cached for a section that is now excluded', () => {
+        const r = release();
+        const renderModes = { path: ['MaterialSystem2', 'RenderModes'], key: 'game', value: 'FrontDepth' };
+        writeLatestCache(dir, {
+            byPreset: { [r.presetId]: { ...r, sectionOps: [...r.sectionOps, renderModes] } },
+            checkedAt: {},
+            history: {},
+        });
+        const preset = resolveCachedPreset(dir, r.presetId, 'latest');
+        expect(preset?.sectionOps).toEqual(r.sectionOps);
     });
 });
 

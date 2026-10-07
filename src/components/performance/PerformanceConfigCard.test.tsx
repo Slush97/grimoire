@@ -234,12 +234,11 @@ describe('PerformanceConfigCard', () => {
 
     it('shows bundled pictures for verified authors and an initial for the rest', async () => {
       await render();
-      for (const tier of ['balanced', 'competitive', 'maximum', 'preview']) {
+      for (const tier of ['balanced', 'competitive', 'maximum', 'potato', 'preview']) {
         expect(card(tier)?.querySelector('img')).toBeTruthy();
       }
       expect(card('aggressive')?.querySelector('img')).toBeNull();
       expect(card('aggressive')?.textContent).toContain('b');
-      expect(card('potato')?.querySelector('img')).toBeNull();
     });
 
     it('never shows commit hashes or raw status prose on the main card', async () => {

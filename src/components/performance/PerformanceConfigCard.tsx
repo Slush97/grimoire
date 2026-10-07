@@ -24,6 +24,8 @@ import {
 import { savedOptIns, savedVersion, sortPresetsByTier } from '../../lib/performanceSelection';
 import sqookyAvatar from '../../assets/performance-authors/sqooky.png';
 import dacooderAvatar from '../../assets/performance-authors/dacooder.jpg';
+import eskayAvatar from '../../assets/performance-authors/eskay.png';
+import kaizuchanerusAvatar from '../../assets/performance-authors/kaizuchanerus.jpg';
 import type {
   PerformanceConfigStatus,
   PerformanceLatestInfo,
@@ -49,6 +51,8 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
 const AUTHOR_AVATARS: Record<string, string> = {
   Sqooky: sqookyAvatar,
   dacooder: dacooderAvatar,
+  Eskay: eskayAvatar,
+  kaizuchanerus: kaizuchanerusAvatar,
 };
 
 interface Notice {

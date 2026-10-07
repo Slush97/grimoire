@@ -3096,6 +3096,7 @@
     "preset": {
       "authorMods": "Mods",
       "tier": {
+        "light": "Light",
         "balanced": "Balanced",
         "preview": "Preview",
         "competitive": "Competitive",
@@ -3104,6 +3105,7 @@
         "potato": "Potato"
       },
       "tierBlurb": {
+        "light": "Close to Balanced, but keeps the full draw distance so buildings and players don't pop in.",
         "balanced": "A solid all-round gain that keeps the game looking close to normal.",
         "preview": "The author's in-progress tuning. Newer changes, less testing.",
         "competitive": "Tuned for ranked play: strips visual noise while keeping the game readable.",
