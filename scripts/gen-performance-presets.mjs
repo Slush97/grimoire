@@ -639,7 +639,7 @@ async function main() {
         }
     }
 
-    // The opt-in list is only as good as the last hand-audit of six upstream
+    // The opt-in list is only as good as the last hand-audit of the upstream
     // files. The pattern check (now inside generatePresetBody) is what makes it
     // hold across a `--refresh`: a key that looks like a visibility or framing
     // setting has to be classified on purpose before it can ship in a preset
@@ -766,6 +766,14 @@ async function refreshPins(manifest, target) {
                 optional: true,
             });
             hashes[release.ref] = text === null ? null : sha256(text);
+            // A 404 is either "not written yet" or "lived at another path",
+            // and only the first is a correct null.
+            if (text === null) {
+                console.log(
+                    `  ${entry.id}: no ${pathFor(entry, release.ref)} at ${release.ref}, recorded null.\n` +
+                        `      ^ if the file lived elsewhere then, add a pathByRef instead.`
+                );
+            }
         }
         entry.sha256 = hashes;
     }

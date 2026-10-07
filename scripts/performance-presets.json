@@ -318,7 +318,7 @@
       },
       {
         "key": "citadel_unit_status_old_update_rate",
-        "why": "Caught by the citadel_unit_status_ pattern, but it is the one member of that family that is genuinely a frame-rate setting: it caps how often health bars redraw. All six presets set 15 against a stock default of 30. It changes redraw cost, not what the bars show."
+        "why": "Caught by the citadel_unit_status_ pattern, but it is the one member of that family that is genuinely a frame-rate setting: it caps how often health bars redraw. Every bundled preset except kaizuchanerus' sets 15 against a stock default of 30. It changes redraw cost, not what the bars show."
       },
       {
         "key": "citadel_hud_objective_health_debug_show_midboss",
