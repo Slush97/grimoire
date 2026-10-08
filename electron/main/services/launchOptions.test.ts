@@ -1,16 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'fs';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs';
+import type { SpawnOptions } from 'child_process';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { isSteamRunning } from './launchOptions';
 
-// Rather than mock child_process, put a fake `pgrep` at the front of PATH that
-// logs its argv and reports a match only for the pattern named in GRIMOIRE_TEST_MATCH.
-// That exercises the real spawn, so a wrong flag or a dropped second probe
-// shows up here instead of at runtime.
+const fixture = vi.hoisted(() => ({ command: '' }));
+
+// pgrep cannot run on Windows. Replace only its executable with a Node fixture,
+// keeping the real child process, arguments, options and exit-code handling.
+vi.mock('child_process', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('child_process')>();
+    return {
+        ...actual,
+        spawn: (command: string, args: string[], options: SpawnOptions) => {
+            if (command !== 'pgrep') throw new Error(`Unexpected command: ${command}`);
+            return actual.spawn(process.execPath, [fixture.command, ...args], options);
+        },
+    };
+});
+
 let root: string;
 let argvLog: string;
-let realPath: string | undefined;
 let realPlatform: PropertyDescriptor | undefined;
 
 function setPlatform(value: NodeJS.Platform) {
@@ -27,28 +38,22 @@ beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'grimoire-launchopts-'));
     argvLog = join(root, 'pgrep-argv.txt');
 
-    const fakePgrep = join(root, 'pgrep');
+    fixture.command = join(root, 'pgrep.cjs');
     writeFileSync(
-        fakePgrep,
+        fixture.command,
         [
-            '#!/bin/sh',
-            `printf '%s\\n' "$*" >> "${argvLog}"`,
-            'case "$*" in',
-            '  *"$GRIMOIRE_TEST_MATCH"*) exit 0 ;;',
-            'esac',
-            'exit 1',
+            "const { appendFileSync } = require('node:fs');",
+            "const args = process.argv.slice(2).join(' ');",
+            "appendFileSync(process.env.GRIMOIRE_TEST_LOG, args + '\\n');",
+            'process.exit(args.includes(process.env.GRIMOIRE_TEST_MATCH) ? 0 : 1);',
         ].join('\n') + '\n',
     );
-    chmodSync(fakePgrep, 0o755);
-
-    realPath = process.env.PATH;
-    process.env.PATH = `${root}:${realPath ?? ''}`;
+    vi.stubEnv('GRIMOIRE_TEST_LOG', argvLog);
     realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 });
 
 afterAll(() => {
-    process.env.PATH = realPath;
-    delete process.env.GRIMOIRE_TEST_MATCH;
+    vi.unstubAllEnvs();
     if (realPlatform) Object.defineProperty(process, 'platform', realPlatform);
     rmSync(root, { recursive: true, force: true });
 });
@@ -56,7 +61,7 @@ afterAll(() => {
 beforeEach(() => {
     rmSync(argvLog, { force: true });
     // A pattern no invocation can contain, so "nothing is running" is the default.
-    process.env.GRIMOIRE_TEST_MATCH = '__no_match__';
+    vi.stubEnv('GRIMOIRE_TEST_MATCH', '__no_match__');
 });
 
 describe('isSteamRunning on darwin', () => {

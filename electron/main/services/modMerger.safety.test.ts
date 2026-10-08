@@ -4,6 +4,7 @@
  * claim a live slot, and a merge of trusted sources must not ask again.
  */
 import { EventEmitter } from 'events';
+import { basename, dirname, join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fsMocks = vi.hoisted(() => ({
@@ -179,7 +180,8 @@ describe('refused merge outputs', () => {
         await expect(extractMergeSource('/game', target.id, a.fileName)).rejects.toThrow('MOD_SAFETY_TRUST_REQUIRED');
 
         const buildPath = String(safetyMocks.assertVpkSafety.mock.calls[0][0]);
-        expect(buildPath).toMatch(/^\/game\/addons\/\.merge-rebuild-.*\.tmp$/);
+        expect(dirname(buildPath)).toBe(join('/game', 'addons'));
+        expect(basename(buildPath)).toMatch(/^\.merge-rebuild-.*\.tmp$/);
         expect(fsMocks.unlink).toHaveBeenCalledWith(buildPath);
         expect(fsMocks.rename).not.toHaveBeenCalled();
         expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();

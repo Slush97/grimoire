@@ -23,7 +23,7 @@ import {
 import { CLASSIFICATION, getPreset } from './performanceConfigData';
 import { pathExcluded } from './performancePresetGen';
 
-const STOCK = readFileSync(join(__dirname, '__fixtures__/stock-gameinfo.gi'), 'utf-8');
+const STOCK = readFileSync(join(__dirname, '__fixtures__/stock-gameinfo.gi'), 'utf-8').replace(/\r\n/g, '\n');
 const STOCK_CRLF = STOCK.split('\n').join('\r\n');
 const PRESETS = listPerformancePresets();
 
