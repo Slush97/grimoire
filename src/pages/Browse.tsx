@@ -38,6 +38,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
+import { browseRemoteFilters } from '../lib/browseFilters';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
@@ -498,6 +499,7 @@ export default function Browse() {
   const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
   const [sections, setSections] = useState<GameBananaSection[]>([]);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
+  const [categoriesSection, setCategoriesSection] = useState<string | null>(null);
   // Hero list comes from the Mod section's category tree (Mod -> Skins -> heroes).
   // Cached separately so hero filtering still works on the Sound tab, where the
   // current section's category tree has no Skins parent.
@@ -798,6 +800,7 @@ export default function Browse() {
   // having no items, and stale ids restored from a previous session.
   const rootCategoryNameById = useMemo(() => {
     const map = new Map<number, string>();
+    if (categoriesSection !== section) return map;
     const walk = (nodes: GameBananaCategoryNode[], rootName: string | null) => {
       for (const node of nodes) {
         const root = rootName ?? node.name;
@@ -807,7 +810,7 @@ export default function Browse() {
     };
     walk(categories, null);
     return map;
-  }, [categories]);
+  }, [categories, categoriesSection, section]);
 
   const effectiveCategoryName =
     effectiveCategoryId === undefined ? undefined : rootCategoryNameById.get(effectiveCategoryId);
@@ -1134,15 +1137,18 @@ export default function Browse() {
     setError(null);
 
     try {
+      const remoteFilters = browseRemoteFilters({
+        section, search: effectiveSearch, heroCategoryId, selectedHeroName, effectiveCategoryId,
+      });
       const response = await browseMods(
         page,
         perPage,
         // In artist mode the grid is scoped by submitter; text search and
         // category don't combine cleanly with that on the API, so they're
         // dropped while viewing an artist.
-        submitter ? undefined : (effectiveSearch || undefined),
+        submitter ? undefined : remoteFilters.search,
         section,
-        submitter ? undefined : effectiveCategoryId,
+        submitter ? undefined : remoteFilters.categoryId,
         sort !== 'default' ? sort : undefined,
         submitter?.id
       );
@@ -1228,6 +1234,8 @@ export default function Browse() {
     section,
     perPage,
     effectiveCategoryId,
+    heroCategoryId,
+    selectedHeroName,
     fetchFilterStamp,
     useLocalSearch,
     submitter,
@@ -1473,35 +1481,25 @@ export default function Browse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Track whether `section` actually changed (vs. the effect just firing on
-  // mount because deps populated for the first time). Without this guard the
-  // hero/category filters were reset to 'all' on every remount, which then
-  // triggered a refetch and threw away the cached scroll position.
-  const lastLoadedSectionRef = useRef<string | null>(null);
+  // The store switches filters with the section. Category loading must never
+  // reset them, including a selection made while this request is in flight.
   useEffect(() => {
     let active = true;
     const selected = sections.find((entry) => entry.modelName === section);
     if (!selected) {
       setCategories([]);
+      setCategoriesSection(null);
       return () => {
         active = false;
       };
     }
-
-    const sectionChanged = lastLoadedSectionRef.current !== null && lastLoadedSectionRef.current !== section;
-    lastLoadedSectionRef.current = section;
 
     const loadCategories = async () => {
       try {
         const data = await getGamebananaCategories(selected.categoryModelName);
         if (!active) return;
         setCategories(data);
-        // Only reset the hero/category filter when the user actually
-        // switched sections — not on every remount.
-        if (sectionChanged) {
-          setHeroCategoryId('all');
-          setCategoryId('all');
-        }
+        setCategoriesSection(section);
       } catch (err) {
         if (active) {
           setError(String(err));
@@ -1514,7 +1512,7 @@ export default function Browse() {
     return () => {
       active = false;
     };
-  }, [sections, section, setCategoryId, setHeroCategoryId]);
+  }, [sections, section]);
 
   // fetchMods and searchLocal share `lastFetchedStampRef`, and its key
   // (`page` + fetchFilterStamp) describes the FILTERS only, not which backend
@@ -2010,6 +2008,7 @@ export default function Browse() {
   }, [modCategories]);
 
   const categoryOptions = useMemo(() => {
+    if (categoriesSection !== section) return [];
     // Per-hero entries under Skins are handled by the dedicated Hero filter, so
     // exclude them here. Everything else (Skins, Model Replacement, HUD,
     // Gameplay Modifications, Maps, Music, Killsounds, ...) becomes a mod-type
@@ -2032,7 +2031,7 @@ export default function Browse() {
     }
 
     return Array.from(byLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [categories, heroOptions]);
+  }, [categories, categoriesSection, section, heroOptions]);
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();

@@ -207,6 +207,9 @@ export interface BrowseUiState {
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
   heroCategoryId: number | 'all' | 'none';
   categoryId: number | 'all';
+  // Category ids belong to their section. Remember them for this session only.
+  categoryIdsBySection: Partial<Record<string, number | 'all'>>;
+  soundNoHero: boolean;
   // Artist mode: when set, the grid lists only this submitter's mods
   // (GameBanana Generic_Submitter filter) and Browse shows an artist banner.
   // Session-only; carries display fields so the banner needs no extra fetch.
@@ -284,6 +287,8 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   addedTo: '',
   heroCategoryId: 'all',
   categoryId: 'all',
+  categoryIdsBySection: {},
+  soundNoHero: false,
 };
 
 // Cached page state: lets the Browse tab resume exactly where the user left
@@ -1281,7 +1286,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   // a time without restating the rest. layout + sort also mirror to
   // localStorage so they persist across app restarts.
   setBrowseUi: (partial: Partial<BrowseUiState>) => {
-    const next = { ...get().browseUi, ...partial };
+    const current = get().browseUi;
+    const next = { ...current, ...partial };
+    if (next.section !== current.section) {
+      next.categoryIdsBySection = {
+        ...current.categoryIdsBySection,
+        [current.section]: current.categoryId,
+      };
+      next.categoryId = partial.categoryId ?? next.categoryIdsBySection[next.section] ?? 'all';
+      next.heroCategoryId = partial.heroCategoryId ?? (
+        next.section === 'Sound' && current.soundNoHero
+          ? 'none'
+          : current.heroCategoryId === 'none' ? 'all' : current.heroCategoryId
+      );
+    }
+    if (partial.heroCategoryId !== undefined) {
+      next.soundNoHero = next.section === 'Sound' && partial.heroCategoryId === 'none';
+    }
+    if (next.section !== 'Sound' && next.heroCategoryId === 'none') {
+      next.heroCategoryId = 'all';
+    }
     // An override belongs to the exact navigation that supplied it. Any
     // ordinary submitter change must drop it so a later Installed/Browse link
     // cannot accidentally reveal a creator the user chose to hide.
