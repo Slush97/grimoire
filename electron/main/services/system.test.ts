@@ -8,7 +8,7 @@ import { findSearchPathsBlock, hasActivePath } from './gameinfoSearchPaths';
 vi.mock('./replayFolder', () => ({ ensureReplayFolderLink: vi.fn() }));
 
 const roots: string[] = [];
-const stock = readFileSync(new URL('./__fixtures__/stock-gameinfo.gi', import.meta.url), 'utf8');
+const stock = readFileSync(new URL('./__fixtures__/stock-gameinfo.gi', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const legacyBody = `
     Game citadel/grimoire
     Game citadel/addons
@@ -194,8 +194,8 @@ describe('gameinfo search-path repair', () => {
         expect(hasActivePath(body, 'citadel/addons')).toBe(true);
     });
 
-    it('keeps the block stable across repeated repairs', () => {
-        const game = install(stock.replace('Game_Language', 'Game_UILanguage'));
+    it.each(['\n', '\r\n'])('keeps the block stable across repeated repairs (%j)', (eol) => {
+        const game = install(stock.replace('Game_Language', 'Game_UILanguage').replaceAll('\n', eol));
         fixGameinfo(game.root);
         const first = game.read();
         mkdirSync(join(game.citadel, 'addons1'));
@@ -206,7 +206,7 @@ describe('gameinfo search-path repair', () => {
         rmSync(join(game.citadel, 'deadworks_addons'), { recursive: true });
         writeFileSync(game.path, game.read().replace('Game_UILanguage', 'Game_Language'));
         fixGameinfo(game.root);
-        expect(game.read()).toBe(first.replace('citadel/addons\n', 'citadel/addons\n\t\t\tGame_UILanguage\t\tcitadel_*LANGUAGE*\n')
+        expect(game.read()).toBe(first.replace(`citadel/addons${eol}`, `citadel/addons${eol}\t\t\tGame_UILanguage\t\tcitadel_*LANGUAGE*${eol}`)
             .replace('Game_UILanguage "', 'Game_Language "'));
     });
 

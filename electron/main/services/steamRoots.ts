@@ -13,7 +13,7 @@
 // and correct the day Valve ships a macOS build).
 
 import { existsSync, readdirSync, readlinkSync, statSync } from 'fs';
-import { join, resolve, isAbsolute } from 'path';
+import { join, resolve, isAbsolute, sep } from 'path';
 import { homedir } from 'os';
 import { execFileSync } from 'child_process';
 
@@ -144,7 +144,7 @@ export function findBottleForPath(
     const normalized = resolve(hostPath);
     for (const bottle of findSteamBottles(bottlesDir)) {
         const root = resolve(bottle.bottlePath);
-        if (normalized === root || normalized.startsWith(root + '/')) return bottle;
+        if (normalized === root || normalized.startsWith(root + sep)) return bottle;
     }
     return null;
 }
