@@ -71,9 +71,6 @@ export function source2TintPlan(morphic: MorphicExtras, factor: THREE.Color): So
 const ALBEDO_SAMPLE_EDGE = 256;
 const SRGB_BYTE_TO_LINEAR = Float32Array.from({ length: 256 }, (_, i) =>
   new THREE.Color().setRGB(i / 255, 0, 0).convertSRGBToLinear().r);
-// Captured at module load: loadGltfPreview hides createImageBitmap from the
-// GLTFLoader while a model loads, which is exactly when the averages run.
-const nativeCreateImageBitmap = typeof createImageBitmap === 'function' ? createImageBitmap : undefined;
 
 function sampleSize(width: number, height: number): { width: number; height: number } {
   const scale = Math.min(1, ALBEDO_SAMPLE_EDGE / Math.max(width, height));
@@ -140,7 +137,7 @@ interface GltfImageSource {
  * GPU upload, so drawing it into a canvas here decoded every albedo twice. */
 export async function sourceAlbedoAverage(parser: GltfImageSource, texture: THREE.Texture | null): Promise<THREE.Vector3 | null> {
   const image = texture?.image as { width?: number; height?: number } | undefined;
-  if (!texture || !nativeCreateImageBitmap || !image?.width || !image.height) return null;
+  if (!texture || typeof createImageBitmap !== 'function' || !image?.width || !image.height) return null;
   const index = parser.associations.get(texture)?.textures;
   const source = index === undefined ? undefined : parser.json.textures?.[index]?.source;
   const def = source === undefined ? undefined : parser.json.images?.[source];
@@ -148,7 +145,7 @@ export async function sourceAlbedoAverage(parser: GltfImageSource, texture: THRE
   try {
     const bytes = await parser.getDependency('bufferView', def.bufferView);
     const size = sampleSize(image.width, image.height);
-    const bitmap = await nativeCreateImageBitmap(new Blob([bytes], { type: def.mimeType }), {
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: def.mimeType }), {
       resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'pixelated',
     });
     try {
