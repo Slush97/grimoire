@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+const realExecPath = Object.getOwnPropertyDescriptor(process, 'execPath')!;
 
 const h = vi.hoisted(() => ({
     version: '1.31.0',
@@ -34,6 +37,8 @@ const nightly = { version: '1.31.1-nightly.20261009123000.42.gabcdef0', files: [
 function emit(name: string, value?: unknown) { h.handlers.get(name)?.(value); }
 
 beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    vi.stubEnv('APPIMAGE', '/tmp/Grimoire.AppImage');
     vi.resetModules();
     vi.clearAllMocks();
     h.version = '1.31.0';
@@ -52,13 +57,23 @@ beforeEach(() => {
     h.updater.autoInstallOnAppQuit = true;
 });
 
+afterEach(() => {
+    Object.defineProperty(process, 'platform', realPlatform);
+    Object.defineProperty(process, 'execPath', realExecPath);
+    vi.unstubAllEnvs();
+});
+
 async function init() {
     const service = await import('./updater');
     service.initUpdater({ isDestroyed: () => false, webContents: { send: h.send } } as never);
     return service;
 }
 
-describe('Stable / Nightly updates', () => {
+describe.each(['win32', 'linux'] as const)('Stable / Nightly updates (%s)', platform => {
+    beforeEach(() => {
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    });
+
     it('starts on stable without claiming an update check succeeded', async () => {
         const service = await init();
         expect(h.updater.channel).toBe('latest');
@@ -188,5 +203,31 @@ describe('Stable / Nightly updates', () => {
         const service = await init();
         emit('update-available', { ...nightly, version: '1.32.0', releaseNotes: [{ version: nightly.version, note: 'test build' }, { version: '1.32.0', note: 'official release' }] });
         expect(service.getUpdateStatus().updateInfo?.releaseNotes).toEqual([{ version: '1.32.0', note: 'official release' }]);
+    });
+});
+
+describe('installation sources', () => {
+    it('keeps package-managed Linux installs out of the in-app updater', async () => {
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+        Object.defineProperty(process, 'execPath', { value: '/usr/bin/grimoire', configurable: true });
+        vi.stubEnv('APPIMAGE', '');
+        const service = await init();
+        expect(service.getInstallSource()).toBe('managed');
+        expect(service.canSelfInstall()).toBe(false);
+        expect(() => service.setUpdateChannel('nightly')).toThrow('package manager');
+        await service.checkForUpdates();
+        expect(h.updater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('allows macOS to select and check channels without installing in place', async () => {
+        Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+        const service = await init();
+        expect(service.getInstallSource()).toBe('manual');
+        expect(service.canSelfInstall()).toBe(false);
+        service.setUpdateChannel('nightly');
+        await service.checkForUpdates();
+        expect(service.getUpdateStatus().available).toBe(true);
+        await service.downloadUpdate();
+        expect(h.updater.downloadUpdate).not.toHaveBeenCalled();
     });
 });
