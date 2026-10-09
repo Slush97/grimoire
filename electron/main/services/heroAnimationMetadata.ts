@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join, posix } from 'node:path';
 import { tmpdir } from 'node:os';
-import { attachmentMetadataResources } from './modelAttachments';
+import { attachmentMetadataResources, mapConcurrent } from './modelAttachments';
 import { readVpkEntryBytes } from './vpk';
 import { runVpkmergeStdout } from './modMerger';
 import type { HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
@@ -60,8 +60,8 @@ export async function readHeroAnimationMetadata(vpk: string, base: string, entry
   if (!/^models\/heroes[^/]*\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(entry) || entry.includes('..')) return metadata;
   const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-animation-metadata-'));
   try {
-    for (const [index, clip] of clips.slice(0, 8).entries()) {
-      if (!/^[a-zA-Z0-9_-]+$/.test(clip.name)) continue;
+    await mapConcurrent(clips.slice(0, 8), 8, async (clip, index) => {
+      if (!/^[a-zA-Z0-9_-]+$/.test(clip.name)) return;
       for (const path of heroAnimationMetadataPaths(entry, clip.name)) {
         const bytes = readVpkEntryBytes(vpk, path) ?? (vpk !== base ? readVpkEntryBytes(base, path) : null);
         if (!bytes || bytes.length > 2 * 1024 * 1024) continue;
@@ -72,13 +72,13 @@ export async function readHeroAnimationMetadata(vpk: string, base: string, entry
         try {
           const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', file]));
           const flags = parseHeroAnimationMetadata(raw, clip);
-          if (flags) { metadata.set(clip.name, flags); break; }
+          if (flags) { metadata.set(clip.name, flags); return; }
         } catch {
           // Older exporters may not decode this graph generation. The reviewed
           // catalog remains the fallback; missing flags are not invented.
         }
       }
-    }
+    });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
   return metadata;
 }

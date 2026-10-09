@@ -289,14 +289,28 @@ function riggedClothFile(key: string): string {
  * Pre-v14 Infernus GLBs were baked via `--hero inferno`, which read the base pak
  * and so cached the vanilla look over any active skin; force a re-export.
  *
+ * v16: textures are baked at PREVIEW_MAX_TEXTURE (`--max-texture`). Pre-v16 GLBs
+ * carry full-size 2048/4096 textures (35-70 MB) that load several times slower.
+ *
  * The Source 2 extras schema version (SOURCE2_EXTRAS_VERSION) is folded into the
  * effective key below, so a material-extras schema bump auto-busts this cache
  * with no manual edit here, and the cache version cannot drift from the parser's
  * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
  * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_PIPELINE_VERSION = '15';
+const POSE_PIPELINE_VERSION = '16';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
+
+/**
+ * Longest texture edge baked into preview GLBs (`model export --max-texture`):
+ * each texture embeds at its largest mip that fits. Full-size hero textures
+ * (2048/4096) are far more than the Locker viewport shows, and they dominate
+ * export time, GLB size, and the renderer's decode + GPU upload. 1024 cuts a
+ * hero GLB ~3x (drifter skin: 39 -> 14 MB). Raising it to 2048 keeps fine print
+ * sharp at the closest zoom but costs ~300 MB more renderer memory per loaded
+ * hero (decoded ImageBitmaps; see loadGltfPreview).
+ */
+const PREVIEW_MAX_TEXTURE = '1024';
 
 const POSE_VERSION_FILENAME = '.cache-version';
 
@@ -334,17 +348,52 @@ function versionFile(key: string): string {
  * v9: export a bounded menu of representative full-body motions.
  * v10: preserve supported authored attachment frames beside the rigged model.
  *
+ * v15: textures baked at PREVIEW_MAX_TEXTURE (same as POSE_CACHE_VERSION v16).
+ *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
 // v14: Graves uses the complete standing weapon pose; shop parks its spectral
 // hand at the model origin. Refresh existing menus instead of reusing that pose.
-const RIGGED_PIPELINE_VERSION = '14';
+const RIGGED_PIPELINE_VERSION = '15';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
 
 function riggedVersionFile(key: string): string {
     return join(modelDir(key), RIGGED_VERSION_FILENAME);
+}
+
+// Some skins list clips that the exporter then drops, leaving a rigged GLB with
+// no animation. The viewer can only discover that after a full GLB load, so
+// record it once and let the preview go straight to the static pose.
+const RIGGED_NO_CLIPS_FILENAME = '.rigged-no-clips';
+
+function riggedNoClipsFile(key: string): string {
+    return join(modelDir(key), RIGGED_NO_CLIPS_FILENAME);
+}
+
+async function hasNoRiggedClips(key: string): Promise<boolean> {
+    const marker = await fs.readFile(riggedNoClipsFile(key), 'utf8').catch(() => '');
+    return marker.trim() === RIGGED_CACHE_VERSION;
+}
+
+/** Animation count from a GLB's JSON chunk, without reading the binary chunk.
+ *  Null when the file is not a readable GLB, so only a proven zero is recorded. */
+async function glbAnimationCount(file: string): Promise<number | null> {
+    const handle = await fs.open(file, 'r');
+    try {
+        const header = Buffer.alloc(20);
+        const { bytesRead } = await handle.read(header, 0, 20, 0);
+        if (bytesRead < 20 || header.readUInt32LE(0) !== 0x46546c67 || header.readUInt32LE(16) !== 0x4e4f534a) return null;
+        const json = Buffer.alloc(header.readUInt32LE(12));
+        await handle.read(json, 0, json.length, 20);
+        const parsed = JSON.parse(json.toString('utf8')) as { animations?: unknown[] };
+        return Array.isArray(parsed.animations) ? parsed.animations.length : 0;
+    } catch {
+        return null;
+    } finally {
+        await handle.close();
+    }
 }
 
 /**
@@ -778,6 +827,7 @@ export async function getHeroPoseInfo(
 
 async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
     try {
+        if (await hasNoRiggedClips(key)) return { hasModel: false, mtimeMs: null, key };
         const stat = await fs.stat(riggedModelFile(key));
         const version = await fs.readFile(riggedVersionFile(key), 'utf8').catch(() => '');
         if (version.trim() !== RIGGED_CACHE_VERSION) {
@@ -899,6 +949,8 @@ async function runHeroPoseExportForSources(
                     // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
                     // Locker falls back to the 2D portrait instead of an unposed model.
                     '--require-pose',
+                    '--max-texture',
+                    PREVIEW_MAX_TEXTURE,
                     '--out',
                     out,
                 ]);
@@ -941,7 +993,13 @@ export async function exportRiggedHeroPose(
     const existing = inFlightRiggedExports.get(requestKey);
     if (existing) return existing;
 
-    const work = runRiggedHeroExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
+    // Registered before the first await, so a concurrent request for the same
+    // stack joins this run instead of exporting into the same files.
+    const work = (async (): Promise<HeroPoseInfo> => {
+        const cachedKey = await resolvePoseKey(deadlockPath, heroName, normalized);
+        if (await hasNoRiggedClips(cachedKey)) return { hasModel: false, mtimeMs: null, key: cachedKey };
+        return runRiggedHeroExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
+    })();
     inFlightRiggedExports.set(requestKey, work);
     try {
         const info = await work;
@@ -1005,6 +1063,21 @@ async function runRiggedHeroExportForSources(
             if (!clips.length) continue;
             foundUsableClip = true;
 
+            // Physics and attachments read the model entry, not the exported GLB,
+            // so they decode while the export runs instead of after it.
+            const cloth = runVpkmergeStdout(['model', 'femodel', '--vpk', source.vpk, ...selector, '--base', pak01])
+                .then((json): unknown => JSON.parse(json))
+                .catch((error: unknown) => {
+                    console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
+                    return null;
+                });
+            const entryIndex = selector.indexOf('--entry');
+            const attachments = entryIndex >= 0 && selector[entryIndex + 1]
+                ? exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]).catch((error: unknown) => {
+                    console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
+                    return [];
+                })
+                : Promise.resolve([]);
             try {
                 await fs.rm(riggedVersionFile(key), { force: true });
                 await runVpkmerge([
@@ -1017,35 +1090,32 @@ async function runRiggedHeroExportForSources(
                     pak01,
                     // The viewer plays one action at a time from this menu.
                     ...clips.flatMap((clip) => ['--clip', clip.name]),
+                    '--max-texture',
+                    PREVIEW_MAX_TEXTURE,
                     '--out',
                     out,
                 ]);
-                let cloth: unknown = null;
-                try {
-                    cloth = JSON.parse(await runVpkmergeStdout([
-                        'model', 'femodel', '--vpk', source.vpk, ...selector, '--base', pak01,
-                    ]));
-                } catch (error) {
-                    console.warn('[heroPoseModels] rigged physics unavailable:', heroName, error);
+                if (await glbAnimationCount(out) === 0) {
+                    await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
+                    return { hasModel: false, mtimeMs: null, key };
                 }
-                await fs.writeFile(riggedClothFile(key), JSON.stringify(cloth));
-                let attachments: Awaited<ReturnType<typeof exportModelAttachments>> = [];
-                const entryIndex = selector.indexOf('--entry');
-                if (entryIndex >= 0 && selector[entryIndex + 1]) {
-                    try {
-                        attachments = await exportModelAttachments(source.vpk, pak01, selector[entryIndex + 1]);
-                    } catch (error) {
-                        console.warn('[heroPoseModels] rigged attachments unavailable:', heroName, error);
-                    }
-                }
-                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(attachments));
+                await fs.rm(riggedNoClipsFile(key), { force: true });
+                await fs.writeFile(riggedClothFile(key), JSON.stringify(await cloth));
+                await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(await attachments));
                 await fs.writeFile(riggedVersionFile(key), RIGGED_CACHE_VERSION);
                 return infoForRiggedKey(key);
             } catch (err) {
                 lastError = err;
+            } finally {
+                // Both read source.vpk, which the outer finally deletes when it is a
+                // merged stack.
+                await Promise.all([cloth, attachments]);
             }
         }
         if (listedAny && !foundUsableClip) {
+            // A selector that failed to list may still carry clips; remember
+            // "nothing usable" only when every selector answered.
+            if (lastError === undefined) await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
             return { hasModel: false, mtimeMs: null, key };
         }
         throw lastError instanceof Error

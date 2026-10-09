@@ -29,7 +29,7 @@ import {
   exportHeroEffect,
   previewTrippySprite,
 } from '../../lib/api';
-import { loadGltfPreview } from '../../lib/loadGltfPreview';
+import { disposeTexture, loadGltfPreview, materialTextures } from '../../lib/loadGltfPreview';
 import { prepareSource2VertexColors } from '../../lib/source2VertexColors';
 import { loadRiggedHeroPreview } from '../../lib/loadRiggedHeroPreview';
 import { ParticleEffect } from './ParticleEffect';
@@ -73,7 +73,7 @@ import type { TrippyPreview } from '../../stores/trippyPreviewStore';
  *
  * Interactive: drag to orbit, scroll to zoom. Loading stays on the custom
  * GLTFLoader helper because Source 2 morphic texture resolution needs the live
- * gltf.parser and ImageBitmap suppression window.
+ * gltf.parser.
  */
 
 const HERO_POSE_SCHEME = 'grimoire-hero';
@@ -179,13 +179,10 @@ function disposeScene(root: THREE.Object3D): void {
   const disposeMaterial = (m: THREE.Material | null | undefined): void => {
     if (!m || disposedMaterials.has(m)) return;
     disposedMaterials.add(m);
-    const sm = m as THREE.MeshStandardMaterial;
-    [sm.map, sm.normalMap, sm.roughnessMap, sm.metalnessMap, sm.emissiveMap, sm.aoMap].forEach(
-      (t) => t?.dispose()
-    );
+    materialTextures(m).forEach(disposeTexture);
     const resolved = getMorphic(m)?.resolvedTextures;
     if (resolved) {
-      Object.values(resolved).forEach((t) => t.dispose());
+      Object.values(resolved).forEach(disposeTexture);
     }
     const csmBase = (m as { __csm?: { baseMaterial?: THREE.Material } }).__csm?.baseMaterial;
     if (csmBase && csmBase !== m) disposeMaterial(csmBase);
@@ -1081,7 +1078,6 @@ export default function HeroPoseViewer({
     // The caller remounts this component (via a hero+skin `key`) when the
     // selection changes, so initial state is already fresh here.
     let cancelled = false;
-    let loaded: THREE.Object3D | null = null;
     setFailed(false);
     setScene(null);
     setClips([]);
@@ -1115,7 +1111,6 @@ export default function HeroPoseViewer({
                 disposeScene(gltf.scene);
                 throw new Error('Rigged preview GLB has no animated clip.');
               }
-              loaded = gltf.scene;
               setClips((gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001));
               setClipName((current) => gltf.animations.some((candidate) => candidate.name === current
                 && Number.isFinite(candidate.duration) && candidate.duration > 0.001) ? current : clip.name);
@@ -1144,12 +1139,11 @@ export default function HeroPoseViewer({
           return;
         }
         const url = meshUrlFor(info.key, info.mtimeMs);
-        const gltf = await loadGltfPreview(url);
+        const gltf = await loadGltfPreview(url, { imageBitmaps: true });
         if (cancelled) {
           disposeScene(gltf.scene);
           return;
         }
-        loaded = gltf.scene;
         setRigged(false);
         setClips([]);
         setClothModel(null); // static path has no skeleton; nothing to simulate.
@@ -1164,7 +1158,6 @@ export default function HeroPoseViewer({
 
     return () => {
       cancelled = true;
-      if (loaded) disposeScene(loaded);
     };
     // `skinSources` is deliberately not a dependency: `sourceKey` already
     // encodes its contents, and the array reference changes on every parent
@@ -1178,6 +1171,14 @@ export default function HeroPoseViewer({
     features.riggedPreviewEnabled,
     features.clothPreviewEnabled,
   ]);
+
+  // Dispose in the commit that drops the scene from the Canvas. Disposing in the
+  // loader cleanup left a frame where the still-mounted Canvas re-uploaded
+  // textures whose ImageBitmaps were already closed.
+  useEffect(() => {
+    if (!scene) return;
+    return () => disposeScene(scene);
+  }, [scene]);
 
   useEffect(() => {
     if (!scene || !features.nprDebugEnabled) return;

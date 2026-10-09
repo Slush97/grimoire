@@ -65,34 +65,94 @@ export function source2TintPlan(morphic: MorphicExtras, factor: THREE.Color): So
   return { matrix, offset, ownsExportedFactor, linearTint };
 }
 
+// An average pivot does not need every texel. Point-sampling 256 px on the long
+// edge stays within ~0.001 of the full-resolution linear mean on hero albedos;
+// a filtered downscale averages in sRGB first and drifts ~0.01.
+const ALBEDO_SAMPLE_EDGE = 256;
+const SRGB_BYTE_TO_LINEAR = Float32Array.from({ length: 256 }, (_, i) =>
+  new THREE.Color().setRGB(i / 255, 0, 0).convertSRGBToLinear().r);
+
+function sampleSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, ALBEDO_SAMPLE_EDGE / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+function readCanvasPixels(source: CanvasImageSource, width: number, height: number): Uint8ClampedArray | null {
+  if (typeof OffscreenCanvas === 'undefined') return null;
+  const context = new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true });
+  if (!context) return null;
+  context.imageSmoothingEnabled = false;
+  context.drawImage(source, 0, 0, width, height);
+  return context.getImageData(0, 0, width, height).data;
+}
+
+function averagePixels(pixels: ArrayLike<number>, width: number, height: number, srgb: boolean): THREE.Vector3 | null {
+  if (pixels.length < width * height * 4) return null;
+  // Centered grid sample: a flat stride aliases with row width.
+  const stepX = Math.max(1, Math.floor(width / ALBEDO_SAMPLE_EDGE));
+  const stepY = Math.max(1, Math.floor(height / ALBEDO_SAMPLE_EDGE));
+  const floatData = pixels instanceof Float32Array || pixels instanceof Float64Array;
+  const color = new THREE.Color();
+  const sum = new THREE.Vector3();
+  let samples = 0;
+  for (let y = stepY >> 1; y < height; y += stepY) {
+    for (let x = stepX >> 1; x < width; x += stepX, samples++) {
+      const i = (y * width + x) * 4;
+      if (floatData) {
+        color.setRGB(pixels[i], pixels[i + 1], pixels[i + 2]);
+        if (srgb) color.convertSRGBToLinear();
+        sum.x += color.r; sum.y += color.g; sum.z += color.b;
+      } else if (srgb) {
+        sum.x += SRGB_BYTE_TO_LINEAR[pixels[i]]; sum.y += SRGB_BYTE_TO_LINEAR[pixels[i + 1]]; sum.z += SRGB_BYTE_TO_LINEAR[pixels[i + 2]];
+      } else {
+        sum.x += pixels[i] / 255; sum.y += pixels[i + 1] / 255; sum.z += pixels[i + 2] / 255;
+      }
+    }
+  }
+  return samples ? sum.divideScalar(samples) : null;
+}
+
 /** Decoded top-mip fallback only. It cannot reproduce a compiled VTEX header's
  * reflectivity exactly, but avoids an invented fixed gray pivot for legacy GLBs. */
 export function decodedAlbedoAverage(texture: THREE.Texture | null): THREE.Vector3 | null {
   const image = texture?.image as { width: number; height: number; data?: ArrayLike<number> } | undefined;
   if (!image?.width || !image.height) return null;
-  let pixels: ArrayLike<number> | undefined = image.data;
-  if (!pixels) {
-    if (typeof OffscreenCanvas === 'undefined') return null;
+  const srgb = texture?.colorSpace === THREE.SRGBColorSpace;
+  if (image.data) return averagePixels(image.data, image.width, image.height, srgb);
+  const size = sampleSize(image.width, image.height);
+  try {
+    const pixels = readCanvasPixels(image as unknown as CanvasImageSource, size.width, size.height);
+    return pixels ? averagePixels(pixels, size.width, size.height, srgb) : null;
+  } catch { return null; }
+}
+
+interface GltfImageSource {
+  json: { textures?: { source?: number }[]; images?: { bufferView?: number; mimeType?: string }[] };
+  associations: Map<unknown, { textures?: number } | undefined>;
+  getDependency(type: 'bufferView', index: number): Promise<ArrayBuffer>;
+}
+
+/** Same average from the texture's encoded glTF source, decoded at sample size
+ * off the UI thread. The decoded <img> the loader holds is not reused by the
+ * GPU upload, so drawing it into a canvas here decoded every albedo twice. */
+export async function sourceAlbedoAverage(parser: GltfImageSource, texture: THREE.Texture | null): Promise<THREE.Vector3 | null> {
+  const image = texture?.image as { width?: number; height?: number } | undefined;
+  if (!texture || typeof createImageBitmap !== 'function' || !image?.width || !image.height) return null;
+  const index = parser.associations.get(texture)?.textures;
+  const source = index === undefined ? undefined : parser.json.textures?.[index]?.source;
+  const def = source === undefined ? undefined : parser.json.images?.[source];
+  if (def?.bufferView === undefined || !def.mimeType) return null;
+  try {
+    const bytes = await parser.getDependency('bufferView', def.bufferView);
+    const size = sampleSize(image.width, image.height);
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: def.mimeType }), {
+      resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'pixelated',
+    });
     try {
-      // Bounded fallback for unusually large atlases. Downsampling is approximate.
-      const scale = Math.min(1, 2048 / Math.max(image.width, image.height));
-      const canvas = new OffscreenCanvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) return null;
-      context.drawImage(image as unknown as CanvasImageSource, 0, 0, canvas.width, canvas.height);
-      pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    } catch { return null; }
-  }
-  const count = Math.floor(pixels.length / 4);
-  if (!count) return null;
-  const sum = new THREE.Vector3();
-  const color = new THREE.Color();
-  const floatData = pixels instanceof Float32Array || pixels instanceof Float64Array;
-  const divisor = floatData ? 1 : 255;
-  for (let i = 0; i < count; i++) {
-    color.setRGB(pixels[i * 4] / divisor, pixels[i * 4 + 1] / divisor, pixels[i * 4 + 2] / divisor);
-    if (texture?.colorSpace === THREE.SRGBColorSpace) color.convertSRGBToLinear();
-    sum.x += color.r; sum.y += color.g; sum.z += color.b;
-  }
-  return sum.divideScalar(count);
+      const pixels = readCanvasPixels(bitmap, size.width, size.height);
+      return pixels ? averagePixels(pixels, size.width, size.height, texture.colorSpace === THREE.SRGBColorSpace) : null;
+    } finally {
+      bitmap.close();
+    }
+  } catch { return null; }
 }

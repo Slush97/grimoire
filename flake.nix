@@ -12,7 +12,7 @@
     # Rust CLI the app shells out to for VPK merge/split. Keep the ref in
     # sync with VPKMERGE_VERSION in scripts/fetch-vpkmerge.mjs.
     vpkmerge = {
-      url = "github:Slush97/vpkmerge?ref=v0.20.1";
+      url = "github:Slush97/vpkmerge?ref=v0.21.0";
       flake = false;
     };
   };

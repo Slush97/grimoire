@@ -96,9 +96,11 @@ const inflightParses = new Map<string, Promise<string[] | null>>();
 export function invalidateVpkParseCache(vpkPath?: string): void {
     if (vpkPath) {
         vpkParseCache.delete(vpkPath);
+        vpkEntryIndexes.delete(vpkPath);
         cacheEpochs.set(vpkPath, (cacheEpochs.get(vpkPath) ?? 0) + 1);
     } else {
         vpkParseCache.clear();
+        vpkEntryIndexes.clear();
         globalEpoch++;
     }
 }
@@ -508,126 +510,183 @@ export function parseVpkEntryStats(vpkPath: string): VpkEntryStat[] | null {
  * root-level entries like the embedded addoninfo.txt; it reads the whole entry
  * into memory.
  */
-export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | null {
-    if (!existsSync(vpkPath)) {
-        return null;
-    }
+// Lookup index for readVpkEntryBytes, keyed like vpkParseCache on (path,
+// mtime, size). A single lookup used to read and walk the whole directory tree
+// (~25 ms for pak01's 140K entries), and the 3D preview exporters look up
+// dozens of entries per open. Typed arrays keep pak01's index to a few MB on
+// top of the tree buffer, which is retained for preload bytes. Small LRU: the
+// callers hit pak01 plus the active skin VPKs.
+interface VpkEntryIndex {
+    mtimeMs: number;
+    size: number;
+    dataStart: number;
+    tree: Buffer;
+    slots: Map<string, number>;
+    preloadStart: Uint32Array;
+    preloadBytes: Uint16Array;
+    archiveIndex: Uint16Array;
+    entryOffset: Uint32Array;
+    entryLength: Uint32Array;
+}
+const VPK_ENTRY_INDEX_LIMIT = 4;
+const vpkEntryIndexes = new Map<string, VpkEntryIndex>();
 
-    const target = entryPath.replace(/\\/g, '/').toLowerCase();
-    let fd: number | null = null;
-
+function buildVpkEntryIndex(vpkPath: string, mtimeMs: number, size: number): VpkEntryIndex | null {
+    const fd = openSync(vpkPath, 'r');
     try {
-        fd = openSync(vpkPath, 'r');
-
         const headerBuffer = Buffer.alloc(12);
         readSync(fd, headerBuffer, 0, 12, 0);
-
-        if (headerBuffer.readUInt32LE(0) !== VPK_SIGNATURE) {
-            closeSync(fd);
-            return null;
-        }
+        if (headerBuffer.readUInt32LE(0) !== VPK_SIGNATURE) return null;
 
         const version = headerBuffer.readUInt32LE(4);
         const treeSize = headerBuffer.readUInt32LE(8);
         const headerSize = version === 2 ? 28 : 12;
-
-        if (!isPlausibleVpkLength(treeSize, fstatSync(fd).size, headerSize)) {
+        if (!isPlausibleVpkLength(treeSize, size, headerSize)) {
             console.warn(`[vpk] ${vpkPath}: implausible tree size ${treeSize}, refusing to parse`);
-            closeSync(fd);
             return null;
         }
 
-        const treeBuffer = Buffer.alloc(treeSize);
-        readSync(fd, treeBuffer, 0, treeSize, headerSize);
+        const tree = Buffer.alloc(treeSize);
+        readSync(fd, tree, 0, treeSize, headerSize);
+
+        const slots = new Map<string, number>();
+        const preloadStart: number[] = [];
+        const preloadBytes: number[] = [];
+        const archiveIndex: number[] = [];
+        const entryOffset: number[] = [];
+        const entryLength: number[] = [];
 
         let offset = 0;
-        while (offset < treeBuffer.length) {
-            const extResult = readNullTerminatedString(treeBuffer, offset);
+        walk: while (offset < tree.length) {
+            const extResult = readNullTerminatedString(tree, offset);
             offset += extResult.bytesRead;
             if (extResult.str === '') break;
             const extension = extResult.str;
 
-            while (offset < treeBuffer.length) {
-                const pathResult = readNullTerminatedString(treeBuffer, offset);
+            while (offset < tree.length) {
+                const pathResult = readNullTerminatedString(tree, offset);
                 offset += pathResult.bytesRead;
                 if (pathResult.str === '') break;
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
 
-                while (offset < treeBuffer.length) {
-                    const nameResult = readNullTerminatedString(treeBuffer, offset);
+                while (offset < tree.length) {
+                    const nameResult = readNullTerminatedString(tree, offset);
                     offset += nameResult.bytesRead;
                     if (nameResult.str === '') break;
-                    const filename = nameResult.str;
+                    // A truncated metadata block ends the walk: entries past it
+                    // were unreachable for the old linear scan as well.
+                    if (offset + 18 > tree.length) break walk;
 
                     const fullPath = dirPath
-                        ? `${dirPath}/${filename}.${extension}`
-                        : `${filename}.${extension}`;
-
-                    // Entry metadata block (18 bytes):
-                    // CRC(4) PreloadBytes(2) ArchiveIndex(2) EntryOffset(4) EntryLength(4) Terminator(2)
-                    if (offset + 18 > treeBuffer.length) {
-                        closeSync(fd);
-                        return null;
+                        ? `${dirPath}/${nameResult.str}.${extension}`
+                        : `${nameResult.str}.${extension}`;
+                    const key = fullPath.replace(/\\/g, '/').toLowerCase();
+                    const preload = tree.readUInt16LE(offset + 4);
+                    if (!slots.has(key)) {
+                        slots.set(key, preloadStart.length);
+                        preloadStart.push(offset + 18);
+                        preloadBytes.push(preload);
+                        archiveIndex.push(tree.readUInt16LE(offset + 6));
+                        entryOffset.push(tree.readUInt32LE(offset + 8));
+                        entryLength.push(tree.readUInt32LE(offset + 12));
                     }
-                    const preloadBytes = treeBuffer.readUInt16LE(offset + 4);
-                    const archiveIndex = treeBuffer.readUInt16LE(offset + 6);
-                    const entryOffset = treeBuffer.readUInt32LE(offset + 8);
-                    const entryLength = treeBuffer.readUInt32LE(offset + 12);
-                    const preloadStart = offset + 18;
-
-                    if (fullPath.replace(/\\/g, '/').toLowerCase() === target) {
-                        const preload = preloadBytes > 0
-                            ? treeBuffer.subarray(preloadStart, preloadStart + preloadBytes)
-                            : Buffer.alloc(0);
-
-                        let archiveData = Buffer.alloc(0);
-                        if (entryLength > 0) {
-                            // entryLength is another untrusted uint32, so it gets
-                            // the same treatment as treeSize: check it against the
-                            // file that actually holds the data before allocating.
-                            // Throwing lands in the catch below, which closes fd.
-                            if (archiveIndex === VPK_DIR_ARCHIVE_INDEX) {
-                                // Data lives in the dir VPK after header + tree.
-                                const dataOffset = headerSize + treeSize + entryOffset;
-                                if (!isPlausibleVpkLength(entryLength, fstatSync(fd).size, dataOffset, MAX_VPK_ENTRY_SIZE)) {
-                                    throw new Error(`implausible entry length ${entryLength} for ${fullPath}`);
-                                }
-                                archiveData = Buffer.alloc(entryLength);
-                                readSync(fd, archiveData, 0, entryLength, dataOffset);
-                            } else {
-                                // Data lives in a sibling _NNN.vpk archive.
-                                const archivePath = vpkPath.replace(
-                                    /_dir\.vpk$/i,
-                                    `_${String(archiveIndex).padStart(3, '0')}.vpk`
-                                );
-                                const afd = openSync(archivePath, 'r');
-                                try {
-                                    if (!isPlausibleVpkLength(entryLength, fstatSync(afd).size, entryOffset, MAX_VPK_ENTRY_SIZE)) {
-                                        throw new Error(`implausible entry length ${entryLength} for ${fullPath}`);
-                                    }
-                                    archiveData = Buffer.alloc(entryLength);
-                                    readSync(afd, archiveData, 0, entryLength, entryOffset);
-                                } finally {
-                                    closeSync(afd);
-                                }
-                            }
-                        }
-
-                        closeSync(fd);
-                        return Buffer.concat([preload, archiveData]);
-                    }
-
-                    offset = preloadStart + preloadBytes;
+                    offset += 18 + preload;
                 }
             }
         }
 
+        return {
+            mtimeMs,
+            size,
+            dataStart: headerSize + treeSize,
+            tree,
+            slots,
+            preloadStart: Uint32Array.from(preloadStart),
+            preloadBytes: Uint16Array.from(preloadBytes),
+            archiveIndex: Uint16Array.from(archiveIndex),
+            entryOffset: Uint32Array.from(entryOffset),
+            entryLength: Uint32Array.from(entryLength),
+        };
+    } finally {
         closeSync(fd);
+    }
+}
+
+function vpkEntryIndex(vpkPath: string): VpkEntryIndex | null {
+    let stat;
+    try {
+        stat = statSync(vpkPath);
+    } catch {
+        vpkEntryIndexes.delete(vpkPath);
         return null;
-    } catch (error) {
-        if (fd !== null) {
-            try { closeSync(fd); } catch { /* already closed */ }
+    }
+    const cached = vpkEntryIndexes.get(vpkPath);
+    vpkEntryIndexes.delete(vpkPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        vpkEntryIndexes.set(vpkPath, cached);
+        return cached;
+    }
+    const index = buildVpkEntryIndex(vpkPath, stat.mtimeMs, stat.size);
+    if (!index) return null;
+    vpkEntryIndexes.set(vpkPath, index);
+    if (vpkEntryIndexes.size > VPK_ENTRY_INDEX_LIMIT) {
+        vpkEntryIndexes.delete(vpkEntryIndexes.keys().next().value!);
+    }
+    return index;
+}
+
+/** Whether a VPK contains an entry (case-insensitive), via the lookup index. */
+export function vpkHasEntry(vpkPath: string, entryPath: string): boolean {
+    try {
+        return vpkEntryIndex(vpkPath)?.slots.has(entryPath.replace(/\\/g, '/').toLowerCase()) ?? false;
+    } catch {
+        return false;
+    }
+}
+
+export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | null {
+    try {
+        const index = vpkEntryIndex(vpkPath);
+        const slot = index?.slots.get(entryPath.replace(/\\/g, '/').toLowerCase());
+        if (!index || slot === undefined) return null;
+
+        const preloadStart = index.preloadStart[slot];
+        const preload = index.tree.subarray(preloadStart, preloadStart + index.preloadBytes[slot]);
+        const entryLength = index.entryLength[slot];
+        const entryOffset = index.entryOffset[slot];
+        const archiveIndex = index.archiveIndex[slot];
+        if (entryLength === 0) return Buffer.from(preload);
+
+        // entryLength is an untrusted uint32: check it against the file that
+        // actually holds the data before allocating.
+        let archiveData: Buffer;
+        if (archiveIndex === VPK_DIR_ARCHIVE_INDEX) {
+            const dataOffset = index.dataStart + entryOffset;
+            if (!isPlausibleVpkLength(entryLength, index.size, dataOffset, MAX_VPK_ENTRY_SIZE)) {
+                throw new Error(`implausible entry length ${entryLength} for ${entryPath}`);
+            }
+            const fd = openSync(vpkPath, 'r');
+            try {
+                archiveData = Buffer.alloc(entryLength);
+                readSync(fd, archiveData, 0, entryLength, dataOffset);
+            } finally {
+                closeSync(fd);
+            }
+        } else {
+            const archivePath = vpkPath.replace(/_dir\.vpk$/i, `_${String(archiveIndex).padStart(3, '0')}.vpk`);
+            const afd = openSync(archivePath, 'r');
+            try {
+                if (!isPlausibleVpkLength(entryLength, fstatSync(afd).size, entryOffset, MAX_VPK_ENTRY_SIZE)) {
+                    throw new Error(`implausible entry length ${entryLength} for ${entryPath}`);
+                }
+                archiveData = Buffer.alloc(entryLength);
+                readSync(afd, archiveData, 0, entryLength, entryOffset);
+            } finally {
+                closeSync(afd);
+            }
         }
+        return Buffer.concat([preload, archiveData]);
+    } catch (error) {
         console.warn(`[readVpkEntryBytes] Error reading ${entryPath} from ${vpkPath}:`, error);
         return null;
     }

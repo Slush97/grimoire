@@ -20,7 +20,9 @@ vi.mock('./modMerger', () => ({
   runVpkmerge: h.run, runVpkmergeStdout: h.stdout, verifyVpkOutput: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./heroParticleExport', () => ({ exportParticleBundle: h.particles }));
-vi.mock('./heroPortraits', () => ({ codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : ['yamato'] }));
+vi.mock('./heroPortraits', () => ({
+  codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : name === 'Twin' ? ['twin_a', 'twin_b'] : ['yamato'],
+}));
 vi.mock('./deadlock', () => ({
   getCitadelPath: (path: string) => join(path, 'game', 'citadel'),
   getAddonsPath: (path: string) => join(path, 'game', 'citadel', 'addons'),
@@ -139,7 +141,8 @@ describe('rigged preview physics bundle', () => {
     expect(info.key).toContain('::one_dir.vpk::');
     const cloth = JSON.parse(await fs.readFile(join(cacheDir(info.key), 'cloth-rigged.json'), 'utf8'));
     expect(cloth.source).toBe(join(addons, 'one_dir.vpk'));
-    expect(h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel')).toHaveLength(1);
+    const physics = h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel');
+    expect(argument(physics.at(-1)![0], '--vpk')).toBe(join(addons, 'one_dir.vpk'));
   });
 
   it('retains animation with an explicit null sidecar when physics extraction fails', async () => {
@@ -164,6 +167,39 @@ describe('rigged preview physics bundle', () => {
     h.run.mockRejectedValue(new Error('export interrupted'));
     await expect(exportRiggedHeroPose(game(), 'Yamato')).rejects.toThrow('export interrupted');
     expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+  });
+
+  it('records a clipless rigged export once and skips re-exporting it', async () => {
+    const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, animations: [] }).padEnd(48, ' '));
+    const glb = Buffer.alloc(20 + json.length);
+    glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8);
+    glb.writeUInt32LE(json.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); json.copy(glb, 20);
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), glb));
+    expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect(await fs.readFile(join(cacheDir((await getRiggedHeroPose(game(), 'Yamato')).key), 'cloth-rigged.json'), 'utf8').catch(() => null)).toBeNull();
+    const spawns = h.run.mock.calls.length + h.stdout.mock.calls.length;
+    expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
+    expect(h.run.mock.calls.length + h.stdout.mock.calls.length).toBe(spawns);
+  });
+
+  it('shares one rigged export between concurrent requests for the same stack', async () => {
+    const [first, second] = await Promise.all([exportRiggedHeroPose(game(), 'Yamato'), exportRiggedHeroPose(game(), 'Yamato')]);
+    expect(second).toEqual(first);
+    expect(h.run.mock.calls.filter(([args]) => args[0] === 'model' && args[1] === 'export')).toHaveLength(1);
+  });
+
+  it('does not record a clipless marker when another selector failed to list clips', async () => {
+    h.stdout.mockImplementation(async (args) => {
+      if (args[1] !== 'clips') return 'null';
+      if (argument(args, '--hero') === 'twin_a') throw new Error('transient read failure');
+      return '[]';
+    });
+    expect((await exportRiggedHeroPose(game(), 'Twin')).hasModel).toBe(false);
+    const listings = () => h.stdout.mock.calls.filter(([args]) => args[1] === 'clips').length;
+    const before = listings();
+    expect((await exportRiggedHeroPose(game(), 'Twin')).hasModel).toBe(false);
+    expect(listings()).toBeGreaterThan(before);
   });
 
   it('preserves a current rigged-only cache when sweeping old static entries', async () => {
