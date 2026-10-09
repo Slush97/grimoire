@@ -1067,6 +1067,7 @@ export type AppearanceSurface = 'launchModded' | 'launchVanilla' | 'activeTab' |
  *  - `none`: no art (hidden). */
 export type AppearanceBgKind = 'default' | 'hero' | 'custom' | 'none';
 export type NsfwContentMode = 'show' | 'blur' | 'hide';
+export type UpdateChannel = 'stable' | 'nightly';
 
 export interface AppearanceBg {
   kind: AppearanceBgKind;
@@ -1093,6 +1094,7 @@ export interface HiddenMod {
 }
 
 export interface AppSettings {
+  updateChannel: UpdateChannel;
   deadlockPath: string | null;
   devMode: boolean;
   devDeadlockPath: string | null;

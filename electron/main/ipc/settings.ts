@@ -5,6 +5,7 @@ import { syncWindowBackgroundWithSettings } from '../services/windowBackground';
 import { detectDeadlockPath, looksLikeDeadlockPath } from '../services/deadlock';
 import { ensureDevDeadlockPath } from '../services/dev';
 import { syncForgeBridgeWithSettings } from '../services/forgeBridge';
+import { assertUpdateChannelChange, syncUpdaterWithSettings } from '../services/updater';
 
 // detect-deadlock
 ipcMain.handle('detect-deadlock', (): string | null => {
@@ -31,7 +32,9 @@ ipcMain.handle('get-settings', (): AppSettings => {
 // set-settings
 ipcMain.handle('set-settings', (_, settings: AppSettings): void => {
     const safetyWasOn = loadSettings().experimentalModSafety;
+    assertUpdateChannelChange(settings.updateChannel);
     saveSettings(settings);
+    syncUpdaterWithSettings();
     syncWindowBackgroundWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must
     // actually close the socket, not just start refusing requests on it.

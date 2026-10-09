@@ -1,0 +1,190 @@
+name: Package
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact Grimoire commit or tag to package
+        type: string
+        default: ''
+      version:
+        description: Override the packaged version for a nightly
+        type: string
+        default: ''
+      channel:
+        type: string
+        default: latest
+      social-ref:
+        description: Shared types revision, pinned across nightly platforms
+        type: string
+        default: main
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          # macos-latest must stay Apple Silicon: vpkmerge publishes a
+          # darwin-arm64 asset only (scripts/fetch-vpkmerge.mjs), and the
+          # CrossOver bottle Deadlock runs in is arm64 in practice. The build
+          # step asserts the arch so an x64 runner fails loudly instead of
+          # silently shipping without mod merging.
+          - os: macos-latest
+            platform: mac
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout grimoire
+        uses: actions/checkout@v6
+        with:
+          path: grimoire
+          ref: ${{ inputs.ref }}
+
+      # pnpm-workspace.yaml resolves @grimoire/social-types from
+      # ../grimoire-social/packages/*. Without this sibling checkout the
+      # workspace dep fails to resolve and pnpm install bails out.
+      - name: Checkout grimoire-social (sibling for shared types)
+        uses: actions/checkout@v6
+        with:
+          repository: Slush97/grimoire-social
+          path: grimoire-social
+          ref: ${{ inputs.social-ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          # Match the local pnpm that generates pnpm-lock.yaml (v10); see ci.yml.
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: grimoire/pnpm-lock.yaml
+
+      # @grimoire/social-types declares zod as a peer dependency; the symlinked
+      # workspace package needs its own node_modules so the import resolves
+      # from the Electron build.
+      - name: Install grimoire-social deps (for the shared workspace package)
+        working-directory: grimoire-social
+        run: pnpm install --frozen-lockfile
+
+      - name: Install dependencies
+        working-directory: grimoire
+        run: pnpm install --frozen-lockfile
+
+      - name: Clean previous builds
+        working-directory: grimoire
+        shell: bash
+        run: |
+          rm -rf dist release
+          mkdir -p release
+
+      - name: Build and package
+        id: build
+        working-directory: grimoire
+        shell: bash
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
+          BUILD_CHANNEL: ${{ inputs.channel }}
+          # Baked into the renderer by electron.vite.config.ts. Production
+          # builds refuse to start without this set to an https:// URL so
+          # installers can't ship pointing at localhost:8787.
+          GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.slusheliott.workers.dev
+        run: |
+          args=(--publish never)
+          if [ -n "$BUILD_VERSION" ]; then
+            args+=("-c.extraMetadata.version=$BUILD_VERSION" "-c.publish.channel=$BUILD_CHANNEL" -c.generateUpdatesFilesForAllChannels=false)
+          fi
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            pnpm exec electron-vite build && pnpm exec electron-builder --linux "${args[@]}"
+          elif [ "${{ matrix.platform }}" = "mac" ]; then
+            # See the matrix comment: arm64 only. postinstall skips the
+            # vpkmerge fetch with a warning on unsupported platforms, so
+            # without this the .dmg would build fine and just lose merging.
+            ARCH="$(node -p 'process.arch')"
+            if [ "$ARCH" != "arm64" ]; then
+              echo "ERROR: mac runner is $ARCH; expected arm64 (no darwin-$ARCH vpkmerge asset)"
+              exit 1
+            fi
+            pnpm exec electron-vite build && pnpm exec electron-builder --mac --arm64 "${args[@]}"
+          else
+            pnpm exec electron-vite build && pnpm exec electron-builder --win "${args[@]}"
+          fi
+
+      - name: List release directory
+        if: always()
+        working-directory: grimoire
+        shell: bash
+        run: |
+          echo "=== Release directory contents ==="
+          if [ -d "release" ]; then
+            ls -la release/
+            echo "=== File count ==="
+            find release -type f | wc -l
+          else
+            echo "ERROR: release/ does not exist"
+            exit 1
+          fi
+
+      - name: Generate SHA256 checksums
+        working-directory: grimoire
+        shell: bash
+        run: |
+          cd release
+          # Hash user-facing artifacts only (skip auto-update metadata and blockmaps).
+          # *.zip is the macOS update artifact; win/linux targets produce none.
+          shopt -s nullglob
+          files=(*.exe *.AppImage *.deb *.dmg *.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: no artifact files found to hash"
+            exit 1
+          fi
+          # macOS runners have no sha256sum; shasum ships with the OS and emits
+          # the same "<hash>  <name>" format.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          else
+            shasum -a 256 "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          fi
+          echo "=== SHA256SUMS-${{ matrix.platform }}.txt ==="
+          cat "SHA256SUMS-${{ matrix.platform }}.txt"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            grimoire/release/*.exe
+            grimoire/release/*.AppImage
+            grimoire/release/*.deb
+            grimoire/release/*.dmg
+            grimoire/release/*.zip
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}-build
+          path: |
+            grimoire/release/*.exe
+            grimoire/release/*.AppImage
+            grimoire/release/*.deb
+            grimoire/release/*.dmg
+            grimoire/release/*.zip
+            grimoire/release/*.blockmap
+            grimoire/release/latest*.yml
+            grimoire/release/nightly*.yml
+            grimoire/release/SHA256SUMS-*.txt
+          if-no-files-found: error
+          retention-days: 1

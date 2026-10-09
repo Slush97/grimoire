@@ -827,6 +827,14 @@
       "openFailed": "Could not open gameinfo.gi: {{error}}"
     },
     "updates": {
+      "channel": "Update channel",
+      "stable": "Stable",
+      "nightly": "Nightly",
+      "stableDescription": "Recommended for everyday use. Receive official releases.",
+      "nightlyDescription": "Get fixes as soon as they land. Nightly builds may have bugs. You can switch back to Stable at any time.",
+      "returnToStable": "You're running a nightly build. Download and install the offered stable release to return to Stable, even if its version is older.",
+      "channelChangeFailed": "Could not switch update channels: {{error}}",
+      "nightlyUnavailable": "No nightly build is available yet. Try again later, or switch to Stable.",
       "releaseNotesTitle": "View release notes for {{version}}",
       "currentVersion": "Current Version",
       "available": "available!",
@@ -2944,6 +2952,7 @@
     "appUpdates": "App Updates",
     "titleReady": "v{{version}} ready to install",
     "titleAvailable": "Update available: v{{version}}",
+    "titleStable": "Return to Stable: v{{version}}",
     "youReOn": "You're on <ver>v{{version}}</ver>",
     "releasedOn": "(released {{date}})",
     "managedByPackageManager": "Managed by your package manager.",
@@ -2961,6 +2970,9 @@
     "manualDownloadLink": "Open the releases page"
   },
   "appUpdateBanner": {
+    "stableAvailableVersion": "Stable release available ({{version}})",
+    "stableReady": "Download the current stable release to leave Nightly. It may be older than your installed build.",
+    "switchToStable": "Switch to Stable",
     "readyToInstallVersion": "Grimoire {{version}} is ready to install",
     "readyToInstall": "Grimoire is ready to install",
     "updateAvailableVersion": "Grimoire update available ({{version}})",

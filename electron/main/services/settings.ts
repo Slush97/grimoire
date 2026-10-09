@@ -9,6 +9,7 @@ import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
+    updateChannel: 'stable',
     deadlockPath: null,
     devMode: false,
     devDeadlockPath: null,
@@ -130,6 +131,7 @@ export function loadSettings(): AppSettings {
         return {
             ...DEFAULT_SETTINGS,
             ...settings,
+            updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
             hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
             hiddenMods: normalizeHiddenMods(settings.hiddenMods),
             nsfwContentMode:

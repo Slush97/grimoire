@@ -6,7 +6,10 @@ import {
     quitAndInstall,
     getUpdateStatus,
     getInstallSource,
+    setUpdateChannel,
 } from '../services/updater';
+
+ipcMain.handle('updater:setChannel', (_, channel: unknown) => setUpdateChannel(channel));
 
 // Get current app version
 ipcMain.handle('updater:getVersion', () => {

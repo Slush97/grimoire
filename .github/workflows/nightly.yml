@@ -1,0 +1,143 @@
+name: Nightly
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.meta.outputs.build }}
+      sha: ${{ steps.meta.outputs.sha }}
+      previous: ${{ steps.meta.outputs.previous }}
+      version: ${{ steps.meta.outputs.version }}
+      social-sha: ${{ steps.meta.outputs.social-sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Select a checked main commit
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NIGHTLY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          PREVIOUS="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-nightly\\.")))][0].target_commitish // ""')"
+          if [ "$NIGHTLY_SHA" != "$HEAD_SHA" ] || [ "$NIGHTLY_SHA" = "$PREVIOUS" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping an outdated or already published commit."
+            exit 0
+          fi
+          # The manual trigger is held to the same CI gate as workflow_run.
+          CHECKED="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" -f head_sha="$NIGHTLY_SHA" -f branch=main -f status=success --jq '[.workflow_runs[] | select(.event == "push") ] | length')"
+          if [ "$CHECKED" = "0" ]; then
+            echo "This main commit has not passed CI."
+            exit 1
+          fi
+          VERSION="$(node scripts/nightly-version.mjs)"
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$NIGHTLY_SHA" >> "$GITHUB_OUTPUT"
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "social-sha=$(gh api repos/Slush97/grimoire-social/git/ref/heads/main --jq .object.sha)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    uses: ./.github/workflows/package.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      channel: nightly
+      social-ref: ${{ needs.prepare.outputs.social-sha }}
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish the complete nightly
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NIGHTLY_SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PREVIOUS: ${{ needs.prepare.outputs.previous }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [ "$HEAD_SHA" != "$NIGHTLY_SHA" ]; then
+            echo "main advanced during packaging; its CI run will publish the next nightly."
+            exit 0
+          fi
+          # A nightly must never carry stable update metadata.
+          test -f artifacts/nightly.yml
+          test -f artifacts/nightly-linux.yml
+          test -f artifacts/nightly-mac.yml
+          if compgen -G 'artifacts/latest*.yml' > /dev/null; then
+            echo "Unexpected stable update metadata in a nightly."
+            exit 1
+          fi
+          cat artifacts/SHA256SUMS-*.txt > artifacts/SHA256SUMS
+          rm artifacts/SHA256SUMS-*.txt
+          {
+            echo "Build of [$NIGHTLY_SHA]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$NIGHTLY_SHA) from main after CI passed."
+            echo
+            echo "Select Nightly in Settings > Updates to receive these builds. Nightlies may have bugs; switch to Stable to return to the current official release."
+            echo
+            if [ -n "$PREVIOUS" ] && git cat-file -e "$PREVIOUS^{commit}" 2>/dev/null; then
+              git log "$PREVIOUS..$NIGHTLY_SHA" --format='- %s (%h)'
+            else
+              git log -15 "$NIGHTLY_SHA" --format='- %s (%h)'
+            fi
+          } > nightly-notes.md
+          TAG="v$VERSION"
+          # Upload while hidden, then expose all platforms and metadata together.
+          gh release create "$TAG" artifacts/* --target "$NIGHTLY_SHA" --draft --prerelease --latest=false --title "Nightly $VERSION" --notes-file nightly-notes.md
+          gh release edit "$TAG" --draft=false --prerelease --latest=false
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: Keep the five newest nightlies
+        if: steps.publish.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.prerelease and (.draft | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-nightly\\.[0-9]{14}\\.[0-9]+\\.g[a-f0-9]{7}$"))) | .tag_name' > nightlies.txt
+          tail -n +6 nightlies.txt | while read -r tag; do
+            gh release delete "$tag" --cleanup-tag --yes
+          done

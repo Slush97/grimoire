@@ -670,6 +670,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Updater
     updater: {
+        setChannel: (channel) => ipcRenderer.invoke('updater:setChannel', channel),
         getVersion: () => ipcRenderer.invoke('updater:getVersion'),
         getStatus: () => ipcRenderer.invoke('updater:getStatus'),
         getInstallSource: () => ipcRenderer.invoke('updater:getInstallSource'),

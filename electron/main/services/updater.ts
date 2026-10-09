@@ -3,6 +3,8 @@ const { autoUpdater } = pkg;
 import type { UpdateInfo } from 'electron-updater';
 import { app, BrowserWindow } from 'electron';
 import log from 'electron-log';
+import { loadSettings, saveSettings } from './settings';
+import type { AppSettings, UpdateChannel } from '../../../src/types/mod';
 
 export type InstallSource = 'managed' | 'appimage' | 'standard' | 'manual';
 
@@ -65,6 +67,9 @@ autoUpdater.fullChangelog = true;
 let mainWindow: BrowserWindow | null = null;
 
 export interface UpdateStatus {
+    checked: boolean;
+    returningToStable: boolean;
+    errorCode: string | null;
     checking: boolean;
     available: boolean;
     downloading: boolean;
@@ -74,7 +79,10 @@ export interface UpdateStatus {
     updateInfo: UpdateInfo | null;
 }
 
-let currentStatus: UpdateStatus = {
+const emptyStatus = (): UpdateStatus => ({
+    checked: false,
+    returningToStable: false,
+    errorCode: null,
     checking: false,
     available: false,
     downloading: false,
@@ -82,7 +90,53 @@ let currentStatus: UpdateStatus = {
     error: null,
     progress: 0,
     updateInfo: null,
-};
+});
+let currentStatus = emptyStatus();
+let activeChannel: UpdateChannel = 'stable';
+let checkPromise: Promise<UpdateInfo | null> | null = null;
+
+function errorCode(error: unknown): string | null {
+    if (!error || typeof error !== 'object' || !('code' in error)) return null;
+    return typeof error.code === 'string' ? error.code : null;
+}
+
+export function assertUpdateChannelChange(channel: unknown): asserts channel is UpdateChannel {
+    if (channel !== 'stable' && channel !== 'nightly') throw new Error('Invalid update channel.');
+    if (channel === activeChannel) return;
+    if (updaterDisabled) throw new Error('Updates are managed by your package manager.');
+    if (currentStatus.checking || currentStatus.downloading || checkPromise) {
+        throw new Error('Wait for the current update check or download to finish.');
+    }
+}
+
+export function syncUpdaterWithSettings(): void {
+    const channel = loadSettings().updateChannel;
+    const changed = channel !== activeChannel;
+    if (changed) {
+        // A previously downloaded installer belongs to the old channel. It must
+        // not be installed on quit after the user chooses a different channel.
+        autoUpdater.autoInstallOnAppQuit = false;
+        currentStatus = emptyStatus();
+        activeChannel = channel;
+    }
+    autoUpdater.channel = channel === 'nightly' ? 'nightly' : 'latest';
+    autoUpdater.allowPrerelease = channel === 'nightly';
+    // The channel setter enables downgrades implicitly. Restrict them to the
+    // explicit return from an installed nightly to the current stable release.
+    const installedNightly = app.getVersion().includes('-nightly.');
+    autoUpdater.allowDowngrade = channel === 'stable' && installedNightly;
+    autoUpdater.fullChangelog = channel === 'stable' && !installedNightly;
+    currentStatus = { ...currentStatus, returningToStable: channel === 'stable' && installedNightly };
+    if (changed) sendStatusToRenderer();
+}
+
+export function setUpdateChannel(channel: unknown): AppSettings {
+    assertUpdateChannelChange(channel);
+    const settings = { ...loadSettings(), updateChannel: channel };
+    saveSettings(settings);
+    syncUpdaterWithSettings();
+    return settings;
+}
 
 function sendStatusToRenderer() {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -92,19 +146,24 @@ function sendStatusToRenderer() {
 
 export function initUpdater(window: BrowserWindow) {
     mainWindow = window;
+    syncUpdaterWithSettings();
     if (updaterDisabled) {
         log.info('[Updater] System package install detected; in-app updater disabled.');
         return;
     }
 
     autoUpdater.on('checking-for-update', () => {
-        currentStatus = { ...currentStatus, checking: true, error: null };
+        currentStatus = { ...currentStatus, checking: true, error: null, errorCode: null };
         sendStatusToRenderer();
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
+        if (activeChannel === 'stable' && Array.isArray(info.releaseNotes)) {
+            info = { ...info, releaseNotes: info.releaseNotes.filter(note => !note.version.includes('-')) };
+        }
         currentStatus = {
             ...currentStatus,
+            checked: true,
             checking: false,
             available: true,
             updateInfo: info,
@@ -115,6 +174,7 @@ export function initUpdater(window: BrowserWindow) {
     autoUpdater.on('update-not-available', () => {
         currentStatus = {
             ...currentStatus,
+            checked: true,
             checking: false,
             available: false,
             updateInfo: null,
@@ -132,6 +192,7 @@ export function initUpdater(window: BrowserWindow) {
     });
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+        autoUpdater.autoInstallOnAppQuit = true;
         currentStatus = {
             ...currentStatus,
             downloading: false,
@@ -148,6 +209,7 @@ export function initUpdater(window: BrowserWindow) {
             checking: false,
             downloading: false,
             error: error.message,
+            errorCode: errorCode(error),
         };
         sendStatusToRenderer();
     });
@@ -159,11 +221,25 @@ export function getAppVersion(): string {
 
 export async function checkForUpdates(): Promise<UpdateInfo | null> {
     if (updaterDisabled) return null;
+    if (checkPromise) return checkPromise;
+    if (currentStatus.downloading || currentStatus.downloaded) return currentStatus.updateInfo;
+    syncUpdaterWithSettings();
+    checkPromise = performUpdateCheck();
+    try {
+        return await checkPromise;
+    } finally {
+        checkPromise = null;
+    }
+}
+
+async function performUpdateCheck(): Promise<UpdateInfo | null> {
     try {
         const result = await autoUpdater.checkForUpdates();
         return result?.updateInfo ?? null;
     } catch (error) {
         log.error('Error checking for updates:', error);
+        currentStatus = { ...currentStatus, checking: false, error: error instanceof Error ? error.message : String(error), errorCode: errorCode(error) };
+        sendStatusToRenderer();
         throw error;
     }
 }
@@ -172,17 +248,21 @@ export async function downloadUpdate(): Promise<void> {
     // Not just updaterDisabled: downloading on a 'manual' install would hand
     // Squirrel.Mac a payload it will refuse to install, so stop earlier and
     // let the UI point at the download page instead.
-    if (!canInstallInPlace) return;
+    if (!canInstallInPlace || !currentStatus.available || currentStatus.checking || currentStatus.downloading || currentStatus.downloaded) return;
+    currentStatus = { ...currentStatus, downloading: true, error: null, progress: 0 };
+    sendStatusToRenderer();
     try {
         await autoUpdater.downloadUpdate();
     } catch (error) {
         log.error('Error downloading update:', error);
+        currentStatus = { ...currentStatus, downloading: false, error: error instanceof Error ? error.message : String(error) };
+        sendStatusToRenderer();
         throw error;
     }
 }
 
 export function quitAndInstall(): void {
-    if (!canInstallInPlace) return;
+    if (!canInstallInPlace || !currentStatus.downloaded) return;
     autoUpdater.quitAndInstall(false, true);
 }
 
