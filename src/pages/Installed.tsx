@@ -5029,9 +5029,11 @@ export default function Installed() {
         />
       )}
 
-      {selectMode && (
-        // Floats at top-center. z-40 keeps this bar above the page + sticky
-        // header (z-30) but below modal overlays (z-50), so an open modal's
+      {selectMode && createPortal(
+        // Floats at top-center. Portaled to body because the page's outlet
+        // wrapper is its own stacking context, which trapped this bar under the
+        // sidebar when dragged over it. At root, z-40 keeps it above the whole
+        // app shell but below modal overlays (z-50), so an open modal's
         // backdrop dims it like the rest of the page instead of the bar
         // painting over the modal (e.g. the variant picker overlapping it in a
         // short window).
@@ -5205,7 +5207,8 @@ export default function Installed() {
               />
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
