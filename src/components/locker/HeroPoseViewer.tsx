@@ -1078,7 +1078,6 @@ export default function HeroPoseViewer({
     // The caller remounts this component (via a hero+skin `key`) when the
     // selection changes, so initial state is already fresh here.
     let cancelled = false;
-    let loaded: THREE.Object3D | null = null;
     setFailed(false);
     setScene(null);
     setClips([]);
@@ -1112,7 +1111,6 @@ export default function HeroPoseViewer({
                 disposeScene(gltf.scene);
                 throw new Error('Rigged preview GLB has no animated clip.');
               }
-              loaded = gltf.scene;
               setClips((gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001));
               setClipName((current) => gltf.animations.some((candidate) => candidate.name === current
                 && Number.isFinite(candidate.duration) && candidate.duration > 0.001) ? current : clip.name);
@@ -1146,7 +1144,6 @@ export default function HeroPoseViewer({
           disposeScene(gltf.scene);
           return;
         }
-        loaded = gltf.scene;
         setRigged(false);
         setClips([]);
         setClothModel(null); // static path has no skeleton; nothing to simulate.
@@ -1161,7 +1158,6 @@ export default function HeroPoseViewer({
 
     return () => {
       cancelled = true;
-      if (loaded) disposeScene(loaded);
     };
     // `skinSources` is deliberately not a dependency: `sourceKey` already
     // encodes its contents, and the array reference changes on every parent
@@ -1175,6 +1171,14 @@ export default function HeroPoseViewer({
     features.riggedPreviewEnabled,
     features.clothPreviewEnabled,
   ]);
+
+  // Dispose in the commit that drops the scene from the Canvas. Disposing in the
+  // loader cleanup left a frame where the still-mounted Canvas re-uploaded
+  // textures whose ImageBitmaps were already closed.
+  useEffect(() => {
+    if (!scene) return;
+    return () => disposeScene(scene);
+  }, [scene]);
 
   useEffect(() => {
     if (!scene || !features.nprDebugEnabled) return;
