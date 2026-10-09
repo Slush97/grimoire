@@ -34,7 +34,9 @@ export default function Layout() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const outletKey = location.pathname.startsWith('/locker') ? '/locker' : location.pathname;
+  // Keyed on the top-level route only, so sub-routes (/locker/<hero>, /settings/<section>)
+  // swap content in place instead of remounting the whole page.
+  const outletKey = location.pathname.split('/')[1];
   const [showWelcome, setShowWelcome] = useState(false);
   const [loading, setLoading] = useState(true);
   // Normal one-click download progress is handled by DownloadQueueIndicator.
