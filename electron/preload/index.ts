@@ -134,6 +134,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // Mods
+    getCrashAdvisories: () => ipcRenderer.invoke('get-crash-advisories'),
+    dismissCrashAdvisory: (id: string) => ipcRenderer.invoke('dismiss-crash-advisory', id),
+    onCrashAdvisoriesChanged: (callback: (findings: import('../../src/types/crashAdvisory').CrashAdvisory[]) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, findings: import('../../src/types/crashAdvisory').CrashAdvisory[]) => callback(findings);
+        ipcRenderer.on('crash-advisories-changed', listener);
+        return () => ipcRenderer.removeListener('crash-advisories-changed', listener);
+    },
     getModSafetyPrompts: () => ipcRenderer.invoke('get-mod-safety-prompts'),
     respondModSafety: (id: string, accepted: boolean) => ipcRenderer.invoke('respond-mod-safety', id, accepted),
     getInstalledModSafety: () => ipcRenderer.invoke('get-installed-mod-safety'),

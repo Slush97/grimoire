@@ -28,6 +28,7 @@ import { metaKeyFor, isValidDeadlockPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata, type ModMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
+import { notifyModChanges } from '../services/modChangeObservation';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
@@ -370,6 +371,7 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
         await parseVpkDirectoriesAsync(warmPaths);
     }
     const enriched = visible.map(enrichMod);
+    notifyModChanges();
     void checkOutdatedVdata(deadlockPath, visible.map((m) => m.path));
     if (settings.verboseModTrace) {
         const hidden = mods.length - visible.length;

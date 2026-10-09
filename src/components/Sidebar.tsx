@@ -47,6 +47,7 @@ import { rollMemeTooltip } from '../lib/easterEggs';
 import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
+import { CrashLaunchIndicator } from './CrashAdvisories';
 import Tx from './translation/Tx';
 import { SidebarActiveBackdrop, SurfaceBackdrop } from './sidebar/surfaceArt';
 
@@ -1112,6 +1113,7 @@ export default function Sidebar() {
             // right-click "hide art" menu is gone (the Appearance surfaces own
             // that now).
             <>
+              <div className="relative flex min-w-0 items-center gap-1">
               <button
                 onClick={handleLaunchModded}
                 disabled={!canLaunch || !!launchPending || stopPending}
@@ -1143,6 +1145,8 @@ export default function Sidebar() {
                   </span>
                 )}
               </button>
+              <CrashLaunchIndicator compact={!labelMounted} />
+              </div>
 
               <button
                 onClick={handleLaunchVanilla}
@@ -1178,8 +1182,9 @@ export default function Sidebar() {
               </button>
             </>
           ) : (
+            <div className="relative flex min-w-0 items-center gap-1">
             <div
-              className="group/launch relative"
+              className="group/launch relative min-w-0 flex-1"
               onContextMenu={(e) => {
                 e.preventDefault();
                 if (launchPending || stopPending) return;
@@ -1240,6 +1245,8 @@ export default function Sidebar() {
                   <ArrowRightLeft className="h-3 w-3" />
                 </span>
               )}
+            </div>
+            {isModdedLaunch && <CrashLaunchIndicator compact={!labelMounted} />}
             </div>
           )}
         </div>

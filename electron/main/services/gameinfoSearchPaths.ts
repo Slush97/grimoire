@@ -99,6 +99,14 @@ function normalizePath(path: string): string {
     return path.replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase();
 }
 
+/** Null means the mount order is unknown, so diagnostics must not guess an owner. */
+export function gameSearchPaths(content: string): string[] | null {
+    const block = findSearchPathsBlock(content);
+    if (!block) return null;
+    try { return readPaths(block.body)?.filter(entry => entry.key === 'game').map(entry => entry.path) ?? null; }
+    catch { return null; }
+}
+
 export function hasActivePath(body: string, path: string, key = 'Game'): boolean {
     return !!readPaths(body)?.some((entry) => entry.key === key.toLowerCase() && entry.path === normalizePath(path));
 }

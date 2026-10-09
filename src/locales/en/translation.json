@@ -3343,5 +3343,19 @@
     "chooseFolderAndExport": "Choose folder and export",
     "exportPickFolder": "Choose where to save the export",
     "exportFailed": "Export failed: {{error}}"
+  },
+  "crashAdvisory": {
+    "badge": "Possible crash cause",
+    "title": "Possible crash cause",
+    "explanation": "{{name}} may be related to a recent Deadlock crash. The game reported a fatal error in a file this mod supplied in your recorded configuration.",
+    "recorded": "The affected file was traced to the configuration recorded for this launch. This is a suspect, not a confirmed cause.",
+    "lastKnown": "This is based on your last known mod configuration. Steam or another tool may have changed which files loaded while Grimoire was closed.",
+    "tryDisabling": "Try disabling this mod with its usual toggle, then restart Deadlock. Your mod files and settings stay installed.",
+    "when": "Crash: {{date}} · Game build {{build}}",
+    "showError": "Show error",
+    "dismiss": "Dismiss this report",
+    "showMod": "Show mod",
+    "viewForMod": "View possible crash cause: {{name}}",
+    "launchHint": "{{name}} may be related to a recent crash. Click to view details. Launching remains available."
   }
 }

@@ -869,6 +869,9 @@ export interface ElectronAPI {
     };
 
     // Mods
+    getCrashAdvisories: () => Promise<import('./crashAdvisory').CrashAdvisory[]>;
+    dismissCrashAdvisory: (id: string) => Promise<import('./crashAdvisory').CrashAdvisory[]>;
+    onCrashAdvisoriesChanged: (callback: (findings: import('./crashAdvisory').CrashAdvisory[]) => void) => () => void;
     getModSafetyPrompts: () => Promise<ModSafetyPrompt[]>;
     respondModSafety: (id: string, accepted: boolean) => Promise<void>;
     getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;

@@ -52,7 +52,7 @@ import {
   Fingerprint,
   FileWarning,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
@@ -443,6 +443,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       mod={{
         ...entry.primary,
         safetyTarget,
+        crashModIds: entry.variants.map(variant => variant.id),
         outdatedVdata: outdatedVariant?.outdatedVdata,
         outdatedVdataEnabled: !!outdatedVariant?.enabled,
         // Group's overall enable state is "one or more files enabled", not
@@ -563,6 +564,7 @@ function getCardSizeGridStyle(multiplier: number): CSSProperties {
 export default function Installed() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     settings,
     mods,
@@ -774,6 +776,18 @@ export default function Installed() {
   // category keys) so the two AND together: "in my Ivy list AND tagged Skins"
   // is the useful reading, where folding lists into tagFilter would OR them.
   const [listFilter, setListFilter] = useState<string[]>([]);
+  useEffect(() => {
+    const id = (location.state as { crashSuspectId?: string } | null)?.crashSuspectId;
+    const suspect = id && mods.find(mod => mod.id === id);
+    if (!suspect) return;
+    setSearch(suspect.name);
+    setSourceSel(['gamebanana', 'local']);
+    setStatusSel(['enabled', 'disabled']);
+    setHeroFilter('all');
+    setTagFilter([]);
+    setListFilter([]);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location, mods, navigate]);
   const installedHideNsfwPreviews = shouldBlurNsfw(settings);
   // Disabled-section sort, deliberately separate from the top-bar sort above.
   // That one spans both sections and turns the whole page read-only (a sorted

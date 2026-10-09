@@ -11,6 +11,7 @@ import { findChunkSiblingNames } from './vpk';
 import { loadSettings } from './settings';
 import { assertVpkSafety, moveSafetySnapshot, forgetSafetySnapshot } from './modSafety';
 import { forgetVdataSnapshot, moveVdataSnapshot } from './vdataCheck';
+import { notifyModChanges } from './modChangeObservation';
 import { isStaleModTemp, modTempPath } from './modTemps';
 import {
     assertCanMoveLoadedGameMod,
@@ -373,7 +374,7 @@ function pickEnableSlot(forbidden: Set<number>, preferred: Array<number | undefi
 /**
  * Scan a folder for VPK mods (async)
  */
-async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
+async function scanFolder(folder: string, enabled: boolean, diagnostics = false): Promise<Mod[]> {
     const mods: Mod[] = [];
 
     if (!existsSync(folder)) {
@@ -390,7 +391,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
         // Locker's own managed VPKs. They are keyed by synthetic metadata keys
         // (locker:cards and friends), so surfacing them here would invent
         // phantom user mods for artifacts the user never installed.
-        if (isReservedPriorityVpkPath(fullPath)) continue;
+        if (!diagnostics && isReservedPriorityVpkPath(fullPath)) continue;
 
         try {
             const stats = await fs.stat(fullPath);
@@ -429,6 +430,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
                 installedAt: stats.mtime.toISOString(),
             });
         } catch (err) {
+            if (diagnostics) throw err;
             // Skip files we can't read (surfaced under trace: an unreadable VPK
             // is another way a mod silently drops out of the list).
             if (trace) modTrace(`scanFolder ${basename(folder)}: unreadable "${entry}": ${String(err)}`);
@@ -436,6 +438,18 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
     }
 
     return mods;
+}
+
+/** Diagnostics must never reconcile collisions, clean temporary files or heal metadata.
+ * Includes reserved VPKs so their resources can suppress misleading attribution. */
+export async function scanModsReadOnly(deadlockPath: string): Promise<Mod[]> {
+    const root = join(deadlockPath, 'game/citadel');
+    const folders = ['grimoire', 'addons', ...(await fs.readdir(root)).filter(name => /^addons[1-9]$/.test(name)).sort()];
+    const scanned = await Promise.all([
+        ...folders.map(folder => scanFolder(join(root, folder), true, true)),
+        scanFolder(join(root, 'addons/.disabled'), false, true),
+    ]);
+    return scanned.flat().sort((a, b) => addonFolderIndex(a.path) * 100 + a.priority - (addonFolderIndex(b.path) * 100 + b.priority));
 }
 
 /**
@@ -1001,6 +1015,7 @@ function withModMutationLock<T>(fn: () => Promise<T>): Promise<T> {
             return await fn();
         } finally {
             endModMutationRunningScope();
+            notifyModChanges();
         }
     };
     const run = modMutationQueue.then(scoped, scoped);
