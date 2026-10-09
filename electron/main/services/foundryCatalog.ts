@@ -319,19 +319,18 @@ function fingerprintKey(fp: BuildFingerprint): string {
 }
 
 /**
- * Read the pak's build fingerprint via `catalog cache` (a single stat under the
- * hood) so thumbnail dirs invalidate on a real game update. Also warms the
- * engine's own index cache as a side effect, which is fine.
+ * Match the engine's size/mtime fingerprint without building its catalog. Asset
+ * previews need only their own entries, so an unavailable voice-line index must
+ * not prevent decoding a texture or extracting a sound. BigInt stats preserve
+ * the nanosecond component used by existing cache directory names.
  */
 async function buildFingerprint(deadlockPath: string): Promise<BuildFingerprint> {
-    const report = await runCatalogJson<CacheReport>([
-        'cache',
-        '--vpk',
-        pak01Path(deadlockPath),
-        '--dir',
-        catalogCacheDir(),
-    ]);
-    return report.fingerprint;
+    const stat = await fs.stat(pak01Path(deadlockPath), { bigint: true });
+    return {
+        vpkLen: Number(stat.size),
+        vpkMtimeSecs: Number(stat.mtimeNs / 1_000_000_000n),
+        vpkMtimeNanos: Number(stat.mtimeNs % 1_000_000_000n),
+    };
 }
 
 /**
