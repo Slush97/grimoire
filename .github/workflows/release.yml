@@ -485,3 +485,24 @@ jobs:
           fi
           git commit -m "chore(flatpak): repackage the v${{ steps.meta.outputs.version }} deb"
           git push origin main
+
+  # grimoiremods.com/download bakes the latest release in at build time, so
+  # without a rebuild the site keeps advertising the previous version. This
+  # fires grimoire-site's deploy workflow, which builds main, fails unless
+  # /download links this tag, and runs wrangler deploy. Green here only means
+  # the dispatch was accepted; the deploy result lives in grimoire-site's
+  # Actions tab. github.token can't dispatch cross-repo, hence
+  # SITE_DEPLOY_TOKEN (fine-grained PAT, Actions: write on
+  # Slush97/grimoire-site).
+  site-redeploy:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') && inputs.draft != true
+
+    permissions: {}
+
+    steps:
+      - name: Dispatch grimoire-site deploy
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DEPLOY_TOKEN }}
+        run: gh workflow run deploy.yml --repo Slush97/grimoire-site --ref main -f tag="$GITHUB_REF_NAME"
