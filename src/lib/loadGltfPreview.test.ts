@@ -41,14 +41,9 @@ vi.mock('three/examples/jsm/loaders/GLTFLoader.js', () => ({
       loaderMock.textureLoaders.push(parser.textureLoader);
     }
 
-    load(_url: string, onLoad: (gltf: GLTF) => void): void {
+    async parseAsync(_buffer: ArrayBuffer, _path: string): Promise<GLTF> {
       this.runParser();
-      onLoad(fakeGltf());
-    }
-
-    parse(_buffer: ArrayBuffer, _path: string, onLoad: (gltf: GLTF) => void): void {
-      this.runParser();
-      onLoad(fakeGltf());
+      return fakeGltf();
     }
   },
 }));
@@ -62,6 +57,8 @@ describe('loadGltfPreview texture decoding', () => {
     loaderMock.textureLoaders = [];
     source2Mock.resolveMorphicTextures.mockReset();
     source2Mock.resolveMorphicTextures.mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ArrayBuffer(4))));
+    return () => vi.unstubAllGlobals();
   });
 
   it('decodes with <img> textures by default, per parser', async () => {
@@ -85,6 +82,14 @@ describe('loadGltfPreview texture decoding', () => {
 
     expect(loaderMock.textureLoaders).toEqual(['image-bitmap-loader']);
     expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(gltf);
+  });
+
+  it('rejects a failed GLB request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    const { loadGltfPreview } = await import('./loadGltfPreview');
+
+    await expect(loadGltfPreview('grimoire-hero://m/missing/model.glb')).rejects.toThrow('404');
+    expect(loaderMock.textureLoaders).toEqual([]);
   });
 });
 

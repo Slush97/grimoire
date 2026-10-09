@@ -27,30 +27,28 @@ function previewLoader({ imageBitmaps = false }: GltfPreviewOptions): GLTFLoader
   return loader;
 }
 
+/** Fetch a self-contained `.glb` and parse it. One native `arrayBuffer()` read
+ *  instead of GLTFLoader.load, whose FileLoader re-streams every body chunk
+ *  through JS to report progress. */
 export async function loadGltfPreview(
   url: string,
   options: GltfPreviewOptions = {}
 ): Promise<GLTF> {
-  const gltf = await new Promise<GLTF>((resolve, reject) => {
-    previewLoader(options).load(url, resolve, undefined, reject);
-  });
-  // Resolve morphic preview texture indices (the only part of the morphic
-  // contract the stock loader does not surface) while gltf.parser is still live.
-  // No-op when no material carries preview-only textures.
-  await resolveMorphicTextures(gltf);
-  return gltf;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`GLB request failed (${response.status}): ${url}`);
+  return parseGltfPreview(await response.arrayBuffer(), options);
 }
 
-/** Parse an in-memory `.glb` (ArrayBuffer) instead of fetching a URL. Used by
- *  the Soul Container import preview, which loads the dropped/picked file's bytes
- *  directly (before any build). */
+/** Parse an in-memory `.glb` (ArrayBuffer). Also used directly by the Soul
+ *  Container import preview, which loads the dropped/picked file's bytes before
+ *  any build. Morphic preview texture indices (the only part of the morphic
+ *  contract the stock loader does not surface) resolve while gltf.parser is
+ *  still live; no-op when no material carries them. */
 export async function parseGltfPreview(
   buffer: ArrayBuffer,
   options: GltfPreviewOptions = {}
 ): Promise<GLTF> {
-  const gltf = await new Promise<GLTF>((resolve, reject) => {
-    previewLoader(options).parse(buffer, '', resolve, reject);
-  });
+  const gltf = await previewLoader(options).parseAsync(buffer, '');
   await resolveMorphicTextures(gltf);
   return gltf;
 }
