@@ -992,10 +992,14 @@ export async function exportRiggedHeroPose(
     const requestKey = poseKey(heroName, normalized);
     const existing = inFlightRiggedExports.get(requestKey);
     if (existing) return existing;
-    const cachedKey = await resolvePoseKey(deadlockPath, heroName, normalized);
-    if (await hasNoRiggedClips(cachedKey)) return { hasModel: false, mtimeMs: null, key: cachedKey };
 
-    const work = runRiggedHeroExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
+    // Registered before the first await, so a concurrent request for the same
+    // stack joins this run instead of exporting into the same files.
+    const work = (async (): Promise<HeroPoseInfo> => {
+        const cachedKey = await resolvePoseKey(deadlockPath, heroName, normalized);
+        if (await hasNoRiggedClips(cachedKey)) return { hasModel: false, mtimeMs: null, key: cachedKey };
+        return runRiggedHeroExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
+    })();
     inFlightRiggedExports.set(requestKey, work);
     try {
         const info = await work;
@@ -1102,10 +1106,16 @@ async function runRiggedHeroExportForSources(
                 return infoForRiggedKey(key);
             } catch (err) {
                 lastError = err;
+            } finally {
+                // Both read source.vpk, which the outer finally deletes when it is a
+                // merged stack.
+                await Promise.all([cloth, attachments]);
             }
         }
         if (listedAny && !foundUsableClip) {
-            await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
+            // A selector that failed to list may still carry clips; remember
+            // "nothing usable" only when every selector answered.
+            if (lastError === undefined) await fs.writeFile(riggedNoClipsFile(key), RIGGED_CACHE_VERSION);
             return { hasModel: false, mtimeMs: null, key };
         }
         throw lastError instanceof Error

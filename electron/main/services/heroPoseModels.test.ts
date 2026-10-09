@@ -20,7 +20,9 @@ vi.mock('./modMerger', () => ({
   runVpkmerge: h.run, runVpkmergeStdout: h.stdout, verifyVpkOutput: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./heroParticleExport', () => ({ exportParticleBundle: h.particles }));
-vi.mock('./heroPortraits', () => ({ codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : ['yamato'] }));
+vi.mock('./heroPortraits', () => ({
+  codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : name === 'Twin' ? ['twin_a', 'twin_b'] : ['yamato'],
+}));
 vi.mock('./deadlock', () => ({
   getCitadelPath: (path: string) => join(path, 'game', 'citadel'),
   getAddonsPath: (path: string) => join(path, 'game', 'citadel', 'addons'),
@@ -179,6 +181,25 @@ describe('rigged preview physics bundle', () => {
     expect((await getRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
     expect((await exportRiggedHeroPose(game(), 'Yamato')).hasModel).toBe(false);
     expect(h.run.mock.calls.length + h.stdout.mock.calls.length).toBe(spawns);
+  });
+
+  it('shares one rigged export between concurrent requests for the same stack', async () => {
+    const [first, second] = await Promise.all([exportRiggedHeroPose(game(), 'Yamato'), exportRiggedHeroPose(game(), 'Yamato')]);
+    expect(second).toEqual(first);
+    expect(h.run.mock.calls.filter(([args]) => args[0] === 'model' && args[1] === 'export')).toHaveLength(1);
+  });
+
+  it('does not record a clipless marker when another selector failed to list clips', async () => {
+    h.stdout.mockImplementation(async (args) => {
+      if (args[1] !== 'clips') return 'null';
+      if (argument(args, '--hero') === 'twin_a') throw new Error('transient read failure');
+      return '[]';
+    });
+    expect((await exportRiggedHeroPose(game(), 'Twin')).hasModel).toBe(false);
+    const listings = () => h.stdout.mock.calls.filter(([args]) => args[1] === 'clips').length;
+    const before = listings();
+    expect((await exportRiggedHeroPose(game(), 'Twin')).hasModel).toBe(false);
+    expect(listings()).toBeGreaterThan(before);
   });
 
   it('preserves a current rigged-only cache when sweeping old static entries', async () => {
