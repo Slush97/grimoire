@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowRightLeft, ChevronDown, FileInput, FolderSearch } from 'lucide-react';
+import { ArrowRightLeft, ChevronDown, FileInput, FileOutput, FolderSearch } from 'lucide-react';
 import { listInterchangeSources, showOpenDialog } from '../../lib/api';
 import type { InterchangeSourceInfo, InterchangeSourceRequest } from '../../lib/modInterchange';
 import { AnchoredPopover } from '../common/AnchoredPopover';
@@ -10,6 +10,8 @@ interface ImportSourceMenuProps {
   onImported: () => void;
   /** Compact icon button (toolbar) vs labelled button (empty state). */
   compact?: boolean;
+  /** Adds an export entry, making this the toolbar's one import/export menu. */
+  onExport?: () => void;
 }
 
 const itemClass =
@@ -18,9 +20,9 @@ const itemClass =
 /**
  * "Import from other mod managers": one entry per mod manager Grimoire can
  * read (reported by the main-process registry), plus any manager's exported
- * mod-interchange file.
+ * mod-interchange file, and optionally exporting for them.
  */
-export default function ImportSourceMenu({ onImported, compact = false }: ImportSourceMenuProps) {
+export default function ImportSourceMenu({ onImported, compact = false, onExport }: ImportSourceMenuProps) {
   const { t } = useTranslation();
   const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -64,8 +66,8 @@ export default function ImportSourceMenu({ onImported, compact = false }: Import
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t('interchange.importButtonHint')}
-        aria-label={t('interchange.importButton')}
+        title={onExport ? t('interchange.transferHint') : t('interchange.importButtonHint')}
+        aria-label={onExport ? t('interchange.transferButton') : t('interchange.importButton')}
         className={
           compact
             ? 'inline-flex items-center gap-1 rounded-sm border border-hl/5 bg-bg-tertiary px-2.5 py-2 text-text-primary transition-colors hover:bg-hl/10 cursor-pointer'
@@ -83,7 +85,7 @@ export default function ImportSourceMenu({ onImported, compact = false }: Import
         anchorRef={anchorRef}
         width={300}
         role="menu"
-        ariaLabel={t('interchange.importButton')}
+        ariaLabel={onExport ? t('interchange.transferButton') : t('interchange.importButton')}
         className="p-1"
       >
         <p className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wider text-text-secondary">
@@ -131,6 +133,24 @@ export default function ImportSourceMenu({ onImported, compact = false }: Import
           <FileInput className="h-4 w-4 shrink-0 text-text-secondary" />
           <span>{t('interchange.openBundle')}</span>
         </button>
+        {onExport && (
+          <>
+            <div className="my-1 border-t border-border" />
+            <button
+              type="button"
+              role="menuitem"
+              className={itemClass}
+              title={t('interchange.exportHint')}
+              onClick={() => {
+                close();
+                onExport();
+              }}
+            >
+              <FileOutput className="h-4 w-4 shrink-0 text-text-secondary" />
+              <span>{t('interchange.exportMenu')}</span>
+            </button>
+          </>
+        )}
       </AnchoredPopover>
 
       {active && (

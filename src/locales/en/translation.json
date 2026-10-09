@@ -3240,6 +3240,8 @@
   "interchange": {
     "importButton": "Import from other mod managers",
     "importButtonHint": "Bring mods, profiles and crosshairs over from Deadlock Mod Manager or another manager's export",
+    "transferButton": "Import or export",
+    "transferHint": "Move mods, profiles and crosshairs between Grimoire and other mod managers",
     "managersLabel": "Mod managers",
     "detecting": "Looking for installed mod managers…",
     "detected": "Detected",
@@ -3247,7 +3249,7 @@
     "pickManagerFolder": "Choose the {{source}} folder",
     "chooseManagerFolder": "Choose {{source}} folder…",
     "pickBundle": "Open a mod-interchange.json",
-    "openBundle": "Open export file…",
+    "openBundle": "Import from file…",
     "exportFile": "export file",
     "importTitle": "Import from {{source}}",
     "stepDescription": {

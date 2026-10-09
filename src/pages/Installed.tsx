@@ -28,7 +28,6 @@ import {
   Trash2,
   AlertTriangle,
   FolderOpen,
-  FileOutput,
   FilePlus,
   Files,
   X,
@@ -4346,15 +4345,7 @@ export default function Installed() {
               aria-label={t('installed.actions.addCustomMod')}
               title={t('installed.actions.addCustomModHint')}
             />
-            <ImportSourceMenu compact onImported={() => void loadMods()} />
-            <Button
-              variant="secondary"
-              onClick={() => setExportOpen(true)}
-              icon={FileOutput}
-              className="!px-2.5"
-              aria-label={t('interchange.exportMenu')}
-              title={t('interchange.exportHint')}
-            />
+            <ImportSourceMenu compact onImported={() => void loadMods()} onExport={() => setExportOpen(true)} />
             <Button
               variant="secondary"
               onClick={() => openModsFolder().catch(() => {})}
