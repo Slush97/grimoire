@@ -1322,8 +1322,9 @@ export default function Sidebar() {
                 labelsVisible ? 'opacity-100' : 'opacity-0'
               } ${settingsActive ? 'text-text-primary/70' : 'text-text-secondary/70'}`}
               aria-hidden={!labelsVisible}
+              title={appVersion}
             >
-              {appVersion || 'v...'}
+              {appVersion.includes('-nightly.') ? `${appVersion.split('-nightly.')[0]} ${t('settings.updates.nightly')}` : appVersion || 'v...'}
             </span>
           )}
         </button>

@@ -770,6 +770,9 @@ export interface CrosshairPreset {
 }
 
 export interface UpdateStatus {
+    checked: boolean;
+    returningToStable: boolean;
+    errorCode: string | null;
     checking: boolean;
     available: boolean;
     downloading: boolean;
@@ -1328,6 +1331,7 @@ export interface ElectronAPI {
 
     // Updater
     updater: {
+        setChannel: (channel: import('./mod').UpdateChannel) => Promise<AppSettings>;
         getVersion: () => Promise<string>;
         getStatus: () => Promise<UpdateStatus>;
         getInstallSource: () => Promise<'managed' | 'appimage' | 'standard' | 'manual'>;

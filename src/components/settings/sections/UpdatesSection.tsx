@@ -2,9 +2,12 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { ArrowDownCircle, Download, RefreshCw, Sparkles } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import { Badge, Button, Card, ModalHeader } from '../../common/ui';
+import { Badge, Button, Card, ModalHeader, SegmentedControl } from '../../common/ui';
 import { Modal, ModalBody, ModalFooter } from '../../common/Modal';
 import Tx from '../../translation/Tx';
+import { useAppStore } from '../../../stores/appStore';
+import type { UpdateStatus } from '../../../types/electron';
+import type { UpdateChannel } from '../../../types/mod';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
 // release notes (an update is pending) we show them in-app; otherwise we link
@@ -32,20 +35,13 @@ function ReleaseVersionLink({ version, className = '' }: { version?: string | nu
 }
 
 export default function UpdatesSection() {
+  const { t } = useTranslation();
+  const settings = useAppStore(state => state.settings);
+  const channel = settings?.updateChannel ?? 'stable';
+  const [changingChannel, setChangingChannel] = useState(false);
+  const [channelError, setChannelError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
-  const [updateStatus, setUpdateStatus] = useState<{
-    checking: boolean;
-    available: boolean;
-    downloading: boolean;
-    downloaded: boolean;
-    error: string | null;
-    progress: number;
-    updateInfo: {
-      version: string;
-      releaseDate?: string;
-      releaseNotes?: string | { version: string; note: string | null }[] | null;
-    } | null;
-  } | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const changelogTitleId = useId();
   const closeChangelog = useCallback(() => setShowChangelog(false), []);
@@ -56,7 +52,10 @@ export default function UpdatesSection() {
 
   // Derived, not state: a check in flight sets `checking`, so this falls back
   // to false on its own while one runs.
-  const upToDate = !!updateStatus && !updateStatus.checking && !updateStatus.available && !updateStatus.error;
+  const upToDate = !!updateStatus?.checked && !updateStatus.checking && !updateStatus.available && !updateStatus.error;
+  const updateError = channel === 'nightly' && ['ERR_UPDATER_NO_PUBLISHED_VERSIONS', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'].includes(updateStatus?.errorCode ?? '')
+    ? t('settings.updates.nightlyUnavailable')
+    : updateStatus?.error;
 
   useEffect(() => {
     window.electronAPI.updater.getVersion().then(setAppVersion);
@@ -73,6 +72,22 @@ export default function UpdatesSection() {
       console.error('Update check failed:', err);
     }
   }, []);
+
+  const handleChannelChange = async (nextChannel: UpdateChannel) => {
+    if (nextChannel === channel) return;
+    setChangingChannel(true);
+    setChannelError(null);
+    setShowChangelog(false);
+    try {
+      const nextSettings = await window.electronAPI.updater.setChannel(nextChannel);
+      useAppStore.setState({ settings: nextSettings });
+      await handleCheckForUpdates();
+    } catch (err) {
+      setChannelError(t('settings.updates.channelChangeFailed', { error: String(err) }));
+    } finally {
+      setChangingChannel(false);
+    }
+  };
 
   const handleDownloadUpdate = useCallback(async () => {
     try {
@@ -102,6 +117,32 @@ export default function UpdatesSection() {
     <>
       <Card title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download}>
         <div className="space-y-4">
+          {installSource !== 'managed' && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm font-medium"><Tx k="settings.updates.channel" fallback="Update channel" /></span>
+                <SegmentedControl<UpdateChannel>
+                  label={t('settings.updates.channel')}
+                  value={channel}
+                  options={[
+                    { value: 'stable', label: <Tx k="settings.updates.stable" fallback="Stable" /> },
+                    { value: 'nightly', label: <Tx k="settings.updates.nightly" fallback="Nightly" /> },
+                  ]}
+                  onChange={next => { void handleChannelChange(next); }}
+                  disabled={!settings || changingChannel || updateStatus?.checking || updateStatus?.downloading}
+                />
+              </div>
+              <p className="text-xs text-text-secondary">
+                {channel === 'nightly'
+                  ? <Tx k="settings.updates.nightlyDescription" fallback="Get fixes as soon as they land. Nightly builds may have bugs. You can switch back to Stable at any time." />
+                  : <Tx k="settings.updates.stableDescription" fallback="Recommended for everyday use. Receive official releases." />}
+              </p>
+              {channel === 'stable' && appVersion.includes('-nightly.') && (
+                <p className="text-xs text-text-secondary"><Tx k="settings.updates.returnToStable" fallback="You're running a nightly build. Download and install the offered stable release to return to Stable, even if its version is older." /></p>
+              )}
+              {channelError && <p role="alert" className="text-xs text-state-danger">{channelError}</p>}
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <div className="flex items-center gap-2">
@@ -128,8 +169,8 @@ export default function UpdatesSection() {
                   <Tx k="settings.updates.upToDate" fallback="✓ You're up to date!" />
                 </span>
               )}
-              {updateStatus?.error && (
-                <span className="text-xs text-state-danger basis-full">{updateStatus.error}</span>
+              {updateError && (
+                <span role="alert" className="text-xs text-state-danger basis-full">{updateError}</span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -145,6 +186,7 @@ export default function UpdatesSection() {
               {installSource === 'managed' ? null : canSelfInstall && updateStatus?.downloaded ? (
                 <Button
                   onClick={handleInstallUpdate}
+                  disabled={changingChannel}
                   icon={ArrowDownCircle}
                 >
                   <Tx k="settings.updates.installRestart" fallback="Install & Restart" />
@@ -152,6 +194,7 @@ export default function UpdatesSection() {
               ) : canSelfInstall && updateStatus?.available && !updateStatus.downloading ? (
                 <Button
                   onClick={handleDownloadUpdate}
+                  disabled={changingChannel}
                   icon={Download}
                 >
                   <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
@@ -159,7 +202,7 @@ export default function UpdatesSection() {
               ) : (
                 <Button
                   onClick={handleCheckForUpdates}
-                  disabled={updateStatus?.checking || updateStatus?.downloading}
+                  disabled={changingChannel || updateStatus?.checking || updateStatus?.downloading}
                   isLoading={updateStatus?.checking}
                   variant="secondary"
                   icon={RefreshCw}
@@ -212,7 +255,7 @@ export default function UpdatesSection() {
                 />
               </p>
               <a
-                href="https://github.com/Slush97/grimoire/releases/latest"
+                href={updateStatus?.updateInfo ? releaseTagUrl(updateStatus.updateInfo.version) : channel === 'nightly' ? GITHUB_RELEASES_URL : `${GITHUB_RELEASES_URL}/latest`}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="inline-block font-mono text-text-primary underline underline-offset-2 hover:text-accent transition-colors"

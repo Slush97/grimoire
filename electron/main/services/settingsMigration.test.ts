@@ -24,6 +24,13 @@ beforeEach(() => {
 });
 
 describe('loadSettings legacy experimentalVpkTagging migration', () => {
+  it('defaults old or invalid update-channel preferences to stable', () => {
+    expect(loadSettings().updateChannel).toBe('stable');
+    writeFileSync(settingsPath(), JSON.stringify({ updateChannel: 'beta' }));
+    expect(loadSettings().updateChannel).toBe('stable');
+    writeFileSync(settingsPath(), JSON.stringify({ updateChannel: 'nightly' }));
+    expect(loadSettings().updateChannel).toBe('nightly');
+  });
   it('migrates a legacy experimentalVpkTagging:true to experimentalVpkImprinting:true', () => {
     writeFileSync(settingsPath(), JSON.stringify({ experimentalVpkTagging: true }));
     expect(loadSettings().experimentalVpkImprinting).toBe(true);

@@ -4,26 +4,12 @@ import { Download, ArrowDownCircle, RefreshCw, Sparkles, AlertTriangle, Package 
 import DOMPurify from 'dompurify';
 import { Button, ModalHeader } from './common/ui';
 import { Modal, ModalBody, ModalFooter } from './common/Modal';
+import type { UpdateStatus } from '../types/electron';
+import { useAppStore } from '../stores/appStore';
 
 type InstallSource = 'managed' | 'appimage' | 'standard' | 'manual';
 
-const RELEASES_URL = 'https://github.com/Slush97/grimoire/releases/latest';
-
-interface UpdateInfo {
-    version: string;
-    releaseDate?: string;
-    releaseNotes?: string | { version: string; note: string | null }[] | null;
-}
-
-interface UpdateStatus {
-    checking: boolean;
-    available: boolean;
-    downloading: boolean;
-    downloaded: boolean;
-    error: string | null;
-    progress: number;
-    updateInfo: UpdateInfo | null;
-}
+const RELEASES_URL = 'https://github.com/Slush97/grimoire/releases';
 
 interface Props {
     onClose: () => void;
@@ -31,6 +17,7 @@ interface Props {
 
 export default function UpdateModal({ onClose }: Props) {
     const { t } = useTranslation();
+    const channel = useAppStore(state => state.settings?.updateChannel ?? 'stable');
     const titleId = useId();
     const [appVersion, setAppVersion] = useState('');
     const [status, setStatus] = useState<UpdateStatus | null>(null);
@@ -75,6 +62,9 @@ export default function UpdateModal({ onClose }: Props) {
 
     const releaseNotes = status?.updateInfo?.releaseNotes;
     const hasNotes = Array.isArray(releaseNotes) ? releaseNotes.length > 0 : Boolean(releaseNotes);
+    const updateError = channel === 'nightly' && ['ERR_UPDATER_NO_PUBLISHED_VERSIONS', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'].includes(status?.errorCode ?? '')
+        ? t('settings.updates.nightlyUnavailable')
+        : status?.error;
 
     return (
         <Modal onClose={onClose} labelledBy={titleId} size="lg">
@@ -82,6 +72,8 @@ export default function UpdateModal({ onClose }: Props) {
                     title={
                         status?.downloaded
                             ? t('updateModal.titleReady', { version: status.updateInfo?.version })
+                            : status?.available && status.returningToStable
+                                ? t('updateModal.titleStable', { version: status.updateInfo?.version })
                             : status?.available
                                 ? t('updateModal.titleAvailable', { version: status.updateInfo?.version })
                                 : t('updateModal.appUpdates')
@@ -138,7 +130,7 @@ export default function UpdateModal({ onClose }: Props) {
                                 <p className="text-text-primary font-medium">{t('updateModal.manualDownloadRequired')}</p>
                                 <p>{t('updateModal.manualUnsignedExplanation')}</p>
                                 <a
-                                    href={RELEASES_URL}
+                                    href={status?.updateInfo ? `${RELEASES_URL}/tag/v${status.updateInfo.version}` : channel === 'nightly' ? RELEASES_URL : `${RELEASES_URL}/latest`}
                                     target="_blank"
                                     rel="noreferrer noopener"
                                     className="inline-block font-mono text-text-primary underline underline-offset-2 hover:text-accent transition-colors"
@@ -152,7 +144,7 @@ export default function UpdateModal({ onClose }: Props) {
                     {status?.error && (
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm mb-4">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                            <span>{status.error}</span>
+                            <span>{updateError}</span>
                         </div>
                     )}
 
