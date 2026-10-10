@@ -92,6 +92,27 @@ describe('mod update cache refreshes', () => {
     expect(cache.rows.get(7)).toEqual(rows(2));
   });
 
+  it('retries on focus after an offline check with an unchanged mod list', async () => {
+    const cache = new UpdateCheckCache();
+    const focusTarget = new EventTarget();
+    const stop = listenForModUpdateChanges({ onDownloadComplete: () => () => {} }, focusTarget, cache);
+    await expect(cache.load(7, async () => { throw new Error('offline'); })).rejects.toThrow('offline');
+    const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2 }];
+    const refresh = vi.fn(async () => {
+      await cache.load(7, async () => rows(2));
+      return computeUpdateFlags(installed, cache.rows);
+    });
+    const unsubscribe = cache.subscribe(() => { void refresh(); });
+
+    focusTarget.dispatchEvent(new Event('focus'));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const flags = await refresh.mock.results[0].value;
+    expect(flags.updatesAvailable.size).toBe(0);
+    expect(cache.rows.get(7)).toEqual(rows(2));
+    unsubscribe();
+    stop();
+  });
+
   it('refetches expired rows when returning to the page', async () => {
     const cache = new UpdateCheckCache();
     await cache.load(7, async () => rows(1));

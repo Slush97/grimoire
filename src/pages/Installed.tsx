@@ -2242,7 +2242,7 @@ export default function Installed() {
       }
     }
 
-    // Recheck even when fresh details skipped every target and the scan is unchanged.
+    // Refresh even if every target was skipped and the mod list stayed unchanged.
     updateCheckCache.invalidate(groups.keys());
 
     // Refresh once so the new installs are in the store with their new ids,

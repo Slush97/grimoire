@@ -8,18 +8,22 @@ interface CacheEntry {
   request?: Promise<void>;
 }
 
-/** Shared file lists. Invalidations notify the page even when its mod scan is unchanged. */
+/** File lists shared across page visits. Invalidation also refreshes the badges. */
 export class UpdateCheckCache {
   private fileRows = new Map<number, readonly UpdateFileRow[]>();
   private entries = new Map<number, CacheEntry>();
   private listeners = new Set<() => void>();
   private revision = 0;
 
-  get rows(): ReadonlyMap<number, readonly UpdateFileRow[]> { return this.fileRows; }
+  get rows(): ReadonlyMap<number, readonly UpdateFileRow[]> {
+    return this.fileRows;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   getRevision = (): number => this.revision;
@@ -58,7 +62,8 @@ export class UpdateCheckCache {
       entry.expiresAt = Date.now() + FILE_ROWS_TTL_MS;
       entry.request = undefined;
     }).catch((error: unknown) => {
-      if (this.entries.get(modId) === entry) this.entries.delete(modId);
+      // Leave failures expired so refocusing the app retries them too.
+      if (this.entries.get(modId) === entry) entry.request = undefined;
       throw error;
     });
     return entry.request;
@@ -67,7 +72,7 @@ export class UpdateCheckCache {
 
 export const updateCheckCache = new UpdateCheckCache();
 
-/** App-wide so downloads on Browse, Locker and one-click installs also invalidate rows. */
+/** Listen across routes so a download refreshes rows even while Installed is closed. */
 export function listenForModUpdateChanges(
   api: { onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void },
   focusTarget: Pick<Window, 'addEventListener' | 'removeEventListener'>,
