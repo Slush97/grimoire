@@ -1,4 +1,4 @@
-import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -90,7 +90,8 @@ import {
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, replaceableFilesFor, resolveUpdateRun, sameFileModIds, summarizeUpdateScope } from '../lib/updateActions';
-import { computeUpdateFlags, mergeSourceFileIds, updateCheckCache } from '../lib/updateCheck';
+import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
+import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import {
   createEnabledVpkRestoreSnapshot,
@@ -1164,6 +1165,7 @@ export default function Installed() {
   const detailsRequestIdRef = useRef(0);
   // Map of mod id → true if a newer version exists on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+  const updateCheckRevision = useSyncExternalStore(updateCheckCache.subscribe, updateCheckCache.getRevision);
   // Merged mod id -> fileNames of its absorbed sources whose GameBanana file is
   // gone. Kept apart from `updatesAvailable` because runUpdate has nothing to
   // re-download for a merged VPK; this is surfaced as information only.
@@ -1984,6 +1986,8 @@ export default function Installed() {
         showToast(restoreFailureMessage, { tone: 'warning', duration: 7000 });
       }
 
+      updateCheckCache.invalidate([detailsMod.id]);
+
       // Keep the overlay open on the freshly installed file so the row flips to
       // Installed/Active and the button to "Reinstall" in place. Re-anchor the
       // source entry first: an update or reinstall deletes the old local id, and
@@ -2252,14 +2256,8 @@ export default function Installed() {
       }
     }
 
-    // Drop touched gbIds from the update-check cache before we re-derive
-    // the updatesAvailable set. The cache is module-scoped and never expires
-    // otherwise, so the post-update useEffect would otherwise reuse the same
-    // file rows that flagged the mod in the first place and the "update
-    // available" pulse would stick around on the freshly installed file.
-    for (const gbId of groups.keys()) {
-      updateCheckCache.delete(gbId);
-    }
+    // Refresh even if every target was skipped and the mod list stayed unchanged.
+    updateCheckCache.invalidate(groups.keys());
 
     // Refresh once so the new installs are in the store with their new ids,
     // then restore Global placement and enabled state. Match by GB ids; the
@@ -2986,9 +2984,7 @@ export default function Installed() {
       // requests through the rate limiter and pins ~N JSON payloads in
       // renderer memory; with 70+ installed mods that visibly stalls the
       // page on mount. The slim getModFileList only pulls _idRow + _aFiles.
-      const queue = Array.from(uniqueIds.entries()).filter(
-        ([gbId]) => !updateCheckCache.has(gbId),
-      );
+      const queue = Array.from(uniqueIds.entries());
       let cursor = 0;
       const worker = async () => {
         while (!cancelled) {
@@ -2996,7 +2992,7 @@ export default function Installed() {
           if (idx >= queue.length) return;
           const [gbId, section] = queue[idx];
           try {
-            updateCheckCache.set(gbId, (await getModFileList(gbId, section)).files);
+            await updateCheckCache.load(gbId, async () => (await getModFileList(gbId, section)).files);
           } catch {
             // Network or API failure: leave uncached so a later mount retries.
           }
@@ -3006,7 +3002,7 @@ export default function Installed() {
       await Promise.all(Array.from({ length: concurrency }, worker));
 
       if (cancelled) return;
-      const flags = computeUpdateFlags(visibleMods, updateCheckCache);
+      const flags = computeUpdateFlags(visibleMods, updateCheckCache.rows);
       setUpdatesAvailable(flags.updatesAvailable);
       setMergedSourceUpdates(flags.staleMergeSources);
     };
@@ -3017,7 +3013,7 @@ export default function Installed() {
     // `visibleMods` is derived from `mods` and changes only when `mods`
     // does; listing it directly would re-fire on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mods]);
+  }, [mods, updateCheckRevision]);
 
   // Group variants sharing a GB mod id under a single card. Singletons and
   // custom imports (no GB id) keep their old card behavior. Absorbed merge

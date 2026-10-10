@@ -11,13 +11,6 @@ export interface UpdateCheckMod extends InstalledUpdateEntry {
   merged?: { sources: readonly MergedModSource[] };
 }
 
-/**
- * File rows per GameBanana mod id, populated by the Installed update check.
- * Module scope so it survives page navigation within a session and every
- * installed file of one mod shares one fetch.
- */
-export const updateCheckCache = new Map<number, UpdateFileRow[]>();
-
 export interface UpdateFlags {
   /** Local mod ids whose installed file has a successor or needs a pick. */
   updatesAvailable: Set<string>;

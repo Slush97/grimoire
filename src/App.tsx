@@ -22,6 +22,7 @@ import { getAssetPath } from './lib/assetPath';
 import { rollMemeAppTitle } from './lib/easterEggs';
 import { useGlobalModFileDrop } from './lib/useGlobalModFileDrop';
 import { ModSafetySync } from './components/ModSafety';
+import { listenForModUpdateChanges } from './lib/updateCheckCache';
 
 const GASSY_SOUND = getAssetPath('/sounds/gassy.mp3');
 
@@ -31,6 +32,8 @@ export default function App() {
   // importer, and swallows the rest so Electron never navigates the window to
   // a dropped file:// URL. Registered zones still handle their own file types.
   const fileDragOver = useGlobalModFileDrop();
+
+  useEffect(() => listenForModUpdateChanges(window.electronAPI, window), []);
 
   // Easter egg: typing "gassy" anywhere plays the gassy sound.
   useEffect(() => {
