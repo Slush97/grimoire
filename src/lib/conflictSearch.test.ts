@@ -26,13 +26,13 @@ describe('searchConflicts', () => {
 
   it('finds shared paths beyond the abbreviated details and trims case-insensitive queries', () => {
     const results = searchConflicts(conflicts, mods, '  SOLOMON  ');
-    expect(results).toEqual([{ conflict: soundConflict, files: ['sounds/solomon/fire.vsnd_c'] }]);
+    expect(results).toEqual([{ conflict: soundConflict, files: ['sounds/solomon/fire.vsnd_c'], fileMatch: true }]);
     expect(soundConflict.files).toHaveLength(4);
   });
 
   it('keeps the full shared-file list when the installed mod name matches', () => {
     expect(searchConflicts(conflicts, mods, 'weapon')).toEqual([
-      { conflict: soundConflict, files: soundConflict.files },
+      { conflict: soundConflict, files: soundConflict.files, fileMatch: false },
     ]);
   });
 
@@ -41,7 +41,19 @@ describe('searchConflicts', () => {
   });
 
   it('can find a priority conflict by either mod name without loaded mod metadata', () => {
-    expect(searchConflicts(conflicts, new Map(), 'hat')).toEqual([{ conflict: priorityConflict, files: [] }]);
+    expect(searchConflicts(conflicts, new Map(), 'hat')).toEqual([{ conflict: priorityConflict, files: [], fileMatch: false }]);
+  });
+
+  it('marks only shared-path matches as file matches', () => {
+    expect(searchConflicts(conflicts, mods, '').every((result) => !result.fileMatch)).toBe(true);
+    expect(searchConflicts(conflicts, mods, 'pak05').map((result) => result.fileMatch)).toEqual([false]);
+    expect(searchConflicts(conflicts, mods, 'sounds/t').map((result) => result.fileMatch)).toEqual([true]);
+  });
+
+  it('prefers a mod-name match over a shared-path match and keeps every file', () => {
+    expect(searchConflicts(conflicts, mods, 'sound')).toEqual([
+      { conflict: soundConflict, files: soundConflict.files, fileMatch: false },
+    ]);
   });
 
   it('returns no results for an unrelated asset', () => {

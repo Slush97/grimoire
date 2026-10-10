@@ -81,6 +81,17 @@ describe('sanitize', () => {
         expect(out).toBe('<home>/.config and /home/<user>/live/init.php');
     });
 
+    it('redacts Wine/Proton drive-letter home paths', () => {
+        const out = sanitize(String.raw`Z:\home\alice\.steam\steam\steamapps and Z:\\home\\bob\\x and Z:/home/carol/y`);
+
+        expect(out).toBe(String.raw`Z:\home\<user>\.steam\steam\steamapps and Z:\\home\\<user>\\x and Z:/home/<user>/y`);
+    });
+
+    it('redacts SteamID3 and SteamID2 account ids', () => {
+        expect(sanitize('player [U:1:12345678] joined')).toBe('player <steamid3> joined');
+        expect(sanitize('owner U:1:42 and STEAM_0:1:4242')).toBe('owner <steamid3> and <steamid2>');
+    });
+
     it('keeps redacting non-path secrets', () => {
         expect(sanitize('id 76561198012345678')).toBe('id <steamid64>');
         expect(sanitize('Authorization: Bearer abc.def.ghi')).toBe('Authorization: Bearer <token>');

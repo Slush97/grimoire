@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { promises as fsPromises } from 'fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm, utimes, rename } from 'fs/promises';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import type { Mod } from './mods';
 
-const h = vi.hoisted(() => ({ userData: '', gamePath: '', steamRoot: '', mods: [] as Mod[], send: vi.fn() }));
+const h = vi.hoisted(() => ({ userData: '', gamePath: '', steamRoot: '', mods: [] as Mod[], send: vi.fn(), parses: 0 }));
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: h.send } }] } }));
 vi.mock('../utils/paths', () => ({ getUserDataPath: () => h.userData }));
 vi.mock('./settings', () => ({ getActiveDeadlockPath: () => h.gamePath }));
@@ -13,7 +14,10 @@ vi.mock('./mods', () => ({ scanModsReadOnly: async () => h.mods.map(mod => ({ ..
 vi.mock('./metadata', () => ({ getModMetadata: () => ({ modName: 'Crash test mod', sha256: 'a'.repeat(64) }) }));
 vi.mock('./vpk', async importOriginal => {
     const original = await importOriginal<typeof import('./vpk')>();
-    return { ...original, parseVpkDirectoriesAsync: async (paths: string[]) => new Map(paths.map(path => [path, original.parseVpkDirectory(path)])) };
+    return { ...original, parseVpkDirectoriesAsync: async (paths: string[]) => {
+        h.parses++;
+        return new Map(paths.map(path => [path, original.parseVpkDirectory(path)]));
+    } };
 });
 
 const entry = 'panorama/layout/hud.vxml_c';
@@ -89,6 +93,7 @@ beforeEach(async () => {
     await put(join(h.steamRoot, 'logs/content_log.txt'), `[${stamp(clock - 1000)}] AppID 1422450 finished update, 3 mounted depots (BuildID 100)`);
     h.mods = [{ id: 'mod-1', name: 'Test', metaKey: 'pak01_dir.vpk', fileName: 'pak01_dir.vpk', path, enabled: true, priority: 1, size: 70, installedAt: '' }];
     h.send.mockClear();
+    h.parses = 0;
 });
 
 afterEach(async () => { vi.useRealTimers(); await rm(root, { recursive: true, force: true }); });
@@ -249,6 +254,51 @@ describe('advisory crash lifecycle', () => {
         await crash(message);
         await service.refreshCrashAdvisories();
         expect(service.getCrashAdvisories()).toEqual([]);
+    });
+
+    it('reuses the recorded setup and skips Steam logs while nothing changed', async () => {
+        const open = vi.spyOn(fsPromises, 'open');
+        const logReads = () => open.mock.calls.filter(([path]) => String(path).includes('gameprocess_log')).length;
+        try {
+            const service = await import('./crashAdvisories');
+            await service.refreshCrashAdvisories();
+            await service.refreshCrashAdvisories();
+            expect(h.parses).toBe(1);
+            expect(logReads()).toBe(0);
+            await crash();
+            await service.refreshCrashAdvisories();
+            expect(logReads()).toBe(1);
+            expect(service.getCrashAdvisories()).toHaveLength(1);
+            await put(h.mods[0].path, vpk('updated compatible HUD with changed content'));
+            await service.refreshCrashAdvisories();
+            expect(h.parses).toBe(2);
+        } finally { open.mockRestore(); }
+    });
+
+    it('stops blaming a mod once a loose file overrides its resource', async () => {
+        const service = await import('./crashAdvisories');
+        await service.refreshCrashAdvisories();
+        await put(join(h.gamePath, 'game/citadel/addons', entry), 'loose override');
+        await service.refreshCrashAdvisories();
+        await crash();
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toEqual([]);
+    });
+
+    it('does not blame the last modded setup for a crash in a vanilla session', async () => {
+        const service = await import('./crashAdvisories');
+        await service.refreshCrashAdvisories();
+        const launchedAt = clock + 5000;
+        await crash();
+        // The vanilla launch precedes the crashed session; the refresh runs after mods were restored.
+        vi.setSystemTime(launchedAt);
+        service.recordVanillaCrashLaunch(h.gamePath);
+        vi.setSystemTime(clock);
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toEqual([]);
+        await crash();
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toMatchObject([{ modId: 'mod-1' }]);
     });
 
     it('skips corrupted diagnostic history and unreadable mods without throwing', async () => {

@@ -15,8 +15,8 @@ export function searchConflicts(
       conflict.modAName, conflict.modBName,
       modA?.name, modB?.name, modA?.fileName, modB?.fileName,
     ].some((value) => value?.toLowerCase().includes(needle));
-    if (!needle || matchesMod) return [{ conflict, files }];
+    if (!needle || matchesMod) return [{ conflict, files, fileMatch: false }];
     const matchingFiles = files.filter((file) => file.toLowerCase().includes(needle));
-    return matchingFiles.length > 0 ? [{ conflict, files: matchingFiles }] : [];
+    return matchingFiles.length > 0 ? [{ conflict, files: matchingFiles, fileMatch: true }] : [];
   });
 }

@@ -17,7 +17,7 @@ import { reconcileCursorPack } from '../services/cursorPacks';
 import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
-import { recordCrashLaunchConfiguration } from '../services/crashAdvisories';
+import { recordCrashLaunchConfiguration, recordVanillaCrashLaunch } from '../services/crashAdvisories';
 import { auditInstalledSafety } from '../services/modSafetyAudit';
 import { pruneModQuarantine, pruneModSafetyPathCache } from '../services/modSafety';
 import {
@@ -67,7 +67,10 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
         await launchVanilla({
             deadlockPath,
             onRestoreComplete: emitRestore,
-            beforeLaunch: captureEmptyGameMods,
+            beforeLaunch: () => {
+                captureEmptyGameMods();
+                recordVanillaCrashLaunch(deadlockPath);
+            },
         });
     } catch (err) {
         clearLoadedGameMods();

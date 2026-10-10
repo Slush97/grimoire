@@ -14,9 +14,15 @@ const SANITIZERS: Array<{ pattern: RegExp; replacement: string }> = [
     // catches the doubled-backslash form `C:\\Users\\Alice\\...` that
     // util.inspect emits when electron-log serializes an object argument.
     { pattern: /([A-Za-z]:\\{1,2}Users\\{1,2})[^\\\s"'`]+/gi, replacement: '$1<user>' },
+    // Wine/Proton maps the Linux root to a drive letter, so crash dumps carry
+    // `Z:\home\alice\...`. The forward-slash form is already caught above.
+    { pattern: /([A-Za-z]:\\{1,2}home\\{1,2})[^\\\s"'`]+/gi, replacement: '$1<user>' },
 
     // SteamID64 — real Steam user IDs start 7656119 and are 17 digits.
     { pattern: /\b7656119\d{10}\b/g, replacement: '<steamid64>' },
+    // SteamID3 (`[U:1:12345]`) and SteamID2 (`STEAM_0:1:12345`) in game logs.
+    { pattern: /\[U:1:\d+\]|\bU:1:\d+\b/g, replacement: '<steamid3>' },
+    { pattern: /\bSTEAM_[0-5]:[01]:\d+\b/g, replacement: '<steamid2>' },
     // 32-bit account id in deadlock-api / Steam URLs.
     { pattern: /(account_id=|\/players?\/)(\d{4,12})/g, replacement: '$1<accountid>' },
 

@@ -1,7 +1,9 @@
 import type { DownloadEventData } from '../types/electron';
 import type { UpdateFileRow } from './updateFileMatch';
 
-const FILE_ROWS_TTL_MS = 5 * 60 * 1000;
+// Every expiry refetches one GameBanana file list per installed mod, so focus
+// refreshes need to stay rare.
+const FILE_ROWS_TTL_MS = 30 * 60 * 1000;
 
 interface CacheEntry {
   expiresAt: number;
@@ -28,6 +30,7 @@ export class UpdateCheckCache {
 
   getRevision = (): number => this.revision;
 
+  /** Drop rows known to be stale, such as after a download or update. */
   invalidate(modIds: Iterable<number>): void {
     let changed = false;
     for (const modId of modIds) {
@@ -35,16 +38,19 @@ export class UpdateCheckCache {
       this.fileRows.delete(modId);
       changed = true;
     }
-    if (!changed) return;
-    this.revision += 1;
-    for (const listener of this.listeners) listener();
+    if (changed) this.notify();
   }
 
+  /** Refetch expired rows, keeping the last known ones until a refetch succeeds. */
   expire(): void {
     const now = Date.now();
-    this.invalidate(
-      [...this.entries].filter(([, entry]) => !entry.request && entry.expiresAt <= now).map(([id]) => id),
-    );
+    let changed = false;
+    for (const [modId, entry] of this.entries) {
+      if (entry.request || entry.expiresAt > now) continue;
+      this.entries.delete(modId);
+      changed = true;
+    }
+    if (changed) this.notify();
   }
 
   load(modId: number, fetchRows: () => Promise<readonly UpdateFileRow[]>): Promise<void> {
@@ -52,7 +58,6 @@ export class UpdateCheckCache {
     if (cached?.request) return cached.request;
     if (cached && cached.expiresAt > Date.now()) return Promise.resolve();
 
-    this.fileRows.delete(modId);
     const entry: CacheEntry = { expiresAt: 0 };
     this.entries.set(modId, entry);
     entry.request = Promise.resolve().then(fetchRows).then((rows) => {
@@ -67,6 +72,11 @@ export class UpdateCheckCache {
       throw error;
     });
     return entry.request;
+  }
+
+  private notify(): void {
+    this.revision += 1;
+    for (const listener of this.listeners) listener();
   }
 }
 

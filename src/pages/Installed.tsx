@@ -2994,7 +2994,7 @@ export default function Installed() {
           try {
             await updateCheckCache.load(gbId, async () => (await getModFileList(gbId, section)).files);
           } catch {
-            // Network or API failure: leave uncached so a later mount retries.
+            // Network or API failure: keep any last known rows; focus or a later mount retries.
           }
         }
       };
