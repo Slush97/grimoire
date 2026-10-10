@@ -115,10 +115,32 @@ describe('mod update cache refreshes', () => {
 
   it('refetches expired rows when returning to the page', async () => {
     const cache = new UpdateCheckCache();
-    await cache.load(7, async () => rows(1));
-    vi.advanceTimersByTime(5 * 60 * 1000);
+    const fetch = vi.fn(async () => rows(1));
+    await cache.load(7, fetch);
+    vi.advanceTimersByTime(29 * 60 * 1000);
+    await cache.load(7, fetch);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(60 * 1000);
     await cache.load(7, async () => rows(2));
     expect(cache.rows.get(7)).toEqual(rows(2));
+  });
+
+  it('keeps known update flags when an expired refresh fails', async () => {
+    const cache = new UpdateCheckCache();
+    const installed = [{ id: 'pak01', gameBananaId: 7, gameBananaFileId: 2, sourceFileName: 'skin_v2' }];
+    await cache.load(7, async () => rows(1));
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    cache.expire();
+    expect(cache.rows.get(7)).toEqual(rows(1));
+
+    await expect(cache.load(7, async () => { throw new Error('offline'); })).rejects.toThrow('offline');
+    expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.has('pak01')).toBe(true);
+    const notify = vi.fn();
+    cache.subscribe(notify);
+    cache.expire();
+    expect(notify).toHaveBeenCalledTimes(1);
+    await cache.load(7, async () => rows(2));
+    expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.size).toBe(0);
   });
 
   it('invalidates downloads app-wide, expires on focus, and removes listeners on cleanup', async () => {
@@ -139,15 +161,17 @@ describe('mod update cache refreshes', () => {
     expect(notify).toHaveBeenCalledTimes(1);
     focusTarget.dispatchEvent(new Event('focus'));
     expect(notify).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(5 * 60 * 1000);
+    vi.advanceTimersByTime(30 * 60 * 1000);
     focusTarget.dispatchEvent(new Event('focus'));
-    expect(cache.rows.size).toBe(0);
+    expect(cache.rows.has(7)).toBe(false);
+    expect(cache.rows.get(8)).toEqual(rows(3));
     expect(notify).toHaveBeenCalledTimes(2);
 
     await cache.load(8, async () => rows(4));
+    expect(cache.rows.get(8)).toEqual(rows(4));
     stop();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(5 * 60 * 1000);
+    vi.advanceTimersByTime(30 * 60 * 1000);
     focusTarget.dispatchEvent(new Event('focus'));
     expect(cache.rows.get(8)).toEqual(rows(4));
   });
