@@ -184,6 +184,8 @@ describe('advisory crash lifecycle', () => {
         await put(h.mods[0].path, vpk('updated compatible HUD with changed content'));
         await service.refreshCrashAdvisories();
         expect(service.getCrashAdvisories()).toEqual([]);
+        expect(await service.getCrashReportContext(h.gamePath, clock - 10000, entry))
+            .toMatchObject({ suspectedMod: 'Crash test mod', gameBuild: '100' });
     });
 
     it('retains a finding when an update or reorder changes identity but leaves relevant bytes unchanged', async () => {

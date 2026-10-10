@@ -238,6 +238,15 @@ function projectAdvisories(value: State): CrashAdvisory[] {
     return findings;
 }
 
+/** Recorded context survives dismissal and installation of an updated mod. */
+export async function getCrashReportContext(gamePath: string, crashedAt: number, entry: string): Promise<{
+    gameBuild: string; suspectedMod: string; attribution: 'recorded' | 'last-known';
+} | null> {
+    const value = await loadState(gamePath);
+    const incident = value.incidents.find(item => item.crashedAt === crashedAt && item.entry === entry);
+    return incident ? { gameBuild: incident.gameBuild, suspectedMod: incident.owner.name, attribution: incident.attribution } : null;
+}
+
 function publishFindings(next: CrashAdvisory[]): void {
     if (JSON.stringify(next) === JSON.stringify(active)) return;
     active = next;
