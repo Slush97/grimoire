@@ -107,8 +107,9 @@ interface ModCardProps {
    *  anywhere on the card route to `onSelectToggle` instead of opening
    *  details / firing toggle / delete. */
   selectMode?: boolean;
+  shiftHeld?: boolean;
   selected?: boolean;
-  onSelectToggle?: React.MouseEventHandler<HTMLButtonElement>;
+  onSelectToggle?: React.MouseEventHandler<HTMLElement>;
   /** Personal pin, settable from either section, but it only reorders the
    *  disabled section (favorites sort ahead of other disabled entries). The
    *  enabled section is real load order, so starring an enabled card is a pure
@@ -755,6 +756,7 @@ export function ModCard({
   onUnmerge,
   onCopyShareCode,
   selectMode,
+  shiftHeld = false,
   selected,
   onSelectToggle,
   favorite = false,
@@ -767,6 +769,8 @@ export function ModCard({
   group,
 }: ModCardProps) {
   const { t } = useTranslation();
+  const [hovered, setHovered] = useState(false);
+  const selectionPreview = shiftHeld && hovered && !selectMode;
   const hasConflicts = conflicts.length > 0;
   const isGroupCard = !!group;
   const handleRevealInFolder = () => {
@@ -1281,11 +1285,20 @@ export function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onClickCapture={(event) => {
+        if (!selectMode && event.shiftKey && onSelectToggle) {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelectToggle(event);
+        }
+      }}
       onContextMenu={captureContextImage}
       className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
-        {selectMode && (
+        {(selectMode || selectionPreview) && (
         <>
           {/* Full-card click target. Sits above thumbnail button, toggle, and
               delete (their non-positioned containers stack below this absolute
@@ -1351,7 +1364,7 @@ export function ModCard({
         {(() => {
         const overlayBadges = (
           <div className="pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2">
-            {mod.enabled && !selectMode && (
+            {mod.enabled && !selectMode && !selectionPreview && (
               mod.priorityMod ? (
                 <div className="pointer-events-auto flex h-5 shrink-0 items-start">
                   <GlobalLoadBadge variant="overlay" />
@@ -1368,7 +1381,7 @@ export function ModCard({
               </div>
               )
             )}
-            {!mod.enabled && !selectMode && (
+            {!mod.enabled && !selectMode && !selectionPreview && (
               <div className="pointer-events-auto flex shrink-0 flex-col items-start gap-1">
                 <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
                   {t('locker.global.disabledBadge')}
