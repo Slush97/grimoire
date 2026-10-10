@@ -3382,8 +3382,8 @@
     "build": "Game build {{build}}",
     "steam": "Steam",
     "game": "Deadlock",
-    "noComments": "This dump has no readable diagnostic comments.",
-    "rawDump": "Copied bug reports are redacted. Original crash dumps are not.",
+    "noComments": "No error details found in this crash report.",
+    "rawDump": "Bug reports hide account IDs and personal paths. Original dumps may contain personal information.",
     "showFile": "Show file",
     "saveDump": "Save original dump",
     "saved": "Crash dump saved."
