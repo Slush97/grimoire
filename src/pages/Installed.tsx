@@ -134,6 +134,7 @@ import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
+import { useShiftKey } from '../components/installed/useShiftKey';
 import { HeroTagLabel } from '../components/installed/chips';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
@@ -255,8 +256,8 @@ const SortableEntryCard = memo(function SortableEntryCard({
       // moves on a reorder, so the view stays put through pin / unpin / delete.
       className={`flex flex-col has-[[data-card-menu-open]]:z-20 [overflow-anchor:none] [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(sortableDisabled ? {} : attributes)}
+      {...(sortableDisabled ? {} : listeners)}
     >
       <InstalledEntryCard {...cardProps} />
     </div>
@@ -282,6 +283,7 @@ interface InstalledEntryCardProps {
   loadPosition: number | undefined;
   loadCount: number;
   selectMode: boolean;
+  shiftHeld: boolean;
   selected: boolean;
   soloBusy: boolean;
   favorite: boolean;
@@ -342,6 +344,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   loadPosition,
   loadCount,
   selectMode,
+  shiftHeld,
   selected,
   soloBusy,
   favorite,
@@ -418,6 +421,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onUnmerge={mod.merged ? () => onUnmerge(mod) : undefined}
         onCopyShareCode={mod.merged ? () => onCopyShareCode(mod) : undefined}
         selectMode={selectMode}
+        shiftHeld={shiftHeld}
         selected={selected}
         onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
         favorite={favorite}
@@ -491,6 +495,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       loadCount={loadCount}
       onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
       selectMode={selectMode}
+      shiftHeld={shiftHeld}
       selected={selected}
       onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
       favorite={favorite}
@@ -874,6 +879,7 @@ export default function Installed() {
   // selected group expand to every variant id) so bulk handlers can iterate
   // directly without re-deriving from entries.
   const [selectMode, setSelectMode] = useState(false);
+  const shiftHeld = useShiftKey();
   const [enabledCollapsed, setEnabledCollapsed] = useState(false);
   const [disabledCollapsed, setDisabledCollapsed] = useState(false);
   const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(() =>
@@ -3413,12 +3419,13 @@ export default function Installed() {
   );
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
-  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean) =>
+  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean) => {
+    setSelectMode(true);
     toggleSelection({
       key: entry.key,
       ids: entry.kind === 'single' ? [entry.mod.id] : entry.variants.map((variant) => variant.id),
-    }, shiftKey)
-  );
+    }, shiftKey);
+  });
 
   if (!activeDeadlockPath) {
     return (
@@ -3707,7 +3714,7 @@ export default function Installed() {
   const previewEnabled = previewEntriesForDrag(visibleEnabled, 'enabled');
   const previewDisabled = previewEntriesForDrag(visibleDisabled, 'disabled');
 
-  const sortableEnabled = viewIsReorderable && !selectMode;
+  const sortableEnabled = viewIsReorderable && !selectMode && !shiftHeld;
 
   const visibleEntriesForSection = (section: DragSection): ModEntry[] =>
     section === 'enabled' ? visibleEnabled : visibleDisabled;
@@ -3850,6 +3857,7 @@ export default function Installed() {
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
     loadCount: enabledModCount,
     selectMode,
+    shiftHeld,
     selected: isEntrySelected(entry),
     soloBusy,
     favorite: disabledFavorites.has(entryDisabledPreferenceKey(entry)),
