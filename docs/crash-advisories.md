@@ -1,7 +1,7 @@
 # Advisory crash detection
 
 Crash detection adds a clickable `Possible crash cause` badge to the affected
-Installed mod and a separate warning icon beside Launch Modded. Findings never
+Installed mod and a separate warning icon inside Launch Modded. Findings never
 open a dialog automatically. Launching, installing and enabling mods work as
 before. Dismissal hides that report and persists across restarts.
 
@@ -28,7 +28,21 @@ saved history before recording the reset search paths. The existing Fix
 Configuration control remains responsible for restoring mounts.
 
 Changing the mod's relevant resources or the game build retires the visible
-finding. Disabling the suspect removes the launch marker; the Installed badge
+finding. Publishing an update alone does not clear it: the user must install
+changed layout or vdata resources. An update notice and a crash warning can
+coexist. Renaming a mod, changing its version label or replacing unrelated
+assets retains the warning. Clearing it means the recorded configuration
+changed, not that Grimoire verified the fix.
+
+When several mods contain the same resource, only the provider that wins in
+the recorded mount and pak order is a suspect. Other copies are not blamed.
+Identical matching mod fingerprints or uncertain ownership produce no badge.
+This cannot prove whether another mod's different file caused the incompatibility.
+The current parser accepts fatal errors naming Panorama layouts and scripts
+vdata resources. Any mod category can qualify, but other asset types and
+ordinary console logs are not supported.
+
+Disabling the suspect removes the launch marker; the Installed badge
 remains available for reference. A clean launch does not prove a previously
 suspected resource is fixed, so it does not automatically dismiss a finding.
 

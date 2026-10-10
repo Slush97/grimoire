@@ -186,6 +186,39 @@ describe('advisory crash lifecycle', () => {
         expect(service.getCrashAdvisories()).toEqual([]);
     });
 
+    it('retains a finding when an update or reorder changes identity but leaves relevant bytes unchanged', async () => {
+        const service = await import('./crashAdvisories');
+        await service.refreshCrashAdvisories();
+        await crash();
+        await service.refreshCrashAdvisories();
+        const path = join(dirname(h.mods[0].path), 'pak05_dir.vpk');
+        await rename(h.mods[0].path, path);
+        h.mods[0] = { ...h.mods[0], id: 'renamed-mod', name: 'Updated version label', path,
+            fileName: 'pak05_dir.vpk', metaKey: 'pak05_dir.vpk', priority: 5 };
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toMatchObject([{ modId: 'renamed-mod', entry }]);
+    });
+
+    it('blames only the recorded winning provider and does not transfer blame after it is disabled', async () => {
+        const path = join(dirname(h.mods[0].path), 'pak02_dir.vpk');
+        await put(path, vpk('a different HUD overriding the same path'));
+        h.mods.push({ ...h.mods[0], id: 'mod-2', path, fileName: 'pak02_dir.vpk',
+            metaKey: 'pak02_dir.vpk', priority: 2 });
+        const service = await import('./crashAdvisories');
+        await service.refreshCrashAdvisories();
+        await crash();
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toMatchObject([{ modId: 'mod-1', enabled: true }]);
+        expect(service.getCrashAdvisories()).toHaveLength(1);
+        const disabled = join(dirname(h.mods[0].path), '.disabled/pak01_dir.vpk');
+        await mkdir(dirname(disabled), { recursive: true });
+        await rename(h.mods[0].path, disabled);
+        h.mods[0] = { ...h.mods[0], path: disabled, enabled: false };
+        await service.refreshCrashAdvisories();
+        expect(service.getCrashAdvisories()).toMatchObject([{ modId: 'mod-1', enabled: false }]);
+        expect(service.getCrashAdvisories()).toHaveLength(1);
+    });
+
     it('uses the new game build for a crash after an update while Grimoire was closed', async () => {
         const service = await import('./crashAdvisories');
         await service.refreshCrashAdvisories();
