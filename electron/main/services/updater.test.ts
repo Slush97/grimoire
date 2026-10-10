@@ -200,8 +200,11 @@ describe.each(['win32', 'linux'] as const)('Stable / Nightly updates (%s)', plat
     });
 
     it('keeps nightly release notes out of the stable changelog', async () => {
+        const stable = { ...nightly, version: '1.32.0', releaseNotes: [{ version: nightly.version, note: 'test build' }, { version: '1.32.0', note: 'official release' }] };
         const service = await init();
-        emit('update-available', { ...nightly, version: '1.32.0', releaseNotes: [{ version: nightly.version, note: 'test build' }, { version: '1.32.0', note: 'official release' }] });
+        emit('update-available', stable);
+        expect(service.getUpdateStatus().updateInfo?.releaseNotes).toEqual([{ version: '1.32.0', note: 'official release' }]);
+        emit('update-downloaded', stable);
         expect(service.getUpdateStatus().updateInfo?.releaseNotes).toEqual([{ version: '1.32.0', note: 'official release' }]);
     });
 });

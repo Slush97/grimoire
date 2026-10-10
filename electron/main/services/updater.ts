@@ -138,6 +138,14 @@ export function setUpdateChannel(channel: unknown): AppSettings {
     return settings;
 }
 
+// fullChangelog aggregates every release in the feed between the installed
+// and target versions, nightlies included. Both the available and the
+// downloaded event carry electron-updater's unfiltered info.
+function forActiveChannel(info: UpdateInfo): UpdateInfo {
+    if (activeChannel !== 'stable' || !Array.isArray(info.releaseNotes)) return info;
+    return { ...info, releaseNotes: info.releaseNotes.filter(note => !note.version.includes('-')) };
+}
+
 function sendStatusToRenderer() {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('updater:status', currentStatus);
@@ -158,15 +166,12 @@ export function initUpdater(window: BrowserWindow) {
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
-        if (activeChannel === 'stable' && Array.isArray(info.releaseNotes)) {
-            info = { ...info, releaseNotes: info.releaseNotes.filter(note => !note.version.includes('-')) };
-        }
         currentStatus = {
             ...currentStatus,
             checked: true,
             checking: false,
             available: true,
-            updateInfo: info,
+            updateInfo: forActiveChannel(info),
         };
         sendStatusToRenderer();
     });
@@ -198,7 +203,7 @@ export function initUpdater(window: BrowserWindow) {
             downloading: false,
             downloaded: true,
             progress: 100,
-            updateInfo: info,
+            updateInfo: forActiveChannel(info),
         };
         sendStatusToRenderer();
     });
