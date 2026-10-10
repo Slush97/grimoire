@@ -630,6 +630,14 @@
     }
   },
   "conflicts": {
+    "search": {
+      "label": "Search conflicts",
+      "placeholder": "Search active conflicts by mod or file...",
+      "clear": "Clear search",
+      "resultCount": "Showing {{count}} of {{total}} conflicts",
+      "noResults": "No matching conflicts",
+      "noResultsHint": "Try a different mod name or shared-file path."
+    },
     "actions": {
       "clearIgnored": "Clear ignored",
       "clearing": "Clearing…",
