@@ -695,6 +695,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     diagnostics: {
         buildReport: (description: string, options?: { includeFullLog?: boolean }) =>
             ipcRenderer.invoke('diagnostics:buildReport', description, options),
+        listCrashes: (offset) => ipcRenderer.invoke('diagnostics:listCrashes', offset),
+        crashDetail: (id) => ipcRenderer.invoke('diagnostics:crashDetail', id),
+        revealCrash: (id) => ipcRenderer.invoke('diagnostics:revealCrash', id),
+        saveCrashDump: (id) => ipcRenderer.invoke('diagnostics:saveCrashDump', id),
     },
 
     // Grimoire Social

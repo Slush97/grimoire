@@ -40,8 +40,15 @@ export function fatalResourceError(comments: string): Pick<CrashEvidence, 'entry
 
 type ReadRange = (offset: number, length: number) => Promise<Buffer>;
 
+export interface CrashDumpDiagnostics {
+    createdAt: number;
+    pid?: number;
+    exceptionCode?: string;
+    comments: string;
+}
+
 /** Reads only the header, directory and bounded diagnostic streams, never dump memory. */
-export async function decodeCrashDump(read: ReadRange, size: number): Promise<CrashEvidence | null> {
+export async function decodeCrashDiagnostics(read: ReadRange, size: number): Promise<CrashDumpDiagnostics | null> {
     const range = async (offset: number, length: number): Promise<Buffer> => {
         if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > size) {
             throw new Error('Invalid minidump range');
@@ -57,6 +64,8 @@ export async function decodeCrashDump(read: ReadRange, size: number): Promise<Cr
     const directory = await range(header.readUInt32LE(12), count * 12);
     const createdAt = header.readUInt32LE(20) * 1000;
     let pid: number | undefined;
+    let exceptionCode: string | undefined;
+    let commentBytes = 0;
     const comments: string[] = [];
     for (let index = 0; index < count; index++) {
         const offset = index * 12;
@@ -67,24 +76,40 @@ export async function decodeCrashDump(read: ReadRange, size: number): Promise<Cr
             const misc = await range(address, 12);
             if (misc.readUInt32LE(4) & 1) pid = misc.readUInt32LE(8);
         }
-        if ((kind === 10 || kind === 11) && length <= MAX_COMMENT_BYTES) {
+        if (kind === 6 && length >= 12) {
+            const exception = await range(address, 12);
+            exceptionCode = `0x${exception.readUInt32LE(8).toString(16).padStart(8, '0')}`;
+        }
+        if ((kind === 10 || kind === 11) && length <= MAX_COMMENT_BYTES - commentBytes) {
             comments.push((await range(address, length)).toString(kind === 11 ? 'utf16le' : 'utf8'));
+            commentBytes += length;
         }
     }
-    const fatal = fatalResourceError(comments.join('\n'));
-    return fatal ? { pid, createdAt, ...fatal } : null;
+    return { pid, createdAt, exceptionCode, comments: comments.join('\n').replace(/\0/g, '') };
 }
 
-export async function readCrashDump(path: string): Promise<CrashEvidence | null> {
+export async function decodeCrashDump(read: ReadRange, size: number): Promise<CrashEvidence | null> {
+    const diagnostics = await decodeCrashDiagnostics(read, size);
+    const fatal = diagnostics && fatalResourceError(diagnostics.comments);
+    return diagnostics && fatal ? { pid: diagnostics.pid, createdAt: diagnostics.createdAt, ...fatal } : null;
+}
+
+export async function readCrashDiagnostics(path: string): Promise<CrashDumpDiagnostics | null> {
     const file = await open(path, 'r');
     try {
         const size = (await file.stat()).size;
-        return await decodeCrashDump(async (position, length) => {
+        return await decodeCrashDiagnostics(async (position, length) => {
             const bytes = Buffer.alloc(length);
             const { bytesRead } = await file.read(bytes, 0, length, position);
             return bytes.subarray(0, bytesRead);
         }, size);
     } finally { await file.close(); }
+}
+
+export async function readCrashDump(path: string): Promise<CrashEvidence | null> {
+    const diagnostics = await readCrashDiagnostics(path);
+    const fatal = diagnostics && fatalResourceError(diagnostics.comments);
+    return diagnostics && fatal ? { pid: diagnostics.pid, createdAt: diagnostics.createdAt, ...fatal } : null;
 }
 
 export interface SteamGameSession {

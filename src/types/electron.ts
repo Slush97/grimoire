@@ -1346,7 +1346,11 @@ export interface ElectronAPI {
 
     // Diagnostics
     diagnostics: {
-        buildReport: (description: string, options?: { includeFullLog?: boolean }) => Promise<string>;
+        buildReport: (description: string, options?: { includeFullLog?: boolean; crashReportIds?: string[] }) => Promise<string>;
+        listCrashes: (offset?: number) => Promise<import('./crashHistory').CrashHistoryPage>;
+        crashDetail: (id: string) => Promise<import('./crashHistory').CrashReportDetail>;
+        revealCrash: (id: string) => Promise<void>;
+        saveCrashDump: (id: string) => Promise<boolean>;
     };
 
     // Grimoire Social
