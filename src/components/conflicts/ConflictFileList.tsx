@@ -7,6 +7,7 @@ import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuLabel } from '../comm
 interface ConflictFileListProps {
   /** Overlapping paths still flagged for this pair. */
   files: string[];
+  initiallyOpen?: boolean;
   /** True while an ignore/unignore for this pair is in flight. */
   busy: boolean;
   /** Dismiss a single overlapping file for this pair only. */
@@ -22,12 +23,13 @@ interface ConflictFileListProps {
  */
 export default function ConflictFileList({
   files,
+  initiallyOpen = false,
   busy,
   onIgnoreFile,
   onIgnoreFileEverywhere,
 }: ConflictFileListProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
 
   if (files.length === 0) return null;
 

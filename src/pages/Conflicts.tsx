@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe, Ban, CircleHelp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe, Ban, CircleHelp, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getConflicts,
@@ -24,7 +24,9 @@ import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { modLoadOrder } from '../lib/lockerUtils';
-import { Button } from '../components/common/ui';
+import { Button, IconButton } from '../components/common/ui';
+import { Input } from '../components/common/forms';
+import { searchConflicts } from '../lib/conflictSearch';
 import ConflictExplainer from '../components/conflicts/ConflictExplainer';
 import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
@@ -152,6 +154,7 @@ function ConflictsSkeleton() {
 export default function Conflicts() {
   const { t } = useTranslation();
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
+  const [search, setSearch] = useState('');
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
   // Enabled mod ids in true load order (index 0 loads first). Drives the
   // per-conflict reorder control's "who currently wins" and the splice math.
@@ -196,6 +199,11 @@ export default function Conflicts() {
   // that row's buttons during the round-trip without freezing the whole page.
   const [pendingPair, setPendingPair] = useState<string | null>(null);
   const { loadMods } = useAppStore();
+  const searchNeedle = search.trim().toLowerCase();
+  const searchResults = useMemo(
+    () => searchConflicts(conflicts, modsMap, searchNeedle),
+    [conflicts, modsMap, searchNeedle],
+  );
 
   const loadConflicts = async () => {
     setLoading(true);
@@ -568,7 +576,8 @@ export default function Conflicts() {
     ignored.size === 0 &&
     ignoredFilePairCount === 0 &&
     ignoredFilesGlobal.length === 0 &&
-    ignoredMods.length === 0
+    ignoredMods.length === 0 &&
+    !searchNeedle
   ) {
     return (
       <div className="h-full flex items-center justify-center p-6">
@@ -635,7 +644,7 @@ export default function Conflicts() {
                 ]}
               />
             )}
-            {conflicts.length > 0 && (
+            {conflicts.length > 0 && !searchNeedle && (
               <Button
                 variant="secondary"
                 onClick={() => setIgnoreAllConfirmOpen(true)}
@@ -655,11 +664,49 @@ export default function Conflicts() {
 
       <ConflictExplainer open={explainerOpen} onClose={() => setExplainerOpen(false)} />
 
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1">
+          <Input
+            type="search"
+            icon={Search}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setSearch('');
+            }}
+            placeholder={t('conflicts.search.placeholder')}
+            aria-label={t('conflicts.search.label')}
+            className="pr-10"
+          />
+          {search && (
+            <IconButton
+              icon={X}
+              label={t('conflicts.search.clear')}
+              onClick={() => setSearch('')}
+              className="absolute right-1 top-1/2 -translate-y-1/2"
+            />
+          )}
+        </div>
+        {searchNeedle && (
+          <p className="text-xs text-text-secondary" role="status">
+            {t('conflicts.search.resultCount', { count: searchResults.length, total: conflicts.length })}
+          </p>
+        )}
+      </div>
+
+      {searchNeedle && searchResults.length === 0 && (
+        <EmptyState
+          icon={Search}
+          title={t('conflicts.search.noResults')}
+          description={t('conflicts.search.noResultsHint')}
+        />
+      )}
+
       {/* Empty active-conflict slot when every conflict has been dismissed.
           We don't redirect to the global empty state because the user still
           has the ignored list to manage — making everything disappear would
           hide the only path back. */}
-      {conflicts.length === 0 && (
+      {conflicts.length === 0 && !searchNeedle && (
         <div className="mb-6 p-4 rounded-xl border border-border bg-bg-secondary text-sm text-text-secondary flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-green-400" />
           {ignored.size > 0 ? (
@@ -676,7 +723,7 @@ export default function Conflicts() {
 
       {viewMode === 'list' ? (
         <div className="space-y-3">
-          {conflicts.map((conflict, i) => {
+          {searchResults.map(({ conflict, files }) => {
             const modA = getModInfo(conflict.modA, conflict.modAName);
             const modB = getModInfo(conflict.modB, conflict.modBName);
             const variantA = getVariantLabel(modA);
@@ -728,7 +775,7 @@ export default function Conflicts() {
 
             return (
               <div
-                key={`${conflict.modA}-${conflict.modB}-${i}`}
+                key={conflictPairKey(conflict.modA, conflict.modB)}
                 className="overflow-hidden rounded-xl border border-yellow-500/30 bg-bg-secondary"
               >
                 <div className="flex items-center gap-2 border-b border-yellow-500/20 bg-yellow-500/10 px-4 py-2">
@@ -756,7 +803,9 @@ export default function Conflicts() {
                 </div>
                 {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
                   <ConflictFileList
-                    files={conflict.files}
+                    key={searchNeedle}
+                    files={files}
+                    initiallyOpen={Boolean(searchNeedle)}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
                     onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
@@ -776,7 +825,7 @@ export default function Conflicts() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {conflicts.map((conflict, i) => {
+          {searchResults.map(({ conflict, files }) => {
             const modA = getModInfo(conflict.modA, conflict.modAName);
             const modB = getModInfo(conflict.modB, conflict.modBName);
             const variantA = getVariantLabel(modA);
@@ -784,7 +833,7 @@ export default function Conflicts() {
 
             return (
               <div
-                key={`${conflict.modA}-${conflict.modB}-${i}`}
+                key={conflictPairKey(conflict.modA, conflict.modB)}
                 className="bg-bg-secondary border border-yellow-500/30 rounded-xl overflow-hidden"
               >
                 {/* Header */}
@@ -909,7 +958,9 @@ export default function Conflicts() {
 
                 {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
                   <ConflictFileList
-                    files={conflict.files}
+                    key={searchNeedle}
+                    files={files}
+                    initiallyOpen={Boolean(searchNeedle)}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
                     onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
