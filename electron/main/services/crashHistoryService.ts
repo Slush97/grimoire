@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { CrashHistory } from './crashHistory';
 import { getActiveDeadlockPath } from './settings';
 import { getSteamRoots } from './steamRoots';
@@ -7,7 +8,9 @@ let current: { path: string; history: CrashHistory } | undefined;
 export function crashHistory(): CrashHistory {
     const path = getActiveDeadlockPath() ?? '';
     if (!current || current.path !== path) {
-        current = { path, history: new CrashHistory(path, getSteamRoots(), path ? (time, entry) => getCrashReportContext(path, time, entry) : undefined) };
+        // crashAdvisories keys its state by the resolved path and resets on a mismatch.
+        const gamePath = path && resolve(path);
+        current = { path, history: new CrashHistory(gamePath, getSteamRoots(), gamePath ? (time, entry) => getCrashReportContext(gamePath, time, entry) : undefined) };
     }
     return current.history;
 }

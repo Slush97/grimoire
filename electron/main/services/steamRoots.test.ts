@@ -1,12 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
     findSteamBottles,
     findBottleForPath,
+    getSteamRoots,
     resolveBottleWindowsPath,
 } from './steamRoots';
+
+const home = vi.hoisted(() => ({ dir: '' }));
+vi.mock('os', async (importOriginal) => {
+    const os = await importOriginal<typeof import('os')>();
+    return { ...os, homedir: () => home.dir || os.homedir() };
+});
 
 // A fixture that mirrors a real CrossOver bottles directory:
 //
@@ -132,5 +139,28 @@ describe('findBottleForPath', () => {
 
     it('does not match an unrelated folder with a bottle-name prefix', () => {
         expect(findBottleForPath(join(bottlesDir, 'DeadlockBackup', 'drive_c'), bottlesDir)).toBeNull();
+    });
+});
+
+describe('getSteamRoots', () => {
+    it('drops a Linux root that is a symlink to one already listed', () => {
+        const platform = process.platform;
+        home.dir = mkdtempSync(join(tmpdir(), 'grimoire-steam-home-'));
+        try {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            const real = join(home.dir, '.local/share/Steam');
+            mkdirSync(real, { recursive: true });
+            mkdirSync(join(home.dir, '.steam'));
+            symlinkSync(real, join(home.dir, '.steam/steam'), 'junction');
+
+            expect(getSteamRoots()).toEqual([
+                join(home.dir, '.steam/steam'),
+                join(home.dir, '.var/app/com.valvesoftware.Steam/.steam/steam'),
+            ]);
+        } finally {
+            Object.defineProperty(process, 'platform', { value: platform });
+            rmSync(home.dir, { recursive: true, force: true });
+            home.dir = '';
+        }
     });
 });
