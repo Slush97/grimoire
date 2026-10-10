@@ -3351,5 +3351,19 @@
     "chooseFolderAndExport": "Choose folder and export",
     "exportPickFolder": "Choose where to save the export",
     "exportFailed": "Export failed: {{error}}"
+  },
+  "crashAdvisory": {
+    "badge": "Possible crash cause",
+    "title": "Possible crash cause",
+    "explanation": "Deadlock's crash report points to a file from {{name}}.",
+    "recorded": "This mod may have caused the crash.",
+    "lastKnown": "This uses the last mod setup Grimoire saw. It may have changed before the crash.",
+    "tryDisabling": "Disable this mod and restart Deadlock to check.",
+    "when": "{{date}} · Game build {{build}}",
+    "showError": "Show error",
+    "dismiss": "Dismiss",
+    "showMod": "Show mod",
+    "viewForMod": "View possible crash cause: {{name}}",
+    "launchHint": "Possible crash cause: {{name}}"
   }
 }

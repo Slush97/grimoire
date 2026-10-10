@@ -71,6 +71,8 @@ app.commandLine.appendSwitch(
 // Import IPC handlers
 import './ipc/settings';
 import './ipc/mods';
+import './ipc/crashAdvisories';
+import { startCrashAdvisories } from './services/crashAdvisories';
 import './ipc/gamebanana';
 import './ipc/gamebananaFileServers';
 import './ipc/system';
@@ -535,6 +537,7 @@ if (!gotTheLock) {
         }
 
         createWindow();
+        startCrashAdvisories();
 
         // Start the DeadlockForge local install bridge. No-op unless the user
         // has switched it on in Settings, so the listening socket does not
