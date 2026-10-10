@@ -199,7 +199,16 @@ export default function Conflicts() {
   // that row's buttons during the round-trip without freezing the whole page.
   const [pendingPair, setPendingPair] = useState<string | null>(null);
   const { loadMods } = useAppStore();
-  const searchNeedle = search.trim().toLowerCase();
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const clearSearch = () => {
+    setSearch('');
+    setDebouncedSearch('');
+  };
+  const searchNeedle = debouncedSearch.trim().toLowerCase();
   const searchResults = useMemo(
     () => searchConflicts(conflicts, modsMap, searchNeedle),
     [conflicts, modsMap, searchNeedle],
@@ -644,7 +653,7 @@ export default function Conflicts() {
                 ]}
               />
             )}
-            {conflicts.length > 0 && !searchNeedle && (
+            {conflicts.length > 0 && !search.trim() && (
               <Button
                 variant="secondary"
                 onClick={() => setIgnoreAllConfirmOpen(true)}
@@ -672,7 +681,7 @@ export default function Conflicts() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') setSearch('');
+              if (event.key === 'Escape') clearSearch();
             }}
             placeholder={t('conflicts.search.placeholder')}
             aria-label={t('conflicts.search.label')}
@@ -682,7 +691,7 @@ export default function Conflicts() {
             <IconButton
               icon={X}
               label={t('conflicts.search.clear')}
-              onClick={() => setSearch('')}
+              onClick={clearSearch}
               className="absolute right-1 top-1/2 -translate-y-1/2"
             />
           )}
@@ -723,7 +732,7 @@ export default function Conflicts() {
 
       {viewMode === 'list' ? (
         <div className="space-y-3">
-          {searchResults.map(({ conflict, files }) => {
+          {searchResults.map(({ conflict, files, fileMatch }) => {
             const modA = getModInfo(conflict.modA, conflict.modAName);
             const modB = getModInfo(conflict.modB, conflict.modBName);
             const variantA = getVariantLabel(modA);
@@ -803,9 +812,8 @@ export default function Conflicts() {
                 </div>
                 {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
                   <ConflictFileList
-                    key={searchNeedle}
                     files={files}
-                    initiallyOpen={Boolean(searchNeedle)}
+                    autoOpen={fileMatch}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
                     onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
@@ -825,7 +833,7 @@ export default function Conflicts() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {searchResults.map(({ conflict, files }) => {
+          {searchResults.map(({ conflict, files, fileMatch }) => {
             const modA = getModInfo(conflict.modA, conflict.modAName);
             const modB = getModInfo(conflict.modB, conflict.modBName);
             const variantA = getVariantLabel(modA);
@@ -958,9 +966,8 @@ export default function Conflicts() {
 
                 {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
                   <ConflictFileList
-                    key={searchNeedle}
                     files={files}
-                    initiallyOpen={Boolean(searchNeedle)}
+                    autoOpen={fileMatch}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
                     onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
