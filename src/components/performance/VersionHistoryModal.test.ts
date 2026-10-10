@@ -49,6 +49,7 @@ describe('bundledPerformanceVersionFor', () => {
       historyCommit: remote.commit!,
       date: '2026-08-17',
       settingCount: 282,
+      videoSettingCount: 0,
       optIn: [],
     };
 

@@ -114,6 +114,9 @@ export default function PerformanceConfigCard() {
   // rollback to an older version still beats tracking.
   const trackLatest = settings?.performanceTrackLatest !== false;
   const pinnedOlder = !!selected && selectedVersion !== selected.versions[0].version;
+  // Default on: authors who ship a video.txt say the config looks wrong without it.
+  const videoOn = settings?.performanceVideoSettings !== false;
+  const videoCount = selectedRelease?.videoSettingCount ?? 0;
 
   const refresh = useCallback(async () => {
     try {
@@ -282,6 +285,13 @@ export default function PerformanceConfigCard() {
     if (on && applied && !pinnedOlder) await write(selected, selectedVersion, selectedOptIns);
   };
 
+  // Main reads the saved setting on every apply, so save first, then rewrite.
+  const onToggleVideo = async (on: boolean) => {
+    if (!settings || !selected) return;
+    await saveSettings({ ...settings, performanceVideoSettings: on });
+    if (applied) await write(selected, selectedVersion, selectedOptIns);
+  };
+
   const openFile = async () => {
     setOpenError(null);
     try {
@@ -324,6 +334,10 @@ export default function PerformanceConfigCard() {
       : selected?.versions[0].version;
   const updateAvailable =
     applied && !pinnedOlder && !!newestVersion && status?.appliedVersion !== newestVersion;
+  // Applied without the video settings this release ships: an apply from
+  // before Grimoire wrote video.txt, or one made before the game created it.
+  const videoPending = applied && videoOn && videoCount > 0 && !status?.video;
+  const videoChanged = applied && status?.video ? status.video.total - status.video.applied : 0;
 
   const notice: Notice | null = !status
     ? null
@@ -357,9 +371,20 @@ export default function PerformanceConfigCard() {
                     run: () => void write(selected, selectedVersion, selectedOptIns),
                   },
                 }
-              : applied && status.handEdited
-                ? { tone: 'neutral', text: t('performance.notice.handEdited') }
-                : null;
+              : videoPending && status.videoFileMissing
+                ? { tone: 'neutral', text: t('performance.notice.videoNoFile') }
+                : videoPending && selected
+                  ? {
+                      tone: 'neutral',
+                      text: t('performance.notice.videoPending'),
+                      action: {
+                        label: t('performance.video.apply'),
+                        run: () => void write(selected, selectedVersion, selectedOptIns),
+                      },
+                    }
+                  : applied && status.handEdited
+                    ? { tone: 'neutral', text: t('performance.notice.handEdited') }
+                    : null;
 
   const overrideCount = status?.overrideCount ?? 0;
   const sortedPresets = sortPresetsByTier(presets);
@@ -508,6 +533,33 @@ export default function PerformanceConfigCard() {
               description={t('performance.trackLatest.description')}
               disabled={busy}
             />
+
+            {videoCount > 0 && (
+              <div>
+                <Toggle
+                  checked={videoOn}
+                  onChange={(on) => void onToggleVideo(on)}
+                  label={t('performance.video.label')}
+                  description={t('performance.video.description', { count: videoCount })}
+                  disabled={busy}
+                />
+                {videoOn && videoChanged > 0 && selected && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-text-secondary">
+                      {t('performance.video.changed', { count: videoChanged })}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void write(selected, selectedVersion, selectedOptIns)}
+                    >
+                      {t('performance.video.reapply')}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <GameplayOptIns
               controls={selectedRelease.optIn}

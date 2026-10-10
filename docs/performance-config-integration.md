@@ -75,7 +75,8 @@ Sqooky, boot). Findings:
    `[CHANGE]` fields for `VendorID`, `DeviceID`, resolution, refresh rate, and
    monitor index, with the author warning not to copy them blindly. Applying it
    stomps the user's display setup. Never auto-apply; guided per-field merge
-   only.
+   only. (Bundled presets now write their video.txt render settings, with every
+   display field held back: see "video.txt" under What shipped.)
 4. **Boolean-encoding chaos.** The same convar is written `1` in one config and
    `true` in another, `0` vs `false` elsewhere (e.g. `cl_async_usercmd_send`,
    `r_directlighting`, `r_citadel_gpu_culling_shadows`). A naive value diff
@@ -98,9 +99,10 @@ intersection is extractable and safe; everything beyond it is author-specific.
 
 ## What shipped
 
-Seven presets selected by id: `sqooky-default` (balanced, default), `eskay` (light), `sqooky-testing`
+Eight presets selected by id: `sqooky-default` (balanced, default), `eskay` (light), `sqooky-testing`
 (preview), `boot-max-fps` (aggressive), `kaizu-min-spec` (potato), `optilock-fps`
-(competitive), `optilock-max` (maximum). Each is a section/key diff of a pinned
+(competitive), `optilock-max` (maximum), `optilock-potato-testing` (extreme,
+OptiLock's "Potato Config (Testing)"). Each is a section/key diff of a pinned
 upstream `gameinfo.gi` against the stock baseline, generated into
 `performanceConfigData.ts` (never hand-edited) by `pnpm perf:presets` from the
 pins in `scripts/performance-presets.json`.
@@ -141,6 +143,35 @@ before Valve added `ShadowSilhouette` (boot, OptiLock) diffed to
 users on v1.30.x hit this at runtime; `latestAsPreset` re-applies today's
 section exclusions to cached bodies so the fix reaches them without a refetch.
 Any future list-valued section needs the same treatment.
+
+### video.txt
+
+OptiLock's two configs and Sqooky's `test_cfg` ship a `video.txt` next to their
+gameinfo.gi, and the authors are explicit that the config looks wrong without
+it (OptiLock's README: "You *MUST* do both or else you will have a very weird
+looking game").
+Their instructions are to paste it over everything under `DeviceID` in the
+user's own `game/citadel/cfg/video.txt`.
+
+Grimoire writes the `setting.*` entries in place (`performanceVideo.ts`) and
+never the header. `videoSha256` on a preset pins the sibling file per release,
+like `sha256` pins the gameinfo.gi. `video.exclude` in the pin manifest strips
+everything that describes the user's screen rather than render cost:
+resolution, refresh rate, window mode, monitor index, DPI, aspect mode, gamma,
+V-Sync, frame cap and `knowndevice`. The remaining keys go through the
+gameinfo.gi classification too, so `r_render_portals` is never written and
+`r_citadel_outlines` is left to its gameinfo.gi opt-in toggle.
+
+Deadlock rewrites video.txt whenever a graphics setting changes in game and
+keeps no comments, so this half has no markers. The sidecar records, per key,
+the value written and the value replaced (null = absent). Every apply first
+reverts the previous record, then writes, so originals are always pre-Grimoire
+values. Revert only touches keys that still hold Grimoire's value: anything the
+user or the game changed since is theirs. Status reports how many written values
+the file still holds, and the card offers to put back the rest.
+
+`performanceVideoSettings` (undefined = on) turns it off globally; an apply with
+it off reverts what an earlier apply wrote.
 
 ### Marker grammar
 
@@ -218,7 +249,9 @@ guessed. Left open deliberately.
 
 - Generic ingestion of arbitrary GameBanana gameinfo.gi configs (unsafe, see
   evidence above).
-- Auto-applying `video.txt` (machine-specific; guided merge only, future).
+- Writing `video.txt` display settings (resolution, window mode, monitor,
+  refresh rate, gamma, V-Sync, frame cap). Render settings are written; these
+  never are.
 - dyson and other full-file replacement configs (no manifest, no relationship,
   per-patch churn; would force the unsafe auto-diff path).
 
@@ -233,10 +266,12 @@ guessed. Left open deliberately.
   OptimizationLock repo, Zod-validated, with a bundled pinned fallback. Controls:
   `key / section / type / range / presetValues / description / warning /
   requires`.
-- **Perf-addon VPKs as optional installs.** Upstream bundles three (Optimized
-  Soul Container, Sinner Light Fix, Vindicta Scope Downscale). They belong in the
-  normal VPK pipeline, not the gameinfo patcher. Encode the known dependency
-  `video.txt mip_bias >= 4 -> Sinner Light Fix` as a `requires` field.
+- **Perf-addon VPKs as optional installs.** OptiLock ships four under `Essential
+  Fixes/` (SinnersLightFix, SoulContainer, ScopeDownscale,
+  OptimizedMcGinnisWall). They belong in the normal VPK pipeline, not the
+  gameinfo patcher. Encode the known dependency as a `requires` field: OptiLock's
+  README says raising `r_texture_stream_mip_bias` past 4 needs Sinner's Light
+  Fix. Every bundled video.txt sets exactly 4.
 - **Ask Sqooky to cut git tags.** It costs him one command and upgrades four of
   the six pins from a bare SHA to a real release.
 

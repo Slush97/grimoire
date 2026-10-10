@@ -40,6 +40,7 @@ import type {
 // `version` falls back the same way. An unknown version is not rejected here:
 // the service resolves it to the newest release, which is what should happen
 // when a saved pin names a release that has since aged out of the bundle.
+// Whether video.txt is written is a global setting, always read here.
 function selection(presetId?: string, optIns?: string[], version?: string | null) {
     const settings = loadSettings();
     const id = presetId ?? settings.performanceConfigPresetId;
@@ -47,6 +48,7 @@ function selection(presetId?: string, optIns?: string[], version?: string | null
         presetId: id,
         optIns: optIns ?? (id ? settings.performanceConfigOptIns?.[id] : undefined),
         version: version ?? (id ? settings.performanceConfigVersions?.[id] : undefined) ?? null,
+        video: settings.performanceVideoSettings !== false,
     };
 }
 
@@ -147,7 +149,10 @@ ipcMain.handle(
 // reapply-wiped-performance-config (the gameinfo banner's one-click repair
 // after a game update)
 ipcMain.handle('reapply-wiped-performance-config', (): PerformanceConfigStatus => {
-    return reapplyWipedPerformanceConfig(getActiveDeadlockPath());
+    return reapplyWipedPerformanceConfig(
+        getActiveDeadlockPath(),
+        loadSettings().performanceVideoSettings !== false
+    );
 });
 
 // restore-performance-config-backup (recover an emptied/corrupt gameinfo.gi

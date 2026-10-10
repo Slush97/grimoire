@@ -131,6 +131,11 @@
         "3.3": "b7b2d540fdb74d91ca8544cb50354ca6ef1cc78dd9a24bc59ad0f5180e29abe1",
         "3.2": "93a375143673eae81e98adb0ddf7f24aeeb428a9bd7c696717d2db6ddaf46808"
       },
+      "videoSha256": {
+        "3.4": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3",
+        "3.3": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3",
+        "3.2": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3"
+      },
       "author": "Sqooky",
       "unstable": true
     },
@@ -178,6 +183,11 @@
         "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
         "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
       },
+      "videoSha256": {
+        "v5.1": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
+        "v5.0": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
+        "v4.6": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593"
+      },
       "author": "dacooder"
     },
     {
@@ -197,9 +207,101 @@
         "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6",
         "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703"
       },
+      "videoSha256": {
+        "v5.1": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
+        "v5.0": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
+        "v4.6": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75"
+      },
       "author": "dacooder"
+    },
+    {
+      "id": "optilock-potato-testing",
+      "name": "OptiLock Potato (Testing)",
+      "tier": "extreme",
+      "source": "optilock",
+      "path": "OptiLock Potato Config (Testing)/gameinfo.gi",
+      "$comment": "dacooder's work-in-progress take on the Potato Config (optilock-max): shorter draw, fade and particle distances, fewer decals. Added upstream after v5.0 (commit 5fd6f01d, 2026-09-30), so older releases are null. Ships the same video.txt as the Potato Config.",
+      "sha256": {
+        "v5.1": "26cdefc36eecae9e0de00b9579f358d3524fdca8466070294d491ed8ae66853f",
+        "v5.0": null,
+        "v4.6": null
+      },
+      "videoSha256": {
+        "v5.1": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
+        "v5.0": null,
+        "v4.6": null
+      },
+      "author": "dacooder",
+      "unstable": true
     }
   ],
+  "video": {
+    "$comment": [
+      "Some presets ship a video.txt next to their gameinfo.gi, and their authors",
+      "say the config looks wrong without it: the gameinfo.gi values assume these",
+      "render settings. Upstream's instructions are to paste it over everything",
+      "under DeviceID in the user's own game/citadel/cfg/video.txt.",
+      "",
+      "`videoSha256` on a preset pins that sibling file per release, exactly like",
+      "`sha256` pins the gameinfo.gi (null = no video.txt at that release). The",
+      "path is always `video.txt` next to the release's gameinfo.gi, so pathByRef",
+      "covers it too.",
+      "",
+      "Grimoire writes only `setting.*` entries, never the header (Version,",
+      "VendorID, DeviceID), and records each value it replaced in the applied-state",
+      "sidecar so Remove puts them back. Keys matching `exclude` describe the",
+      "user's screen rather than render cost and are never written, whatever",
+      "upstream ships. Every other key then goes through the same exclude/opt-in",
+      "classification as gameinfo.gi convars: an opt-in convar is left to its",
+      "gameinfo.gi toggle, and an unclassified gameplay-shaped key fails the run."
+    ],
+    "exclude": [
+      {
+        "pattern": "^defaultres",
+        "why": "Resolution. OptiLock ships -1, Sqooky's test_cfg ships the author's own 1920x1080."
+      },
+      {
+        "pattern": "^recommendedheight$",
+        "why": "The engine's resolution recommendation for the user's display."
+      },
+      {
+        "pattern": "^refreshrate_",
+        "why": "The user's monitor refresh rate."
+      },
+      {
+        "pattern": "fullscreen|^nowindowborder$",
+        "why": "Window mode (fullscreen, borderless, minimize on focus loss) is the user's choice."
+      },
+      {
+        "pattern": "^monitor_index$",
+        "why": "Which monitor the game opens on. Upstream ships 0 (primary)."
+      },
+      {
+        "pattern": "^high_dpi$",
+        "why": "Display scaling for the user's monitor."
+      },
+      {
+        "pattern": "^aspectratiomode$",
+        "why": "Stretched versus letterboxed handling of the user's resolution."
+      },
+      {
+        "pattern": "^knowndevice$",
+        "why": "The engine's record of whether it recognised the GPU, not a setting."
+      },
+      {
+        "pattern": "gamma",
+        "why": "Brightness calibration for the user's display."
+      },
+      {
+        "pattern": "^mat_vsync$",
+        "why": "Frame pacing depends on the user's monitor and VRR setup. OptiLock's own README recommends V-Sync with G-Sync while its file turns V-Sync off."
+      },
+      {
+        "pattern": "^fps_max",
+        "why": "Frame cap. Users cap to their refresh rate; upstream ships 0 (uncapped)."
+      }
+    ]
+  },
   "exclude": {
     "$comment": "Never emitted into a preset, whatever upstream sets. MaterialSystem2/RenderModes is a list of seven `game` entries, not key/value pairs: a config written before Valve added ShadowSilhouette diffed to a single `game \"FrontDepth\"` op, and the patcher, which edits every occurrence of a key, collapsed all seven render modes into FrontDepth.",
     "patterns": [
@@ -471,6 +573,10 @@
       },
       {
         "key": "citadel_camera_pitch_max",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_reduce_camera_shake",
         "group": "camera"
       },
       {

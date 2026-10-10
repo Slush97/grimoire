@@ -175,6 +175,9 @@ export interface PerformancePresetVersion {
     date: string;
     /** How many settings this release changes, for a rough intensity signal. */
     settingCount: number;
+    /** How many video.txt settings this release writes; 0 when upstream ships
+     *  no video.txt for it. */
+    videoSettingCount: number;
     /** Creator-authored gameplay convars exposed as individual controls.
      *  Differs between releases, so it is recorded per version. */
     optIn: PerformanceOptIn[];
@@ -191,7 +194,15 @@ export interface PerformancePresetSummary {
     name: string;
     /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
     version: string;
-    tier: 'light' | 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
+    tier:
+        | 'light'
+        | 'balanced'
+        | 'preview'
+        | 'aggressive'
+        | 'potato'
+        | 'competitive'
+        | 'maximum'
+        | 'extreme';
     author: string;
     /** Upstream itself labels this config experimental. */
     unstable: boolean;
@@ -237,6 +248,15 @@ export interface PerformanceConfigStatus {
     /** Saved user deviations from the preset (hand edits harvested on reapply,
      *  layered onto every apply, surviving game-update wipes). */
     overrideCount?: number;
+    /** video.txt settings the last apply changed (`total`) and how many still
+     *  hold Grimoire's value (`applied`): Deadlock rewrites the file whenever
+     *  graphics settings change in game. Absent when the last apply left
+     *  video.txt alone (video off, the preset ships none, or an apply from
+     *  before video.txt support). */
+    video?: { applied: number; total: number };
+    /** game/citadel/cfg/video.txt does not exist yet (Deadlock writes it on
+     *  first launch), so video settings cannot be applied. */
+    videoFileMissing?: boolean;
     /** gameinfo.gi is empty/corrupt (no ConVars section to patch) AND a
      *  Grimoire backup exists, so the UI can offer a one-click restore. Only
      *  set on the broken-file states (error / wiped). */

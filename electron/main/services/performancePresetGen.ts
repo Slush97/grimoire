@@ -33,6 +33,10 @@ export interface PresetGenClassification {
     optInPatterns: readonly string[];
     /** Pattern-matching keys audited as genuine performance settings. */
     allowInBody: readonly string[];
+    /** Case-insensitive regex sources for video.txt settings that describe
+     *  the user's screen (resolution, window mode, refresh, gamma), never
+     *  written whatever upstream ships. */
+    videoExcludePatterns: readonly string[];
 }
 
 export interface GenSectionOp {
@@ -268,6 +272,78 @@ export function generatePresetBody(
 }
 
 // ---------------------------------------------------------------------------
+// video.txt
+//
+// The engine's video config is flat KV: a `"video.cfg"` header, then
+// `"setting.<convar>" "<value>"` entries. Upstreams ship either a whole file
+// or only the entries that go under DeviceID; setting.* entries are all that
+// count either way. There is no baseline to diff against (the user's own
+// file IS the baseline), so a video body is every classified setting.
+// ---------------------------------------------------------------------------
+
+const VIDEO_ENTRY_RE = /^[ \t]*"setting\.([A-Za-z_]\w*)"[ \t]+"([^"\r\n]*)"/;
+
+/** setting.* entries as [bare convar, value], first-seen order, later
+ *  duplicates winning (the engine reads the file top to bottom). */
+export function parseVideoConfig(text: string): Array<[string, string]> {
+    const values = new Map<string, string>();
+    for (const line of text.split(/\r?\n/)) {
+        const m = VIDEO_ENTRY_RE.exec(line);
+        if (m) values.set(m[1], m[2]);
+    }
+    return [...values];
+}
+
+export interface GeneratedVideo {
+    settings: Array<[string, string]>;
+    problems: GenProblem[];
+}
+
+/** Classify parsed video.txt settings into what Grimoire writes. Display keys
+ *  and anything gameinfo.gi never writes are dropped. Opt-in convars are
+ *  dropped too: the gameinfo.gi toggle for that convar is what the user
+ *  controls, and a second copy here would quietly overrule it. */
+export function generateVideoBody(
+    settings: ReadonlyArray<readonly [string, string]>,
+    classification: PresetGenClassification
+): GeneratedVideo {
+    const display = classification.videoExcludePatterns.map((p) => new RegExp(p, 'i'));
+    const excludedKeys = new Set(classification.excludeKeys);
+    const excludePatterns = classification.excludePatterns.map((p) => new RegExp(p, 'i'));
+    const optInKeys = new Set(classification.optInKeys.map((k) => k.key));
+    const optInPatterns = classification.optInPatterns.map((p) => new RegExp(p, 'i'));
+    const allowedInBody = new Set(classification.allowInBody);
+
+    const out: Array<[string, string]> = [];
+    const problems: GenProblem[] = [];
+    for (const [key, value] of settings) {
+        if (display.some((re) => re.test(key))) continue;
+        if (excludedKeys.has(key) || excludePatterns.some((re) => re.test(key))) continue;
+        if (optInKeys.has(key)) continue;
+        if (!allowedInBody.has(key) && optInPatterns.some((re) => re.test(key))) {
+            problems.push({ kind: 'unclassified', key, where: 'video.txt' });
+            continue;
+        }
+        out.push([key, value]);
+    }
+    return { settings: out, problems };
+}
+
+const MIN_VIDEO_SETTINGS = 5;
+const MAX_VIDEO_SETTINGS = 400;
+const MAX_VIDEO_BYTES = 64_000;
+
+/** Structural sanity for a fetched video.txt. Returns an error description,
+ *  or null when it looks like one. */
+export function validateVideoText(text: string, label: string): string | null {
+    if (text.length > MAX_VIDEO_BYTES) return `${label} is implausibly large (${text.length} bytes)`;
+    const count = parseVideoConfig(text).length;
+    if (count < MIN_VIDEO_SETTINGS) return `${label} has only ${count} settings`;
+    if (count > MAX_VIDEO_SETTINGS) return `${label} has ${count} settings (cap ${MAX_VIDEO_SETTINGS})`;
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // Sanity checks for texts fetched at runtime
 // ---------------------------------------------------------------------------
 
@@ -341,6 +417,9 @@ interface ManifestLike {
         patterns?: string[];
         allowInBody?: Array<{ key: string }>;
     };
+    video?: {
+        exclude?: Array<{ pattern: string }>;
+    };
 }
 
 /** Extract the classification tables from the pin manifest, the single source
@@ -353,5 +432,6 @@ export function classificationFromManifest(manifest: ManifestLike): PresetGenCla
         optInKeys: manifest.optIn.keys.map((k) => ({ key: k.key, group: k.group })),
         optInPatterns: manifest.optIn.patterns ?? [],
         allowInBody: (manifest.optIn.allowInBody ?? []).map((k) => k.key),
+        videoExcludePatterns: (manifest.video?.exclude ?? []).map((p) => p.pattern),
     };
 }

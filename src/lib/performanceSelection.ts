@@ -1,8 +1,8 @@
 import type { AppSettings } from '../types/mod';
 import type { PerformancePresetSummary } from '../types/electron';
 
-// The recommended default first, then mildest to strongest, with the author's
-// work-in-progress config last.
+// The recommended default first, then mildest to strongest, with the authors'
+// work-in-progress configs last.
 const TIER_ORDER: PerformancePresetSummary['tier'][] = [
   'balanced',
   'light',
@@ -10,6 +10,7 @@ const TIER_ORDER: PerformancePresetSummary['tier'][] = [
   'aggressive',
   'maximum',
   'potato',
+  'extreme',
   'preview',
 ];
 

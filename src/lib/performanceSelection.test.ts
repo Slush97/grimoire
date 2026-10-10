@@ -22,6 +22,7 @@ function preset(
     historyCommit: `commit-${v.version}`,
     date: '2026-08-01',
     settingCount: 10,
+    videoSettingCount: 0,
     optIn: v.optIn ?? OPT_INS,
   }));
   return {

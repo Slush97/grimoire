@@ -52,6 +52,7 @@ function preset(
     historyCommit: `c${version}`,
     date: '2026-08-17',
     settingCount: 100,
+    videoSettingCount: 0,
     optIn: OPT_INS,
   }));
   return {
