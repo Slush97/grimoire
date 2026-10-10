@@ -36,8 +36,8 @@ packager; package.json and the lockfile are not changed.
 
 All platform builds must succeed before publishing. The release stays a draft
 while assets upload, then becomes a prerelease without becoming GitHub's latest
-stable release. It contains only `nightly*.yml` update metadata. The five newest
-published nightlies are retained; stable releases are untouched. The stable
+stable release. It contains only `nightly*.yml` update metadata. Only the newest
+published nightly is retained; stable releases are untouched. The stable
 tag workflow also excludes nightly tags.
 
 The workflow starts publishing once this change is on main and CI passes.
