@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { createHash } from 'crypto';
-import { promises as fs, existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join, dirname, relative, resolve } from 'path';
 import { z } from 'zod';
 import { getUserDataPath } from '../utils/paths';
@@ -12,7 +12,7 @@ import { getModMetadata } from './metadata';
 import { parseVpkDirectoriesAsync, parseVpkEntryStats, readVpkEntryBytes } from './vpk';
 import { gameSearchPaths } from './gameinfoSearchPaths';
 import { observeModChanges } from './modChangeObservation';
-import { crashResourceOwners, configurationForCrash, steamBuildAt, type CrashProvider } from './crashConfiguration';
+import { crashResourceOwners, configurationForCrash, steamBuildAt, type CrashProvider, type CrashResourceOwner } from './crashConfiguration';
 import { readCrashDump, sessionForCrash, steamGameSessions } from './crashEvidence';
 import type { CrashAdvisory } from '../../../src/types/crashAdvisory';
 
@@ -41,7 +41,9 @@ let started = false;
 let persistenceQueue: Promise<void> = Promise.resolve();
 let savedBytes = '';
 let steamRoots: string[] | undefined;
-const launchObservations: { gamePath: string; mods: Mod[]; observedAt: number }[] = [];
+let captured: { signature: string; owners: Record<string, CrashResourceOwner> } | undefined;
+// `mods: null` is a vanilla launch: user mods are stashed, so no user mod owns anything.
+const launchObservations: { gamePath: string; mods: Mod[] | null; observedAt: number }[] = [];
 const inspected = new Map<string, string>();
 const fileCache = new Map<string, { signature: string; files: Record<string, string>; fingerprint: string }>();
 
@@ -63,6 +65,7 @@ async function loadState(gamePath: string): Promise<State> {
     inspected.clear();
     savedBytes = '';
     catalog = [];
+    captured = undefined;
     try {
         const bytes = await fs.readFile(statePath());
         if (bytes.length > MAX_STATE_BYTES) throw new Error('Diagnostic history is too large');
@@ -132,6 +135,14 @@ async function readGameinfo(gamePath: string): Promise<string | null> {
     }
 }
 
+function recordConfiguration(value: State, configuration: State['configurations'][number], force: boolean): void {
+    const last = value.configurations[value.configurations.length - 1];
+    if (force || last?.gameBuild !== configuration.gameBuild || JSON.stringify(last.owners) !== JSON.stringify(configuration.owners)) {
+        value.configurations.push(configuration);
+        value.configurations = value.configurations.sort((a, b) => a.observedAt - b.observedAt).slice(-64);
+    }
+}
+
 async function captureConfiguration(gamePath: string, value: State, launch?: { mods: Mod[]; observedAt: number }): Promise<void> {
     const observedAt = launch?.observedAt ?? Date.now();
     const mods = await scanModsReadOnly(gamePath);
@@ -139,37 +150,41 @@ async function captureConfiguration(gamePath: string, value: State, launch?: { m
     const gameinfo = await readGameinfo(gamePath);
     const mounts = gameinfo === null ? null : gameSearchPaths(gameinfo);
     currentBuild = await readBuild(gamePath);
-    // Warm indexes in the existing worker pool rather than parsing VPK trees
-    // synchronously on the main thread.
-    const stockPath = join(gamePath, 'game/citadel/pak01_dir.vpk');
-    const paths = await parseVpkDirectoriesAsync([...mods.map(mod => mod.path), stockPath]);
-    const next: CatalogMod[] = [];
-    for (const mod of mods) {
-        const resources = await modResources(mod);
-        const metadata = getModMetadata(mod.metaKey);
-        next.push({ ...resources, fingerprint: isReservedPriorityVpkPath(mod.path) ? '' : resources.fingerprint, id: mod.id, enabled: mod.enabled, priority: mod.priority,
-            root: relative(join(gamePath, 'game'), dirname(mod.path)).replace(/\\/g, '/').replace(/\/\.disabled$/, '').toLowerCase(),
-            name: (metadata?.modName ?? mod.name).slice(0, 300) });
+    const signature = JSON.stringify([currentBuild, gameinfo, await Promise.all(mods.map(async mod => [mod.id, mod.path, mod.enabled,
+        mod.priority, mod.size, (await fs.stat(mod.path)).mtimeMs, getModMetadata(mod.metaKey)?.modName ?? mod.name]))]);
+    if (captured?.signature !== signature) {
+        // Warm indexes in the existing worker pool rather than parsing VPK trees
+        // synchronously on the main thread.
+        const stockPath = join(gamePath, 'game/citadel/pak01_dir.vpk');
+        const paths = await parseVpkDirectoriesAsync([...mods.map(mod => mod.path), stockPath]);
+        const next: CatalogMod[] = [];
+        for (const mod of mods) {
+            const resources = await modResources(mod);
+            const metadata = getModMetadata(mod.metaKey);
+            next.push({ ...resources, fingerprint: isReservedPriorityVpkPath(mod.path) ? '' : resources.fingerprint, id: mod.id, enabled: mod.enabled, priority: mod.priority,
+                root: relative(join(gamePath, 'game'), dirname(mod.path)).replace(/\\/g, '/').replace(/\/\.disabled$/, '').toLowerCase(),
+                name: (metadata?.modName ?? mod.name).slice(0, 300) });
+        }
+        // A concurrent rename/update invalidates this observation. Retry on the next
+        // refresh instead of recording a mixture of two installations.
+        if (gameinfo !== await readGameinfo(gamePath)) return;
+        const after = await scanModsReadOnly(gamePath);
+        const beforeSignature = JSON.stringify(mods.map(mod => [mod.path, mod.enabled, mod.priority, mod.size]));
+        if (beforeSignature !== JSON.stringify(after.map(mod => [mod.path, mod.enabled, mod.priority, mod.size]))) return;
+        catalog = next;
+        const stock = new Set((paths.get(stockPath) ?? []).map(entry => entry.replace(/\\/g, '/').toLowerCase()));
+        // An unknown or unreadable stock mount cannot establish precedence.
+        captured = { signature, owners: mounts && paths.get(stockPath) ? crashResourceOwners(next.filter(mod => mod.enabled), mounts, stock) : {} };
     }
-    // A concurrent rename/update invalidates this observation. Retry on the next
-    // refresh instead of recording a mixture of two installations.
-    if (gameinfo !== await readGameinfo(gamePath)) return;
-    const after = await scanModsReadOnly(gamePath);
-    const beforeSignature = JSON.stringify(mods.map(mod => [mod.path, mod.enabled, mod.priority, mod.size]));
-    if (beforeSignature !== JSON.stringify(after.map(mod => [mod.path, mod.enabled, mod.priority, mod.size]))) return;
-    catalog = next;
-    const stock = new Set((paths.get(stockPath) ?? []).map(entry => entry.replace(/\\/g, '/').toLowerCase()));
-    // An unknown or unreadable stock mount cannot establish precedence.
-    const owners = mounts && paths.get(stockPath) ? crashResourceOwners(next.filter(mod => mod.enabled), mounts, stock) : {};
+    const owners = { ...captured.owners };
     // Loose files can override VPK resources. Do not assign those to a VPK mod.
-    for (const entry of Object.keys(owners)) {
-        if (mounts?.some(root => existsSync(join(gamePath, 'game', root, entry)))) delete owners[entry];
-    }
-    const last = value.configurations[value.configurations.length - 1];
-    if (launch || last?.gameBuild !== currentBuild || JSON.stringify(last.owners) !== JSON.stringify(owners)) {
-        value.configurations.push({ observedAt, gameBuild: currentBuild, source: launch ? 'launch' : 'observed', owners });
-        value.configurations = value.configurations.sort((a, b) => a.observedAt - b.observedAt).slice(-64);
-    }
+    // They are not part of the signature, so check them on every capture.
+    await Promise.all(Object.keys(owners).map(async entry => {
+        for (const root of mounts ?? []) {
+            if (await fs.access(join(gamePath, 'game', root, entry)).then(() => true, () => false)) { delete owners[entry]; return; }
+        }
+    }));
+    recordConfiguration(value, { observedAt, gameBuild: currentBuild, source: launch ? 'launch' : 'observed', owners }, !!launch);
 }
 
 async function discoverReports(gamePath: string): Promise<string[]> {
@@ -193,12 +208,15 @@ async function discoverReports(gamePath: string): Promise<string[]> {
 }
 
 async function inspectReports(gamePath: string, value: State): Promise<void> {
+    value.incidents = value.incidents.filter(incident => incident.crashedAt >= Date.now() - RETENTION_MS);
+    const reports = await discoverReports(gamePath);
+    if (reports.length === 0) return;
     const roots = steamRoots ??= getSteamRoots();
     const processLogs = await Promise.all(roots.map(root => readTail(join(root, 'logs/gameprocess_log.txt')).catch(() => '')));
     const contentLogs = await Promise.all(roots.map(root => readTail(join(root, 'logs/content_log.txt')).catch(() => '')));
     const sessions = steamGameSessions(processLogs.join('\n')).sort((a, b) => a.startedAt - b.startedAt);
     const content = contentLogs.join('\n');
-    for (const path of await discoverReports(gamePath)) {
+    for (const path of reports) {
         try {
             const before = await fs.stat(path);
             const evidence = await readCrashDump(path);
@@ -222,7 +240,7 @@ async function inspectReports(gamePath: string, value: State): Promise<void> {
             inspected.set(path, `${after.size}:${after.mtimeMs}`);
         } catch { /* An incomplete or unreadable report never becomes a warning. */ }
     }
-    value.incidents = value.incidents.filter(incident => incident.crashedAt >= Date.now() - RETENTION_MS).slice(-200);
+    value.incidents = value.incidents.slice(-200);
 }
 
 function projectAdvisories(value: State): CrashAdvisory[] {
@@ -268,7 +286,9 @@ export function refreshCrashAdvisories(): Promise<void> {
             const gamePath = resolve(path);
             const value = await loadState(gamePath);
             for (const launch of launchObservations.splice(0)) {
-                if (launch.gamePath === gamePath) await captureConfiguration(gamePath, value, launch);
+                if (launch.gamePath !== gamePath) continue;
+                if (launch.mods) await captureConfiguration(gamePath, value, { mods: launch.mods, observedAt: launch.observedAt });
+                else recordConfiguration(value, { observedAt: launch.observedAt, gameBuild: await readBuild(gamePath), source: 'launch', owners: {} }, true);
             }
             // Inspect against history BEFORE recording Steam's post-crash mount reset.
             await inspectReports(gamePath, value);
@@ -292,6 +312,12 @@ export function getCrashAdvisories(): CrashAdvisory[] { return active; }
 /** Queue the prelaunch configuration without waiting on diagnostic I/O. */
 export function recordCrashLaunchConfiguration(gamePath: string, mods: Mod[]): void {
     launchObservations.push({ gamePath: resolve(gamePath), mods: mods.map(mod => ({ ...mod })), observedAt: Date.now() });
+    void refreshCrashAdvisories();
+}
+
+/** A crash in a vanilla session must not inherit the last modded setup's owners. */
+export function recordVanillaCrashLaunch(gamePath: string): void {
+    launchObservations.push({ gamePath: resolve(gamePath), mods: null, observedAt: Date.now() });
     void refreshCrashAdvisories();
 }
 
