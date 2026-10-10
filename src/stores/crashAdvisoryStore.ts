@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CrashAdvisory } from '../types/crashAdvisory';
+import { useAppStore } from './appStore';
 
 interface CrashAdvisoryState {
   findings: CrashAdvisory[];
@@ -13,6 +14,13 @@ interface CrashAdvisoryState {
 }
 
 let generation = 0;
+
+export function useCrashLaunchSuspect() {
+  const findings = useCrashAdvisoryStore(state => state.findings);
+  const mods = useAppStore(state => state.mods);
+  const loaded = useAppStore(state => state.modsLoaded);
+  return findings.find(finding => loaded ? mods.some(mod => mod.id === finding.modId && mod.enabled) : finding.enabled);
+}
 
 export const useCrashAdvisoryStore = create<CrashAdvisoryState>((set) => ({
   findings: [], detailId: null, dismissed: [],

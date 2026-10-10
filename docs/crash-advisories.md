@@ -52,7 +52,8 @@ still be verified manually against the current game build.
 3. Launch Deadlock through Steam. Let the intentional crash and Steam's file
    verification finish, then reopen the test build.
 4. Expect an Installed badge and a launch warning icon. Clicking the icon shows
-   the fatal error and suspected mod. Launch Modded remains available.
+   the fatal error and suspected mod. Show mod opens the Installed page and
+   filters to the suspect, including local mods. Launch Modded remains available.
 5. Disable the fixture using its usual toggle. The launch marker disappears.
    Dismiss the report and restart Grimoire to check dismissal persists.
 6. Repeat with Grimoire kept open. A new finding should appear within about 15

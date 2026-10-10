@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrashAdvisoryBadge, CrashAdvisoryHost, CrashLaunchIndicator } from './CrashAdvisories';
 import { useCrashAdvisoryStore } from '../stores/crashAdvisoryStore';
@@ -38,6 +38,29 @@ async function render(children = <CrashAdvisoryHost />) {
 }
 
 describe('advisory crash UI', () => {
+  it('shows a local suspect on the Installed index route from another page', async () => {
+    api.getCrashAdvisories.mockResolvedValue([finding]);
+    function InstalledTarget() {
+      const location = useLocation();
+      return <div data-installed-mod={location.state?.crashSuspectId}>Installed</div>;
+    }
+    await act(async () => {
+      root.render(<MemoryRouter initialEntries={['/browse']}>
+        <CrashAdvisoryHost />
+        <Routes>
+          <Route path="/" element={<InstalledTarget />} />
+          <Route path="/browse" element={<div>Browse</div>} />
+        </Routes>
+      </MemoryRouter>);
+    });
+    await act(async () => useCrashAdvisoryStore.getState().openDetail(finding.id));
+    const showMod = [...document.querySelectorAll('button')].find(button => button.textContent === 'crashAdvisory.showMod');
+    await act(async () => showMod?.click());
+    expect(host.querySelector('[data-installed-mod="suspect"]')).not.toBeNull();
+    expect(host.textContent).toContain('Installed');
+    expect(useCrashAdvisoryStore.getState().detailId).toBeNull();
+    expect(api.dismissCrashAdvisory).not.toHaveBeenCalled();
+  });
   it('never opens a dialog automatically for findings arriving on startup or while open', async () => {
     api.getCrashAdvisories.mockResolvedValue([finding]);
     await render();
@@ -56,9 +79,9 @@ describe('advisory crash UI', () => {
     expect(api.launchModded).not.toHaveBeenCalled();
   });
 
-  it('keeps launching available and gives the warning a separate click target', async () => {
+  it.each([{ compact: false }, { compact: false, unified: true }, { compact: true }])('keeps launching available with a separate warning target: %j', async props => {
     api.getCrashAdvisories.mockResolvedValue([finding]);
-    await render(<><CrashAdvisoryHost /><button onClick={() => void api.launchModded()}>Launch Modded</button><CrashLaunchIndicator /></>);
+    await render(<><CrashAdvisoryHost /><button onClick={() => void api.launchModded()}>Launch Modded</button><CrashLaunchIndicator {...props} /></>);
     const buttons = [...host.querySelectorAll('button')];
     expect(buttons).toHaveLength(2);
     expect(buttons[0].disabled).toBe(false);

@@ -2,9 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
-import { useCrashAdvisoryStore } from '../stores/crashAdvisoryStore';
-import { useAppStore } from '../stores/appStore';
-import { Button, IconButton, Tag, ModalHeader } from './common/ui';
+import { useCrashAdvisoryStore, useCrashLaunchSuspect } from '../stores/crashAdvisoryStore';
+import { Button, Tag, ModalHeader } from './common/ui';
 import { Modal } from './common/Modal';
 
 /** Mounted once. Findings never open a dialog automatically. */
@@ -38,7 +37,7 @@ export function CrashAdvisoryHost() {
         <Button variant="ghost" onClick={() => void dismiss(finding.id)}>{t('crashAdvisory.dismiss')}</Button>
         <Button variant="secondary" onClick={() => {
           closeDetail();
-          navigate('/installed', { state: { crashSuspectId: finding.modId } });
+          navigate('/', { state: { crashSuspectId: finding.modId } });
         }}>{t('crashAdvisory.showMod')}</Button>
       </div>
     </div>}
@@ -62,19 +61,17 @@ export function CrashAdvisoryBadge({ modIds, variant = 'inline' }: { modIds: str
 }
 
 /** Separate click target. It never changes the launch button's handler or disabled state. */
-export function CrashLaunchIndicator({ compact = false }: { compact?: boolean }) {
+export function CrashLaunchIndicator({ compact = false, unified = false }: { compact?: boolean; unified?: boolean }) {
   const { t } = useTranslation();
-  const findings = useCrashAdvisoryStore(state => state.findings);
   const openDetail = useCrashAdvisoryStore(state => state.openDetail);
-  const mods = useAppStore(state => state.mods);
-  const loaded = useAppStore(state => state.modsLoaded);
-  const suspect = findings.find(finding => loaded ? mods.some(mod => mod.id === finding.modId && mod.enabled) : finding.enabled);
+  const suspect = useCrashLaunchSuspect();
   if (!suspect) return null;
   if (compact) return <button type="button" title={t('crashAdvisory.launchHint', { name: suspect.modName })}
     aria-label={t('crashAdvisory.launchHint', { name: suspect.modName })}
     className="absolute -right-1 -top-1 z-20 flex h-5 w-5 cursor-pointer items-center justify-center rounded-sm bg-bg-secondary text-state-warning focus-visible:outline-2 focus-visible:outline-accent"
     onClick={() => openDetail(suspect.id)}><AlertTriangle className="h-3 w-3" aria-hidden /></button>;
-  return <IconButton icon={AlertTriangle} size="sm" label={t('crashAdvisory.launchHint', { name: suspect.modName })}
-    className="shrink-0 text-state-warning"
-    onClick={() => openDetail(suspect.id)} />;
+  return <button type="button" title={t('crashAdvisory.launchHint', { name: suspect.modName })}
+    aria-label={t('crashAdvisory.launchHint', { name: suspect.modName })}
+    className={`absolute top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-sm text-state-warning transition-colors hover:bg-bg-secondary/90 focus-visible:outline-2 focus-visible:outline-accent ${unified ? 'right-9' : 'right-1'}`}
+    onClick={() => openDetail(suspect.id)}><AlertTriangle className="h-3.5 w-3.5" aria-hidden /></button>;
 }
