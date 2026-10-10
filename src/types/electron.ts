@@ -1537,6 +1537,7 @@ export interface ProfileMod {
      *  GameBanana ids. */
     fileName: string;
     enabled: boolean;
+    /** Position in the complete saved load order, across all addon folders. */
     priority: number;
     /** Stable identity pair. Populated from metadata at save time so apply
      *  can find the mod even if its fileName has changed since. */

@@ -95,7 +95,7 @@ export async function buildPortableProfileFromInstalled(
     const mods: PortableModEntry[] = [];
     const warnings: string[] = [];
 
-    for (const installedMod of installed) {
+    for (const [index, installedMod] of installed.entries()) {
         // Locker-managed VPKs (cards/sounds) are internal and have no GameBanana
         // ref, so silently skip them rather than warning "Skipped local mod".
         if (isLockerManaged(installedMod.metaKey)) continue;
@@ -128,7 +128,7 @@ export async function buildPortableProfileFromInstalled(
                 ...(vpkStem !== null ? { vpkStem } : {}),
             },
             enabled: installedMod.enabled,
-            priority: installedMod.priority,
+            priority: index + 1,
             hint: {
                 name: metadata?.modName || installedMod.name,
                 category: metadata?.categoryName,

@@ -227,10 +227,11 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
     const now = new Date().toISOString();
 
     const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
+    // scanMods is in complete load order; pakNN priorities repeat in each folder.
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: enabledMods.map(mod => toProfileMod(mod, true, inferredVpkIndexes)),
+        mods: enabledMods.map((mod, index) => toProfileMod({ ...mod, priority: index + 1 }, true, inferredVpkIndexes)),
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
         createdAt: now,
@@ -306,7 +307,7 @@ export async function createProfileFromGameBananaIds(
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: matching.map((mod) => toProfileMod(mod, true, inferredVpkIndexes)),
+        mods: matching.map((mod, index) => toProfileMod({ ...mod, priority: index + 1 }, true, inferredVpkIndexes)),
         autoexecCommands: autoexecData.commands,
         createdAt: now,
         updatedAt: now,
@@ -350,7 +351,7 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
     const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
     profiles[index] = {
         ...profiles[index],
-        mods: enabledMods.map(mod => toProfileMod(mod, true, inferredVpkIndexes)),
+        mods: enabledMods.map((mod, index) => toProfileMod({ ...mod, priority: index + 1 }, true, inferredVpkIndexes)),
         // If crosshairSettings is passed, use it. If undefined/null, remove crosshair from profile.
         // This allows the frontend to explicitly control whether crosshair is included based on feature toggle.
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
