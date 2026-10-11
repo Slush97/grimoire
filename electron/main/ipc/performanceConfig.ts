@@ -69,12 +69,13 @@ ipcMain.handle(
         _event,
         presetId?: string,
         optIns?: string[],
-        version?: string | null
+        version?: string | null,
+        restoreVideo?: boolean
     ): PerformanceConfigStatus => {
-        return applyPerformanceConfig(
-            getActiveDeadlockPath(),
-            selection(presetId, optIns, version)
-        );
+        return applyPerformanceConfig(getActiveDeadlockPath(), {
+            ...selection(presetId, optIns, version),
+            restoreVideo,
+        });
     }
 );
 

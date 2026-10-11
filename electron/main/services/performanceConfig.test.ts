@@ -863,7 +863,7 @@ describe('video.txt settings', () => {
 
     it('ships video settings for the presets whose upstream has a video.txt', () => {
         expect(VIDEO_PRESETS.map((p) => p.id)).toEqual(
-            expect.arrayContaining(['optilock-fps', 'optilock-max', 'optilock-potato-testing', 'sqooky-testing'])
+            expect.arrayContaining(['optilock-fps', 'optilock-max', 'sqooky-testing'])
         );
     });
 
@@ -925,16 +925,61 @@ describe('video.txt settings', () => {
         expect(getPerformanceConfigStatus(gameRoot).video!.applied).toBe(video!.total - 1);
     });
 
-    it('a reapply restores what the game changed, and Remove still restores the original', () => {
+    it('a reapply keeps a value changed in game, and Remove leaves it too', () => {
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+        const edited = readVideo().replace(/("setting\.cpu_level"\t\t)"1"/, '$1"3"');
+        writeFileSync(videoPath, edited, 'utf-8');
+
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', optIns: [] });
+        expect(readVideo()).toBe(edited);
+        const { video } = getPerformanceConfigStatus(gameRoot);
+        expect(video!.applied).toBe(video!.total - 1);
+
+        removePerformanceConfig(gameRoot);
+        expect(readVideo()).toBe(VIDEO.replace(/("setting\.cpu_level"\t\t)"2"/, '$1"3"'));
+    });
+
+    it('putting changed values back still lets Remove restore the originals', () => {
         applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
         const applied = readVideo();
         writeFileSync(videoPath, applied.replace(/("setting\.cpu_level"\t\t)"1"/, '$1"3"'), 'utf-8');
 
-        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', restoreVideo: true });
         expect(readVideo()).toBe(applied);
         removePerformanceConfig(gameRoot);
-        // The user's in-game change is now the value Remove goes back to.
-        expect(readVideo()).toBe(VIDEO.replace(/("setting\.cpu_level"\t\t)"2"/, '$1"3"'));
+        expect(readVideo()).toBe(VIDEO);
+    });
+
+    it('an unreadable video.txt fails the apply without touching gameinfo.gi', () => {
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+        const gameinfo = read();
+        rmSync(videoPath);
+        mkdirSync(videoPath);
+
+        expect(applyPerformanceConfig(gameRoot, { presetId: 'optilock-max' }).state).toBe('error');
+        expect(read()).toBe(gameinfo);
+        expect(getPerformanceConfigStatus(gameRoot).appliedPresetId).toBe('optilock-fps');
+    });
+
+    it('a failed video.txt revert keeps the record so Remove can try again', () => {
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+        const applied = readVideo();
+        rmSync(videoPath);
+        mkdirSync(videoPath);
+
+        expect(removePerformanceConfig(gameRoot).state).toBe('error');
+        rmSync(videoPath, { recursive: true });
+        writeFileSync(videoPath, applied, 'utf-8');
+        expect(removePerformanceConfig(gameRoot).state).toBe('not-applied');
+        expect(readVideo()).toBe(VIDEO);
+        expect(read()).toBe(STOCK);
+    });
+
+    it('reports the video settings of the release actually applied', () => {
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', video: false });
+        expect(getPerformanceConfigStatus(gameRoot).videoAvailable).toBeGreaterThan(0);
+        applyPerformanceConfig(gameRoot, { presetId: WITHOUT_VIDEO.id });
+        expect(getPerformanceConfigStatus(gameRoot).videoAvailable).toBe(0);
     });
 
     it('a game update that wipes gameinfo.gi does not strand the video settings', () => {

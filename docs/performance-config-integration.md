@@ -99,10 +99,9 @@ intersection is extractable and safe; everything beyond it is author-specific.
 
 ## What shipped
 
-Eight presets selected by id: `sqooky-default` (balanced, default), `eskay` (light), `sqooky-testing`
+Seven presets selected by id: `sqooky-default` (balanced, default), `eskay` (light), `sqooky-testing`
 (preview), `boot-max-fps` (aggressive), `kaizu-min-spec` (potato), `optilock-fps`
-(competitive), `optilock-max` (maximum), `optilock-potato-testing` (extreme,
-OptiLock's "Potato Config (Testing)"). Each is a section/key diff of a pinned
+(competitive), `optilock-max` (maximum). Each is a section/key diff of a pinned
 upstream `gameinfo.gi` against the stock baseline, generated into
 `performanceConfigData.ts` (never hand-edited) by `pnpm perf:presets` from the
 pins in `scripts/performance-presets.json`.
@@ -146,7 +145,7 @@ Any future list-valued section needs the same treatment.
 
 ### video.txt
 
-OptiLock's two configs and Sqooky's `test_cfg` ship a `video.txt` next to their
+OptiLock's two configs and Sqooky's Max FPS config ship a `video.txt` next to their
 gameinfo.gi, and the authors are explicit that the config looks wrong without
 it (OptiLock's README: "You *MUST* do both or else you will have a very weird
 looking game").
@@ -164,11 +163,18 @@ gameinfo.gi classification too, so `r_render_portals` is never written and
 
 Deadlock rewrites video.txt whenever a graphics setting changes in game and
 keeps no comments, so this half has no markers. The sidecar records, per key,
-the value written and the value replaced (null = absent). Every apply first
-reverts the previous record, then writes, so originals are always pre-Grimoire
-values. Revert only touches keys that still hold Grimoire's value: anything the
-user or the game changed since is theirs. Status reports how many written values
-the file still holds, and the card offers to put back the rest.
+the value written and the value replaced (null = absent). A key Grimoire already
+owns keeps its pre-Grimoire original across reapplies. Revert only touches keys
+that still hold Grimoire's value: anything the user or the game changed since is
+theirs, and a reapply (an opt-in toggle, an update, a version pick) leaves it
+too, like hand edits on the gameinfo.gi side. Status reports how many written
+values the file still holds, and the card's "Put them back" is the one apply
+that writes over them (`restoreVideo`).
+
+A video.txt that exists but cannot be read or written fails the whole apply and
+rolls gameinfo.gi back, so the two halves never describe different presets;
+Remove keeps the record when the revert fails. A missing file (before the first
+launch) only skips the video half.
 
 `performanceVideoSettings` (undefined = on) turns it off globally; an apply with
 it off reverts what an earlier apply wrote.

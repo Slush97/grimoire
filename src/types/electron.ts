@@ -194,15 +194,7 @@ export interface PerformancePresetSummary {
     name: string;
     /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
     version: string;
-    tier:
-        | 'light'
-        | 'balanced'
-        | 'preview'
-        | 'aggressive'
-        | 'potato'
-        | 'competitive'
-        | 'maximum'
-        | 'extreme';
+    tier: 'light' | 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
     author: string;
     /** Upstream itself labels this config experimental. */
     unstable: boolean;
@@ -254,6 +246,9 @@ export interface PerformanceConfigStatus {
      *  video.txt alone (video off, the preset ships none, or an apply from
      *  before video.txt support). */
     video?: { applied: number; total: number };
+    /** Video settings the applied release carries, which can differ from the
+     *  bundled release the card has selected (track-latest, a pinned version). */
+    videoAvailable?: number;
     /** game/citadel/cfg/video.txt does not exist yet (Deadlock writes it on
      *  first launch), so video settings cannot be applied. */
     videoFileMissing?: boolean;
@@ -1176,7 +1171,8 @@ export interface ElectronAPI {
     applyPerformanceConfig: (
         presetId?: string,
         optIns?: string[],
-        version?: string | null
+        version?: string | null,
+        restoreVideo?: boolean
     ) => Promise<PerformanceConfigStatus>;
     removePerformanceConfig: () => Promise<PerformanceConfigStatus>;
     resetPerformanceConfigOverrides: (

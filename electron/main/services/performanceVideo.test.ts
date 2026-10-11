@@ -110,6 +110,44 @@ describe('revertVideo', () => {
     });
 });
 
+describe('applyVideo over an earlier apply', () => {
+    const edit = (text: string) =>
+        text.replace('"setting.cpu_level"\t\t"1"', '"setting.cpu_level"\t\t"3"');
+
+    it('is a no-op when nothing changed', () => {
+        const first = applied(VIDEO);
+        const result = applyVideo(first.text, SETTINGS, first.state);
+        expect(result).toEqual(first);
+    });
+
+    it('keeps a value changed since, but still records it', () => {
+        const first = applied(VIDEO);
+        const result = applyVideo(edit(first.text), SETTINGS, first.state);
+        if (!result.ok) throw new Error(result.error);
+        expect(result.text).toBe(edit(first.text));
+        expect(result.state).toEqual(first.state);
+        expect(videoApplied(result.text, result.state)).toBe(SETTINGS.length - 1);
+    });
+
+    it('restore writes it back and keeps the pre-Grimoire original', () => {
+        const first = applied(VIDEO);
+        const result = applyVideo(edit(first.text), SETTINGS, first.state, true);
+        if (!result.ok) throw new Error(result.error);
+        expect(result.text).toBe(first.text);
+        expect(result.state).toEqual(first.state);
+        expect(revertVideo(result.text, result.state)).toBe(VIDEO);
+    });
+
+    it('a switch to settings without a key gives back the original', () => {
+        const first = applied(VIDEO);
+        const result = applyVideo(first.text, [['cpu_level', '1']], first.state);
+        if (!result.ok) throw new Error(result.error);
+        expect(revertVideo(result.text, result.state)).toBe(VIDEO);
+        expect(result.text).toContain('"setting.r_effects_bloom"\t\t"true"');
+        expect(result.text).not.toContain('r_shadows');
+    });
+});
+
 describe('videoApplied', () => {
     it('counts the written values the file still holds', () => {
         const { text, state } = applied(VIDEO);

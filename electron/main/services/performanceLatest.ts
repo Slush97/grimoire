@@ -144,7 +144,12 @@ async function resolveUpstream(family: PerformancePresetFamily): Promise<Resolve
         const commit = await resolveTag(repo, release.tag_name);
         return { refKind: 'tag', ref: release.tag_name, commit, date: await commitDate(repo, commit) };
     }
-    const head = await latestCommitFor(repo, family.upstream.path);
+    // A config that ships a video.txt changes when either file does, so watch
+    // its folder rather than gameinfo.gi alone.
+    const watched = family.releases[0].video.length
+        ? family.upstream.path.replace(/\/[^/]*$/, '')
+        : family.upstream.path;
+    const head = await latestCommitFor(repo, watched);
     return { refKind: 'prose', ref: head.sha.slice(0, 8), commit: head.sha, date: head.date };
 }
 

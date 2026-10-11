@@ -188,7 +188,12 @@ export default function PerformanceConfigCard() {
   // Write a preset, folding in upstream tracking: re-check right before
   // writing so a stale cache never decides what lands in the file. Offline
   // this falls back to the bundled release.
-  const write = (preset: PerformancePresetSummary, version: string, optIns: string[]) =>
+  const write = (
+    preset: PerformancePresetSummary,
+    version: string,
+    optIns: string[],
+    restoreVideo = false
+  ) =>
     run(async () => {
       let target = version;
       if (trackLatest && version === preset.versions[0].version) {
@@ -196,7 +201,7 @@ export default function PerformanceConfigCard() {
         if (info) setLatest(info);
         if (info?.version && !info.matchesBundled) target = 'latest';
       }
-      return applyPerformanceConfig(preset.id, optIns, target);
+      return applyPerformanceConfig(preset.id, optIns, target, restoreVideo);
     });
 
   const onToggle = async (on: boolean) => {
@@ -334,9 +339,9 @@ export default function PerformanceConfigCard() {
       : selected?.versions[0].version;
   const updateAvailable =
     applied && !pinnedOlder && !!newestVersion && status?.appliedVersion !== newestVersion;
-  // Applied without the video settings this release ships: an apply from
-  // before Grimoire wrote video.txt, or one made before the game created it.
-  const videoPending = applied && videoOn && videoCount > 0 && !status?.video;
+  // Applied without the video settings the applied release ships: an apply
+  // from before Grimoire wrote video.txt, or one made before the game created it.
+  const videoPending = applied && videoOn && (status?.videoAvailable ?? 0) > 0 && !status?.video;
   const videoChanged = applied && status?.video ? status.video.total - status.video.applied : 0;
 
   const notice: Notice | null = !status
@@ -552,7 +557,7 @@ export default function PerformanceConfigCard() {
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => void write(selected, selectedVersion, selectedOptIns)}
+                      onClick={() => void write(selected, selectedVersion, selectedOptIns, true)}
                     >
                       {t('performance.video.reapply')}
                     </Button>

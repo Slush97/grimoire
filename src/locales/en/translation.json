@@ -3114,8 +3114,7 @@
         "competitive": "Competitive",
         "aggressive": "Aggressive",
         "maximum": "Maximum",
-        "potato": "Potato",
-        "extreme": "Extreme"
+        "potato": "Potato"
       },
       "tierBlurb": {
         "light": "Close to Balanced, but keeps the full draw distance so buildings and players don't pop in.",
@@ -3124,8 +3123,7 @@
         "competitive": "Tuned for ranked play: strips visual noise while keeping the game readable.",
         "aggressive": "Trades noticeable visual quality for a large frame-rate gain.",
         "maximum": "Pushes settings as far as they go. The game will look distinctly worse.",
-        "potato": "For very low-end machines. Expect the game to look rough.",
-        "extreme": "The author's in-progress potato config, cut even lower than Maximum. Newer changes, less testing."
+        "potato": "For very low-end machines. Expect the game to look rough."
       },
       "recommended": "Recommended",
       "experimental": "Experimental"

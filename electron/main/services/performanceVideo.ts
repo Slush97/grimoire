@@ -77,14 +77,25 @@ export type ApplyVideoResult =
     | { ok: true; text: string; state: VideoState }
     | { ok: false; error: string };
 
-/** Write `settings` into a video.txt that has no Grimoire values in it (revert
- *  first). Existing entries are edited in place; missing ones go in before the
- *  closing brace, formatted like the file's own entries. */
+/** Take video.txt from what `previous` wrote (null: nothing) to `settings`.
+ *  Existing entries are edited in place; missing ones go in before the closing
+ *  brace, formatted like the file's own entries. A value changed in game since
+ *  `previous` is the user's, so it stays unless `restore` asks for the preset
+ *  value back; it remains in the record either way, which is how the card can
+ *  count it and offer to put it back. */
 export function applyVideo(
     text: string,
-    settings: ReadonlyArray<readonly [string, string]>
+    settings: ReadonlyArray<readonly [string, string]>,
+    previous: VideoState | null = null,
+    restore = false
 ): ApplyVideoResult {
-    const { lines, crlf } = toLines(text);
+    const before = currentValues(toLines(text).lines);
+    const changed = new Set(
+        previous && !restore
+            ? Object.keys(previous.written).filter((key) => before.get(key) !== previous.written[key])
+            : []
+    );
+    const { lines, crlf } = toLines(previous ? revertVideo(text, previous) : text);
     let close = -1;
     for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i].trim() === '}') {
@@ -105,9 +116,16 @@ export function applyVideo(
     const state: VideoState = { original: {}, written: {} };
     const missing: string[] = [];
     for (const [key, value] of settings) {
-        const before = current.get(key) ?? null;
-        if (before === value) continue;
-        state.original[key] = before;
+        // A key an earlier apply wrote keeps its pre-Grimoire original.
+        const original =
+            previous && key in previous.written ? (previous.original[key] ?? null) : (current.get(key) ?? null);
+        if (changed.has(key)) {
+            state.original[key] = original;
+            state.written[key] = value;
+            continue;
+        }
+        if (current.get(key) === value) continue;
+        state.original[key] = original;
         state.written[key] = value;
         if (!setValue(lines, key, value)) missing.push(`${indent}"setting.${key}"${gap}"${value}"`);
     }

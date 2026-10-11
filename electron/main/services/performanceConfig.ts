@@ -119,6 +119,8 @@ export interface ApplyOptions {
     optIns?: string[];
     resetOverrides?: boolean;
     video?: boolean;
+    /** Write the preset's video values over ones changed in game since. */
+    restoreVideo?: boolean;
 }
 
 /** The convars a preset writes for a given opt-in selection: its performance
@@ -436,12 +438,15 @@ function harvestOverrides(
 // ---------------------------------------------------------------------------
 
 /** Take video.txt from whatever an earlier apply left there to `settings`.
- *  Never fails the apply: on any problem the earlier record is kept (so
- *  Remove can still undo it) and the note says what happened. */
+ *  A missing or unrecognizable file skips the video half (the earlier record
+ *  is kept, so Remove can still undo it) and the note says so. A file that
+ *  cannot be read or written throws: the caller rolls back gameinfo.gi rather
+ *  than leave the two halves describing different presets. */
 function syncVideo(
     deadlockPath: string,
     previous: VideoState | null,
-    settings: ReadonlyArray<readonly [string, string]>
+    settings: ReadonlyArray<readonly [string, string]>,
+    restore: boolean
 ): { state: VideoState | null; note: string } {
     const path = getVideoPath(deadlockPath);
     if (!existsSync(path)) {
@@ -452,33 +457,26 @@ function syncVideo(
                 : '',
         };
     }
-    try {
-        const text = readFileSync(path, 'utf-8');
-        const base = previous ? revertVideo(text, previous) : text;
-        if (!settings.length) {
-            if (base !== text) writeFileSync(path, base, 'utf-8');
-            return { state: null, note: '' };
-        }
-        const result = applyVideo(base, settings);
-        if (!result.ok) return { state: previous, note: ` ${result.error}, so its settings were skipped.` };
-        if (result.text !== text) writeFileSync(path, result.text, 'utf-8');
-        const n = Object.keys(result.state.written).length;
-        return { state: result.state, note: n ? ` Set ${n} video setting${n === 1 ? '' : 's'}.` : '' };
-    } catch (err) {
-        return { state: previous, note: ` video.txt could not be updated: ${err}` };
+    const text = readFileSync(path, 'utf-8');
+    if (!settings.length) {
+        revertVideoFile(deadlockPath, previous ?? undefined);
+        return { state: null, note: '' };
     }
+    const result = applyVideo(text, settings, previous, restore);
+    if (!result.ok) return { state: previous, note: ` ${result.error}, so its settings were skipped.` };
+    if (result.text !== text) writeFileSync(path, result.text, 'utf-8');
+    const n = Object.keys(result.state.written).length;
+    return { state: result.state, note: n ? ` Set ${n} video setting${n === 1 ? '' : 's'}.` : '' };
 }
 
+/** Throws when video.txt exists but cannot be restored, so Remove keeps the
+ *  record instead of forgetting values it never put back. */
 function revertVideoFile(deadlockPath: string, state: VideoState | undefined): void {
-    if (!state) return;
     const path = getVideoPath(deadlockPath);
-    try {
-        const text = readFileSync(path, 'utf-8');
-        const restored = revertVideo(text, state);
-        if (restored !== text) writeFileSync(path, restored, 'utf-8');
-    } catch {
-        // video.txt is gone or unreadable: nothing of ours left in it to undo.
-    }
+    if (!state || !existsSync(path)) return;
+    const text = readFileSync(path, 'utf-8');
+    const restored = revertVideo(text, state);
+    if (restored !== text) writeFileSync(path, restored, 'utf-8');
 }
 
 function videoStatus(
@@ -726,11 +724,21 @@ export function applyPerformanceConfig(
         const finalText = crlf ? content.split('\n').join('\r\n') : content;
         writeFileSync(gameinfoPath, finalText, 'utf-8');
         saved[preset.id] = overrides;
-        const video = syncVideo(
-            deadlockPath,
-            sidecar?.video ?? null,
-            opts?.video === false ? [] : preset.video
-        );
+        let video: ReturnType<typeof syncVideo>;
+        try {
+            video = syncVideo(
+                deadlockPath,
+                sidecar?.video ?? null,
+                opts?.video === false ? [] : preset.video,
+                opts?.restoreVideo === true
+            );
+        } catch (err) {
+            writeFileSync(gameinfoPath, original, 'utf-8');
+            return status(
+                'error',
+                `video.txt could not be updated, so nothing was changed (${err}). Make sure it is not read-only, or turn off Video settings.`
+            );
+        }
         writeAppliedState(gameinfoPath, {
             presetId: preset.id,
             version: preset.version,
@@ -1010,6 +1018,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 handEdited,
                 overrideCount,
                 ...(video ? { video } : {}),
+                videoAvailable: known ? resolvePreset(appliedId, begin[2]).video.length : 0,
                 ...(existsSync(getVideoPath(deadlockPath)) ? {} : { videoFileMissing: true }),
                 message: handEdited
                     ? `${base}${overrideNote} The file has manual edits: Reapply folds them into your overrides.`

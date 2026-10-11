@@ -73,6 +73,11 @@
       "refKind": "tag",
       "releases": [
         {
+          "ref": "v5.2",
+          "commit": "353cb7e5eb18e5d8a13a21a9e1b4c25cd7abb5be",
+          "date": "2026-10-10"
+        },
+        {
           "ref": "v5.1",
           "commit": "7f7a54a1b8237d9b66348067d09f93174c47d303",
           "date": "2026-10-02"
@@ -81,14 +86,9 @@
           "ref": "v5.0",
           "commit": "a8be8027d5223aa5fcd52ba6c69912d905303f8b",
           "date": "2026-09-03"
-        },
-        {
-          "ref": "v4.6",
-          "commit": "6caab13036711d09ae439b4de4406bdb9972e148",
-          "date": "2026-08-15"
         }
       ],
-      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder once tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so tag names do not reliably sort into release order. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. The v5.1 GitHub release is titled \"OptiLock v5.0\"; the tag is what we pin and show."
+      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder once tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so tag names do not reliably sort into release order. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. The v5.1 and v5.2 GitHub releases are both titled \"OptiLock v5.0\"; the tag is what we pin and show."
     }
   },
   "presets": [
@@ -125,9 +125,14 @@
       "name": "Sqooky's Testing",
       "tier": "preview",
       "source": "optimizationlock",
-      "path": "test_cfg/gameinfo.gi",
+      "path": "maximumfps or minimum spec config and resources here/gameinfo.gi",
+      "$comment": "3.4 moved the README's Max FPS link from test_cfg to its own folder: same config (only quoting differs) and the same video.txt, but test_cfg is no longer linked and will go stale. pathByRef pins the old location for 3.3 and 3.2.",
+      "pathByRef": {
+        "3.3": "test_cfg/gameinfo.gi",
+        "3.2": "test_cfg/gameinfo.gi"
+      },
       "sha256": {
-        "3.4": "96ed6e4ceb5ec482cadb38756012cd317203694fe3aa6dcbb082c39d41f98ecc",
+        "3.4": "b6419de8e6aa5fede1e0e70f0ff6fa18c43c7f6ab884f0ec26bf30c418f368c4",
         "3.3": "b7b2d540fdb74d91ca8544cb50354ca6ef1cc78dd9a24bc59ad0f5180e29abe1",
         "3.2": "93a375143673eae81e98adb0ddf7f24aeeb428a9bd7c696717d2db6ddaf46808"
       },
@@ -179,14 +184,14 @@
         "v4.0d": "OptiLock FPS Preset/gameinfo.gi"
       },
       "sha256": {
+        "v5.2": "eb536ee8ae87a121d3769e2f516d144fc47d77cd37fc79e568c162e836c98969",
         "v5.1": "f98c6f6e08cecfd3c44b5f65eb31991d3dabc7be366a0223c9c559c2f9765889",
-        "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
-        "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
+        "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
       },
       "videoSha256": {
+        "v5.2": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
         "v5.1": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
-        "v5.0": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
-        "v4.6": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593"
+        "v5.0": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593"
       },
       "author": "dacooder"
     },
@@ -196,43 +201,23 @@
       "tier": "maximum",
       "source": "optilock",
       "path": "OptiLock Potato Config/gameinfo.gi",
-      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections.",
+      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections. v5.2 replaced this file with the former 'OptiLock Potato Config (Testing)' and deleted that folder, so the Testing config lives on here rather than as its own preset.",
       "pathByRef": {
         "v4.2": "OptiLock Max FPS Preset/gameinfo.gi",
         "v4.1": "OptiLock Max FPS Preset/gameinfo.gi",
         "v4.0d": "OptiLock Max FPS Preset/gameinfo.gi"
       },
       "sha256": {
+        "v5.2": "1245876877243994ba181b03b3f93124c5fc1c545d403f8513aef62f8e45f305",
         "v5.1": "a810f532ee993d9d1dd8aaf2c38bdabc5bf77bbd24b14a17da5abeb50d65d064",
-        "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6",
-        "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703"
+        "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6"
       },
       "videoSha256": {
+        "v5.2": "3c2a9b5658e02d87f493b2da4c9f79909baaf2b4fe9cbc2ef235bf73e770238a",
         "v5.1": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
-        "v5.0": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
-        "v4.6": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75"
+        "v5.0": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75"
       },
       "author": "dacooder"
-    },
-    {
-      "id": "optilock-potato-testing",
-      "name": "OptiLock Potato (Testing)",
-      "tier": "extreme",
-      "source": "optilock",
-      "path": "OptiLock Potato Config (Testing)/gameinfo.gi",
-      "$comment": "dacooder's work-in-progress take on the Potato Config (optilock-max): shorter draw, fade and particle distances, fewer decals. Added upstream after v5.0 (commit 5fd6f01d, 2026-09-30), so older releases are null. Ships the same video.txt as the Potato Config.",
-      "sha256": {
-        "v5.1": "26cdefc36eecae9e0de00b9579f358d3524fdca8466070294d491ed8ae66853f",
-        "v5.0": null,
-        "v4.6": null
-      },
-      "videoSha256": {
-        "v5.1": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
-        "v5.0": null,
-        "v4.6": null
-      },
-      "author": "dacooder",
-      "unstable": true
     }
   ],
   "video": {
