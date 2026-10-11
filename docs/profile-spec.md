@@ -104,7 +104,7 @@ Each entry is one logical mod. If a single downloaded file expands into multiple
 | `source` | string | yes | Open enum. Currently defined: `"gamebanana"`. Future: `"nexus"`, `"thunderstore"`, `"modio"`, `"github"`, etc. |
 | `ref` | object | yes | Source-specific identifier (shape depends on `source`). |
 | `enabled` | boolean | yes | Whether the receiving manager should activate this mod. |
-| `priority` | number | yes | Integer load order. Lower numbers load first. Range MAY be source-specific (Deadlock VPKs accept 1-99). |
+| `priority` | number | yes | Integer load order across all addon folders. Lower numbers load first. This is not a folder's `pakNN` slot. |
 | `hint` | object | no | Human-readable fallback metadata. See [Hints](#hint). |
 
 ### `ref` shapes
