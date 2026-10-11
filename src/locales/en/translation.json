@@ -630,6 +630,14 @@
     }
   },
   "conflicts": {
+    "search": {
+      "label": "Search conflicts",
+      "placeholder": "Search active conflicts by mod or file...",
+      "clear": "Clear search",
+      "resultCount": "Showing {{count}} of {{total}} conflicts",
+      "noResults": "No matching conflicts",
+      "noResultsHint": "Try a different mod name or shared-file path."
+    },
     "actions": {
       "clearIgnored": "Clear ignored",
       "clearing": "Clearing…",
@@ -681,7 +689,9 @@
       "ignoreEverywhere": "Ignore in all mods",
       "ignoreFile": "Ignore",
       "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)",
-      "ignoreForPair": "Ignore for this pair"
+      "ignoreForPair": "Ignore for this pair",
+      "showMore_one": "Show {{count}} more",
+      "showMore_other": "Show {{count}} more"
     },
     "header": {
       "description": "Resolve conflicts between installed mods",
@@ -3354,5 +3364,49 @@
     "chooseFolderAndExport": "Choose folder and export",
     "exportPickFolder": "Choose where to save the export",
     "exportFailed": "Export failed: {{error}}"
+  },
+  "crashAdvisory": {
+    "badge": "Possible crash cause",
+    "title": "Possible crash cause",
+    "explanation": "Deadlock's crash report points to a file from {{name}}.",
+    "recorded": "This mod may have caused the crash.",
+    "lastKnown": "This uses the last mod setup Grimoire saw. It may have changed before the crash.",
+    "tryDisabling": "Disable this mod and restart Deadlock to check.",
+    "when": "{{date}} · Game build {{build}}",
+    "showError": "Show error",
+    "dismiss": "Dismiss",
+    "showMod": "Show mod",
+    "viewForMod": "View possible crash cause: {{name}}",
+    "launchHint": "Possible crash cause: {{name}}"
+  },
+  "crashHistory": {
+    "title": "Deadlock crashes",
+    "description": "Crash reports found in your game and Steam folders. Click a report to view it.",
+    "refresh": "Refresh",
+    "empty": "No Deadlock crash reports found.",
+    "failed": "Could not read the crash report: {{error}}",
+    "resourceError": "Game file error",
+    "fatalError": "Fatal error",
+    "accessViolation": "Access violation",
+    "exception": "Game exception",
+    "unknown": "Cause unknown",
+    "unreadable": "Unreadable crash report",
+    "suspect": "Possible crash cause: {{name}}",
+    "copies_one": "{{count}} report file",
+    "copies_other": "{{count}} copies of this report",
+    "showing": "Showing {{count}} of {{total}} crashes",
+    "more": "Show more",
+    "include": "Include crash from {{date}} in bug report",
+    "selection": "{{count}} selected for the bug report below. Choose up to 10.",
+    "details": "Crash report",
+    "loading": "Reading crash report...",
+    "build": "Game build {{build}}",
+    "steam": "Steam",
+    "game": "Deadlock",
+    "noComments": "No error details found in this crash report.",
+    "rawDump": "Bug reports hide account IDs and personal paths. Original dumps may contain personal information.",
+    "showFile": "Show file",
+    "saveDump": "Save original dump",
+    "saved": "Crash dump saved."
   }
 }

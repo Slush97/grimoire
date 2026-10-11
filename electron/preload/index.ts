@@ -134,6 +134,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // Mods
+    getCrashAdvisories: () => ipcRenderer.invoke('get-crash-advisories'),
+    dismissCrashAdvisory: (id: string) => ipcRenderer.invoke('dismiss-crash-advisory', id),
+    onCrashAdvisoriesChanged: (callback: (findings: import('../../src/types/crashAdvisory').CrashAdvisory[]) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, findings: import('../../src/types/crashAdvisory').CrashAdvisory[]) => callback(findings);
+        ipcRenderer.on('crash-advisories-changed', listener);
+        return () => ipcRenderer.removeListener('crash-advisories-changed', listener);
+    },
     getModSafetyPrompts: () => ipcRenderer.invoke('get-mod-safety-prompts'),
     respondModSafety: (id: string, accepted: boolean) => ipcRenderer.invoke('respond-mod-safety', id, accepted),
     getInstalledModSafety: () => ipcRenderer.invoke('get-installed-mod-safety'),
@@ -692,6 +699,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     diagnostics: {
         buildReport: (description: string, options?: { includeFullLog?: boolean }) =>
             ipcRenderer.invoke('diagnostics:buildReport', description, options),
+        listCrashes: (offset) => ipcRenderer.invoke('diagnostics:listCrashes', offset),
+        crashDetail: (id) => ipcRenderer.invoke('diagnostics:crashDetail', id),
+        revealCrash: (id) => ipcRenderer.invoke('diagnostics:revealCrash', id),
+        saveCrashDump: (id) => ipcRenderer.invoke('diagnostics:saveCrashDump', id),
     },
 
     // Grimoire Social

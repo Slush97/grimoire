@@ -14,6 +14,7 @@ import { getSettings, setSettings } from '../lib/api';
 import { useGameinfoStore } from '../stores/gameinfoStore';
 import GameinfoBanner from './GameinfoBanner';
 import { ModSafetyBanner } from './ModSafety';
+import { CrashAdvisoryHost } from './CrashAdvisories';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
@@ -299,6 +300,7 @@ export default function Layout() {
       <div className="relative z-10 flex min-h-0 flex-1">
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}
       <DiscordPresence />
+      <CrashAdvisoryHost />
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <GameinfoBanner />

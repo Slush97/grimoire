@@ -1027,7 +1027,7 @@ export async function openGameFolder(): Promise<void> {
 // Diagnostics
 export async function buildDiagnosticReport(
   description: string,
-  options?: { includeFullLog?: boolean },
+  options?: { includeFullLog?: boolean; crashReportIds?: string[] },
 ): Promise<string> {
   return window.electronAPI.diagnostics.buildReport(description, options);
 }

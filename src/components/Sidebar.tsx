@@ -47,6 +47,8 @@ import { rollMemeTooltip } from '../lib/easterEggs';
 import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
+import { CrashLaunchIndicator } from './CrashAdvisories';
+import { useCrashLaunchSuspect } from '../stores/crashAdvisoryStore';
 import Tx from './translation/Tx';
 import { SidebarActiveBackdrop, SurfaceBackdrop } from './sidebar/surfaceArt';
 
@@ -254,6 +256,7 @@ export default function Sidebar() {
   }`;
   const navLabelClass = `flex-1 ${labelTransitionClass}`;
   const actionLabelClass = `flex-1 text-left ${labelTransitionClass}`;
+  const crashSuspect = useCrashLaunchSuspect();
   const actionIconClass = 'flex h-full w-10 flex-shrink-0 items-center justify-center';
   // Resolve each customizable surface's background (issue: unify launcher
   // backgrounds). resolveAppearanceBg owns the default + legacy fallback rules.
@@ -1112,6 +1115,7 @@ export default function Sidebar() {
             // right-click "hide art" menu is gone (the Appearance surfaces own
             // that now).
             <>
+              <div className="relative min-w-0">
               <button
                 onClick={handleLaunchModded}
                 disabled={!canLaunch || !!launchPending || stopPending}
@@ -1138,11 +1142,13 @@ export default function Sidebar() {
                   )}
                 </span>
                 {labelMounted && (
-                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass} ${crashSuspect ? 'min-w-0 truncate pr-8' : ''}`} aria-hidden={!labelsVisible}>
                     {t('sidebar.launchModded')}
                   </span>
                 )}
               </button>
+              <CrashLaunchIndicator compact={!labelMounted} />
+              </div>
 
               <button
                 onClick={handleLaunchVanilla}
@@ -1178,8 +1184,9 @@ export default function Sidebar() {
               </button>
             </>
           ) : (
+            <div className="relative min-w-0">
             <div
-              className="group/launch relative"
+              className="group/launch relative min-w-0 flex-1"
               onContextMenu={(e) => {
                 e.preventDefault();
                 if (launchPending || stopPending) return;
@@ -1208,7 +1215,7 @@ export default function Sidebar() {
                 </span>
                 {labelMounted && (
                   <span
-                    className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`}
+                    className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass} ${isModdedLaunch && crashSuspect ? 'min-w-0 truncate pr-16' : ''}`}
                     aria-hidden={!labelsVisible}
                   >
                     {t(launchConfig.labelKey)}
@@ -1240,6 +1247,8 @@ export default function Sidebar() {
                   <ArrowRightLeft className="h-3 w-3" />
                 </span>
               )}
+            </div>
+            {isModdedLaunch && <CrashLaunchIndicator compact={!labelMounted} unified />}
             </div>
           )}
         </div>

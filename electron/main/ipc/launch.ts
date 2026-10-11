@@ -17,6 +17,7 @@ import { reconcileCursorPack } from '../services/cursorPacks';
 import { ensureReplayFolderLink } from '../services/replayFolder';
 import { getMainWindow } from '../index';
 import { scanMods } from '../services/mods';
+import { recordCrashLaunchConfiguration, recordVanillaCrashLaunch } from '../services/crashAdvisories';
 import { auditInstalledSafety } from '../services/modSafetyAudit';
 import { pruneModQuarantine, pruneModSafetyPathCache } from '../services/modSafety';
 import {
@@ -45,7 +46,9 @@ ipcMain.handle('launch-modded', async (): Promise<void> => {
             beforeLaunch: async () => {
                 await reconcileCursorPack(deadlockPath).catch((err) =>
                     console.error('[launch] Cursor pack reconcile failed:', err));
-                captureLoadedGameMods(await scanMods(deadlockPath));
+                const mods = await scanMods(deadlockPath);
+                captureLoadedGameMods(mods);
+                recordCrashLaunchConfiguration(deadlockPath, mods);
                 markLaunchGrace();
             },
         });
@@ -64,7 +67,10 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
         await launchVanilla({
             deadlockPath,
             onRestoreComplete: emitRestore,
-            beforeLaunch: captureEmptyGameMods,
+            beforeLaunch: () => {
+                captureEmptyGameMods();
+                recordVanillaCrashLaunch(deadlockPath);
+            },
         });
     } catch (err) {
         clearLoadedGameMods();

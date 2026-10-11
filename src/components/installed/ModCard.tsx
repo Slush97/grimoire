@@ -22,11 +22,13 @@ import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
 import { heroNameForLabel } from '../../lib/heroNames';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
+import { CrashAdvisoryBadge } from '../CrashAdvisories';
 
 interface ModCardProps {
   mod: {
     safety?: Mod['safety'];
     safetyTarget?: Pick<Mod, 'id' | 'name' | 'safety'>;
+    crashModIds?: string[];
     outdatedVdata?: Mod['outdatedVdata'];
     /** Group cards: whether the flagged variant is the enabled one. Defaults to `enabled`. */
     outdatedVdataEnabled?: boolean;
@@ -646,6 +648,7 @@ function ModListRowContent({
         />
         <div className="min-w-0">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
+          <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
           <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
@@ -1388,6 +1391,7 @@ export function ModCard({
               <div className="pointer-events-auto ml-auto flex min-w-0 flex-wrap items-start justify-end gap-1">
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
+              {!selectMode && <CrashAdvisoryBadge variant="overlay" modIds={mod.crashModIds ?? [mod.id]} />}
               {mod.nsfw && (
                 <Tag
                   tone="danger"

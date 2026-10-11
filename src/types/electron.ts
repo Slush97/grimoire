@@ -884,6 +884,9 @@ export interface ElectronAPI {
     };
 
     // Mods
+    getCrashAdvisories: () => Promise<import('./crashAdvisory').CrashAdvisory[]>;
+    dismissCrashAdvisory: (id: string) => Promise<import('./crashAdvisory').CrashAdvisory[]>;
+    onCrashAdvisoriesChanged: (callback: (findings: import('./crashAdvisory').CrashAdvisory[]) => void) => () => void;
     getModSafetyPrompts: () => Promise<ModSafetyPrompt[]>;
     respondModSafety: (id: string, accepted: boolean) => Promise<void>;
     getInstalledModSafety: () => Promise<{ mods: InstalledModSafety[]; running: boolean; failed: boolean }>;
@@ -1359,7 +1362,11 @@ export interface ElectronAPI {
 
     // Diagnostics
     diagnostics: {
-        buildReport: (description: string, options?: { includeFullLog?: boolean }) => Promise<string>;
+        buildReport: (description: string, options?: { includeFullLog?: boolean; crashReportIds?: string[] }) => Promise<string>;
+        listCrashes: (offset?: number) => Promise<import('./crashHistory').CrashHistoryPage>;
+        crashDetail: (id: string) => Promise<import('./crashHistory').CrashReportDetail>;
+        revealCrash: (id: string) => Promise<void>;
+        saveCrashDump: (id: string) => Promise<boolean>;
     };
 
     // Grimoire Social

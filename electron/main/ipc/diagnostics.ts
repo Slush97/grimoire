@@ -1,5 +1,7 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog, shell } from 'electron';
+import { basename } from 'path';
 import { buildReportText } from '../services/diagnostics';
+import { crashHistory } from '../services/crashHistoryService';
 
 // Renderer-side trace bridge.
 //
@@ -19,14 +21,29 @@ ipcMain.on('diagnostics:trace', (_, scope: unknown, message: unknown) => {
 
 ipcMain.handle(
     'diagnostics:buildReport',
-    (_, description: unknown, options: unknown): Promise<string> => {
+    async (_, description: unknown, options: unknown): Promise<string> => {
         const includeFullLog =
             typeof options === 'object' &&
             options !== null &&
             (options as { includeFullLog?: unknown }).includeFullLog === true;
-        return buildReportText(
+        const report = await buildReportText(
             typeof description === 'string' ? description : '',
             { includeFullLog },
         );
+        const ids = typeof options === 'object' && options !== null ? (options as { crashReportIds?: unknown }).crashReportIds : undefined;
+        const selected = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id)).slice(0, 10) : [];
+        return selected.length ? `${report}\n\n--- selected Deadlock crashes ---\n\n${await crashHistory().reportText(selected)}` : report;
     },
 );
+
+ipcMain.handle('diagnostics:listCrashes', (_, offset: unknown) => crashHistory().list(typeof offset === 'number' ? offset : 0));
+ipcMain.handle('diagnostics:crashDetail', (_, id: string) => crashHistory().detail(id));
+ipcMain.handle('diagnostics:revealCrash', async (_, id: string) => shell.showItemInFolder(await crashHistory().sourcePath(id)));
+ipcMain.handle('diagnostics:saveCrashDump', async (_, id: string): Promise<boolean> => {
+    const history = crashHistory();
+    const source = await history.sourcePath(id);
+    const result = await dialog.showSaveDialog({ defaultPath: basename(source) });
+    if (result.canceled || !result.filePath) return false;
+    await history.saveDump(id, result.filePath);
+    return true;
+});

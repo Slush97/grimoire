@@ -6,6 +6,7 @@ import { buildDiagnosticReport } from '../../../lib/api';
 import { Button, Card } from '../../common/ui';
 import { Textarea } from '../../common/forms';
 import Tx from '../../translation/Tx';
+import CrashHistoryPanel from '../CrashHistoryPanel';
 
 const DISCORD_INVITE = 'https://discord.gg/KgYGHEMq2P';
 
@@ -29,13 +30,14 @@ export default function SupportSection() {
   const [bugReportError, setBugReportError] = useState<string | null>(null);
   const [bugCopyState, setBugCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [includeFullLog, setIncludeFullLog] = useState(false);
+  const [crashReportIds, setCrashReportIds] = useState<string[]>([]);
 
   const handleGenerateBugReport = async () => {
     setIsBuildingReport(true);
     setBugReportError(null);
     setBugCopyState('idle');
     try {
-      const text = await buildDiagnosticReport(bugDescription, { includeFullLog });
+      const text = await buildDiagnosticReport(bugDescription, { includeFullLog, crashReportIds });
       setBugReportText(text);
     } catch (err) {
       setBugReportError(t('settings.support.reportBuildFailed', { error: String(err) }));
@@ -109,6 +111,14 @@ export default function SupportSection() {
             </a>
           </div>
         </div>
+
+        <div className="h-px bg-hl/5" />
+
+        <CrashHistoryPanel selectedIds={crashReportIds} onToggle={id => {
+          setCrashReportIds(previous => previous.includes(id) ? previous.filter(item => item !== id)
+            : previous.length < 10 ? [...previous, id] : previous);
+          setBugReportText(null);
+        }} />
 
         <div className="h-px bg-hl/5" />
 
