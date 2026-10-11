@@ -1,9 +1,15 @@
 // The video.txt half of a performance preset. Several upstream configs ship a
 // video.txt next to their gameinfo.gi and look wrong without it, because the
 // gameinfo.gi values assume those render settings. Grimoire writes the preset's
-// `setting.*` values into the user's own game/citadel/cfg/video.txt in place;
-// the header (Version, VendorID, DeviceID) and every display setting stay the
-// user's (see `video.exclude` in scripts/performance-presets.json).
+// `setting.*` values into the user's own video.txt in place; the header
+// (Version, VendorID, DeviceID) and every display setting stay the user's (see
+// `video.exclude` in scripts/performance-presets.json).
+//
+// Since the 2026-09-29 update Deadlock keeps its cfg in Steam userdata
+// (`userdata/<account>/1422450/local/cfg/`) and reads video.txt from there,
+// falling back to game/citadel/cfg/video.txt only while the userdata copy does
+// not exist yet. Writing the game folder's copy when the userdata one exists
+// does nothing in game.
 //
 // Unlike gameinfo.gi, Deadlock rewrites video.txt itself whenever the user
 // changes a graphics setting in game, and that rewrite keeps no comments. An
@@ -11,8 +17,12 @@
 // applied-state sidecar instead: per key, the value written and the value it
 // replaced. Revert only touches a key that still holds the value Grimoire
 // wrote; one the user or the game has changed since is theirs now.
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { getCitadelPath } from './deadlock';
+import { getSteamRoots } from './steamRoots';
+
+const DEADLOCK_APP_ID = '1422450';
 
 export interface VideoState {
     /** Value each key had before Grimoire wrote it; null when it was absent. */
@@ -21,8 +31,33 @@ export interface VideoState {
     written: Record<string, string>;
 }
 
+/** The userdata video.txt Deadlock reads. With several Steam accounts, the one
+ *  that launched Deadlock last: the game rewrites machine_convars.vcfg next to
+ *  it on every launch, while video.txt only changes with a setting. */
+function userdataVideoPath(): string | null {
+    let best: { path: string; launched: number } | null = null;
+    for (const root of getSteamRoots()) {
+        let accounts: string[];
+        try {
+            accounts = readdirSync(join(root, 'userdata'));
+        } catch {
+            continue;
+        }
+        for (const account of accounts) {
+            if (!/^\d+$/.test(account)) continue;
+            const cfg = join(root, 'userdata', account, DEADLOCK_APP_ID, 'local', 'cfg');
+            const path = join(cfg, 'video.txt');
+            if (!existsSync(path)) continue;
+            const convars = join(cfg, 'machine_convars.vcfg');
+            const launched = statSync(existsSync(convars) ? convars : path).mtimeMs;
+            if (!best || launched > best.launched) best = { path, launched };
+        }
+    }
+    return best?.path ?? null;
+}
+
 export function getVideoPath(deadlockPath: string): string {
-    return join(getCitadelPath(deadlockPath), 'cfg', 'video.txt');
+    return userdataVideoPath() ?? join(getCitadelPath(deadlockPath), 'cfg', 'video.txt');
 }
 
 const SETTING_RE = /^([ \t]*)"setting\.([A-Za-z_]\w*)"([ \t]+)"([^"\r\n]*)"/;

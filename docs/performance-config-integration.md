@@ -150,7 +150,19 @@ gameinfo.gi, and the authors are explicit that the config looks wrong without
 it (OptiLock's README: "You *MUST* do both or else you will have a very weird
 looking game").
 Their instructions are to paste it over everything under `DeviceID` in the
-user's own `game/citadel/cfg/video.txt`.
+user's own video.txt.
+
+Since the 2026-09-29 update Deadlock keeps its cfg in Steam userdata and reads
+`userdata/<account>/1422450/local/cfg/video.txt`, falling back to
+`game/citadel/cfg/video.txt` only until the game first writes the userdata
+copy. Writing the game folder's copy while the userdata one exists changes
+nothing in game, which made every video-shipping config look broken: the
+gameinfo.gi half ran against the user's own render settings. `getVideoPath`
+takes the userdata copy of the account whose `machine_convars.vcfg` is newest
+(the game rewrites it on every launch) and falls back to the game folder. The
+sidecar records which file was written; when the game starts reading another
+one, status counts the values as not applied and the next apply reverts the old
+file before writing the new one.
 
 Grimoire writes the `setting.*` entries in place (`performanceVideo.ts`) and
 never the header. `videoSha256` on a preset pins the sibling file per release,
@@ -160,6 +172,12 @@ resolution, refresh rate, window mode, monitor index, DPI, aspect mode, gamma,
 V-Sync, frame cap and `knowndevice`. The remaining keys go through the
 gameinfo.gi classification too, so `r_render_portals` is never written and
 `r_citadel_outlines` is left to its gameinfo.gi opt-in toggle.
+
+`video.max` caps numeric values, for bundled presets and tracked releases
+alike. `r_texture_stream_mip_bias` is capped at 4: OptiLock's README says past
+4 you need its Sinner's Light Fix VPK, which Grimoire does not install, and
+OptiLock v5.2's Potato Config ships 6. Several gameinfo.gi bodies set it to 8,
+but video.txt is read after gameinfo.gi and wins.
 
 Deadlock rewrites video.txt whenever a graphics setting changes in game and
 keeps no comments, so this half has no markers. The sidecar records, per key,
@@ -176,8 +194,8 @@ rolls gameinfo.gi back, so the two halves never describe different presets;
 Remove keeps the record when the revert fails. A missing file (before the first
 launch) only skips the video half.
 
-`performanceVideoSettings` (undefined = on) turns it off globally; an apply with
-it off reverts what an earlier apply wrote.
+There is no switch for the video half: a config that ships a video.txt always
+applies it, since its author says the config is broken without it.
 
 ### Marker grammar
 
@@ -277,7 +295,7 @@ guessed. Left open deliberately.
   OptimizedMcGinnisWall). They belong in the normal VPK pipeline, not the
   gameinfo patcher. Encode the known dependency as a `requires` field: OptiLock's
   README says raising `r_texture_stream_mip_bias` past 4 needs Sinner's Light
-  Fix. Every bundled video.txt sets exactly 4.
+  Fix. Until then `video.max` holds it at 4.
 - **Ask Sqooky to cut git tags.** It costs him one command and upgrades four of
   the six pins from a bare SHA to a real release.
 

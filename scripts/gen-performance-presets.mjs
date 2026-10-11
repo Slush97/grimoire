@@ -362,6 +362,7 @@ function emit(manifest, presets) {
     emitList('optInPatterns', manifest.optIn.patterns ?? [], q);
     emitList('allowInBody', manifest.optIn.allowInBody ?? [], (k) => q(k.key));
     emitList('videoExcludePatterns', manifest.video?.exclude ?? [], (p) => q(p.pattern));
+    emitList('videoMax', manifest.video?.max ?? [], (c) => `{ key: ${q(c.key)}, max: ${c.max} }`);
     L.push(`};`);
     L.push(``);
 

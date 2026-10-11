@@ -201,7 +201,7 @@
       "tier": "maximum",
       "source": "optilock",
       "path": "OptiLock Potato Config/gameinfo.gi",
-      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections. v5.2 replaced this file with the former 'OptiLock Potato Config (Testing)' and deleted that folder, so the Testing config lives on here rather than as its own preset.",
+      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections. v5.2 rewrote this file as a new, more aggressive config (\"Updated New Potato, Retired Old\") and deleted the 'OptiLock Potato Config (Testing)' folder. The new file is not the Testing config: it drops about 150 of its convars and adds draw-distance culling (r_farz 7000, r_propsmaxdist 600).",
       "pathByRef": {
         "v4.2": "OptiLock Max FPS Preset/gameinfo.gi",
         "v4.1": "OptiLock Max FPS Preset/gameinfo.gi",
@@ -284,6 +284,14 @@
       {
         "pattern": "^fps_max",
         "why": "Frame cap. Users cap to their refresh rate; upstream ships 0 (uncapped)."
+      }
+    ],
+    "$maxComment": "Ceilings on numeric video.txt values: a higher upstream value is written as `max`. Applies to bundled presets and to releases fetched by track-latest alike.",
+    "max": [
+      {
+        "key": "r_texture_stream_mip_bias",
+        "max": 4,
+        "why": "OptiLock's README: past 4 you must install its Essential Fixes/SinnersLightFix.vpk, which Grimoire does not install. OptiLock v5.2's Potato Config ships 6, and without the fix the game looks broken."
       }
     ]
   },

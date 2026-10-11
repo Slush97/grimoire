@@ -8,10 +8,14 @@
 //
 // The fixture is the stock Deadlock gameinfo.gi the presets were diffed
 // against (see scripts/performance-presets.json).
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'fs';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, utimesSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+
+// Without this, video.txt resolution would find the real Steam userdata.
+const h = vi.hoisted(() => ({ steamRoot: '' }));
+vi.mock('./steamRoots', () => ({ getSteamRoots: () => [h.steamRoot] }));
 import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
@@ -33,6 +37,7 @@ let sidecarPath: string;
 
 beforeEach(() => {
     gameRoot = mkdtempSync(join(tmpdir(), 'grimoire-perf-'));
+    h.steamRoot = join(gameRoot, 'steam');
     const dir = join(gameRoot, 'game', 'citadel');
     mkdirSync(dir, { recursive: true });
     gameinfo = join(dir, 'gameinfo.gi');
@@ -903,14 +908,6 @@ describe('video.txt settings', () => {
         expect(getPerformanceConfigStatus(gameRoot).video).toBeUndefined();
     });
 
-    it('turning video off reverts it and keeps it off', () => {
-        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
-        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', video: false });
-        expect(readVideo()).toBe(VIDEO);
-        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', video: false });
-        expect(readVideo()).toBe(VIDEO);
-    });
-
     it('reports how many written values the game has changed since', () => {
         applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
         const { video } = getPerformanceConfigStatus(gameRoot);
@@ -976,7 +973,8 @@ describe('video.txt settings', () => {
     });
 
     it('reports the video settings of the release actually applied', () => {
-        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps', video: false });
+        rmSync(videoPath);
+        applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
         expect(getPerformanceConfigStatus(gameRoot).videoAvailable).toBeGreaterThan(0);
         applyPerformanceConfig(gameRoot, { presetId: WITHOUT_VIDEO.id });
         expect(getPerformanceConfigStatus(gameRoot).videoAvailable).toBe(0);
@@ -1002,5 +1000,51 @@ describe('video.txt settings', () => {
         const status = getPerformanceConfigStatus(gameRoot);
         expect(status.video).toBeUndefined();
         expect(status.videoFileMissing).toBe(true);
+    });
+
+    describe('Steam userdata video.txt', () => {
+        /** A Steam account's Deadlock cfg folder holding video.txt, as the
+         *  game creates it; `launched` stamps its machine_convars.vcfg. */
+        function userdataVideo(account: string, launched: number): string {
+            const cfg = join(h.steamRoot, 'userdata', account, '1422450', 'local', 'cfg');
+            mkdirSync(cfg, { recursive: true });
+            const convars = join(cfg, 'machine_convars.vcfg');
+            writeFileSync(convars, '"config" {}', 'utf-8');
+            utimesSync(convars, launched, launched);
+            const path = join(cfg, 'video.txt');
+            writeFileSync(path, VIDEO, 'utf-8');
+            return path;
+        }
+
+        it('writes the userdata copy the game reads and leaves the game folder one alone', () => {
+            const userdata = userdataVideo('111', 1000);
+            applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+            expect(readFileSync(userdata, 'utf-8')).not.toBe(VIDEO);
+            expect(readVideo()).toBe(VIDEO);
+            const { video } = getPerformanceConfigStatus(gameRoot);
+            expect(video!.applied).toBe(video!.total);
+
+            removePerformanceConfig(gameRoot);
+            expect(readFileSync(userdata, 'utf-8')).toBe(VIDEO);
+        });
+
+        it('picks the account that launched Deadlock last', () => {
+            const older = userdataVideo('111', 1000);
+            const newer = userdataVideo('222', 2000);
+            applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+            expect(readFileSync(older, 'utf-8')).toBe(VIDEO);
+            expect(readFileSync(newer, 'utf-8')).not.toBe(VIDEO);
+        });
+
+        it('moves the settings when the game starts reading the userdata copy', () => {
+            applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+            const applied = readVideo();
+            const userdata = userdataVideo('111', 1000);
+            expect(getPerformanceConfigStatus(gameRoot).video!.applied).toBe(0);
+
+            applyPerformanceConfig(gameRoot, { presetId: 'optilock-fps' });
+            expect(readVideo()).toBe(VIDEO);
+            expect(readFileSync(userdata, 'utf-8')).toBe(applied);
+        });
     });
 });
