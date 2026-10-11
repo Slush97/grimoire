@@ -68,7 +68,8 @@ let mainWindow: BrowserWindow | null = null;
 
 export interface UpdateStatus {
     checked: boolean;
-    returningToStable: boolean;
+    /** The offered update is a stable release older than this nightly build. */
+    olderStable: boolean;
     errorCode: string | null;
     checking: boolean;
     available: boolean;
@@ -81,7 +82,7 @@ export interface UpdateStatus {
 
 const emptyStatus = (): UpdateStatus => ({
     checked: false,
-    returningToStable: false,
+    olderStable: false,
     errorCode: null,
     checking: false,
     available: false,
@@ -126,7 +127,6 @@ export function syncUpdaterWithSettings(): void {
     const installedNightly = app.getVersion().includes('-nightly.');
     autoUpdater.allowDowngrade = channel === 'stable' && installedNightly;
     autoUpdater.fullChangelog = channel === 'stable' && !installedNightly;
-    currentStatus = { ...currentStatus, returningToStable: channel === 'stable' && installedNightly };
     if (changed) sendStatusToRenderer();
 }
 
@@ -144,6 +144,13 @@ export function setUpdateChannel(channel: unknown): AppSettings {
 function forActiveChannel(info: UpdateInfo): UpdateInfo {
     if (activeChannel !== 'stable' || !Array.isArray(info.releaseNotes)) return info;
     return { ...info, releaseNotes: info.releaseNotes.filter(note => !note.version.includes('-')) };
+}
+
+// Leaving Nightly offers the current stable release even when it is older than
+// the installed build. That is not an update, so the renderer only offers it in
+// Settings > Updates.
+function isOlderStable(info: UpdateInfo): boolean {
+    return activeChannel === 'stable' && autoUpdater.currentVersion.compare(info.version) > 0;
 }
 
 function sendStatusToRenderer() {
@@ -171,6 +178,7 @@ export function initUpdater(window: BrowserWindow) {
             checked: true,
             checking: false,
             available: true,
+            olderStable: isOlderStable(info),
             updateInfo: forActiveChannel(info),
         };
         sendStatusToRenderer();
@@ -182,6 +190,7 @@ export function initUpdater(window: BrowserWindow) {
             checked: true,
             checking: false,
             available: false,
+            olderStable: false,
             updateInfo: null,
         };
         sendStatusToRenderer();
@@ -203,6 +212,7 @@ export function initUpdater(window: BrowserWindow) {
             downloading: false,
             downloaded: true,
             progress: 100,
+            olderStable: isOlderStable(info),
             updateInfo: forActiveChannel(info),
         };
         sendStatusToRenderer();

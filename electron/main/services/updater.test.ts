@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
         allowDowngrade: false,
         fullChangelog: false,
         autoInstallOnAppQuit: true,
+        // electron-updater's SemVer for the installed build. RANK orders the fixture versions.
+        currentVersion: { compare: (other: string) => Math.sign(RANK[h.version] - RANK[other]) },
     },
 }));
 
@@ -34,6 +36,7 @@ vi.mock('./settings', () => ({
 }));
 
 const nightly = { version: '1.31.1-nightly.20261009123000.42.gabcdef0', files: [], releaseDate: '2026-10-09' };
+const RANK: Record<string, number> = { '1.31.0': 0, [nightly.version]: 1, '1.32.0': 2 };
 function emit(name: string, value?: unknown) { h.handlers.get(name)?.(value); }
 
 beforeEach(() => {
@@ -104,10 +107,22 @@ describe.each(['win32', 'linux'] as const)('Stable / Nightly updates (%s)', plat
         expect(h.updater.allowDowngrade).toBe(true);
         expect(h.updater.fullChangelog).toBe(false);
         h.version = '1.31.0';
-        expect(service.getUpdateStatus().returningToStable).toBe(true);
         service.syncUpdaterWithSettings();
         expect(h.updater.allowDowngrade).toBe(false);
-        expect(service.getUpdateStatus().returningToStable).toBe(false);
+    });
+
+    it('flags only a stable offer older than the installed nightly', async () => {
+        h.version = nightly.version;
+        const service = await init();
+        emit('update-available', { ...nightly, version: '1.31.0' });
+        expect(service.getUpdateStatus()).toMatchObject({ available: true, olderStable: true });
+        emit('update-downloaded', { ...nightly, version: '1.31.0' });
+        expect(service.getUpdateStatus()).toMatchObject({ downloaded: true, olderStable: true });
+        emit('update-available', { ...nightly, version: '1.32.0' });
+        expect(service.getUpdateStatus().olderStable).toBe(false);
+        emit('update-available', { ...nightly, version: '1.31.0' });
+        emit('update-not-available');
+        expect(service.getUpdateStatus().olderStable).toBe(false);
     });
 
     it('rejects invalid channels and preserves the old channel when persistence fails', async () => {

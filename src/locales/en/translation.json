@@ -2962,7 +2962,6 @@
     "appUpdates": "App Updates",
     "titleReady": "v{{version}} ready to install",
     "titleAvailable": "Update available: v{{version}}",
-    "titleStable": "Return to Stable: v{{version}}",
     "youReOn": "You're on <ver>v{{version}}</ver>",
     "releasedOn": "(released {{date}})",
     "managedByPackageManager": "Managed by your package manager.",
@@ -2980,9 +2979,6 @@
     "manualDownloadLink": "Open the releases page"
   },
   "appUpdateBanner": {
-    "stableAvailableVersion": "Stable release available ({{version}})",
-    "stableReady": "Download the current stable release to leave Nightly. It may be older than your installed build.",
-    "switchToStable": "Switch to Stable",
     "readyToInstallVersion": "Grimoire {{version}} is ready to install",
     "readyToInstall": "Grimoire is ready to install",
     "updateAvailableVersion": "Grimoire update available ({{version}})",

@@ -36,7 +36,7 @@ export default function AppUpdateBanner() {
   }, []);
 
   const downloaded = !!status?.downloaded;
-  const updateReady = !!status && (status.available || status.downloaded);
+  const updateReady = !!status && (status.downloaded || (status.available && !status.olderStable));
   const showBanner = updateReady && !managed && !dismissed;
   const version = status?.updateInfo?.version;
 
@@ -58,8 +58,6 @@ export default function AppUpdateBanner() {
                   ? version
                     ? t('appUpdateBanner.readyToInstallVersion', { version })
                     : t('appUpdateBanner.readyToInstall')
-                  : status?.returningToStable && version
-                    ? t('appUpdateBanner.stableAvailableVersion', { version })
                   : version
                     ? t('appUpdateBanner.updateAvailableVersion', { version })
                     : t('appUpdateBanner.updateAvailable')}
@@ -67,9 +65,7 @@ export default function AppUpdateBanner() {
               <div className="text-xs text-text-secondary">
                 {downloaded
                   ? t('appUpdateBanner.restartToFinish')
-                  : status?.returningToStable
-                    ? t('appUpdateBanner.stableReady')
-                    : t('appUpdateBanner.newerVersionReady')}
+                  : t('appUpdateBanner.newerVersionReady')}
               </div>
             </div>
             <Button
@@ -79,7 +75,7 @@ export default function AppUpdateBanner() {
               icon={Download}
               className="flex-shrink-0"
             >
-              {downloaded ? t('appUpdateBanner.install') : status?.returningToStable ? t('appUpdateBanner.switchToStable') : t('appUpdateBanner.viewUpdate')}
+              {downloaded ? t('appUpdateBanner.install') : t('appUpdateBanner.viewUpdate')}
             </Button>
             <button
               type="button"

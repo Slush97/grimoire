@@ -72,8 +72,6 @@ export default function UpdateModal({ onClose }: Props) {
                     title={
                         status?.downloaded
                             ? t('updateModal.titleReady', { version: status.updateInfo?.version })
-                            : status?.available && status.returningToStable
-                                ? t('updateModal.titleStable', { version: status.updateInfo?.version })
                             : status?.available
                                 ? t('updateModal.titleAvailable', { version: status.updateInfo?.version })
                                 : t('updateModal.appUpdates')

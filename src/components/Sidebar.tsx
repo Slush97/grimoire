@@ -305,10 +305,10 @@ export default function Sidebar() {
     window.electronAPI.updater.getVersion().then(v => setAppVersion(`v${v}`)).catch(() => setAppVersion('v???'));
     window.electronAPI.updater.checkForUpdates().catch(() => { });
     window.electronAPI.updater.getStatus().then(status => {
-      if (status) setUpdateAvailable(status.available || status.downloaded);
+      if (status) setUpdateAvailable(status.downloaded || (status.available && !status.olderStable));
     });
     const unsub = window.electronAPI.updater.onStatus((status) => {
-      setUpdateAvailable(status.available || status.downloaded);
+      setUpdateAvailable(status.downloaded || (status.available && !status.olderStable));
     });
     return unsub;
   }, []);

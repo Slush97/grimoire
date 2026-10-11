@@ -786,7 +786,9 @@ export interface CrosshairPreset {
 
 export interface UpdateStatus {
     checked: boolean;
-    returningToStable: boolean;
+    /** The offered update is a stable release older than this nightly build:
+     *  only offered in Settings > Updates, never announced as an update. */
+    olderStable: boolean;
     errorCode: string | null;
     checking: boolean;
     available: boolean;
