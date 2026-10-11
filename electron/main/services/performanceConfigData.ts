@@ -250,6 +250,9 @@ export const CLASSIFICATION: PresetGenClassification = {
         '^mat_vsync$',
         '^fps_max',
     ],
+    videoMax: [
+        { key: 'r_texture_stream_mip_bias', max: 4 },
+    ],
 };
 
 const SqookyDefault: PerformancePresetFamily = {
@@ -6210,7 +6213,7 @@ const OptilockMax: PerformancePresetFamily = {
                 ['r_citadel_mboit', 'false'],
                 ['lb_csm_override_staticgeo_cascades', 'true'],
                 ['lb_csm_override_staticgeo_cascades_value', '-1'],
-                ['r_texture_stream_mip_bias', '6'],
+                ['r_texture_stream_mip_bias', '4'],
             ],
         },
         {

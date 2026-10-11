@@ -37,6 +37,9 @@ export interface PresetGenClassification {
      *  the user's screen (resolution, window mode, refresh, gamma), never
      *  written whatever upstream ships. */
     videoExcludePatterns: readonly string[];
+    /** Numeric ceilings for video.txt settings: an upstream value above `max`
+     *  is written as `max`. */
+    videoMax: ReadonlyArray<{ readonly key: string; readonly max: number }>;
 }
 
 export interface GenSectionOp {
@@ -302,12 +305,14 @@ export interface GeneratedVideo {
 /** Classify parsed video.txt settings into what Grimoire writes. Display keys
  *  and anything gameinfo.gi never writes are dropped. Opt-in convars are
  *  dropped too: the gameinfo.gi toggle for that convar is what the user
- *  controls, and a second copy here would quietly overrule it. */
+ *  controls, and a second copy here would quietly overrule it. Capped keys are
+ *  lowered to their ceiling. */
 export function generateVideoBody(
     settings: ReadonlyArray<readonly [string, string]>,
     classification: PresetGenClassification
 ): GeneratedVideo {
     const display = classification.videoExcludePatterns.map((p) => new RegExp(p, 'i'));
+    const caps = new Map(classification.videoMax.map((c) => [c.key, c.max]));
     const excludedKeys = new Set(classification.excludeKeys);
     const excludePatterns = classification.excludePatterns.map((p) => new RegExp(p, 'i'));
     const optInKeys = new Set(classification.optInKeys.map((k) => k.key));
@@ -324,7 +329,8 @@ export function generateVideoBody(
             problems.push({ kind: 'unclassified', key, where: 'video.txt' });
             continue;
         }
-        out.push([key, value]);
+        const cap = caps.get(key);
+        out.push([key, cap !== undefined && Number(value) > cap ? String(cap) : value]);
     }
     return { settings: out, problems };
 }
@@ -419,6 +425,7 @@ interface ManifestLike {
     };
     video?: {
         exclude?: Array<{ pattern: string }>;
+        max?: Array<{ key: string; max: number }>;
     };
 }
 
@@ -433,5 +440,6 @@ export function classificationFromManifest(manifest: ManifestLike): PresetGenCla
         optInPatterns: manifest.optIn.patterns ?? [],
         allowInBody: (manifest.optIn.allowInBody ?? []).map((k) => k.key),
         videoExcludePatterns: (manifest.video?.exclude ?? []).map((p) => p.pattern),
+        videoMax: (manifest.video?.max ?? []).map((c) => ({ key: c.key, max: c.max })),
     };
 }

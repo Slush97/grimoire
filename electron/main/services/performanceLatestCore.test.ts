@@ -2,10 +2,13 @@
 // for the human reviewer the bundled presets get, the cache round-trip, and
 // the end-to-end contract that a cached latest release applies and removes
 // through the patcher exactly like a bundled one.
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+
+// Without this, video.txt resolution would find the real Steam userdata.
+vi.mock('./steamRoots', () => ({ getSteamRoots: () => [] }));
 import {
     buildLatestRelease,
     getCachedHistory,
@@ -19,8 +22,8 @@ import {
     type BuildLatestInput,
     type LatestRelease,
 } from './performanceLatestCore';
-import { validateGameinfoText } from './performancePresetGen';
-import { getFamily } from './performanceConfigData';
+import { generateVideoBody, validateGameinfoText } from './performancePresetGen';
+import { CLASSIFICATION, getFamily } from './performanceConfigData';
 import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
@@ -248,6 +251,26 @@ describe('validateGameinfoText', () => {
         // Braces inside comments must not count.
         const commented = baselineText().replace('// padding comment line 0', '// stray { brace');
         expect(validateGameinfoText(commented, 'x')).toBeNull();
+    });
+});
+
+describe('generateVideoBody caps', () => {
+    // Past 4 OptiLock needs its Sinner's Light Fix VPK, which Grimoire does not install.
+    it('lowers mip bias above 4 and leaves lower values alone', () => {
+        const capped = (value: string) =>
+            generateVideoBody([['r_texture_stream_mip_bias', value]], CLASSIFICATION).settings;
+        expect(capped('6')).toEqual([['r_texture_stream_mip_bias', '4']]);
+        expect(capped('4')).toEqual([['r_texture_stream_mip_bias', '4']]);
+        expect(capped('2')).toEqual([['r_texture_stream_mip_bias', '2']]);
+    });
+
+    it('caps every bundled release', () => {
+        for (const id of ['optilock-fps', 'optilock-max', 'sqooky-testing']) {
+            for (const release of getFamily(id).releases) {
+                const bias = release.video.find(([key]) => key === 'r_texture_stream_mip_bias');
+                if (bias) expect(Number(bias[1])).toBeLessThanOrEqual(4);
+            }
+        }
     });
 });
 

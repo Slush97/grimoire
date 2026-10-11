@@ -3164,9 +3164,8 @@
       "description": "Grimoire checks the config author's GitHub for updates. Offline, it uses the version bundled with Grimoire."
     },
     "video": {
-      "label": "Video settings",
-      "description_one": "Also changes {{count}} in-game video setting the config needs to look right. Your resolution, display mode and frame cap stay as they are.",
-      "description_other": "Also changes {{count}} in-game video settings the config needs to look right. Your resolution, display mode and frame cap stay as they are.",
+      "description_one": "This config also sets {{count}} in-game video setting it needs to look right. Your resolution, display mode and frame cap stay as they are.",
+      "description_other": "This config also sets {{count}} in-game video settings it needs to look right. Your resolution, display mode and frame cap stay as they are.",
       "changed_one": "{{count}} of them was changed in game since.",
       "changed_other": "{{count}} of them were changed in game since.",
       "reapply": "Put them back",

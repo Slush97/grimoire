@@ -111,14 +111,12 @@ type Overrides = Record<string, OverrideEntry>;
  *  visibility/camera on, developer/testing tools off. An explicit empty list
  *  disables every optional gameplay setting. `version` picks which bundled
  *  upstream release of that preset to write, defaulting to the newest.
- *  `video: false` leaves video.txt alone (and takes back what an earlier
- *  apply wrote there). */
+ *  A preset whose upstream ships a video.txt always writes it too. */
 export interface ApplyOptions {
     presetId?: string;
     version?: string | null;
     optIns?: string[];
     resetOverrides?: boolean;
-    video?: boolean;
     /** Write the preset's video values over ones changed in game since. */
     restoreVideo?: boolean;
 }
@@ -437,56 +435,62 @@ function harvestOverrides(
 // video.txt
 // ---------------------------------------------------------------------------
 
+/** What an apply wrote into video.txt, and which video.txt that was. */
+type VideoRecord = VideoState & { path: string };
+
 /** Take video.txt from whatever an earlier apply left there to `settings`.
+ *  When the game now reads a different video.txt (it created the userdata
+ *  copy, or another Steam account launched it), the old one is reverted first.
  *  A missing or unrecognizable file skips the video half (the earlier record
  *  is kept, so Remove can still undo it) and the note says so. A file that
  *  cannot be read or written throws: the caller rolls back gameinfo.gi rather
  *  than leave the two halves describing different presets. */
 function syncVideo(
     deadlockPath: string,
-    previous: VideoState | null,
+    previous: VideoRecord | null,
     settings: ReadonlyArray<readonly [string, string]>,
     restore: boolean
-): { state: VideoState | null; note: string } {
+): { state: VideoRecord | null; note: string } {
     const path = getVideoPath(deadlockPath);
+    if (previous && (previous.path !== path || !settings.length)) {
+        revertVideoFile(previous);
+        previous = null;
+    }
+    if (!settings.length) return { state: null, note: '' };
     if (!existsSync(path)) {
-        return {
-            state: previous,
-            note: settings.length
-                ? ' Video settings skipped: launch Deadlock once, then apply again.'
-                : '',
-        };
+        return { state: previous, note: ' Video settings skipped: launch Deadlock once, then apply again.' };
     }
     const text = readFileSync(path, 'utf-8');
-    if (!settings.length) {
-        revertVideoFile(deadlockPath, previous ?? undefined);
-        return { state: null, note: '' };
-    }
     const result = applyVideo(text, settings, previous, restore);
     if (!result.ok) return { state: previous, note: ` ${result.error}, so its settings were skipped.` };
     if (result.text !== text) writeFileSync(path, result.text, 'utf-8');
     const n = Object.keys(result.state.written).length;
-    return { state: result.state, note: n ? ` Set ${n} video setting${n === 1 ? '' : 's'}.` : '' };
+    return {
+        state: { ...result.state, path },
+        note: n ? ` Set ${n} video setting${n === 1 ? '' : 's'}.` : '',
+    };
 }
 
 /** Throws when video.txt exists but cannot be restored, so Remove keeps the
  *  record instead of forgetting values it never put back. */
-function revertVideoFile(deadlockPath: string, state: VideoState | undefined): void {
-    const path = getVideoPath(deadlockPath);
-    if (!state || !existsSync(path)) return;
-    const text = readFileSync(path, 'utf-8');
+function revertVideoFile(state: VideoRecord | undefined): void {
+    if (!state || !existsSync(state.path)) return;
+    const text = readFileSync(state.path, 'utf-8');
     const restored = revertVideo(text, state);
-    if (restored !== text) writeFileSync(path, restored, 'utf-8');
+    if (restored !== text) writeFileSync(state.path, restored, 'utf-8');
 }
 
+/** Values written to a video.txt the game no longer reads count as not
+ *  applied, so the card offers to put them back (into the one it reads). */
 function videoStatus(
     deadlockPath: string,
-    state: VideoState | undefined
+    state: VideoRecord | undefined
 ): PerformanceConfigStatus['video'] {
     if (!state) return undefined;
     const total = Object.keys(state.written).length;
+    if (state.path !== getVideoPath(deadlockPath)) return { applied: 0, total };
     try {
-        return { applied: videoApplied(readFileSync(getVideoPath(deadlockPath), 'utf-8'), state), total };
+        return { applied: videoApplied(readFileSync(state.path, 'utf-8'), state), total };
     } catch {
         return { applied: 0, total };
     }
@@ -729,14 +733,14 @@ export function applyPerformanceConfig(
             video = syncVideo(
                 deadlockPath,
                 sidecar?.video ?? null,
-                opts?.video === false ? [] : preset.video,
+                preset.video,
                 opts?.restoreVideo === true
             );
         } catch (err) {
             writeFileSync(gameinfoPath, original, 'utf-8');
             return status(
                 'error',
-                `video.txt could not be updated, so nothing was changed (${err}). Make sure it is not read-only, or turn off Video settings.`
+                `video.txt could not be updated, so nothing was changed (${err}). Make sure it is not read-only.`
             );
         }
         writeAppliedState(gameinfoPath, {
@@ -831,7 +835,7 @@ export function removePerformanceConfig(deadlockPath: string | null): Performanc
     try {
         // A game update that wiped gameinfo.gi leaves video.txt alone, so this
         // runs whether or not the markers are still there.
-        revertVideoFile(deadlockPath, readAppliedState(gameinfoPath)?.video);
+        revertVideoFile(readAppliedState(gameinfoPath)?.video);
         const content = readFileSync(gameinfoPath, 'utf-8');
         if (!content.includes(MARKER)) {
             clearAppliedState(gameinfoPath);
@@ -850,10 +854,7 @@ export function removePerformanceConfig(deadlockPath: string | null): Performanc
 /** Put back what a game update wiped: the preset, release and optional
  *  settings the sidecar recorded, not whatever the Settings card has selected
  *  now. Anything other than a patchable wipe is returned untouched. */
-export function reapplyWipedPerformanceConfig(
-    deadlockPath: string | null,
-    video = true
-): PerformanceConfigStatus {
+export function reapplyWipedPerformanceConfig(deadlockPath: string | null): PerformanceConfigStatus {
     const current = getPerformanceConfigStatus(deadlockPath);
     if (current.state !== 'wiped' || current.canRestoreBackup) return current;
     const sidecar = readAppliedState(getGameinfoPath(deadlockPath!))!;
@@ -863,7 +864,6 @@ export function reapplyWipedPerformanceConfig(
         // The sidecar drops an empty list, so absent means "all off", not
         // "creator defaults".
         optIns: sidecar.optIns ?? [],
-        video,
     });
 }
 
@@ -1101,10 +1101,9 @@ interface AppliedState {
     /** Pre-multi-preset sidecars stored a single flat map. Read-only: migrated
      *  by `allOverrides` and never written again. */
     overrides?: Overrides;
-    /** What the last apply wrote into video.txt and what it replaced. Absent
-     *  when it wrote nothing there (video off, or a sidecar from before
-     *  video.txt support). */
-    video?: VideoState;
+    /** Which video.txt the last apply wrote, what it wrote and what it replaced. Absent
+     *  when it wrote nothing there (a preset without one, or no video.txt yet). */
+    video?: VideoRecord;
 }
 
 /** Overrides keyed by preset id, migrating the flat single-preset shape that
@@ -1138,7 +1137,7 @@ function writeAppliedState(
         contentHash: string;
         optIns: string[];
         overridesByPreset: Record<string, Overrides>;
-        video: VideoState | null;
+        video: VideoRecord | null;
     }
 ): void {
     try {
