@@ -27,7 +27,9 @@ import { fileURLToPath } from 'node:url';
 import {
     classificationFromManifest,
     generatePresetBody,
+    generateVideoBody,
     parseConfig,
+    parseVideoConfig,
 } from '../electron/main/services/performancePresetGen.ts';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -287,9 +289,17 @@ function emit(manifest, presets) {
     L.push(`     *  Lets the track-latest path recognize a fetched file as identical to`);
     L.push(`     *  a bundled release and reuse its version identity. */`);
     L.push(`    sha256: string;`);
+    L.push(`    /** sha256 of the video.txt next to it upstream, null when there is none.`);
+    L.push(`     *  Part of the same twin check: a release that only changed video.txt`);
+    L.push(`     *  is a different release. */`);
+    L.push(`    videoSha256: string | null;`);
     L.push(`    sectionOps: SectionOp[];`);
     L.push(`    convars: ReadonlyArray<readonly [string, string]>;`);
     L.push(`    optIn: OptInControl[];`);
+    L.push(`    /** video.txt settings ([bare convar, value], written as \`setting.<convar>\`)`);
+    L.push(`     *  from the video.txt upstream ships next to this release's gameinfo.gi.`);
+    L.push(`     *  Empty when it ships none. Display settings are already stripped. */`);
+    L.push(`    video: ReadonlyArray<readonly [string, string]>;`);
     L.push(`}`);
     L.push(``);
     L.push(`/** A preset across all the upstream releases we bundle. Identity (name,`);
@@ -325,6 +335,7 @@ function emit(manifest, presets) {
     L.push(`    sectionOps: SectionOp[];`);
     L.push(`    convars: ReadonlyArray<readonly [string, string]>;`);
     L.push(`    optIn: OptInControl[];`);
+    L.push(`    video: ReadonlyArray<readonly [string, string]>;`);
     L.push(`}`);
     L.push(``);
     L.push(`/** Baseline the diffs were computed against, for provenance. The repo and`);
@@ -350,6 +361,7 @@ function emit(manifest, presets) {
     emitList('optInKeys', manifest.optIn.keys, (k) => `{ key: ${q(k.key)}, group: ${q(k.group)} }`);
     emitList('optInPatterns', manifest.optIn.patterns ?? [], q);
     emitList('allowInBody', manifest.optIn.allowInBody ?? [], (k) => q(k.key));
+    emitList('videoExcludePatterns', manifest.video?.exclude ?? [], (p) => q(p.pattern));
     L.push(`};`);
     L.push(``);
 
@@ -379,6 +391,7 @@ function emit(manifest, presets) {
             L.push(`            historyCommit: ${q(r.historyCommit)},`);
             L.push(`            date: ${q(r.date)},`);
             L.push(`            sha256: ${q(r.sha256)},`);
+            L.push(`            videoSha256: ${r.videoSha256 ? q(r.videoSha256) : 'null'},`);
             if (r.supersedes.length) {
                 L.push(
                     `            // Byte-identical upstream in ${r.supersedes.join(', ')}, collapsed into this entry.`
@@ -407,6 +420,14 @@ function emit(manifest, presets) {
                 );
             }
             L.push(`            ],`);
+
+            if (r.video.length) {
+                L.push(`            video: [`);
+                for (const [k, v] of r.video) L.push(`                [${q(k)}, ${q(v)}],`);
+                L.push(`            ],`);
+            } else {
+                L.push(`            video: [],`);
+            }
             L.push(`        },`);
         }
 
@@ -455,6 +476,7 @@ function emit(manifest, presets) {
     L.push(`        sectionOps: release.sectionOps,`);
     L.push(`        convars: release.convars,`);
     L.push(`        optIn: release.optIn,`);
+    L.push(`        video: release.video,`);
     L.push(`    };`);
     L.push(`}`);
     L.push(``);
@@ -482,6 +504,9 @@ const camel = (id) =>
 // track-latest fetch uses); `pathByRef` pins the historical location for the
 // older bundled releases that predate a rename.
 const pathFor = (entry, ref) => entry.pathByRef?.[ref] ?? entry.path;
+// Upstreams that ship a video.txt put it next to the preset's gameinfo.gi, so
+// it follows the same renames.
+const videoPathFor = (entry, ref) => pathFor(entry, ref).replace(/[^/]*$/, 'video.txt');
 
 async function main() {
     const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8'));
@@ -519,6 +544,11 @@ async function main() {
         const releases = [];
         let absentAt = null;
         for (const release of source.releases) {
+            const label = source.releases.length > 1 ? `${entry.id}@${release.ref}` : entry.id;
+            const sink = (key) => {
+                if (!unclassified.has(key)) unclassified.set(key, []);
+                if (!unclassified.get(key).includes(label)) unclassified.get(key).push(label);
+            };
             const expected = entry.sha256[release.ref];
             if (expected === undefined) {
                 fail(
@@ -527,6 +557,12 @@ async function main() {
                         `  content gate silently stops covering that version.`
                 );
             }
+            // A preset that ships a video.txt anywhere records a hash (or null,
+            // for none) at every release, for the same reason.
+            if (entry.videoSha256 && entry.videoSha256[release.ref] === undefined) {
+                fail(`Preset ${entry.id} has no videoSha256 for release ${release.ref}.`);
+            }
+            const videoExpected = entry.videoSha256?.[release.ref] ?? null;
             // An explicit null records that the file did not exist upstream
             // yet at this release (a config added after the source's older
             // bundled releases). Only a trailing run of older releases may be
@@ -557,7 +593,7 @@ async function main() {
             // newer one already recorded: offering both would be two picker
             // entries that write exactly the same file.
             const previous = releases[releases.length - 1];
-            if (previous && previous.sha256 === expected) {
+            if (previous && previous.sha256 === expected && previous.videoSha256 === videoExpected) {
                 previous.supersedes.push(release.ref);
                 continue;
             }
@@ -567,16 +603,22 @@ async function main() {
                     ? await lastPathCommit(source.repo, release.commit, path)
                     : release.commit;
 
-            const label = source.releases.length > 1 ? `${entry.id}@${release.ref}` : entry.id;
             const { sectionOps, convars, optIn } = diffAgainstBaseline(
                 baseline,
                 parseConfig(text),
                 classification,
-                (key) => {
-                    if (!unclassified.has(key)) unclassified.set(key, []);
-                    if (!unclassified.get(key).includes(label)) unclassified.get(key).push(label);
-                }
+                sink
             );
+
+            let video = [];
+            if (videoExpected) {
+                const videoPath = videoPathFor(entry, release.ref);
+                const videoText = await fetchAt(source.repo, release.commit, videoPath);
+                verify(videoText, videoExpected, `${entry.id} (${videoPath}) at ${release.ref}`);
+                const body = generateVideoBody(parseVideoConfig(videoText), classification);
+                for (const problem of body.problems) sink(problem.key);
+                video = body.settings;
+            }
             releases.push({
                 version: release.ref.replace(/^v/, ''),
                 ref: release.ref,
@@ -585,10 +627,12 @@ async function main() {
                 historyCommit,
                 date: release.date,
                 sha256: expected,
+                videoSha256: videoExpected,
                 supersedes: [],
                 sectionOps,
                 convars,
                 optIn,
+                video,
             });
         }
 
@@ -614,7 +658,8 @@ async function main() {
                 : '  (single version)';
         console.log(
             `  ${entry.id.padEnd(16)} ${String(head.sectionOps.length).padStart(3)} section ops  ` +
-                `${String(head.convars.length).padStart(3)} convars  ${String(head.optIn.length).padStart(2)} opt-in` +
+                `${String(head.convars.length).padStart(3)} convars  ${String(head.optIn.length).padStart(2)} opt-in  ` +
+                `${String(head.video.length).padStart(2)} video` +
                 extra
         );
     }
@@ -630,6 +675,7 @@ async function main() {
             const inBody = [
                 ...r.convars.map(([k]) => k),
                 ...r.sectionOps.map((op) => op.key),
+                ...r.video.map(([k]) => k),
             ].filter((k) => optInKeys.has(k));
             if (inBody.length) {
                 fail(
@@ -776,6 +822,19 @@ async function refreshPins(manifest, target) {
             }
         }
         entry.sha256 = hashes;
+
+        // Pick up a video.txt upstream started shipping next to this preset,
+        // and keep recording nulls for one it stopped shipping.
+        const videoHashes = {};
+        for (const release of source.releases) {
+            const text = await fetchAt(source.repo, release.commit, videoPathFor(entry, release.ref), {
+                optional: true,
+            });
+            videoHashes[release.ref] = text === null ? null : sha256(text);
+        }
+        if (entry.videoSha256 || Object.values(videoHashes).some(Boolean)) {
+            entry.videoSha256 = videoHashes;
+        }
     }
 
     writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');

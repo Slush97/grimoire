@@ -957,9 +957,10 @@ export async function listPerformancePresets(): Promise<PerformancePresetSummary
 export async function applyPerformanceConfig(
   presetId?: string,
   optIns?: string[],
-  version?: string | null
+  version?: string | null,
+  restoreVideo?: boolean
 ): Promise<PerformanceConfigStatus> {
-  return window.electronAPI.applyPerformanceConfig(presetId, optIns, version);
+  return window.electronAPI.applyPerformanceConfig(presetId, optIns, version, restoreVideo);
 }
 
 export async function removePerformanceConfig(): Promise<PerformanceConfigStatus> {

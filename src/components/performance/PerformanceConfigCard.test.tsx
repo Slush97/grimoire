@@ -52,6 +52,7 @@ function preset(
     historyCommit: `c${version}`,
     date: '2026-08-17',
     settingCount: 100,
+    videoSettingCount: 0,
     optIn: OPT_INS,
   }));
   return {
@@ -254,7 +255,7 @@ describe('PerformanceConfigCard', () => {
       await render({ performanceConfigOptIns: { 'sqooky-default': ['citadel_camera_fov'] } });
       expect(powerSwitch().checked).toBe(false);
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', ['citadel_camera_fov'], '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', ['citadel_camera_fov'], '2.9', false);
       expect(powerSwitch().checked).toBe(true);
     });
 
@@ -300,7 +301,7 @@ describe('PerformanceConfigCard', () => {
       await render(before);
 
       await click(radio('competitive'));
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('optilock-fps', CREATOR_DEFAULTS, '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('optilock-fps', CREATOR_DEFAULTS, '2.9', false);
       expect((radio('competitive') as HTMLInputElement).checked).toBe(true);
 
       const toast = useToastStore.getState().toasts.at(-1)!;
@@ -309,7 +310,7 @@ describe('PerformanceConfigCard', () => {
 
       await act(async () => toast.onAction!());
       await flush();
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', ['citadel_camera_fov'], '2.8');
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', ['citadel_camera_fov'], '2.8', undefined);
       expect(saveSettings).toHaveBeenLastCalledWith(before);
     });
 
@@ -325,28 +326,28 @@ describe('PerformanceConfigCard', () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234', ref: 'v3.0' };
       await render();
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest', false);
     });
 
     it('prefers the reviewed bundled release when upstream is identical to it', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234', matchesBundled: '2.9' };
       await render();
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
     });
 
     it('never overrides a deliberate rollback', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
       await render({ performanceConfigVersions: { 'sqooky-default': '2.8' } });
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false);
     });
 
     it('stays on the bundle when tracking is off', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
       await render({ performanceTrackLatest: false });
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
     });
   });
 
@@ -362,7 +363,7 @@ describe('PerformanceConfigCard', () => {
       await render();
       expect(host.textContent).toContain('performance.notice.update');
       await click(button('performance.update'));
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
     });
 
     it('does not nag about updates after a deliberate rollback', async () => {
@@ -463,7 +464,7 @@ describe('PerformanceConfigCard', () => {
       expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({ performanceConfigOptIns: { 'sqooky-default': remaining } })
       );
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', remaining, '2.9');
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', remaining, '2.9', false);
     });
 
     it('writes a version change straight away while on, without following upstream', async () => {
@@ -480,7 +481,7 @@ describe('PerformanceConfigCard', () => {
       expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({ performanceConfigVersions: { 'sqooky-default': '2.8' } })
       );
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8');
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false);
     });
 
     it('offers file tools only while a config is applied', async () => {

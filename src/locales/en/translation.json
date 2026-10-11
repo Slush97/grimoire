@@ -3163,6 +3163,15 @@
       "label": "Always use the newest version",
       "description": "Grimoire checks the config author's GitHub for updates. Offline, it uses the version bundled with Grimoire."
     },
+    "video": {
+      "label": "Video settings",
+      "description_one": "Also changes {{count}} in-game video setting the config needs to look right. Your resolution, display mode and frame cap stay as they are.",
+      "description_other": "Also changes {{count}} in-game video settings the config needs to look right. Your resolution, display mode and frame cap stay as they are.",
+      "changed_one": "{{count}} of them was changed in game since.",
+      "changed_other": "{{count}} of them were changed in game since.",
+      "reapply": "Put them back",
+      "apply": "Add video settings"
+    },
     "history": {
       "browse": "See every published version",
       "title": "Version history",
@@ -3186,7 +3195,9 @@
       "removed": "Your performance config is no longer in gameinfo.gi. Restore it, or dismiss this if you took it out on purpose.",
       "damaged": "Your game's config file is empty or damaged. Restore the backup Grimoire made, or verify game files in Steam.",
       "update": "A newer version of this config is available.",
-      "handEdited": "Includes changes you made to the file by hand."
+      "handEdited": "Includes changes you made to the file by hand.",
+      "videoPending": "This config also has video settings that aren't applied yet.",
+      "videoNoFile": "This config also has video settings. Launch Deadlock once, then come back to apply them."
     },
     "restore": "Restore",
     "update": "Update",

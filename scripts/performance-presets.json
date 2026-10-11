@@ -73,6 +73,11 @@
       "refKind": "tag",
       "releases": [
         {
+          "ref": "v5.2",
+          "commit": "353cb7e5eb18e5d8a13a21a9e1b4c25cd7abb5be",
+          "date": "2026-10-10"
+        },
+        {
           "ref": "v5.1",
           "commit": "7f7a54a1b8237d9b66348067d09f93174c47d303",
           "date": "2026-10-02"
@@ -81,14 +86,9 @@
           "ref": "v5.0",
           "commit": "a8be8027d5223aa5fcd52ba6c69912d905303f8b",
           "date": "2026-09-03"
-        },
-        {
-          "ref": "v4.6",
-          "commit": "6caab13036711d09ae439b4de4406bdb9972e148",
-          "date": "2026-08-15"
         }
       ],
-      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder once tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so tag names do not reliably sort into release order. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. The v5.1 GitHub release is titled \"OptiLock v5.0\"; the tag is what we pin and show."
+      "$comment": "ORDER IS BY DATE, NOT NAME: dacooder once tagged v4.0d (12 Jul) a day AFTER v4.1 (11 Jul), so tag names do not reliably sort into release order. Do not 'fix' this ordering to look alphabetical; it would make the rollback order a lie. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. The v5.1 and v5.2 GitHub releases are both titled \"OptiLock v5.0\"; the tag is what we pin and show."
     }
   },
   "presets": [
@@ -125,11 +125,21 @@
       "name": "Sqooky's Testing",
       "tier": "preview",
       "source": "optimizationlock",
-      "path": "test_cfg/gameinfo.gi",
+      "path": "maximumfps or minimum spec config and resources here/gameinfo.gi",
+      "$comment": "3.4 moved the README's Max FPS link from test_cfg to its own folder: same config (only quoting differs) and the same video.txt, but test_cfg is no longer linked and will go stale. pathByRef pins the old location for 3.3 and 3.2.",
+      "pathByRef": {
+        "3.3": "test_cfg/gameinfo.gi",
+        "3.2": "test_cfg/gameinfo.gi"
+      },
       "sha256": {
-        "3.4": "96ed6e4ceb5ec482cadb38756012cd317203694fe3aa6dcbb082c39d41f98ecc",
+        "3.4": "b6419de8e6aa5fede1e0e70f0ff6fa18c43c7f6ab884f0ec26bf30c418f368c4",
         "3.3": "b7b2d540fdb74d91ca8544cb50354ca6ef1cc78dd9a24bc59ad0f5180e29abe1",
         "3.2": "93a375143673eae81e98adb0ddf7f24aeeb428a9bd7c696717d2db6ddaf46808"
+      },
+      "videoSha256": {
+        "3.4": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3",
+        "3.3": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3",
+        "3.2": "3eac767a751db000ba2400c07eeb2bd1dd509a60a35f33ceb4f29ff0954f26f3"
       },
       "author": "Sqooky",
       "unstable": true
@@ -174,9 +184,14 @@
         "v4.0d": "OptiLock FPS Preset/gameinfo.gi"
       },
       "sha256": {
+        "v5.2": "eb536ee8ae87a121d3769e2f516d144fc47d77cd37fc79e568c162e836c98969",
         "v5.1": "f98c6f6e08cecfd3c44b5f65eb31991d3dabc7be366a0223c9c559c2f9765889",
-        "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8",
-        "v4.6": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
+        "v5.0": "ce1b084d986de7807f1a456c6845b232f08396e545ff0b133fdfc4a135df16c8"
+      },
+      "videoSha256": {
+        "v5.2": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
+        "v5.1": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593",
+        "v5.0": "d8530b937e4075900162dccb1fca216f2bc535f569cb9e40295a400bdc3d0593"
       },
       "author": "dacooder"
     },
@@ -186,20 +201,92 @@
       "tier": "maximum",
       "source": "optilock",
       "path": "OptiLock Potato Config/gameinfo.gi",
-      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections.",
+      "$comment": "v4.6 renamed 'OptiLock Max FPS Preset' to 'OptiLock Potato Config' (lineage verified by content similarity, 0.91). Our preset keeps its established id/name/tier: renaming the card every time upstream rebrands would orphan users' saved selections. v5.2 replaced this file with the former 'OptiLock Potato Config (Testing)' and deleted that folder, so the Testing config lives on here rather than as its own preset.",
       "pathByRef": {
         "v4.2": "OptiLock Max FPS Preset/gameinfo.gi",
         "v4.1": "OptiLock Max FPS Preset/gameinfo.gi",
         "v4.0d": "OptiLock Max FPS Preset/gameinfo.gi"
       },
       "sha256": {
+        "v5.2": "1245876877243994ba181b03b3f93124c5fc1c545d403f8513aef62f8e45f305",
         "v5.1": "a810f532ee993d9d1dd8aaf2c38bdabc5bf77bbd24b14a17da5abeb50d65d064",
-        "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6",
-        "v4.6": "5c3d4956117ffdf7c583042b23f34185ca95f91f346eb77ab86764106722f703"
+        "v5.0": "f950abc3ffbb1ec220234b26e6e5a2af39fab0bc65b3b1f5dd93a4ab75d4a6f6"
+      },
+      "videoSha256": {
+        "v5.2": "3c2a9b5658e02d87f493b2da4c9f79909baaf2b4fe9cbc2ef235bf73e770238a",
+        "v5.1": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75",
+        "v5.0": "265fa78ff809ff75bae9f26e2b9b577750b155c338b395d580fae6c8ebf80a75"
       },
       "author": "dacooder"
     }
   ],
+  "video": {
+    "$comment": [
+      "Some presets ship a video.txt next to their gameinfo.gi, and their authors",
+      "say the config looks wrong without it: the gameinfo.gi values assume these",
+      "render settings. Upstream's instructions are to paste it over everything",
+      "under DeviceID in the user's own game/citadel/cfg/video.txt.",
+      "",
+      "`videoSha256` on a preset pins that sibling file per release, exactly like",
+      "`sha256` pins the gameinfo.gi (null = no video.txt at that release). The",
+      "path is always `video.txt` next to the release's gameinfo.gi, so pathByRef",
+      "covers it too.",
+      "",
+      "Grimoire writes only `setting.*` entries, never the header (Version,",
+      "VendorID, DeviceID), and records each value it replaced in the applied-state",
+      "sidecar so Remove puts them back. Keys matching `exclude` describe the",
+      "user's screen rather than render cost and are never written, whatever",
+      "upstream ships. Every other key then goes through the same exclude/opt-in",
+      "classification as gameinfo.gi convars: an opt-in convar is left to its",
+      "gameinfo.gi toggle, and an unclassified gameplay-shaped key fails the run."
+    ],
+    "exclude": [
+      {
+        "pattern": "^defaultres",
+        "why": "Resolution. OptiLock ships -1, Sqooky's test_cfg ships the author's own 1920x1080."
+      },
+      {
+        "pattern": "^recommendedheight$",
+        "why": "The engine's resolution recommendation for the user's display."
+      },
+      {
+        "pattern": "^refreshrate_",
+        "why": "The user's monitor refresh rate."
+      },
+      {
+        "pattern": "fullscreen|^nowindowborder$",
+        "why": "Window mode (fullscreen, borderless, minimize on focus loss) is the user's choice."
+      },
+      {
+        "pattern": "^monitor_index$",
+        "why": "Which monitor the game opens on. Upstream ships 0 (primary)."
+      },
+      {
+        "pattern": "^high_dpi$",
+        "why": "Display scaling for the user's monitor."
+      },
+      {
+        "pattern": "^aspectratiomode$",
+        "why": "Stretched versus letterboxed handling of the user's resolution."
+      },
+      {
+        "pattern": "^knowndevice$",
+        "why": "The engine's record of whether it recognised the GPU, not a setting."
+      },
+      {
+        "pattern": "gamma",
+        "why": "Brightness calibration for the user's display."
+      },
+      {
+        "pattern": "^mat_vsync$",
+        "why": "Frame pacing depends on the user's monitor and VRR setup. OptiLock's own README recommends V-Sync with G-Sync while its file turns V-Sync off."
+      },
+      {
+        "pattern": "^fps_max",
+        "why": "Frame cap. Users cap to their refresh rate; upstream ships 0 (uncapped)."
+      }
+    ]
+  },
   "exclude": {
     "$comment": "Never emitted into a preset, whatever upstream sets. MaterialSystem2/RenderModes is a list of seven `game` entries, not key/value pairs: a config written before Valve added ShadowSilhouette diffed to a single `game \"FrontDepth\"` op, and the patcher, which edits every occurrence of a key, collapsed all seven render modes into FrontDepth.",
     "patterns": [
@@ -471,6 +558,10 @@
       },
       {
         "key": "citadel_camera_pitch_max",
+        "group": "camera"
+      },
+      {
+        "key": "citadel_reduce_camera_shake",
         "group": "camera"
       },
       {

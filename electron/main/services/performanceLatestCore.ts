@@ -28,10 +28,13 @@ import {
 } from './performanceConfigData';
 import {
     generatePresetBody,
+    generateVideoBody,
     parseConfig,
+    parseVideoConfig,
     pathExcluded,
     validateGameinfoText,
     validateGeneratedBody,
+    validateVideoText,
 } from './performancePresetGen';
 
 /** One runtime-fetched upstream release of a preset, in a shape close enough
@@ -57,6 +60,12 @@ export interface LatestRelease {
     sectionOps: SectionOp[];
     convars: Array<[string, string]>;
     optIn: Array<{ key: string; value: string; group: string }>;
+    /** Classified settings from the video.txt upstream ships next to the
+     *  config; empty when it ships none. Absent on entries cached before
+     *  video.txt support, which are rebuilt on the next check. */
+    video?: Array<[string, string]>;
+    /** sha256 of that video.txt, null when there is none. */
+    videoSha256?: string | null;
     /** Keys held out of the body: gameplay-shaped keys nobody has classified
      *  yet, or opt-in keys upstream moved outside the ConVars block. They are
      *  simply never written; the UI reports the count. */
@@ -168,6 +177,8 @@ export interface BuildLatestInput {
     baselineCommit: string;
     baselineText: string;
     configText: string;
+    /** The video.txt next to the config upstream, null when there is none. */
+    videoText: string | null;
     now: Date;
 }
 
@@ -190,20 +201,31 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
         const problem = validateGameinfoText(text, label);
         if (problem) return { ok: false, error: problem };
     }
+    if (input.videoText !== null) {
+        const problem = validateVideoText(input.videoText, 'upstream video.txt');
+        if (problem) return { ok: false, error: problem };
+    }
 
     const configHash = sha256(input.configText);
+    const videoHash = input.videoText === null ? null : sha256(input.videoText);
     // Byte-identical to a bundled release: reuse its version identity so the
     // marker names the release a human actually reviewed. The body is still
     // rebuilt from the fetched texts (the baseline may be newer than the one
     // the bundled diff used, and a diff against today's stock file is the one
     // that can be patched into the file the user actually has).
-    const bundledTwin = family.releases.find((r) => r.sha256 === configHash);
+    const bundledTwin = family.releases.find(
+        (r) => r.sha256 === configHash && r.videoSha256 === videoHash
+    );
 
     const baseline = parseConfig(input.baselineText);
     const config = parseConfig(input.configText);
     const body = generatePresetBody(baseline, config, CLASSIFICATION);
     const bodyProblem = validateGeneratedBody(baseline, config, body);
     if (bodyProblem) return { ok: false, error: bodyProblem };
+    const video =
+        input.videoText === null
+            ? { settings: [], problems: [] }
+            : generateVideoBody(parseVideoConfig(input.videoText), CLASSIFICATION);
 
     const ref = input.refKind === 'tag' ? input.ref : input.commit.slice(0, 8);
     let version = bundledTwin?.version ?? versionFor(input.refKind, input.ref, input.commit);
@@ -227,7 +249,9 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
         sectionOps: body.sectionOps,
         convars: body.convars,
         optIn: body.optIn,
-        withheld: [...new Set(body.problems.map((p) => p.key))],
+        video: video.settings,
+        videoSha256: videoHash,
+        withheld: [...new Set([...body.problems, ...video.problems].map((p) => p.key))],
         ...(bundledTwin ? { matchesBundled: bundledTwin.version } : {}),
     };
     return { ok: true, release };
@@ -260,6 +284,8 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
         // Groups come from the same manifest tables the bundled data was
         // generated with, so the cast is between two views of one source.
         optIn: release.optIn.map((o) => ({ ...o, group: o.group as OptInGroup })),
+        // Reclassified for the same reason as sectionOps.
+        video: generateVideoBody(release.video ?? [], CLASSIFICATION).settings,
     };
 }
 

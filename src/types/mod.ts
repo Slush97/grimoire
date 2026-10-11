@@ -1275,6 +1275,12 @@ export interface AppSettings {
    *  releases. A per-preset version pin in `performanceConfigVersions` beats
    *  tracking: an explicit rollback is the stronger, deliberate choice. */
   performanceTrackLatest?: boolean;
+  /** Also write a preset's video.txt render settings, for presets whose
+   *  upstream ships one. Undefined = on (their authors say the config looks
+   *  wrong without them); explicit false = leave video.txt alone. Display
+   *  settings (resolution, window mode, refresh, gamma, V-Sync, frame cap)
+   *  are never written either way. */
+  performanceVideoSettings?: boolean;
   /** Editor binary used to open gameinfo.gi for hand edits. null = the OS
    *  default app; undefined = never chosen, so the picker is shown first.
    *  (.gi maps to text/plain, which often resolves to a word processor, so

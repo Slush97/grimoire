@@ -68,14 +68,25 @@ async function githubJson(url: string): Promise<unknown> {
 }
 
 async function fetchRaw(repo: string, commit: string, path: string): Promise<string> {
+    const text = await fetchRawOptional(repo, commit, path);
+    if (text === null) throw new Error(`Fetch 404 for ${repo}@${commit.slice(0, 8)} ${path}`);
+    return text;
+}
+
+/** Like fetchRaw, but a 404 means "upstream has no such file" (null). */
+async function fetchRawOptional(repo: string, commit: string, path: string): Promise<string | null> {
     const url = `https://raw.githubusercontent.com/${repo}/${commit}/${path
         .split('/')
         .map(encodeURIComponent)
         .join('/')}`;
     const res = await githubFetch(url, 'text/plain');
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Fetch ${res.status} for ${repo}@${commit.slice(0, 8)} ${path}`);
     return res.text();
 }
+
+// Upstreams that ship a video.txt put it next to the config's gameinfo.gi.
+const videoPathFor = (configPath: string) => configPath.replace(/[^/]*$/, 'video.txt');
 
 /** Newest commit on the default branch that touched `path`. */
 async function latestCommitFor(
@@ -133,7 +144,12 @@ async function resolveUpstream(family: PerformancePresetFamily): Promise<Resolve
         const commit = await resolveTag(repo, release.tag_name);
         return { refKind: 'tag', ref: release.tag_name, commit, date: await commitDate(repo, commit) };
     }
-    const head = await latestCommitFor(repo, family.upstream.path);
+    // A config that ships a video.txt changes when either file does, so watch
+    // its folder rather than gameinfo.gi alone.
+    const watched = family.releases[0].video.length
+        ? family.upstream.path.replace(/\/[^/]*$/, '')
+        : family.upstream.path;
+    const head = await latestCommitFor(repo, watched);
     return { refKind: 'prose', ref: head.sha.slice(0, 8), commit: head.sha, date: head.date };
 }
 
@@ -244,10 +260,12 @@ export async function fetchPerformanceRemoteVersion(
         const baselineText = await fetchRaw(BASELINE.repo, baselineHead.sha, BASELINE.path);
 
         let configText: string | null = null;
+        let configPath = family.upstream.path;
         let lastError = '';
         for (const path of family.upstream.paths) {
             try {
                 configText = await fetchRaw(family.upstream.repo, sha, path);
+                configPath = path;
                 break;
             } catch (err) {
                 lastError = err instanceof Error ? err.message : String(err);
@@ -256,6 +274,7 @@ export async function fetchPerformanceRemoteVersion(
         if (configText === null) {
             return toInfo(presetId, null, `No config file at any known path: ${lastError}`);
         }
+        const videoText = await fetchRawOptional(family.upstream.repo, sha, videoPathFor(configPath));
 
         const built = buildLatestRelease({
             presetId,
@@ -266,6 +285,7 @@ export async function fetchPerformanceRemoteVersion(
             baselineCommit: baselineHead.sha,
             baselineText,
             configText,
+            videoText,
             now: new Date(),
         });
         if (!built.ok) {
@@ -302,19 +322,23 @@ export async function checkPerformanceLatest(
 
         const cache = readLatestCache(dir);
         const cached = cache.byPreset[presetId] ?? null;
+        // An entry cached before video.txt support has no `video`: rebuild it
+        // rather than keep applying the config without its video settings.
         if (
             cached &&
             cached.commit === upstream.commit &&
-            cached.baselineCommit === baselineHead.sha
+            cached.baselineCommit === baselineHead.sha &&
+            cached.video !== undefined
         ) {
             cache.checkedAt[presetId] = now.toISOString();
             writeLatestCache(dir, cache);
             return toInfo(presetId, cached);
         }
 
-        const [baselineText, configText] = await Promise.all([
+        const [baselineText, configText, videoText] = await Promise.all([
             fetchRaw(BASELINE.repo, baselineHead.sha, BASELINE.path),
             fetchRaw(family.upstream.repo, upstream.commit, family.upstream.path),
+            fetchRawOptional(family.upstream.repo, upstream.commit, videoPathFor(family.upstream.path)),
         ]);
 
         const built = buildLatestRelease({
@@ -326,6 +350,7 @@ export async function checkPerformanceLatest(
             baselineCommit: baselineHead.sha,
             baselineText,
             configText,
+            videoText,
             now,
         });
         if (!built.ok) {
