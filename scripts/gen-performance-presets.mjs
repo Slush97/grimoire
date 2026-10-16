@@ -105,26 +105,6 @@ async function commitDate(repo, commit) {
     return (await res.json()).commit.author.date.slice(0, 10);
 }
 
-// A prose "release" pin is a repository snapshot, but the history modal lists
-// only commits that touched one preset's file. Resolve the last such commit at
-// the snapshot so the renderer can identify bundled rows without fetching
-// every historical file or guessing from commit-message prose.
-async function lastPathCommit(repo, commit, path) {
-    const query = new URLSearchParams({ sha: commit, path, per_page: '1' });
-    const res = await fetch(`https://api.github.com/repos/${repo}/commits?${query}`, GH);
-    if (!res.ok) {
-        fail(
-            `Could not resolve path history for ${repo}@${commit.slice(0, 8)} ${path} ` +
-                `(${res.status})`
-        );
-    }
-    const commits = await res.json();
-    if (!Array.isArray(commits) || !commits[0]?.sha) {
-        fail(`No path history for ${repo}@${commit.slice(0, 8)} ${path}`);
-    }
-    return commits[0].sha;
-}
-
 // A source pinned with refKind 'tag' claims, in the UI, that the preset comes
 // from a published release. Tags are mutable, so that claim can quietly become
 // false. The commit is still what we fetch and the sha256 still gates content:
@@ -248,15 +228,22 @@ function emit(manifest, presets) {
     L.push(`export type PresetTier =`);
     L.push(`    ${[...new Set(presets.map((p) => p.tier))].map(q).join('\n    | ')};`);
     L.push(``);
+    L.push(`/** One of the video.txt files a preset ships when it ships more than one`);
+    L.push(` *  (OptiLock Ultra Potato: with and without shadows). */`);
+    L.push(`export interface VideoVariant {`);
+    L.push(`    id: string;`);
+    L.push(`    video: ReadonlyArray<readonly [string, string]>;`);
+    L.push(`}`);
+    L.push(``);
     L.push(`export interface PresetUpstream {`);
     L.push(`    repo: string;`);
     L.push(`    url: string;`);
     L.push(`    /** Path of the source config inside the upstream repo. */`);
     L.push(`    path: string;`);
-    L.push(`    /** Every path this file has lived at, current first. Upstreams rename`);
-    L.push(`     *  their config folders across releases, so fetching a historical`);
-    L.push(`     *  version tries these in order. */`);
-    L.push(`    paths: string[];`);
+    L.push(`    /** The video.txt files this preset ships when there is more than one,`);
+    L.push(`     *  default first, each with every name it has had next to the config`);
+    L.push(`     *  (current first). Absent when the only one is the sibling video.txt. */`);
+    L.push(`    videoFiles?: ReadonlyArray<{ variant: string; files: string[] }>;`);
     L.push(`    /** Human-facing upstream version (a git tag where one exists). */`);
     L.push(`    ref: string;`);
     L.push(`    /** Whether \`ref\` is a real git tag or a version stated in prose. */`);
@@ -279,9 +266,6 @@ function emit(manifest, presets) {
     L.push(`    refKind: 'tag' | 'prose';`);
     L.push(`    /** Immutable pin. This, not \`ref\`, is what was fetched. */`);
     L.push(`    commit: string;`);
-    L.push(`    /** Last commit at or before the pin that touched this preset's file.`);
-    L.push(`     *  Prose history is path-scoped, so this is its row identity. */`);
-    L.push(`    historyCommit: string;`);
     L.push(`    /** Upstream release date, yyyy-mm-dd. Tag names do not reliably sort`);
     L.push(`     *  into release order, so this is what the picker shows to disambiguate. */`);
     L.push(`    date: string;`);
@@ -297,9 +281,13 @@ function emit(manifest, presets) {
     L.push(`    convars: ReadonlyArray<readonly [string, string]>;`);
     L.push(`    optIn: OptInControl[];`);
     L.push(`    /** video.txt settings ([bare convar, value], written as \`setting.<convar>\`)`);
-    L.push(`     *  from the video.txt upstream ships next to this release's gameinfo.gi.`);
-    L.push(`     *  Empty when it ships none. Display settings are already stripped. */`);
+    L.push(`     *  from the video.txt upstream ships next to this release's gameinfo.gi`);
+    L.push(`     *  (the default variant, for a preset that ships several). Empty when it`);
+    L.push(`     *  ships none. Display settings are already stripped. */`);
     L.push(`    video: ReadonlyArray<readonly [string, string]>;`);
+    L.push(`    /** The other video.txt variants this release ships besides the default,`);
+    L.push(`     *  each pinned by its own sha256. Absent when it ships one or none. */`);
+    L.push(`    videoVariants?: ReadonlyArray<VideoVariant & { sha256: string }>;`);
     L.push(`}`);
     L.push(``);
     L.push(`/** A preset across all the upstream releases we bundle. Identity (name,`);
@@ -335,7 +323,11 @@ function emit(manifest, presets) {
     L.push(`    sectionOps: SectionOp[];`);
     L.push(`    convars: ReadonlyArray<readonly [string, string]>;`);
     L.push(`    optIn: OptInControl[];`);
+    L.push(`    /** The default video.txt variant's settings. */`);
     L.push(`    video: ReadonlyArray<readonly [string, string]>;`);
+    L.push(`    /** Every video.txt variant of this release, default first, when it ships`);
+    L.push(`     *  more than one. The user picks which one is written. */`);
+    L.push(`    videoVariants?: ReadonlyArray<VideoVariant>;`);
     L.push(`}`);
     L.push(``);
     L.push(`/** Baseline the diffs were computed against, for provenance. The repo and`);
@@ -377,7 +369,13 @@ function emit(manifest, presets) {
         L.push(`        repo: ${q(p.upstream.repo)},`);
         L.push(`        url: ${q(p.upstream.url)},`);
         L.push(`        path: ${q(p.upstream.path)},`);
-        L.push(`        paths: [${p.upstream.paths.map(q).join(', ')}],`);
+        if (p.upstream.videoFiles) {
+            L.push(`        videoFiles: [`);
+            for (const v of p.upstream.videoFiles) {
+                L.push(`            { variant: ${q(v.variant)}, files: [${v.files.map(q).join(', ')}] },`);
+            }
+            L.push(`        ],`);
+        }
         L.push(`        license: ${q(p.upstream.license)},`);
         L.push(`        credit: ${q(p.upstream.credit)},`);
         L.push(`    },`);
@@ -389,7 +387,6 @@ function emit(manifest, presets) {
             L.push(`            ref: ${q(r.ref)},`);
             L.push(`            refKind: ${q(r.refKind)},`);
             L.push(`            commit: ${q(r.commit)},`);
-            L.push(`            historyCommit: ${q(r.historyCommit)},`);
             L.push(`            date: ${q(r.date)},`);
             L.push(`            sha256: ${q(r.sha256)},`);
             L.push(`            videoSha256: ${r.videoSha256 ? q(r.videoSha256) : 'null'},`);
@@ -428,6 +425,19 @@ function emit(manifest, presets) {
                 L.push(`            ],`);
             } else {
                 L.push(`            video: [],`);
+            }
+            if (r.videoVariants.length) {
+                L.push(`            videoVariants: [`);
+                for (const variant of r.videoVariants) {
+                    L.push(`                {`);
+                    L.push(`                    id: ${q(variant.id)},`);
+                    L.push(`                    sha256: ${q(variant.sha256)},`);
+                    L.push(`                    video: [`);
+                    for (const [k, v] of variant.video) L.push(`                        [${q(k)}, ${q(v)}],`);
+                    L.push(`                    ],`);
+                    L.push(`                },`);
+                }
+                L.push(`            ],`);
             }
             L.push(`        },`);
         }
@@ -478,6 +488,14 @@ function emit(manifest, presets) {
     L.push(`        convars: release.convars,`);
     L.push(`        optIn: release.optIn,`);
     L.push(`        video: release.video,`);
+    L.push(`        ...(release.videoVariants?.length && family.upstream.videoFiles`);
+    L.push(`            ? {`);
+    L.push(`                  videoVariants: [`);
+    L.push(`                      { id: family.upstream.videoFiles[0].variant, video: release.video },`);
+    L.push(`                      ...release.videoVariants.map(({ id, video }) => ({ id, video })),`);
+    L.push(`                  ],`);
+    L.push(`              }`);
+    L.push(`            : {}),`);
     L.push(`    };`);
     L.push(`}`);
     L.push(``);
@@ -506,8 +524,19 @@ const camel = (id) =>
 // older bundled releases that predate a rename.
 const pathFor = (entry, ref) => entry.pathByRef?.[ref] ?? entry.path;
 // Upstreams that ship a video.txt put it next to the preset's gameinfo.gi, so
-// it follows the same renames.
-const videoPathFor = (entry, ref) => pathFor(entry, ref).replace(/[^/]*$/, 'video.txt');
+// it follows the same renames. A preset with `videoVariants` ships several
+// under their own names; otherwise the one file is the sibling video.txt.
+// Either way the result is a list, default first, with `id` null for the
+// single unnamed file.
+const videoSpecs = (entry) =>
+    entry.videoVariants
+        ? entry.videoVariants.map((v) => ({
+              id: v.id,
+              sha256: v.sha256,
+              file: (ref) => v.fileByRef?.[ref] ?? v.file,
+          }))
+        : [{ id: null, sha256: entry.videoSha256 ?? null, file: () => 'video.txt' }];
+const videoPathFor = (entry, spec, ref) => pathFor(entry, ref).replace(/[^/]*$/, spec.file(ref));
 
 async function main() {
     const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8'));
@@ -559,11 +588,25 @@ async function main() {
                 );
             }
             // A preset that ships a video.txt anywhere records a hash (or null,
-            // for none) at every release, for the same reason.
-            if (entry.videoSha256 && entry.videoSha256[release.ref] === undefined) {
-                fail(`Preset ${entry.id} has no videoSha256 for release ${release.ref}.`);
+            // for none) at every release, for the same reason. So does each
+            // of its variants.
+            const videos = videoSpecs(entry).map((spec) => {
+                if (spec.sha256 && spec.sha256[release.ref] === undefined) {
+                    fail(
+                        `Preset ${entry.id} has no ${spec.id ? `sha256 for video variant ${spec.id}` : 'videoSha256'} ` +
+                            `for release ${release.ref}.`
+                    );
+                }
+                return { spec, expected: spec.sha256?.[release.ref] ?? null };
+            });
+            const videoExpected = videos[0].expected;
+            const variantsExpected = videos.slice(1).filter((v) => v.expected);
+            if (!videoExpected && variantsExpected.length) {
+                fail(
+                    `Preset ${entry.id} ships video variant ${variantsExpected[0].spec.id} at ${release.ref} ` +
+                        `without its default variant ${videos[0].spec.id}.`
+                );
             }
-            const videoExpected = entry.videoSha256?.[release.ref] ?? null;
             // An explicit null records that the file did not exist upstream
             // yet at this release (a config added after the source's older
             // bundled releases). Only a trailing run of older releases may be
@@ -594,15 +637,16 @@ async function main() {
             // newer one already recorded: offering both would be two picker
             // entries that write exactly the same file.
             const previous = releases[releases.length - 1];
-            if (previous && previous.sha256 === expected && previous.videoSha256 === videoExpected) {
+            const variantKey = variantsExpected.map((v) => `${v.spec.id}:${v.expected}`).join(',');
+            if (
+                previous &&
+                previous.sha256 === expected &&
+                previous.videoSha256 === videoExpected &&
+                previous.videoVariants.map((v) => `${v.id}:${v.sha256}`).join(',') === variantKey
+            ) {
                 previous.supersedes.push(release.ref);
                 continue;
             }
-
-            const historyCommit =
-                source.refKind === 'prose'
-                    ? await lastPathCommit(source.repo, release.commit, path)
-                    : release.commit;
 
             const { sectionOps, convars, optIn } = diffAgainstBaseline(
                 baseline,
@@ -611,21 +655,24 @@ async function main() {
                 sink
             );
 
-            let video = [];
-            if (videoExpected) {
-                const videoPath = videoPathFor(entry, release.ref);
+            const videoBody = async ({ spec, expected: sha }) => {
+                const videoPath = videoPathFor(entry, spec, release.ref);
                 const videoText = await fetchAt(source.repo, release.commit, videoPath);
-                verify(videoText, videoExpected, `${entry.id} (${videoPath}) at ${release.ref}`);
+                verify(videoText, sha, `${entry.id} (${videoPath}) at ${release.ref}`);
                 const body = generateVideoBody(parseVideoConfig(videoText), classification);
                 for (const problem of body.problems) sink(problem.key);
-                video = body.settings;
+                return body.settings;
+            };
+            const video = videoExpected ? await videoBody(videos[0]) : [];
+            const videoVariants = [];
+            for (const v of variantsExpected) {
+                videoVariants.push({ id: v.spec.id, sha256: v.expected, video: await videoBody(v) });
             }
             releases.push({
                 version: release.ref.replace(/^v/, ''),
                 ref: release.ref,
                 refKind: source.refKind,
                 commit: release.commit,
-                historyCommit,
                 date: release.date,
                 sha256: expected,
                 videoSha256: videoExpected,
@@ -634,9 +681,13 @@ async function main() {
                 convars,
                 optIn,
                 video,
+                videoVariants,
             });
         }
 
+        if (entry.videoVariants && entry.videoSha256) {
+            fail(`Preset ${entry.id} has both videoSha256 and videoVariants; the first variant replaces videoSha256.`);
+        }
         presets.push({
             ...entry,
             constName: camel(entry.id),
@@ -645,7 +696,14 @@ async function main() {
                 repo: source.repo,
                 url: source.url,
                 path: entry.path,
-                paths: [...new Set([entry.path, ...Object.values(entry.pathByRef ?? {})])],
+                ...(entry.videoVariants
+                    ? {
+                          videoFiles: entry.videoVariants.map((v) => ({
+                              variant: v.id,
+                              files: [...new Set([v.file, ...Object.values(v.fileByRef ?? {})])],
+                          })),
+                      }
+                    : {}),
                 license: source.license,
                 credit: source.credit,
             },
@@ -661,6 +719,7 @@ async function main() {
             `  ${entry.id.padEnd(16)} ${String(head.sectionOps.length).padStart(3)} section ops  ` +
                 `${String(head.convars.length).padStart(3)} convars  ${String(head.optIn.length).padStart(2)} opt-in  ` +
                 `${String(head.video.length).padStart(2)} video` +
+                (head.videoVariants.length ? ` (+${head.videoVariants.map((v) => v.id).join(', ')})` : '') +
                 extra
         );
     }
@@ -677,6 +736,7 @@ async function main() {
                 ...r.convars.map(([k]) => k),
                 ...r.sectionOps.map((op) => op.key),
                 ...r.video.map(([k]) => k),
+                ...r.videoVariants.flatMap((v) => v.video.map(([k]) => k)),
             ].filter((k) => optInKeys.has(k));
             if (inBody.length) {
                 fail(
@@ -825,16 +885,24 @@ async function refreshPins(manifest, target) {
         entry.sha256 = hashes;
 
         // Pick up a video.txt upstream started shipping next to this preset,
-        // and keep recording nulls for one it stopped shipping.
-        const videoHashes = {};
-        for (const release of source.releases) {
-            const text = await fetchAt(source.repo, release.commit, videoPathFor(entry, release.ref), {
-                optional: true,
-            });
-            videoHashes[release.ref] = text === null ? null : sha256(text);
-        }
-        if (entry.videoSha256 || Object.values(videoHashes).some(Boolean)) {
-            entry.videoSha256 = videoHashes;
+        // and keep recording nulls for one it stopped shipping. A renamed
+        // variant file reads as null here: add a fileByRef for it.
+        for (const spec of videoSpecs(entry)) {
+            const videoHashes = {};
+            for (const release of source.releases) {
+                const text = await fetchAt(
+                    source.repo,
+                    release.commit,
+                    videoPathFor(entry, spec, release.ref),
+                    { optional: true }
+                );
+                videoHashes[release.ref] = text === null ? null : sha256(text);
+            }
+            if (spec.id) {
+                entry.videoVariants.find((v) => v.id === spec.id).sha256 = videoHashes;
+            } else if (entry.videoSha256 || Object.values(videoHashes).some(Boolean)) {
+                entry.videoSha256 = videoHashes;
+            }
         }
     }
 

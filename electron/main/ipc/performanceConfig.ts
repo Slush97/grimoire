@@ -14,18 +14,12 @@ import {
 } from '../services/performanceConfig';
 // Importing the service also registers its preset resolver with
 // performanceConfig, so markers written by a track-latest apply resolve.
-import {
-    checkPerformanceLatest,
-    fetchPerformanceRemoteVersion,
-    getPerformanceLatestInfo,
-    listPerformanceRemoteVersions,
-} from '../services/performanceLatest';
+import { checkPerformanceLatest, getPerformanceLatestInfo } from '../services/performanceLatest';
 import type {
     EditorCandidate,
     PerformanceConfigStatus,
     PerformanceLatestInfo,
     PerformancePresetSummary,
-    PerformanceRemoteVersionList,
 } from '../../../src/types/electron';
 
 // The preset and opt-in selection the renderer passes in are only a request:
@@ -39,14 +33,22 @@ import type {
 // still means the user disabled every optional gameplay setting.
 // `version` falls back the same way. An unknown version is not rejected here:
 // the service resolves it to the newest release, which is what should happen
-// when a saved pin names a release that has since aged out of the bundle.
-function selection(presetId?: string, optIns?: string[], version?: string | null) {
+// when a saved pick names a release that has since aged out of the bundle.
+// `videoVariant` too: one the release does not ship means its default.
+function selection(
+    presetId?: string,
+    optIns?: string[],
+    version?: string | null,
+    videoVariant?: string | null
+) {
     const settings = loadSettings();
     const id = presetId ?? settings.performanceConfigPresetId;
     return {
         presetId: id,
         optIns: optIns ?? (id ? settings.performanceConfigOptIns?.[id] : undefined),
         version: version ?? (id ? settings.performanceConfigVersions?.[id] : undefined) ?? null,
+        videoVariant:
+            videoVariant ?? (id ? settings.performanceVideoVariants?.[id] : undefined) ?? null,
     };
 }
 
@@ -68,10 +70,11 @@ ipcMain.handle(
         presetId?: string,
         optIns?: string[],
         version?: string | null,
-        restoreVideo?: boolean
+        restoreVideo?: boolean,
+        videoVariant?: string | null
     ): PerformanceConfigStatus => {
         return applyPerformanceConfig(getActiveDeadlockPath(), {
-            ...selection(presetId, optIns, version),
+            ...selection(presetId, optIns, version, videoVariant),
             restoreVideo,
         });
     }
@@ -90,11 +93,12 @@ ipcMain.handle(
         _event,
         presetId?: string,
         optIns?: string[],
-        version?: string | null
+        version?: string | null,
+        videoVariant?: string | null
     ): PerformanceConfigStatus => {
         return resetPerformanceConfigOverrides(
             getActiveDeadlockPath(),
-            selection(presetId, optIns, version)
+            selection(presetId, optIns, version, videoVariant)
         );
     }
 );
@@ -115,33 +119,6 @@ ipcMain.handle(
     'check-performance-latest',
     (_event, presetId: string, force?: boolean): Promise<PerformanceLatestInfo> => {
         return checkPerformanceLatest(String(presetId), force === true);
-    }
-);
-
-// list-performance-remote-versions (everything upstream has published for a
-// preset, for the full-history browser; a listing only, nothing is fetched)
-ipcMain.handle(
-    'list-performance-remote-versions',
-    (_event, presetId: string): Promise<PerformanceRemoteVersionList> => {
-        return listPerformanceRemoteVersions(String(presetId));
-    }
-);
-
-// fetch-performance-remote-version (fetch + gate + cache one historical
-// upstream version so the user can pin and apply it, offline included)
-ipcMain.handle(
-    'fetch-performance-remote-version',
-    (
-        _event,
-        presetId: string,
-        ref: string,
-        commit?: string | null
-    ): Promise<PerformanceLatestInfo> => {
-        return fetchPerformanceRemoteVersion(
-            String(presetId),
-            String(ref),
-            typeof commit === 'string' ? commit : null
-        );
     }
 );
 

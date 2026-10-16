@@ -3139,7 +3139,8 @@
         "competitive": "Competitive",
         "aggressive": "Aggressive",
         "maximum": "Maximum",
-        "potato": "Potato"
+        "potato": "Potato",
+        "ultraPotato": "Ultra Potato"
       },
       "tierBlurb": {
         "light": "Close to Balanced, but keeps the full draw distance so buildings and players don't pop in.",
@@ -3148,7 +3149,8 @@
         "competitive": "Tuned for ranked play: strips visual noise while keeping the game readable.",
         "aggressive": "Trades noticeable visual quality for a large frame-rate gain.",
         "maximum": "Pushes settings as far as they go. The game will look distinctly worse.",
-        "potato": "For very low-end machines. Expect the game to look rough."
+        "potato": "For very low-end machines. Expect the game to look rough.",
+        "ultraPotato": "Goes further than Potato. The hideout looks awful, but real matches hold up better than you'd expect."
       },
       "recommended": "Recommended",
       "experimental": "Experimental"
@@ -3171,8 +3173,7 @@
     "version": {
       "label": "Version",
       "option": "{{ref}} ({{date}})",
-      "optionNewest": "{{ref}} ({{date}}, newest)",
-      "optionRemote": "{{ref}} ({{date}}, from history)"
+      "optionNewest": "{{ref}} ({{date}}, newest)"
     },
     "trackLatest": {
       "label": "Always use the newest version",
@@ -3184,20 +3185,13 @@
       "changed_one": "{{count}} of them was changed in game since.",
       "changed_other": "{{count}} of them were changed in game since.",
       "reapply": "Put them back",
-      "apply": "Add video settings"
-    },
-    "history": {
-      "browse": "See every published version",
-      "title": "Version history",
-      "subtitle": "Everything {{repo}} has published, newest first. Older versions are fetched on demand and pass the same safety checks as the newest one.",
-      "loading": "Loading versions from the config's repo...",
-      "listFailed": "Could not load the version list. Check your connection and try again.",
-      "fetchFailed": "Could not fetch that version.",
-      "empty": "No published versions found.",
-      "bundled": "bundled",
-      "bundledHint": "Ships with Grimoire; applies without a network connection.",
-      "downloaded": "downloaded",
-      "downloadedHint": "Already fetched and cached; applies without a network connection."
+      "apply": "Add video settings",
+      "variant": {
+        "label": "Shadows",
+        "description": "The author ships two sets of video settings for this config, with and without shadows.",
+        "noShadows": "Off",
+        "shadows": "On"
+      }
     },
     "description": "Community configs that raise your frame rate by trimming Deadlock's graphics settings.",
     "on": "On",

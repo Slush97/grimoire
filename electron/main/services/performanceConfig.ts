@@ -39,6 +39,7 @@ import {
     PRESETS,
     type PerformancePreset,
     type SectionOp,
+    type VideoVariant,
 } from './performanceConfigData';
 
 /** Resolves a preset at a version the bundle does not know. The track-latest
@@ -111,7 +112,8 @@ type Overrides = Record<string, OverrideEntry>;
  *  visibility/camera on, developer/testing tools off. An explicit empty list
  *  disables every optional gameplay setting. `version` picks which bundled
  *  upstream release of that preset to write, defaulting to the newest.
- *  A preset whose upstream ships a video.txt always writes it too. */
+ *  A preset whose upstream ships a video.txt always writes it too;
+ *  `videoVariant` picks which one when the release ships several. */
 export interface ApplyOptions {
     presetId?: string;
     version?: string | null;
@@ -119,6 +121,15 @@ export interface ApplyOptions {
     resetOverrides?: boolean;
     /** Write the preset's video values over ones changed in game since. */
     restoreVideo?: boolean;
+    videoVariant?: string | null;
+}
+
+/** The video.txt variant to write: the requested one when the release ships
+ *  it, otherwise its default. Null for a release with one video.txt or none. */
+function pickVideoVariant(preset: PerformancePreset, wanted: string | null | undefined): VideoVariant | null {
+    const variants = preset.videoVariants;
+    if (!variants?.length) return null;
+    return variants.find((variant) => variant.id === wanted) ?? variants[0];
 }
 
 /** The convars a preset writes for a given opt-in selection: its performance
@@ -728,12 +739,13 @@ export function applyPerformanceConfig(
         const finalText = crlf ? content.split('\n').join('\r\n') : content;
         writeFileSync(gameinfoPath, finalText, 'utf-8');
         saved[preset.id] = overrides;
+        const videoVariant = pickVideoVariant(preset, opts?.videoVariant);
         let video: ReturnType<typeof syncVideo>;
         try {
             video = syncVideo(
                 deadlockPath,
                 sidecar?.video ?? null,
-                preset.video,
+                videoVariant?.video ?? preset.video,
                 opts?.restoreVideo === true
             );
         } catch (err) {
@@ -750,6 +762,7 @@ export function applyPerformanceConfig(
             optIns,
             overridesByPreset: saved,
             video: video.state,
+            videoVariant: videoVariant?.id ?? null,
         });
 
         const kept = Object.keys(overrides).length;
@@ -864,6 +877,7 @@ export function reapplyWipedPerformanceConfig(deadlockPath: string | null): Perf
         // The sidecar drops an empty list, so absent means "all off", not
         // "creator defaults".
         optIns: sidecar.optIns ?? [],
+        videoVariant: sidecar.videoVariant,
     });
 }
 
@@ -919,21 +933,24 @@ export function listPerformancePresets(): PerformancePresetSummary[] {
         // that never touches the version picker gets. `versions` carries the
         // rest, newest first.
         const newest = family.releases[0];
-        const summarize = (release: (typeof family.releases)[number]) => ({
-            version: release.version,
-            ref: release.ref,
-            refKind: release.refKind,
-            commit: release.commit,
-            historyCommit: release.historyCommit,
-            date: release.date,
-            settingCount: release.convars.length + release.sectionOps.length,
-            videoSettingCount: release.video.length,
-            optIn: release.optIn.map((control) => ({
-                key: control.key,
-                value: control.value,
-                group: control.group,
-            })),
-        });
+        const summarize = (release: (typeof family.releases)[number]) => {
+            const variants = getPreset(family.id, release.version).videoVariants;
+            return {
+                version: release.version,
+                ref: release.ref,
+                refKind: release.refKind,
+                commit: release.commit,
+                date: release.date,
+                settingCount: release.convars.length + release.sectionOps.length,
+                videoSettingCount: release.video.length,
+                ...(variants ? { videoVariants: variants.map((variant) => variant.id) } : {}),
+                optIn: release.optIn.map((control) => ({
+                    key: control.key,
+                    value: control.value,
+                    group: control.group,
+                })),
+            };
+        };
         return {
             id: family.id,
             name: family.name,
@@ -1013,6 +1030,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 // from an unrelated preset would be a lie.
                 bundledVersion: newestVersion ?? begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
+                ...(sidecar?.videoVariant ? { appliedVideoVariant: sidecar.videoVariant } : {}),
                 managedConvarValues: managedConvarValues(content),
                 savedConvarValues,
                 handEdited,
@@ -1104,6 +1122,9 @@ interface AppliedState {
     /** Which video.txt the last apply wrote, what it wrote and what it replaced. Absent
      *  when it wrote nothing there (a preset without one, or no video.txt yet). */
     video?: VideoRecord;
+    /** Which of the release's video.txt variants that was. Absent for a release
+     *  that ships only one. */
+    videoVariant?: string;
 }
 
 /** Overrides keyed by preset id, migrating the flat single-preset shape that
@@ -1138,6 +1159,7 @@ function writeAppliedState(
         optIns: string[];
         overridesByPreset: Record<string, Overrides>;
         video: VideoRecord | null;
+        videoVariant: string | null;
     }
 ): void {
     try {
@@ -1154,6 +1176,7 @@ function writeAppliedState(
         );
         if (kept.length) trimmed.overridesByPreset = Object.fromEntries(kept);
         if (state.video) trimmed.video = state.video;
+        if (state.videoVariant) trimmed.videoVariant = state.videoVariant;
         writeFileSync(statePath(gameinfoPath), JSON.stringify(trimmed), 'utf-8');
     } catch {
         // Best-effort: losing the sidecar only degrades wiped-detection to

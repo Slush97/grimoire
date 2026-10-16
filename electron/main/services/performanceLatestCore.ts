@@ -66,6 +66,10 @@ export interface LatestRelease {
     video?: Array<[string, string]>;
     /** sha256 of that video.txt, null when there is none. */
     videoSha256?: string | null;
+    /** For a preset that ships several video.txt files, the ones besides the
+     *  default (`video`) that this release ships. Absent on entries cached
+     *  before variant support, which such a preset rebuilds on the next check. */
+    videoVariants?: Array<{ id: string; sha256: string; video: Array<[string, string]> }>;
     /** Keys held out of the body: gameplay-shaped keys nobody has classified
      *  yet, or opt-in keys upstream moved outside the ConVars block. They are
      *  simply never written; the UI reports the count. */
@@ -81,16 +85,7 @@ interface LatestCacheFile {
     byPreset: Record<string, LatestRelease>;
     /** Last successful upstream check per preset id (ISO), for throttling. */
     checkedAt: Record<string, string>;
-    /** Historical releases fetched on demand, per preset id, most recently
-     *  fetched first. What lets a user pin an old upstream version and keep
-     *  applying it offline: the built release persists here. */
-    history: Record<string, LatestRelease[]>;
 }
-
-/** Fetched historical releases kept per preset. Generous, because an evicted
- *  release that a user still has pinned degrades to the bundled newest on the
- *  next apply; the cap only exists to stop the cache growing without bound. */
-const HISTORY_CAP = 32;
 
 const CACHE_FILENAME = 'performance-latest.json';
 
@@ -106,13 +101,12 @@ export function readLatestCache(dir: string): LatestCacheFile {
             return {
                 byPreset: parsed.byPreset ?? {},
                 checkedAt: parsed.checkedAt ?? {},
-                history: parsed.history ?? {},
             };
         }
     } catch {
         // Missing or corrupt cache reads as empty; the next check rebuilds it.
     }
-    return { byPreset: {}, checkedAt: {}, history: {} };
+    return { byPreset: {}, checkedAt: {} };
 }
 
 export function writeLatestCache(dir: string, cache: LatestCacheFile): void {
@@ -127,21 +121,6 @@ export function writeLatestCache(dir: string, cache: LatestCacheFile): void {
 
 export function getCachedLatest(dir: string, presetId: string): LatestRelease | null {
     return readLatestCache(dir).byPreset[presetId] ?? null;
-}
-
-export function getCachedHistory(dir: string, presetId: string): LatestRelease[] {
-    return readLatestCache(dir).history[presetId] ?? [];
-}
-
-/** Record a historical fetch, deduplicating by version (a refetch replaces the
- *  old entry and moves it to the front). */
-export function upsertHistory(dir: string, release: LatestRelease): void {
-    const cache = readLatestCache(dir);
-    const rest = (cache.history[release.presetId] ?? []).filter(
-        (r) => r.version !== release.version
-    );
-    cache.history[release.presetId] = [release, ...rest].slice(0, HISTORY_CAP);
-    writeLatestCache(dir, cache);
 }
 
 /** How stale a successful check may be before the next one hits the network
@@ -177,8 +156,11 @@ export interface BuildLatestInput {
     baselineCommit: string;
     baselineText: string;
     configText: string;
-    /** The video.txt next to the config upstream, null when there is none. */
+    /** The video.txt next to the config upstream, null when there is none.
+     *  For a preset that ships several, the default variant's. */
     videoText: string | null;
+    /** The other video.txt variants found next to the config. */
+    videoVariantTexts?: Array<{ id: string; text: string }>;
     now: Date;
 }
 
@@ -201,20 +183,39 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
         const problem = validateGameinfoText(text, label);
         if (problem) return { ok: false, error: problem };
     }
-    if (input.videoText !== null) {
-        const problem = validateVideoText(input.videoText, 'upstream video.txt');
+    const variantTexts = family.upstream.videoFiles ? (input.videoVariantTexts ?? []) : [];
+    if (input.videoText === null && variantTexts.length) {
+        return { ok: false, error: `video.txt variant ${variantTexts[0].id} ships without the default one` };
+    }
+    const videoTexts: Array<[string | null, string]> = [
+        [input.videoText, 'upstream video.txt'],
+        ...variantTexts.map((v): [string, string] => [v.text, `upstream ${v.id} video.txt`]),
+    ];
+    for (const [text, label] of videoTexts) {
+        if (text === null) continue;
+        const problem = validateVideoText(text, label);
         if (problem) return { ok: false, error: problem };
     }
 
     const configHash = sha256(input.configText);
     const videoHash = input.videoText === null ? null : sha256(input.videoText);
+    const variants = variantTexts.map((v) => ({
+        id: v.id,
+        sha256: sha256(v.text),
+        video: generateVideoBody(parseVideoConfig(v.text), CLASSIFICATION),
+    }));
+    const variantKey = (list: ReadonlyArray<{ id: string; sha256: string }>) =>
+        list.map((v) => `${v.id}:${v.sha256}`).join(',');
     // Byte-identical to a bundled release: reuse its version identity so the
     // marker names the release a human actually reviewed. The body is still
     // rebuilt from the fetched texts (the baseline may be newer than the one
     // the bundled diff used, and a diff against today's stock file is the one
     // that can be patched into the file the user actually has).
     const bundledTwin = family.releases.find(
-        (r) => r.sha256 === configHash && r.videoSha256 === videoHash
+        (r) =>
+            r.sha256 === configHash &&
+            r.videoSha256 === videoHash &&
+            variantKey(r.videoVariants ?? []) === variantKey(variants)
     );
 
     const baseline = parseConfig(input.baselineText);
@@ -251,7 +252,22 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
         optIn: body.optIn,
         video: video.settings,
         videoSha256: videoHash,
-        withheld: [...new Set([...body.problems, ...video.problems].map((p) => p.key))],
+        ...(family.upstream.videoFiles
+            ? {
+                  videoVariants: variants.map((v) => ({
+                      id: v.id,
+                      sha256: v.sha256,
+                      video: v.video.settings,
+                  })),
+              }
+            : {}),
+        withheld: [
+            ...new Set(
+                [...body.problems, ...video.problems, ...variants.flatMap((v) => v.video.problems)].map(
+                    (p) => p.key
+                )
+            ),
+        ],
         ...(bundledTwin ? { matchesBundled: bundledTwin.version } : {}),
     };
     return { ok: true, release };
@@ -261,6 +277,8 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
  *  on, nothing downstream can tell it from a bundled release. */
 export function latestAsPreset(release: LatestRelease): PerformancePreset {
     const family = getFamily(release.presetId);
+    const video = generateVideoBody(release.video ?? [], CLASSIFICATION).settings;
+    const defaultVariant = family.upstream.videoFiles?.[0].variant;
     return {
         id: family.id,
         name: family.name,
@@ -285,14 +303,24 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
         // generated with, so the cast is between two views of one source.
         optIn: release.optIn.map((o) => ({ ...o, group: o.group as OptInGroup })),
         // Reclassified for the same reason as sectionOps.
-        video: generateVideoBody(release.video ?? [], CLASSIFICATION).settings,
+        video,
+        ...(defaultVariant && release.videoVariants?.length
+            ? {
+                  videoVariants: [
+                      { id: defaultVariant, video },
+                      ...release.videoVariants.map((v) => ({
+                          id: v.id,
+                          video: generateVideoBody(v.video, CLASSIFICATION).settings,
+                      })),
+                  ],
+              }
+            : {}),
     };
 }
 
-/** Resolve a preset at a version the bundle does not know, from the cache:
- *  the tracked latest (which alone answers the 'latest' sentinel), then the
- *  fetched historical releases. Used for markers written by a track-latest or
- *  pinned-historical apply. */
+/** Resolve a preset at a version the bundle does not know from the cached
+ *  tracked latest, which also answers the 'latest' sentinel. Used for markers
+ *  written by a track-latest apply. */
 export function resolveCachedPreset(
     dir: string,
     presetId: string,
@@ -302,11 +330,26 @@ export function resolveCachedPreset(
     if (cached && (version === 'latest' || version === cached.version)) {
         return latestAsPreset(cached);
     }
-    if (version && version !== 'latest') {
-        const historical = getCachedHistory(dir, presetId).find((r) => r.version === version);
-        if (historical) return latestAsPreset(historical);
-    }
     return null;
+}
+
+/** Whether a cached tracked-latest entry still describes `commit` diffed
+ *  against `baselineCommit`. An entry cached before video.txt support has no
+ *  `video`, and one cached before variant support has no `videoVariants`
+ *  (for a preset that ships several): both are rebuilt rather than applied
+ *  without those video settings. */
+export function cachedLatestIsCurrent(
+    family: PerformancePresetFamily,
+    cached: LatestRelease,
+    commit: string,
+    baselineCommit: string
+): boolean {
+    return (
+        cached.commit === commit &&
+        cached.baselineCommit === baselineCommit &&
+        cached.video !== undefined &&
+        (!family.upstream.videoFiles || cached.videoVariants !== undefined)
+    );
 }
 
 /** True when applying `release` would write the same body the newest bundled

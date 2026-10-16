@@ -3,8 +3,7 @@
     "em-dash": 2
   },
   "src/components/DownloadQueueIndicator.tsx": {
-    "raw-palette": 4,
-    "em-dash": 1
+    "raw-palette": 4
   },
   "src/components/ImportCollectionModal.tsx": {
     "raw-palette": 2,
@@ -169,9 +168,6 @@
   "src/components/stats/primitives.tsx": {
     "raw-palette": 4
   },
-  "src/components/stats/tabs/LeaderboardTab.tsx": {
-    "raw-palette": 1
-  },
   "src/components/stats/tabs/OverviewTab.tsx": {
     "raw-palette": 2
   },
@@ -191,9 +187,6 @@
     "em-dash": 4
   },
   "src/lib/modEntries.ts": {
-    "em-dash": 1
-  },
-  "src/lib/performanceHistory.ts": {
     "em-dash": 1
   },
   "src/pages/Browse.tsx": {

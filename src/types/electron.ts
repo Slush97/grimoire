@@ -168,9 +168,6 @@ export interface PerformancePresetVersion {
     /** Whether `ref` is a real git tag or a version stated in prose. */
     refKind: 'tag' | 'prose';
     commit: string;
-    /** Last commit at or before the release pin that touched this preset's
-     *  source file. Prose version history is scoped to that path. */
-    historyCommit: string;
     /** Upstream release date, yyyy-mm-dd. Shown because upstream tag names do
      *  not reliably sort into release order (OptiLock tagged v4.0d after v4.1),
      *  so the name alone cannot tell a user which release is older. */
@@ -180,6 +177,9 @@ export interface PerformancePresetVersion {
     /** How many video.txt settings this release writes; 0 when upstream ships
      *  no video.txt for it. */
     videoSettingCount: number;
+    /** The video.txt variants this release ships, default first, when there is
+     *  more than one to pick from (OptiLock Ultra Potato: noShadows, shadows). */
+    videoVariants?: string[];
     /** Creator-authored gameplay convars exposed as individual controls.
      *  Differs between releases, so it is recorded per version. */
     optIn: PerformanceOptIn[];
@@ -196,7 +196,15 @@ export interface PerformancePresetSummary {
     name: string;
     /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
     version: string;
-    tier: 'light' | 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
+    tier:
+        | 'light'
+        | 'balanced'
+        | 'preview'
+        | 'aggressive'
+        | 'potato'
+        | 'ultraPotato'
+        | 'competitive'
+        | 'maximum';
     author: string;
     /** Upstream itself labels this config experimental. */
     unstable: boolean;
@@ -231,6 +239,9 @@ export interface PerformanceConfigStatus {
     bundledVersion: string;
     /** Opt-in convar keys the last apply wrote. */
     appliedOptIns?: string[];
+    /** The video.txt variant the last apply wrote, for a release that ships
+     *  more than one. */
+    appliedVideoVariant?: string;
     /** Current values of the active ConVars lines Grimoire manages in
      *  gameinfo.gi, hand edits included. */
     managedConvarValues?: Record<string, string>;
@@ -249,7 +260,7 @@ export interface PerformanceConfigStatus {
      *  before video.txt support). */
     video?: { applied: number; total: number };
     /** Video settings the applied release carries, which can differ from the
-     *  bundled release the card has selected (track-latest, a pinned version). */
+     *  bundled release the card has selected (track-latest, a rolled-back version). */
     videoAvailable?: number;
     /** game/citadel/cfg/video.txt does not exist yet (Deadlock writes it on
      *  first launch), so video settings cannot be applied. */
@@ -286,32 +297,6 @@ export interface PerformanceLatestInfo {
     matchesBundled: string | null;
     /** Fetch or validation failure. The cached fields above may still be
      *  populated from an earlier successful check. */
-    error: string | null;
-}
-
-/** One version a preset's upstream has published, for the full-history
- *  browser. A row is only a pointer: nothing is fetched until it is picked. */
-export interface PerformanceRemoteVersion {
-    /** The upstream handle: a tag name ('v4.2') or a short commit sha. */
-    ref: string;
-    /** The version identity a pin/apply of this row would use (tag with any
-     *  leading 'v' stripped, or the short sha). */
-    version: string;
-    /** Full commit sha when the listing knows it (commit-versioned sources);
-     *  tag refs resolve at fetch time instead. */
-    commit: string | null;
-    /** yyyy-mm-dd. */
-    date: string;
-    /** Human handle where upstream provides one: the release title, or the
-     *  commit subject line for sources that version in prose. */
-    label: string | null;
-    /** Already fetched, gated, and cached locally (appliable offline). */
-    cached?: boolean;
-}
-
-export interface PerformanceRemoteVersionList {
-    /** Newest first. Empty on error. */
-    versions: PerformanceRemoteVersion[];
     error: string | null;
 }
 
@@ -1179,24 +1164,20 @@ export interface ElectronAPI {
         presetId?: string,
         optIns?: string[],
         version?: string | null,
-        restoreVideo?: boolean
+        restoreVideo?: boolean,
+        videoVariant?: string | null
     ) => Promise<PerformanceConfigStatus>;
     removePerformanceConfig: () => Promise<PerformanceConfigStatus>;
     resetPerformanceConfigOverrides: (
         presetId?: string,
         optIns?: string[],
-        version?: string | null
+        version?: string | null,
+        videoVariant?: string | null
     ) => Promise<PerformanceConfigStatus>;
     reapplyWipedPerformanceConfig: () => Promise<PerformanceConfigStatus>;
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
     getPerformanceLatestInfo: (presetId: string) => Promise<PerformanceLatestInfo>;
     checkPerformanceLatest: (presetId: string, force?: boolean) => Promise<PerformanceLatestInfo>;
-    listPerformanceRemoteVersions: (presetId: string) => Promise<PerformanceRemoteVersionList>;
-    fetchPerformanceRemoteVersion: (
-        presetId: string,
-        ref: string,
-        commit?: string | null
-    ) => Promise<PerformanceLatestInfo>;
     openPerformanceConfigFile: () => Promise<void>;
     listEditorCandidates: () => Promise<EditorCandidate[]>;
     openModsFolder: () => Promise<void>;

@@ -447,24 +447,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
         presetId?: string,
         optIns?: string[],
         version?: string | null,
-        restoreVideo?: boolean
-    ) => ipcRenderer.invoke('apply-performance-config', presetId, optIns, version, restoreVideo),
+        restoreVideo?: boolean,
+        videoVariant?: string | null
+    ) =>
+        ipcRenderer.invoke('apply-performance-config', presetId, optIns, version, restoreVideo, videoVariant),
     removePerformanceConfig: () => ipcRenderer.invoke('remove-performance-config'),
     resetPerformanceConfigOverrides: (
         presetId?: string,
         optIns?: string[],
-        version?: string | null
-    ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version),
+        version?: string | null,
+        videoVariant?: string | null
+    ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version, videoVariant),
     reapplyWipedPerformanceConfig: () => ipcRenderer.invoke('reapply-wiped-performance-config'),
     restorePerformanceConfigBackup: () => ipcRenderer.invoke('restore-performance-config-backup'),
     getPerformanceLatestInfo: (presetId: string) =>
         ipcRenderer.invoke('get-performance-latest-info', presetId),
     checkPerformanceLatest: (presetId: string, force?: boolean) =>
         ipcRenderer.invoke('check-performance-latest', presetId, force),
-    listPerformanceRemoteVersions: (presetId: string) =>
-        ipcRenderer.invoke('list-performance-remote-versions', presetId),
-    fetchPerformanceRemoteVersion: (presetId: string, ref: string, commit?: string | null) =>
-        ipcRenderer.invoke('fetch-performance-remote-version', presetId, ref, commit),
     openPerformanceConfigFile: () => ipcRenderer.invoke('open-performance-config-file'),
     listEditorCandidates: () => ipcRenderer.invoke('list-editor-candidates'),
     openModsFolder: () => ipcRenderer.invoke('open-mods-folder'),

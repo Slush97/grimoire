@@ -49,7 +49,6 @@ function preset(
     ref: `v${version}`,
     refKind: 'tag' as const,
     commit: `c${version}`,
-    historyCommit: `c${version}`,
     date: '2026-08-17',
     settingCount: 100,
     videoSettingCount: 0,
@@ -79,9 +78,15 @@ function preset(
   };
 }
 
+// The newest release ships two video.txt variants, the older one a single file.
+const ULTRA = preset('optilock-ultra-potato', 'OptiLock Ultra Potato', 'ultraPotato', 'dacooder');
+ULTRA.versions[0] = { ...ULTRA.versions[0], videoSettingCount: 50, videoVariants: ['noShadows', 'shadows'] };
+ULTRA.versions[1] = { ...ULTRA.versions[1], videoSettingCount: 50 };
+
 // Deliberately out of order: the card sorts mildest to strongest.
 const PRESETS = [
   preset('sqooky-testing', "Sqooky's Testing", 'preview', 'Sqooky', { unstable: true }),
+  ULTRA,
   preset('optilock-max', 'OptiLock Max FPS', 'maximum', 'dacooder'),
   preset('sqooky-default', "Sqooky's Default", 'balanced', 'Sqooky', { isDefault: true }),
   preset('kaizu-min-spec', 'kaizuchanerus Minimum Spec', 'potato', 'kaizuchanerus'),
@@ -217,6 +222,7 @@ describe('PerformanceConfigCard', () => {
         'performance.preset.tier.aggressive',
         'performance.preset.tier.maximum',
         'performance.preset.tier.potato',
+        'performance.preset.tier.ultraPotato',
         'performance.preset.tier.preview',
       ]);
       expect((radio('balanced') as HTMLInputElement).checked).toBe(true);
@@ -235,7 +241,7 @@ describe('PerformanceConfigCard', () => {
 
     it('shows bundled pictures for verified authors and an initial for the rest', async () => {
       await render();
-      for (const tier of ['balanced', 'competitive', 'maximum', 'potato', 'preview']) {
+      for (const tier of ['balanced', 'competitive', 'maximum', 'potato', 'ultraPotato', 'preview']) {
         expect(card(tier)?.querySelector('img')).toBeTruthy();
       }
       expect(card('aggressive')?.querySelector('img')).toBeNull();
@@ -255,7 +261,7 @@ describe('PerformanceConfigCard', () => {
       await render({ performanceConfigOptIns: { 'sqooky-default': ['citadel_camera_fov'] } });
       expect(powerSwitch().checked).toBe(false);
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', ['citadel_camera_fov'], '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', ['citadel_camera_fov'], '2.9', false, null);
       expect(powerSwitch().checked).toBe(true);
     });
 
@@ -301,7 +307,7 @@ describe('PerformanceConfigCard', () => {
       await render(before);
 
       await click(radio('competitive'));
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('optilock-fps', CREATOR_DEFAULTS, '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('optilock-fps', CREATOR_DEFAULTS, '2.9', false, null);
       expect((radio('competitive') as HTMLInputElement).checked).toBe(true);
 
       const toast = useToastStore.getState().toasts.at(-1)!;
@@ -310,7 +316,13 @@ describe('PerformanceConfigCard', () => {
 
       await act(async () => toast.onAction!());
       await flush();
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', ['citadel_camera_fov'], '2.8', undefined);
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith(
+        'sqooky-default',
+        ['citadel_camera_fov'],
+        '2.8',
+        false,
+        null
+      );
       expect(saveSettings).toHaveBeenLastCalledWith(before);
     });
 
@@ -326,28 +338,50 @@ describe('PerformanceConfigCard', () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234', ref: 'v3.0' };
       await render();
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest', false, null);
     });
 
     it('prefers the reviewed bundled release when upstream is identical to it', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234', matchesBundled: '2.9' };
       await render();
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false, null);
     });
 
     it('never overrides a deliberate rollback', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
       await render({ performanceConfigVersions: { 'sqooky-default': '2.8' } });
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false, null);
     });
 
     it('stays on the bundle when tracking is off', async () => {
       latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
       await render({ performanceTrackLatest: false });
       await click(powerSwitch());
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false, null);
+    });
+
+    it('offers the upstream release as an update while tracking', async () => {
+      status = applied('sqooky-default');
+      latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
+      await render();
+      expect(host.textContent).toContain('performance.notice.update');
+      await click(button('performance.update'));
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest', false, null);
+    });
+
+    it('writes the upstream release straight away when tracking is switched on', async () => {
+      status = applied('sqooky-default');
+      latest = { ...NO_LATEST, presetId: 'sqooky-default', version: 'abc1234' };
+      await render({ performanceTrackLatest: false });
+      await click(button('performance.advanced'));
+      const trackSwitch = [...host.querySelectorAll('label')]
+        .find((l) => l.textContent?.includes('performance.trackLatest.label'))
+        ?.querySelector('input');
+      await click(trackSwitch);
+      expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ performanceTrackLatest: true }));
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, 'latest', false, null);
     });
   });
 
@@ -363,7 +397,7 @@ describe('PerformanceConfigCard', () => {
       await render();
       expect(host.textContent).toContain('performance.notice.update');
       await click(button('performance.update'));
-      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.9', false, null);
     });
 
     it('does not nag about updates after a deliberate rollback', async () => {
@@ -464,7 +498,7 @@ describe('PerformanceConfigCard', () => {
       expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({ performanceConfigOptIns: { 'sqooky-default': remaining } })
       );
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', remaining, '2.9', false);
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', remaining, '2.9', false, null);
     });
 
     it('writes a version change straight away while on, without following upstream', async () => {
@@ -481,7 +515,7 @@ describe('PerformanceConfigCard', () => {
       expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({ performanceConfigVersions: { 'sqooky-default': '2.8' } })
       );
-      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false);
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith('sqooky-default', CREATOR_DEFAULTS, '2.8', false, null);
     });
 
     it('offers file tools only while a config is applied', async () => {
@@ -490,6 +524,46 @@ describe('PerformanceConfigCard', () => {
       expect(button('performance.editFile')).toBeUndefined();
       await click(powerSwitch());
       expect(button('performance.editFile')).toBeTruthy();
+    });
+  });
+
+  describe('video.txt variants', () => {
+    const shadowsLabel = 'performance.video.variant.label';
+
+    it('offers no choice for a config with a single video.txt', async () => {
+      await render();
+      expect(host.textContent).not.toContain(shadowsLabel);
+    });
+
+    it('offers the choice when the selected release ships both, defaulting to the first', async () => {
+      await render({ performanceConfigPresetId: ULTRA.id });
+      expect(host.textContent).toContain(shadowsLabel);
+      await click(powerSwitch());
+      expect(api.applyPerformanceConfig).toHaveBeenCalledWith(ULTRA.id, CREATOR_DEFAULTS, '2.9', false, 'noShadows');
+    });
+
+    it('hides the choice for a rolled-back release that ships one video.txt', async () => {
+      await render({ performanceConfigPresetId: ULTRA.id, performanceConfigVersions: { [ULTRA.id]: '2.8' } });
+      expect(host.textContent).not.toContain(shadowsLabel);
+    });
+
+    it('saves the pick and writes it straight away while on', async () => {
+      status = applied(ULTRA.id);
+      await render();
+      await click(button('performance.video.variant.shadows'));
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ performanceVideoVariants: { [ULTRA.id]: 'shadows' } })
+      );
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith(ULTRA.id, CREATOR_DEFAULTS, '2.9', false, 'shadows');
+    });
+
+    it('only saves the pick while off', async () => {
+      await render({ performanceConfigPresetId: ULTRA.id });
+      await click(button('performance.video.variant.shadows'));
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ performanceVideoVariants: { [ULTRA.id]: 'shadows' } })
+      );
+      expect(api.applyPerformanceConfig).not.toHaveBeenCalled();
     });
   });
 });

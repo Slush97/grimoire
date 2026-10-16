@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { savedOptIns, savedVersion, sortPresetsByTier } from './performanceSelection';
+import { savedOptIns, savedVersion, savedVideoVariant, sortPresetsByTier } from './performanceSelection';
 import type { AppSettings } from '../types/mod';
 import type { PerformanceOptIn, PerformancePresetSummary } from '../types/electron';
 
@@ -19,7 +19,6 @@ function preset(
     ref: v.version,
     refKind: 'tag' as const,
     commit: `commit-${v.version}`,
-    historyCommit: `commit-${v.version}`,
     date: '2026-08-01',
     settingCount: 10,
     videoSettingCount: 0,
@@ -56,6 +55,7 @@ describe('sortPresetsByTier', () => {
       preset('p', 'preview'),
       preset('m', 'maximum'),
       preset('b', 'balanced'),
+      preset('up', 'ultraPotato'),
       preset('pot', 'potato'),
       preset('a', 'aggressive'),
       preset('c', 'competitive'),
@@ -68,6 +68,7 @@ describe('sortPresetsByTier', () => {
       'aggressive',
       'maximum',
       'potato',
+      'ultraPotato',
       'preview',
     ]);
   });
@@ -85,19 +86,11 @@ describe('savedVersion', () => {
     expect(savedVersion(settings({ performanceConfigVersions: { p: '2.8' } }), p)).toBe('2.8');
   });
 
-  it('keeps a version pinned from the full history', () => {
-    const s = settings({
-      performanceConfigVersions: { p: 'abc1234' },
-      performanceConfigRemotePins: { p: { version: 'abc1234', ref: 'v1', date: '2026-01-01' } },
-    });
-    expect(savedVersion(s, p)).toBe('abc1234');
-  });
-
   it('falls back to the newest when a saved pick has aged out of the bundle', () => {
     expect(savedVersion(settings({ performanceConfigVersions: { p: '1.0' } }), p)).toBe('2.9');
   });
 
-  it('reads pins per preset', () => {
+  it('reads picks per preset', () => {
     expect(savedVersion(settings({ performanceConfigVersions: { other: '2.8' } }), p)).toBe('2.9');
   });
 });
@@ -129,9 +122,27 @@ describe('savedOptIns', () => {
     expect(savedOptIns(s, p, '2.8')).toEqual(['citadel_trooper_glow_disabled']);
     expect(savedOptIns(s, p, '2.9')).toEqual(['citadel_trooper_glow_disabled', 'citadel_camera_fov']);
   });
+});
 
-  it("uses the newest release's list for a version pinned from the full history", () => {
-    const p = preset('p', 'balanced', [{ version: '2.9' }]);
-    expect(savedOptIns(null, p, 'abc1234')).toEqual(['citadel_trooper_glow_disabled', 'citadel_camera_fov']);
+describe('savedVideoVariant', () => {
+  const p = preset('p', 'ultraPotato', [{ version: '5.6' }, { version: '5.5' }]);
+  const [both, one] = p.versions;
+  both.videoVariants = ['noShadows', 'shadows'];
+
+  it('defaults to the first variant', () => {
+    expect(savedVideoVariant(null, 'p', both)).toBe('noShadows');
+  });
+
+  it('keeps a saved pick the release ships', () => {
+    expect(savedVideoVariant(settings({ performanceVideoVariants: { p: 'shadows' } }), 'p', both)).toBe('shadows');
+  });
+
+  it('falls back to the default for a pick the release does not ship', () => {
+    expect(savedVideoVariant(settings({ performanceVideoVariants: { p: 'gone' } }), 'p', both)).toBe('noShadows');
+  });
+
+  it('is null for a release with a single video.txt, so the card offers no choice', () => {
+    expect(savedVideoVariant(settings({ performanceVideoVariants: { p: 'shadows' } }), 'p', one)).toBeNull();
+    expect(savedVideoVariant(null, 'p', null)).toBeNull();
   });
 });

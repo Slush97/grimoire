@@ -24,7 +24,7 @@ import {
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
 } from './performanceConfig';
-import { CLASSIFICATION, getPreset } from './performanceConfigData';
+import { CLASSIFICATION, getFamily, getPreset } from './performanceConfigData';
 import { pathExcluded } from './performancePresetGen';
 
 const STOCK = readFileSync(join(__dirname, '__fixtures__/stock-gameinfo.gi'), 'utf-8').replace(/\r\n/g, '\n');
@@ -1000,6 +1000,99 @@ describe('video.txt settings', () => {
         const status = getPerformanceConfigStatus(gameRoot);
         expect(status.video).toBeUndefined();
         expect(status.videoFileMissing).toBe(true);
+    });
+
+    // OptiLock Ultra Potato ships its video.txt with and without shadows.
+    describe('variants', () => {
+        const ULTRA = 'optilock-ultra-potato';
+        const ultra = PRESETS.find((p) => p.id === ULTRA)!;
+        const shadowQuality = () =>
+            /"setting\.r_citadel_shadow_quality"\t\t"([^"]*)"/.exec(readVideo())?.[1];
+
+        it('are listed only for a release that ships more than one video.txt', () => {
+            expect(ultra.versions[0].videoVariants).toEqual(['noShadows', 'shadows']);
+            const single = PRESETS.flatMap((p) => p.versions).filter((v) => v !== ultra.versions[0]);
+            expect(single.every((v) => v.videoVariants === undefined)).toBe(true);
+        });
+
+        it('writes the default variant unless another is picked', () => {
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA });
+            expect(shadowQuality()).toBe('-1');
+            expect(getPerformanceConfigStatus(gameRoot).appliedVideoVariant).toBe('noShadows');
+        });
+
+        it('switching variant rewrites only video.txt, and Remove restores both files', () => {
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA });
+            const gameinfoText = read();
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA, videoVariant: 'shadows' });
+            expect(shadowQuality()).toBe('0');
+            expect(read()).toBe(gameinfoText);
+            expect(getPerformanceConfigStatus(gameRoot).appliedVideoVariant).toBe('shadows');
+
+            removePerformanceConfig(gameRoot);
+            expect(readVideo()).toBe(VIDEO);
+            expect(read()).toBe(STOCK);
+        });
+
+        it('falls back to the default for a variant the release does not ship', () => {
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA, videoVariant: 'nope' });
+            expect(shadowQuality()).toBe('-1');
+
+            applyPerformanceConfig(gameRoot, {
+                presetId: ULTRA,
+                version: ultra.versions[1].version,
+                videoVariant: 'shadows',
+            });
+            expect(shadowQuality()).toBe('-1');
+            expect(getPerformanceConfigStatus(gameRoot).appliedVideoVariant).toBeUndefined();
+        });
+
+        it('a game update that wipes gameinfo.gi brings back the variant that was applied', () => {
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA, videoVariant: 'shadows' });
+            const applied = readVideo();
+            write(STOCK);
+            expect(reapplyWipedPerformanceConfig(gameRoot).state).toBe('applied');
+            expect(readVideo()).toBe(applied);
+        });
+
+        it('caps the mip bias the No Shadows file ships', () => {
+            applyPerformanceConfig(gameRoot, { presetId: ULTRA });
+            expect(readVideo()).toContain('"setting.r_texture_stream_mip_bias"\t\t"4"');
+        });
+
+        // The generator needs the network, so its variant handling is checked
+        // here against what it emitted: the manifest's declarations and pins.
+        describe('generated from the pin manifest', () => {
+            type Variant = { id: string; file: string; fileByRef?: Record<string, string>; sha256: Record<string, string | null> };
+            const manifest = JSON.parse(
+                readFileSync(join(__dirname, '../../../scripts/performance-presets.json'), 'utf-8')
+            ) as { presets: Array<{ id: string; videoVariants?: Variant[] }> };
+            const declared = manifest.presets.filter((p) => p.videoVariants);
+
+            it('declares each variant file, default first, with every name it has had', () => {
+                expect(declared.map((p) => p.id)).toContain(ULTRA);
+                for (const entry of declared) {
+                    expect(getFamily(entry.id).upstream.videoFiles).toEqual(
+                        entry.videoVariants!.map((v) => ({
+                            variant: v.id,
+                            files: [...new Set([v.file, ...Object.values(v.fileByRef ?? {})])],
+                        }))
+                    );
+                }
+            });
+
+            it('pins every bundled release to the manifest hash of each variant it ships', () => {
+                for (const entry of declared) {
+                    const [first, ...rest] = entry.videoVariants!;
+                    for (const release of getFamily(entry.id).releases) {
+                        expect(release.videoSha256).toBe(first.sha256[release.ref]);
+                        expect((release.videoVariants ?? []).map((v) => [v.id, v.sha256])).toEqual(
+                            rest.filter((v) => v.sha256[release.ref]).map((v) => [v.id, v.sha256[release.ref]])
+                        );
+                    }
+                }
+            });
+        });
     });
 
     describe('Steam userdata video.txt', () => {
