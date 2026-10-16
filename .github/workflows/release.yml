@@ -55,7 +55,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: ${{ inputs.draft || false }}
           generate_release_notes: true
@@ -68,7 +68,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download Linux artifacts
         uses: actions/download-artifact@v8
@@ -260,7 +260,7 @@ jobs:
       # Check out main rather than the tag: a tag checkout is detached and the
       # manifest bump at the end of this job needs a branch to push to.
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
 
@@ -319,7 +319,7 @@ jobs:
           cache: false
 
       - name: Attach bundle to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: Grimoire-${{ steps.meta.outputs.version }}.flatpak

@@ -46,7 +46,7 @@ jobs:
 
     steps:
       - name: Checkout grimoire
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: grimoire
           ref: ${{ inputs.ref }}
@@ -55,7 +55,7 @@ jobs:
       # ../grimoire-social/packages/*. Without this sibling checkout the
       # workspace dep fails to resolve and pnpm install bails out.
       - name: Checkout grimoire-social (sibling for shared types)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Slush97/grimoire-social
           path: grimoire-social
@@ -68,7 +68,7 @@ jobs:
           version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
