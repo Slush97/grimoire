@@ -618,9 +618,21 @@ export interface OutdatedVdata {
   sample: string[];
 }
 
+/** A hero model the mod ships that predates Deadlock's camera change (from
+ *  `vpkmerge attachments check`). Its camera and aim attachments still point
+ *  the old way, which breaks the hero's camera in game. `healModAttachments`
+ *  rewrites them from the game's model. */
+export interface StaleModel {
+  /** VPK entry, e.g. `models/heroes_wip/werewolf/werewolf.vmdl_c`. */
+  entry: string;
+  /** Attachments pointing the old way (`standing_pivot`, `aim`, ...). */
+  attachments: string[];
+}
+
 export interface Mod {
   safety?: import('./modSafety').ModSafetySnapshot;
   outdatedVdata?: OutdatedVdata[];
+  staleModels?: StaleModel[];
   id: string;
   name: string;
   fileName: string;

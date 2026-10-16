@@ -26,6 +26,7 @@ function props(mask: number, enabled: boolean, viewMode: Props['viewMode']): Pro
     priority: 3, size: 100, installedAt: '2026-10-10T10:00:00Z',
     nsfw: !!(mask & 1), outdatedVdata: mask & 2 ? [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['new_hero'] }] : undefined,
     safety: mask & 4 ? { trusted: false, report: { verdict: 'requires-trust', fingerprint: 'safety', policyVersion: 1, findings: [] } } : undefined,
+    staleModels: mask & 32 ? [{ entry: 'models/heroes_wip/werewolf/werewolf.vmdl_c', attachments: ['standing_pivot'] }] : undefined,
   }, viewMode, hideNsfwPreviews: true, soundVolume: 0,
     conflicts: mask & 8 ? [{ modA: 'suspect', modAName: 'Crash test', modB: 'other', modBName: 'Other mod',
       modAIdentity: 'suspect', modBIdentity: 'other', ignoreKey: 'test', conflictType: 'file', details: 'Same file' }] : [],
@@ -42,13 +43,14 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 describe('crash badges on installed cards', () => {
   it.each(['grid', 'compact', 'list'] as const)('keeps the crash action independent across badge combinations in %s', async view => {
-    for (const enabled of [true, false]) for (let mask = 0; mask < 32; mask++) {
+    for (const enabled of [true, false]) for (let mask = 0; mask < 64; mask++) {
       await act(async () => root.render(<ModCard {...props(mask, enabled, view)} />));
       const badge = host.querySelector<HTMLButtonElement>('[aria-label="crashAdvisory.viewForMod"]');
       expect(badge, `mask ${mask}, enabled ${enabled}`).not.toBeNull();
       expect(badge!.disabled).toBe(false);
       expect(badge!.closest('button')?.parentElement?.closest('button')).toBeNull();
       if (mask & 2) expect(host.textContent).toContain('installed.card.outdatedData');
+      expect(host.textContent?.includes('installed.card.staleModel'), `mask ${mask}`).toBe(!!(mask & 32));
       if (mask & 4) expect(host.querySelector('[title="modSafety.viewFindings"]') ?? host.querySelector('[aria-label^="modSafety.needsReview"]')).not.toBeNull();
       await act(async () => badge!.click());
       expect(useCrashAdvisoryStore.getState().detailId).toBe(finding.id);

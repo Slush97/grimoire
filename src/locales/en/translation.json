@@ -1368,6 +1368,22 @@
       "enabledToast_one": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game field Valve added since is removed in game.",
       "enabledToast_other": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game fields Valve added since are removed in game."
     },
+    "staleModels": {
+      "button_one": "{{count}} mod needs a camera fix",
+      "button_other": "{{count}} mods need a camera fix",
+      "buttonHint": "Hero models built before Deadlock moved the camera and aim points",
+      "title_one": "{{count}} mod needs a camera fix",
+      "title_other": "{{count}} mods need a camera fix",
+      "message": "These hero models were built before a Deadlock update moved each hero's camera and aim points, so the camera can sit in the wrong spot while you play them. Fix copies the current points from the game into the mod file. Nothing else in the mod changes.",
+      "model_one": "{{file}}: {{count}} old camera or aim point",
+      "model_other": "{{file}}: {{count}} old camera and aim points",
+      "fix": "Fix",
+      "fixAll_one": "Fix it",
+      "fixAll_other": "Fix all {{count}}",
+      "healed_one": "Fixed {{count}} mod",
+      "healed_other": "Fixed {{count}} mods",
+      "failed": "Couldn't fix {{name}}: {{error}}"
+    },
     "unknown": {
       "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
       "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
@@ -1565,6 +1581,8 @@
       "outdatedData": "Outdated data",
       "outdatedDataTitle_one": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} field added to Deadlock since the mod was built is removed in game: {{sample}}",
       "outdatedDataTitle_other": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} fields added to Deadlock since the mod was built are removed in game, starting with: {{sample}}",
+      "staleModel": "Old camera",
+      "staleModelTitle": "Its hero model ({{files}}) predates Deadlock's camera change, so the camera can sit in the wrong spot. Fix it from the camera fix button at the top of Installed.",
       "unknown": "Unknown",
       "unknownTitle": "This local mod has no saved GameBanana or custom metadata",
       "updateAvailableTitle": "A newer version is available on GameBanana",

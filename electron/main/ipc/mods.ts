@@ -1,6 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { modSafetySnapshot } from '../services/modSafety';
-import { checkOutdatedVdata, outdatedVdataSnapshot } from '../services/vdataCheck';
+import { checkOutdatedVdata, outdatedVdataSnapshot, staleModelsSnapshot } from '../services/vdataCheck';
+import { healModAttachments } from '../services/attachmentHeal';
 import { importDisabledVpk } from '../services/importDisabledVpk';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
@@ -230,6 +231,7 @@ function enrichMod(mod: Mod): WireMod {
             ...mod,
             safety: modSafetySnapshot(mod.path),
             outdatedVdata: outdatedVdataSnapshot(mod.path),
+            staleModels: staleModelsSnapshot(mod.path),
             // Use the stored mod name from GameBanana if available
             name: metadata.modName || mod.name,
             thumbnailUrl: metadata.thumbnailUrl,
@@ -267,7 +269,7 @@ function enrichMod(mod: Mod): WireMod {
     // No metadata row (a VPK dropped straight into addons): still file-tree tag
     // the hero so unknown skins get their Locker chip like downloaded mods.
     const { lockerHero, lockerHeroSource } = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
-    return { ...mod, safety: modSafetySnapshot(mod.path), outdatedVdata: outdatedVdataSnapshot(mod.path), isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
+    return { ...mod, safety: modSafetySnapshot(mod.path), outdatedVdata: outdatedVdataSnapshot(mod.path), staleModels: staleModelsSnapshot(mod.path), isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
 /**
@@ -418,6 +420,17 @@ ipcMain.handle('reveal-mod-in-folder', async (_, modId: string): Promise<void> =
         throw new Error(`Mod not found: ${modId}`);
     }
     shell.showItemInFolder(mod.path);
+});
+
+// heal-mod-attachments: rewrite a mod's stale hero models with the game's
+// camera and aim attachments (see staleModelsSnapshot). Resolves to how many
+// models were healed.
+ipcMain.handle('heal-mod-attachments', async (_, modId: string): Promise<number> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    return healModAttachments(deadlockPath, modId);
 });
 
 // delete-mod

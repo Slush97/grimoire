@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { revealModInFolder } from '../../lib/api';
@@ -33,6 +33,7 @@ interface ModCardProps {
     outdatedVdata?: Mod['outdatedVdata'];
     /** Group cards: whether the flagged variant is the enabled one. Defaults to `enabled`. */
     outdatedVdataEnabled?: boolean;
+    staleModels?: Mod['staleModels'];
     id: string;
     name: string;
     fileName: string;
@@ -543,6 +544,20 @@ function OutdatedVdataTag({ outdated, enabled, variant }: { outdated?: Mod['outd
   );
 }
 
+/** `models/heroes_wip/werewolf/werewolf.vmdl_c` reads as `werewolf.vmdl`. */
+const modelFileName = (entry: string) => entry.slice(entry.lastIndexOf('/') + 1).replace(/_c$/, '');
+
+function StaleModelTag({ models, variant }: { models?: Mod['staleModels']; variant: 'overlay' | 'inline' }) {
+  const { t } = useTranslation();
+  if (!models?.length) return null;
+  return (
+    <Tag tone="warning" variant={variant} icon={Camera}
+      title={t('installed.card.staleModelTitle', { files: models.map((m) => modelFileName(m.entry)).join(', ') })}>
+      {t('installed.card.staleModel')}
+    </Tag>
+  );
+}
+
 function ModListRowContent({
   mod,
   taxonomy,
@@ -652,6 +667,7 @@ function ModListRowContent({
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
           <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
+          <StaleModelTag models={mod.staleModels} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
@@ -1427,6 +1443,7 @@ export function ModCard({
                 </Tag>
               )}
               <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="overlay" />
+              <StaleModelTag models={mod.staleModels} variant="overlay" />
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"

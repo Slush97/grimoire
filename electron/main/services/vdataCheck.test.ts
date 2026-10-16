@@ -12,6 +12,7 @@ vi.mock('./vpk', () => ({
 vi.mock('./deadlock', () => ({ getCitadelPath: (deadlockPath: string) => deadlockPath }));
 
 const HEROES = 'scripts/heroes.vdata_c';
+const WEREWOLF = 'models/heroes_wip/werewolf/werewolf.vmdl_c';
 
 let dir: string;
 let vdata: typeof import('./vdataCheck');
@@ -27,11 +28,21 @@ function report(missing: string[], extra: string[] = []) {
     return { entry: HEROES, status: 'outdated', missing, extra, changed: [] };
 }
 
+function modelReport(status: string, stale: string[] = []) {
+    return { entry: WEREWOLF, status, stale };
+}
+
 /** Answers every spawn with these reports per mod path (none for unlisted mods). */
-function respond(reports: Record<string, ReturnType<typeof report>[]>) {
-    h.run.mockImplementation(async (args: string[]) =>
-        JSON.stringify(args.slice(4).map((mod) => ({ mod, reports: reports[mod] ?? [] })))
-    );
+function respond(
+    vdataReports: Record<string, ReturnType<typeof report>[]>,
+    modelReports: Record<string, ReturnType<typeof modelReport>[]> = {}
+) {
+    h.run.mockImplementation(async (args: string[]) => {
+        const [reports, mods] = args[0] === 'attachments'
+            ? [modelReports, args.slice(5)]
+            : [vdataReports, args.slice(4)];
+        return JSON.stringify(mods.map((mod) => ({ mod, reports: reports[mod] ?? [] })));
+    });
 }
 
 beforeEach(async () => {
@@ -51,11 +62,51 @@ afterEach(async () => {
 });
 
 describe('checkOutdatedVdata', () => {
-    it('never spawns vpkmerge for a library without vdata', async () => {
-        const skin = await vpk('pak01_dir.vpk', ['models/heroes/skin.vmdl_c']);
-        await vdata.checkOutdatedVdata(dir, [skin]);
+    it('never spawns vpkmerge for a library without vdata or hero models', async () => {
+        const prop = await vpk('pak01_dir.vpk', ['models/props/crate.vmdl_c', 'materials/crate.vmat_c']);
+        await vdata.checkOutdatedVdata(dir, [prop]);
         expect(h.run).not.toHaveBeenCalled();
         expect(h.send).not.toHaveBeenCalled();
+    });
+
+    it('flags a hero model that predates the camera change, once', async () => {
+        const stale = await vpk('pak01_dir.vpk', [WEREWOLF]);
+        const fixed = await vpk('pak02_dir.vpk', [WEREWOLF]);
+        respond({}, { [stale]: [modelReport('stale', ['standing_pivot', 'aim'])], [fixed]: [modelReport('current')] });
+
+        await vdata.checkOutdatedVdata(dir, [stale, fixed]);
+        expect(h.run).toHaveBeenCalledTimes(1);
+        expect(h.run.mock.calls[0][0].slice(0, 2)).toEqual(['attachments', 'check']);
+        expect(vdata.staleModelsSnapshot(stale)).toEqual([{ entry: WEREWOLF, attachments: ['standing_pivot', 'aim'] }]);
+        expect(vdata.staleModelsSnapshot(fixed)).toBeUndefined();
+        expect(h.send).toHaveBeenCalledTimes(1);
+
+        await vdata.checkOutdatedVdata(dir, [stale, fixed]);
+        expect(h.run).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs both checks for a mod that ships vdata and a hero model', async () => {
+        const mod = await vpk('pak01_dir.vpk', [HEROES, WEREWOLF]);
+        respond({ [mod]: [report(['hero_ratking'])] }, { [mod]: [modelReport('stale', ['lean'])] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+        expect(h.run).toHaveBeenCalledTimes(2);
+        expect(vdata.outdatedVdataSnapshot(mod)?.[0].missing).toBe(1);
+        expect(vdata.staleModelsSnapshot(mod)?.[0].attachments).toEqual(['lean']);
+    });
+
+    it('drops a stale model flag once the mod is healed', async () => {
+        const mod = await vpk('pak01_dir.vpk', [WEREWOLF]);
+        respond({}, { [mod]: [modelReport('stale', ['standing_pivot'])] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+
+        await fs.writeFile(mod, 'healed vpk');
+        expect(vdata.staleModelsSnapshot(mod)).toBeUndefined();
+        respond({}, { [mod]: [modelReport('current')] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+        expect(h.run).toHaveBeenCalledTimes(2);
+        expect(vdata.staleModelsSnapshot(mod)).toBeUndefined();
+        // The flag went away with the file change, so the recheck shows nothing new.
+        expect(h.send).toHaveBeenCalledTimes(1);
     });
 
     it('flags a mod that deletes game fields, once', async () => {

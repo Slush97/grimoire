@@ -897,8 +897,10 @@ export interface ElectronAPI {
     rescanModSafety: () => Promise<InstalledModSafety[]>;
     reviewModSafety: (id: string, fingerprint: string) => Promise<Mod>;
     onModSafetyChanged: (callback: () => void) => () => void;
-    /** Fires when the background outdated-vdata check flags a mod. */
+    /** Fires when the background check flags a mod's outdated vdata or stale hero models. */
     onModVdataChecked: (callback: () => void) => () => void;
+    /** Rewrites the mod's `staleModels` from the game's models. Resolves to how many were healed. */
+    healModAttachments: (modId: string) => Promise<number>;
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;

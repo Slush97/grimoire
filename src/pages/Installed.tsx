@@ -51,6 +51,7 @@ import {
   ClipboardList,
   Fingerprint,
   FileWarning,
+  Camera,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
@@ -141,6 +142,7 @@ import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
 import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
+import { StaleModelsModal } from '../components/installed/StaleModelsModal';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
@@ -452,6 +454,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         crashModIds: entry.variants.map(variant => variant.id),
         outdatedVdata: outdatedVariant?.outdatedVdata,
         outdatedVdataEnabled: !!outdatedVariant?.enabled,
+        staleModels: entry.variants.flatMap(v => v.staleModels ?? []),
         // Group's overall enable state is "one or more files enabled", not
         // the primary's individual flag (matches sort + section choice).
         enabled: entry.enabledVariants.length > 0,
@@ -1229,6 +1232,7 @@ export default function Installed() {
   // for the duration of the run.
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
+  const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
   // Mods whose file the author deleted with no confident successor, found
@@ -3474,6 +3478,8 @@ export default function Installed() {
     .filter((mod) => mod.isUnknown)
     .sort((a, b) => a.priority - b.priority);
   const outdatedVdataMods = mods.filter((mod) => mod.enabled && mod.outdatedVdata?.length);
+  // Disabled ones too: fixing is safe, and they break the camera once enabled.
+  const staleModelMods = mods.filter((mod) => mod.staleModels?.length);
   const unknownFilterCacheById: Record<string, UnknownModFilterGuess> = {};
   for (const mod of unknownMods) {
     const cached = getUnknownCache(mod);
@@ -3976,7 +3982,7 @@ export default function Installed() {
   // action bar's right cluster (next to Fix Order). The right cluster wraps when
   // cramped, so there's no need to relocate them to a section header.
   const hasStatusButtons =
-    outdatedVdataMods.length > 0 || conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
+    outdatedVdataMods.length > 0 || staleModelMods.length > 0 || conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
       {outdatedVdataMods.length > 0 && (
@@ -3988,6 +3994,17 @@ export default function Installed() {
           title={t('installed.outdatedData.buttonHint')}
         >
           {t('installed.outdatedData.button', { count: outdatedVdataMods.length })}
+        </Button>
+      )}
+      {staleModelMods.length > 0 && (
+        <Button
+          variant="warning"
+          size="sm"
+          onClick={() => setStaleModelsOpen(true)}
+          icon={Camera}
+          title={t('installed.staleModels.buttonHint')}
+        >
+          {t('installed.staleModels.button', { count: staleModelMods.length })}
         </Button>
       )}
       {conflictCount > 0 && (
@@ -4661,6 +4678,12 @@ export default function Installed() {
         mods={outdatedVdataMods}
         open={outdatedVdataOpen}
         onClose={() => setOutdatedVdataOpen(false)}
+      />
+
+      <StaleModelsModal
+        mods={staleModelMods}
+        open={staleModelsOpen}
+        onClose={() => setStaleModelsOpen(false)}
       />
 
       <DeleteModsModal

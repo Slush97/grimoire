@@ -169,6 +169,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     assertReplacementSafety: (modIds: string[]) => ipcRenderer.invoke('assert-replacement-safety', modIds),
     revealModInFolder: (modId: string) => ipcRenderer.invoke('reveal-mod-in-folder', modId),
+    healModAttachments: (modId: string) => ipcRenderer.invoke('heal-mod-attachments', modId),
     detectUnknownModFilters: (modId: string, requestId?: string) =>
         ipcRenderer.invoke('detect-unknown-mod-filters', modId, requestId),
     detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) =>
