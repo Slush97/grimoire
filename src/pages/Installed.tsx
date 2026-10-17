@@ -143,6 +143,7 @@ import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
 import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
 import { StaleModelsModal } from '../components/installed/StaleModelsModal';
+import { StatusIssues, type StatusIssue } from '../components/installed/StatusIssues';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
@@ -3978,45 +3979,62 @@ export default function Installed() {
     );
   }
 
-  // Conflicts, update-all, and fix-unknown buttons. Rendered once, in the top
-  // action bar's right cluster (next to Fix Order). The right cluster wraps when
-  // cramped, so there's no need to relocate them to a section header.
+  // Issue buttons (outdated data, camera fix, conflicts, fix unknown) plus
+  // update-all. Rendered once, in the top action bar's right cluster (next to
+  // Fix Order). Two or more issues collapse into one dropdown.
+  const statusIssues: StatusIssue[] = [];
+  if (outdatedVdataMods.length > 0) {
+    statusIssues.push({
+      key: 'outdatedVdata',
+      variant: 'danger',
+      icon: FileWarning,
+      label: t('installed.outdatedData.button', { count: outdatedVdataMods.length }),
+      title: t('installed.outdatedData.buttonHint'),
+      count: outdatedVdataMods.length,
+      onOpen: () => setOutdatedVdataOpen(true),
+    });
+  }
+  if (staleModelMods.length > 0) {
+    statusIssues.push({
+      key: 'staleModels',
+      variant: 'warning',
+      icon: Camera,
+      label: t('installed.staleModels.button', { count: staleModelMods.length }),
+      title: t('installed.staleModels.buttonHint'),
+      count: staleModelMods.length,
+      onOpen: () => setStaleModelsOpen(true),
+    });
+  }
+  if (conflictCount > 0) {
+    statusIssues.push({
+      key: 'conflicts',
+      variant: 'warning',
+      icon: AlertTriangle,
+      label: t('installed.status.conflictCount', { count: conflictPairCount }),
+      count: conflictPairCount,
+      onOpen: () => navigate('/conflicts'),
+    });
+  }
+  if (unknownMods.length > 0 && !fixUnknownHidden) {
+    statusIssues.push({
+      key: 'unknown',
+      variant: 'primary',
+      icon: HelpCircle,
+      label: t('installed.unknown.fixButton', { count: unknownMods.length }),
+      title: t('installed.unknown.fixButtonHint'),
+      count: unknownMods.length,
+      onOpen: () => openBulkUnknownFix(unknownMods),
+      onContextMenu: (e) => {
+        e.preventDefault();
+        setFixUnknownHidden(true);
+      },
+    });
+  }
   const hasStatusButtons =
-    outdatedVdataMods.length > 0 || staleModelMods.length > 0 || conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
+    statusIssues.length > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
-      {outdatedVdataMods.length > 0 && (
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => setOutdatedVdataOpen(true)}
-          icon={FileWarning}
-          title={t('installed.outdatedData.buttonHint')}
-        >
-          {t('installed.outdatedData.button', { count: outdatedVdataMods.length })}
-        </Button>
-      )}
-      {staleModelMods.length > 0 && (
-        <Button
-          variant="warning"
-          size="sm"
-          onClick={() => setStaleModelsOpen(true)}
-          icon={Camera}
-          title={t('installed.staleModels.buttonHint')}
-        >
-          {t('installed.staleModels.button', { count: staleModelMods.length })}
-        </Button>
-      )}
-      {conflictCount > 0 && (
-        <Button
-          variant="warning"
-          size="sm"
-          onClick={() => navigate('/conflicts')}
-          icon={AlertTriangle}
-        >
-          {t('installed.status.conflictCount', { count: conflictPairCount })}
-        </Button>
-      )}
+      <StatusIssues issues={statusIssues} />
       {(updatesAvailable.size > 0 || updateAllProgress) && (
         <Button
           variant="primary"
@@ -4036,42 +4054,27 @@ export default function Installed() {
             : `Update all (${updatesAvailable.size})`}
         </Button>
       )}
-      {unknownMods.length > 0 &&
-        (fixUnknownHidden ? (
-          <button
-            type="button"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setFixUnknownHidden(false);
-            }}
-            aria-label={`Restore the Fix unknown button (${unknownMods.length} unknown)`}
-            title={t('installed.unknown.fixHiddenHint')}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-secondary/40 transition-colors hover:text-text-secondary cursor-pointer"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-          </button>
-        ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => openBulkUnknownFix(unknownMods)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setFixUnknownHidden(true);
-            }}
-            icon={HelpCircle}
-            title={t('installed.unknown.fixButtonHint')}
-          >
-            {t('installed.unknown.fixButton', { count: unknownMods.length })}
-          </Button>
-        ))}
+      {unknownMods.length > 0 && fixUnknownHidden && (
+        <button
+          type="button"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setFixUnknownHidden(false);
+          }}
+          aria-label={`Restore the Fix unknown button (${unknownMods.length} unknown)`}
+          title={t('installed.unknown.fixHiddenHint')}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-secondary/40 transition-colors hover:text-text-secondary cursor-pointer"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   ) : null;
   const topStatusActions =
     hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
         {statusButtons}
-        {/* After Fix Unknown (last status button): copy enabled names in load order. */}
+        {/* After the status buttons: copy enabled names in load order. */}
         {enabledModCount > 0 && (
           <Button
             variant="secondary"

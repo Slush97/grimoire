@@ -1351,7 +1351,9 @@
     },
     "status": {
       "conflictCount_one": "{{count}} conflict",
-      "conflictCount_other": "{{count}} conflicts"
+      "conflictCount_other": "{{count}} conflicts",
+      "issues_one": "{{count}} issue",
+      "issues_other": "{{count}} issues"
     },
     "outdatedData": {
       "button_one": "{{count}} outdated mod",
