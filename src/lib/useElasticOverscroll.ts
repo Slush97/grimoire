@@ -88,6 +88,7 @@ function attachElasticOverscroll(scroller: HTMLElement): () => void {
   let velocity = 0;
   let pull = 0;
   let pulling = false;
+  let held = false;
   let lastInput = 0;
   let lastFrame = 0;
   let frame = 0;
@@ -103,7 +104,7 @@ function attachElasticOverscroll(scroller: HTMLElement): () => void {
     paint(0);
     targets = [];
     offset = velocity = pull = 0;
-    pulling = false;
+    pulling = held = false;
   };
 
   const tick = (now: number) => {
@@ -123,7 +124,7 @@ function attachElasticOverscroll(scroller: HTMLElement): () => void {
   };
 
   const onWheel = (e: WheelEvent) => {
-    if (e.ctrlKey || e.shiftKey || e.buttons !== 0 || reducedMotion.matches) return;
+    if (held || e.ctrlKey || e.shiftKey || e.buttons !== 0 || reducedMotion.matches) return;
     const dy = wheelDeltaPx(e.deltaY, e.deltaMode, scroller.clientHeight);
     if (dy === 0 || Math.abs(wheelDeltaPx(e.deltaX, e.deltaMode, scroller.clientWidth)) > Math.abs(dy)) return;
     const down = dy > 0;
@@ -158,17 +159,34 @@ function attachElasticOverscroll(scroller: HTMLElement): () => void {
     lastInput = performance.now();
   };
 
-  // A press while displaced (a click, a drag-reorder grab) should land on
-  // the content where it rests, so snap back first.
+  // A press during a bounce freezes the content until release. Moving it
+  // mid-press would put a different element under the release, and Chromium
+  // would then fire the click on their common ancestor instead of the card.
   const onPointerDown = () => {
-    if (frame) stop();
+    if (!frame) return;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    held = true;
+    pulling = false;
+    velocity = 0;
+  };
+
+  const onPointerUp = () => {
+    if (!held) return;
+    held = false;
+    lastFrame = performance.now();
+    frame = requestAnimationFrame(tick);
   };
 
   scroller.addEventListener('wheel', onWheel, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown, { passive: true, capture: true });
+  window.addEventListener('pointerup', onPointerUp, { passive: true, capture: true });
+  window.addEventListener('pointercancel', onPointerUp, { passive: true, capture: true });
   return () => {
     scroller.removeEventListener('wheel', onWheel);
     scroller.removeEventListener('pointerdown', onPointerDown, { capture: true });
+    window.removeEventListener('pointerup', onPointerUp, { capture: true });
+    window.removeEventListener('pointercancel', onPointerUp, { capture: true });
     stop();
     delete scroller.dataset.elastic;
   };

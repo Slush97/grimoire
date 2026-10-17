@@ -64,3 +64,69 @@ it('loads the first row eagerly at high priority', () => {
   expect(img().getAttribute('loading')).toBe('eager');
   expect(img().getAttribute('fetchpriority')).toBe('high');
 });
+
+it('reveals a loaded image even when decode never settles', async () => {
+  vi.useFakeTimers();
+  try {
+    HTMLImageElement.prototype.decode = vi.fn(() => new Promise<void>(() => {}));
+    act(() => root.render(<RevealImage src="https://images.gamebanana.com/d.jpg" alt="" />));
+    act(() => {
+      img().dispatchEvent(new Event('load'));
+    });
+    expect(img().dataset.reveal).toBe('pending');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(img().dataset.reveal).toBe('in');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('tries fallbackSrc at once when src fails', () => {
+  act(() => root.render(<RevealImage src="https://images.gamebanana.com/220-90_e.jpg" fallbackSrc="https://images.gamebanana.com/530-90_e.jpg" alt="" />));
+  act(() => {
+    img().dispatchEvent(new Event('error'));
+  });
+  expect(img().getAttribute('src')).toBe('https://images.gamebanana.com/530-90_e.jpg');
+  expect(img().dataset.reveal).toBe('pending');
+});
+
+it('retries a failed image after a wait, then gives up', () => {
+  vi.useFakeTimers();
+  try {
+    act(() => root.render(<RevealImage src="https://images.gamebanana.com/f.jpg" alt="" />));
+    for (const wait of [2000, 8000]) {
+      act(() => {
+        img().dispatchEvent(new Event('error'));
+      });
+      expect(host.querySelector('img')).toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(wait);
+      });
+      expect(img().getAttribute('src')).toBe('https://images.gamebanana.com/f.jpg');
+    }
+    act(() => {
+      img().dispatchEvent(new Event('error'));
+    });
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.querySelector('.reveal-fallback')).not.toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('refetches a src that failed earlier when it comes back', () => {
+  const a = 'https://images.gamebanana.com/g.jpg';
+  act(() => root.render(<RevealImage src={a} alt="" />));
+  act(() => {
+    img().dispatchEvent(new Event('error'));
+  });
+  expect(host.querySelector('img')).toBeNull();
+  act(() => root.render(<RevealImage src="https://images.gamebanana.com/h.jpg" alt="" />));
+  act(() => root.render(<RevealImage src={a} alt="" />));
+  expect(img().getAttribute('src')).toBe(a);
+});

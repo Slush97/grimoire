@@ -65,7 +65,7 @@ function ReadableBrowseModCard({
 }: ModCardProps) {
   const { t } = useTranslation();
   const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
-  const thumbnail = getModThumbnail(mod, readableCardWidth);
+  const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
@@ -143,6 +143,7 @@ function ReadableBrowseModCard({
           imageFit="cover"
           imagePosition="center top"
           imageClassName="browse-card-media-zoom"
+          width={readableCardWidth}
           priority={priority}
         />
       ) : (
@@ -165,6 +166,7 @@ function ReadableBrowseModCard({
       imageFit="cover"
       imagePosition="center top"
       imageClassName="browse-card-media-zoom"
+      width={readableCardWidth}
       priority={priority}
     />
   );
@@ -384,12 +386,16 @@ export function ModCardSkeleton({
   );
 }
 
-// Browse list rows show the thumbnail in a w-32 box.
+// Browse list rows show the thumbnail in a w-32 h-20 box.
 const LIST_THUMB_WIDTH = 128;
+const LIST_THUMB_HEIGHT = 80;
 
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
   const { t } = useTranslation();
-  const thumbnail = getModThumbnail(mod, viewMode === 'list' ? LIST_THUMB_WIDTH : (cardWidth ?? cardSize));
+  const thumbnail = getModThumbnail(mod);
+  // Classic grid cards are aspect-[3/2], taller than a screenshot.
+  const thumbWidth = viewMode === 'list' ? LIST_THUMB_WIDTH : (cardWidth ?? cardSize);
+  const thumbHeight = viewMode === 'list' ? LIST_THUMB_HEIGHT : (thumbWidth * 2) / 3;
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // At the smallest grid sizes the bottom overlay (title + stats + author) eats
   // most of a classic card, burying the art it's drawn over. Below this width
@@ -447,7 +453,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 />
               </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" priority={priority} />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" width={thumbWidth} height={thumbHeight} priority={priority} />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
@@ -457,7 +463,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </div>
             )
           ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" priority={priority} />
+            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" width={thumbWidth} height={thumbHeight} priority={priority} />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -624,7 +630,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 />
               </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" priority={priority} />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" width={thumbWidth} height={thumbHeight} priority={priority} />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -647,7 +653,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" priority={priority} />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" width={thumbWidth} height={thumbHeight} priority={priority} />
         )}
       </div>
 

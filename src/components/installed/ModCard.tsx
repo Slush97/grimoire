@@ -652,6 +652,7 @@ function ModListRowContent({
             mergedSources={mod.merged?.sources}
             forgeInstalled={!!mod.forgeInstall}
             width={56}
+            height={40}
           />
         )}
         {canOpen && (

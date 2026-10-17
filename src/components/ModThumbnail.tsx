@@ -34,9 +34,10 @@ interface ModThumbnailProps {
    *  so there is no remote thumbnail to fetch and Grimoire will not go looking
    *  for one: the bundled badge stands in. */
   forgeInstalled?: boolean;
-  /** Displayed width in CSS px. A stored GameBanana 530 thumbnail is swapped
-   *  for its 220 sibling when that is enough at the current pixel ratio. */
+  /** Displayed box in CSS px. A GameBanana 530 thumbnail is swapped for its
+   *  220 sibling when that covers the box at the current pixel ratio. */
   width?: number;
+  height?: number;
   /** First visible row: fetch eagerly at high priority. */
   priority?: boolean;
 }
@@ -56,6 +57,7 @@ export default function ModThumbnail({
   enableImageContextMenu = true,
   forgeInstalled,
   width,
+  height,
   priority,
 }: ModThumbnailProps) {
   const { t } = useTranslation();
@@ -65,7 +67,7 @@ export default function ModThumbnail({
   // shows its hero render in the Locker. NSFW blur is suppressed for both
   // because neither is a user-uploaded image.
   const forgeBadge = forgeInstalled && !src ? getForgeBadgePath() : undefined;
-  const sizedSrc = src && width ? sizeGameBananaThumbUrl(src, width, currentPixelRatio()) : src;
+  const sizedSrc = src && width ? sizeGameBananaThumbUrl(src, width, currentPixelRatio(), height) : src;
   const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : (sizedSrc ?? forgeBadge);
   const resolvedBlur = heroPortrait || forgeBadge ? false : shouldBlur;
 
@@ -99,6 +101,7 @@ export default function ModThumbnail({
       <div className={`w-full h-full ${imageClassName}`}>
         <RevealImage
           src={resolvedSrc}
+          fallbackSrc={!heroPortrait && sizedSrc !== src ? src : undefined}
           alt={alt}
           priority={priority}
           fallback={fallback}
