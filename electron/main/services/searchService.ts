@@ -99,26 +99,37 @@ function applyContentFilters(
  * subcategory pick widens to its root rather than returning nothing, which is
  * the best the cached columns allow. The id comparison stays as a last resort
  * for the day rows carry real ids.
+ *
+ * Heroes are the exception. The list endpoint also returns `_aSubCategory`, whose
+ * profile URL carries the id, so `sub_category_id` is real and a hero (a Skins
+ * subcategory) matches exactly. Sound and Wip have no hero categories, so there
+ * the title is all there is and it is matched as a whole word.
  */
-function applyCategoryFilter(
+export function applyCategoryFilter(
     conditions: string[],
     params: Record<string, unknown>,
     categoryId: SearchOptions['categoryId'],
     categoryName: SearchOptions['categoryName'],
     heroName: SearchOptions['heroName'],
-    skinsCategoryId: SearchOptions['skinsCategoryId']
+    heroCategoryIds: SearchOptions['heroCategoryIds']
 ): void {
-    if (categoryId === undefined) return;
-
-    if (heroName && skinsCategoryId !== undefined) {
-        // Hero search: find ALL mods with the hero name in the title, whatever
-        // their category. Same missing-id constraint as above, which is why this
-        // cannot simply scope to the hero's subcategory.
-        params.heroNamePattern = `%${heroName.toLowerCase()}%`;
-        conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
-        console.log(`[searchMods] Hero search: heroName="${heroName}" (searching all categories)`);
+    if (heroCategoryIds?.length) {
+        const placeholders = heroCategoryIds.map((id, index) => {
+            const key = `hero_category_${index}`;
+            params[key] = id;
+            return `@${key}`;
+        });
+        conditions.push(`mods.sub_category_id IN (${placeholders.join(', ')})`);
         return;
     }
+
+    if (heroName) {
+        params.heroName = heroName;
+        conditions.push('hero_name_match(mods.name, @heroName)');
+        return;
+    }
+
+    if (categoryId === undefined) return;
 
     if (categoryName) {
         params.categoryName = categoryName;
@@ -180,7 +191,7 @@ function runFallbackSubstringSearch(
         categoryId,
         categoryName,
         heroName,
-        skinsCategoryId,
+        heroCategoryIds,
         sortBy,
         nsfw,
         addedWithin,
@@ -210,7 +221,7 @@ function runFallbackSubstringSearch(
         params.section = section;
     }
 
-    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, skinsCategoryId);
+    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
@@ -249,7 +260,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         categoryId,
         categoryName,
         heroName,
-        skinsCategoryId,
+        heroCategoryIds,
         sortBy = 'relevance',
         nsfw = 'all',
         addedWithin = 'all',
@@ -297,18 +308,12 @@ export function searchMods(options: SearchOptions): SearchResult {
         params.section = section;
     }
 
-    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, skinsCategoryId);
+    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // Debug logging for hero search issues
-    if (heroName && skinsCategoryId !== undefined) {
-        console.log(`[searchMods] WHERE clause: ${whereClause}`);
-        console.log(`[searchMods] Params:`, JSON.stringify(params));
-    }
 
     const orderBy = buildOrderBy(sortBy, !!query?.trim());
 
@@ -317,10 +322,6 @@ export function searchMods(options: SearchOptions): SearchResult {
     const countStmt = database.prepare(countQuery);
     const countRow = countStmt.get(params) as { count: number };
     const totalCount = countRow.count;
-
-    if (heroName && skinsCategoryId !== undefined) {
-        console.log(`[searchMods] Result count: ${totalCount}`);
-    }
 
     // FTS5 missed — fall back to substring matching so creative names / typos
     // still surface something instead of an empty page. Only triggers when a

@@ -39,6 +39,7 @@ import {
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { browseRemoteFilters } from '../lib/browseFilters';
+import { categorySubtreeIds } from '../lib/heroFilter';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
@@ -819,10 +820,14 @@ export default function Browse() {
   // Sound or Wip. Resolve this outside searchLocal so the asynchronously loaded
   // name can participate in the request identity below.
   const skinsCategory = findCategoryByName(modCategories, 'Skins');
-  const skinsCategoryId = skinsCategory?.id;
-  const selectedHeroName = heroCategoryId !== 'all' && skinsCategory?.children
-    ? skinsCategory.children.find((child) => child.id === heroCategoryId)?.name
+  const selectedHeroNode = heroCategoryId !== 'all' && skinsCategory?.children
+    ? skinsCategory.children.find((child) => child.id === heroCategoryId)
     : undefined;
+  const selectedHeroName = selectedHeroNode?.name;
+  const selectedHeroCategoryIds = useMemo(
+    () => (selectedHeroNode ? categorySubtreeIds(selectedHeroNode) : undefined),
+    [selectedHeroNode]
+  );
 
   // Debounce the search input: every keystroke previously fired a full FTS5
   // query + count + render, which felt slow even when the DB was fast. 250ms
@@ -1290,12 +1295,12 @@ export default function Browse() {
         section: section,
         categoryId: effectiveCategoryId,
         // The cached rows have no category id, only a root category name; see
-        // rootCategoryNameById. Ignored when a hero is selected, which scopes by
-        // title instead.
+        // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
-        // Enhanced hero search: pass hero name and skins parent ID
-        heroName: selectedHeroName,
-        skinsCategoryId,
+        // Mod skins match the hero's category. Sound and Wip have no hero
+        // categories, so they can only match the title.
+        heroCategoryIds: section === 'Mod' ? selectedHeroCategoryIds : undefined,
+        heroName: section === 'Mod' ? undefined : selectedHeroName,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
@@ -1376,7 +1381,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, skinsCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually

@@ -677,9 +677,12 @@ export interface SearchLocalModsOptions {
      *  null), so this is what actually scopes a local category filter. Without
      *  it the id comparison matches no rows at all. */
     categoryName?: string;
-    // Enhanced hero search
+    /** Hero's category and every descendant. Matched against the mod's
+     *  sub-category id, so it is exact. Mod section only. */
+    heroCategoryIds?: number[];
+    /** Hero name, matched as a whole word in the title. For Sound and Wip,
+     *  which have no hero categories. Ignored when `heroCategoryIds` is set. */
     heroName?: string;
-    skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     nsfw?: 'all' | 'sfw' | 'nsfw';
     addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
@@ -705,6 +708,9 @@ export interface CachedMod {
     section: string;
     categoryId: number | null;
     categoryName: string | null;
+    /** Deepest category (a hero under Skins). Null until the mod is re-synced
+     *  after the column was added, or when it has no sub-category. */
+    subCategoryId: number | null;
     submitterName: string | null;
     submitterId: number | null;
     likeCount: number;

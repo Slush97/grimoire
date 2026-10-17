@@ -14,6 +14,9 @@ export interface GameBananaMod {
   submitter?: GameBananaSubmitter;
   previewMedia?: GameBananaPreviewMedia;
   rootCategory?: GameBananaCategory;
+  /** Deepest category the mod is filed under (a hero, under Skins). Absent when
+   *  it sits directly in a root category. */
+  subCategory?: GameBananaCategory;
 }
 
 export interface GameBananaSection {

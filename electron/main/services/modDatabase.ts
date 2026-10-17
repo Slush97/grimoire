@@ -5,6 +5,7 @@ import fs from 'fs';
 // CachedMod is single-sourced in src/types/electron.ts; re-exported because
 // syncService and searchService import it from this module.
 import type { CachedMod } from '../../../src/types/electron';
+import { nameMentionsHero } from '../../../src/lib/heroFilter';
 export type { CachedMod };
 
 export interface SyncState {
@@ -72,6 +73,9 @@ export function initDatabase(): Database.Database {
         db = new Database(dbPath);
         db.pragma('journal_mode = WAL');
         db.pragma('foreign_keys = ON');
+        db.function('hero_name_match', { deterministic: true }, (name, hero) =>
+            nameMentionsHero(String(name), String(hero)) ? 1 : 0
+        );
 
         // Create tables
         db.exec(`
@@ -82,6 +86,7 @@ export function initDatabase(): Database.Database {
                 section TEXT NOT NULL,
                 category_id INTEGER,
                 category_name TEXT,
+                sub_category_id INTEGER,
                 submitter_name TEXT,
                 submitter_id INTEGER,
                 like_count INTEGER DEFAULT 0,
@@ -207,12 +212,12 @@ export function upsertMod(mod: CachedMod): void {
     const database = initDatabase();
     const stmt = database.prepare(`
         INSERT INTO mods (
-            id, name, section, category_id, category_name,
+            id, name, section, category_id, category_name, sub_category_id,
             submitter_name, submitter_id, like_count, view_count,
             date_added, date_modified, has_files, is_nsfw,
             thumbnail_url, audio_url, profile_url, cached_at
         ) VALUES (
-            @id, @name, @section, @categoryId, @categoryName,
+            @id, @name, @section, @categoryId, @categoryName, @subCategoryId,
             @submitterName, @submitterId, @likeCount, @viewCount,
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
             @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
@@ -222,6 +227,7 @@ export function upsertMod(mod: CachedMod): void {
             section = excluded.section,
             category_id = excluded.category_id,
             category_name = excluded.category_name,
+            sub_category_id = excluded.sub_category_id,
             submitter_name = excluded.submitter_name,
             submitter_id = excluded.submitter_id,
             like_count = excluded.like_count,
@@ -249,12 +255,12 @@ export function upsertMods(mods: CachedMod[]): void {
     const database = initDatabase();
     const upsertStmt = database.prepare(`
         INSERT INTO mods (
-            id, name, section, category_id, category_name,
+            id, name, section, category_id, category_name, sub_category_id,
             submitter_name, submitter_id, like_count, view_count,
             date_added, date_modified, has_files, is_nsfw,
             thumbnail_url, audio_url, profile_url, cached_at
         ) VALUES (
-            @id, @name, @section, @categoryId, @categoryName,
+            @id, @name, @section, @categoryId, @categoryName, @subCategoryId,
             @submitterName, @submitterId, @likeCount, @viewCount,
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
             @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
@@ -264,6 +270,7 @@ export function upsertMods(mods: CachedMod[]): void {
             section = excluded.section,
             category_id = excluded.category_id,
             category_name = excluded.category_name,
+            sub_category_id = excluded.sub_category_id,
             submitter_name = excluded.submitter_name,
             submitter_id = excluded.submitter_id,
             like_count = excluded.like_count,
@@ -388,6 +395,7 @@ export function mapRowToMod(row: Record<string, unknown>): CachedMod {
         section: row.section as string,
         categoryId: row.category_id as number | null,
         categoryName: row.category_name as string | null,
+        subCategoryId: (row.sub_category_id as number | null) ?? null,
         submitterName: row.submitter_name as string | null,
         submitterId: row.submitter_id as number | null,
         likeCount: (row.like_count as number) ?? 0,
@@ -488,6 +496,14 @@ function runMigrations(database: Database.Database): void {
     if (!hasAudioUrl) {
         console.log('[ModDatabase] Running migration: adding audio_url column');
         database.exec('ALTER TABLE mods ADD COLUMN audio_url TEXT');
+    }
+
+    if (!tableInfo.includes('sub_category_id')) {
+        console.log('[ModDatabase] Running migration: adding sub_category_id column');
+        database.exec('ALTER TABLE mods ADD COLUMN sub_category_id INTEGER');
+        // Only a re-sync can fill it. Zeroing last_sync makes needsSync() true,
+        // so the next launch refills it without a manual cache wipe.
+        database.exec('UPDATE sync_state SET last_sync = 0');
     }
 
     tableInfo = getTableColumns(database, 'mods');
