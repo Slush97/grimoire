@@ -88,7 +88,7 @@ export function repairModCompatibility(deadlockPath: string, modId: string): Pro
                 retargetStarted = true;
                 retargetProfileModSha(previousSha, replacementSha);
                 moveSafetySnapshot(staged, mod.path);
-                return { kind: 'repaired', count: repaired.length, backupPath };
+                return { kind: 'repaired', count: changed.size, backupPath };
             } catch (error) {
                 try {
                     await fs.copyFile(backupPath, mod.path);

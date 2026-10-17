@@ -82,12 +82,13 @@ export function CompatibilityRepairsModal({ open, onClose, mods }: { open: boole
                 {report.kind === 'failed' ? <p className="mt-2 text-xs text-state-warning">{report.error}</p> : (
                   <ul className="mt-2 space-y-2">
                     {report.findings.map((finding) => (
-                      <li key={finding.entry} className="text-xs text-text-secondary">
+                      <li key={`${finding.kind}:${finding.entry}`} className="text-xs text-text-secondary">
                         <p className="break-all">{finding.entry}</p>
                         <p className={finding.status === 'unsupported' ? 'text-state-warning' : ''}>
                           {finding.status === 'repairable'
                             ? finding.kind === 'data' ? t('installed.repairs.data', { count: finding.changes })
                               : finding.kind === 'localization' ? t('installed.repairs.localization', { count: finding.changes })
+                                : finding.kind === 'sounds' ? t('installed.repairs.sounds')
                                 : t('installed.repairs.skeleton')
                             : t('installed.repairs.unsupported')}
                         </p>

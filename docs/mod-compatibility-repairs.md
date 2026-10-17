@@ -28,6 +28,14 @@ historical indexes, fixtures, or repair implementations are included.
   resource blocks remain authored. Extra sampling-only branches may be absent
   from both models when they cannot affect a deformation bone and have a mapped
   ancestor.
+- Restore an absent `TaggedSoundSettings_t` block from the installed version of
+  the same model. Its tagged-sound tables must exist and have the expected type.
+  This restores bindings used for footsteps and movement sounds on older skins.
+  Existing sound settings, including empty blocks, remain unchanged. The rest of
+  the model's game-data text stays byte-identical. Missing sound-table resource
+  references are appended using the installed model's IDs; authored references
+  remain intact and conflicts are declined. Sound repair remains available
+  when a separate skeleton repair is declined.
 
 Skeleton repairs are declined with custom animation/graph providers, competing
 skeleton overrides, unreadable competing archives, or unsupported structures.
@@ -35,13 +43,16 @@ This version does not migrate authored clips, reconcile different deformation
 rigs, relocate historical model paths, convert retired enums/classes, rebase
 custom masks, or infer historical balance changes. A source value different from
 today's game may be intentional; this implementation does not overwrite it.
-Split archives must be combined before in-place repair.
+Split archives must be combined before in-place repair. Sound repair handles
+missing bindings, not missing animation tags or authored clips. Unknown or
+ambiguous model metadata formats are declined.
 
 ## Verification
 
 Structural writes retain semantic KV3 reference flags, preserve the format GUID,
 decode the result again, and compare values and flags. Non-DATA blocks remain
-byte-identical. Unrepresented streamed resource tails prevent rebuilding.
+byte-identical except the resource-reference list when a missing sound-table
+reference must be added. Unrepresented streamed resource tails prevent rebuilding.
 The packed output is read back and every entry is compared with its intended
 replacement or the source. Original archives are retained in backups; game
 files are never repair outputs. Unsupported findings remain visible after
@@ -58,7 +69,7 @@ cargo run -p vpkmerge-core --example compatibility_fixture -- GAME_PAK OUTPUT_RO
 node scripts/smoke-compatibility.mjs EXE OUTPUT_ROOT SCREENSHOTS
 ```
 
-The fixture contains a real installed model with its animation bindings removed,
+The fixture contains a real installed model with its animation and sound bindings removed,
 plus small synthetic ability/localization tables. The smoke script copies it to
 a fresh temporary installation, drives the packaged UI through repair, verifies
 the original backup, and checks the resulting archive again. It does not launch
@@ -66,8 +77,9 @@ Deadlock. In-game rendering and animation acceptance remain separate checks.
 
 ## Engine release dependency
 
-The app's fetch script still pins the published vpkmerge v0.22.1. The local test
-package bundles the new locally built engine. Before distributing this feature,
-publish the reviewed engine change and update `scripts/fetch-vpkmerge.mjs` with
+The app's fetch script pins published vpkmerge v0.23.0, which supports the original
+data and skeleton repairs. Footstep binding repair requires the follow-up engine
+change. The local test package bundles that locally built engine. Before
+distributing sound repair, publish the reviewed engine change and update `scripts/fetch-vpkmerge.mjs` with
 that release tag and the Windows, Linux and macOS asset hashes. Do not invent
 hashes or silently use a development binary in release builds.

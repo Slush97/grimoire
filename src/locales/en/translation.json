@@ -956,7 +956,7 @@
       "deadworksServers": "Deadworks Servers",
       "foundry": "Door Stuck",
       "modRepairs": "Mod repairs",
-      "modRepairsDescription": "Restore missing game data and repair supported skeleton changes from Installed. Original files are backed up."
+      "modRepairsDescription": "Restore missing game data, footstep sounds and supported skeleton changes from Installed. Original files are backed up."
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
@@ -1704,7 +1704,7 @@
     "repairs": {
       "button": "Repair mods",
       "title": "Repair mods after game updates",
-      "description": "Check enabled mods for missing game data, missing names and supported skeleton changes. Repairs keep existing mod values. Custom rigs and animation overrides may need an update from the author.",
+      "description": "Check enabled mods for missing game data, names, footstep sounds and supported skeleton changes. Repairs keep existing mod values. Custom rigs and animation overrides may need an update from the author.",
       "backupNote": "Each repaired mod is backed up first. Close Deadlock before repairing mods it has loaded.",
       "checking": "Checking enabled mods against your installed game...",
       "failed": "Couldn't repair mods: {{error}}",
@@ -1718,6 +1718,7 @@
       "localization_one": "Restore {{count}} missing name or description",
       "localization_other": "Restore {{count}} missing names or descriptions",
       "skeleton": "Update verified animation bindings or skeleton layout",
+      "sounds": "Restore missing footstep and movement sound bindings",
       "unsupported": "Left unchanged. This difference needs another repair or an author update.",
       "details": "Details",
       "backups": "Show original backup"

@@ -76,6 +76,15 @@ it('refuses loaded mods and a disabled experiment before running the engine', as
     expect(await fs.readFile(h.path, 'utf8')).toBe('original');
 });
 
+it('counts a model repaired for both sounds and skeletons as one file', async () => {
+    h.run.mockImplementationOnce(async () => {
+        await fs.writeFile(h.staged, 'repaired');
+        return JSON.stringify(['sounds', 'skeleton'].map((kind) => ({ entry, kind, status: 'repairable', changes: 1, detail: '' })));
+    });
+    const result = await repairModCompatibility(dir, 'skin');
+    expect(result).toMatchObject({ kind: 'repaired', count: 1 });
+});
+
 it('does not replace a mod after a failed safety or preservation check', async () => {
     h.safety.mockRejectedValueOnce(new Error('unsafe'));
     await expect(repairModCompatibility(dir, 'skin')).rejects.toThrow('unsafe');

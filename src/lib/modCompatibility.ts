@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const compatibilityFindingSchema = z.object({
   entry: z.string(),
-  kind: z.enum(['data', 'localization', 'skeleton']),
+  kind: z.enum(['data', 'localization', 'skeleton', 'sounds']),
   status: z.enum(['repairable', 'unsupported']),
   changes: z.number().int().nonnegative(),
   detail: z.string(),
