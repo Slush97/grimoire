@@ -154,7 +154,7 @@ export default function Discover() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const onLoadMoreIntersect = useEffectEvent(() => { void loadMore(); });
   useEffect(() => {
-    if (tab === 'mine' || !hasMore || loading) return;
+    if (tab === 'mine' || !hasMore || loading || loadingMore || error) return;
     const node = loadMoreRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
@@ -163,12 +163,13 @@ export default function Discover() {
       },
       { rootMargin: '600px 0px' }
     );
-    // Rearm after a new page lands so short pages still fill the viewport.
-    // Busy/like updates must not re-observe an already visible sentinel:
-    // a failed request would otherwise immediately retry in a hot loop.
+    // Rearm after a new page lands so short pages still fill the viewport, and
+    // after any load settles, including a stale page dropped by a tab switch.
+    // A failed page leaves `error` set, so it never retries in a hot loop;
+    // the next tab switch clears it.
     observer.observe(node);
     return () => observer.disconnect();
-  }, [tab, hasMore, loading, data?.page, data?.profiles.length]);
+  }, [tab, hasMore, loading, loadingMore, error, data?.page, data?.profiles.length]);
 
   // If a signed-in user lands on Your profile and then signs out, fall back
   // to Top so they don't end up staring at an empty owner-only view.
