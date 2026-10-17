@@ -713,6 +713,95 @@ describe('order independence over the real fixture', () => {
   });
 });
 
+describe('remaining-file update matching', () => {
+  const gb = 100;
+  const old = (id: number, name: string): InstalledUpdateEntry => ({
+    id: `installed-${id}`, gameBananaId: gb, gameBananaFileId: id, sourceFileName: name,
+  });
+
+  it('pairs a sole renamed upload when enabled and keeps the manual pick when disabled', () => {
+    const files = [file(2, 'duneshivvioletfix.rar')];
+    const installed = [old(1, 'scuffed_dune_shiv')];
+
+    expect(classifyModFiles(gb, files, installed, undefined, true).states.get(1)).toEqual({
+      kind: 'update', target: files[0], via: 'remaining', promote: false,
+    });
+    expect(classifyModFiles(gb, files, installed, undefined, false).states.get(1)).toEqual({ kind: 'needs-pick' });
+  });
+
+  it('pairs the last file after normal matches, independent of input order', () => {
+    const files = [file(3, 'bb_vin.rar'), file(4, 'bb_vin_cover.rar')];
+    const installed = [old(1, 'vin_window'), old(2, 'vin_cover')];
+
+    for (const rows of permutations(files)) {
+      for (const entries of permutations(installed)) {
+        const { states } = classifyModFiles(gb, rows, entries, undefined, true);
+        expect(states.get(1)).toEqual({ kind: 'update', target: files[0], via: 'remaining', promote: false });
+        expect(states.get(2)).toEqual({ kind: 'update', target: files[1], via: 'name', promote: false });
+      }
+    }
+    const strict = classifyModFiles(gb, files, installed, undefined, false).states;
+    expect(strict.get(1)).toEqual({ kind: 'needs-pick' });
+    expect(targetOf(strict.get(2))).toBe(4);
+  });
+
+  it('keeps multiple unmatched uploads or installs unresolved', () => {
+    const installed = [old(1, 'old_variant'), old(2, 'another_variant')];
+    const files = [file(3, 'renamed.zip'), file(4, 'different.zip')];
+    expect([...classifyModFiles(gb, files, installed, undefined, true).states.values()]).toEqual([
+      { kind: 'needs-pick' }, { kind: 'needs-pick' },
+    ]);
+    expect(classifyModFiles(gb, files, installed.slice(0, 1), undefined, true).states.get(1)).toEqual({ kind: 'needs-pick' });
+    expect([...classifyModFiles(gb, files.slice(0, 1), installed, undefined, true).states.values()]).toEqual([
+      { kind: 'needs-pick' }, { kind: 'needs-pick' },
+    ]);
+  });
+
+  it('never uses an installed or merged file as the fallback destination', () => {
+    const files = [file(2, 'new_name.zip')];
+    expect(classifyModFiles(gb, files, [old(1, 'old_name'), old(2, 'new_name')], undefined, true).states.get(1))
+      .toEqual({ kind: 'needs-pick' });
+    expect(classifyModFiles(gb, files, [old(1, 'old_name')], new Set([2]), true).states.get(1))
+      .toEqual({ kind: 'needs-pick' });
+  });
+
+  it('does not reuse a successor already claimed by a normal match', () => {
+    const files = [file(3, 'main_v2.zip')];
+    const installed = [old(1, 'main_v1'), old(2, 'unrelated')];
+    const { states } = classifyModFiles(gb, files, installed, undefined, true);
+    expect(targetOf(states.get(1))).toBe(3);
+    expect(states.get(2)).toEqual({ kind: 'needs-pick' });
+  });
+
+  it('does not infer a different variant when the known successor is already inside a merge', () => {
+    const files = [file(2, 'red_v2.zip'), file(3, 'blue_v2.zip')];
+    const installed = [old(1, 'red_v1')];
+    expect(classifyModFiles(gb, files, installed, new Set([2]), true).states.get(1))
+      .toEqual({ kind: 'needs-pick' });
+  });
+
+  it('respects upload sessions when pairing an archived file', () => {
+    const archived = file(1, 'old_name.zip', { isArchived: true, dateAdded: 10_000 });
+    const installed = [old(1, 'old_name')];
+    for (const dateAdded of [9000, 10_100]) {
+      expect(classifyModFiles(gb, [archived, file(2, 'new_name.zip', { dateAdded })], installed, undefined, true).states.get(1))
+        .toEqual({ kind: 'archived' });
+    }
+    const newer = file(2, 'new_name.zip', { dateAdded: 20_000 });
+    expect(targetOf(classifyModFiles(gb, [archived, newer], installed, undefined, true).states.get(1))).toBe(2);
+  });
+
+  it('keeps ignored files pinned and treats multiple VPKs from one archive as one file', () => {
+    const files = [file(2, 'new_name.zip')];
+    const installed = [old(1, 'old_name')];
+    expect(classifyModFiles(gb, files, [{ ...installed[0], ignoreUpdates: true }], undefined, true).states.get(1))
+      .toEqual({ kind: 'ignored' });
+    const classification = classifyModFiles(gb, files, [installed[0], { ...installed[0], id: 'second-vpk' }], undefined, true);
+    expect(targetOf(classification.states.get(1))).toBe(2);
+    expect(classification.sourceIds.get(1)).toEqual(['installed-1', 'second-vpk']);
+  });
+});
+
 function permutations<T>(items: readonly T[]): T[][] {
   if (items.length <= 1) return [[...items]];
   return items.flatMap((item, index) =>

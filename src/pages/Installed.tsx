@@ -1249,32 +1249,25 @@ export default function Installed() {
   }, [visibleMods, detailsGameBananaId]);
   // Files the user has inside a merge are never proposed as successors.
   const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
+  const autoMatchRemainingFiles = settings?.autoMatchRemainingFiles ?? true;
 
-  // Update state for the overlay, classified from the file list it just
-  // fetched with the same rules as the cards. Scoped to the entry that opened
-  // it: a sibling having an update must not relabel this file's rows, or the
-  // download handler would replace an install the user did not open.
+  // The mod page shows every installed file's update or manual replacement.
+  // Each download still replaces only its matched or explicitly chosen file.
   const detailsUpdate = useMemo(() => {
     const files = detailsMod?.files ?? [];
-    const classification = classifyModFiles(detailsMod?.id ?? -1, files, visibleMods, mergedFileIds);
+    const classification = classifyModFiles(detailsMod?.id ?? -1, files, visibleMods, mergedFileIds, autoMatchRemainingFiles);
     const source = detailsSourceModId ? mods.find((mod) => mod.id === detailsSourceModId) : undefined;
-    const scope = new Set<number>(
-      source && !source.ignoreUpdates && typeof source.gameBananaFileId === 'number'
-        ? [source.gameBananaFileId]
-        : [],
-    );
-    const summary = summarizeUpdateScope(classification, scope);
+    const summary = summarizeUpdateScope(classification);
     // The offline fallback has no file rows; keep the card's verdict for the badge.
     const offlineFlag = files.length === 0 && !!source && updatesAvailable.has(source.id);
     return {
       classification,
-      scope,
       flagged: summary.flagged || offlineFlag,
       archived: summary.archived,
       updateFileIds: new Set(summary.targets.keys()),
-      replaceableFiles: replaceableFilesFor(summary.needsPick, source ? [source] : []),
+      replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
     };
-  }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable]);
+  }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
 
   // "Update all" confirm + progress. Progress is null when idle, otherwise
   // { done, total } so the button can render "Updating 2/5…" and stay disabled
@@ -1904,7 +1897,7 @@ export default function Installed() {
         fileId,
         detailsUpdate.classification,
         visibleMods.filter((mod) => mod.gameBananaId === detailsMod.id),
-        { scopeFileIds: detailsUpdate.scope, replaceFileId },
+        { replaceFileId },
       );
       const replacedIds = new Set(decision.replacedModIds);
       const replacementTargets = mods.filter((mod) => replacedIds.has(mod.id));
@@ -2049,8 +2042,7 @@ export default function Installed() {
       // Keep the overlay open on the freshly installed file so the row flips to
       // Installed/Active and the button to "Reinstall" in place. Re-anchor the
       // source entry first: an update or reinstall deletes the old local id, and
-      // leaving it dangling would break the ignore-updates toggle and make a
-      // follow-up pick look like a variant add rather than a replacement.
+      // leaving it dangling would break the ignore-updates toggle and navigation.
       const installed = useAppStore
         .getState()
         .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
@@ -2142,11 +2134,11 @@ export default function Installed() {
 
       // Classify with the same rules as the cards and the details popups, so
       // Update-all cannot disagree with the row labelled Update. Everything is
-      // resolved before any delete/download runs: only a confident successor
-      // is applied, a deleted file with none keeps its install and goes to the
-      // manual-pick queue, and an archived one is not an update at all.
+      // resolved before any delete/download runs, including the optional
+      // remaining-file match. Unresolved deleted files keep their installs
+      // and go to the manual-pick queue; unresolved archived files are skipped.
       const steps = resolveUpdateRun(
-        classifyModFiles(group[0].gameBananaId, details.files ?? [], visibleMods, mergedFileIds),
+        classifyModFiles(group[0].gameBananaId, details.files ?? [], visibleMods, mergedFileIds, autoMatchRemainingFiles),
         group.map((snapshot) => ({ id: snapshot.oldId, gameBananaFileId: snapshot.gameBananaFileId })),
       );
       const resolutions = group.map((snapshot, index) => {
@@ -2747,15 +2739,15 @@ export default function Installed() {
       }
     }
 
-    // Don't re-download a file the user already has installed standalone.
-    const claimed = new Set<number>();
+    // Don't re-download a file already installed standalone or inside a merge.
+    const claimed = mergeSourceFileIds(visibleMods);
     for (const mod of mods) {
       if (typeof mod.gameBananaFileId !== 'number') continue;
       if (!filesByModId.has(mod.gameBananaId ?? -1)) continue;
       claimed.add(mod.gameBananaFileId);
     }
 
-    const plan = planMergeSourceUpdates(stale, filesByModId, claimed);
+    const plan = planMergeSourceUpdates(stale, filesByModId, claimed, autoMatchRemainingFiles);
     const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
       modName: entry.source.modName,
       reason: entry.reason,
@@ -2997,7 +2989,7 @@ export default function Installed() {
   }, [mods]);
 
   // Flag an installed file when it is no longer current on GameBanana AND
-  // either a confident successor exists or the row was deleted (see
+  // either a successor is matched or the row was deleted (see
   // classifyModFiles). An archived file with no successor is a retired addon
   // or a legacy alternate, not an update, so it is never flagged.
   useEffect(() => {
@@ -3064,7 +3056,7 @@ export default function Installed() {
       await Promise.all(Array.from({ length: concurrency }, worker));
 
       if (cancelled) return;
-      const flags = computeUpdateFlags(visibleMods, updateCheckCache.rows);
+      const flags = computeUpdateFlags(visibleMods, updateCheckCache.rows, autoMatchRemainingFiles);
       setUpdatesAvailable(flags.updatesAvailable);
       setMergedSourceUpdates(flags.staleMergeSources);
     };
@@ -3075,7 +3067,7 @@ export default function Installed() {
     // `visibleMods` is derived from `mods` and changes only when `mods`
     // does; listing it directly would re-fire on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mods, updateCheckRevision]);
+  }, [mods, updateCheckRevision, autoMatchRemainingFiles]);
 
   // Group variants sharing a GB mod id under a single card. Singletons and
   // custom imports (no GB id) keep their old card behavior. Absorbed merge

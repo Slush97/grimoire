@@ -440,7 +440,7 @@ interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElem
     tone?: 'default' | 'danger';
 }
 
-export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', className = '', ...props }: IconButtonProps) {
+export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', className = '', children, ...props }: IconButtonProps) {
     const sizes = {
         sm: 'h-7 w-7',
         md: 'h-8 w-8',
@@ -459,6 +459,7 @@ export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', c
             {...props}
         >
             <Icon className={iconSize} aria-hidden />
+            {children}
         </button>
     );
 }

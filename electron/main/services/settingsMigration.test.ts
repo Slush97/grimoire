@@ -13,7 +13,7 @@ import { vi } from 'vitest';
 const h = vi.hoisted(() => ({ userData: '' }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 
-import { loadSettings } from './settings';
+import { loadSettings, saveSettings } from './settings';
 
 function settingsPath(): string {
   return join(h.userData, 'settings.json');
@@ -21,6 +21,19 @@ function settingsPath(): string {
 
 beforeEach(() => {
   h.userData = mkdtempSync(join(tmpdir(), 'settings-migration-'));
+});
+
+describe('remaining-file update matching preference', () => {
+  it('defaults to enabled for new and existing settings', () => {
+    expect(loadSettings().autoMatchRemainingFiles).toBe(true);
+    writeFileSync(settingsPath(), JSON.stringify({ autoEnableDownloads: false }));
+    expect(loadSettings().autoMatchRemainingFiles).toBe(true);
+  });
+
+  it('preserves an explicit opt-out when settings are saved and loaded', () => {
+    saveSettings({ ...loadSettings(), autoMatchRemainingFiles: false });
+    expect(loadSettings().autoMatchRemainingFiles).toBe(false);
+  });
 });
 
 describe('loadSettings legacy experimentalVpkTagging migration', () => {

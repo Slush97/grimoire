@@ -19,12 +19,12 @@ export interface InstalledUpdateEntry {
   sourceFileName?: string;
 }
 
-export type SuccessorEvidence = 'description' | 'name';
+export type SuccessorEvidence = 'description' | 'name' | 'remaining';
 
 export type FileUpdateState =
   /** The installed file id is still a current (non-archived) row. */
   | { kind: 'current' }
-  /** A confident successor exists among the current files. `promote` means
+  /** A successor was matched among the current files. `promote` means
    *  the user already has it installed: applying the update removes the stale
    *  file and moves its state onto the installed one, with no download. */
   | { kind: 'update'; target: UpdateFileRow; via: SuccessorEvidence; promote: boolean }
@@ -103,9 +103,10 @@ interface Proposal extends Winner {
  * the outcome: when two stale files want the same successor the stronger match
  * wins and a tie leaves both unresolved.
  *
- * A sole current upload must satisfy the same matching rules. Sharing one
- * filename word is not enough: it may be the remaining color or optional
- * variant, rather than a successor of the installed file.
+ * With `autoMatchRemainingFiles`, a single unmatched install and a single
+ * unclaimed current upload are paired after the normal matches. Upload-session
+ * and installed-file exclusions still apply. Otherwise even a sole upload
+ * must satisfy the name or description rules.
  *
  * @param otherInstalledFileIds file ids installed outside `installed` (inside
  *  a merge, or standalone when classifying merge sources), which are never
@@ -116,6 +117,7 @@ export function classifyModFiles(
   files: readonly UpdateFileRow[],
   installed: readonly InstalledUpdateEntry[],
   otherInstalledFileIds?: ReadonlySet<number>,
+  autoMatchRemainingFiles = false,
 ): ModUpdateClassification {
   const groups = new Map<number, InstalledUpdateEntry[]>();
   for (const entry of installed) {
@@ -154,10 +156,15 @@ export function classifyModFiles(
   }
 
   const installedElsewhere = (fileId: number) => !groups.has(fileId) && !!otherInstalledFileIds?.has(fileId);
+  const matchedElsewhere = new Set<number>();
   const proposalsByTarget = new Map<number, Proposal[]>();
   for (const file of stale) {
     const proposal = proposeSuccessor(file, files, currentRows, groups);
-    if (!proposal || installedElsewhere(proposal.target.id)) continue;
+    if (!proposal) continue;
+    if (installedElsewhere(proposal.target.id)) {
+      matchedElsewhere.add(file.fileId);
+      continue;
+    }
     const claims = proposalsByTarget.get(proposal.target.id) ?? [];
     claims.push(proposal);
     proposalsByTarget.set(proposal.target.id, claims);
@@ -168,6 +175,18 @@ export function classifyModFiles(
     claims.sort(compareProposals);
     if (claims.length === 1 || compareProposals(claims[0], claims[1]) < 0) {
       winners.set(claims[0].fileId, claims[0]);
+    }
+  }
+
+  if (autoMatchRemainingFiles) {
+    // A known successor installed elsewhere must not redirect to another variant.
+    const unmatched = stale.filter((file) => !winners.has(file.fileId) && !matchedElsewhere.has(file.fileId));
+    const claimed = new Set([...winners.values()].map((winner) => winner.target.id));
+    const remaining = currentRows.filter(
+      (row) => !claimed.has(row.id) && !groups.has(row.id) && !installedElsewhere(row.id),
+    );
+    if (unmatched.length === 1 && remaining.length === 1 && newerThanSession(unmatched[0], remaining).length === 1) {
+      winners.set(unmatched[0].fileId, { target: remaining[0], via: 'remaining', promote: false });
     }
   }
 

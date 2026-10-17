@@ -42,6 +42,7 @@ export function mergeSourceFileIds(mods: readonly UpdateCheckMod[]): Set<number>
 export function computeUpdateFlags(
   mods: readonly UpdateCheckMod[],
   rowsByModId: ReadonlyMap<number, readonly UpdateFileRow[]>,
+  autoMatchRemainingFiles = false,
 ): UpdateFlags {
   const merged = mergeSourceFileIds(mods);
   const updatesAvailable = new Set<string>();
@@ -52,7 +53,7 @@ export function computeUpdateFlags(
   for (const gameBananaId of gameBananaIds) {
     const rows = rowsByModId.get(gameBananaId);
     if (!rows) continue;
-    const { states, sourceIds } = classifyModFiles(gameBananaId, rows, mods, merged);
+    const { states, sourceIds } = classifyModFiles(gameBananaId, rows, mods, merged, autoMatchRemainingFiles);
     for (const [fileId, state] of states) {
       if (!isUpdateFlagged(state)) continue;
       for (const id of sourceIds.get(fileId) ?? []) updatesAvailable.add(id);
@@ -71,6 +72,7 @@ export function computeUpdateFlags(
         rows,
         sources.map((source) => ({ id: source.fileName, gameBananaId, gameBananaFileId: source.fileId })),
         installedFileIdsOf(gameBananaId, mods),
+        autoMatchRemainingFiles,
       );
       for (const source of sources) {
         if (isUpdateFlagged(states.get(source.fileId))) stale.add(source.fileName);

@@ -1850,6 +1850,7 @@ export default function Browse() {
       selectedMod?.files ?? [],
       visibleMods,
       mergedFileIds,
+      settings?.autoMatchRemainingFiles ?? true,
     );
     const summary = summarizeUpdateScope(classification);
     return {
@@ -1859,7 +1860,7 @@ export default function Browse() {
       updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
     };
-  }, [selectedMod, visibleMods, mergedFileIds]);
+  }, [selectedMod, visibleMods, mergedFileIds, settings?.autoMatchRemainingFiles]);
 
   // Stable identity (useStableCallback) so the memoized ModDetailsModal does
   // not re-render every time this large component does (e.g. on every

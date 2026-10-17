@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideFileDownload, resolveUpdateRun, sameFileModIds, summarizeUpdateScope } from './updateActions';
+import { decideFileDownload, replaceableFilesFor, resolveUpdateRun, sameFileModIds, summarizeUpdateScope } from './updateActions';
 import { classifyModFiles, type InstalledUpdateEntry, type UpdateFileRow } from './updateFileMatch';
 import snapshot from './__fixtures__/gamebanana/files-2026-10-02.json';
 
@@ -35,6 +35,38 @@ const unmatchedInstall = [
 ];
 
 describe('summarizeUpdateScope', () => {
+  it('offers inferred updates and replaces only the paired install when the preference is enabled', () => {
+    const installed = [vpk('old', 10, { sourceFileName: 'scuffed_dune_shiv' })];
+    const files: UpdateFileRow[] = [{ id: 20, fileName: 'duneshivvioletfix.rar', isArchived: false }];
+    const enabled = classifyModFiles(QOL, files, installed, undefined, true);
+    expect(summarizeUpdateScope(enabled).targets).toEqual(new Map([[20, ['old']]]));
+    expect(decideFileDownload(20, enabled, installed)).toEqual({ kind: 'update', replacedModIds: ['old'] });
+    expect(resolveUpdateRun(enabled, installed)).toEqual([{ modId: 'old', kind: 'update', fileId: 20, promote: false }]);
+
+    const disabled = classifyModFiles(QOL, files, installed, undefined, false);
+    expect(summarizeUpdateScope(disabled).needsPick).toEqual([10]);
+    expect(resolveUpdateRun(disabled, installed)).toEqual([{ modId: 'old', kind: 'needs-pick' }]);
+  });
+
+  it('offers every matched update while keeping manual replacements separate', () => {
+    const installed = [
+      vpk('no-hotel', 10, { fileDescription: 'No Hotel version', sourceFileName: 'gman-no-hotel_old' }),
+      vpk('main', 11, { fileDescription: 'G-Man Mod', sourceFileName: 'gman_old' }),
+      vpk('unresolved', 12, { sourceFileName: 'unmatched_variant' }),
+    ];
+    const files: UpdateFileRow[] = [
+      { id: 20, fileName: 'gman-no-hotel.zip', description: 'No Hotel version', isArchived: false },
+      { id: 21, fileName: 'gman.zip', description: 'G-Man Mod', isArchived: false },
+    ];
+    const classification = classifyModFiles(QOL, files, installed);
+    const summary = summarizeUpdateScope(classification);
+
+    expect(summary.targets).toEqual(new Map([[20, ['no-hotel']], [21, ['main']]]));
+    expect(summary.needsPick).toEqual([12]);
+    expect(decideFileDownload(20, classification, installed).replacedModIds).toEqual(['no-hotel']);
+    expect(decideFileDownload(21, classification, installed).replacedModIds).toEqual(['main']);
+  });
+
   it('labels the confident successor and reports the archived addon', () => {
     const summary = summarizeUpdateScope(classifyModFiles(QOL, qolFiles, qolInstall));
 
@@ -59,6 +91,20 @@ describe('summarizeUpdateScope', () => {
     const summary = summarizeUpdateScope(classifyModFiles(QOL, qolFiles, qolInstall), new Set([ADDON]));
 
     expect(summary).toEqual({ flagged: false, archived: true, targets: new Map(), needsPick: [] });
+  });
+});
+
+describe('replaceableFilesFor', () => {
+  it('names unresolved files by description, falling back to the archive or VPK filename', () => {
+    expect(replaceableFilesFor([10, 11, 12], [
+      { gameBananaFileId: 10, fileDescription: 'mina_lilith(short hair)', sourceFileName: 'succubmina', fileName: 'old.vpk' },
+      { gameBananaFileId: 11, sourceFileName: 'scbm_1_complex_lh_wings_tail_whip', fileName: 'another.vpk' },
+      { gameBananaFileId: 12, fileDescription: '  ', fileName: 'fallback.vpk' },
+    ])).toEqual([
+      { fileId: 10, label: 'mina_lilith(short hair)', fileName: 'succubmina' },
+      { fileId: 11, label: 'scbm_1_complex_lh_wings_tail_whip', fileName: 'scbm_1_complex_lh_wings_tail_whip' },
+      { fileId: 12, label: 'fallback.vpk', fileName: 'fallback.vpk' },
+    ]);
   });
 });
 
@@ -244,7 +290,7 @@ describe('a successor the user already installed', () => {
     });
   });
 
-  it('lets a confirmed replace target an installed current file (677044 feet v4 beside v5)', () => {
+  it('keeps the unresolved file when a replace tries to target an installed current file', () => {
     const files = [{ id: 1774719, fileName: 'freaky_hidout.zip', isArchived: false }];
     const feet = [
       { id: 'feet-v4', gameBananaId: 677044, gameBananaFileId: 1723227, fileDescription: 'Feet in hub V4', sourceFileName: 'feetinhubv4' },
@@ -254,8 +300,8 @@ describe('a successor the user already installed', () => {
 
     expect(feetClassification.states.get(1723227)).toEqual({ kind: 'needs-pick' });
     expect(decideFileDownload(1774719, feetClassification, feet, { replaceFileId: 1723227 })).toEqual({
-      kind: 'replace',
-      replacedModIds: ['feet-v4'],
+      kind: 'reinstall',
+      replacedModIds: ['feet-v5'],
     });
     // A plain click on the installed v5 is still only a reinstall of v5.
     expect(decideFileDownload(1774719, feetClassification, feet)).toEqual({

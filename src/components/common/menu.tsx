@@ -26,6 +26,7 @@ import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
 // menu are the same list of actions, mounted twice.
 
 export type MenuKind = 'context' | 'dropdown';
+type MenuVariant = 'default' | 'picker';
 
 // Typed against the dropdown namespace because its Content is the one that
 // accepts positioning props (side/align/sideOffset). A context menu anchors at
@@ -81,13 +82,16 @@ export function MenuTrigger({ children, ...props }: MenuTriggerProps) {
   return <Trigger {...props}>{children}</Trigger>;
 }
 
-export const MENU_SURFACE_CLASS =
-  'z-[80] min-w-52 rounded-sm border border-hl/10 bg-bg-secondary/95 p-1 text-sm text-text-primary shadow-2xl shadow-black/50 backdrop-blur-md animate-popover-in';
+const MENU_SURFACE_BASE_CLASS =
+  'z-[80] min-w-52 rounded-sm border p-1 text-sm text-text-primary shadow-2xl shadow-black/50 animate-popover-in';
+export const MENU_SURFACE_CLASS = `${MENU_SURFACE_BASE_CLASS} border-hl/10 bg-bg-secondary/95 backdrop-blur-md`;
+const MENU_PICKER_SURFACE_CLASS = `${MENU_SURFACE_BASE_CLASS} border-border bg-bg-secondary`;
 
-type MenuContentProps = RadixDropdownMenu.DropdownMenuContentProps;
+type MenuContentProps = RadixDropdownMenu.DropdownMenuContentProps & { variant?: MenuVariant };
 
 export function MenuContent({
   children,
+  variant = 'default',
   className = '',
   side = 'bottom',
   align = 'end',
@@ -104,7 +108,7 @@ export function MenuContent({
     <Portal>
       <Content
         collisionPadding={12}
-        className={`${MENU_SURFACE_CLASS} ${className}`}
+        className={`${variant === 'picker' ? MENU_PICKER_SURFACE_CLASS : MENU_SURFACE_CLASS} ${className}`}
         {...positioning}
         {...props}
       >
@@ -116,6 +120,7 @@ export function MenuContent({
 
 interface MenuItemProps {
   children: ReactNode;
+  variant?: MenuVariant;
   icon?: LucideIcon;
   /** Renders the icon with animate-spin (in-flight clipboard ops etc.) */
   spinning?: boolean;
@@ -128,8 +133,10 @@ interface MenuItemProps {
 
 // Row geometry, shared by every item kind so a checkbox or submenu row lines up
 // with a plain MenuItem. Tone is appended separately (MenuItem varies it).
-const ITEM_GEOMETRY_CLASS =
-  'flex h-8 select-none items-center gap-2 rounded-sm px-2 outline-none transition-colors cursor-pointer data-[disabled]:cursor-default data-[disabled]:opacity-50';
+const ITEM_BASE_CLASS =
+  'flex select-none items-center outline-none transition-colors cursor-pointer data-[disabled]:cursor-default data-[disabled]:opacity-50';
+const ITEM_GEOMETRY_CLASS = `${ITEM_BASE_CLASS} h-8 gap-2 rounded-sm px-2`;
+const PICKER_ITEM_CLASS = `${ITEM_BASE_CLASS} gap-3 rounded-md px-3 py-2`;
 const DEFAULT_TONE_CLASS = 'text-text-primary focus:bg-hl/10 data-[highlighted]:bg-hl/10';
 const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
   default: DEFAULT_TONE_CLASS,
@@ -138,9 +145,12 @@ const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
   danger: 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10',
 };
 
-export function MenuItem({ children, icon: Icon, spinning, tone = 'default', disabled, title, onSelect, onContextMenu }: MenuItemProps) {
+export function MenuItem({ children, variant = 'default', icon: Icon, spinning, tone = 'default', disabled, title, onSelect, onContextMenu }: MenuItemProps) {
   const { ns } = useMenuImpl();
   const Item = ns.Item;
+  const toneClass = tone === 'default' && variant === 'picker'
+    ? 'text-text-primary focus:bg-bg-tertiary data-[highlighted]:bg-bg-tertiary'
+    : ITEM_TONE_CLASS[tone];
 
   return (
     <Item
@@ -151,9 +161,9 @@ export function MenuItem({ children, icon: Icon, spinning, tone = 'default', dis
         onSelect(event);
       }}
       onContextMenu={onContextMenu}
-      className={`${ITEM_GEOMETRY_CLASS} ${ITEM_TONE_CLASS[tone]}`}
+      className={`${variant === 'picker' ? PICKER_ITEM_CLASS : ITEM_GEOMETRY_CLASS} ${toneClass}`}
     >
-      {Icon && <Icon className={`h-4 w-4 flex-shrink-0 text-current ${spinning ? 'animate-spin' : ''}`} />}
+      {Icon && <Icon className={`h-4 w-4 flex-shrink-0 ${variant === 'picker' && tone === 'default' ? 'text-text-secondary' : 'text-current'} ${spinning ? 'animate-spin' : ''}`} />}
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </Item>
   );

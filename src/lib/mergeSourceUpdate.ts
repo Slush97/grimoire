@@ -63,9 +63,9 @@ export interface MergeSourceUpdateOutcome {
  * Resolution uses the same classifier as standalone files (`classifyModFiles`)
  * over the FULL file list, archived rows included, because the archived row
  * for the retired file is the best source of its old name and description.
- * Only a confident successor resolves. Anything else becomes `unresolved`
- * rather than a guess, a successor is claimed by at most one stale file, and
- * sources from one stale file resolve together so it is downloaded once.
+ * Name/description matches and the optional remaining-file fallback resolve.
+ * Anything else becomes `unresolved`. Each successor is claimed by at most one
+ * stale file, and sources from one file share a single replacement download.
  *
  * @param staleSources merge sources whose recorded file id is no longer live
  * @param filesByModId full file lists keyed by GameBanana mod id, archived
@@ -77,6 +77,7 @@ export function planMergeSourceUpdates(
   staleSources: readonly MergedModSource[],
   filesByModId: ReadonlyMap<number, readonly UpdateFileRow[]>,
   alreadyClaimedFileIds?: ReadonlySet<number>,
+  autoMatchRemainingFiles = false,
 ): MergeSourceUpdatePlan {
   const resolvedByFileId = new Map<number, ResolvedMergeSourceUpdate>();
   const unresolved: UnresolvedMergeSource[] = [];
@@ -103,7 +104,7 @@ export function planMergeSourceUpdates(
 
     let states = statesByModId.get(gameBananaId);
     if (!states) {
-      states = classifyModFiles(gameBananaId, files, entries, alreadyClaimedFileIds).states;
+      states = classifyModFiles(gameBananaId, files, entries, alreadyClaimedFileIds, autoMatchRemainingFiles).states;
       statesByModId.set(gameBananaId, states);
     }
     const state = states.get(installedFileId);

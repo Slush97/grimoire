@@ -17,8 +17,7 @@ export interface UpdateScopeSummary {
 
 /**
  * What a details view shows for the installed files in `scopeFileIds` (all
- * installed files of the mod when omitted). Installed scopes it to the entry
- * that opened the view; Browse looks at every installed file.
+ * installed files of the mod when omitted).
  */
 export function summarizeUpdateScope(
   classification: ModUpdateClassification,
@@ -57,8 +56,9 @@ export function sameFileModIds(mods: readonly InstalledUpdateEntry[], modId: str
 export interface ReplaceableFile {
   /** The stale GameBanana file id. */
   fileId: number;
-  /** How the confirmation names it: the archive name captured at install. */
+  /** Description captured at install, falling back to the archive filename. */
   label: string;
+  fileName: string;
 }
 
 export function replaceableFilesFor(
@@ -67,7 +67,8 @@ export function replaceableFilesFor(
 ): ReplaceableFile[] {
   return needsPick.map((fileId) => {
     const mod = installed.find((candidate) => candidate.gameBananaFileId === fileId);
-    return { fileId, label: mod?.sourceFileName ?? mod?.fileDescription ?? mod?.fileName ?? String(fileId) };
+    const fileName = mod?.sourceFileName || mod?.fileName || String(fileId);
+    return { fileId, label: mod?.fileDescription?.trim() || fileName, fileName };
   });
 }
 
@@ -87,10 +88,9 @@ export type FileDownloadDecision =
  * replaces the stale file it is the confident successor of, or reinstalls the
  * same file; everything else is an ordinary install that deletes nothing.
  * Replacing a stale file without a successor requires `replaceFileId`, set
- * only after the user confirmed exactly that replacement. When the picked
- * file is already installed (a promoted successor, or a replace onto a file
- * the user has), the host skips the download and only removes the replaced
- * mods.
+ * only after the user confirmed exactly that replacement, and may only target
+ * a file that is not installed. A matched successor that is already installed
+ * is promoted: the host skips the download and removes only its predecessor.
  *
  * @param installed installed VPKs of this GameBanana mod
  */
@@ -101,9 +101,11 @@ export function decideFileDownload(
   options: { scopeFileIds?: ReadonlySet<number>; replaceFileId?: number } = {},
 ): FileDownloadDecision {
   const { scopeFileIds, replaceFileId } = options;
+  const sameFile = installed.filter((mod) => mod.gameBananaFileId === fileId).map((mod) => mod.id);
   if (
     replaceFileId !== undefined &&
     replaceFileId !== fileId &&
+    sameFile.length === 0 &&
     (!scopeFileIds || scopeFileIds.has(replaceFileId)) &&
     classification.states.get(replaceFileId)?.kind === 'needs-pick' &&
     classification.currentFileIds.has(fileId)
@@ -114,7 +116,6 @@ export function decideFileDownload(
   const replaced = summarizeUpdateScope(classification, scopeFileIds).targets.get(fileId);
   if (replaced) return { kind: 'update', replacedModIds: replaced };
 
-  const sameFile = installed.filter((mod) => mod.gameBananaFileId === fileId).map((mod) => mod.id);
   return sameFile.length > 0
     ? { kind: 'reinstall', replacedModIds: sameFile }
     : { kind: 'install', replacedModIds: [] };
@@ -128,7 +129,7 @@ export type UpdateRunStep =
 
 /**
  * Resolve each target of an "Update all" / group update run against freshly
- * fetched file rows. Only a confident successor is applied. A file with no
+ * fetched file rows. Only a classified successor is applied. A file with no
  * successor goes to the manual-pick queue when it was deleted, and is skipped
  * when it is current again, archived, ignored or unknown, so a retired file
  * never enters a batch.

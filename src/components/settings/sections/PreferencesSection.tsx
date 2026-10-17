@@ -57,6 +57,15 @@ export default function PreferencesSection() {
         <div className="h-px bg-hl/5" />
 
         <Toggle
+          checked={settings?.autoMatchRemainingFiles ?? true}
+          onChange={(checked) => update({ autoMatchRemainingFiles: checked })}
+          label={<Tx k="settings.preferences.autoMatchRemainingFiles" fallback="Match remaining update files automatically" />}
+          description={<Tx k="settings.toggles.autoMatchRemainingFiles" fallback="After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself." />}
+        />
+
+        <div className="h-px bg-hl/5" />
+
+        <Toggle
           checked={settings?.autoEnableDownloads ?? false}
           onChange={(checked) => update({ autoEnableDownloads: checked })}
           label={<Tx k="settings.preferences.enableAfterDownload" fallback="Enable mods after download" />}

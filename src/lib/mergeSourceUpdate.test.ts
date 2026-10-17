@@ -31,6 +31,22 @@ const source = (over: Partial<MergedModSource> = {}): MergedModSource => ({
 });
 
 describe('planMergeSourceUpdates', () => {
+  it('excludes current files already used by a merge from the remaining-file count', () => {
+    const stale = source();
+    const files = new Map([[700, [file(2000, 'kept_variant.zip'), file(3000, 'renamed.zip')]]]);
+    const plan = planMergeSourceUpdates([stale], files, new Set([1000, 2000]), true);
+    expect(plan.resolved.map((entry) => entry.fileId)).toEqual([3000]);
+  });
+
+  it('uses the remaining-file preference when resolving a renamed merge source', () => {
+    const stale = source();
+    const files = new Map([[700, [file(2000, 'renamed.zip')]]]);
+    expect(planMergeSourceUpdates([stale], files, undefined, true).resolved.map((entry) => entry.fileId)).toEqual([2000]);
+    expect(planMergeSourceUpdates([stale], files, undefined, false).unresolved).toEqual([
+      { source: stale, reason: 'no-match' },
+    ]);
+  });
+
   it('matches the replacement by filename token overlap', () => {
     const files = [
       file(1000, 'galaxy_rem_gold_v1.zip', true),

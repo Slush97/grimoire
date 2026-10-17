@@ -89,10 +89,9 @@ interface ModDetailsModalProps {
   /** The installed file was archived by its author and no clear replacement
    *  was found. Shown as a quiet tag: it is not an update. */
   archivedByAuthor?: boolean;
-  /** Installed files the author deleted with no confident successor. Every
-   *  current row offers "Replace <file> with this" (installed rows included,
-   *  which only removes the old file), confirming exactly what gets deleted
-   *  before calling `onReplace`. */
+  /** Installed files the author deleted with no confident successor. Current
+   *  rows without an automatic match offer a replacement picker, confirming
+   *  exactly what gets deleted before calling `onReplace`. */
   replaceableFiles?: ReplaceableFile[];
   onReplace?: (fileId: number, fileName: string, replacedFileId: number) => void;
   /** When provided, render a toggle next to the Update/Installed badge that
@@ -270,7 +269,7 @@ function ModDetailsModal({
   const [deleteCandidate, setDeleteCandidate] = useState<{ mod: DeleteModEntry; fileName: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [replaceCandidate, setReplaceCandidate] = useState<
-    { fileId: number; fileName: string; installed: boolean; replaced: ReplaceableFile } | null
+    { fileId: number; fileName: string; replaced: ReplaceableFile } | null
   >(null);
   // Backdrop dismissal for the two nested overlays. The hook ignores drags
   // that only end on the backdrop, so releasing a text selection (or the
@@ -383,6 +382,7 @@ function ModDetailsModal({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
         if (deleteCandidate) {
           if (!deleteInProgress) setDeleteCandidate(null);
@@ -609,9 +609,9 @@ function ModDetailsModal({
       !!onEnableFile &&
       !isBusyThis;
     const showDeleteButton = !!installedFileState && !!onDeleteFile;
-    const replaceOptions = !archived && onReplace ? replaceableFiles : [];
+    const replaceOptions = !archived && !isUpdate && !isInstalled && onReplace ? replaceableFiles : [];
     const pickReplacement = (replaced: ReplaceableFile) =>
-      setReplaceCandidate({ fileId: file.id, fileName: file.fileName, installed: isInstalled, replaced });
+      setReplaceCandidate({ fileId: file.id, fileName: file.fileName, replaced });
     const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
     const pct = fileProgress && fileProgress.total > 0
       ? Math.round((fileProgress.downloaded / fileProgress.total) * 100)
@@ -714,7 +714,7 @@ function ModDetailsModal({
           {replaceOptions.length === 1 && (
             <IconButton
               icon={Replace}
-              label={t('modDetails.replace.action', { name: replaceOptions[0].label })}
+              label={t('modDetails.replace.action', { name: replaceOptions[0].fileName })}
               onClick={() => pickReplacement(replaceOptions[0])}
               disabled={isBusyThis}
             />
@@ -722,12 +722,28 @@ function ModDetailsModal({
           {replaceOptions.length > 1 && (
             <MenuRoot kind="dropdown">
               <MenuTrigger asChild disabled={isBusyThis}>
-                <IconButton icon={Replace} label={t('modDetails.replace.menu')} disabled={isBusyThis} />
+                <IconButton
+                  icon={Replace}
+                  label={t('modDetails.replace.menu')}
+                  className="w-auto! gap-1 px-2.5"
+                  disabled={isBusyThis}
+                >
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                </IconButton>
               </MenuTrigger>
-              <MenuContent>
+              <MenuContent variant="picker" className="w-[300px] max-w-[calc(100vw-24px)]">
+                <p className="px-3 pb-1 pt-2 text-2xs uppercase tracking-wider text-text-secondary">
+                  {t('modDetails.replace.pick')}
+                </p>
                 {replaceOptions.map((replaced) => (
-                  <MenuItem key={replaced.fileId} onSelect={() => pickReplacement(replaced)}>
-                    {t('modDetails.replace.action', { name: replaced.label })}
+                  <MenuItem
+                    key={replaced.fileId}
+                    variant="picker"
+                    icon={FileArchive}
+                    title={t('modDetails.replace.action', { name: replaced.fileName })}
+                    onSelect={() => pickReplacement(replaced)}
+                  >
+                    {replaced.label}
                   </MenuItem>
                 ))}
               </MenuContent>
@@ -1211,17 +1227,10 @@ function ModDetailsModal({
           <ConfirmModal
             isOpen
             title={t('modDetails.replace.confirmTitle')}
-            message={
-              replaceCandidate.installed
-                ? t('modDetails.replace.confirmBodyInstalled', {
-                    newName: replaceCandidate.fileName,
-                    oldName: replaceCandidate.replaced.label,
-                  })
-                : t('modDetails.replace.confirmBody', {
-                    newName: replaceCandidate.fileName,
-                    oldName: replaceCandidate.replaced.label,
-                  })
-            }
+            message={t('modDetails.replace.confirmBody', {
+              newName: replaceCandidate.fileName,
+              oldName: replaceCandidate.replaced.label,
+            })}
             confirmLabel={t('modDetails.replace.confirm')}
             onCancel={() => setReplaceCandidate(null)}
             onConfirm={() => {

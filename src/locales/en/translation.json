@@ -926,6 +926,7 @@
     "preferences": {
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
+      "autoMatchRemainingFiles": "Match remaining update files automatically",
       "enableAfterDownload": "Enable mods after download",
       "confirmProfileUpdate": "Confirm before updating a profile",
       "ignoreConflicts": "Ignore conflicts by default",
@@ -1054,6 +1055,7 @@
     "toggles": {
       "expandLocker": "Start Locker list view with hero cards expanded.",
       "switchVariants": "Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file.",
+      "autoMatchRemainingFiles": "After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself.",
       "enableAfterDownload": "Enable mods as soon as they finish downloading. Stays disabled if no slot is free.",
       "confirmProfileUpdate": "Confirm before overwriting a profile's saved mods. Off overwrites immediately.",
       "ignoreConflicts": "Hide all conflicts from the Conflicts page. Off shows them.",
@@ -2975,9 +2977,9 @@
     "replace": {
       "action": "Replace {{name}} with this",
       "menu": "Replace an installed file with this",
+      "pick": "Pick replacement",
       "confirmTitle": "Replace file?",
       "confirmBody": "{{oldName}} is no longer on GameBanana. Grimoire will install {{newName}} and delete {{oldName}}, keeping its enabled and Global settings.",
-      "confirmBodyInstalled": "{{oldName}} is no longer on GameBanana. Grimoire will delete it and keep {{newName}}, which you already have, moving its enabled and Global settings over.",
       "confirm": "Replace"
     },
     "aria": {

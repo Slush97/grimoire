@@ -36,6 +36,17 @@ const mergedMod = (sources: MergedModSource[], over: Partial<UpdateCheckMod> = {
 });
 
 describe('computeUpdateFlags', () => {
+  it('reclassifies an archived rename according to the remaining-file preference', () => {
+    const files: UpdateFileRow[] = [
+      { id: 1, fileName: 'old_name.zip', isArchived: true, dateAdded: 10_000 },
+      { id: 2, fileName: 'renamed.zip', isArchived: false, dateAdded: 20_000 },
+    ];
+    const mods = [mod('old', QOL, 1, { sourceFileName: 'old_name' })];
+    const rows = new Map([[QOL, files]]);
+    expect(computeUpdateFlags(mods, rows, true).updatesAvailable).toEqual(new Set(['old']));
+    expect(computeUpdateFlags(mods, rows, false).updatesAvailable.size).toBe(0);
+  });
+
   it('flags the deleted QOL Lock main and none of the archived addons', () => {
     const mods = [
       mod('main', QOL, 1832204, { sourceFileName: 'qollock_403_30september' }),
