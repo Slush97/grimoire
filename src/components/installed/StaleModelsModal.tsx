@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmModal } from '../common/PageComponents';
 import { Button } from '../common/ui';
 import ModThumbnail from '../ModThumbnail';
+import { healModAttachments, isGameRunningModLockError } from '../../lib/api';
 import { shouldBlurNsfw } from '../../lib/appSettings';
 import { useAppStore } from '../../stores/appStore';
 import { showToast } from '../../stores/toastStore';
@@ -34,8 +35,10 @@ export function StaleModelsModal({ mods, open, onClose }: StaleModelsModalProps)
     let healed = 0;
     for (const mod of targets) {
       try {
-        if (await window.electronAPI.healModAttachments(mod.id) > 0) healed++;
+        if (await healModAttachments(mod.id) > 0) healed++;
       } catch (err) {
+        // healModAttachments already warned that the game has it loaded.
+        if (isGameRunningModLockError(err)) continue;
         showToast(t('installed.staleModels.failed', { name: mod.name, error: err instanceof Error ? err.message : String(err) }), { tone: 'error' });
       }
     }

@@ -796,6 +796,11 @@ export async function imprintOneMod(modId: string): Promise<Mod> {
   return withGameRunningWarning(() => window.electronAPI.imprintOneMod(modId));
 }
 
+/** Rewrite a mod's stale hero models in place. Resolves to how many were healed. */
+export async function healModAttachments(modId: string): Promise<number> {
+  return withGameRunningWarning(() => window.electronAPI.healModAttachments(modId));
+}
+
 /** Retroactively imprint the whole installed library in place. Loaded mods are
  *  skipped and reported; per-mod failures are collected (never thrown). */
 export async function imprintAllInstalled(): Promise<ImprintAllInstalledResult> {

@@ -55,7 +55,14 @@ export function StatusIssues({ issues }: { issues: StatusIssue[] }) {
       </MenuTrigger>
       <MenuContent>
         {issues.map((issue) => (
-          <MenuItem key={issue.key} icon={issue.icon} tone={MENU_TONE[issue.variant]} onSelect={issue.onOpen}>
+          <MenuItem
+            key={issue.key}
+            icon={issue.icon}
+            tone={MENU_TONE[issue.variant]}
+            title={issue.title}
+            onSelect={issue.onOpen}
+            onContextMenu={issue.onContextMenu}
+          >
             {issue.label}
           </MenuItem>
         ))}

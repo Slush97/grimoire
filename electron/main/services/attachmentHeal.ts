@@ -1,13 +1,15 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getCitadelPath, metaKeyFor } from './deadlock';
+import { assertCanMoveLoadedGameMod, syncRunningGameModSnapshotFromMods } from './gameSessionMods';
+import { freezeLegacyVpkIndexes } from './imprintMods';
 import { getModMetadata, setModMetadataWithHash } from './metadata';
 import { runVpkmergeStdout } from './modMerger';
 import { runExclusiveModMutation, scanMods } from './mods';
 import { assertVpkSafety, carryVpkSafety, moveSafetySnapshot } from './modSafety';
 import { modTempPath } from './modTemps';
 import { retargetProfileModSha } from './profiles';
-import { parseVpkEntryStats } from './vpk';
+import { findChunkSiblingNames, parseVpkEntryStats } from './vpk';
 
 interface HealedModel { entry: string; attachments: string[]; blocks: number }
 
@@ -21,8 +23,17 @@ interface HealedModel { entry: string; attachments: string[]; blocks: number }
 export function healModAttachments(deadlockPath: string, modId: string): Promise<number> {
     const base = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
     return runExclusiveModMutation(async () => {
-        const mod = (await scanMods(deadlockPath)).find((m) => m.id === modId);
+        const installed = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(installed);
+        // The heal changes the mod's size, which legacy sibling order is inferred from.
+        freezeLegacyVpkIndexes(installed);
+        const mod = installed.find((m) => m.id === modId);
         if (!mod) throw new Error(`Mod not found: ${modId}`);
+        assertCanMoveLoadedGameMod(mod);
+        // The repack is one self-contained dir VPK, which would orphan the chunks.
+        if (findChunkSiblingNames(mod.fileName, await fs.readdir(dirname(mod.path))).length > 0) {
+            throw new Error(`${mod.fileName} is split into chunk files, which can't be fixed in place.`);
+        }
         const staged = modTempPath(dirname(mod.path), 'heal');
         try {
             const healed = JSON.parse(await runVpkmergeStdout(

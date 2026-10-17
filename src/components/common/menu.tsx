@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, type MouseEvent, type ReactNode } from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import * as RadixDropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
@@ -121,7 +121,9 @@ interface MenuItemProps {
   spinning?: boolean;
   tone?: 'default' | 'success' | 'warning' | 'danger';
   disabled?: boolean;
+  title?: string;
   onSelect: (event: Event) => void;
+  onContextMenu?: (event: MouseEvent) => void;
 }
 
 // Row geometry, shared by every item kind so a checkbox or submenu row lines up
@@ -136,17 +138,19 @@ const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
   danger: 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10',
 };
 
-export function MenuItem({ children, icon: Icon, spinning, tone = 'default', disabled, onSelect }: MenuItemProps) {
+export function MenuItem({ children, icon: Icon, spinning, tone = 'default', disabled, title, onSelect, onContextMenu }: MenuItemProps) {
   const { ns } = useMenuImpl();
   const Item = ns.Item;
 
   return (
     <Item
       disabled={disabled}
+      title={title}
       onSelect={(event) => {
         event.stopPropagation();
         onSelect(event);
       }}
+      onContextMenu={onContextMenu}
       className={`${ITEM_GEOMETRY_CLASS} ${ITEM_TONE_CLASS[tone]}`}
     >
       {Icon && <Icon className={`h-4 w-4 flex-shrink-0 text-current ${spinning ? 'animate-spin' : ''}`} />}

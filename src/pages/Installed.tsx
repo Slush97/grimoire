@@ -3480,7 +3480,7 @@ export default function Installed() {
     .sort((a, b) => a.priority - b.priority);
   const outdatedVdataMods = mods.filter((mod) => mod.enabled && mod.outdatedVdata?.length);
   // Disabled ones too: fixing is safe, and they break the camera once enabled.
-  const staleModelMods = mods.filter((mod) => mod.staleModels?.length);
+  const staleModelMods = visibleMods.filter((mod) => mod.staleModels?.length);
   const unknownFilterCacheById: Record<string, UnknownModFilterGuess> = {};
   for (const mod of unknownMods) {
     const cached = getUnknownCache(mod);

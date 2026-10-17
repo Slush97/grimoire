@@ -12,9 +12,17 @@ const h = vi.hoisted(() => ({
     carry: vi.fn(),
     assertSafety: vi.fn(),
     moveSafety: vi.fn(),
-    mods: [] as Array<{ id: string; name: string; path: string }>,
+    syncGame: vi.fn(),
+    assertMovable: vi.fn(),
+    freeze: vi.fn(),
+    mods: [] as Array<{ id: string; name: string; path: string; fileName: string; metaKey: string; enabled: boolean }>,
     staged: '',
 }));
+vi.mock('./gameSessionMods', () => ({
+    syncRunningGameModSnapshotFromMods: h.syncGame,
+    assertCanMoveLoadedGameMod: h.assertMovable,
+}));
+vi.mock('./imprintMods', () => ({ freezeLegacyVpkIndexes: h.freeze }));
 vi.mock('./deadlock', () => ({
     getCitadelPath: (deadlockPath: string) => deadlockPath,
     metaKeyFor: (path: string) => path.slice(path.lastIndexOf('/') + 1),
@@ -35,7 +43,10 @@ vi.mock('./modSafety', () => ({
 }));
 vi.mock('./modTemps', () => ({ modTempPath: () => h.staged }));
 vi.mock('./profiles', () => ({ retargetProfileModSha: h.retarget }));
-vi.mock('./vpk', () => ({ parseVpkEntryStats: (path: string) => h.entries.get(path) ?? null }));
+vi.mock('./vpk', async (importOriginal) => ({
+    findChunkSiblingNames: (await importOriginal<typeof import('./vpk')>()).findChunkSiblingNames,
+    parseVpkEntryStats: (path: string) => h.entries.get(path) ?? null,
+}));
 
 import { healModAttachments } from './attachmentHeal';
 
@@ -62,7 +73,7 @@ beforeEach(async () => {
     modPath = join(dir, 'pak04_dir.vpk');
     await fs.writeFile(modPath, 'original');
     h.staged = join(dir, '.heal-test.tmp');
-    h.mods = [{ id: 'silver', name: 'Flower Child Silver', path: modPath }];
+    h.mods = [{ id: 'silver', name: 'Flower Child Silver', path: modPath, fileName: 'pak04_dir.vpk', metaKey: 'pak04_dir.vpk', enabled: true }];
     h.entries.clear();
     h.entries.set(modPath, [{ path: WEREWOLF, size: 100 }, { path: MATERIAL, size: 10 }]);
     h.meta.clear();
@@ -137,5 +148,28 @@ describe('healModAttachments', () => {
     it('rejects an unknown mod id without spawning vpkmerge', async () => {
         await expect(healModAttachments(dir, 'gone')).rejects.toThrow('Mod not found: gone');
         expect(h.run).not.toHaveBeenCalled();
+    });
+
+    it('pins legacy sibling order before the heal changes the size', async () => {
+        vpkmergeHeals([WEREWOLF], [{ path: WEREWOLF, size: 140 }, { path: MATERIAL, size: 10 }]);
+        await healModAttachments(dir, 'silver');
+        expect(h.freeze).toHaveBeenCalledWith(h.mods);
+        expect(h.freeze.mock.invocationCallOrder[0]).toBeLessThan(h.run.mock.invocationCallOrder[0]);
+    });
+
+    it('refuses a mod the running game has loaded', async () => {
+        h.assertMovable.mockImplementationOnce(() => { throw new Error('Game is running'); });
+        await expect(healModAttachments(dir, 'silver')).rejects.toThrow('Game is running');
+        expect(h.syncGame).toHaveBeenCalledWith(h.mods);
+        expect(h.assertMovable).toHaveBeenCalledWith(h.mods[0]);
+        expect(h.run).not.toHaveBeenCalled();
+        expect(await fs.readFile(modPath, 'utf8')).toBe('original');
+    });
+
+    it('refuses a VPK split into chunk files', async () => {
+        await fs.writeFile(join(dir, 'pak04_000.vpk'), 'chunk');
+        await expect(healModAttachments(dir, 'silver')).rejects.toThrow(/chunk files/);
+        expect(h.run).not.toHaveBeenCalled();
+        expect(await files()).toEqual(['pak04_000.vpk', 'pak04_dir.vpk']);
     });
 });
