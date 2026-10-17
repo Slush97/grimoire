@@ -69,6 +69,10 @@ jobs:
         working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
 
+      - name: Locker artwork covers the full roster
+        working-directory: grimoire
+        run: pnpm locker-art:check
+
       # Vitest covers the FeModel parser, cloth fit math + solver stability,
       # Source 2 / NPR material reconstruction, the dynamic-scalar evaluator and
       # the profiles vpkIndex resolver. Nothing gated these until now, so a PR
