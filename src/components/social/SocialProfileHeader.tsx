@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Loader2,
@@ -19,12 +19,12 @@ import {
   socialLike,
   socialUnlike,
   socialReport,
-  parsePortableProfile,
   type SocialProfileDetail,
   type SocialListProfilesResponse,
 } from '../../lib/api';
 import { useSocialStore } from '../../stores/socialStore';
 import { formatRelativeDate } from '../../lib/dates';
+import type { PortableProfile } from '../../types/portableProfile';
 
 // Seed for instant render before the /v1/profiles/:id call completes. Matches
 // the list response shape — pass straight through from the Discover card.
@@ -33,6 +33,9 @@ export type SocialProfileSeed = SocialListProfilesResponse['profiles'][number];
 interface SocialProfileHeaderProps {
   profileId: string;
   seed?: SocialProfileSeed;
+  // Reuse the import dialog's parse instead of parsing the same share code
+  // in a second IPC request just for the capability indicators.
+  parsedProfile: PortableProfile | null;
   // Fires once the detail fetch resolves so the parent can start parsing the
   // share_code (the import flow needs it; we don't want to refetch).
   onDetailReady?: (detail: SocialProfileDetail) => void;
@@ -50,9 +53,10 @@ function isoFromUnix(unixSec: number): string {
   return new Date(unixSec * 1000).toISOString();
 }
 
-export default function SocialProfileHeader({
+export default memo(function SocialProfileHeader({
   profileId,
   seed,
+  parsedProfile,
   onDetailReady,
   onLikeChange,
   onLikeWithoutSignIn,
@@ -63,8 +67,8 @@ export default function SocialProfileHeader({
   const [detail, setDetail] = useState<SocialProfileDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasCrosshair, setHasCrosshair] = useState(false);
-  const [autoexecCount, setAutoexecCount] = useState(0);
+  const hasCrosshair = !!parsedProfile?.extensions?.grimoire?.crosshair;
+  const autoexecCount = parsedProfile?.extensions?.grimoire?.autoexecCommands?.length ?? 0;
 
   const [likeBusy, setLikeBusy] = useState(false);
   const [likeError, setLikeError] = useState<string | null>(null);
@@ -96,21 +100,6 @@ export default function SocialProfileHeader({
     // we only want this to fire when the profile id changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId]);
-
-  // Inspect the share_code purely for the crosshair / autoexec indicators.
-  // Parsing the mod list happens in the import dialog itself.
-  useEffect(() => {
-    if (!detail?.share_code) return;
-    let cancelled = false;
-    parsePortableProfile(detail.share_code)
-      .then((p) => {
-        if (cancelled) return;
-        setHasCrosshair(!!p.extensions?.grimoire?.crosshair);
-        setAutoexecCount(p.extensions?.grimoire?.autoexecCommands?.length ?? 0);
-      })
-      .catch(() => { /* best-effort; the import path surfaces real errors */ });
-    return () => { cancelled = true; };
-  }, [detail?.share_code]);
 
   const handleLikeToggle = useCallback(async () => {
     if (!signedIn) {
@@ -388,4 +377,4 @@ export default function SocialProfileHeader({
       </div>
     </div>
   );
-}
+});

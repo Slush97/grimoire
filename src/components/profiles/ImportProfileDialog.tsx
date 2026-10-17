@@ -1249,6 +1249,7 @@ export default function ImportProfileDialog({
                 <SocialProfileHeader
                   profileId={socialProfileId}
                   seed={socialProfileSeed}
+                  parsedProfile={parsed}
                   onDetailReady={handleSocialDetailReady}
                   onLikeChange={onLikeChange}
                   onSignInRequested={onSignInRequested}

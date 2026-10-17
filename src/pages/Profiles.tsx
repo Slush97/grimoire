@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Layers, Plus, Trash2, Play, Save, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
 import {
@@ -164,18 +164,30 @@ export default function Profiles() {
   const [bulkDeleteSnapshotsOpen, setBulkDeleteSnapshotsOpen] = useState(false);
   const [bulkDeletingSnapshots, setBulkDeletingSnapshots] = useState(false);
 
-  const { mods, loadMods } = useAppStore();
-  const { loadSettingsFromPreset, loadPresets, presets, activePresetId } = useCrosshairStore();
+  const mods = useAppStore((s) => s.mods);
+  const loadMods = useAppStore((s) => s.loadMods);
+  const loadSettingsFromPreset = useCrosshairStore((s) => s.loadSettingsFromPreset);
+  const loadPresets = useCrosshairStore((s) => s.loadPresets);
+  const presets = useCrosshairStore((s) => s.presets);
+  const activePresetId = useCrosshairStore((s) => s.activePresetId);
   const socialSignedIn = useSocialStore((s) => s.status.signedIn);
 
-  const modByFileName = new Map(mods.map((m) => [m.fileName, m]));
-  // Rename-proof lookup for the saved profile entries. First writer wins: mods
-  // sharing a sha are byte-identical, so either one displays the same.
-  const modBySha = new Map<string, Mod>();
-  for (const m of mods) {
-    const sha = m.sha256?.toLowerCase();
-    if (sha && !modBySha.has(sha)) modBySha.set(sha, m);
-  }
+  // Typing, expanding details and snapshot selection do not change the saved
+  // entries or installed metadata. Resolve and group only when those change.
+  const profilesWithGroups = useMemo(() => {
+    const modByFileName = new Map(mods.map((m) => [m.fileName, m]));
+    // Rename-proof lookup for the saved profile entries. First writer wins:
+    // mods sharing a sha are byte-identical, so either one displays the same.
+    const modBySha = new Map<string, Mod>();
+    for (const m of mods) {
+      const sha = m.sha256?.toLowerCase();
+      if (sha && !modBySha.has(sha)) modBySha.set(sha, m);
+    }
+    return profiles.map((profile) => ({
+      profile,
+      profileModGroups: getProfileModGroups(profile.mods, modByFileName, modBySha),
+    }));
+  }, [profiles, mods]);
 
   const loadProfileList = async (opts?: { silent?: boolean }) => {
     // Silent refresh leaves the page rendered: needed for in-modal flows
@@ -749,12 +761,11 @@ export default function Profiles() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
-          {profiles.map((profile) => {
+          {profilesWithGroups.map(({ profile, profileModGroups }) => {
             const isApplying = applyingId === profile.id;
             const isUpdating = updatingId === profile.id;
             const isActive = activeProfileId === profile.id;
             const isExpanded = expandedProfiles.has(profile.id);
-            const profileModGroups = getProfileModGroups(profile.mods, modByFileName, modBySha);
             const profileFileCount = profile.mods.length;
 
             const isRenamingThis = renamingId === profile.id;

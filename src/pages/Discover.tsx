@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Globe2,
@@ -32,6 +32,7 @@ import PublishPickerDialog from '../components/social/PublishPickerDialog';
 import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { formatRelativeDate } from '../lib/dates';
+import { mergeProfileLikes } from '../components/social/profileLikes';
 
 // 'mine' is a client-side view, not a backend sort. We branch on it before
 // hitting /v1/profiles and render the user's own published profiles instead.
@@ -97,15 +98,7 @@ export default function Discover() {
   // Merge the viewer_has_liked field from a response into our local map.
   // Pulled out so loadProfiles and loadMore can share it.
   const mergeViewerLiked = useCallback((profiles: SocialListProfilesResponse['profiles']) => {
-    setViewerLiked((prev) => {
-      const next = { ...prev };
-      for (const p of profiles) {
-        if (typeof p.viewer_has_liked === 'boolean') {
-          next[p.id] = p.viewer_has_liked;
-        }
-      }
-      return next;
-    });
+    setViewerLiked((prev) => mergeProfileLikes(prev, profiles));
   }, []);
 
   const loadProfiles = useCallback(async () => {
@@ -159,19 +152,23 @@ export default function Discover() {
   // IntersectionObserver-driven infinite scroll. Mirrors the pattern Browse
   // uses so the two pages feel the same.
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMoreIntersect = useEffectEvent(() => { void loadMore(); });
   useEffect(() => {
-    if (tab === 'mine' || !hasMore) return;
+    if (tab === 'mine' || !hasMore || loading) return;
     const node = loadMoreRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) void loadMore();
+        if (entries[0]?.isIntersecting) onLoadMoreIntersect();
       },
       { rootMargin: '600px 0px' }
     );
+    // Rearm after a new page lands so short pages still fill the viewport.
+    // Busy/like updates must not re-observe an already visible sentinel:
+    // a failed request would otherwise immediately retry in a hot loop.
     observer.observe(node);
     return () => observer.disconnect();
-  }, [tab, hasMore, loadMore]);
+  }, [tab, hasMore, loading, data?.page, data?.profiles.length]);
 
   // If a signed-in user lands on Your profile and then signs out, fall back
   // to Top so they don't end up staring at an empty owner-only view.
