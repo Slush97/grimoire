@@ -3203,6 +3203,7 @@
       "removed": "Your performance config is no longer in gameinfo.gi. Restore it, or dismiss this if you took it out on purpose.",
       "damaged": "Your game's config file is empty or damaged. Restore the backup Grimoire made, or verify game files in Steam.",
       "update": "A newer version of this config is available.",
+      "outdated": "An older version of Grimoire applied this config. Update it to get the fixes since.",
       "handEdited": "Includes changes you made to the file by hand.",
       "videoPending": "This config also has video settings that aren't applied yet.",
       "videoNoFile": "This config also has video settings. Launch Deadlock once, then come back to apply them."

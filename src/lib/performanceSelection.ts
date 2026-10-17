@@ -28,6 +28,14 @@ export function savedVersion(settings: AppSettings | null, preset: PerformancePr
   return preset.versions[0].version;
 }
 
+/** True when the user picked a bundled release by hand. That pick beats
+ *  "Always use the newest version", the newest bundled release included:
+ *  picking it while upstream has moved past it means "stay on this one". */
+export function hasPinnedVersion(settings: AppSettings | null, preset: PerformancePresetSummary): boolean {
+  const saved = settings?.performanceConfigVersions?.[preset.id];
+  return !!saved && preset.versions.some((v) => v.version === saved);
+}
+
 /** The optional gameplay settings to write. Nothing saved means the creator's
  *  visibility/camera values; an explicit [] means the user turned them all
  *  off. Developer/testing tools are never implicit. */

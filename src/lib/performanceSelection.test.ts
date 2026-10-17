@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { savedOptIns, savedVersion, savedVideoVariant, sortPresetsByTier } from './performanceSelection';
+import {
+  hasPinnedVersion,
+  savedOptIns,
+  savedVersion,
+  savedVideoVariant,
+  sortPresetsByTier,
+} from './performanceSelection';
 import type { AppSettings } from '../types/mod';
 import type { PerformanceOptIn, PerformancePresetSummary } from '../types/electron';
 
@@ -92,6 +98,24 @@ describe('savedVersion', () => {
 
   it('reads picks per preset', () => {
     expect(savedVersion(settings({ performanceConfigVersions: { other: '2.8' } }), p)).toBe('2.9');
+  });
+});
+
+describe('hasPinnedVersion', () => {
+  const p = preset('p', 'balanced', [{ version: '2.9' }, { version: '2.8' }]);
+
+  it('is false without a pick', () => {
+    expect(hasPinnedVersion(null, p)).toBe(false);
+    expect(hasPinnedVersion(settings({ performanceConfigVersions: { other: '2.8' } }), p)).toBe(false);
+  });
+
+  it('counts a pick of any bundled release, the newest included', () => {
+    expect(hasPinnedVersion(settings({ performanceConfigVersions: { p: '2.8' } }), p)).toBe(true);
+    expect(hasPinnedVersion(settings({ performanceConfigVersions: { p: '2.9' } }), p)).toBe(true);
+  });
+
+  it('ignores a pick this build no longer bundles', () => {
+    expect(hasPinnedVersion(settings({ performanceConfigVersions: { p: '2b994f62' } }), p)).toBe(false);
   });
 });
 

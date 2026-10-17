@@ -250,6 +250,10 @@ export interface PerformanceConfigStatus {
     savedConvarValues?: Record<string, string>;
     /** Applied, but the file no longer matches what Grimoire wrote (hand edits). */
     handEdited?: boolean;
+    /** Applied from another upstream commit of that release, or under older
+     *  Grimoire rules (an exclusion added since), so a reapply writes
+     *  something different. */
+    outdated?: boolean;
     /** Saved user deviations from the preset (hand edits harvested on reapply,
      *  layered onto every apply, surviving game-update wipes). */
     overrideCount?: number;

@@ -102,6 +102,22 @@ describe('revertVideo', () => {
         expect(revertVideo(rewritten, state)).toBe(VIDEO);
     });
 
+    it('takes the game reformatting a number as the value Grimoire wrote', () => {
+        const { text, state } = applied(VIDEO, [['mat_viewportscale', '1']]);
+        const rewritten = text.replace('"setting.mat_viewportscale"\t\t"1"', '"setting.mat_viewportscale"\t\t"1.000000"');
+        expect(videoApplied(rewritten, state)).toBe(1);
+        expect(revertVideo(rewritten, state)).toBe(VIDEO);
+    });
+
+    it('takes the game resolving a -1 resolution as the value Grimoire wrote', () => {
+        const { text, state } = applied(VIDEO, [['defaultres', '-1'], ['defaultresheight', '-1']]);
+        const resolved = text
+            .replace('"setting.defaultres"\t\t"-1"', '"setting.defaultres"\t\t"1920"')
+            .replace('"setting.defaultresheight"\t\t"-1"', '"setting.defaultresheight"\t\t"1080"');
+        expect(videoApplied(resolved, state)).toBe(2);
+        expect(revertVideo(resolved, state)).toBe(VIDEO);
+    });
+
     it('reapplying from the reverted text keeps the pre-Grimoire originals', () => {
         const first = applied(VIDEO);
         const second = applied(revertVideo(first.text, first.state));

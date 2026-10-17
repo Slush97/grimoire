@@ -31,11 +31,14 @@ export interface VideoState {
     written: Record<string, string>;
 }
 
-/** The userdata video.txt Deadlock reads. With several Steam accounts, the one
- *  that launched Deadlock last: the game rewrites machine_convars.vcfg next to
- *  it on every launch, while video.txt only changes with a setting. */
+/** The userdata video.txt Deadlock reads, or null while it reads the game
+ *  folder one. With several Steam accounts, the one that launched Deadlock
+ *  last: the game rewrites machine_convars.vcfg next to it on every launch,
+ *  while video.txt only changes with a setting. That account is picked whether
+ *  or not it has a video.txt yet, because until it does the game falls back to
+ *  the game folder copy, not to another account's. */
 function userdataVideoPath(): string | null {
-    let best: { path: string; launched: number } | null = null;
+    let best: { cfg: string; launched: number } | null = null;
     for (const root of getSteamRoots()) {
         let accounts: string[];
         try {
@@ -46,14 +49,15 @@ function userdataVideoPath(): string | null {
         for (const account of accounts) {
             if (!/^\d+$/.test(account)) continue;
             const cfg = join(root, 'userdata', account, DEADLOCK_APP_ID, 'local', 'cfg');
-            const path = join(cfg, 'video.txt');
-            if (!existsSync(path)) continue;
-            const convars = join(cfg, 'machine_convars.vcfg');
-            const launched = statSync(existsSync(convars) ? convars : path).mtimeMs;
-            if (!best || launched > best.launched) best = { path, launched };
+            const stamp = [join(cfg, 'machine_convars.vcfg'), join(cfg, 'video.txt')].find(existsSync);
+            if (!stamp) continue;
+            const launched = statSync(stamp).mtimeMs;
+            if (!best || launched > best.launched) best = { cfg, launched };
         }
     }
-    return best?.path ?? null;
+    if (!best) return null;
+    const path = join(best.cfg, 'video.txt');
+    return existsSync(path) ? path : null;
 }
 
 export function getVideoPath(deadlockPath: string): string {
@@ -61,6 +65,23 @@ export function getVideoPath(deadlockPath: string): string {
 }
 
 const SETTING_RE = /^([ \t]*)"setting\.([A-Za-z_]\w*)"([ \t]+)"([^"\r\n]*)"/;
+
+// The game rewrites video.txt in its own number format ("3.0" comes back as
+// "3.000000") and replaces a "-1" resolution with the one it picked. Neither
+// is the user changing a setting, so neither may keep a value from being
+// switched or put back.
+const AUTO_RESOLUTION = new Set(['defaultres', 'defaultresheight']);
+
+function sameValue(current: string | undefined, value: string): boolean {
+    if (current === value) return true;
+    if (current === undefined || !current.trim() || !value.trim()) return false;
+    const n = Number(current);
+    return Number.isFinite(n) && n === Number(value);
+}
+
+function holdsWritten(key: string, current: string | undefined, written: string): boolean {
+    return sameValue(current, written) || (written === '-1' && current !== undefined && AUTO_RESOLUTION.has(key));
+}
 
 function toLines(text: string): { lines: string[]; crlf: boolean } {
     const crlf = text.includes('\r\n');
@@ -102,7 +123,7 @@ export function revertVideo(text: string, state: VideoState): string {
     const { lines, crlf } = toLines(text);
     const current = currentValues(lines);
     for (const [key, value] of Object.entries(state.written)) {
-        if (current.get(key) !== value) continue;
+        if (!holdsWritten(key, current.get(key), value)) continue;
         setValue(lines, key, state.original[key] ?? null);
     }
     return fromLines(lines, crlf);
@@ -127,7 +148,7 @@ export function applyVideo(
     const before = currentValues(toLines(text).lines);
     const changed = new Set(
         previous && !restore
-            ? Object.keys(previous.written).filter((key) => before.get(key) !== previous.written[key])
+            ? Object.keys(previous.written).filter((key) => !holdsWritten(key, before.get(key), previous.written[key]))
             : []
     );
     const { lines, crlf } = toLines(previous ? revertVideo(text, previous) : text);
@@ -159,7 +180,7 @@ export function applyVideo(
             state.written[key] = value;
             continue;
         }
-        if (current.get(key) === value) continue;
+        if (sameValue(current.get(key), value)) continue;
         state.original[key] = original;
         state.written[key] = value;
         if (!setValue(lines, key, value)) missing.push(`${indent}"setting.${key}"${gap}"${value}"`);
@@ -171,5 +192,5 @@ export function applyVideo(
 /** How many of the values Grimoire wrote the file still holds. */
 export function videoApplied(text: string, state: VideoState): number {
     const current = currentValues(toLines(text).lines);
-    return Object.entries(state.written).filter(([key, value]) => current.get(key) === value).length;
+    return Object.entries(state.written).filter(([key, value]) => holdsWritten(key, current.get(key), value)).length;
 }

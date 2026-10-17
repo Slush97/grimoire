@@ -29,6 +29,7 @@ import {
 import {
     generatePresetBody,
     generateVideoBody,
+    keyExcluded,
     parseConfig,
     parseVideoConfig,
     pathExcluded,
@@ -78,6 +79,9 @@ export interface LatestRelease {
      *  version identity is then reused: the marker should say "v4.6", not a
      *  sha, when the content IS v4.6. */
     matchesBundled?: string;
+    /** Fingerprint of the classification rules the body was built with. Absent
+     *  on entries cached before it existed, which are rebuilt on the next check. */
+    classification?: string;
 }
 
 interface LatestCacheFile {
@@ -137,6 +141,11 @@ export function isCheckFresh(dir: string, presetId: string, now: Date): boolean 
 
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf-8').digest('hex');
 
+// A body cached under other rules is rebuilt on the next check. Re-filtering in
+// latestAsPreset can drop a newly excluded key, but it cannot bring back one
+// that was excluded when the body was fetched (r_render_portals, 2026-10-16).
+const CLASSIFICATION_HASH = sha256(JSON.stringify(CLASSIFICATION)).slice(0, 16);
+
 /** The version string a runtime release writes into the marker. Git ref names
  *  can contain punctuation such as '-' and '/', so the marker parser treats
  *  the commit delimiter (` @<sha>`) as the boundary instead of restricting
@@ -172,6 +181,7 @@ export type BuildLatestResult =
  *  reason. Refusal means the caller falls back to the bundled preset. */
 export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
     const family = getFamily(input.presetId);
+    const verbatim = family.upstream.verbatimVideo === true;
     if (family.id !== input.presetId) {
         return { ok: false, error: `unknown preset id ${input.presetId}` };
     }
@@ -202,7 +212,7 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
     const variants = variantTexts.map((v) => ({
         id: v.id,
         sha256: sha256(v.text),
-        video: generateVideoBody(parseVideoConfig(v.text), CLASSIFICATION),
+        video: generateVideoBody(parseVideoConfig(v.text), CLASSIFICATION, verbatim),
     }));
     const variantKey = (list: ReadonlyArray<{ id: string; sha256: string }>) =>
         list.map((v) => `${v.id}:${v.sha256}`).join(',');
@@ -226,7 +236,7 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
     const video =
         input.videoText === null
             ? { settings: [], problems: [] }
-            : generateVideoBody(parseVideoConfig(input.videoText), CLASSIFICATION);
+            : generateVideoBody(parseVideoConfig(input.videoText), CLASSIFICATION, verbatim);
 
     const ref = input.refKind === 'tag' ? input.ref : input.commit.slice(0, 8);
     let version = bundledTwin?.version ?? versionFor(input.refKind, input.ref, input.commit);
@@ -269,6 +279,7 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
             ),
         ],
         ...(bundledTwin ? { matchesBundled: bundledTwin.version } : {}),
+        classification: CLASSIFICATION_HASH,
     };
     return { ok: true, release };
 }
@@ -277,8 +288,10 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
  *  on, nothing downstream can tell it from a bundled release. */
 export function latestAsPreset(release: LatestRelease): PerformancePreset {
     const family = getFamily(release.presetId);
-    const video = generateVideoBody(release.video ?? [], CLASSIFICATION).settings;
+    const verbatim = family.upstream.verbatimVideo === true;
+    const video = generateVideoBody(release.video ?? [], CLASSIFICATION, verbatim).settings;
     const defaultVariant = family.upstream.videoFiles?.[0].variant;
+    const kept = (key: string) => !keyExcluded(key, CLASSIFICATION);
     return {
         id: family.id,
         name: family.name,
@@ -293,12 +306,12 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
             commit: release.commit,
         },
         // A cached body was classified by whichever Grimoire fetched it.
-        // Today's section exclusions still apply: RenderModes was excluded
-        // after older builds had cached bodies that wrote to it.
+        // Today's exclusions still apply: RenderModes and r_lightmap_size were
+        // excluded after older builds had cached bodies that wrote to them.
         sectionOps: release.sectionOps.filter(
-            (op) => !pathExcluded(op.path, CLASSIFICATION.excludeSections)
+            (op) => !pathExcluded(op.path, CLASSIFICATION.excludeSections) && kept(op.key)
         ),
-        convars: release.convars,
+        convars: release.convars.filter(([key]) => kept(key)),
         // Groups come from the same manifest tables the bundled data was
         // generated with, so the cast is between two views of one source.
         optIn: release.optIn.map((o) => ({ ...o, group: o.group as OptInGroup })),
@@ -310,7 +323,7 @@ export function latestAsPreset(release: LatestRelease): PerformancePreset {
                       { id: defaultVariant, video },
                       ...release.videoVariants.map((v) => ({
                           id: v.id,
-                          video: generateVideoBody(v.video, CLASSIFICATION).settings,
+                          video: generateVideoBody(v.video, CLASSIFICATION, verbatim).settings,
                       })),
                   ],
               }
@@ -347,6 +360,7 @@ export function cachedLatestIsCurrent(
     return (
         cached.commit === commit &&
         cached.baselineCommit === baselineCommit &&
+        cached.classification === CLASSIFICATION_HASH &&
         cached.video !== undefined &&
         (!family.upstream.videoFiles || cached.videoVariants !== undefined)
     );

@@ -214,7 +214,7 @@ describe('buildLatestRelease gates', () => {
     ].join('\n');
 
     it('classifies a fetched video.txt like the bundled generator', () => {
-        const result = buildLatestRelease(input({ presetId: 'optilock-fps', videoText: VIDEO }));
+        const result = buildLatestRelease(input({ presetId: 'sqooky-testing', videoText: VIDEO }));
         expect(result.ok).toBe(true);
         if (!result.ok) return;
         // Display keys and the opt-in convar are dropped, the unclassified
@@ -227,6 +227,24 @@ describe('buildLatestRelease gates', () => {
         ]);
         expect(result.release.withheld).toContain('r_new_glow_quality');
         expect(latestAsPreset(result.release).video).toEqual(result.release.video);
+    });
+
+    it("keeps a verbatim source's display settings and shipped values", () => {
+        const result = buildLatestRelease(
+            input({ presetId: 'optilock-fps', videoText: VIDEO.replace('"4"', '"8"') })
+        );
+        if (!result.ok) throw new Error(result.error);
+        // The opt-in convar and the unclassified key still stay out.
+        expect(result.release.video).toEqual([
+            ['defaultres', '-1'],
+            ['monitor_index', '0'],
+            ['mat_vsync', '0'],
+            ['r_shadows', '0'],
+            ['r_texture_stream_mip_bias', '8'],
+            ['shaderquality', '0'],
+            ['cpu_level', '1'],
+        ]);
+        expect(result.release.withheld).toContain('r_new_glow_quality');
     });
 
     it('refuses a fetched video.txt that is not one', () => {
@@ -295,6 +313,13 @@ describe('buildLatestRelease gates', () => {
                 cachedLatestIsCurrent(family, { ...built.release, videoVariants: undefined }, commit, baselineCommit)
             ).toBe(false);
             expect(cachedLatestIsCurrent(family, built.release, 'other', baselineCommit)).toBe(false);
+            // Built under other classification rules, or before they were recorded.
+            expect(
+                cachedLatestIsCurrent(family, { ...built.release, classification: 'other' }, commit, baselineCommit)
+            ).toBe(false);
+            expect(
+                cachedLatestIsCurrent(family, { ...built.release, classification: undefined }, commit, baselineCommit)
+            ).toBe(false);
 
             // A preset with a single video.txt never needed the field.
             const fps = buildLatestRelease(input({ presetId: 'optilock-fps', videoText: VIDEO }));
@@ -330,8 +355,15 @@ describe('generateVideoBody caps', () => {
         expect(capped('2')).toEqual([['r_texture_stream_mip_bias', '2']]);
     });
 
-    it('caps every bundled release', () => {
-        for (const id of ['optilock-fps', 'optilock-max', 'sqooky-testing']) {
+    it('leaves a verbatim body uncapped and caps the rest', () => {
+        expect(
+            generateVideoBody([['r_texture_stream_mip_bias', '8']], CLASSIFICATION, true).settings
+        ).toEqual([['r_texture_stream_mip_bias', '8']]);
+    });
+
+    // Verbatim (OptiLock) bodies keep the shipped value: dacooder asked for it.
+    it('caps every bundled release that is not verbatim', () => {
+        for (const id of ['sqooky-testing']) {
             for (const release of getFamily(id).releases) {
                 const bias = release.video.find(([key]) => key === 'r_texture_stream_mip_bias');
                 if (bias) expect(Number(bias[1])).toBeLessThanOrEqual(4);
@@ -402,6 +434,16 @@ describe('cache round-trip and resolution', () => {
         });
         const preset = resolveCachedPreset(dir, r.presetId, 'latest');
         expect(preset?.sectionOps).toEqual(r.sectionOps);
+    });
+
+    it('drops convars an older build cached for a key that is now excluded', () => {
+        const r = release();
+        writeLatestCache(dir, {
+            byPreset: { [r.presetId]: { ...r, convars: [...r.convars, ['r_lightmap_size', '0']] } },
+            checkedAt: {},
+        });
+        const preset = resolveCachedPreset(dir, r.presetId, 'latest');
+        expect(preset?.convars).toEqual(r.convars);
     });
 });
 

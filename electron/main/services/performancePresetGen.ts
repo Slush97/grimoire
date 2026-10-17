@@ -173,6 +173,14 @@ export function pathExcluded(path: string[], excludedSections: ReadonlyArray<rea
     return excludedSections.some((ex) => ex.every((seg, i) => path[i] === seg));
 }
 
+/** A key Grimoire never writes, from any section or source. */
+export function keyExcluded(key: string, classification: PresetGenClassification): boolean {
+    return (
+        classification.excludeKeys.includes(key) ||
+        classification.excludePatterns.some((p) => new RegExp(p, 'i').test(key))
+    );
+}
+
 /** Diff `config` against `baseline` and classify the result. Never throws on
  *  content: anything it cannot place safely comes back in `problems` and is
  *  withheld from the body, so callers choose between failing (build) and
@@ -306,10 +314,16 @@ export interface GeneratedVideo {
  *  and anything gameinfo.gi never writes are dropped. Opt-in convars are
  *  dropped too: the gameinfo.gi toggle for that convar is what the user
  *  controls, and a second copy here would quietly overrule it. Capped keys are
- *  lowered to their ceiling. */
+ *  lowered to their ceiling.
+ *
+ *  `verbatim` is for a source whose author says the config only looks right
+ *  with their video.txt pasted in whole (OptiLock): display settings are kept
+ *  and caps do not apply (the author asked for his mip bias as shipped).
+ *  Excluded keys and opt-in convars are still dropped. */
 export function generateVideoBody(
     settings: ReadonlyArray<readonly [string, string]>,
-    classification: PresetGenClassification
+    classification: PresetGenClassification,
+    verbatim = false
 ): GeneratedVideo {
     const display = classification.videoExcludePatterns.map((p) => new RegExp(p, 'i'));
     const caps = new Map(classification.videoMax.map((c) => [c.key, c.max]));
@@ -322,14 +336,14 @@ export function generateVideoBody(
     const out: Array<[string, string]> = [];
     const problems: GenProblem[] = [];
     for (const [key, value] of settings) {
-        if (display.some((re) => re.test(key))) continue;
+        if (!verbatim && display.some((re) => re.test(key))) continue;
         if (excludedKeys.has(key) || excludePatterns.some((re) => re.test(key))) continue;
         if (optInKeys.has(key)) continue;
         if (!allowedInBody.has(key) && optInPatterns.some((re) => re.test(key))) {
             problems.push({ kind: 'unclassified', key, where: 'video.txt' });
             continue;
         }
-        const cap = caps.get(key);
+        const cap = verbatim ? undefined : caps.get(key);
         out.push([key, cap !== undefined && Number(value) > cap ? String(cap) : value]);
     }
     return { settings: out, problems };

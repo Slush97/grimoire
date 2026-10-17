@@ -2,13 +2,22 @@ import { useTranslation } from 'react-i18next';
 import { Select, FormField } from '../common/forms';
 import type { PerformancePresetVersion } from '../../types/electron';
 
+// Option value of the tracked upstream release. Never a bundled version.
+const TRACKED = 'latest';
+
 interface VersionPickerProps {
   /** Bundled releases of the selected preset, newest first, never empty. */
   versions: PerformancePresetVersion[];
-  /** The release the user has picked. Newest when they have not picked one. */
-  selected: string;
-  onSelect: (version: string) => void;
+  /** The bundled release the user has picked, or null while following the
+   *  tracked upstream release. */
+  selected: string | null;
+  /** Called with a bundled version, or null for the tracked release. */
+  onSelect: (version: string | null) => void;
   disabled?: boolean;
+  /** The upstream release "Always use the newest version" writes, when it is
+   *  newer than every bundled one. It gets its own entry above the bundled
+   *  releases, so the newest bundled one stays pickable. */
+  tracked?: { ref: string; date: string } | null;
 }
 
 /**
@@ -25,23 +34,24 @@ interface VersionPickerProps {
  * then reads as "this is the release you are about to write", which is worth
  * showing on its own, and the picker row keeps the same shape across presets.
  */
-export default function VersionPicker({ versions, selected, onSelect, disabled }: VersionPickerProps) {
+export default function VersionPicker({ versions, selected, onSelect, disabled, tracked }: VersionPickerProps) {
   const { t } = useTranslation();
   const newest = versions[0].version;
 
   return (
     <FormField label={t('performance.version.label')}>
       <Select
-        value={selected}
-        disabled={disabled || versions.length < 2}
-        onChange={(e) => onSelect(e.target.value)}
+        value={selected ?? TRACKED}
+        disabled={disabled || (versions.length < 2 && !tracked)}
+        onChange={(e) => onSelect(e.target.value === TRACKED ? null : e.target.value)}
       >
+        {tracked && <option value={TRACKED}>{t('performance.version.optionNewest', tracked)}</option>}
         {versions.map((entry) => (
           // The date is not decoration: upstream tag names do not reliably sort
           // into release order (OptiLock tagged v4.0d after v4.1), so the name
           // alone cannot tell you which one is actually older.
           <option key={entry.version} value={entry.version}>
-            {entry.version === newest
+            {entry.version === newest && !tracked
               ? t('performance.version.optionNewest', { ref: entry.ref, date: entry.date })
               : t('performance.version.option', { ref: entry.ref, date: entry.date })}
           </option>

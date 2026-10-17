@@ -244,6 +244,9 @@ function emit(manifest, presets) {
     L.push(`     *  default first, each with every name it has had next to the config`);
     L.push(`     *  (current first). Absent when the only one is the sibling video.txt. */`);
     L.push(`    videoFiles?: ReadonlyArray<{ variant: string; files: string[] }>;`);
+    L.push(`    /** The author's video.txt is written whole, display settings and caps`);
+    L.push(`     *  included: their config only looks right with it pasted in as shipped. */`);
+    L.push(`    verbatimVideo?: boolean;`);
     L.push(`    /** Human-facing upstream version (a git tag where one exists). */`);
     L.push(`    ref: string;`);
     L.push(`    /** Whether \`ref\` is a real git tag or a version stated in prose. */`);
@@ -376,6 +379,7 @@ function emit(manifest, presets) {
             }
             L.push(`        ],`);
         }
+        if (p.upstream.verbatimVideo) L.push(`        verbatimVideo: true,`);
         L.push(`        license: ${q(p.upstream.license)},`);
         L.push(`        credit: ${q(p.upstream.credit)},`);
         L.push(`    },`);
@@ -659,7 +663,7 @@ async function main() {
                 const videoPath = videoPathFor(entry, spec, release.ref);
                 const videoText = await fetchAt(source.repo, release.commit, videoPath);
                 verify(videoText, sha, `${entry.id} (${videoPath}) at ${release.ref}`);
-                const body = generateVideoBody(parseVideoConfig(videoText), classification);
+                const body = generateVideoBody(parseVideoConfig(videoText), classification, source.verbatimVideo === true);
                 for (const problem of body.problems) sink(problem.key);
                 return body.settings;
             };
@@ -704,6 +708,7 @@ async function main() {
                           })),
                       }
                     : {}),
+                ...(source.verbatimVideo ? { verbatimVideo: true } : {}),
                 license: source.license,
                 credit: source.credit,
             },

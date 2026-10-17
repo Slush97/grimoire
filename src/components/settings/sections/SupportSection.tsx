@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bug, Check, Copy, FileText, Github, LifeBuoy } from 'lucide-react';
+import { Bug, Check, Copy, FileText, LifeBuoy } from 'lucide-react';
 import { useAppStore } from '../../../stores/appStore';
 import { buildDiagnosticReport } from '../../../lib/api';
 import { Button, Card } from '../../common/ui';
 import { Textarea } from '../../common/forms';
+import { GithubIcon } from '../../common/BrandIcons';
 import Tx from '../../translation/Tx';
 import CrashHistoryPanel from '../CrashHistoryPanel';
 
@@ -97,7 +98,7 @@ export default function SupportSection() {
               rel="noreferrer noopener"
               className="inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-medium border border-border bg-bg-tertiary/40 text-text-primary hover:bg-bg-tertiary/70 hover:border-text-secondary/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-secondary/60 whitespace-nowrap"
             >
-              <Github className="w-4 h-4" aria-hidden="true" />
+              <GithubIcon className="w-4 h-4" aria-hidden="true" />
               <Tx k="settings.support.githubIssues" fallback="GitHub Issues" />
             </a>
             <a
@@ -229,7 +230,7 @@ export default function SupportSection() {
                   rel="noreferrer noopener"
                   className="inline-flex items-center justify-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium border border-border bg-bg-tertiary/40 text-text-primary hover:bg-bg-tertiary/70 hover:border-text-secondary/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-secondary/60"
                 >
-                  <Github className="w-4 h-4" aria-hidden="true" />
+                  <GithubIcon className="w-4 h-4" aria-hidden="true" />
                   <Tx k="settings.support.openGithubIssue" fallback="Open GitHub issue" />
                 </a>
               </div>

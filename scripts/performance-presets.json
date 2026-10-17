@@ -70,6 +70,8 @@
       "url": "https://github.com/dacooderr/OptiLock",
       "license": "GPL-3.0",
       "credit": "OptiLock by dacooder and contributors",
+      "verbatimVideo": true,
+      "$verbatimVideoComment": "dacooder's README says to delete everything under DeviceID in your video.txt and paste his in whole; tested 2026-10-16, the configs only look right that way. So video.exclude (display keys) and video.max (dacooder asked for his mip bias 6/8 as shipped, not capped) do not apply to OptiLock video.txt bodies. exclude.keys/patterns and the opt-in dedupe (r_citadel_outlines follows its gameinfo.gi toggle) still apply. Display keys are restored on Remove from the sidecar's undo record, and a value changed in game afterwards is kept on reapply.",
       "refKind": "tag",
       "releases": [
         {
@@ -338,7 +340,7 @@
       {
         "key": "r_texture_stream_mip_bias",
         "max": 4,
-        "why": "OptiLock's README: past 4 you must install its Essential Fixes/SinnersLightFix.vpk, which Grimoire does not install. OptiLock's Potato Config ships 6 and its Ultra Potato No Shadows video.txt ships 8, and without the fix the game looks broken."
+        "why": "Past 4 Sinner's lights need OptiLock's Essential Fixes/SinnersLightFix.vpk, which Grimoire does not install. Applies to sources without verbatimVideo; OptiLock itself is exempt because dacooder asked for his 6 (Potato) and 8 (Ultra Potato No Shadows) as shipped (2026-10-16)."
       }
     ]
   },
@@ -400,12 +402,12 @@
         "why": "Valve added this key under Engine2 in the stock gameinfo.gi; OptimizationLock 2.8.2 transcribed it into the Localize block by mistake. Diffs are path-scoped, so without this the generator would emit an add against Localize and Grimoire would faithfully write upstream's typo into the user's file. It is engine plumbing, not a performance setting, so never write it from either section."
       },
       {
-        "key": "r_render_portals",
-        "why": "OptiLock v4.2's FPS preset set this to false, which breaks Doorman's door. Every bundled release now omits it or sets the stock \"true\", so excluding it costs nothing; it stays as a guard on the track-latest path in case an upstream reintroduces false."
-      },
-      {
         "key": "DistanceField",
         "why": "The current Deadlock build access-violates shortly after loading the hideout when boot's config combines Engine2/RenderingPipeline/DistanceField=0 with its core convar body. A live binary-search launch check reproduced the crash with this section op alone and confirmed the full preset remains running without it. No other bundled preset currently sets this key."
+      },
+      {
+        "key": "r_lightmap_size",
+        "why": "Since Valve's 2026-10-13 update the map renders nearly black when this is tiny: every OptiLock config sets it to 4 (FPS) or 0 (Potato, Ultra Potato). That update also stopped gameinfo.gi from switching off the sun, stationary lights and baked shadows (lb_enable_sunlight and friends are now gameinfo_cannot_override), so those lights now read their shadowing from these starved lightmaps. A live launch bisection on OptiLock Ultra Potato v5.7 cleared the darkness with this key alone back at stock. Sqooky hit the same thing with \"1\" on 2026-10-11 and moved to 2048; excluding the key means stock (65536) for every preset."
       }
     ]
   },
@@ -447,6 +449,10 @@
       "tracer"
     ],
     "allowInBody": [
+      {
+        "key": "aspectratiomode",
+        "why": "A video.txt display setting (the in-game aspect ratio mode), caught by the aspect pattern. Only OptiLock's verbatim video.txt writes it, and every release ships \"0\", the game's automatic mode; it is not r_aspectratio, the FOV-changing convar that pattern exists for. Reclassify if a release ships anything else."
+      },
       {
         "key": "cl_phys_timescale",
         "why": "Caught by the timescale pattern, but every bundled preset sets it to \"1\", which is normal physics speed (upstream's own comment: '1=Normal physics'); the authors keep the knob visible for hand-tuning. Writing the normal value changes nothing the player sees. Reclassify if any release ships a value other than 1."

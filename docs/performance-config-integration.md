@@ -129,11 +129,20 @@ Invariants that hold:
 - Switching preset removes the applied one by its markers first, so the file
   always goes stock -> preset and never accumulates two presets' markers.
 
-Documented safety exclusions live beside the pins. They currently include the
-broken `r_render_portals=0` value and boot's `DistanceField=0` section
-edit. The latter access-violates in the current Deadlock build when combined
-with boot's convar body; live launch bisection confirmed the full boot preset
-stays running without that one edit. No other bundled preset currently sets it.
+Documented safety exclusions live beside the pins. They currently include
+boot's `DistanceField=0` section edit, which access-violates in the current
+Deadlock build when combined with boot's convar body; live launch bisection
+confirmed the full boot preset stays running without that one edit. No other
+bundled preset currently sets it.
+
+`r_lightmap_size` is excluded too. Since Valve's 2026-10-13 update, gameinfo.gi
+can no longer switch off the sun, stationary lights or baked shadows
+(`lb_enable_sunlight` and friends are `gameinfo_cannot_override`), and every
+OptiLock config's tiny lightmap cap (4, or 0 for Potato and Ultra Potato) then
+renders the map nearly black. Launch bisection on Ultra Potato v5.7 cleared it
+with this key alone back at stock. Cached track-latest bodies are re-filtered
+against today's excluded keys as well as sections, so an older cache cannot
+bring it back.
 
 `MaterialSystem2/RenderModes` is excluded as a whole section because it is a
 list (seven `game` entries), not key/value pairs. The parser keeps the last
@@ -170,16 +179,22 @@ never the header. `videoSha256` on a preset pins the sibling file per release,
 like `sha256` pins the gameinfo.gi. `video.exclude` in the pin manifest strips
 everything that describes the user's screen rather than render cost:
 resolution, refresh rate, window mode, monitor index, DPI, aspect mode, gamma,
-V-Sync, frame cap and `knowndevice`. The remaining keys go through the
-gameinfo.gi classification too, so `r_render_portals` is never written and
-`r_citadel_outlines` is left to its gameinfo.gi opt-in toggle.
+V-Sync, frame cap and `knowndevice`. Not for OptiLock: its source carries
+`verbatimVideo`, because dacooder's README says to paste his video.txt in
+whole and the configs only looked right that way in testing (2026-10-16). Its
+display settings are written too, and Remove restores the user's own from the
+sidecar's undo record. The remaining keys go through the
+gameinfo.gi classification too, so `r_citadel_outlines` is left to its
+gameinfo.gi opt-in toggle. `r_render_portals` was excluded until 2026-10-16
+(OptiLock v4.2 set it false and broke Doorman's door); no bundled release sets
+it false any more, so it is written as upstream ships it.
 
 `video.max` caps numeric values, for bundled presets and tracked releases
-alike. `r_texture_stream_mip_bias` is capped at 4: OptiLock's README says past
-4 you need its Sinner's Light Fix VPK, which Grimoire does not install, and
-OptiLock's Potato Config ships 6 (Ultra Potato's No Shadows file ships 8).
-Several gameinfo.gi bodies set it to 8, but video.txt is read after gameinfo.gi
-and wins.
+alike, except verbatim sources. `r_texture_stream_mip_bias` is capped at 4,
+because past 4 Sinner's lights need OptiLock's Sinner's Light Fix VPK, which
+Grimoire does not install. OptiLock is exempt: dacooder asked for his Potato
+Config's 6 and Ultra Potato No Shadows' 8 as shipped. Several gameinfo.gi
+bodies set it to 8, but video.txt is read after gameinfo.gi and wins.
 
 Deadlock rewrites video.txt whenever a graphics setting changes in game and
 keeps no comments, so this half has no markers. The sidecar records, per key,
@@ -321,9 +336,9 @@ guessed. Left open deliberately.
 - **Perf-addon VPKs as optional installs.** OptiLock ships four under `Essential
   Fixes/` (SinnersLightFix, SoulContainer, ScopeDownscale,
   OptimizedMcGinnisWall). They belong in the normal VPK pipeline, not the
-  gameinfo patcher. Encode the known dependency as a `requires` field: OptiLock's
-  README says raising `r_texture_stream_mip_bias` past 4 needs Sinner's Light
-  Fix. Until then `video.max` holds it at 4.
+  gameinfo patcher. OptiLock's Potato configs ship `r_texture_stream_mip_bias`
+  6 and 8, written as shipped, and its README says past 4 you need Sinner's
+  Light Fix, so these configs currently rely on the user installing it.
 - **Ask Sqooky to cut git tags.** It costs them one command and upgrades four of
   the six pins from a bare SHA to a real release.
 
