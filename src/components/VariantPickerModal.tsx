@@ -370,7 +370,7 @@ export default function VariantPickerModal({
                                     {v.isArchived && <ArchivedTag />}
                                     {hasUpdate && (
                                         <Tag
-                                            tone="accent"
+                                            tone="update"
                                             icon={Download}
                                             title={t('variantPicker.updateAvailable')}
                                             className="flex-shrink-0 uppercase tracking-wide"

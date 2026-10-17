@@ -82,10 +82,10 @@ interface ModDetailsModalProps {
   navigationDirection?: ModDetailsNavigationDirection;
   navigationLabel?: string;
   updateAvailable?: boolean;
-  /** Current file rows that are actual replacement destinations. Keeping this
+  /** Current file ids mapped to the local mods they replace. Keeping this
    *  separate from the mod-level badge prevents alternate variants from all
    *  being mislabeled as updates. */
-  updateFileIds?: Set<number>;
+  updateTargets?: ReadonlyMap<number, readonly string[]>;
   /** The installed file was archived by its author and no clear replacement
    *  was found. Shown as a quiet tag: it is not an update. */
   archivedByAuthor?: boolean;
@@ -152,7 +152,7 @@ function ModDetailsModal({
   navigationDirection = 'next',
   navigationLabel,
   updateAvailable,
-  updateFileIds = new Set<number>(),
+  updateTargets = new Map<number, readonly string[]>(),
   archivedByAuthor = false,
   replaceableFiles = [],
   onReplace,
@@ -236,6 +236,7 @@ function ModDetailsModal({
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const soundVolume = useAppStore((state) => state.soundVolume);
+  const installedMods = useAppStore((state) => state.mods);
   // Cursor into the images array - only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
@@ -487,11 +488,11 @@ function ModDetailsModal({
 
   const actionLabel = (fileId: number, archived = false) => {
     // A file you already own re-downloads itself = "Reinstall". A current file
-    // in updateFileIds is the confident successor of a stale install: clicking
+    // in updateTargets is the confident successor of a stale install: clicking
     // it replaces that install, so it reads "Update". Every other file is a
     // plain Install that deletes nothing. Both hosts classify the same way, so
     // a file reads the same from Installed or from Browse.
-    if (updateFileIds.has(fileId) && !archived) return t('profiles.actions.update');
+    if (updateTargets.has(fileId) && !archived) return t('profiles.actions.update');
     if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
     return t('modDetails.actions.install');
   };
@@ -590,9 +591,10 @@ function ModDetailsModal({
     // Highlight the actual replacement target, not every sibling. A target can
     // already be installed: then Update promotes it and removes the stale
     // predecessor without downloading a duplicate.
-    const isUpdate = updateFileIds.has(file.id) && !archived;
+    const isUpdate = updateTargets.has(file.id) && !archived;
     const installedFileState = installedFileStates?.get(file.id);
-    const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true;
+    const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true ||
+      (isUpdate && installedMods.some((mod) => mod.enabled && updateTargets.get(file.id)?.includes(mod.id)));
     const fileDownload = selectFileDownloadActivity(downloadActivity, mod.id, file.id);
     const isDownloadingThis =
       fileDownload.phase === 'starting' ||
@@ -622,11 +624,11 @@ function ModDetailsModal({
         key={file.id}
         className={`flex flex-wrap items-center gap-3 p-3 rounded-lg border transition-colors sm:flex-nowrap ${
           isUpdate
-            ? 'border-accent/40 bg-accent/5'
+            ? 'border-state-update/40 bg-state-update/5'
             : isActive
-              ? 'border-accent/50 bg-accent/10'
+              ? 'border-green-500/50 bg-green-500/10'
               : isInstalled
-                ? 'border-green-500/30 bg-green-500/5'
+                ? 'border-state-info/30 bg-state-info/5'
                 : archived
                   ? 'border-border/70 bg-bg-secondary/70'
                   : 'border-border bg-bg-tertiary'
@@ -634,11 +636,11 @@ function ModDetailsModal({
       >
         <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${
           isUpdate
-            ? 'bg-accent/15 text-accent'
+            ? 'bg-state-update/15 text-state-update'
             : isActive
-              ? 'bg-accent/20 text-accent'
+              ? 'bg-green-500/20 text-green-400'
               : isInstalled
-                ? 'bg-green-500/15 text-green-400'
+                ? 'bg-state-info/15 text-state-info'
                 : archived
                   ? 'bg-bg-tertiary text-text-tertiary'
                   : 'bg-bg-secondary text-text-secondary'
@@ -675,7 +677,7 @@ function ModDetailsModal({
           {isDownloadingThis && pct !== null && (
             <div className="mt-2 h-1 w-full rounded-full bg-bg-secondary overflow-hidden">
               <div
-                className="h-full bg-accent transition-all duration-200"
+                className={`h-full transition-all duration-200 ${isUpdate ? 'bg-state-update' : 'bg-accent'}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -683,7 +685,7 @@ function ModDetailsModal({
         </div>
         <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
           {isActive && (
-            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+            <span className="flex-shrink-0 self-center rounded bg-state-success/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-state-success">
               {t('common.status.active')}
             </span>
           )}
@@ -735,7 +737,7 @@ function ModDetailsModal({
           )}
           <Button
             type="button"
-            variant={isUpdate || !isInstalled ? 'primary' : 'secondary'}
+            variant={isUpdate ? 'update' : !isInstalled ? 'primary' : 'secondary'}
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
             className="min-w-[110px] max-w-full"
@@ -1008,7 +1010,7 @@ function ModDetailsModal({
           )}
           <div className="flex items-center gap-2 flex-shrink-0">
             {updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent border border-accent/40">
+              <span className="inline-flex items-center gap-1 rounded-full bg-state-update/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-update border border-state-update/40">
                 <Download className="w-2.5 h-2.5" />
                 {t('profiles.actions.update')}
               </span>

@@ -228,7 +228,7 @@ interface ConfirmModalProps {
     message: ReactNode;
     confirmLabel?: ReactNode;
     cancelLabel?: ReactNode;
-    variant?: 'danger' | 'primary';
+    variant?: 'danger' | 'primary' | 'update';
     onConfirm: () => void;
     onCancel: () => void;
     /** The confirmed action is running: blocks dismissal and disables both buttons. */

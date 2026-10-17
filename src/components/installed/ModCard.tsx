@@ -1473,7 +1473,7 @@ export function ModCard({
               )}
               {updateAvailable && (
                 <Tag
-                  tone="accent"
+                  tone="update"
                   variant="overlay"
                   icon={Download}
                   title={t('installed.card.updateAvailableTitle')}
@@ -1494,10 +1494,10 @@ export function ModCard({
               )}
               {staleSourceCount > 0 && (
                 <Tag
+                  tone="update"
                   variant="overlay"
                   icon={Download}
                   title={t('installed.card.staleSourcesTitle', { count: staleSourceCount })}
-                  className="border-amber-300/70 text-amber-200"
                 >
                   {t('installed.card.staleSourcesBadge', { count: staleSourceCount })}
                 </Tag>

@@ -193,14 +193,14 @@ export default function MergedContentsModal({
               </p>
               {staleCount > 0 && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <p className="text-amber-200/90 text-xs leading-relaxed flex-1 min-w-[16rem]">
+                  <p className="text-state-update/90 text-xs leading-relaxed flex-1 min-w-[16rem]">
                     {onUpdateSources
                       ? t('mergedContents.staleSourcesUpdatable', { count: staleCount })
                       : t('mergedContents.staleSourcesNote', { count: staleCount })}
                   </p>
                   {onUpdateSources && (
                     <Button
-                      variant="warning"
+                      variant="update"
                       size="sm"
                       onClick={() => void handleUpdateSources()}
                       isLoading={updatingSources}
@@ -276,12 +276,13 @@ export default function MergedContentsModal({
                         </span>
                       )}
                       {staleSourceFileNames?.has(src.fileName) && (
-                        <span
-                          className="text-[10px] uppercase tracking-wide text-amber-200 px-1.5 py-0.5 rounded border border-amber-300/70"
+                        <Tag
+                          tone="update"
+                          className="uppercase tracking-wide"
                           title={t('mergedContents.sourceOutdatedTitle')}
                         >
                           {t('mergedContents.sourceOutdated')}
-                        </span>
+                        </Tag>
                       )}
                       {canExtract && (
                         <button

@@ -1271,7 +1271,7 @@ export default function Installed() {
       scope,
       flagged: summary.flagged || offlineFlag,
       archived: summary.archived,
-      updateFileIds: new Set(summary.targets.keys()),
+      updateTargets: summary.targets,
       replaceableFiles: replaceableFilesFor(summary.needsPick, source ? [source] : []),
     };
   }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable]);
@@ -4663,7 +4663,7 @@ export default function Installed() {
           </>
         }
         confirmLabel={`Update ${updatesAvailable.size}`}
-        variant="primary"
+        variant="update"
         onConfirm={handleUpdateAll}
         onCancel={() => setUpdateAllConfirmOpen(false)}
       />
@@ -4916,7 +4916,7 @@ export default function Installed() {
           dateModified={detailsDates?.dateModified}
           offline={detailsOffline}
           updateAvailable={detailsUpdate.flagged}
-          updateFileIds={detailsUpdate.updateFileIds}
+          updateTargets={detailsUpdate.updateTargets}
           archivedByAuthor={detailsUpdate.archived}
           replaceableFiles={detailsUpdate.replaceableFiles}
           onReplace={handleDetailsDownload}
