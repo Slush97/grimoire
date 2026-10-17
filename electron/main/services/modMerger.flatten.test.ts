@@ -53,6 +53,9 @@ vi.mock('electron', () => ({
 vi.mock('./deadlock', () => ({ metaKeyFor: vi.fn((path: string) => path) }));
 vi.mock('./settings', () => ({ loadSettings: vi.fn(() => ({})) }));
 
+const backupMocks = vi.hoisted(() => ({ captureModBackup: vi.fn(async (..._args: unknown[]) => null) }));
+vi.mock('./modBackups', () => backupMocks);
+
 const modMocks = vi.hoisted(() => ({
     scanMods: vi.fn(),
     disableModUnlocked: vi.fn(),
@@ -187,6 +190,7 @@ const manifestB = {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    backupMocks.captureModBackup.mockReset().mockResolvedValue(null);
     processMocks.exitCodes.length = 0;
     processMocks.spawnArgs.length = 0;
     embeddedRecords.length = 0;
@@ -209,6 +213,21 @@ beforeEach(() => {
 });
 
 describe('mergeMods flattening', () => {
+    it('leaves parents and enabled sources unchanged when backup capture fails', async () => {
+        backupMocks.captureModBackup.mockRejectedValueOnce(new Error('Backup disk full'));
+
+        await expect(mergeMods('/game', [parentA.id, parentB.id], { name: 'Flattened' }))
+            .rejects.toThrow('Backup disk full');
+
+        expect(fsMocks.open).not.toHaveBeenCalledWith('/game/addons/pak11_dir.vpk', 'wx');
+        expect(fsMocks.rename).not.toHaveBeenCalled();
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentA.path);
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentB.path);
+        expect(modMocks.disableModUnlocked).not.toHaveBeenCalled();
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
+        expect(metadataMocks.removeModMetadata).not.toHaveBeenCalled();
+    });
+
     it('flattens parent manifests, dedupes shared leaves, and consumes only parent shells', async () => {
         const result = await mergeMods('/game', [parentA.id, parentB.id], {
             name: 'Flattened',

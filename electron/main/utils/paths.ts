@@ -18,8 +18,8 @@ export function getSettingsPath(): string {
 /**
  * Get the mod metadata file path
  */
-export function getMetadataPath(): string {
-    return join(getUserDataPath(), 'mod-metadata.json');
+export function getMetadataPath(devMode = false): string {
+    return join(getUserDataPath(), devMode ? 'mod-metadata.dev.json' : 'mod-metadata.json');
 }
 
 /**

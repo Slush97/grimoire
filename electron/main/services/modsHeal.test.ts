@@ -196,11 +196,14 @@ describe('healModFolders', () => {
             expect(Object.keys(loadMetadata()).sort()).toEqual(['ghost_dir.vpk', 'pak01_dir.vpk']);
         });
 
-        it('keeps every row in dev mode', async () => {
+        it('prunes developer orphans without changing normal metadata', async () => {
             await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ devMode: true }));
+            saveMetadata({ 'pak01_dir.vpk': { modName: 'Developer mod' }, 'dev_ghost_dir.vpk': { modName: 'Developer orphan' } });
 
             await healModFolders(root);
 
+            expect(loadMetadata()).toEqual({ 'pak01_dir.vpk': { modName: 'Developer mod' } });
+            await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ devMode: false }));
             expect(Object.keys(loadMetadata()).sort()).toEqual(['ghost_dir.vpk', 'pak01_dir.vpk']);
         });
 

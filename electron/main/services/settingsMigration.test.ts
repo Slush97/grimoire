@@ -23,6 +23,16 @@ beforeEach(() => {
   h.userData = mkdtempSync(join(tmpdir(), 'settings-migration-'));
 });
 
+describe('retained mod backups preference', () => {
+  it('keeps retained mod backups off by default and persists an opt-in', () => {
+    expect(loadSettings().keepModBackups).toBe(false);
+    saveSettings({ ...loadSettings(), keepModBackups: true });
+    expect(loadSettings().keepModBackups).toBe(true);
+    saveSettings({ ...loadSettings(), keepModBackups: false });
+    expect(loadSettings().keepModBackups).toBe(false);
+  });
+});
+
 describe('remaining-file update matching preference', () => {
   it('defaults to enabled for new and existing settings', () => {
     expect(loadSettings().autoMatchRemainingFiles).toBe(true);

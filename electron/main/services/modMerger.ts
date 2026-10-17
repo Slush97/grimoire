@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { assertVpkSafety, carryVpkSafety, moveSafetySnapshot } from './modSafety';
 import { modTempPath } from './modTemps';
+import { captureModBackup } from './modBackups';
 import { metaKeyFor } from './deadlock';
 import { loadSettings } from './settings';
 import {
@@ -661,6 +662,10 @@ async function mergeModsLocked(
         await runVpkmerge(args);
         await verifyVpkOutput(stagingPath);
         await assertMergeOutputSafety(args.slice(1), stagingPath, trimmedName);
+        // Preserve the parent merges before installing output or disabling sources.
+        for (const parent of parentMerges) {
+            await captureModBackup(parent.path, getModMetadata(parent.metaKey), parent.name);
+        }
         // Claim the slot only once the output is accepted: a review can take
         // minutes, and a claim left behind by quitting mid-review would be an
         // empty VPK in a live slot. wx errors with EEXIST if a concurrent
@@ -1006,6 +1011,8 @@ async function unmergeModLocked(
     assertCanMoveLoadedGameMod(target);
     const manifest = meta.merged;
 
+    await captureModBackup(target.path, meta, target.name);
+
     // Recover each source from disk via the shared locator (disabled folder by
     // fileName, then a content-hash fallback, then the enabled folder). The
     // merged mod itself is excluded so it can't be misidentified as a source.
@@ -1251,6 +1258,7 @@ async function addMergeSourcesLocked(
         // and metaKey. The metadata setter merges this patch with unrelated
         // fields already stored for the merge.
         await assertMergeOutputSafety(args.slice(1), buildPath, targetMeta.modName || target.name);
+        await captureModBackup(target.path, targetMeta, target.name);
         await fs.rename(buildPath, target.path);
         moveSafetySnapshot(buildPath, target.path);
         swapped = true;
@@ -1521,6 +1529,10 @@ async function replaceMergeSourcesLocked(
         await verifyVpkOutput(buildPath);
 
         await assertMergeOutputSafety(args.slice(1), buildPath, targetMeta.modName || target.name);
+        await captureModBackup(target.path, targetMeta, target.name);
+        for (const retired of retiredMods) {
+            await captureModBackup(retired.path, getModMetadata(retired.metaKey), retired.name);
+        }
         await fs.rename(buildPath, target.path);
         moveSafetySnapshot(buildPath, target.path);
         swapped = true;
@@ -1637,6 +1649,7 @@ async function extractMergeSourceLocked(
 
     // ---- Collapse: fewer than two sources would remain, so fully unmerge. ----
     if (remainingSnapshots.length < 2) {
+        await captureModBackup(target.path, meta, target.name);
         const survivor = remainingSnapshots[0];
         if (survivor) {
             const onDisk = await locator.locate(survivor);
@@ -1699,6 +1712,7 @@ async function extractMergeSourceLocked(
         // Inspect before atomically replacing the old VPK. A refused rebuild keeps
         // the previous file, metadata and load order intact.
         await assertMergeOutputSafety(ordered.map((m) => m.path), buildPath, meta.modName || target.name);
+        await captureModBackup(target.path, meta, target.name);
         await fs.rename(buildPath, target.path);
         moveSafetySnapshot(buildPath, target.path);
     } catch (err) {

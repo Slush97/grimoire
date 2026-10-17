@@ -7,6 +7,7 @@ import { ensureDevDeadlockPath } from '../services/dev';
 import { syncForgeBridgeWithSettings } from '../services/forgeBridge';
 import { assertUpdateChannelChange, syncUpdaterWithSettings } from '../services/updater';
 import { hydrateOnBoot as hydrateSocialSession } from '../services/socialAuth';
+import { runExclusiveModMutation } from '../services/mods';
 
 // detect-deadlock
 ipcMain.handle('detect-deadlock', (): string | null => {
@@ -31,12 +32,20 @@ ipcMain.handle('get-settings', (): AppSettings => {
 });
 
 // set-settings
-ipcMain.handle('set-settings', (_, settings: AppSettings): void => {
+ipcMain.handle('set-settings', async (_, settings: AppSettings): Promise<void> => {
     const current = loadSettings();
     const safetyWasOn = current.experimentalModSafety;
     const socialWasOn = current.experimentalSocial;
     assertUpdateChannelChange(settings.updateChannel);
-    saveSettings({ ...settings, lastDialogDirectory: current.lastDialogDirectory });
+    const persist = (): void => {
+        saveSettings({ ...settings, lastDialogDirectory: loadSettings().lastDialogDirectory });
+    };
+    if (settings.devMode !== current.devMode || settings.devDeadlockPath !== current.devDeadlockPath) {
+        // Finish in-flight mod writes before changing their metadata destination.
+        await runExclusiveModMutation(async () => persist());
+    } else {
+        persist();
+    }
     syncUpdaterWithSettings();
     syncWindowBackgroundWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must

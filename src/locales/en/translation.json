@@ -927,6 +927,7 @@
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
       "autoMatchRemainingFiles": "Match remaining update files automatically",
+      "keepModBackups": "Keep removed mod files for 24 hours",
       "enableAfterDownload": "Enable mods after download",
       "confirmProfileUpdate": "Confirm before updating a profile",
       "ignoreConflicts": "Ignore conflicts by default",
@@ -1056,6 +1057,7 @@
       "expandLocker": "Start Locker list view with hero cards expanded.",
       "switchVariants": "Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file.",
       "autoMatchRemainingFiles": "After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself.",
+      "keepModBackups": "Back up updated, replaced, and deleted mod files. Restore them as disabled files from a mod's Backups menu. Backups older than 24 hours are removed at startup. Turning this off stops new backups.",
       "enableAfterDownload": "Enable mods as soon as they finish downloading. Stays disabled if no slot is free.",
       "confirmProfileUpdate": "Confirm before overwriting a profile's saved mods. Off overwrites immediately.",
       "ignoreConflicts": "Hide all conflicts from the Conflicts page. Off shows them.",
@@ -1168,6 +1170,12 @@
     }
   },
   "installed": {
+    "backups": {
+      "menuTrigger": "Backups",
+      "deleteNamed": "Delete backup {{name}}",
+      "restored": "Backup restored",
+      "installChanged": "The active mod folder changed. Try restoring the backup again."
+    },
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode.",
       "noMods": "Download mods from Browse or import a custom VPK to get started.",

@@ -1,4 +1,5 @@
 import { lazy, useEffect } from 'react';
+import { listenForModBackupChanges } from './stores/modBackupsStore';
 import { useTranslation } from 'react-i18next';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
@@ -38,6 +39,7 @@ export default function App() {
   const fileDragOver = useGlobalModFileDrop();
 
   useEffect(() => listenForModUpdateChanges(window.electronAPI, window), []);
+  useEffect(() => listenForModBackupChanges(), []);
 
   // Easter egg: typing "gassy" anywhere plays the gassy sound.
   useEffect(() => {

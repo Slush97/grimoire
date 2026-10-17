@@ -12,6 +12,7 @@ import { loadSettings } from './settings';
 import { assertVpkSafety, moveSafetySnapshot, forgetSafetySnapshot } from './modSafety';
 import { forgetVdataSnapshot, moveVdataSnapshot } from './vdataCheck';
 import { notifyModChanges } from './modChangeObservation';
+import { captureModBackup } from './modBackups';
 import { readStash } from './launch';
 import { isVanillaWindowActive, VANILLA_WINDOW_LOCK_MESSAGE } from './vanillaWindow';
 import { isStaleModTemp, modTempPath } from './modTemps';
@@ -598,25 +599,16 @@ export async function healModFolders(deadlockPath: string): Promise<void> {
         console.error('[mods] healModFolders: priorityMod repair failed:', err);
     }
 
-    // Self-heal users whose metadata.json still carries orphan entries from
-    // pre-fix deletes (issue #26). Skip while dev mode is active: the dev
-    // sandbox starts empty, and pruning against it would wipe every real
-    // install's name/thumbnail/gameBananaId from the global metadata sidecar.
-    //
-    // Same reasoning, for the real install: an empty scan is only evidence that
-    // the user has no mods when it came from a Deadlock folder that is actually
-    // there. A configured path can stop resolving (Steam mid-update after a
+    // Self-heal metadata rows whose installed VPK is gone. Each mode prunes
+    // its own sidecar, so the sandbox follows the same rules as the real install.
+    // An empty scan only means the user has no mods when the Deadlock folder
+    // is actually there. A configured path can stop resolving (Steam mid-update after a
     // reboot, a moved library, a drive that has not come up yet) and the scan
     // then reports zero mods rather than failing. Pruning against that deletes
     // every name, id, thumbnail and hero assignment the user has (reported
     // 2026-08-14: 26 mods reduced to "Pak01".."Pak31" after a PC restart).
     // gameinfo.gi is the discriminator: Steam ships it and nothing on the
     // install path writes one.
-    //
-    // The devMode check stays load-bearing rather than redundant: setupDevMode
-    // (services/dev.ts) writes an empty gameinfo.gi into the sandbox, so the
-    // sandbox passes this test and would otherwise prune the real sidecar
-    // against a tree that has never held a mod.
     const trustworthyScan = isValidDeadlockPath(deadlockPath);
     if (!trustworthyScan && deadlockPath !== lastUntrustedPathWarned) {
         // Once per path, not once per batch: a user whose gameinfo.gi is
@@ -627,7 +619,7 @@ export async function healModFolders(deadlockPath: string): Promise<void> {
             `[Metadata] Skipping orphan prune: ${deadlockPath} has no game/citadel/gameinfo.gi, so this scan (${mods.length} VPKs) is not evidence of what is installed.`
         );
     }
-    if (!loadSettings().devMode && trustworthyScan) {
+    if (trustworthyScan) {
         // Prune against ALL scanned files (including managed VPKs) so we don't
         // wipe their metadata before they are filtered out of the list.
         try {
@@ -953,6 +945,12 @@ export async function installEnabledVpk(deadlockPath: string, sourcePath: string
         await assertVpkSafety(staged, { context: 'installation', name: basename(sourcePath) });
         return await withModMutationLock(async () => {
             const destPath = replacePath ?? await allocateEnabledVpkPath(deadlockPath);
+            if (replacePath && existsSync(replacePath)) {
+                const metadata = getModMetadata(metaKeyFor(replacePath));
+                await captureModBackup(replacePath, isPriorityFolderPath(replacePath)
+                    ? { ...metadata, priorityMod: true }
+                    : metadata);
+            }
             await fs.rename(staged, destPath);
             moveSafetySnapshot(staged, destPath);
             return destPath;
@@ -1395,6 +1393,10 @@ export function deleteMods(
         const skipped: string[] = [];
         for (const [i, target] of resolved.entries()) {
             if (target) {
+                const metadata = getModMetadata(target.metaKey);
+                await captureModBackup(target.path, isPriorityFolderPath(target.path)
+                    ? { ...metadata, priorityMod: true }
+                    : metadata, target.name);
                 await deleteVpkSet(target.path);
                 // Metadata is keyed by metaKey. Left behind, the next mod
                 // assigned the same slot would inherit the deleted mod's

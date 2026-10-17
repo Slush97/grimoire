@@ -170,6 +170,25 @@ export async function deleteReplacedMod(mod: DeleteModEntry): Promise<void> {
   if (skipped.length > 0) throw new Error(i18n.t('installed.delete.replacedChanged'));
 }
 
+export function listModBackups(): Promise<import('../types/modBackup').ModBackupSummary[]> {
+  return window.electronAPI.listModBackups();
+}
+
+export async function restoreModBackup(backupId: string): Promise<void> {
+  try {
+    await window.electronAPI.restoreModBackup(backupId);
+  } catch (error) {
+    if (String(error).includes('MOD_BACKUP_INSTALL_CHANGED')) {
+      throw new Error(i18n.t('installed.backups.installChanged'), { cause: error });
+    }
+    throw error;
+  }
+}
+
+export function deleteModBackup(backupId: string): Promise<void> {
+  return window.electronAPI.deleteModBackup(backupId);
+}
+
 export async function deleteMods(
   mods: readonly DeleteModEntry[],
   onProgress?: (progress: DeleteModsProgress) => void

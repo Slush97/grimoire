@@ -148,6 +148,7 @@ import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
 import { StaleModelsModal } from '../components/installed/StaleModelsModal';
 import { StatusIssues, type StatusIssue } from '../components/installed/StatusIssues';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
+import { ModBackupDeletePrompt } from '../components/installed/ModBackupsSubmenu';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
 import type { FoundUnknownMatch } from '../components/installed/unknown/foundMatch';
 import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/installed/unknown/UnknownFixModals';
@@ -4731,6 +4732,7 @@ export default function Installed() {
         onCancel={() => setModToDelete(null)}
         onDeleted={handleDeleted}
       />
+      <ModBackupDeletePrompt />
 
       {localEditMod && (
         <EditLocalModModal

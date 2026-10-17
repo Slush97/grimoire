@@ -839,6 +839,10 @@ export interface LockerImageEdit {
 }
 
 export interface ElectronAPI {
+    listModBackups: () => Promise<import('./modBackup').ModBackupSummary[]>;
+    restoreModBackup: (backupId: string) => Promise<void>;
+    deleteModBackup: (backupId: string) => Promise<void>;
+    onModBackupsChanged: (callback: () => void) => () => void;
     // Host platform ('win32', 'linux', ...), captured in the preload. The
     // renderer uses it to decide whether to draw the custom Windows title
     // bar strip (the native frame is hidden on Windows only).

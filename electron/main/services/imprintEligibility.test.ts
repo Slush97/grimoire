@@ -25,8 +25,14 @@ vi.mock('fs', () => ({
 const { scanMods } = vi.hoisted(() => ({
     scanMods: vi.fn<(deadlockPath: string) => Promise<Mod[]>>(),
 }));
+const activeSettings = vi.hoisted(() => ({ path: 'C:/deadlock', devMode: false }));
+vi.mock('./settings', () => ({
+    getActiveDeadlockPath: () => activeSettings.path,
+    loadSettings: () => ({ devMode: activeSettings.devMode }),
+}));
 vi.mock('./mods', () => ({
     scanMods,
+    healModFolders: vi.fn(async () => {}),
     runExclusiveModMutation: vi.fn(<T,>(fn: () => Promise<T>) => fn()),
 }));
 
@@ -94,7 +100,9 @@ vi.mock('./gameSessionMods', () => ({
 
 vi.mock('./profileResolver', () => ({ inferMissingVpkIndexes: vi.fn(() => new Map()) }));
 
-import { imprintAllInstalled, imprintPreflight } from './imprintMods';
+import { backfillImprintedFlags, imprintAllInstalled, imprintPreflight } from './imprintMods';
+import { healModFolders, runExclusiveModMutation } from './mods';
+import { setModMetadata } from './metadata';
 
 function makeMod(overrides: Partial<Mod> = {}): Mod {
     return {
@@ -130,6 +138,34 @@ beforeEach(() => {
     carryForwardOriginalIdentity.mockReturnValue(null);
     readEmbeddedModinfo.mockReturnValue(null);
     computeOriginalIdentity.mockResolvedValue({ sha256: 'b'.repeat(64) });
+    activeSettings.path = 'C:/deadlock';
+    activeSettings.devMode = false;
+});
+
+describe('startup imprint metadata scope', () => {
+    it.each(['path', 'mode'] as const)('skips stale queued work after the active %s changes', async (change) => {
+        vi.mocked(runExclusiveModMutation).mockImplementationOnce(async (operation, options) => {
+            if (change === 'path') activeSettings.path = 'C:/developer-deadlock';
+            else activeSettings.devMode = true;
+            if (options?.healPath) await healModFolders(options.healPath);
+            return operation();
+        });
+
+        expect(await backfillImprintedFlags('C:/deadlock')).toBe(0);
+
+        expect(scanMods).not.toHaveBeenCalled();
+        expect(healModFolders).not.toHaveBeenCalled();
+        expect(setModMetadata).not.toHaveBeenCalled();
+    });
+
+    it('scans the still-active install after entering the mutation lock', async () => {
+        scanMods.mockResolvedValue([]);
+
+        expect(await backfillImprintedFlags('C:/deadlock')).toBe(0);
+
+        expect(scanMods).toHaveBeenCalledWith('C:/deadlock');
+        expect(healModFolders).toHaveBeenCalledWith('C:/deadlock');
+    });
 });
 
 describe('never-identified VPKs and bulk imprint', () => {

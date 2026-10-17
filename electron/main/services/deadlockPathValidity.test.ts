@@ -90,11 +90,7 @@ describe('isValidDeadlockPath as the prune guard', () => {
         expect(isValidDeadlockPath(root)).toBe(false);
     });
 
-    it('says yes to the dev sandbox, which is why devMode is still checked separately', () => {
-        // ensureDevDeadlockPath writes an empty gameinfo.gi, so the sandbox
-        // passes this guard. get-mods must keep its own !settings.devMode
-        // check, or a dev session would prune every real install's metadata
-        // against a tree that has never held a mod.
+    it('accepts the dev sandbox with its placeholder gameinfo.gi', () => {
         harness.devRoot = tempRoot('deadlock-devmode-');
 
         expect(isValidDeadlockPath(ensureDevDeadlockPath())).toBe(true);

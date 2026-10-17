@@ -66,6 +66,15 @@ export default function PreferencesSection() {
         <div className="h-px bg-hl/5" />
 
         <Toggle
+          checked={settings?.keepModBackups ?? false}
+          onChange={(checked) => update({ keepModBackups: checked })}
+          label={<Tx k="settings.preferences.keepModBackups" fallback="Keep removed mod files for 24 hours" />}
+          description={<Tx k="settings.toggles.keepModBackups" fallback="Back up updated, replaced, and deleted mod files. Restore them as disabled files from a mod's Backups menu. Backups older than 24 hours are removed at startup. Turning this off stops new backups." />}
+        />
+
+        <div className="h-px bg-hl/5" />
+
+        <Toggle
           checked={settings?.autoEnableDownloads ?? false}
           onChange={(checked) => update({ autoEnableDownloads: checked })}
           label={<Tx k="settings.preferences.enableAfterDownload" fallback="Enable mods after download" />}

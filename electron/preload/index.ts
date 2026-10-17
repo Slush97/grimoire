@@ -135,6 +135,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // Mods
+    listModBackups: () => ipcRenderer.invoke('list-mod-backups'),
+    restoreModBackup: (backupId: string) => ipcRenderer.invoke('restore-mod-backup', backupId),
+    deleteModBackup: (backupId: string) => ipcRenderer.invoke('delete-mod-backup', backupId),
+    onModBackupsChanged: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('mod-backups-changed', listener);
+        return () => ipcRenderer.removeListener('mod-backups-changed', listener);
+    },
     getCrashAdvisories: () => ipcRenderer.invoke('get-crash-advisories'),
     dismissCrashAdvisory: (id: string) => ipcRenderer.invoke('dismiss-crash-advisory', id),
     onCrashAdvisoriesChanged: (callback: (findings: import('../../src/types/crashAdvisory').CrashAdvisory[]) => void) => {

@@ -10,8 +10,10 @@ vi.mock('./launch', () => ({ isDeadlockRunning: async () => h.running, readStash
 vi.mock('./modSafety', () => ({ assertVpkSafety: h.assertVpkSafety, moveSafetySnapshot: vi.fn(), forgetSafetySnapshot: vi.fn() }));
 
 import { deleteMods, enableMod, healModFolders, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
-import { getModMetadata, saveMetadata, setModMetadata } from './metadata';
+import { getModMetadata, saveMetadata, setModMetadata, type ModMetadata } from './metadata';
 import { clearLoadedGameMods } from './gameSessionMods';
+import { copyModBackupTo, listModBackups } from './modBackups';
+import { restoreModBackup } from './modBackupRestore';
 import type { DeleteModsProgress } from '../../../src/types/mod';
 
 let root: string;
@@ -91,6 +93,7 @@ describe('chunked mods move and delete as one set', () => {
         await deleteMods(root, [await entryAt(join(addons, 'pak04_dir.vpk'))]);
 
         expect(await contents(addons)).toEqual({});
+        await expect(fs.stat(join(h.userData, 'mod-backups'))).rejects.toMatchObject({ code: 'ENOENT' });
     });
 
     it('the enabled/disabled collision heal renames or drops a disabled twin with its chunks', async () => {
@@ -107,6 +110,92 @@ describe('chunked mods move and delete as one set', () => {
 });
 
 describe('deleteMods', () => {
+    it('restores the original filename and keeps its identity through developer mode switches', async () => {
+        const settingsPath = join(h.userData, 'settings.json');
+        const devRoot = join(root, 'dev-deadlock');
+        const devDisabled = join(devRoot, 'game', 'citadel', 'addons', '.disabled');
+        await fs.mkdir(devDisabled, { recursive: true });
+        await fs.writeFile(join(devRoot, 'game', 'citadel', 'gameinfo.gi'), 'GameInfo {}\n');
+        await put(addons, { 'pak04_dir.vpk': 'normal skin' });
+        setModMetadata('pak04_dir.vpk', { modName: 'Normal skin', gameBananaId: 1 });
+        const normalMetadataPath = join(h.userData, 'mod-metadata.json');
+        const normalMetadata = await fs.readFile(normalMetadataPath, 'utf8');
+        const settings = { keepModBackups: true, deadlockPath: root, devDeadlockPath: devRoot };
+        await fs.writeFile(settingsPath, JSON.stringify({ ...settings, devMode: true }));
+        await put(devDisabled, { 'pak04_dir.vpk': 'sandbox skin', 'pak04_000.vpk': 'sandbox chunk' });
+        setModMetadata('pak04_dir.vpk', { modName: 'Sandbox skin', gameBananaId: 2, fileDescription: 'Classic style' });
+        const [mod] = await scanMods(devRoot);
+        await deleteMods(devRoot, [mod]);
+        const [backup] = await listModBackups();
+
+        await restoreModBackup(devRoot, backup.id);
+
+        expect(await contents(devDisabled)).toEqual({ 'pak04_dir.vpk': 'sandbox skin', 'pak04_000.vpk': 'sandbox chunk' });
+        expect(await fs.readFile(normalMetadataPath, 'utf8')).toBe(normalMetadata);
+        expect(await listModBackups()).toEqual([]);
+        await fs.writeFile(settingsPath, JSON.stringify({ ...settings, devMode: false }));
+        await healModFolders(root);
+        expect(getModMetadata('pak04_dir.vpk')).toMatchObject({ modName: 'Normal skin', gameBananaId: 1 });
+        await fs.writeFile(settingsPath, JSON.stringify({ ...settings, devMode: true }));
+        await healModFolders(devRoot);
+        const [restored] = await scanMods(devRoot);
+        expect(restored).toMatchObject({ fileName: 'pak04_dir.vpk', enabled: false });
+        expect(getModMetadata(restored.metaKey)).toMatchObject({
+            modName: 'Sandbox skin', gameBananaId: 2, fileDescription: 'Classic style',
+        });
+    });
+
+    it('retains deleted bytes, split chunks and metadata when backups are enabled', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ keepModBackups: true }));
+        await put(addons, { 'pak04_dir.vpk': 'old skin', 'pak04_000.vpk': 'old chunk', 'pak05_dir.vpk': 'other mod' });
+        const metadata = {
+            modName: 'Skin', gameBananaId: 12, gameBananaFileId: 34,
+            fileDescription: 'Original appearance', sourceFileName: 'old_skin',
+            sourceSection: 'Mod', localGroupId: 'my-variants', sha256: 'a'.repeat(64),
+            archiveVpkPath: 'old/skin.vpk', vpkIndex: 2,
+        };
+        setModMetadata('pak04_dir.vpk', metadata);
+
+        await deleteMods(root, [await entryAt(join(addons, 'pak04_dir.vpk'))]);
+
+        expect(await contents(addons)).toEqual({ 'pak05_dir.vpk': 'other mod' });
+        expect(getModMetadata('pak04_dir.vpk')).toBeUndefined();
+        const backups = await listModBackups();
+        expect(backups).toHaveLength(1);
+        expect(backups[0]).toMatchObject({ fileName: 'pak04_dir.vpk', description: 'Original appearance' });
+        const restored = join(root, 'restored');
+        expect(await copyModBackupTo(backups[0].id, join(restored, 'skin_dir.vpk'))).toMatchObject({ metadata });
+        expect(await contents(restored)).toEqual({ 'skin_dir.vpk': 'old skin', 'skin_000.vpk': 'old chunk' });
+    });
+
+    it('preserves a Global mod placement flag in its deleted backup', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ keepModBackups: true }));
+        const globalFolder = join(root, 'game', 'citadel', 'grimoire');
+        await put(globalFolder, { 'pak05_dir.vpk': 'global skin' });
+        setModMetadata('grimoire/pak05_dir.vpk', { modName: 'Global skin' });
+
+        await deleteMods(root, [await entryAt(join(globalFolder, 'pak05_dir.vpk'))]);
+
+        const [backup] = await listModBackups();
+        const restored = await copyModBackupTo(backup.id, join(root, 'restored_dir.vpk'));
+        expect(restored.metadata).toMatchObject({ modName: 'Global skin', priorityMod: true });
+        expect(await contents(globalFolder)).toEqual({});
+    });
+
+    it('leaves the mod, chunks and metadata untouched if its backup cannot be stored', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ keepModBackups: true }));
+        await fs.writeFile(join(h.userData, 'mod-backups'), 'a file blocks the backup folder');
+        const files = { 'pak04_dir.vpk': 'old skin', 'pak04_000.vpk': 'old chunk' };
+        await put(addons, files);
+        const metadata = { modName: 'Skin', gameBananaId: 12, gameBananaFileId: 34 };
+        setModMetadata('pak04_dir.vpk', metadata);
+
+        await expect(deleteMods(root, [await entryAt(join(addons, 'pak04_dir.vpk'))])).rejects.toThrow();
+
+        expect(await contents(addons)).toEqual(files);
+        expect(getModMetadata('pak04_dir.vpk')).toEqual(metadata);
+    });
+
     it('deletes every target with its chunks and metadata, one tick per entry', async () => {
         await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0', 'pak03_dir.vpk': 'keep' });
         await put(disabled, { 'skin_dir.vpk': 's' });
@@ -164,6 +253,39 @@ describe('deleteMods', () => {
 });
 
 describe('installEnabledVpk', () => {
+    it('backs up the old local import before replacing its bytes', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ keepModBackups: true }));
+        await put(addons, { 'pak08_dir.vpk': 'previous build' });
+        const metadata: ModMetadata = {
+            modName: 'Custom container',
+            soulImport: { glbFileName: 'container.glb', orient: 'auto', glow: 'off', status: 'untested' },
+        };
+        setModMetadata('pak08_dir.vpk', metadata);
+        const source = join(root, 'new.vpk');
+        await fs.writeFile(source, 'new build');
+        const destination = join(addons, 'pak08_dir.vpk');
+
+        expect(await installEnabledVpk(root, source, destination)).toBe(destination);
+
+        expect(await fs.readFile(destination, 'utf8')).toBe('new build');
+        const [backup] = await listModBackups();
+        const restoredPath = join(root, 'restored_dir.vpk');
+        expect(await copyModBackupTo(backup.id, restoredPath)).toMatchObject({ metadata });
+        expect(await fs.readFile(restoredPath, 'utf8')).toBe('previous build');
+    });
+
+    it('keeps the old local import when its backup fails', async () => {
+        await fs.writeFile(join(h.userData, 'settings.json'), JSON.stringify({ keepModBackups: true }));
+        await fs.writeFile(join(h.userData, 'mod-backups'), 'a file blocks the backup folder');
+        await put(addons, { 'pak08_dir.vpk': 'previous build' });
+        const source = join(root, 'new.vpk');
+        await fs.writeFile(source, 'new build');
+
+        await expect(installEnabledVpk(root, source, join(addons, 'pak08_dir.vpk'))).rejects.toThrow();
+
+        expect(await contents(addons)).toEqual({ 'pak08_dir.vpk': 'previous build' });
+    });
+
     it('allocates after the check, so installs and enables finishing first cannot take its slot', async () => {
         const src = join(root, 'src');
         await fs.mkdir(src);

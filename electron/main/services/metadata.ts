@@ -1,10 +1,11 @@
 import { createHash } from 'crypto';
 import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { metaKeyFor } from './deadlock';
 import { listInstalledUserVpks } from './modLibrary';
 import { resolveVpkIdentity } from './vpkIdentity';
-import { getMetadataPath } from '../utils/paths';
+import { getMetadataPath as metadataPathForMode } from '../utils/paths';
+import { loadSettings } from './settings';
 
 export interface ModMetadata {
     modName?: string;      // The human-readable mod name from GameBanana
@@ -168,15 +169,24 @@ export function hasModIdentity(meta: ModMetadata): boolean {
 // In-memory cache of the parsed metadata.json. Without this, every enrichMod
 // call (one per installed mod) re-reads + re-parses the whole sidecar from
 // disk on the main thread; users with many mods see noticeable freezes on
-// import/get-mods. Invalidated via (mtimeMs, size) so external writes still
-// get picked up, and refreshed eagerly inside saveMetadata to avoid an
-// immediate re-read after we just wrote.
+// import/get-mods. Invalidated via (path, mtimeMs, size), so mode changes and
+// external writes get picked up. saveMetadata refreshes it eagerly to avoid
+// an immediate re-read after we just wrote.
 interface MetadataCacheEntry {
+    path: string;
     mtimeMs: number;
     size: number;
     data: ModMetadataMap;
 }
 let metadataCache: MetadataCacheEntry | null = null;
+
+function getMetadataPath(): string {
+    return metadataPathForMode(loadSettings().devMode);
+}
+
+function metadataBackupDirectory(path = getMetadataPath()): string {
+    return join(dirname(path), `${basename(path, '.json')}.backups`);
+}
 
 /**
  * Load mod metadata from disk
@@ -193,6 +203,7 @@ export function loadMetadata(): ModMetadataMap {
         const stat = statSync(path);
         if (
             metadataCache &&
+            metadataCache.path === path &&
             metadataCache.mtimeMs === stat.mtimeMs &&
             metadataCache.size === stat.size
         ) {
@@ -201,7 +212,7 @@ export function loadMetadata(): ModMetadataMap {
 
         const content = readFileSync(path, 'utf-8');
         const data = JSON.parse(content) as ModMetadataMap;
-        metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data };
+        metadataCache = { path, mtimeMs: stat.mtimeMs, size: stat.size, data };
         return data;
     } catch (error) {
         // Returning {} here means every writer that follows treats "I could not
@@ -232,7 +243,7 @@ export function saveMetadata(metadata: ModMetadataMap): void {
         renameSync(tempPath, path);
         try {
             const stat = statSync(path);
-            metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data: metadata };
+            metadataCache = { path, mtimeMs: stat.mtimeMs, size: stat.size, data: metadata };
         } catch {
             metadataCache = null;
         }
@@ -315,6 +326,7 @@ export async function backfillMissingMetadataHashes(
     deadlockPath: string,
     runLocked: (apply: () => Promise<number>) => Promise<number>
 ): Promise<number> {
+    const metadataPath = getMetadataPath();
     const metadata = loadMetadata();
     const filesByKey = await collectInstalledVpkPaths(deadlockPath);
     const metadataKeysByLower = new Map(
@@ -354,7 +366,9 @@ export async function backfillMissingMetadataHashes(
     if (hashed.length === 0) return 0;
 
     return runLocked(async () => {
+        if (getMetadataPath() !== metadataPath) return 0;
         const current = await collectInstalledVpkPaths(deadlockPath);
+        if (getMetadataPath() !== metadataPath) return 0;
         const latest = loadMetadata();
         const latestKeysByLower = new Map(Object.keys(latest).map((key) => [key.toLowerCase(), key]));
         let updated = 0;
@@ -409,7 +423,7 @@ function isValidSha256(value: string | undefined): boolean {
  * of rows recovered.
  */
 export function recoverPrunedIdentities(): number {
-    // The folder heal stamps priorityMod on every Global file before recovery runs, so it says nothing about identity here.
+    // Folder healing adds priorityMod even when a file has no known identity.
     const hasRecoverableIdentity = (row: ModMetadata): boolean => hasModIdentity({ ...row, priorityMod: undefined });
     try {
         const metadata = loadMetadata();
@@ -421,7 +435,7 @@ export function recoverPrunedIdentities(): number {
         }
         if (wanted.size === 0) return 0;
 
-        const dir = join(dirname(getMetadataPath()), 'mod-metadata.backups');
+        const dir = metadataBackupDirectory();
         if (!existsSync(dir)) return 0;
         const backups = readdirSync(dir)
             .filter((name) => name.endsWith('_pre-prune.json'))
@@ -475,7 +489,7 @@ export function backupMetadataSidecar(tag: string, keep = 5): string | null {
     if (!existsSync(path)) return null;
 
     try {
-        const dir = join(dirname(path), 'mod-metadata.backups');
+        const dir = metadataBackupDirectory(path);
         mkdirSync(dir, { recursive: true });
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const backupPath = join(dir, `${stamp}_${tag}.json`);

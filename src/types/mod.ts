@@ -1156,6 +1156,8 @@ export interface AppSettings {
   /** Pair one unmatched installed file with one remaining new upload after
    *  normal update matching, even when their names and descriptions differ. */
   autoMatchRemainingFiles: boolean;
+  /** Retain removed mod files for 24 hours. Disabling stops new captures only. */
+  keepModBackups: boolean;
   /** After a successful GameBanana download, immediately enable the installed
    *  VPKs instead of leaving them in the disabled library. Off by default. */
   autoEnableDownloads: boolean;

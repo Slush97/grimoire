@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
-import { revealModInFolder } from '../../lib/api';
+import { useAppStore } from '../../stores/appStore';
+import { useModBackupsStore } from '../../stores/modBackupsStore';
+import { getModBackupIdentity } from '../../lib/modBackupIdentity';
+import { restoreModBackup, revealModInFolder } from '../../lib/api';
+import { ModBackupsSubmenu } from './ModBackupsSubmenu';
 import type { ModConflict } from '../../lib/api';
 import type { Mod, GlobalModType } from '../../types/mod';
 import { isCardSelectClick } from './selection';
@@ -48,6 +52,7 @@ interface ModCardProps {
     categoryName?: string;
     nsfw?: boolean;
     gameBananaId?: number;
+    localGroupId?: string;
     isUnknown?: boolean;
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
@@ -793,6 +798,24 @@ export function ModCard({
 }: ModCardProps) {
   const { t } = useTranslation();
   const pointerInside = useRef(false);
+  const backups = useModBackupsStore((state) => state.backups);
+  const backupIdentity = getModBackupIdentity(mod, mod.fileName, mod.name);
+  const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const setBackupToDelete = useModBackupsStore((state) => state.setDeleteTarget);
+  const restoreBackup = async (backupId: string) => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      await restoreModBackup(backupId);
+      await useAppStore.getState().loadMods({ silent: true, force: true });
+      showToast(t('installed.backups.restored'), { tone: 'success' });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), { tone: 'error' });
+    } finally {
+      setBackupBusy(false);
+    }
+  };
   const [hovered, setHovered] = useState(false);
   // Ordinary hover is styled by CSS. Only Shift-selection needs React state.
   // Remember the pointer separately so pressing Shift over a stationary card
@@ -1104,7 +1127,13 @@ export function ModCard({
           </MenuSubContent>
         </MenuSub>
       )}
-      {hasTopActions && <MenuSeparator />}
+      <ModBackupsSubmenu
+        backups={modBackups}
+        busy={backupBusy}
+        onRestore={(backupId) => void restoreBackup(backupId)}
+        onDelete={setBackupToDelete}
+      />
+      {(hasTopActions || modBackups.length > 0) && <MenuSeparator />}
       {hasListActions && lists && onToggleList && onCreateList && (
         <ModListSubmenu
           lists={lists}
