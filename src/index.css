@@ -1282,23 +1282,95 @@ body {
   100% { transform: rotate(var(--gear-spin-end)); }
 }
 
-/* Skeleton shimmer — used for async-loading placeholders. Surfaces apply
-   `.skeleton-shimmer` on a muted-background element; the shimmer gradient
-   sweeps left→right to signal "loading". */
-@keyframes skeletonShimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+/* Skeletons (common/Skeleton.tsx). One sweep for the whole screen: the glint
+   is a fixed-attachment background, so it is positioned against the viewport
+   and every placeholder shows its slice of the same band at the same moment,
+   one wave across the page rather than dozens of out-of-phase pulses. A raised
+   surface plus an hl tint, so it follows OLED mode and a future light theme and
+   never uses the accent. `.skeleton-shimmer` is the older name for the same
+   thing. Components layer so a bg-* utility on the element still sets its base
+   tone. Fixed backgrounds make their scroller repaint on scroll (main-thread
+   scrolling), which is fine for a loading state but not for image boxes in a
+   live grid; those get the local sweep below. */
+@keyframes skeletonSweep {
+  from { background-position: -45vw 0; }
+  to   { background-position: 145vw 0; }
 }
 
-.skeleton-shimmer {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.09) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: skeletonShimmer 1.4s ease-in-out infinite;
+/* The same band crossing one box, for images waiting inside a scrolling grid.
+   RevealImage phase-locks every box to the document clock (--reveal-phase),
+   so boxes that mount mid-scroll still sweep in step with the rest. */
+@keyframes skeletonSweepLocal {
+  from { background-position: 135% 0; }
+  to   { background-position: -35% 0; }
+}
+
+@layer components {
+  .skeleton,
+  .skeleton-shimmer {
+    background-color: var(--color-bg-tertiary);
+    background-image: linear-gradient(
+      100deg,
+      transparent 15%,
+      color-mix(in srgb, var(--color-hl) 6.5%, transparent) 50%,
+      transparent 85%
+    );
+    background-size: 45vw 100vh;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    animation: skeletonSweep 1.9s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  }
+
+  /* An image waiting on its bytes: its own box shows the skeleton while the
+     picture is parked off-box, so a half-received JPEG never paints. Four
+     passes, then a still surface: an image that slow is not worth the paint. */
+  .reveal-img--skeleton[data-reveal='pending'] {
+    background-color: var(--color-bg-tertiary);
+    background-image: linear-gradient(
+      100deg,
+      transparent 36%,
+      color-mix(in srgb, var(--color-hl) 6.5%, transparent) 50%,
+      transparent 64%
+    );
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    animation: skeletonSweepLocal 1.9s cubic-bezier(0.45, 0, 0.25, 1) var(--reveal-phase, 0ms) 4;
+  }
+
+  .reveal-img[data-reveal='pending'] {
+    color: transparent;
+    object-fit: none !important;
+    object-position: -99999px -99999px !important;
+  }
+
+  .reveal-img[data-reveal='in'] {
+    animation: revealIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal-img--skeleton[data-reveal='cached'] {
+    background-color: var(--color-bg-tertiary);
+  }
+
+  /* The sweep is a main-thread animation. Hold it while the Browse grid is
+     flinging past, like the other hover affordances, so placeholders cost no
+     style or paint work mid-scroll. */
+  .browse-is-scrolling .skeleton,
+  .browse-is-scrolling .reveal-img--skeleton[data-reveal='pending'] {
+    animation-play-state: paused;
+  }
+
+  /* A thumbnail that failed to load: the surface tone and a faint glyph. */
+  .reveal-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-bg-tertiary);
+    color: color-mix(in srgb, var(--color-text-tertiary) 55%, transparent);
+  }
+}
+
+@keyframes revealIn {
+  from { opacity: 0; }
 }
 
 /* Update-available cards. Accent-agnostic: stripes are white at low opacity
@@ -1674,7 +1746,7 @@ body {
   .mod-details-body--loading-previous .mod-details-body-content,
   .mod-details-body--loading-next .mod-details-navigation-skeleton,
   .mod-details-body--loading-previous .mod-details-navigation-skeleton,
-  .skeleton-shimmer,
+  .reveal-img,
   .browse-action-button--downloading::after,
   .browse-download-spinner::after,
   .browse-action-button--complete-pop,
@@ -1726,6 +1798,14 @@ body {
   .sidebar-offset-transition,
   .sidebar-active-backdrop__image {
     will-change: auto;
+  }
+
+  /* Skeletons hold still: the surface tone alone says loading. */
+  .skeleton,
+  .skeleton-shimmer,
+  .reveal-img--skeleton[data-reveal='pending'] {
+    animation: none;
+    background-image: none;
   }
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */

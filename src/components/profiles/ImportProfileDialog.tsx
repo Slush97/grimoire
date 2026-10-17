@@ -16,6 +16,7 @@ import { Button, CheckboxMark, ModalHeader } from '../common/ui';
 import { Input, Textarea } from '../common/forms';
 import { Modal } from '../common/Modal';
 import ModThumbnail from '../ModThumbnail';
+import { Skeleton } from '../common/Skeleton';
 import SocialProfileHeader, { type SocialProfileSeed } from '../social/SocialProfileHeader';
 import {
   parsePortableProfile,
@@ -698,7 +699,7 @@ export default function ImportProfileDialog({
           // duplicating the JSX. The body itself is unchanged.
           const body = (
             <>
-        {/* Loading skeleton — covers both the auto-parse flow (Discover ->
+        {/* Loading skeleton: covers both the auto-parse flow (Discover ->
             Import with a prefilled share code) and the in-between window of
             manual parse + resolve where `parsed` is set but `report` is not
             yet. Without this the dialog body would flash empty between the
@@ -706,24 +707,24 @@ export default function ImportProfileDialog({
         {showSkeleton && (
           <>
             <div className="px-4 sm:px-6 py-2.5 border-b border-hl/10">
-              <div className="h-3 bg-hl/5 rounded w-20 mb-2 animate-pulse" />
-              <div className="h-8 bg-hl/5 rounded animate-pulse" />
+              <Skeleton className="h-3 w-20 mb-2" />
+              <Skeleton className="h-8" />
             </div>
             <div className="px-4 sm:px-6 py-2 border-b border-hl/5 flex items-center justify-between">
-              <div className="h-3 bg-hl/5 rounded w-24 animate-pulse" />
-              <div className="h-4 bg-hl/5 rounded w-32 animate-pulse" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4 w-32" />
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               <ul className="divide-y divide-hl/5">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <li key={i} className="px-4 sm:px-6 py-2.5 flex items-center gap-3 sm:gap-4 animate-pulse">
-                    <div className="w-4 h-4 rounded-sm bg-hl/5 flex-shrink-0" />
-                    <div className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0 rounded-sm bg-hl/5" />
+                  <li key={i} className="px-4 sm:px-6 py-2.5 flex items-center gap-3 sm:gap-4">
+                    <Skeleton className="w-4 h-4 flex-shrink-0" />
+                    <Skeleton className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0" />
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="h-3.5 bg-hl/5 rounded w-2/3" />
-                      <div className="h-3 bg-hl/5 rounded w-1/3" />
+                      <Skeleton className="h-3.5 w-2/3" />
+                      <Skeleton className="h-3 w-1/3" />
                     </div>
-                    <div className="h-3 bg-hl/5 rounded w-16 flex-shrink-0" />
+                    <Skeleton className="h-3 w-16 flex-shrink-0" />
                   </li>
                 ))}
               </ul>

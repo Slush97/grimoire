@@ -24,7 +24,8 @@ import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
 import { Input } from '../components/common/forms';
-import { ConfirmModal, EmptyState, PageHeader, PageLayout, LoadingState } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
+import { Skeleton } from '../components/common/Skeleton';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -468,7 +469,28 @@ export default function Profiles() {
   };
 
   if (loading) {
-    return <LoadingState label={<Tx k="profiles.loading" fallback="Loading profiles..." />} />;
+    // The header is static, so it renders for real; the cards below hold their
+    // places until the profiles land.
+    return (
+      <PageLayout maxWidth="5xl">
+        <PageHeader
+          title={<Tx k="nav.profiles" fallback="Profiles" />}
+          description={
+            <Tx k="profiles.header.description" fallback="Saved mod setups you can apply, share and restore." />
+          }
+        />
+        <div className="space-y-6" aria-busy="true" aria-live="polite">
+          <span className="sr-only">
+            <Tx k="profiles.loading" fallback="Loading profiles..." />
+          </span>
+          <Skeleton className="h-[145px] w-full" />
+          <Skeleton className="h-[119px] w-full" />
+          {Array.from({ length: 2 }, (_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+      </PageLayout>
+    );
   }
 
   return (

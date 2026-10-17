@@ -46,6 +46,8 @@ import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
 import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
+import { useElasticOverscroll } from '../lib/useElasticOverscroll';
+import { RevealImage } from '../components/common/RevealImage';
 import { HeroSelect } from '../components/common/HeroSelect';
 import {
   FAVORITE_HEROES_KEY,
@@ -364,6 +366,7 @@ export default function Locker() {
     }
   }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
+  useElasticOverscroll(lockerScrollRef);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
   const heroTypeaheadRef = useRef(heroTypeahead);
   const heroTypeaheadFadeTimerRef = useRef<number | null>(null);
@@ -1266,8 +1269,14 @@ export default function Locker() {
   }
 
   if (modsLoading || categoriesLoading) {
+    // Mirrors the loaded page: the stats line and view controls, then the grid,
+    // so the hero cards land where their placeholders were.
     return (
       <div className="p-6 space-y-6">
+        <div className="flex h-9 items-center justify-between gap-3" aria-hidden>
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-9 w-24" />
+        </div>
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
           aria-busy="true"
@@ -2524,11 +2533,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           a 3D model on a clear window, so they skip it. */}
                       {glassBackdropUrl && !isPropContainer && (
                         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
-                          <img
+                          <RevealImage
                             src={glassBackdropUrl}
                             alt=""
                             aria-hidden
                             draggable={false}
+                            skeleton={false}
                             className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
                               mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
                             }`}

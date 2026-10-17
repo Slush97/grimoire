@@ -1,4 +1,5 @@
 import { formatDateParts } from '../lib/dateFormat';
+import { currentPixelRatio, pickGameBananaImageFile } from '../lib/gameBananaImage';
 
 export interface GameBananaMod {
   id: number;
@@ -278,13 +279,16 @@ export function parseGameBananaItemUrl(input: string): GameBananaItemRef | null 
   }
 }
 
-export function getModThumbnail(mod: Pick<GameBananaMod, 'previewMedia'>): string | undefined {
+/**
+ * First preview image. Pass the displayed width (CSS px) to get the smallest
+ * GameBanana variant that covers it at the current pixel ratio.
+ */
+export function getModThumbnail(mod: Pick<GameBananaMod, 'previewMedia'>, cssWidth?: number): string | undefined {
   const images = mod.previewMedia?.images;
   if (!images || images.length === 0) return undefined;
 
   const image = images[0];
-  const file = image.file530 || image.file || image.file220;
-  return `${image.baseUrl}/${file}`;
+  return `${image.baseUrl}/${pickGameBananaImageFile(image, cssWidth, currentPixelRatio())}`;
 }
 
 export function getSoundPreviewUrl(mod: GameBananaMod): string | undefined {

@@ -44,6 +44,7 @@ import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
+import { RevealImage } from './common/RevealImage';
 import { ArchivedTag, Button, IconButton, Tag } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import ImageContextMenu from './ImageContextMenu';
@@ -1287,9 +1288,10 @@ function ModDetailsModal({
                           aria-label={`View image ${idx + 1} of ${images.length} full size`}
                           className="group absolute inset-0 h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                         >
-                          <img
+                          <RevealImage
                             src={previewSrc}
                             alt={`${mod.name} - Image ${idx + 1}`}
+                            loading="eager"
                             draggable={false}
                             className={`absolute inset-0 h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
                               imageHidden ? 'blur-xl scale-110' : ''
@@ -1383,10 +1385,9 @@ function ModDetailsModal({
                         style={{ aspectRatio: ratio ? String(ratio) : '16 / 9' }}
                         className="relative block w-full bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
                       >
-                        <img
+                        <RevealImage
                           src={previewSrc}
                           alt={`${mod.name} - Image ${index + 1}`}
-                          loading="lazy"
                           onLoad={(e) => {
                             const el = e.currentTarget;
                             if (el.naturalWidth > 0 && el.naturalHeight > 0) {

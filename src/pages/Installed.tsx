@@ -59,6 +59,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
+import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteReplacedMod, assertReplacementSafety, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
@@ -1289,6 +1290,7 @@ export default function Installed() {
   // the delete + re-enable flow.
   const [updatePickQueue, setUpdatePickQueue] = useState<{ id: string; name: string }[]>([]);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
+  useElasticOverscroll(installedScrollRef);
   const latestInstalledScrollTopRef = useRef(
     installedPageScrollTop || useAppStore.getState().installedScrollTop
   );

@@ -71,7 +71,7 @@ export default function TrippySpriteSwatch({
   }, [sprite, fps]);
 
   if (!sprite) {
-    return <div className={`animate-pulse bg-bg-tertiary ${className}`} aria-hidden />;
+    return <div className={`skeleton ${className}`} aria-hidden />;
   }
   return <canvas ref={canvasRef} className={className} />;
 }

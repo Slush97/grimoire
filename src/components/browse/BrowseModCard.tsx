@@ -7,6 +7,8 @@ import ModThumbnail from '../ModThumbnail';
 import ImageContextMenu from '../ImageContextMenu';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import { Tag } from '../common/ui';
+import { RevealImage } from '../common/RevealImage';
+import { SkeletonModCard } from '../common/Skeleton';
 import { IconText } from '../common/IconText';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
 import {
@@ -59,9 +61,11 @@ function ReadableBrowseModCard({
   onClick,
   onQuickDownload,
   onEnable,
+  priority,
 }: ModCardProps) {
   const { t } = useTranslation();
-  const thumbnail = getModThumbnail(mod);
+  const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
+  const thumbnail = getModThumbnail(mod, readableCardWidth);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
@@ -69,7 +73,6 @@ function ReadableBrowseModCard({
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
-  const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
   const readableDensity = getReadableDensity(readableCardWidth);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [audioControlsActive, setAudioControlsActive] = useState(false);
@@ -112,21 +115,19 @@ function ReadableBrowseModCard({
     <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
       {heroRenderUrl ? (
         shouldHideNsfw ? (
-          <img
+          <RevealImage
             src={heroRenderUrl}
             alt={inferredHero ?? mod.name}
-            loading="lazy"
-            decoding="async"
+            priority={priority}
             className="browse-card-media-zoom h-full w-full object-cover scale-105 blur-lg saturate-75"
             style={{ objectPosition: `${heroFacePosX}% 20%` }}
           />
         ) : (
           <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
-            <img
+            <RevealImage
               src={heroRenderUrl}
               alt={inferredHero ?? mod.name}
-              loading="lazy"
-              decoding="async"
+              priority={priority}
               className="browse-card-media-zoom h-full w-full object-cover"
               style={{ objectPosition: `${heroFacePosX}% 20%` }}
             />
@@ -142,6 +143,7 @@ function ReadableBrowseModCard({
           imageFit="cover"
           imagePosition="center top"
           imageClassName="browse-card-media-zoom"
+          priority={priority}
         />
       ) : (
         <BrowseSoundPlaceholder title={mod.name} />
@@ -163,6 +165,7 @@ function ReadableBrowseModCard({
       imageFit="cover"
       imagePosition="center top"
       imageClassName="browse-card-media-zoom"
+      priority={priority}
     />
   );
 
@@ -357,34 +360,36 @@ interface ModCardProps {
   /** Toggle the local mod's enabled state. Provided only when there's an
    *  installed-but-disabled mod to enable. */
   onEnable?: () => void;
+  /** First visible row: its thumbnail loads eagerly at high priority. */
+  priority?: boolean;
 }
 
-export function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
-  if (viewMode === 'list') {
-    return (
-      <div className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-4">
-        <div className="bg-bg-tertiary skeleton-shimmer w-32 h-20 flex-shrink-0 rounded-md" />
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="bg-bg-tertiary skeleton-shimmer h-4 rounded w-2/3" />
-          <div className="bg-bg-tertiary skeleton-shimmer h-3 rounded w-1/3" />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="relative bg-bg-tertiary border border-border rounded-lg overflow-hidden aspect-[3/2]">
-      <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
-      <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-        <div className="h-3.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-3/4" />
-        <div className="h-2.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-1/2" />
-      </div>
-    </div>
+/** Placeholder with the geometry of the card it stands in for. */
+export function ModCardSkeleton({
+  viewMode,
+  cardDesign,
+  height,
+  index,
+}: {
+  viewMode: ViewMode;
+  cardDesign: BrowseCardDesign;
+  height?: number;
+  index?: number;
+}) {
+  const layout = viewMode === 'list' ? 'browse-list' : cardDesign === 'readable' ? 'browse' : 'browse-classic';
+  return viewMode === 'list' ? (
+    <SkeletonModCard layout={layout} index={index} className="self-start" />
+  ) : (
+    <SkeletonModCard layout={layout} height={height} index={index} />
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+// Browse list rows show the thumbnail in a w-32 box.
+const LIST_THUMB_WIDTH = 128;
+
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
   const { t } = useTranslation();
-  const thumbnail = getModThumbnail(mod);
+  const thumbnail = getModThumbnail(mod, viewMode === 'list' ? LIST_THUMB_WIDTH : (cardWidth ?? cardSize));
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // At the smallest grid sizes the bottom overlay (title + stats + author) eats
   // most of a classic card, burying the art it's drawn over. Below this width
@@ -433,17 +438,16 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           {isSoundSection ? (
             heroRenderUrl ? (
               <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
-                <img
+                <RevealImage
                   src={heroRenderUrl}
                   alt={inferredHero ?? mod.name}
-                  loading="lazy"
-                  decoding="async"
+                  priority={priority}
                   className="browse-card-media-zoom w-full h-full object-cover"
                   style={{ objectPosition: `${heroFacePosX}% 25%` }}
                 />
               </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" priority={priority} />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
@@ -453,7 +457,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </div>
             )
           ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
+            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" priority={priority} />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -568,6 +572,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           onClick={onClick}
           onQuickDownload={onQuickDownload}
           onEnable={onEnable}
+          priority={priority}
         />
       </BrowseArtParallaxCard>
     );
@@ -610,17 +615,16 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <div className="w-full h-full relative">
             {heroRenderUrl ? (
               <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
-                <img
+                <RevealImage
                   src={heroRenderUrl}
                   alt={inferredHero ?? mod.name}
-                  loading="lazy"
-                  decoding="async"
+                  priority={priority}
                   className="browse-card-media-zoom w-full h-full object-cover"
                   style={{ objectPosition: `${heroFacePosX}% 20%` }}
                 />
               </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" priority={priority} />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -643,7 +647,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" priority={priority} />
         )}
       </div>
 
@@ -895,5 +899,6 @@ export const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.isPlaying === next.isPlaying &&
   prev.suppressHoverIntentRef === next.suppressHoverIntentRef &&
   prev.enableModId === next.enableModId &&
-  prev.actionContextKey === next.actionContextKey
+  prev.actionContextKey === next.actionContextKey &&
+  prev.priority === next.priority
 ));

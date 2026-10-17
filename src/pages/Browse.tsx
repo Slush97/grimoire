@@ -98,6 +98,7 @@ import {
   type ViewMode,
 } from '../components/browse/cardGeometry';
 import { usePrefersReducedMotion } from '../components/browse/cardUtils';
+import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 const DEFAULT_PER_PAGE = 36;
 // Row count below which the local catalog mirror is treated as unusable. A
@@ -270,18 +271,6 @@ function readBrowseCardSizeMultiplier(): number {
   if (raw == null || raw === '') return BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
   const stored = Number(raw);
   return Number.isFinite(stored) ? clampBrowseCardSizeMultiplier(stored) : BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
-}
-
-function getBrowseCardSizeCss(multiplier: number): string {
-  const nextMultiplier = clampBrowseCardSizeMultiplier(multiplier);
-  return `clamp(${BROWSE_CARD_SIZE_MIN * nextMultiplier}px, calc(${BROWSE_CARD_SIZE_BASE * nextMultiplier}px + ${BROWSE_CARD_SIZE_VW * 100 * nextMultiplier}vw + ${BROWSE_CARD_SIZE_VH * 100 * nextMultiplier}vh), ${BROWSE_CARD_SIZE_MAX * nextMultiplier}px)`;
-}
-
-function getBrowseCardSizeGridStyle(multiplier: number): React.CSSProperties {
-  return {
-    '--card-size': getBrowseCardSizeCss(multiplier),
-    gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size), 1fr))',
-  } as React.CSSProperties;
 }
 
 function getResponsiveBrowseCardSize(metrics: BrowseViewportMetrics, multiplier: number): number {
@@ -463,10 +452,6 @@ export default function Browse() {
   const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
   const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
   const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
-  const browseCardSizeGridStyle = useMemo(
-    () => getBrowseCardSizeGridStyle(browseCardSizeMultiplier),
-    [browseCardSizeMultiplier]
-  );
   const viewMode: ViewMode = layout === 'list' ? 'list' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
@@ -559,6 +544,7 @@ export default function Browse() {
   const pendingScrollTopRef = useRef<number | null>(initialCache?.scrollTop ?? null);
   // The outer scroll container — same element with `h-full overflow-y-auto`.
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  useElasticOverscroll(scrollContainerRef);
   // The virtualized grid's relative wrapper (the div sized to getTotalSize()).
   // Used by the scroll anchor below to translate scrollTop into item space.
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
@@ -1642,7 +1628,10 @@ export default function Browse() {
           setPage(prev => prev + 1);
         }
       },
-      { threshold: 0.1, rootMargin: '100px' }
+      // Rooted on the grid's own scroller: with the viewport as root its
+      // overflow clip swallowed the margin, so the next page only started at
+      // the very end. A screen of lead time lets it land before it is needed.
+      { root: scrollContainerRef.current, threshold: 0, rootMargin: '0px 0px 900px 0px' }
     );
 
     if (loadMoreRef.current) {
@@ -3088,21 +3077,6 @@ export default function Browse() {
       {/* Main Content */}
       <div className="relative z-0 flex-1 p-4">
         {(() => {
-          const gridClass =
-            layout === 'list'
-              ? 'flex flex-col gap-3'
-              : browseCardDesign === 'readable'
-                ? 'grid'
-                : 'grid gap-3';
-          const gridStyle =
-            layout === 'list'
-              ? undefined
-              : browseCardDesign === 'readable'
-                ? {
-                    gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
-                    gap: `${gridGap}px`,
-                  }
-                : browseCardSizeGridStyle;
           const hasActiveFilters =
             search.trim().length > 0 ||
             heroCategoryId !== 'all' ||
@@ -3113,12 +3087,21 @@ export default function Browse() {
             addedTo.length > 0;
 
           if (loading || (pagingPastFilteredPage && !error)) {
-            // Match perPage so the skeleton grid fills roughly the same footprint
-            // as the real results once they arrive.
+            // Same columns, card height and gap as the virtualized grid below,
+            // so the results land exactly where their placeholders were.
             return (
-              <div className={gridClass} style={gridStyle} aria-busy="true" aria-live="polite">
-                {Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
-                  <ModCardSkeleton key={i} viewMode={viewMode} />
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: `repeat(${virtualColumnCount}, minmax(0, 1fr))`,
+                  gridAutoRows: `${virtualCardHeight}px`,
+                  gap: `${gridGap}px`,
+                }}
+                aria-busy="true"
+                aria-live="polite"
+              >
+                {Array.from({ length: Math.min(DEFAULT_PER_PAGE, virtualColumnCount * 6) }).map((_, i) => (
+                  <ModCardSkeleton key={i} viewMode={viewMode} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
                 ))}
               </div>
             );

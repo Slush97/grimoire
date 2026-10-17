@@ -145,6 +145,7 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
                     onEnable={installedLocal && !installedLocal.enabled
                       ? () => onEnable(installedLocal.id)
                       : undefined}
+                    priority={virtualRow.index === 0}
                   />
                 </div>
               );

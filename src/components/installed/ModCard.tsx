@@ -8,6 +8,7 @@ import type { ModConflict } from '../../lib/api';
 import type { Mod, GlobalModType } from '../../types/mod';
 import { isCardSelectClick } from './selection';
 import ModThumbnail from '../ModThumbnail';
+import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../../lib/lockerUtils';
@@ -224,7 +225,7 @@ function ModMediaPreview({
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
-    <img
+    <RevealImage
       src={soundHeroRenderUrl}
       alt={soundHeroName ?? mod.name}
       draggable={false}
@@ -630,7 +631,7 @@ function ModListRowContent({
         onDragStart={stopMediaDrag}
       >
         {listHeroRenderUrl ? (
-          <img
+          <RevealImage
             src={listHeroRenderUrl}
             alt={listHeroName ?? mod.name}
             draggable={false}
@@ -650,6 +651,7 @@ function ModListRowContent({
             imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
             forgeInstalled={!!mod.forgeInstall}
+            width={56}
           />
         )}
         {canOpen && (
@@ -1382,11 +1384,12 @@ export function ModCard({
         <>
         {glassBackdropUrl && (
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl">
-            <img
+            <RevealImage
               src={glassBackdropUrl}
               alt=""
               aria-hidden
               draggable={false}
+              skeleton={false}
               className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
                 mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
               }`}

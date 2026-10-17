@@ -28,6 +28,7 @@ import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { LockerModImagePicker } from './LockerModImagePicker';
 import { ShuffleAlwaysOnBadge, ShuffleIncludeButton } from './ShuffleControls';
 import { Select } from '../common/forms';
+import { RevealImage } from '../common/RevealImage';
 
 interface SkinGroup {
   key: string;
@@ -451,11 +452,12 @@ function SkinGroupCard({
           and Installed grid cards. */}
       {glassBackdropUrl && (
         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
-          <img
+          <RevealImage
             src={glassBackdropUrl}
             alt=""
             aria-hidden
             draggable={false}
+            skeleton={false}
             className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
               groupActive ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
             }`}

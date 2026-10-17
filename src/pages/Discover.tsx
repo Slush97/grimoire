@@ -33,6 +33,12 @@ import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { formatRelativeDate } from '../lib/dates';
 import { mergeProfileLikes } from '../components/social/profileLikes';
+import { currentPixelRatio, sizeGameBananaThumbUrl } from '../lib/gameBananaImage';
+import { RevealImage } from '../components/common/RevealImage';
+import { Skeleton, SkeletonCircle, SkeletonText } from '../components/common/Skeleton';
+
+// A 2x2 mosaic tile on a ~300px card. GameBanana's 220 variant covers it at 1x.
+const MOSAIC_TILE_WIDTH = 180;
 
 // 'mine' is a client-side view, not a backend sort. We branch on it before
 // hitting /v1/profiles and render the user's own published profiles instead.
@@ -412,13 +418,24 @@ export default function Discover() {
       )}
 
       {tab !== 'mine' && loading && !data && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="p-4 animate-pulse h-32">
-              <div className="h-4 bg-hl/5 rounded w-1/2 mb-2" />
-              <div className="h-3 bg-hl/5 rounded w-1/3 mb-4" />
-              <div className="h-3 bg-hl/5 rounded w-full mb-1" />
-              <div className="h-3 bg-hl/5 rounded w-3/4" />
+        // Shaped like the profile cards below: 16:9 art, title, blurb, owner row.
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 items-start" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} contentClassName="p-0" className="overflow-hidden flex flex-col">
+              <Skeleton className="aspect-video" rounded="none" />
+              <div className="p-4 flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-4" style={{ width: `${62 + ((i * 17) % 28)}%` }} />
+                  <SkeletonText lines={2} lineClassName="h-3" />
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <SkeletonCircle size={32} />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-2.5 w-32" />
+                  </div>
+                </div>
+              </div>
             </Card>
           ))}
         </div>
@@ -491,15 +508,11 @@ export default function Discover() {
                       <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px bg-black/40">
                         {mosaicSlots.map((url, i) =>
                           url ? (
-                            <img
+                            <RevealImage
                               key={i}
-                              src={url}
+                              src={sizeGameBananaThumbUrl(url, MOSAIC_TILE_WIDTH, currentPixelRatio())}
                               alt=""
-                              loading="lazy"
                               referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).style.display = 'none';
-                              }}
                               className="w-full h-full object-cover object-top"
                             />
                           ) : (
@@ -509,14 +522,10 @@ export default function Discover() {
                       </div>
                     )}
                     {!mosaicSlots && singleHero && (
-                      <img
+                      <RevealImage
                         src={singleHero}
                         alt=""
-                        loading="lazy"
                         referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                        }}
                         className="absolute inset-0 w-full h-full object-cover object-top"
                       />
                     )}
