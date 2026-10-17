@@ -99,6 +99,7 @@ function mapToCache(mod: GameBananaMod, section: string): CachedMod {
         section,
         categoryId: mod.rootCategory?.id ?? null,
         categoryName: mod.rootCategory?.name ?? null,
+        subCategoryId: mod.subCategory?.id ?? null,
         submitterName: mod.submitter?.name ?? null,
         submitterId: mod.submitter?.id ?? null,
         likeCount: mod.likeCount ?? 0,

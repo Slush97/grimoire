@@ -135,7 +135,12 @@ export async function importInterchangeSelection(
     const pick = (metaKey: string, enabled: boolean, priority: number) => {
       const existing = picks.get(metaKey);
       if (!existing) picks.set(metaKey, { metaKey, enabled, priority });
-      else if (enabled && !existing.enabled) picks.set(metaKey, { metaKey, enabled, priority });
+      else if (enabled && !existing.enabled) {
+        // Re-insert so list order matches priority: applying a profile with
+        // repeated priorities follows list order.
+        picks.delete(metaKey);
+        picks.set(metaKey, { metaKey, enabled, priority });
+      }
     };
     let dropped = 0;
     const ordered = [...profile.mods].sort((a, b) => a.order - b.order);

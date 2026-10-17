@@ -3,6 +3,7 @@ import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
+import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
 // build; re-exported so the many `from './gamebanana'` importers keep working.
@@ -149,6 +150,9 @@ interface ModRaw {
         _sProfileUrl?: string;
         _sIconUrl?: string;
     };
+    // Like _aRootCategory, name + profile URL with no _idRow. Null when the mod
+    // sits directly in its root category.
+    _aSubCategory?: ModRaw['_aRootCategory'] | null;
 }
 
 interface ApiResponseRaw {
@@ -355,14 +359,14 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
                 return parseGameBananaJson<T>(text);
             } catch (err) {
                 console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
-                throw new Error(`GameBanana API returned invalid JSON: ${err}`);
+                throw new Error(`GameBanana API returned invalid JSON: ${err}`, { cause: err });
             }
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') {
                 if (options.signal?.aborted) {
-                    throw new Error('GameBanana request cancelled');
+                    throw new Error('GameBanana request cancelled', { cause: err });
                 }
-                throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`);
+                throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`, { cause: err });
             }
             throw err;
         } finally {
@@ -479,6 +483,14 @@ function mapMod(raw: ModRaw): GameBananaMod {
                 modelName: raw._aRootCategory._sModelName,
                 profileUrl: raw._aRootCategory._sProfileUrl,
                 iconUrl: raw._aRootCategory._sIconUrl,
+            }
+            : undefined,
+        subCategory: raw._aSubCategory
+            ? {
+                id: raw._aSubCategory._idRow ?? categoryIdFromProfileUrl(raw._aSubCategory._sProfileUrl),
+                name: raw._aSubCategory._sName,
+                profileUrl: raw._aSubCategory._sProfileUrl,
+                iconUrl: raw._aSubCategory._sIconUrl,
             }
             : undefined,
     };
@@ -701,7 +713,7 @@ export async function fetchSubmissions(
     }
 
     // Fields to request from GameBanana API (including NSFW flag)
-    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateModified,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
+    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateModified,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory,_aSubCategory';
 
     // Use search endpoint when search query is provided
     if (search && search.trim()) {
@@ -1111,7 +1123,7 @@ function buildContactUrl(item: ContactInfoRaw): string | undefined {
         const templateHref = hrefMatch?.[1];
         if (templateHref) {
             const prefix = templateHref.split('%VALUE%')[0];
-            let host = '';
+            let host: string;
             try {
                 host = new URL(prefix).hostname.toLowerCase();
             } catch {

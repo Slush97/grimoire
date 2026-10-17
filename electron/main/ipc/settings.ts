@@ -32,10 +32,11 @@ ipcMain.handle('get-settings', (): AppSettings => {
 
 // set-settings
 ipcMain.handle('set-settings', (_, settings: AppSettings): void => {
-    const safetyWasOn = loadSettings().experimentalModSafety;
-    const socialWasOn = loadSettings().experimentalSocial;
+    const current = loadSettings();
+    const safetyWasOn = current.experimentalModSafety;
+    const socialWasOn = current.experimentalSocial;
     assertUpdateChannelChange(settings.updateChannel);
-    saveSettings(settings);
+    saveSettings({ ...settings, lastDialogDirectory: current.lastDialogDirectory });
     syncUpdaterWithSettings();
     syncWindowBackgroundWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must

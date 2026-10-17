@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('./rateLimiter', () => ({
+    gamebananaRateLimiter: { acquire: vi.fn(async () => undefined) },
+}));
+
 import {
     createGameBananaFileServerSelector,
     isCanonicalGameBananaFilesUrl,
 } from './gamebananaFileServers';
+import { gamebananaRateLimiter } from './rateLimiter';
 
 const canonicalUrl = 'https://files.gamebanana.com/mods/uhd_08_07_2.zip?token=public#ignored';
 
@@ -335,7 +340,7 @@ describe('gameBananaFileServerSelector', () => {
 
         const first = selector.refreshCache();
         const second = selector.refreshCache();
-        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
 
         release(directoryResponse([server('filecache45', 500)]));
         await expect(Promise.all([first, second])).resolves.toEqual([
@@ -515,7 +520,7 @@ describe('gameBananaFileServerSelector', () => {
         });
     });
 
-    it('probes only the top three directory servers and keeps every fallback', async () => {
+    it('probes only the top three directory servers and drops mirrors that failed or went unprobed', async () => {
         const fetchImpl = vi.fn(async () =>
             directoryResponse([
                 server('filecache41', 100),
@@ -536,8 +541,6 @@ describe('gameBananaFileServerSelector', () => {
         await expect(selector.getCandidates(canonicalUrl)).resolves.toEqual([
             'https://filecache44.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
             'https://filecache45.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
-            'https://filecache41.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
-            'https://filecache43.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
             'https://files.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
         ]);
         expect(probeCandidate).toHaveBeenCalledTimes(3);
@@ -689,11 +692,264 @@ describe('gameBananaFileServerSelector', () => {
 
         const candidates = await selector.getCandidates(canonicalUrl);
 
-        expect(candidates[0]).toContain('filecache43.gamebanana.com');
-        expect(candidates.slice(1, 3).map((url) => new URL(url).hostname)).toEqual([
+        expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+            'filecache43.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+    });
+
+    it('never offers a mirror that answers 404 for the requested file', async () => {
+        const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+            const url = input.toString();
+            if (url.includes('/apiv11/')) {
+                return directoryResponse([
+                    server('filecache45', 500),
+                    server('filecache44', 400),
+                    server('filecache43', 300),
+                ]);
+            }
+            if (url.includes('filecache44')) {
+                return new Response(new Uint8Array(16), {
+                    status: 206,
+                    headers: { 'Content-Range': 'bytes 0-15/1000', 'Content-Length': '16' },
+                });
+            }
+            return new Response('Not Found', { status: 404 });
+        });
+        let clock = 0;
+        const selector = createGameBananaFileServerSelector({ fetchImpl, now: () => (clock += 10) });
+
+        const candidates = await selector.getCandidates(canonicalUrl);
+
+        expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+            'filecache44.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+        await expect(selector.getDiagnostics()).resolves.toMatchObject({
+            preferredServer: 'filecache44',
+            testedServers: [
+                { server: 'filecache45', available: false },
+                { server: 'filecache44', available: true },
+                { server: 'filecache43', available: false },
+            ],
+        });
+    });
+
+    it('stops waiting on a mirror that never answers once the probe budget is spent', async () => {
+        const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            const url = input.toString();
+            if (url.includes('/apiv11/')) {
+                return directoryResponse([server('filecache45', 500), server('filecache44', 400)]);
+            }
+            if (url.includes('filecache44')) {
+                return new Response(new Uint8Array(16), {
+                    status: 206,
+                    headers: { 'Content-Range': 'bytes 0-15/1000', 'Content-Length': '16' },
+                });
+            }
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            });
+        });
+        let clock = 0;
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl,
+            now: () => (clock += 10),
+            probeTimeoutMs: 20,
+        });
+
+        const candidates = await selector.getCandidates(canonicalUrl);
+
+        expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+            'filecache44.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+    });
+
+    it('probes the server GameBanana assigned ahead of the busiest mirrors', async () => {
+        const fetchImpl = vi.fn(async () =>
+            directoryResponse([
+                server('filecache45', 500),
+                server('filecache44', 400),
+                server('filecache43', 300),
+                server('filecache53', 10),
+            ]),
+        );
+        const probeCandidate = vi.fn(async (url: string) =>
+            url.includes('filecache53') ? 700 : null,
+        );
+        const selector = createGameBananaFileServerSelector({ fetchImpl, probeCandidate });
+
+        const candidates = await selector.getCandidates(
+            canonicalUrl,
+            undefined,
+            'filecache53.gamebanana.com',
+        );
+
+        expect(probeCandidate.mock.calls.map(([url]) => new URL(url).hostname)).toEqual([
+            'filecache53.gamebanana.com',
             'filecache45.gamebanana.com',
             'filecache44.gamebanana.com',
         ]);
+        expect(candidates).toEqual([
+            'https://filecache53.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
+            'https://files.gamebanana.com/mods/uhd_08_07_2.zip?token=public',
+        ]);
+    });
+
+    it('keeps the assigned server as the last resort when its own probe failed', async () => {
+        const fetchImpl = vi.fn(async () =>
+            directoryResponse([server('filecache45', 500), server('filecache44', 400)]),
+        );
+        const probeCandidate = vi.fn(async (url: string) =>
+            url.includes('filecache45') ? 900 : null,
+        );
+        const selector = createGameBananaFileServerSelector({ fetchImpl, probeCandidate });
+
+        const candidates = await selector.getCandidates(
+            canonicalUrl,
+            undefined,
+            'filecache53.gamebanana.com',
+        );
+
+        expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+            'filecache45.gamebanana.com',
+            'filecache53.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+    });
+
+    it('offers the assigned server when every probe fails or the directory is unavailable', async () => {
+        const failing = createGameBananaFileServerSelector({
+            fetchImpl: async () => directoryResponse([server('filecache45', 500)]),
+            probeCandidate: async () => null,
+        });
+        const offline = createGameBananaFileServerSelector({
+            fetchImpl: async () => {
+                throw new Error('offline');
+            },
+        });
+
+        for (const selector of [failing, offline]) {
+            const candidates = await selector.getCandidates(
+                canonicalUrl,
+                undefined,
+                'filecache53.gamebanana.com',
+            );
+            expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+                'filecache53.gamebanana.com',
+                'files.gamebanana.com',
+            ]);
+        }
+    });
+
+    it('adds each file\'s own assigned server to the cached ranking', async () => {
+        const fetchImpl = vi.fn(async () =>
+            directoryResponse([server('filecache45', 500), server('filecache44', 400)]),
+        );
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl,
+            probeCandidate: async (url) => (url.includes('filecache44') ? 900 : 100),
+        });
+        await selector.getCandidates('https://files.gamebanana.com/mods/first.zip');
+
+        const second = await selector.getCandidates(
+            'https://files.gamebanana.com/mods/second.zip',
+            undefined,
+            'filecache53.gamebanana.com',
+        );
+
+        expect(second.map((url) => new URL(url).hostname)).toEqual([
+            'filecache44.gamebanana.com',
+            'filecache45.gamebanana.com',
+            'filecache53.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+    });
+
+    it('ignores an assigned host that is not a GameBanana filecache server', async () => {
+        const probeCandidate = vi.fn(async () => 100);
+        const selector = createGameBananaFileServerSelector({
+            fetchImpl: async () => directoryResponse([server('filecache45', 500)]),
+            probeCandidate,
+        });
+
+        const candidates = await selector.getCandidates(
+            canonicalUrl,
+            undefined,
+            'filecache53.gamebanana.com.evil.test',
+        );
+
+        expect(candidates.map((url) => new URL(url).hostname)).toEqual([
+            'filecache45.gamebanana.com',
+            'files.gamebanana.com',
+        ]);
+    });
+
+    it('speed tests through the server GameBanana assigned when the busiest mirrors lack the file', async () => {
+        const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+            const url = String(input);
+            if (url.includes('/Util/Fileservers')) {
+                return directoryResponse([
+                    server('filecache45', 500),
+                    server('filecache44', 400),
+                    server('filecache43', 300),
+                    server('filecache53', 10),
+                ]);
+            }
+            if (url.includes('/Tool/22583')) {
+                return Response.json({
+                    _aFiles: [{
+                        _sDownloadUrl: 'https://gamebanana.com/dl/200',
+                        _tsDateAdded: 20,
+                        _bIsArchived: false,
+                    }],
+                });
+            }
+            return new Response(null, {
+                status: 302,
+                headers: { Location: 'https://filecache53.gamebanana.com/tools/grimoire.exe' },
+            });
+        });
+        const probeCandidate = vi.fn(async (url: string) =>
+            url.includes('filecache53') ? 3_000 : null,
+        );
+        const selector = createGameBananaFileServerSelector({ fetchImpl, probeCandidate });
+
+        await expect(selector.testServers()).resolves.toMatchObject({
+            preferredServer: 'filecache53',
+            needsProbe: false,
+            testedServers: [
+                { server: 'filecache53', bytesPerSecond: 3_000, available: true },
+                { server: 'filecache45', available: false },
+                { server: 'filecache44', available: false },
+            ],
+        });
+        expect(probeCandidate.mock.calls.map(([url]) => url)).toEqual([
+            'https://filecache53.gamebanana.com/tools/grimoire.exe',
+            'https://filecache45.gamebanana.com/tools/grimoire.exe',
+            'https://filecache44.gamebanana.com/tools/grimoire.exe',
+        ]);
+    });
+
+    it('sends only GameBanana API requests through the shared rate limiter', async () => {
+        const acquire = vi.mocked(gamebananaRateLimiter.acquire);
+        acquire.mockClear();
+        const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+            const url = input.toString();
+            if (url.includes('/apiv11/')) return directoryResponse([server('filecache45', 500)]);
+            return new Response(new Uint8Array(16), {
+                status: 206,
+                headers: { 'Content-Range': 'bytes 0-15/1000', 'Content-Length': '16' },
+            });
+        });
+        let clock = 0;
+        const selector = createGameBananaFileServerSelector({ fetchImpl, now: () => (clock += 10) });
+
+        await selector.getCandidates(canonicalUrl);
+
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(acquire).toHaveBeenCalledTimes(1);
     });
 });
 

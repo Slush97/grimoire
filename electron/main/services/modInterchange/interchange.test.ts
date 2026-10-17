@@ -3,7 +3,7 @@
  * a DMM 2.x install (sharded v3 manifest, sound + local ids, a mod whose addon
  * file is gone and only survives in DMM's download cache) imported into
  * Grimoire, and a Grimoire library exported and re-imported as a bundle.
- * Only app.getPath()/getVersion() are mocked; the real services run.
+ * App paths, version and game-running detection are mocked; the real file services run.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'fs';
@@ -15,6 +15,7 @@ import { exportGrimoireLibrary, readInterchangeBundle } from './bundle';
 
 const h = vi.hoisted(() => ({ userData: '' }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData, getVersion: () => '0.0.0-test' } }));
+vi.mock('../launch', () => ({ isDeadlockRunning: async () => false, readStash: async () => null }));
 
 const UUID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 

@@ -3,14 +3,21 @@ import type { Mod } from '../types/mod';
 /**
  * Preserving per-VPK enabled state across a redownload/update. A replacement
  * download lands every VPK disabled, so before deleting the old install we
- * snapshot which VPKs were enabled (by their size-sorted `vpkIndex`), then
- * re-enable the matching siblings on the fresh install. Split out of Installed
- * so the matching rules are unit-tested.
+ * snapshot which VPKs were enabled, then re-enable the matching siblings on
+ * the fresh install. A sibling is matched by where it sat in the archive when
+ * both installs recorded that, else by its size-sorted `vpkIndex`, which
+ * drifts when an update adds a part or changes which part is biggest. Split
+ * out of Installed so the matching rules are unit-tested.
  */
 export type EnabledVpkRestoreSnapshot = {
   hadEnabled: boolean;
+  /** Two or more VPKs and every one enabled: parts that run together, so
+   *  every part of the new archive comes back on, new parts included. One
+   *  enabled VPK is not enough, it may be the one variant the user kept. */
+  allPartsEnabled: boolean;
   enabledIndexes: Set<number>;
   enabledUnindexed: boolean;
+  enabledByArchivePath: Map<string, boolean>;
 };
 
 export type GlobalVpkRestoreSnapshot = {
@@ -19,6 +26,7 @@ export type GlobalVpkRestoreSnapshot = {
   ambiguous: boolean;
   globalIndexes: Set<number>;
   globalUnindexed: boolean;
+  globalByArchivePath: Map<string, boolean>;
 };
 
 export function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
@@ -27,12 +35,54 @@ export function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
     : undefined;
 }
 
+/** `Body/Hero_Body_dir.vpk` -> `body/hero_body`. */
+function archiveStem(path: string): string {
+  return path.toLowerCase().replace(/(_dir)?\.vpk$/, '');
+}
+
+function recordArchivePath(states: Map<string, boolean>, archiveVpkPath: string | undefined, state: boolean): void {
+  if (!archiveVpkPath) return;
+  const stem = archiveStem(archiveVpkPath);
+  states.set(stem, state || !!states.get(stem));
+}
+
+/**
+ * The state of the old VPK the fresh one replaces, by archive path: the same
+ * path, else the longest old path that one of the two starts with, so an
+ * author re-tagging `hero_body` as `hero_body_v2` still maps. null when
+ * nothing matches or equally close matches disagree; undefined when either
+ * side has no paths (installs from before they were recorded).
+ */
+function stateByArchivePath(
+  mod: Pick<Mod, 'archiveVpkPath'>,
+  old: ReadonlyMap<string, boolean>,
+): boolean | null | undefined {
+  if (!mod.archiveVpkPath || old.size === 0) return undefined;
+  const stem = archiveStem(mod.archiveVpkPath);
+  const exact = old.get(stem);
+  if (exact !== undefined) return exact;
+  let longest = 0;
+  const states = new Set<boolean>();
+  for (const [oldStem, state] of old) {
+    if (!stem.startsWith(oldStem) && !oldStem.startsWith(stem)) continue;
+    const overlap = Math.min(stem.length, oldStem.length);
+    if (overlap > longest) {
+      longest = overlap;
+      states.clear();
+    }
+    if (overlap === longest) states.add(state);
+  }
+  return states.size === 1 ? [...states][0] : null;
+}
+
 export function createEnabledVpkRestoreSnapshot(
-  targets: Array<{ enabled: boolean; vpkIndex?: number }>
+  targets: Array<{ enabled: boolean; vpkIndex?: number; archiveVpkPath?: string }>
 ): EnabledVpkRestoreSnapshot {
   const enabledIndexes = new Set<number>();
+  const enabledByArchivePath = new Map<string, boolean>();
   let enabledUnindexed = false;
   for (const target of targets) {
+    recordArchivePath(enabledByArchivePath, target.archiveVpkPath, target.enabled);
     if (!target.enabled) continue;
     const index = getVpkIndex(target);
     if (index === undefined) {
@@ -43,8 +93,10 @@ export function createEnabledVpkRestoreSnapshot(
   }
   return {
     hadEnabled: enabledUnindexed || enabledIndexes.size > 0,
+    allPartsEnabled: targets.length > 1 && targets.every((target) => target.enabled),
     enabledIndexes,
     enabledUnindexed,
+    enabledByArchivePath,
   };
 }
 
@@ -59,6 +111,9 @@ export function shouldRestoreVpkEnabled(
   // one possible replacement there is no ambiguity: preserve the coarse fact
   // that the old install was enabled even when its old index cannot match.
   if (candidates.length === 1) return true;
+  const named = stateByArchivePath(mod, snapshot.enabledByArchivePath);
+  if (named !== undefined) return named ?? snapshot.allPartsEnabled;
+  if (snapshot.allPartsEnabled) return true;
   const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
   const index = getVpkIndex(mod);
   if (hasIndexedCandidates) {
@@ -74,11 +129,13 @@ export function shouldRestoreVpkEnabled(
 }
 
 export function createGlobalVpkRestoreSnapshot(
-  targets: Array<{ priorityMod?: boolean; vpkIndex?: number }>
+  targets: Array<{ priorityMod?: boolean; vpkIndex?: number; archiveVpkPath?: string }>
 ): GlobalVpkRestoreSnapshot {
   const globalIndexes = new Set<number>();
+  const globalByArchivePath = new Map<string, boolean>();
   let globalUnindexed = false;
   for (const target of targets) {
+    recordArchivePath(globalByArchivePath, target.archiveVpkPath, !!target.priorityMod);
     if (!target.priorityMod) continue;
     const index = getVpkIndex(target);
     if (index === undefined) {
@@ -94,6 +151,7 @@ export function createGlobalVpkRestoreSnapshot(
     ambiguous: globalUnindexed && !allGlobal,
     globalIndexes,
     globalUnindexed,
+    globalByArchivePath,
   };
 }
 
@@ -106,6 +164,9 @@ export function shouldRestoreVpkGlobal(
   // As with enabled state, a sole replacement is the unambiguous destination
   // even if the author's new archive no longer carries the old VPK index.
   if (candidates.length === 1) return !snapshot.ambiguous;
+  const named = stateByArchivePath(mod, snapshot.globalByArchivePath);
+  if (named !== undefined) return named ?? snapshot.allGlobal;
+  if (snapshot.allGlobal) return true;
   const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
   const index = getVpkIndex(mod);
   if (hasIndexedCandidates) {

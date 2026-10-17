@@ -448,7 +448,8 @@ export async function reserveOutputSlot(path: string): Promise<void> {
         const code = (err as NodeJS.ErrnoException).code;
         if (code === 'EEXIST') {
             throw new Error(
-                `Cannot create merged mod: ${path.split(/[\\/]/).pop()} was claimed by another operation. Try again.`
+                `Cannot create merged mod: ${path.split(/[\\/]/).pop()} was claimed by another operation. Try again.`,
+                { cause: err }
             );
         }
         throw err;

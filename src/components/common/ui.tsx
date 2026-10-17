@@ -275,24 +275,30 @@ interface ProgressBarProps {
     max: number;
     /** Accessible name; pass the visible progress text. */
     label?: string;
+    /** Work with no measurable progress: a pulsing segment instead of a fill. */
+    indeterminate?: boolean;
     className?: string;
 }
 
-export function ProgressBar({ value, max, label, className = '' }: ProgressBarProps) {
+export function ProgressBar({ value, max, label, indeterminate = false, className = '' }: ProgressBarProps) {
     const percentage = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
     return (
         <div
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={max}
-            aria-valuenow={value}
+            aria-valuenow={indeterminate ? undefined : value}
             aria-label={label}
             className={`h-1.5 w-full overflow-hidden rounded-sm bg-bg-tertiary ${className}`}
         >
-            <div
-                className="h-full rounded-sm bg-accent transition-[width] duration-200 ease-out"
-                style={{ width: `${percentage}%` }}
-            />
+            {indeterminate ? (
+                <div className="h-full w-1/3 animate-pulse rounded-sm bg-accent/70" />
+            ) : (
+                <div
+                    className="h-full rounded-sm bg-accent transition-[width] duration-200 ease-out"
+                    style={{ width: `${percentage}%` }}
+                />
+            )}
         </div>
     );
 }

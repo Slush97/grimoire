@@ -72,11 +72,13 @@ export function decodeShareCode(code: string): string {
             const kb = Math.round(MAX_INFLATED_SHARE_CODE_BYTES / 1024);
             throw new Error(
                 `Share code is too large to import (exceeds ${kb} KB after decompression). ` +
-                `Export the profile to a .modprofile.json file and load it from disk instead.`
+                `Export the profile to a .modprofile.json file and load it from disk instead.`,
+                { cause: err }
             );
         }
         throw new Error(
-            `Invalid share code (gzip payload rejected: ${msg.slice(0, 120)})`
+            `Invalid share code (gzip payload rejected: ${msg.slice(0, 120)})`,
+            { cause: err }
         );
     }
     return decompressed.toString('utf8');
@@ -356,7 +358,7 @@ export function parsePortableProfile(input: string): PortableProfile {
     try {
         parsed = JSON.parse(json);
     } catch (err) {
-        throw new Error(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
     }
     return validatePortable(parsed);
 }

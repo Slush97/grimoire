@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout grimoire
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: grimoire
 
@@ -20,7 +20,7 @@ jobs:
       # side-by-side; CI has to mirror that or every social import becomes an
       # implicit-any and the build fails on the workspace dep.
       - name: Checkout grimoire-social (sibling for shared types)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Slush97/grimoire-social
           path: grimoire-social
@@ -36,9 +36,9 @@ jobs:
           version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: grimoire/pnpm-lock.yaml
 

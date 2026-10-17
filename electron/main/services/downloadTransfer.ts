@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import type { FileHandle } from 'fs/promises';
 import http, { type IncomingHttpHeaders, type IncomingMessage } from 'http';
 import https from 'https';
+import { describeNetworkError } from './networkErrors';
 import { isAllowedGameBananaDownloadHostname } from './security';
 
 export type DownloadServerStatus =
@@ -14,10 +15,13 @@ export interface DownloadTransferOptions {
     onProgress: (downloaded: number, total: number) => void;
     onResponseFilename?: (filename: string) => void;
     connectionTimeoutMs?: number;
+    mirrorConnectionTimeoutMs?: number;
     stallTimeoutMs?: number;
     signal?: AbortSignal;
     onServerStatus?: (status: DownloadServerStatus) => void;
 }
+
+const DEFAULT_MIRROR_CONNECTION_TIMEOUT_MS = 10_000;
 
 type Validator = { header: 'ETag' | 'Last-Modified'; value: string };
 type TransferState = { total?: number; validator?: Validator };
@@ -140,7 +144,7 @@ async function singleResponse(
             finish(error);
         }, connectionTimeoutMs);
         request.on('error', (error) => {
-            finish(signal?.aborted ? cancellationError() : new RetryableTransferError(error.message));
+            finish(signal?.aborted ? cancellationError() : new RetryableTransferError(describeNetworkError(error)));
         });
         signal?.addEventListener('abort', abort, { once: true });
     });
@@ -373,6 +377,7 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
         signal,
         onServerStatus,
         connectionTimeoutMs = 30_000,
+        mirrorConnectionTimeoutMs = DEFAULT_MIRROR_CONNECTION_TIMEOUT_MS,
         stallTimeoutMs = 60_000,
     } = options;
     if (candidateUrls.length === 0) throw new Error('No download servers available');
@@ -384,12 +389,18 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
     let lastError: Error | undefined;
     let previousServer: string | undefined;
 
-    for (const [index, url] of [...new Set(candidateUrls)].entries()) {
+    const urls = [...new Set(candidateUrls)];
+    for (const [index, url] of urls.entries()) {
         if (signal?.aborted) {
             await removePartial(destinationPath).catch(() => undefined);
             throw cancellationError();
         }
         const server = displayServerName(url);
+        // Only the last candidate is a route GameBanana itself vouched for. The
+        // rest are speculative mirrors, so a dead one must not eat the full budget.
+        const candidateConnectionTimeoutMs = index === urls.length - 1
+            ? connectionTimeoutMs
+            : Math.min(connectionTimeoutMs, mirrorConnectionTimeoutMs);
         if (index === 0) onServerStatus?.({ phase: 'selected', server });
         else onServerStatus?.({ phase: 'switching', server, previousServer: previousServer! });
 
@@ -400,7 +411,7 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
                 try {
                     await attemptCandidate(url, destinationPath, state, {
                         ...options,
-                        connectionTimeoutMs,
+                        connectionTimeoutMs: candidateConnectionTimeoutMs,
                         stallTimeoutMs,
                     }, index === 0 ? undefined : () => {
                         onServerStatus?.({ phase: 'selected', server });
@@ -432,6 +443,7 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
                 state.validator = undefined;
             }
             lastError = error instanceof Error ? error : new Error(String(error));
+            console.warn(`[download] ${server} failed: ${lastError.message}`);
             previousServer = server;
         }
     }

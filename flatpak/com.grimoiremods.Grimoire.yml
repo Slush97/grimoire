@@ -10,16 +10,20 @@
 
 app-id: com.grimoiremods.Grimoire
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
-base-version: '24.08'
+base-version: '26.08'
 command: grimoire
 separate-locales: false
 
 finish-args:
   - --share=ipc
-  - --socket=x11
+  # Electron 38+ picks native Wayland whenever XDG_SESSION_TYPE=wayland and
+  # exits if it can't reach the socket (no X11 fallback), so the Wayland
+  # socket is required; fallback-x11 covers X11 sessions.
+  - --socket=wayland
+  - --socket=fallback-x11
   - --socket=pulseaudio
   - --share=network
   - --device=dri
@@ -39,7 +43,7 @@ modules:
   - name: grimoire
     buildsystem: simple
     build-commands:
-      - ar x grimoire_1.31.5_amd64.deb
+      - ar x grimoire_1.32.0_amd64.deb
       - tar xf data.tar.xz
       - cp -a opt/Grimoire /app/grimoire
       - install -Dm755 grimoire.sh /app/bin/grimoire
@@ -54,8 +58,8 @@ modules:
         done
     sources:
       - type: file
-        url: https://github.com/Slush97/grimoire/releases/download/v1.31.5/grimoire_1.31.5_amd64.deb
-        sha256: eb863a3444c5504ce84a16a671d726100f4d3813f071a5044b13038c42d5e94e
+        url: https://github.com/Slush97/grimoire/releases/download/v1.32.0/grimoire_1.32.0_amd64.deb
+        sha256: a672e4b4e9e1f1fab8e12272456b1d678d4226e1e007f9c5ab5c9b25c839a256
       - type: file
         path: grimoire.sh
       - type: file

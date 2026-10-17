@@ -1,7 +1,8 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, shell } from 'electron';
 import { basename } from 'path';
 import { buildReportText } from '../services/diagnostics';
 import { crashHistory } from '../services/crashHistoryService';
+import { showSaveDialog } from '../services/dialogs';
 
 // Renderer-side trace bridge.
 //
@@ -42,7 +43,7 @@ ipcMain.handle('diagnostics:revealCrash', async (_, id: string) => shell.showIte
 ipcMain.handle('diagnostics:saveCrashDump', async (_, id: string): Promise<boolean> => {
     const history = crashHistory();
     const source = await history.sourcePath(id);
-    const result = await dialog.showSaveDialog({ defaultPath: basename(source) });
+    const result = await showSaveDialog({ defaultPath: basename(source) });
     if (result.canceled || !result.filePath) return false;
     await history.saveDump(id, result.filePath);
     return true;

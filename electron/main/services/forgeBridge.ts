@@ -376,7 +376,6 @@ async function handleInstall(
     const tempPath = join(tmpdir(), `grimoire-forge-${requestId}.vpk`);
     // Single owner for the temp file: every exit path below runs this, so no
     // branch can leave a half-gigabyte file behind.
-    let tempPathToClean: string | null = tempPath;
 
     try {
         const lastAccepted = lastAcceptedByOrigin.get(origin) ?? 0;
@@ -455,11 +454,7 @@ async function handleInstall(
         }
     } finally {
         installInFlight = false;
-        if (tempPathToClean) {
-            const path = tempPathToClean;
-            tempPathToClean = null;
-            await safeUnlink(path);
-        }
+        await safeUnlink(tempPath);
     }
 }
 

@@ -26,6 +26,7 @@ import { FormField, Input } from '../common/forms';
 import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { Button, ModalHeader } from '../common/ui';
 import SoulImportPreview from './SoulImportPreview';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { SOUL_BACKDROP_COUNT } from './soulBackdrops';
 import { disposeScene } from './soulModel';
 
@@ -359,17 +360,19 @@ export default function SpiritUrnImportModal({
               canvas never stretches. */}
           <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
             {scene ? (
-              <Suspense fallback={null}>
-                <SoulImportPreview
-                  scene={scene}
-                  orientMode="y-up"
-                  rotate={[0, 0, 0]}
-                  showVanilla={false}
-                  spinning={spinning}
-                  backdropIndex={backdropIndex}
-                  captureRef={captureRef}
-                />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={null}>
+                  <SoulImportPreview
+                    scene={scene}
+                    orientMode="y-up"
+                    rotate={[0, 0, 0]}
+                    showVanilla={false}
+                    spinning={spinning}
+                    backdropIndex={backdropIndex}
+                    captureRef={captureRef}
+                  />
+                </Suspense>
+              </ErrorBoundary>
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs text-text-secondary">
                 {!glbPath && (

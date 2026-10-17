@@ -55,7 +55,8 @@ export async function readInterchangeBundle(path: string): Promise<InterchangeDo
     text = await fs.readFile(manifestPath, 'utf-8');
   } catch (err) {
     throw new Error(
-      `Could not read ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`
+      `Could not read ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
   const document = parseInterchangeDocument(text);

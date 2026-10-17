@@ -109,7 +109,7 @@ export async function buildSpiritUrnVpk(
         cliArgs.push('--ground');
     }
 
-    let stdout = '';
+    let stdout: string;
     try {
         stdout = await runVpkmergeStdout(cliArgs);
         await verifyVpkOutput(out);

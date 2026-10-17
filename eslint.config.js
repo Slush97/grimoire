@@ -20,6 +20,11 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
+      // Compiler warnings are a ratchet: fix by area, then flip these back to error.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/incompatible-library': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {

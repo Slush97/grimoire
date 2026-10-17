@@ -182,7 +182,8 @@ export function unwrapDmmStateEnvelope(rawFileContents: string): Record<string, 
     outer = JSON.parse(rawFileContents);
   } catch (err) {
     throw new Error(
-      `Not valid state.json (JSON parse failed): ${err instanceof Error ? err.message : String(err)}`
+      `Not valid state.json (JSON parse failed): ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
   if (!isObject(outer)) throw new Error('state.json must be a JSON object');
@@ -194,7 +195,8 @@ export function unwrapDmmStateEnvelope(rawFileContents: string): Record<string, 
       inner = JSON.parse(inner);
     } catch (err) {
       throw new Error(
-        `state.json "local-config" is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+        `state.json "local-config" is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
       );
     }
   }

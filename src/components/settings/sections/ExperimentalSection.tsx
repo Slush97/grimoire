@@ -97,7 +97,7 @@ export default function ExperimentalSection() {
             checked={settings?.experimentalModSafety ?? false}
             onChange={(checked) => update({ experimentalModSafety: checked })}
             label={<Tx k="modSafety.manage" fallback="Mod safety" />}
-            description={<Tx k="settings.toggles.modSafety" fallback="Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them." />}
+            description={<Tx k="settings.toggles.modSafety" fallback="Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them. Added for a Deadlock bug that let HUD scripts read files on your computer. Valve has since fixed it, so you don't need this to stay safe." />}
           />
 
           <div className="h-px bg-hl/5" />

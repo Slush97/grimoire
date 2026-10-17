@@ -559,7 +559,11 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         const seen = new Set<string>();
         let reorderSkippedDisabled = 0;
         let reorderSkippedUnmatched = 0;
-        for (const pm of [...profile.mods].sort((a, b) => a.priority - b.priority)) {
+        // Saves before 1.31.5 stored per-folder pakNN numbers, which repeat once
+        // mods overflow into addons1+. Those saves list mods in load order.
+        const legacyPriorities = new Set(profile.mods.map((pm) => pm.priority)).size < profile.mods.length;
+        const savedOrder = legacyPriorities ? profile.mods : [...profile.mods].sort((a, b) => a.priority - b.priority);
+        for (const pm of savedOrder) {
             if (!pm.enabled) continue;
             const resolution = resolveAgainstRefreshed(pm);
             if (resolution.mod === undefined) {

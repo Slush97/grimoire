@@ -118,7 +118,7 @@ export async function buildSoulContainerVpk(
         cliArgs.push('--no-upright');
     }
 
-    let stdout = '';
+    let stdout: string;
     try {
         stdout = await runVpkmergeStdout(cliArgs);
         await verifyVpkOutput(out);

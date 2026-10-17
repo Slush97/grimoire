@@ -9,6 +9,7 @@ function cachedMod(overrides: Partial<CachedMod> = {}): CachedMod {
     section: 'Mod',
     categoryId: 7,
     categoryName: 'Skins',
+    subCategoryId: null,
     submitterName: 'Modder',
     submitterId: 9,
     likeCount: 0,

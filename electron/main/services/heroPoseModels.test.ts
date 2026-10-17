@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
   particles: vi.fn(),
 }));
 vi.mock('electron', () => ({
-  app: { getPath: () => h.userData },
+  app: { getPath: () => h.userData, isPackaged: true },
   protocol: { handle: h.handle },
   net: { fetch: h.fetch },
 }));
@@ -216,7 +216,8 @@ describe('rigged preview physics bundle', () => {
     const info = await exportRiggedHeroPose(game(), 'Yamato');
     registerHeroPoseProtocol();
     const handler = h.handle.mock.calls.at(-1)![1] as (request: Request) => Promise<Response>;
-    const response = await handler(new Request(`grimoire-hero://m/${encodeURIComponent(info.key)}/cloth-rigged.json?v=42`));
+    const request = Object.assign(new Request(`grimoire-hero://m/${encodeURIComponent(info.key)}/cloth-rigged.json?v=42`), { initiatorOrigin: 'file://' });
+    const response = await handler(request);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ selector: 'models/heroes_staging/yamato_v2/yamato.vmdl_c' });
     expect(fileURLToPath(h.fetch.mock.calls.at(-1)![0])).toBe(join(cacheDir(info.key), 'cloth-rigged.json'));

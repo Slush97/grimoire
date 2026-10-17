@@ -655,8 +655,6 @@ export function updateAggregatedStats(accountId: number): void {
         )
         .all(accountId) as Array<{ match_outcome: string }>
 
-    let currentWinStreak = 0
-    let currentLossStreak = 0
     let bestWinStreak = 0
     let worstLossStreak = 0
     let tempWinStreak = 0
@@ -668,18 +666,16 @@ export function updateAggregatedStats(accountId: number): void {
             tempWinStreak++
             tempLossStreak = 0
             if (tempWinStreak > bestWinStreak) bestWinStreak = tempWinStreak
-            if (i === 0) currentWinStreak = tempWinStreak
         } else {
             tempLossStreak++
             tempWinStreak = 0
             if (tempLossStreak > worstLossStreak) worstLossStreak = tempLossStreak
-            if (i === 0) currentLossStreak = tempLossStreak
         }
     }
 
     // Current streak: count consecutive from start
-    currentWinStreak = 0
-    currentLossStreak = 0
+    let currentWinStreak = 0
+    let currentLossStreak = 0
     for (const match of matches) {
         if (match.match_outcome === 'Win') {
             if (currentLossStreak === 0) currentWinStreak++

@@ -278,7 +278,7 @@ export async function assertVpkSafety(path: string, options: {
         await retainRejectedPackage(path, report).catch(err => console.warn('[mod-safety] Could not retain package:', err));
     }
     throw new Error(report.verdict === 'blocked'
-        ? 'MOD_SAFETY_BLOCKED: The archive could not be read or installed safely. Try a complete, valid copy.'
+        ? 'MOD_SAFETY_BLOCKED: Mod safety could not read this archive.'
         : report.verdict === 'incomplete'
             ? 'MOD_SAFETY_INCOMPLETE: Grimoire could not finish checking this mod. Try again.'
             : 'MOD_SAFETY_TRUST_REQUIRED: This version must be trusted before activation.');

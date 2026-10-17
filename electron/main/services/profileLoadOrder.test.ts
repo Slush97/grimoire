@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -80,6 +80,19 @@ describe('saved profile load order across addon folders', () => {
         await reverseOrder();
         const result = await applyProfile(deadlockPath, profile.id);
         expect(result.failures).toEqual([]);
+        expect(await installedOrder()).toEqual(before);
+    }, 30_000);
+
+    it('restores a profile saved with per-folder slot numbers in its listed order', async () => {
+        installMods(150);
+        const before = await installedOrder();
+        const profile = await createProfile(deadlockPath, 'Old save');
+        const profilesPath = join(state.userData, 'profiles.json');
+        const saved = JSON.parse(readFileSync(profilesPath, 'utf-8'));
+        saved[0].mods.forEach((mod: { priority: number }, index: number) => { mod.priority = index % 99 + 1; });
+        writeFileSync(profilesPath, JSON.stringify(saved));
+        await reverseOrder();
+        expect((await applyProfile(deadlockPath, profile.id)).failures).toEqual([]);
         expect(await installedOrder()).toEqual(before);
     }, 30_000);
 

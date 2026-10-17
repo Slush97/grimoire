@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, type MouseEvent, type ReactNode } from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import * as RadixDropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
@@ -119,9 +119,11 @@ interface MenuItemProps {
   icon?: LucideIcon;
   /** Renders the icon with animate-spin (in-flight clipboard ops etc.) */
   spinning?: boolean;
-  tone?: 'default' | 'success' | 'danger';
+  tone?: 'default' | 'success' | 'warning' | 'danger';
   disabled?: boolean;
+  title?: string;
   onSelect: (event: Event) => void;
+  onContextMenu?: (event: MouseEvent) => void;
 }
 
 // Row geometry, shared by every item kind so a checkbox or submenu row lines up
@@ -129,24 +131,27 @@ interface MenuItemProps {
 const ITEM_GEOMETRY_CLASS =
   'flex h-8 select-none items-center gap-2 rounded-sm px-2 outline-none transition-colors cursor-pointer data-[disabled]:cursor-default data-[disabled]:opacity-50';
 const DEFAULT_TONE_CLASS = 'text-text-primary focus:bg-hl/10 data-[highlighted]:bg-hl/10';
+const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
+  default: DEFAULT_TONE_CLASS,
+  success: 'text-state-success focus:bg-state-success/10 data-[highlighted]:bg-state-success/10',
+  warning: 'text-state-warning focus:bg-state-warning/10 data-[highlighted]:bg-state-warning/10',
+  danger: 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10',
+};
 
-export function MenuItem({ children, icon: Icon, spinning, tone = 'default', disabled, onSelect }: MenuItemProps) {
+export function MenuItem({ children, icon: Icon, spinning, tone = 'default', disabled, title, onSelect, onContextMenu }: MenuItemProps) {
   const { ns } = useMenuImpl();
   const Item = ns.Item;
-  const toneClass = tone === 'success'
-    ? 'text-state-success focus:bg-state-success/10 data-[highlighted]:bg-state-success/10'
-    : tone === 'danger'
-      ? 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10'
-      : DEFAULT_TONE_CLASS;
 
   return (
     <Item
       disabled={disabled}
+      title={title}
       onSelect={(event) => {
         event.stopPropagation();
         onSelect(event);
       }}
-      className={`${ITEM_GEOMETRY_CLASS} ${toneClass}`}
+      onContextMenu={onContextMenu}
+      className={`${ITEM_GEOMETRY_CLASS} ${ITEM_TONE_CLASS[tone]}`}
     >
       {Icon && <Icon className={`h-4 w-4 flex-shrink-0 text-current ${spinning ? 'animate-spin' : ''}`} />}
       <span className="min-w-0 flex-1 truncate">{children}</span>

@@ -22,11 +22,11 @@ stable APT, AUR or Flatpak repositories.
 
 ## Publishing
 
-`nightly.yml` runs after CI succeeds for a push to this repository's main
-branch. It packages that exact commit on Windows, Linux and Apple Silicon
-macOS using `package.yml`, also used by stable releases. Outdated commits and
-already published commits are skipped. The manual trigger requires a successful
-main CI run for the same commit too.
+`nightly.yml` runs every two hours, or on demand from the Actions tab. It
+packages main's head commit on Windows, Linux and Apple Silicon macOS using
+`package.yml`, also used by stable releases. A scheduled run is skipped when
+that commit is already the published nightly or hasn't passed main CI yet. The
+manual trigger fails instead of skipping when CI hasn't passed.
 
 The nightly version is the next patch after package.json, followed by
 `-nightly.<UTC build time>.<workflow run number>.g<commit>`. For example,

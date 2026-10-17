@@ -80,7 +80,8 @@ async function runCatalogJson<T>(args: string[]): Promise<T> {
         throw new Error(
             `Foundry catalog returned malformed JSON for \`${args.join(' ')}\`: ${
                 err instanceof Error ? err.message : String(err)
-            }`
+            }`,
+            { cause: err }
         );
     }
 }

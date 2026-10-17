@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     render(): ReactNode {
         if (this.state.hasError) {
             // Custom fallback if provided
-            if (this.props.fallback) {
+            if (this.props.fallback !== undefined) {
                 return this.props.fallback;
             }
 

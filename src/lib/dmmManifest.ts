@@ -64,7 +64,8 @@ export function parseDmmManifest(input: string): DmmManifest {
     parsed = JSON.parse(input);
   } catch (err) {
     throw new Error(
-      `Not valid .dmm.json (JSON parse failed): ${err instanceof Error ? err.message : String(err)}`
+      `Not valid .dmm.json (JSON parse failed): ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

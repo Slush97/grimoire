@@ -21,7 +21,8 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
-import { app, protocol, net } from 'electron';
+import { app, net } from 'electron';
+import { registerAssetProtocol } from './assetProtocol';
 import { runVpkmerge } from './modMerger';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -250,7 +251,7 @@ export async function exportSoulModel(
  * (done in index.ts).
  */
 export function registerSoulModelProtocol(): void {
-    protocol.handle(SOUL_MODEL_SCHEME, async (request) => {
+    registerAssetProtocol(SOUL_MODEL_SCHEME, async (request) => {
         try {
             const url = new URL(request.url);
             // Path is /<encodeURIComponent(metaKey)>/model.glb; the first

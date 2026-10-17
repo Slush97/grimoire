@@ -102,7 +102,7 @@ No telemetry. On its own, Grimoire only talks to GitHub (to check for app update
 Grimoire shares wire-format types with its companion service,
 [grimoire-social](https://github.com/Slush97/grimoire-social), through a
 workspace package resolved from `../grimoire-social`. Clone both side by side,
-or `pnpm install` fails with `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`. Needs Node 20+
+or `pnpm install` fails with `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`. Needs Node 24+
 and pnpm 10+.
 
 ```bash

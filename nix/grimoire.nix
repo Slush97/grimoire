@@ -5,18 +5,15 @@
 # nixpkgs PR #519608); electron-builder's internal rebuild handles natives,
 # steered to the nix headers via npm_config_nodedir.
 #
-# The upstream Electron pin (35.7.5) is EOL and absent from nixpkgs, so this
-# runs on nixpkgs' current electron. better-sqlite3 is rebuilt against the
-# same electron's headers, keeping the native ABI consistent. If runtime
-# breakage from the 35 -> current API drift ever appears, pin the oldest
-# electron_NN still in nixpkgs here.
+# The flake selects the same Electron major as package.json. better-sqlite3
+# is rebuilt against that Electron's headers to keep the native ABI consistent.
 {
   lib,
   stdenv,
   fetchPnpmDeps,
   pnpmConfigHook,
   pnpm_10,
-  nodejs_22,
+  nodejs_24,
   electron,
   makeWrapper,
   copyDesktopItems,
@@ -64,11 +61,11 @@ stdenv.mkDerivation (finalAttrs: {
     # (.github/workflows/nix.yml) runs that build on every PR that touches
     # pnpm-lock.yaml, so a stale hash fails CI instead of downstream users.
     fetcherVersion = 4;
-    hash = "sha256-C35PkFnWOUBDiqToIpttTIy59Yt+gOnIYLc+0toJXHY=";
+    hash = "sha256-QxZ15pvgjTFCw0vjvrkaKYBPbEUk+YvfZN3VZs3nae8=";
   };
 
   nativeBuildInputs = [
-    nodejs_22
+    nodejs_24
     pnpm
     pnpmConfigHook
     makeWrapper
@@ -82,15 +79,14 @@ stdenv.mkDerivation (finalAttrs: {
   strictDeps = true;
 
   env = {
-    ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
     NO_UPDATE_NOTIFIER = "1";
     # Baked textually into the bundle by the vite define; the production
     # build refuses to run without an https value.
     GRIMOIRE_SOCIAL_BASE_URL = "https://grimoire-social.slusheliott.workers.dev";
   };
 
-  # pnpmConfigHook installed with --ignore-scripts (the vpkmerge postinstall
-  # download and husky prepare are skipped by design). The aliased
+  # pnpmConfigHook installed with --ignore-scripts (the Electron and vpkmerge
+  # downloads and husky prepare are skipped by design). The aliased
   # social-types sources import zod; guarantee resolution from grimoire's own
   # node_modules since the sibling has none in the sandbox.
   postConfigure = ''
@@ -174,7 +170,7 @@ stdenv.mkDerivation (finalAttrs: {
         ]
       } \
       --add-flags $out/share/grimoire/resources/app.asar \
-      --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true --wayland-text-input-version=3}}"
+      --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--enable-features=WaylandWindowDecorations --enable-wayland-ime=true --wayland-text-input-version=3}}"
 
     runHook postInstall
   '';

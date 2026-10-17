@@ -1,6 +1,6 @@
 # Grimoire
 
-Desktop mod manager for Deadlock (Valve). Electron 35 + React 19 + TypeScript 5.9 + Tailwind 4, pnpm. Ships for Windows, Linux (AppImage, deb, AUR, Flatpak) and macOS (Apple Silicon only, ad-hoc signed, no auto-update: see `docs/macos.md`).
+Desktop mod manager for Deadlock (Valve). Electron 44 + React 19 + TypeScript 5.9 + Tailwind 4, pnpm. Ships for Windows, Linux (AppImage, deb, AUR, Flatpak) and macOS (Apple Silicon only, ad-hoc signed, no auto-update: see `docs/macos.md`).
 
 Single maintainer. Part of the `grimoire-workspace` monorepo-ish root; sibling repos (`../grimoire-social`, `../vpkmerge`, ...) have their own `AGENTS.md`/`CLAUDE.md`.
 
@@ -61,10 +61,9 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 
 ## Gotchas that have shipped bugs
 
-- **New main-process runtime deps must be bundled.** `externalizeDepsPlugin()` leaves prod deps as bare imports, and `electron-builder.yml` strips `node_modules` except an explicit native allowlist. Add the package to the `exclude` list in `electron.vite.config.ts`, or every packaged user crashes on launch. After `pnpm build`, `grep -c 'Could not resolve "' dist/main/index.js` must print `0`.
+- **New main-process runtime deps must be bundled.** `build.externalizeDeps` leaves prod deps as bare imports, and `electron-builder.yml` strips `node_modules` except an explicit native allowlist. Add the package to the `exclude` list in `electron.vite.config.ts`, or every packaged user crashes on launch. After `pnpm build`, `grep -c 'Could not resolve "' dist/main/index.js` must print `0`.
 - **`@grimoire/social-types` stays in `devDependencies`.** It is bundled at build time. As a prod dep, `@electron/rebuild` trips over its out-of-root symlink.
-- **Main-process string literals must not end with the word `import`.** electron-vite's CJS shim regex treats `...import'` as an import statement and splices code into the next string literal. The error ("Unterminated string literal") points at an unrelated line.
-- **Tests run on Node 20 in CI** with no DOM. A renderer module that touches `navigator`/`window` at import time passes locally on newer Node and fails CI for every test that transitively imports it. Watch the test count, not just pass/fail.
+- **Tests run on Node 24 in CI** with no DOM. Node provides a global `navigator`, but `window` and `document` are still unavailable. Renderer modules that access DOM APIs at import time can fail every test that transitively imports them. Watch the test count, not just pass/fail.
 - **The CSP only applies to packaged builds.** `pnpm dev` has none, so "works in dev, broken packaged" bugs (especially 3D previews over `grimoire-hero:`/`grimoire-soul:`/`blob:`) usually mean the `connect-src` in `electron/main/index.ts` needs updating.
 - **vpkmerge version coupling.** A feature that needs a new vpkmerge flag or subcommand requires a vpkmerge release first, then a bump of the version + 3 sha256s in `scripts/fetch-vpkmerge.mjs`. `pnpm dev` hides the break when a locally built binary sits in `resources/vpkmerge/`.
 - **Mod mutations are serialized.** Enable/disable/reorder share an in-process lock (`withModMutationLock` / `runExclusiveModMutation` in `electron/main/services/mods.ts`) because racing `pakNN` slot writes clobbered VPKs. Route new mutating operations through it.

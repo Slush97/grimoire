@@ -10,10 +10,10 @@
 
 rustPlatform.buildRustPackage {
   pname = "vpkmerge";
-  version = "0.21.1";
+  version = "0.22.1";
   inherit src;
 
-  cargoHash = "sha256-z0gbel0hQDD2de2WcfRrxd+D+ZvpJeT/T0flWVxYTXc=";
+  cargoHash = "sha256-O48nFnBgaJWLCkcBQsWKUo0++CoYs85QTel9Ezz0ZZU=";
 
   buildAndTestSubdir = "vpkmerge-cli";
 

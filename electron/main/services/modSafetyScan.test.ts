@@ -230,6 +230,17 @@ describe('VPK safety inspection', () => {
     it('rejects duplicate case-insensitive paths', async () => {
         expect((await scan(safetyVpk([{ path: 'a.js', bytes: Buffer.from('run()') }, { path: 'A.js', bytes: Buffer.from('run()') }]))).verdict).toBe('blocked');
     });
+    it('accepts a duplicate path when both records are identical', async () => {
+        const report = await scan(safetyVpk([{ path: 'README.txt', bytes: Buffer.alloc(0) },
+            { path: 'models/hero.vmdl_c', bytes: Buffer.from('inert') }, { path: 'README.txt', bytes: Buffer.alloc(0) }]));
+        expect(report.verdict).toBe('no-findings');
+    });
+    it('accepts differing duplicates only for entries the scan never reads', async () => {
+        expect((await scan(safetyVpk([{ path: 'notes.txt', bytes: Buffer.from('one') },
+            { path: 'NOTES.txt', bytes: Buffer.from('two') }]))).verdict).toBe('no-findings');
+        expect((await scan(safetyVpk([{ path: 'ui/hud.vjs_c', bytes: Buffer.from('one') },
+            { path: 'ui/hud.vjs_c', bytes: Buffer.from('two') }]))).verdict).toBe('blocked');
+    });
     it.each([Buffer.alloc(0), Buffer.from('not a vpk'), Buffer.from([0x34, 0x12, 0xaa, 0x55])])('rejects truncated headers', async bytes => {
         expect((await scan(bytes)).verdict).toBe('blocked');
     });

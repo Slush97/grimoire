@@ -118,7 +118,7 @@ async function fetchFromAPI<T>(
         return JSON.parse(text) as T
     } catch (err) {
         console.error('[fetchFromAPI] Failed to parse JSON:', text.slice(0, 200))
-        throw new Error(`Deadlock API returned invalid JSON: ${err}`)
+        throw new Error(`Deadlock API returned invalid JSON: ${err}`, { cause: err })
     }
 }
 

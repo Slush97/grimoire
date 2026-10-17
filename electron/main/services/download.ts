@@ -18,6 +18,7 @@ import { validateDownloadUrl, validateFileSize } from './security';
 import { forgeFileNameStem } from './forgeProtocol';
 import { gameBananaFileServerSelector } from './gamebananaFileServers';
 import { downloadTransfer, type DownloadServerStatus } from './downloadTransfer';
+import { describeNetworkError } from './networkErrors';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
@@ -490,9 +491,10 @@ export async function downloadFile(
                                 candidates = await gameBananaFileServerSelector.getCandidates(
                                     canonicalUrl.toString(),
                                     transferSignal,
+                                    redirectHost,
                                 );
                             } catch (error) {
-                                if (transferSignal.aborted) throw new Error('CANCELLED_BY_USER');
+                                if (transferSignal.aborted) throw new Error('CANCELLED_BY_USER', { cause: error });
                                 console.warn('[download] Fileserver selection failed; using GameBanana route:', error);
                                 candidates = [];
                             }
@@ -507,7 +509,7 @@ export async function downloadFile(
                                     return false;
                                 }
                             });
-                            if (!directCandidates.includes(redirectUrl)) {
+                            if (!directCandidates.some((candidate) => new URL(candidate).hostname === redirectHost)) {
                                 directCandidates.push(redirectUrl);
                             }
 
@@ -633,7 +635,7 @@ export async function downloadFile(
                 finalize(new Error('CANCELLED_BY_USER'));
                 return;
             }
-            finalize(err);
+            finalize(err.message ? err : new Error(describeNetworkError(err), { cause: err }));
         });
 
         // Register the cancel handler. request.destroy() alone is not enough:
@@ -1021,6 +1023,7 @@ async function executeDownload(
     // archives (e.g. Tailed_mod vs Tailed_mod_Beard). Drives the picker label
     // and the persisted variantLabel.
     const variantByFile = new Map<string, string>();
+    const archivePathByFile = new Map<string, string>();
 
     // Extract if archive
     if (isArchive(downloadPath)) {
@@ -1077,6 +1080,7 @@ async function executeDownload(
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
             // Archive folder + original basename: stable across machines/redownloads.
             stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+            archivePathByFile.set(r.fileName, r.archiveFolder ? `${r.archiveFolder}/${r.sourceFileName}` : r.sourceFileName);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -1169,7 +1173,8 @@ async function executeDownload(
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
-        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
+        const archiveVpkPath = archivePathByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex, archiveVpkPath };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
@@ -1538,6 +1543,7 @@ async function executeOneClickDownload(
     let installedVpks: string[] = [];
     let vpkIndexByFile = new Map<string, number>();
     const variantByFile = new Map<string, string>();
+    const archivePathByFile = new Map<string, string>();
 
     if (isArchive(downloadPath)) {
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
@@ -1586,6 +1592,7 @@ async function executeOneClickDownload(
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
             // Archive folder + original basename: stable across machines/redownloads.
             stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+            archivePathByFile.set(r.fileName, r.archiveFolder ? `${r.archiveFolder}/${r.sourceFileName}` : r.sourceFileName);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -1667,7 +1674,8 @@ async function executeOneClickDownload(
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
-        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
+        const archiveVpkPath = archivePathByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex, archiveVpkPath };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 

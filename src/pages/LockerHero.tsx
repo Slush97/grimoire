@@ -18,6 +18,7 @@ import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
 import FloatingModelPanel from '../components/locker/FloatingModelPanel';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import { useAppStore } from '../stores/appStore';
@@ -483,21 +484,24 @@ export function LockerHeroView({
           Mounted only while open so the heavy three.js chunk loads on demand. */}
       {view3d && (
         <FloatingModelPanel title={t('locker.hero.hero3dModel', { hero: hero.name })} onClose={() => setView3d(false)}>
-          <Suspense
-            fallback={
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-              </div>
-            }
-          >
-            <HeroPoseViewer
-              key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
-              heroName={hero.name}
-              skinSources={activeSkinSources}
-              fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
-              trippyPreview={matchedTrippyPreview}
-            />
-          </Suspense>
+          {/* Without hardware WebGL the canvas throws; keep that inside the panel. */}
+          <ErrorBoundary>
+            <Suspense
+              fallback={
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+                </div>
+              }
+            >
+              <HeroPoseViewer
+                key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
+                heroName={hero.name}
+                skinSources={activeSkinSources}
+                fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
+                trippyPreview={matchedTrippyPreview}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </FloatingModelPanel>
       )}
 

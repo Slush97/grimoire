@@ -292,7 +292,8 @@ export function parseInterchangeDocument(text: string): InterchangeDocument {
     raw = JSON.parse(text);
   } catch (err) {
     throw new Error(
-      `${INTERCHANGE_MANIFEST} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+      `${INTERCHANGE_MANIFEST} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
   if (!isObject(raw)) throw new Error(`${INTERCHANGE_MANIFEST} must be a JSON object`);

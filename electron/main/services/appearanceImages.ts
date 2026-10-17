@@ -103,7 +103,7 @@ function resolveImageBytes(source: string): { buf: Buffer; ext: string } {
 
 /** Delete any stored image for `stem` (any extension) directly under `dir`. */
 async function clearKey(dir: string, stem: string): Promise<void> {
-    let entries: string[] = [];
+    let entries: string[];
     try {
         entries = await fs.readdir(dir);
     } catch {
@@ -213,7 +213,7 @@ export async function getAppearanceImageEdit(
 ): Promise<{ source: string; crop: CropRect } | null> {
     if (!isSurface(surface)) return null;
     const sub = sourcesDir();
-    let entries: string[] = [];
+    let entries: string[];
     try {
         entries = await fs.readdir(sub);
     } catch {

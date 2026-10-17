@@ -43,6 +43,13 @@ async function readExactly(file: FileHandle, size: number, offset: number): Prom
     return buffer;
 }
 
+/** Entries the scan never reads: assets and anything that is neither code, layout, archive nor program. */
+function ignored(path: string, extension: string): boolean {
+    return ASSETS.has(extension) || /\.vnmgraph\.\+[a-z0-9_-]+_c$/i.test(path)
+        || (extension !== 'vpk' && extension !== 'vxml_c' && !PROGRAMS.has(extension)
+            && !TEXT.has(extension) && !COMPILED_TEXT.has(extension));
+}
+
 function validPath(path: string): boolean {
     return path.length <= 2048 && !/[\\:<>"|?*]/.test(path) && ![...path].some(c => c.charCodeAt(0) < 32)
         && path.split('/').every(p => p !== '' && p !== '.' && p !== '..' && !/[. ]$/.test(p)
@@ -62,7 +69,7 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
         requireCondition(treeSize > 0 && treeSize <= MAX_TREE && headerSize + treeSize <= stat.size);
         const tree = await readExactly(handle, treeSize, headerSize);
         const entries: Entry[] = [];
-        const seen = new Set<string>();
+        const seen = new Map<string, Buffer>();
         const sizes = new Map<string, number>([[path, stat.size]]);
         let cursor = 0;
         const string = () => {
@@ -78,9 +85,9 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
             for (let folder = string(); folder !== ''; folder = string()) {
                 for (let name = string(); name !== ''; name = string()) {
                     const entryPath = `${folder === ' ' ? '' : folder + '/'}${name}${extension === ' ' ? '' : '.' + extension}`;
-                    requireCondition(validPath(entryPath) && !seen.has(entryPath.toLowerCase()));
+                    requireCondition(validPath(entryPath));
                     requireCondition(cursor + 18 <= tree.length && entries.length < MAX_ENTRIES);
-                    seen.add(entryPath.toLowerCase());
+                    const recordStart = cursor;
                     const preloadSize = tree.readUInt16LE(cursor + 4);
                     const archive = tree.readUInt16LE(cursor + 6);
                     let offset = tree.readUInt32LE(cursor + 8);
@@ -100,7 +107,18 @@ async function directory(path: string): Promise<{ entries: Entry[]; files: strin
                         if (!sizes.has(file)) sizes.set(file, (await fs.stat(file)).size);
                         requireCondition(offset + length <= sizes.get(file)!);
                     }
-                    entries.push({ path: entryPath, extension: extension.trim().toLowerCase(), preload, file, offset, length });
+                    const key = entryPath.toLowerCase();
+                    const record = tree.subarray(recordStart, cursor);
+                    const previous = seen.get(key);
+                    const type = extension.trim().toLowerCase();
+                    if (previous) {
+                        // Released mods list the same README twice. Which copy the game
+                        // loads only matters when the copies differ and the scan reads them.
+                        requireCondition(previous.equals(record) || ignored(entryPath, type));
+                        continue;
+                    }
+                    seen.set(key, record);
+                    entries.push({ path: entryPath, extension: type, preload, file, offset, length });
                 }
             }
         }
@@ -272,7 +290,7 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
         const layouts: Entry[] = [];
         for (const entry of entries) {
             const ext = entry.extension;
-            if (ASSETS.has(ext) || /\.vnmgraph\.\+[a-z0-9_-]+_c$/i.test(entry.path)) continue;
+            if (ignored(entry.path, ext)) continue;
             if (ext === 'vpk') {
                 const size = entry.preload.length + entry.length;
                 budget.nestedBytes += size;
@@ -290,9 +308,6 @@ async function scanArchive(path: string, binary: string | undefined, budget: Sca
                 continue;
             }
             if (PROGRAMS.has(ext)) { add({ entry: entry.path, reason: 'native-code' }); continue; }
-            if (ext !== 'vxml_c' && !TEXT.has(ext) && !COMPILED_TEXT.has(ext)) {
-                continue;
-            }
             budget.sourceBytes += entry.preload.length + entry.length;
             requireCondition(entry.length + entry.preload.length <= MAX_SOURCE && budget.sourceBytes <= MAX_SOURCES);
             if (ext === 'vxml_c') {

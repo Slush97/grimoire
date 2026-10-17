@@ -6,7 +6,7 @@ Thanks for your interest in contributing.
 
 Requirements:
 
-- [Node.js](https://nodejs.org/) 20+
+- [Node.js](https://nodejs.org/) 24+
 - [pnpm](https://pnpm.io/) 10+ (pnpm 9 mis-links the out-of-root workspace package below)
 - [Git](https://git-scm.com/)
 

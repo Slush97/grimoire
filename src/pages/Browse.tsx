@@ -35,10 +35,12 @@ import {
   createSnapshot,
   deleteReplacedMod,
   assertReplacementSafety,
+  isGameRunningModLockError,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { browseRemoteFilters } from '../lib/browseFilters';
+import { categorySubtreeIds } from '../lib/heroFilter';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
@@ -340,6 +342,19 @@ function renderErrorWithLinks(text: string): React.ReactNode {
     }
     return <span key={i}>{part}</span>;
   });
+}
+
+const USER_CANCELLED_MESSAGES = new Set(['Cancelled by user', 'CANCELLED_BY_USER', 'User cancelled multi-VPK pick']);
+
+// `error` only renders over an empty grid, so a failed install or details
+// load would otherwise vanish while results are on screen. Game-running
+// refusals already toast in lib/api.
+function toastModActionError(err: unknown) {
+  if (isGameRunningModLockError(err)) return;
+  const detail = (err instanceof Error ? err.message : String(err))
+    .replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  if (USER_CANCELLED_MESSAGES.has(detail)) return;
+  showToast(detail, { tone: 'error', duration: 7000 });
 }
 
 function BrowseViewOptionControl<T extends string>({
@@ -819,10 +834,14 @@ export default function Browse() {
   // Sound or Wip. Resolve this outside searchLocal so the asynchronously loaded
   // name can participate in the request identity below.
   const skinsCategory = findCategoryByName(modCategories, 'Skins');
-  const skinsCategoryId = skinsCategory?.id;
-  const selectedHeroName = heroCategoryId !== 'all' && skinsCategory?.children
-    ? skinsCategory.children.find((child) => child.id === heroCategoryId)?.name
+  const selectedHeroNode = heroCategoryId !== 'all' && skinsCategory?.children
+    ? skinsCategory.children.find((child) => child.id === heroCategoryId)
     : undefined;
+  const selectedHeroName = selectedHeroNode?.name;
+  const selectedHeroCategoryIds = useMemo(
+    () => (selectedHeroNode ? categorySubtreeIds(selectedHeroNode) : undefined),
+    [selectedHeroNode]
+  );
 
   // Debounce the search input: every keystroke previously fired a full FTS5
   // query + count + render, which felt slow even when the DB was fast. 250ms
@@ -1290,12 +1309,12 @@ export default function Browse() {
         section: section,
         categoryId: effectiveCategoryId,
         // The cached rows have no category id, only a root category name; see
-        // rootCategoryNameById. Ignored when a hero is selected, which scopes by
-        // title instead.
+        // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
-        // Enhanced hero search: pass hero name and skins parent ID
-        heroName: selectedHeroName,
-        skinsCategoryId,
+        // Mod skins match the hero's category. Sound and Wip have no hero
+        // categories, so they can only match the title.
+        heroCategoryIds: section === 'Mod' ? selectedHeroCategoryIds : undefined,
+        heroName: section === 'Mod' ? undefined : selectedHeroName,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
@@ -1376,7 +1395,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, skinsCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -1763,7 +1782,7 @@ export default function Browse() {
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       await applyLoadedModDetails(mod, details, section);
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     }
   };
 
@@ -1780,7 +1799,7 @@ export default function Browse() {
       await applyLoadedModDetails(mod, details, section);
     } catch (err) {
       if (modalNavigationRequestRef.current === requestId) {
-        setError(String(err));
+        toastModActionError(err);
       }
     } finally {
       if (modalNavigationRequestRef.current === requestId) {
@@ -1823,7 +1842,7 @@ export default function Browse() {
       }
     } catch (err) {
       if (modalNavigationRequestRef.current === requestId) {
-        setError(String(err));
+        toastModActionError(err);
       }
     } finally {
       if (modalNavigationRequestRef.current === requestId) {
@@ -1933,7 +1952,7 @@ export default function Browse() {
         }
       }
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     } finally {
       releaseDownloadRequest(selectedMod.id, fileId);
     }
@@ -1946,7 +1965,7 @@ export default function Browse() {
     try {
       await downloadMod(modId, file.id, file.fileName, section, effectiveCategoryId);
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     } finally {
       releaseDownloadRequest(modId, file.id);
     }
@@ -1964,7 +1983,7 @@ export default function Browse() {
       // shows the artist card) without a second round-trip against the limiter.
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (!details.files || details.files.length === 0) {
-        setError(t('browse.errors.noDownloadableFiles'));
+        showToast(t('browse.errors.noDownloadableFiles'), { tone: 'error', duration: 7000 });
         return;
       }
 
@@ -1992,7 +2011,7 @@ export default function Browse() {
 
       await runDownload(mod.id, getPrimaryFile(installable));
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     }
   };
 

@@ -27,7 +27,8 @@ import { createHash } from 'crypto';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
-import { app, protocol, net } from 'electron';
+import { app, net } from 'electron';
+import { registerAssetProtocol } from './assetProtocol';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
 import { exportParticleBundle } from './heroParticleExport';
@@ -1218,7 +1219,7 @@ export async function exportHeroEffect(
  * (done in index.ts).
  */
 export function registerHeroPoseProtocol(): void {
-    protocol.handle(HERO_POSE_SCHEME, async (request) => {
+    registerAssetProtocol(HERO_POSE_SCHEME, async (request) => {
         try {
             const url = new URL(request.url);
             const parts = url.pathname.split('/').filter(Boolean);

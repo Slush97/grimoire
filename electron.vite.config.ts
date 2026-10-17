@@ -1,4 +1,4 @@
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
+import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
@@ -48,8 +48,12 @@ export default defineConfig(({ mode }) => {
     return {
     main: {
         resolve: { alias: socialTypesAlias },
-        plugins: [
-            externalizeDepsPlugin({
+        define: {
+            'process.env.GRIMOIRE_SOCIAL_BASE_URL': JSON.stringify(SOCIAL_BASE_URL),
+        },
+        build: {
+            outDir: 'dist/main',
+            externalizeDeps: {
                 // @grimoire/social-types is a workspace package whose entrypoint is a
                 // .ts file shipped from source, so it must be bundled. zod is bundled
                 // alongside it because electron-builder.yml's files allowlist drops
@@ -69,14 +73,8 @@ export default defineConfig(({ mode }) => {
                     'zod',
                     '@xhayper/discord-rpc',
                 ],
-            }),
-        ],
-        define: {
-            'process.env.GRIMOIRE_SOCIAL_BASE_URL': JSON.stringify(SOCIAL_BASE_URL),
-        },
-        build: {
-            outDir: 'dist/main',
-            rollupOptions: {
+            },
+            rolldownOptions: {
                 input: {
                     index: resolve(__dirname, 'electron/main/index.ts'),
                     vpkSafetyWorker: resolve(__dirname, 'electron/main/services/vpkSafetyWorker.ts'),
@@ -85,7 +83,6 @@ export default defineConfig(({ mode }) => {
         },
     },
     preload: {
-        plugins: [externalizeDepsPlugin()],
         build: {
             outDir: 'dist/preload',
             lib: {
@@ -93,7 +90,7 @@ export default defineConfig(({ mode }) => {
                 formats: ['cjs'],
                 fileName: () => 'index.js',
             },
-            rollupOptions: {
+            rolldownOptions: {
                 external: ['electron'],
             },
         },
@@ -104,7 +101,7 @@ export default defineConfig(({ mode }) => {
         base: './',
         build: {
             outDir: 'dist/renderer',
-            rollupOptions: {
+            rolldownOptions: {
                 input: {
                     index: resolve(__dirname, 'index.html'),
                 },

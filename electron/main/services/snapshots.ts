@@ -182,7 +182,7 @@ export function deleteSnapshot(snapshotId: string): void {
             try {
                 unlinkSync(snapshotPath(filename));
             } catch (err) {
-                throw new Error(`Failed to delete snapshot: ${String(err)}`);
+                throw new Error(`Failed to delete snapshot: ${String(err)}`, { cause: err });
             }
             return;
         }

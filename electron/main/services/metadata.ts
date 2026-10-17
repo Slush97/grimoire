@@ -16,6 +16,7 @@ export interface ModMetadata {
     gameBananaId?: number;
     gameBananaFileId?: number; // The specific file ID that was downloaded
     vpkIndex?: number;      // Size-sorted index inside a multi-VPK GameBanana file
+    archiveVpkPath?: string; // Where the VPK sat in the downloaded archive ("<variant folder>/<name>"); maps parts across updates
     categoryId?: number;
     categoryName?: string; // Hero/category name from GameBanana
     sourceSection?: string;

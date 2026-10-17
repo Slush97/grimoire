@@ -12,7 +12,7 @@
     # Rust CLI the app shells out to for VPK merge/split. Keep the ref in
     # sync with VPKMERGE_VERSION in scripts/fetch-vpkmerge.mjs.
     vpkmerge = {
-      url = "github:Slush97/vpkmerge?ref=v0.21.1";
+      url = "github:Slush97/vpkmerge?ref=v0.22.1";
       flake = false;
     };
   };
@@ -28,20 +28,10 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        # electron_40 is nixpkgs-flagged insecure (EOL upstream) but is the
-        # newest Electron the locked electron-builder stack can rebuild
-        # natives for (node-abi ends at 40; see the callPackage below). The
-        # predicate permits insecure Electron only, nothing else. Drop it
-        # when electron-builder's node-abi learns the current Electron.
-        config.allowInsecurePredicate = pkg: (pkg.pname or "") == "electron";
       };
       lib = pkgs.lib;
 
-      nodeVersion = pkgs.nodejs_22.version;
-      nodeVersionOk = lib.versionAtLeast nodeVersion "22.12.0";
-
-      # Electron 35.7.5 (locked in pnpm-lock.yaml) is not in nixpkgs anymore;
-      # we run the npm-fetched Electron binary via nix-ld instead. The
+      # Development runs the npm-fetched Electron binary via nix-ld. The
       # runtime shared-library list below (electronLibPath) is copied
       # VERBATIM (not abbreviated from memory) from nixpkgs'
       # pkgs/development/tools/electron/binary/generic.nix at the
@@ -105,10 +95,8 @@
         grimoire-src = self;
         social-src = grimoire-social;
         vpkmerge = vpkmergePkg;
-        # Not the default electron (41+): electron-builder 26's bundled
-        # @electron/rebuild uses node-abi 3.85, whose registry ends at
-        # Electron 40. Bump when the locked electron-builder stack catches up.
-        electron = pkgs.electron_40;
+        # Match the npm Electron major used by development and release builds.
+        electron = pkgs.electron_44;
       };
     in
     {
@@ -127,16 +115,15 @@
           grimoire-src = self;
           social-src = grimoire-social;
           vpkmerge = final.vpkmerge;
-          # See packages: node-abi in the locked electron-builder stack
-          # ends at Electron 40.
-          electron = final.electron_40;
+          # Keep the overlay on the same Electron major as the package.
+          electron = final.electron_44;
         };
       };
 
       devShells.${system}.default = pkgs.mkShell {
         packages =
           (with pkgs; [
-            nodejs_22
+            nodejs_24
             pnpm_10
             python3
             gnumake
@@ -152,12 +139,6 @@
           # Extend (never replace) the host's nix-ld library path so libraries
           # configured via programs.nix-ld.libraries stay visible.
           export NIX_LD_LIBRARY_PATH="${lib.makeLibraryPath electronRuntimeLibs}''${NIX_LD_LIBRARY_PATH:+:$NIX_LD_LIBRARY_PATH}"
-
-          if ! ${lib.boolToString nodeVersionOk}; then
-            echo "ERROR: nodejs_22 (${nodeVersion}) is older than the required 22.12.0." >&2
-            echo "  @electron/rebuild 4.0.2 needs Node >=22.12.0. Bump the nixpkgs input." >&2
-            exit 1
-          fi
 
           # Extend (never replace) XDG_DATA_DIRS so GSettings schemas used by
           # GTK/Electron (via wrapGAppsHook upstream, which we don't use since

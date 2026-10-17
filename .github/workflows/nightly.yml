@@ -1,10 +1,8 @@
 name: Nightly
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  schedule:
+    - cron: '17 */2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,11 +15,7 @@ concurrency:
 
 jobs:
   prepare:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.meta.outputs.build }}
@@ -30,17 +24,15 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       social-sha: ${{ steps.meta.outputs.social-sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20
+          node-version: 24
       - name: Select a checked main commit
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
-          NIGHTLY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          NIGHTLY_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           HEAD_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
@@ -50,10 +42,15 @@ jobs:
             echo "Skipping an outdated or already published commit."
             exit 0
           fi
-          # The manual trigger is held to the same CI gate as workflow_run.
+          # A scheduled run can land while main's CI is still going; it skips and
+          # the next tick retries. A manual run fails so the cause is visible.
           CHECKED="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" -f head_sha="$NIGHTLY_SHA" -f branch=main -f status=success --jq '[.workflow_runs[] | select(.event == "push") ] | length')"
           if [ "$CHECKED" = "0" ]; then
             echo "This main commit has not passed CI."
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             exit 1
           fi
           VERSION="$(node scripts/nightly-version.mjs)"
@@ -83,7 +80,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
@@ -102,7 +99,7 @@ jobs:
           set -euo pipefail
           HEAD_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
           if [ "$HEAD_SHA" != "$NIGHTLY_SHA" ]; then
-            echo "main advanced during packaging; its CI run will publish the next nightly."
+            echo "main advanced during packaging; the next scheduled run will publish it."
             exit 0
           fi
           # A nightly must never carry stable update metadata.

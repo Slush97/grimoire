@@ -1,6 +1,7 @@
 # macOS support
 
-Grimoire runs on macOS for development and local mod testing. This document
+Grimoire requires macOS 13 (Ventura) or later on Apple Silicon for development
+and local mod testing. Electron 44 no longer supports macOS 12. This document
 covers what is different about the platform and why, because almost none of it
 is obvious from the code alone.
 

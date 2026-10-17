@@ -1,6 +1,7 @@
-import { ipcMain, dialog, shell, clipboard, nativeImage } from 'electron';
+import { ipcMain, shell, clipboard, ClipboardItem, nativeImage } from 'electron';
 import { getMainWindow } from '../index';
 import { getActiveDeadlockPath } from '../services/settings';
+import { showOpenDialog, showSaveDialog } from '../services/dialogs';
 import {
     getGameinfoStatus,
     fixGameinfo,
@@ -43,7 +44,7 @@ async function loadClipboardImage(source: string): Promise<Electron.NativeImage>
 ipcMain.handle(
     'show-open-dialog',
     async (_, options: OpenDialogOptions): Promise<string | null> => {
-        const result = await dialog.showOpenDialog({
+        const result = await showOpenDialog({
             properties: options.directory ? ['openDirectory'] : ['openFile'],
             title: options.title,
             defaultPath: options.defaultPath,
@@ -59,7 +60,7 @@ ipcMain.handle(
 ipcMain.handle(
     'show-open-dialog-multi',
     async (_, options: OpenDialogOptions): Promise<string[]> => {
-        const result = await dialog.showOpenDialog({
+        const result = await showOpenDialog({
             properties: ['openFile', 'multiSelections'],
             title: options.title,
             defaultPath: options.defaultPath,
@@ -73,7 +74,7 @@ ipcMain.handle(
 ipcMain.handle(
     'show-save-dialog',
     async (_, options: SaveDialogOptions): Promise<string | null> => {
-        const result = await dialog.showSaveDialog({
+        const result = await showSaveDialog({
             title: options.title,
             defaultPath: options.defaultPath,
             filters: options.filters,
@@ -94,7 +95,9 @@ ipcMain.handle('copy-image-to-clipboard', async (_, source: string): Promise<voi
     if (image.isEmpty()) {
         throw new Error('Image could not be decoded');
     }
-    clipboard.writeImage(image);
+    await clipboard.write([new ClipboardItem({
+        'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }),
+    })]);
 });
 
 // open-mods-folder

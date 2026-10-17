@@ -60,7 +60,7 @@ export function capsuleDepth(
 ): number {
   _capsuleAxis.subVectors(c.b, c.a);
   const length = _capsuleAxis.length();
-  let t = 0;
+  let t: number;
   if (length < 1e-6) t = c.rb > c.ra ? 1 : 0;
   else if (length - (c.rb - c.ra) <= 0.5) t = 1;
   else {

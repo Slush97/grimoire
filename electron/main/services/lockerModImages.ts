@@ -184,7 +184,7 @@ async function readAsDataUrl(filePath: string): Promise<string> {
 
 /** Delete any stored image for this skin (any extension). */
 async function clearKey(dir: string, stem: string): Promise<void> {
-    let entries: string[] = [];
+    let entries: string[];
     try {
         entries = await fs.readdir(dir);
     } catch {
@@ -307,7 +307,7 @@ async function storeSource(dir: string, skinKey: string, source: string): Promis
 async function readSource(dir: string, skinKey: string): Promise<string | null> {
     const sub = sourcesDir(dir);
     const stem = keyStem(skinKey);
-    let entries: string[] = [];
+    let entries: string[];
     try {
         entries = await fs.readdir(sub);
     } catch {
