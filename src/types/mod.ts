@@ -1168,6 +1168,7 @@ export interface AppSettings {
    *  mod set. On by default: Update sits next to Apply and overwriting is easy to
    *  trigger by accident, with no undo. Turn off to overwrite immediately. */
   confirmProfileUpdate: boolean;
+  experimentalModRepairs?: boolean;
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
   /** Grimoire Social: Discover page + publish/account UI. */

@@ -1516,3 +1516,11 @@ export async function foundrySwapSound(
 ): Promise<import('../types/mod').Mod[]> {
   return window.electronAPI.foundry.swapSound(req);
 }
+
+export function reviewModCompatibility(): Promise<import('./modCompatibility').CompatibilityReview[]> {
+  return window.electronAPI.reviewModCompatibility();
+}
+
+export function repairModCompatibility(modId: string): Promise<import('./modCompatibility').CompatibilityRepairResult> {
+  return withGameRunningWarning(() => window.electronAPI.repairModCompatibility(modId));
+}
