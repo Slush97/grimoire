@@ -49,30 +49,35 @@ export default function GameinfoBanner() {
   };
 
   return (
-    <div className="sticky top-0 z-40 border-b border-state-warning/30 bg-bg-secondary">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3">
-        <AlertTriangle className="h-5 w-5 shrink-0 text-state-warning" aria-hidden="true" />
-        <p className="flex-1 text-sm text-text-primary" title={gameinfo?.configured ? undefined : gameinfo?.message}>
-          {text}
-        </p>
-        <div className="flex items-center gap-2">
-          {canFix && (
-            <Button variant="warning" size="sm" onClick={() => void onFix()} isLoading={fixing}>
-              {t('layout.fixNow')}
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
-            {t('layout.openSettings')}
-          </Button>
-          <button
-            type="button"
-            onClick={() => setDismissed(text)}
-            aria-label={t('layout.hideGameinfoBanner')}
-            title={t('layout.hideGameinfoBannerShort')}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    <div className="sticky top-0 z-40 h-11 shrink-0 border-b border-state-warning/30 bg-bg-secondary">
+      <div className="update-stripes update-stripes-warning h-full bg-state-warning/5">
+        <div className="mx-auto flex h-full w-full max-w-6xl items-center gap-3 px-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-state-warning" aria-hidden="true" />
+          <p
+            className="min-w-0 flex-1 truncate text-sm text-text-primary"
+            title={gameinfo?.configured ? undefined : gameinfo?.message}
           >
-            <X className="h-4 w-4" />
-          </button>
+            {text}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {canFix && (
+              <Button variant="warning" size="sm" onClick={() => void onFix()} isLoading={fixing}>
+                {t('layout.fixNow')}
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
+              {t('layout.openSettings')}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setDismissed(text)}
+              aria-label={t('layout.hideGameinfoBanner')}
+              title={t('layout.hideGameinfoBannerShort')}
+              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
