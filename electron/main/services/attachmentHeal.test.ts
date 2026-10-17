@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const h = vi.hoisted(() => ({
@@ -25,7 +25,7 @@ vi.mock('./gameSessionMods', () => ({
 vi.mock('./imprintMods', () => ({ freezeLegacyVpkIndexes: h.freeze }));
 vi.mock('./deadlock', () => ({
     getCitadelPath: (deadlockPath: string) => deadlockPath,
-    metaKeyFor: (path: string) => path.slice(path.lastIndexOf('/') + 1),
+    metaKeyFor: (path: string) => basename(path),
 }));
 vi.mock('./metadata', () => ({
     getModMetadata: (key: string) => h.meta.get(key),
