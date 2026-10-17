@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Server as ServerIcon,
   Users,
@@ -35,6 +35,95 @@ function pingTone(ms: number): { color: string } {
   if (ms < 120) return { color: 'text-yellow-400' };
   return { color: 'text-state-danger' };
 }
+
+// Each ping reply only changes its own row; the other servers retain their props.
+const ServerRow = memo(function ServerRow({ server: s, ping, hasGamePath, onConnect }: {
+  server: DeadworksServer;
+  ping: number | undefined;
+  hasGamePath: boolean;
+  onConnect: (server: DeadworksServer) => void;
+}) {
+  const { t } = useTranslation();
+  const tone = pingTone(ping ?? -1);
+  const pingLabel = ping === undefined
+    ? null
+    : ping < 0
+      ? t('servers.ping.unavailable')
+      : t('servers.ping.ms', { ms: ping });
+  const full = s.player_count >= s.max_players && s.max_players > 0;
+  return (
+    <li
+      className="grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-hl/[0.02] md:grid-cols-[1fr_140px_90px_90px_110px] md:items-center md:gap-3"
+    >
+      {/* name + status */}
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${s.online ? 'bg-green-400' : 'bg-text-secondary/40'}`}
+          title={s.online ? t('servers.status.online') : t('servers.status.stale')}
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-medium text-text-primary">{s.name}</span>
+            {s.password_protected && (
+              <span title={t('servers.status.passwordProtected')} className="inline-flex shrink-0">
+                <Lock size={13} className="text-text-secondary" />
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            {s.region && <span className="flex items-center gap-1"><MapPin size={11} />{s.region}</span>}
+            {s.content && s.content.length > 0 && (
+              <Badge variant="info" className="!px-1.5 !py-0">
+                <Tx
+                  k="servers.contentCount"
+                  values={{ count: s.content.length }}
+                  fallback={`${s.content.length} content`}
+                />
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* map */}
+      <div className="truncate text-sm text-text-secondary md:text-text-primary" title={s.map}>
+        {s.map || '-'}
+      </div>
+
+      {/* players */}
+      <div className={`text-sm md:text-center ${full ? 'text-yellow-400' : 'text-text-primary'}`}>
+        <Users size={12} className="mr-1 inline md:hidden" />
+        {s.player_count}/{s.max_players}
+      </div>
+
+      {/* ping */}
+      <div className={`flex items-center gap-1 text-sm md:justify-center ${tone.color}`}>
+        <Signal size={13} />
+        {ping === undefined ? <Loader2 size={12} className="animate-spin" /> : pingLabel}
+      </div>
+
+      {/* join */}
+      <div className="md:text-right">
+        <Button
+          variant="primary"
+          size="sm"
+          icon={Play}
+          disabled={!hasGamePath || full}
+          onClick={() => onConnect(s)}
+          title={
+            full
+              ? t('servers.join.serverFull')
+              : !hasGamePath
+                ? t('servers.join.setGamePathFirst')
+                : t('servers.actions.join')
+          }
+        >
+          <Tx k="servers.actions.join" fallback="Join" />
+        </Button>
+      </div>
+    </li>
+  );
+});
 
 export default function Servers() {
   const { t } = useTranslation();
@@ -256,89 +345,15 @@ export default function Servers() {
             <span className="text-right"><Tx k="servers.actions.join" fallback="Join" /></span>
           </div>
           <ul className="divide-y divide-border">
-            {visible.map((s) => {
-              const ping = pings[s.id];
-              const tone = pingTone(ping ?? -1);
-              const pingLabel = ping === undefined
-                ? null
-                : ping < 0
-                  ? t('servers.ping.unavailable')
-                  : t('servers.ping.ms', { ms: ping });
-              const full = s.player_count >= s.max_players && s.max_players > 0;
-              return (
-                <li
-                  key={s.id}
-                  className="grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-hl/[0.02] md:grid-cols-[1fr_140px_90px_90px_110px] md:items-center md:gap-3"
-                >
-                  {/* name + status */}
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${s.online ? 'bg-green-400' : 'bg-text-secondary/40'}`}
-                      title={s.online ? t('servers.status.online') : t('servers.status.stale')}
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate font-medium text-text-primary">{s.name}</span>
-                        {s.password_protected && (
-                          <span title={t('servers.status.passwordProtected')} className="inline-flex shrink-0">
-                            <Lock size={13} className="text-text-secondary" />
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-text-secondary">
-                        {s.region && <span className="flex items-center gap-1"><MapPin size={11} />{s.region}</span>}
-                        {s.content && s.content.length > 0 && (
-                          <Badge variant="info" className="!px-1.5 !py-0">
-                            <Tx
-                              k="servers.contentCount"
-                              values={{ count: s.content.length }}
-                              fallback={`${s.content.length} content`}
-                            />
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* map */}
-                  <div className="truncate text-sm text-text-secondary md:text-text-primary" title={s.map}>
-                    {s.map || '-'}
-                  </div>
-
-                  {/* players */}
-                  <div className={`text-sm md:text-center ${full ? 'text-yellow-400' : 'text-text-primary'}`}>
-                    <Users size={12} className="mr-1 inline md:hidden" />
-                    {s.player_count}/{s.max_players}
-                  </div>
-
-                  {/* ping */}
-                  <div className={`flex items-center gap-1 text-sm md:justify-center ${tone.color}`}>
-                    <Signal size={13} />
-                    {ping === undefined ? <Loader2 size={12} className="animate-spin" /> : pingLabel}
-                  </div>
-
-                  {/* join */}
-                  <div className="md:text-right">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={Play}
-                      disabled={!hasGamePath || full}
-                      onClick={() => setConnectTarget(s)}
-                      title={
-                        full
-                          ? t('servers.join.serverFull')
-                          : !hasGamePath
-                            ? t('servers.join.setGamePathFirst')
-                            : t('servers.actions.join')
-                      }
-                    >
-                      <Tx k="servers.actions.join" fallback="Join" />
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
+            {visible.map((s) => (
+              <ServerRow
+                key={s.id}
+                server={s}
+                ping={pings[s.id]}
+                hasGamePath={hasGamePath}
+                onConnect={setConnectTarget}
+              />
+            ))}
           </ul>
         </div>
       )}

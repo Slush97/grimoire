@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { Copy, Check, RotateCcw, Pin, Download, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCrosshairStore } from '../stores/crosshairStore';
@@ -55,7 +56,20 @@ export default function Crosshair() {
         applyPreset,
         loadSettingsFromPreset,
         clearAutoexec,
-    } = useCrosshairStore();
+    } = useCrosshairStore(useShallow((s) => ({
+        reset: s.reset,
+        generateCommands: s.generateCommands,
+        getSettings: s.getSettings,
+        importFromGame: s.importFromGame,
+        presets: s.presets,
+        activePresetId: s.activePresetId,
+        loadPresets: s.loadPresets,
+        savePreset: s.savePreset,
+        deletePreset: s.deletePreset,
+        applyPreset: s.applyPreset,
+        loadSettingsFromPreset: s.loadSettingsFromPreset,
+        clearAutoexec: s.clearAutoexec,
+    })));
 
     // Load presets and game path on mount
     useEffect(() => {

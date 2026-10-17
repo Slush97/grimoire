@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Plus, Search } from 'lucide-react';
 import { Card } from '../common/ui';
@@ -24,7 +24,7 @@ interface CommandLibraryProps {
  * live only in a `title` tooltip, which is invisible on touch, unreadable for
  * screen readers browsing by control, and needs a hover-and-wait per row.
  */
-export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) {
+export default memo(function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -145,4 +145,4 @@ export default function CommandLibrary({ isAdded, onAdd }: CommandLibraryProps) 
       )}
     </Card>
   );
-}
+});

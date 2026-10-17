@@ -20,7 +20,8 @@ function formatBytes(bytes: number): string {
 // Housekeeping: leftover archives, the setup wizard, and the two on-disk caches.
 export default function MaintenanceSection() {
   const { t } = useTranslation();
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const activeDeadlockPath = getActiveDeadlockPath(settings);
 
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);

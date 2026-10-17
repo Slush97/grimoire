@@ -9,7 +9,8 @@ import type { AppSettings } from '../../../types/mod';
 // Feature flags plus the dev-only dummy game directory. Both are "you asked
 // for it" territory, so they live away from the everyday preferences.
 export default function ExperimentalSection() {
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const [isCreatingDevPath, setIsCreatingDevPath] = useState(false);
 
   const update = async (patch: Partial<AppSettings>) => {

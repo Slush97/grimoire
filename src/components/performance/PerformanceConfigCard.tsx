@@ -75,7 +75,9 @@ export default function PerformanceConfigCard() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
-  const { settings, saveSettings, setBrowseUi } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
+  const setBrowseUi = useAppStore((s) => s.setBrowseUi);
   const navigate = useNavigate();
 
   const applied = status?.state === 'applied';

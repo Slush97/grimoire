@@ -23,7 +23,8 @@ function DiscordIcon({ className }: { className: string }) {
 // Discord or a GitHub issue.
 export default function SupportSection() {
   const { t } = useTranslation();
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
 
   const [bugDescription, setBugDescription] = useState('');
   const [bugReportText, setBugReportText] = useState<string | null>(null);

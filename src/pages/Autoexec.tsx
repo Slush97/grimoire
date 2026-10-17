@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Save, AlertTriangle, FileWarning } from 'lucide-react';
 import { getSettings } from '../lib/api';
@@ -49,13 +49,16 @@ export default function Autoexec() {
 
     const visibleCommandCount = commands.length + manualCommands.length;
     const copiedCommands = useMemo(() => [...commands, ...manualCommands], [commands, manualCommands]);
-    const commandAlreadyPresent = (command: string) => commands.includes(command) || manualCommands.includes(command);
+    const commandAlreadyPresent = useCallback(
+        (command: string) => commands.includes(command) || manualCommands.includes(command),
+        [commands, manualCommands]
+    );
 
-    const handleAddCommand = (command: string) => {
+    const handleAddCommand = useCallback((command: string) => {
         if (commandAlreadyPresent(command)) return;
         setCommands(prev => [...prev, command]);
         setHasUnsaved(true);
-    };
+    }, [commandAlreadyPresent]);
 
     const handleAddCustomCommand = () => {
         if (!customCommand.trim()) return;

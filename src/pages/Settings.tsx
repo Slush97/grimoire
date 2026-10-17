@@ -53,7 +53,9 @@ type SectionId = (typeof SECTION_IDS)[number];
 // down to routing between them.
 export default function Settings() {
   const { t } = useTranslation();
-  const { settings, settingsLoading, loadSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const settingsLoading = useAppStore((s) => s.settingsLoading);
+  const loadSettings = useAppStore((s) => s.loadSettings);
   const navigate = useNavigate();
   // The section lives in the URL so other pages can link straight to one (/settings/mod-safety).
   const { section: sectionParam } = useParams();

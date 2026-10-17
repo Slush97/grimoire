@@ -14,7 +14,8 @@ const PRIVACY_PAGE_URL = 'https://grimoiremods.com/docs/privacy';
 // What Grimoire shows you and what it shares on your behalf.
 export default function PrivacySection() {
   const { t } = useTranslation();
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
   const [hiddenModsOpen, setHiddenModsOpen] = useState(false);
   const [saltIngestStatus, setSaltIngestStatus] = useState<SaltIngestStatus | null>(null);

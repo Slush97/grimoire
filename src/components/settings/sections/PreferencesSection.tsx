@@ -10,7 +10,8 @@ import type { ForgeBridgeStatus } from '../../../types/electron';
 // Day-to-day behaviour toggles: how mods install, how the Locker opens, and
 // what Grimoire tells other apps about you.
 export default function PreferencesSection() {
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const { t } = useTranslation();
   const [forgeStatus, setForgeStatus] = useState<ForgeBridgeStatus | null>(null);
 

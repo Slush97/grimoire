@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCrosshairStore } from '../../stores/crosshairStore';
 import { crosshairReach } from '../../lib/crosshair';
@@ -35,7 +35,7 @@ interface CrosshairStageProps {
  * the scene, the crosshair, and the hint. `inset-0` resolves against the
  * parent's used size, so it holds regardless of how that height was arrived at.
  */
-export default function CrosshairStage({ scale, zoom, background }: CrosshairStageProps) {
+export default memo(function CrosshairStage({ scale, zoom, background }: CrosshairStageProps) {
   const { t } = useTranslation();
   const stageRef = useRef<HTMLDivElement>(null);
   const followRef = useRef<HTMLDivElement>(null);
@@ -43,7 +43,7 @@ export default function CrosshairStage({ scale, zoom, background }: CrosshairSta
   const frameRef = useRef<number | null>(null);
   const pendingRef = useRef<{ x: number; y: number } | null>(null);
 
-  const settings = useCrosshairStore();
+  const reach = useCrosshairStore(crosshairReach);
   const bg = STAGE_BACKGROUNDS.find((b) => b.id === background) ?? STAGE_BACKGROUNDS[0];
 
   // The simulated screen is the capture: CAPTURE_HEIGHT device-ish px tall,
@@ -59,7 +59,7 @@ export default function CrosshairStage({ scale, zoom, background }: CrosshairSta
   // wide gap at 3x zoom isn't clipped by a fixed-size backing store (and a
   // tiny dot doesn't allocate a huge one). Kept EVEN so the canvas centre sits
   // on a whole pixel and the snapped device pixels land crisp.
-  const canvasSize = Math.min(1400, Math.max(120, 2 * Math.ceil(crosshairReach(settings) * scale * deviceToCss)));
+  const canvasSize = Math.min(1400, Math.max(120, 2 * Math.ceil(reach * scale * deviceToCss)));
 
   const write = useCallback(() => {
     frameRef.current = null;
@@ -161,4 +161,4 @@ export default function CrosshairStage({ scale, zoom, background }: CrosshairSta
       </div>
     </div>
   );
-}
+});

@@ -70,7 +70,8 @@ function GradientTile({
  */
 export default function BackgroundGradientPicker() {
   const { t } = useTranslation();
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const saved = settings?.backgroundGradient ?? null;
 
   const [pickerOpen, setPickerOpen] = useState(false);

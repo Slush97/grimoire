@@ -12,7 +12,8 @@ import LanguageSelector from '../LanguageSelector';
 // stacked list (accent, background, launcher chrome) rather than a header
 // action plus a body, so every appearance control reads at the same level.
 export default function AppearanceSection() {
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
 
   const handleDateFormatChange = async (format: 'MM/DD/YYYY' | 'DD/MM/YYYY') => {
     if (settings && settings.dateFormat !== format) {

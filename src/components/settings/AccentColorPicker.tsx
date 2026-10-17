@@ -20,7 +20,8 @@ const SWATCH_BASE =
  */
 export default function AccentColorPicker() {
   const { t } = useTranslation();
-  const { settings, saveSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState<string | null>(null);
 

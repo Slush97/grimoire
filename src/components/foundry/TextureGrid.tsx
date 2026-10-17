@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import type { TextureGridItem } from '../../types/foundry';
 import TextureCard from './TextureCard';
 
@@ -19,7 +19,7 @@ interface TextureGridProps {
  * narrowing happen client-side here so typing is instant and does not re-spawn
  * the sidecar.
  */
-export default function TextureGrid({ items, heroNames, search, heroFilter, onOpen }: TextureGridProps) {
+export default memo(function TextureGrid({ items, heroNames, search, heroFilter, onOpen }: TextureGridProps) {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((it) => {
@@ -41,4 +41,4 @@ export default function TextureGrid({ items, heroNames, search, heroFilter, onOp
       ))}
     </div>
   );
-}
+});

@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { normalizeCrosshairSettings } from '../../lib/crosshair';
 import type { CrosshairSettings } from '../../types/electron';
 import { useCrosshairStore } from '../../stores/crosshairStore';
 import { drawCrosshair } from './drawCrosshair';
@@ -18,12 +20,11 @@ interface CrosshairPreviewProps {
     transparent?: boolean;
 }
 
-export default function CrosshairPreview({ size = 200, scale = 1, zoom = 1, settings, transparent }: CrosshairPreviewProps) {
-    const storeSettings = useCrosshairStore();
+export default memo(function CrosshairPreview({ size = 200, scale = 1, zoom = 1, settings, transparent }: CrosshairPreviewProps) {
+    // Preset canvases do not subscribe to edits in the live editor. Live canvases
+    // only redraw when crosshair settings change, not preset/loading metadata.
+    const s = useCrosshairStore(useShallow((state) => settings ?? normalizeCrosshairSettings(state)));
     const canvasRef = useRef<HTMLCanvasElement>(null);
-
-    // Use provided settings or fall back to the live editor state
-    const s = settings || storeSettings;
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -33,8 +34,11 @@ export default function CrosshairPreview({ size = 200, scale = 1, zoom = 1, sett
 
         // Backing store at device resolution so the crosshair stays crisp
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = Math.round(size * dpr);
-        canvas.height = Math.round(size * dpr);
+        // Assigning either dimension clears and reallocates the backing store,
+        // even if it has not changed. Most edits only need another draw.
+        const pixels = Math.round(size * dpr);
+        if (canvas.width !== pixels) canvas.width = pixels;
+        if (canvas.height !== pixels) canvas.height = pixels;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         drawCrosshair(ctx, s, { size, scale, zoom, background: transparent ? null : '#555' });
@@ -47,4 +51,4 @@ export default function CrosshairPreview({ size = 200, scale = 1, zoom = 1, sett
             style={{ width: size, height: size }}
         />
     );
-}
+});

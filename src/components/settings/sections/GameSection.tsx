@@ -21,7 +21,9 @@ import Tx from '../../translation/Tx';
 // Game paths and the gameinfo.gi wiring that makes mods load at all.
 export default function GameSection() {
   const { t } = useTranslation();
-  const { settings, saveSettings, detectDeadlock } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
+  const detectDeadlock = useAppStore((s) => s.detectDeadlock);
   const [localPath, setLocalPath] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<boolean | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);

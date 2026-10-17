@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useCrosshairStore } from '../../stores/crosshairStore';
 import { SegmentedControl, Slider, Toggle } from '../common/ui';
@@ -43,7 +44,7 @@ function SubGroup({ title, children }: { title: React.ReactNode; children: React
  * enough to scan at a glance and puts the preview and the control you're
  * dragging on screen at the same time.
  */
-export default function CrosshairControls() {
+export default memo(function CrosshairControls() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<ControlTab>('lines');
 
@@ -87,7 +88,47 @@ export default function CrosshairControls() {
     setColorB,
     setOutlineColor,
     setDisableHeroSpecificCrosshairs,
-  } = useCrosshairStore();
+  } = useCrosshairStore(useShallow((s) => ({
+    pipGap: s.pipGap,
+    pipGapStatic: s.pipGapStatic,
+    pipHeight: s.pipHeight,
+    pipWidth: s.pipWidth,
+    pipOpacity: s.pipOpacity,
+    pipOutlineBorder: s.pipOutlineBorder,
+    pipOutlineGap: s.pipOutlineGap,
+    pipOutlineOpacity: s.pipOutlineOpacity,
+    dotOpacity: s.dotOpacity,
+    dotSize: s.dotSize,
+    dotOutlineBorder: s.dotOutlineBorder,
+    dotOutlineGap: s.dotOutlineGap,
+    dotOutlineOpacity: s.dotOutlineOpacity,
+    colorR: s.colorR,
+    colorG: s.colorG,
+    colorB: s.colorB,
+    outlineColorR: s.outlineColorR,
+    outlineColorG: s.outlineColorG,
+    outlineColorB: s.outlineColorB,
+    disableHeroSpecificCrosshairs: s.disableHeroSpecificCrosshairs,
+    setPipGap: s.setPipGap,
+    setPipGapStatic: s.setPipGapStatic,
+    setPipHeight: s.setPipHeight,
+    setPipWidth: s.setPipWidth,
+    setPipOpacity: s.setPipOpacity,
+    setPipOutlineBorder: s.setPipOutlineBorder,
+    setPipOutlineGap: s.setPipOutlineGap,
+    setPipOutlineOpacity: s.setPipOutlineOpacity,
+    setDotOpacity: s.setDotOpacity,
+    setDotSize: s.setDotSize,
+    setDotOutlineBorder: s.setDotOutlineBorder,
+    setDotOutlineGap: s.setDotOutlineGap,
+    setDotOutlineOpacity: s.setDotOutlineOpacity,
+    setColor: s.setColor,
+    setColorR: s.setColorR,
+    setColorG: s.setColorG,
+    setColorB: s.setColorB,
+    setOutlineColor: s.setOutlineColor,
+    setDisableHeroSpecificCrosshairs: s.setDisableHeroSpecificCrosshairs,
+  })));
 
   const tabs = [
     { value: 'lines' as const, label: t('crosshair.tabs.lines') },
@@ -235,4 +276,4 @@ export default function CrosshairControls() {
       </div>
     </div>
   );
-}
+});

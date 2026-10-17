@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, Rocket, Save } from 'lucide-react';
 import { getSettings, setSettings } from '../../lib/api';
@@ -16,7 +16,7 @@ import type { SteamLaunchOptionsStatus } from '../../types/electron';
  * Self-contained so the page above it does not carry six pieces of state for a
  * concern it never reads.
  */
-export default function LaunchOptionsCard() {
+export default memo(function LaunchOptionsCard() {
   const { t } = useTranslation();
   const [saved, setSaved] = useState<string | null>(null);
   const [managed, setManaged] = useState(false);
@@ -175,4 +175,4 @@ export default function LaunchOptionsCard() {
       </div>
     </Card>
   );
-}
+});
