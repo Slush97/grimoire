@@ -35,6 +35,7 @@ import {
   createSnapshot,
   deleteReplacedMod,
   assertReplacementSafety,
+  isGameRunningModLockError,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -340,6 +341,19 @@ function renderErrorWithLinks(text: string): React.ReactNode {
     }
     return <span key={i}>{part}</span>;
   });
+}
+
+const USER_CANCELLED_MESSAGES = new Set(['Cancelled by user', 'CANCELLED_BY_USER', 'User cancelled multi-VPK pick']);
+
+// `error` only renders over an empty grid, so a failed install or details
+// load would otherwise vanish while results are on screen. Game-running
+// refusals already toast in lib/api.
+function toastModActionError(err: unknown) {
+  if (isGameRunningModLockError(err)) return;
+  const detail = (err instanceof Error ? err.message : String(err))
+    .replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  if (USER_CANCELLED_MESSAGES.has(detail)) return;
+  showToast(detail, { tone: 'error', duration: 7000 });
 }
 
 function BrowseViewOptionControl<T extends string>({
@@ -1763,7 +1777,7 @@ export default function Browse() {
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       await applyLoadedModDetails(mod, details, section);
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     }
   };
 
@@ -1780,7 +1794,7 @@ export default function Browse() {
       await applyLoadedModDetails(mod, details, section);
     } catch (err) {
       if (modalNavigationRequestRef.current === requestId) {
-        setError(String(err));
+        toastModActionError(err);
       }
     } finally {
       if (modalNavigationRequestRef.current === requestId) {
@@ -1823,7 +1837,7 @@ export default function Browse() {
       }
     } catch (err) {
       if (modalNavigationRequestRef.current === requestId) {
-        setError(String(err));
+        toastModActionError(err);
       }
     } finally {
       if (modalNavigationRequestRef.current === requestId) {
@@ -1933,7 +1947,7 @@ export default function Browse() {
         }
       }
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     } finally {
       releaseDownloadRequest(selectedMod.id, fileId);
     }
@@ -1946,7 +1960,7 @@ export default function Browse() {
     try {
       await downloadMod(modId, file.id, file.fileName, section, effectiveCategoryId);
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     } finally {
       releaseDownloadRequest(modId, file.id);
     }
@@ -1964,7 +1978,7 @@ export default function Browse() {
       // shows the artist card) without a second round-trip against the limiter.
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (!details.files || details.files.length === 0) {
-        setError(t('browse.errors.noDownloadableFiles'));
+        showToast(t('browse.errors.noDownloadableFiles'), { tone: 'error', duration: 7000 });
         return;
       }
 
@@ -1992,7 +2006,7 @@ export default function Browse() {
 
       await runDownload(mod.id, getPrimaryFile(installable));
     } catch (err) {
-      setError(String(err));
+      toastModActionError(err);
     }
   };
 
