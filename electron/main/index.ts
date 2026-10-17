@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell, session, protocol, nativeTheme, screen } fro
 import { windowBackgroundColor } from '../../src/lib/oledMode';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { setDefaultAutoSelectFamilyAttemptTimeout } from 'net';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
 import { HERO_POSE_SCHEME, registerHeroPoseProtocol, sweepHeroPoseCache } from './services/heroPoseModels';
@@ -72,6 +73,13 @@ app.commandLine.appendSwitch(
 // hardware WebGL (VMs, blocklisted GPUs) lost every 3D preview. The "unsafe" is
 // about untrusted web pages; our renderer only runs app shaders on local models.
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+
+// Node cancels every connect attempt except the one on the last address after
+// this long (a few hundred ms by default), which is under the round trip from
+// Australia to GameBanana's file servers. With a dead IPv6 or IPv4 address last
+// in the list the connect then fails with AggregateError ETIMEDOUT even though
+// the host is reachable. Applies to fetch and https alike.
+setDefaultAutoSelectFamilyAttemptTimeout(2000);
 
 // Import IPC handlers
 import './ipc/settings';

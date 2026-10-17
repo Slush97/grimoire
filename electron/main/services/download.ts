@@ -18,6 +18,7 @@ import { validateDownloadUrl, validateFileSize } from './security';
 import { forgeFileNameStem } from './forgeProtocol';
 import { gameBananaFileServerSelector } from './gamebananaFileServers';
 import { downloadTransfer, type DownloadServerStatus } from './downloadTransfer';
+import { describeNetworkError } from './networkErrors';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
@@ -490,6 +491,7 @@ export async function downloadFile(
                                 candidates = await gameBananaFileServerSelector.getCandidates(
                                     canonicalUrl.toString(),
                                     transferSignal,
+                                    redirectHost,
                                 );
                             } catch (error) {
                                 if (transferSignal.aborted) throw new Error('CANCELLED_BY_USER', { cause: error });
@@ -507,7 +509,7 @@ export async function downloadFile(
                                     return false;
                                 }
                             });
-                            if (!directCandidates.includes(redirectUrl)) {
+                            if (!directCandidates.some((candidate) => new URL(candidate).hostname === redirectHost)) {
                                 directCandidates.push(redirectUrl);
                             }
 
@@ -633,7 +635,7 @@ export async function downloadFile(
                 finalize(new Error('CANCELLED_BY_USER'));
                 return;
             }
-            finalize(err);
+            finalize(err.message ? err : new Error(describeNetworkError(err), { cause: err }));
         });
 
         // Register the cancel handler. request.destroy() alone is not enough:

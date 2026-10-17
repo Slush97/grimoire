@@ -308,6 +308,83 @@ describe('downloadTransfer', () => {
         expect(await fs.readFile(path)).toEqual(body);
     });
 
+    it('moves past a mirror that answers 404 for the file', async () => {
+        const body = Buffer.from('only the second mirror has this file');
+        const missing = await listen((_request, response) => {
+            response.writeHead(404);
+            response.end('Not Found');
+        });
+        const present = await listen((_request, response) => {
+            response.writeHead(200, { 'Content-Length': body.length });
+            response.end(body);
+        });
+        const path = destination('missing-mirror.zip');
+        const statuses: Array<{ phase: string }> = [];
+
+        await downloadTransfer({
+            candidateUrls: [missing, present],
+            destinationPath: path,
+            onProgress: () => undefined,
+            onServerStatus: (status) => statuses.push(status),
+        });
+
+        expect(await fs.readFile(path)).toEqual(body);
+        expect(statuses.map(({ phase }) => phase)).toEqual(['selected', 'switching', 'selected']);
+    });
+
+    it('gives up on a silent mirror after the mirror timeout instead of the full budget', async () => {
+        const body = Buffer.from('served after the silent mirror is skipped');
+        const silent = await listen(() => undefined);
+        const working = await listen((_request, response) => {
+            response.writeHead(200, { 'Content-Length': body.length });
+            response.end(body);
+        });
+        const path = destination('silent-mirror.zip');
+
+        await downloadTransfer({
+            candidateUrls: [silent, working],
+            destinationPath: path,
+            onProgress: () => undefined,
+            connectionTimeoutMs: 30_000,
+            mirrorConnectionTimeoutMs: 100,
+        });
+
+        expect(await fs.readFile(path)).toEqual(body);
+    });
+
+    it('gives the last candidate the full connection budget and reports why it failed', async () => {
+        const silentMirror = await listen(() => undefined);
+        const silentLast = await listen(() => undefined);
+        const path = destination('all-silent.zip');
+
+        await expect(downloadTransfer({
+            candidateUrls: [silentMirror, silentLast],
+            destinationPath: path,
+            onProgress: () => undefined,
+            connectionTimeoutMs: 400,
+            mirrorConnectionTimeoutMs: 50,
+        })).rejects.toThrow('Download connection timed out after 0.4 seconds');
+        await expect(fs.stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('never surfaces a blank error when the connect fails on every address', async () => {
+        const closed = createServer();
+        await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+        const address = closed.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP test server');
+        await new Promise<void>((resolve) => closed.close(() => resolve()));
+        const path = destination('refused.zip');
+
+        const error = await downloadTransfer({
+            candidateUrls: [`http://localhost:${address.port}/fixture.zip`],
+            destinationPath: path,
+            onProgress: () => undefined,
+        }).catch((reason: unknown) => reason);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/ECONNREFUSED/);
+    });
+
     it('rejects a redirect that leaves the trusted download hosts', async () => {
         const url = await listen((_request, response) => {
             response.writeHead(302, { Location: 'http://example.com/untrusted.zip' });

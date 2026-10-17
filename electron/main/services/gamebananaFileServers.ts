@@ -1,11 +1,12 @@
 import type { GameBananaFileServerDiagnostics } from '../../../src/types/electron';
+import { gamebananaRateLimiter } from './rateLimiter';
 
 const FILESERVERS_URL = 'https://gamebanana.com/apiv11/Util/Fileservers?_nPage=1';
 const GRIMOIRE_FILES_URL =
     'https://gamebanana.com/apiv11/Tool/22583?_csvProperties=_aFiles';
 const DEFAULT_CACHE_TTL_MS = 12 * 60_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
-const DEFAULT_PROBE_TIMEOUT_MS = 4_000;
+const DEFAULT_PROBE_TIMEOUT_MS = 6_000;
 const DEFAULT_PROBE_BYTES = 256 * 1024;
 const PROBE_COUNT = 3;
 const FILESERVER_NAME_PATTERN = /^filecache\d+$/;
@@ -14,7 +15,11 @@ const FILESERVER_HOST_PATTERN = /^filecache\d+\.gamebanana\.com$/;
 type FetchLike = typeof globalThis.fetch;
 
 export interface GameBananaFileServerSelector {
-    getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]>;
+    getCandidates(
+        canonicalUrl: string,
+        signal?: AbortSignal,
+        assignedHost?: string,
+    ): Promise<string[]>;
     getDiagnostics(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
     refreshCache(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
     testServers(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics>;
@@ -80,6 +85,11 @@ function directUrl(serverName: string, source: URL): string {
     return result.toString();
 }
 
+function candidateUrls(order: string[], assignedName: string | null, source: URL): string[] {
+    const names = assignedName && !order.includes(assignedName) ? [...order, assignedName] : order;
+    return [...names.map((name) => directUrl(name, source)), source.toString()];
+}
+
 function gameBananaDownloadUrl(value: unknown): URL | null {
     if (typeof value !== 'string') return null;
     try {
@@ -99,7 +109,7 @@ function gameBananaDownloadUrl(value: unknown): URL | null {
 async function resolveTestSource(
     dependencies: Pick<GameBananaFileServerSelectorDependencies, 'fetchImpl' | 'requestTimeoutMs'>,
     signal?: AbortSignal,
-): Promise<string> {
+): Promise<{ url: string; assignedHost?: string }> {
     throwIfAborted(signal);
     const { response: filesResponse, payload: filesPayload } = await boundedJsonFetch(
         dependencies,
@@ -142,10 +152,11 @@ async function resolveTestSource(
     if (!location) throw new Error('Grimoire download route returned no location');
 
     const source = new URL(location, currentFile.downloadUrl);
-    if (FILESERVER_HOST_PATTERN.test(source.hostname)) {
+    const assignedHost = FILESERVER_HOST_PATTERN.test(source.hostname) ? source.hostname : undefined;
+    if (assignedHost) {
         source.hostname = 'files.gamebanana.com';
     }
-    return normalizedCanonicalUrl(source.toString()).toString();
+    return { url: normalizedCanonicalUrl(source.toString()).toString(), assignedHost };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -206,6 +217,8 @@ async function boundedFetch(
     signal?: AbortSignal,
 ): Promise<Response> {
     throwIfAborted(signal);
+    await gamebananaRateLimiter.acquire();
+    throwIfAborted(signal);
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
     signal?.addEventListener('abort', abort, { once: true });
@@ -224,6 +237,8 @@ async function boundedJsonFetch(
     init: RequestInit,
     signal?: AbortSignal,
 ): Promise<{ response: Response; payload?: unknown }> {
+    throwIfAborted(signal);
+    await gamebananaRateLimiter.acquire();
     throwIfAborted(signal);
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
@@ -442,69 +457,87 @@ export function createGameBananaFileServerSelector(
         };
     }
 
-    async function getCandidates(canonicalUrl: string, signal?: AbortSignal): Promise<string[]> {
-            const source = normalizedCanonicalUrl(canonicalUrl);
-            const fallback = source.toString();
-            if (refreshInFlight) {
-                await waitForWithSignal(refreshInFlight, signal);
-                throwIfAborted(signal);
-            }
-            let servers: DirectoryServer[];
-            try {
-                servers = await getDirectory(signal);
-            } catch {
-                throwIfAborted(signal);
-                return [fallback];
-            }
-            if (servers.length === 0) return [fallback];
-            if (cachedOrder) {
-                return [...cachedOrder.map((name) => directUrl(name, source)), fallback];
-            }
-            const probeGeneration = routingGeneration;
-
-            const topServers = servers.slice(0, PROBE_COUNT);
-            const probes = await Promise.all(
-                topServers.map(async (server) => {
-                    try {
-                        const bytesPerSecond = await probeCandidate(directUrl(server.name, source), signal);
-                        return { server, bytesPerSecond };
-                    } catch {
-                        return { server, bytesPerSecond: null };
-                    }
-                }),
-            );
+    async function getCandidates(
+        canonicalUrl: string,
+        signal?: AbortSignal,
+        assignedHost?: string,
+    ): Promise<string[]> {
+        const source = normalizedCanonicalUrl(canonicalUrl);
+        const assignedName =
+            assignedHost && FILESERVER_HOST_PATTERN.test(assignedHost)
+                ? assignedHost.slice(0, assignedHost.indexOf('.'))
+                : null;
+        if (refreshInFlight) {
+            await waitForWithSignal(refreshInFlight, signal);
             throwIfAborted(signal);
+        }
+        let servers: DirectoryServer[];
+        try {
+            servers = await getDirectory(signal);
+        } catch {
+            throwIfAborted(signal);
+            return candidateUrls([], assignedName, source);
+        }
+        if (servers.length === 0) return candidateUrls([], assignedName, source);
+        if (cachedOrder) return candidateUrls(cachedOrder, assignedName, source);
+        const probeGeneration = routingGeneration;
 
-            const measured = probes
-                .filter(
-                    (probe): probe is { server: DirectoryServer; bytesPerSecond: number } =>
-                        typeof probe.bytesPerSecond === 'number' &&
-                        Number.isFinite(probe.bytesPerSecond) &&
-                        probe.bytesPerSecond > 0,
-                )
-                .sort(
-                    (left, right) =>
-                        right.bytesPerSecond - left.bytesPerSecond ||
-                        right.server.tenMinuteRate - left.server.tenMinuteRate,
-                )
-                .map(({ server }) => server);
-            const measuredNames = new Set(measured.map(({ name }) => name));
-            const unprobed = servers.slice(PROBE_COUNT);
-            const failed = topServers.filter(({ name }) => !measuredNames.has(name));
-            const ordered = [...measured, ...unprobed, ...failed];
-            if (routingGeneration === probeGeneration) {
-                cachedOrder = ordered.map(({ name }) => name);
-                lastLocalProbe = {
-                    testedAt: baseDependencies.now(),
-                    results: probes.map(({ server, bytesPerSecond }) => ({
-                        server: server.name,
-                        bytesPerSecond,
-                    })),
-                    preferredServer: ordered[0]?.name ?? null,
-                };
-            }
+        // GameBanana hosts a file on only some mirrors. The one it redirected to
+        // is known to have it, so it takes a probe slot ahead of the busiest mirrors.
+        const assigned = assignedName
+            ? (servers.find(({ name }) => name === assignedName) ?? {
+                  name: assignedName,
+                  tenMinuteRate: 0,
+              })
+            : null;
+        const probed = (
+            assigned ? [assigned, ...servers.filter(({ name }) => name !== assigned.name)] : servers
+        ).slice(0, PROBE_COUNT);
+        const probes = await Promise.all(
+            probed.map(async (server) => {
+                try {
+                    const bytesPerSecond = await probeCandidate(directUrl(server.name, source), signal);
+                    return { server, bytesPerSecond };
+                } catch {
+                    return { server, bytesPerSecond: null };
+                }
+            }),
+        );
+        throwIfAborted(signal);
 
-        return [...ordered.map((server) => directUrl(server.name, source)), fallback];
+        // Mirrors that failed the probe (404 for this file, unreachable, too slow)
+        // are dropped, not queued as fallbacks: each one would cost a connection
+        // timeout before the download reached a server that works.
+        const measured = probes
+            .filter(
+                (probe): probe is { server: DirectoryServer; bytesPerSecond: number } =>
+                    typeof probe.bytesPerSecond === 'number' &&
+                    Number.isFinite(probe.bytesPerSecond) &&
+                    probe.bytesPerSecond > 0,
+            )
+            .sort(
+                (left, right) =>
+                    right.bytesPerSecond - left.bytesPerSecond ||
+                    right.server.tenMinuteRate - left.server.tenMinuteRate,
+            )
+            .map(({ server }) => server);
+        if (routingGeneration === probeGeneration) {
+            cachedOrder = measured.map(({ name }) => name);
+            lastLocalProbe = {
+                testedAt: baseDependencies.now(),
+                results: probes.map(({ server, bytesPerSecond }) => ({
+                    server: server.name,
+                    bytesPerSecond,
+                })),
+                preferredServer: measured[0]?.name ?? null,
+            };
+        }
+
+        return candidateUrls(
+            measured.map(({ name }) => name),
+            assignedName,
+            source,
+        );
     }
 
     return {
@@ -517,7 +550,7 @@ export function createGameBananaFileServerSelector(
                 const previousOrder = cachedOrder ? [...cachedOrder] : null;
                 cachedOrder = null;
                 routingGeneration += 1;
-                await getCandidates(source, signal);
+                await getCandidates(source.url, signal, source.assignedHost);
                 const completedProbe = lastLocalProbe;
                 if (!completedProbe || completedProbe === previousProbe) {
                     cachedOrder = previousOrder;
