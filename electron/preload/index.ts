@@ -103,6 +103,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     detectDeadlock: () => ipcRenderer.invoke('detect-deadlock'),
     validateDeadlockPath: (path: string) => ipcRenderer.invoke('validate-deadlock-path', path),
     createDevDeadlockPath: () => ipcRenderer.invoke('create-dev-deadlock-path'),
+    copyModsToDev: () => ipcRenderer.invoke('copy-mods-to-dev'),
+    onCopyModsToDevProgress: (callback: (percent: number) => void) => {
+        const listener = (_: unknown, percent: number) => callback(percent);
+        ipcRenderer.on('copy-mods-to-dev-progress', listener);
+        return () => ipcRenderer.removeListener('copy-mods-to-dev-progress', listener);
+    },
     getSettings: () => ipcRenderer.invoke('get-settings'),
     setSettings: (settings: AppSettings) => ipcRenderer.invoke('set-settings', settings),
 

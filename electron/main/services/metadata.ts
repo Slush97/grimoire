@@ -184,7 +184,7 @@ function getMetadataPath(): string {
     return metadataPathForMode(loadSettings().devMode);
 }
 
-function metadataBackupDirectory(path = getMetadataPath()): string {
+export function metadataBackupDirectory(path = getMetadataPath()): string {
     return join(dirname(path), `${basename(path, '.json')}.backups`);
 }
 

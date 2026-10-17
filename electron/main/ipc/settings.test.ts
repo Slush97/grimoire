@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => unknown>(),
     load: vi.fn(), save: vi.fn(), exclusive: vi.fn(),
     updater: vi.fn(), background: vi.fn(), bridge: vi.fn(), audit: vi.fn(), hydrate: vi.fn(),
+    copy: vi.fn(),
 }));
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args: unknown[]) => unknown) => h.handlers.set(name, handler) } }));
 vi.mock('../services/settings', () => ({ loadSettings: h.load, saveSettings: h.save, getActiveDeadlockPath: () => 'game' }));
@@ -16,6 +17,7 @@ vi.mock('../services/updater', () => ({ assertUpdateChannelChange: vi.fn(), sync
 vi.mock('../services/socialAuth', () => ({ hydrateOnBoot: h.hydrate }));
 vi.mock('../services/deadlock', () => ({ detectDeadlockPath: vi.fn(), looksLikeDeadlockPath: vi.fn() }));
 vi.mock('../services/dev', () => ({ ensureDevDeadlockPath: vi.fn() }));
+vi.mock('../services/devMods', () => ({ copyModsToDev: h.copy }));
 import './settings';
 
 const current = {
@@ -91,5 +93,20 @@ describe('developer metadata switching', () => {
         expect(h.bridge).toHaveBeenCalledOnce();
         expect(h.audit).toHaveBeenCalledWith('game');
         expect(h.hydrate).toHaveBeenCalledOnce();
+    });
+});
+
+describe('developer library copy progress', () => {
+    it.each([false, true])('only sends progress to an open requesting window (closed: %s)', async (closed) => {
+        const sender = { isDestroyed: () => closed, send: vi.fn() };
+        h.copy.mockImplementation(async (onProgress: (percent: number) => void) => {
+            onProgress(35);
+        });
+
+        await h.handlers.get('copy-mods-to-dev')!({ sender });
+
+        expect(h.copy).toHaveBeenCalledOnce();
+        if (closed) expect(sender.send).not.toHaveBeenCalled();
+        else expect(sender.send).toHaveBeenCalledExactlyOnceWith('copy-mods-to-dev-progress', 35);
     });
 });

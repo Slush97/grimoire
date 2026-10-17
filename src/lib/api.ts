@@ -100,6 +100,15 @@ export async function createDevDeadlockPath(): Promise<string> {
   return window.electronAPI.createDevDeadlockPath();
 }
 
+export async function copyModsToDev(onProgress?: (percent: number) => void): Promise<void> {
+  const unsubscribe = onProgress ? window.electronAPI.onCopyModsToDevProgress(onProgress) : undefined;
+  try {
+    await window.electronAPI.copyModsToDev();
+  } finally {
+    unsubscribe?.();
+  }
+}
+
 export async function getSettings(): Promise<AppSettings> {
   return window.electronAPI.getSettings();
 }

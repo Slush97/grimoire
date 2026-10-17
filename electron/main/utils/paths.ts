@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { join } from 'path';
+import { createHash } from 'crypto';
 
 /**
  * Get the app's user data directory
@@ -27,4 +28,10 @@ export function getMetadataPath(devMode = false): string {
  */
 export function getDevDeadlockPath(): string {
     return join(getUserDataPath(), 'dev-deadlock');
+}
+
+/** Persistent custom card sources, kept separate for each Deadlock install. */
+export function getCustomHeroCardsPath(deadlockPath: string): string {
+    const installKey = createHash('sha1').update(deadlockPath).digest('hex').slice(0, 12);
+    return join(getUserDataPath(), 'custom-hero-cards', installKey);
 }

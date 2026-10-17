@@ -856,6 +856,8 @@ export interface ElectronAPI {
     detectDeadlock: () => Promise<string | null>;
     validateDeadlockPath: (path: string) => Promise<boolean>;
     createDevDeadlockPath: () => Promise<string>;
+    copyModsToDev: () => Promise<void>;
+    onCopyModsToDevProgress: (callback: (percent: number) => void) => () => void;
     getSettings: () => Promise<AppSettings>;
     setSettings: (settings: AppSettings) => Promise<void>;
 

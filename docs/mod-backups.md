@@ -32,4 +32,17 @@ the restore stops and keeps its backup available to retry.
 
 Developer mode uses `mod-metadata.dev.json` and `mod-metadata.dev.backups`, separate
 from normal mode's `mod-metadata.json` and `mod-metadata.backups`. Each mode creates
-and maintains its own metadata without importing entries from the other mode.
+and maintains its own metadata. Under the developer folder path, **Copy mods to
+dev mode** explicitly replaces the developer library and metadata with copies
+of the normal library. This includes disabled mods, overflow and Global folders,
+split archive chunks, Locker artifacts, and custom card sources. Normal files,
+metadata, settings, and backups stay untouched. A failed copy restores the previous
+developer library. Old developer metadata snapshots and leftover temporary metadata
+are removed with the previous library. A confirmation warns about disk space,
+copying time, and deleting and replacing all current developer mods and metadata.
+The `replays` folders at mod roots are excluded, including replay junctions created
+by Grimoire. Recordings are not mod files and stay in their original locations.
+The button shows a percentage and a progress bar based on bytes copied, reaching
+100% after the copy is committed.
+Progress and the busy button persist when navigating away from Settings and back.
+The main process also refuses duplicate copies while one is queued or running.

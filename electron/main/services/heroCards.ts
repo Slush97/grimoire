@@ -14,8 +14,9 @@
  */
 import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import { app } from 'electron';
+import { getCustomHeroCardsPath } from '../utils/paths';
 import { assertVpkSafety } from './modSafety';
 import {
     getCitadelPath,
@@ -69,9 +70,8 @@ export function baseCardPakPath(deadlockPath: string): string {
  * Survives rebuilds so reverting another hero doesn't drop this hero's upload.
  */
 export function customCardVpkPath(deadlockPath: string, codename: string): string {
-    const installKey = createHash('sha1').update(deadlockPath).digest('hex').slice(0, 12);
     // `_dir.vpk` so vpkmerge split + the VPK parser treat it as a directory VPK.
-    return join(app.getPath('userData'), 'custom-hero-cards', installKey, `${codename}_dir.vpk`);
+    return join(getCustomHeroCardsPath(deadlockPath), `${codename}_dir.vpk`);
 }
 
 interface VpkRef {

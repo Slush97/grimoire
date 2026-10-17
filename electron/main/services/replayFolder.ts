@@ -35,7 +35,7 @@ import { getCitadelPath, getModScanRootPaths } from './deadlock';
  * the user's replays keep working if they stop using grimoire) and each mod
  * folder's replays becomes a link to it.
  */
-const REPLAYS_FOLDER_NAME = 'replays';
+export const REPLAYS_FOLDER_NAME = 'replays';
 
 export function ensureReplayFolderLink(deadlockPath: string): void {
     const real = join(getCitadelPath(deadlockPath), REPLAYS_FOLDER_NAME);

@@ -939,6 +939,12 @@
       "lastSaltAttemptFailed": "Last upload failed: {{error}}",
       "developerMode": "Developer Mode",
       "developerModeDescription": "Use a dummy Deadlock directory for local testing without game files.",
+      "copyModsToDev": "Copy mods to dev mode",
+      "copyModsToDevDescription": "Replace developer mods and metadata with a copy of your normal library.",
+      "copyModsToDevConfirmTitle": "Copy mods to dev mode?",
+      "copyModsToDevConfirmMessage": "All existing dev mode mods and metadata will be deleted and replaced with a copy of your normal mod library. Large libraries can take a long time to copy and require substantial additional disk space.",
+      "copyModsToDevSuccess": "Mods copied to developer mode.",
+      "copyModsToDevFailed": "Could not copy mods to developer mode.",
       "dateFormat": "Date Format",
       "dateFormatDescription": "How upload and update dates are shown on mods and files."
     },

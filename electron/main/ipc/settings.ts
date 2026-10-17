@@ -4,6 +4,7 @@ import { auditInstalledSafety } from '../services/modSafetyAudit';
 import { syncWindowBackgroundWithSettings } from '../services/windowBackground';
 import { detectDeadlockPath, looksLikeDeadlockPath } from '../services/deadlock';
 import { ensureDevDeadlockPath } from '../services/dev';
+import { copyModsToDev } from '../services/devMods';
 import { syncForgeBridgeWithSettings } from '../services/forgeBridge';
 import { assertUpdateChannelChange, syncUpdaterWithSettings } from '../services/updater';
 import { hydrateOnBoot as hydrateSocialSession } from '../services/socialAuth';
@@ -25,6 +26,10 @@ ipcMain.handle('validate-deadlock-path', (_, path: string): boolean => {
 ipcMain.handle('create-dev-deadlock-path', (): string => {
     return ensureDevDeadlockPath();
 });
+
+ipcMain.handle('copy-mods-to-dev', (event) => copyModsToDev((percent) => {
+    if (!event.sender.isDestroyed()) event.sender.send('copy-mods-to-dev-progress', percent);
+}));
 
 // get-settings
 ipcMain.handle('get-settings', (): AppSettings => {

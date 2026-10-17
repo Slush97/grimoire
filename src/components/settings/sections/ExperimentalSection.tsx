@@ -1,17 +1,25 @@
 import { useState } from 'react';
-import { Beaker, Wrench } from 'lucide-react';
+import { Beaker, Copy, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../stores/appStore';
+import { useDevModsStore } from '../../../stores/devModsStore';
 import { createDevDeadlockPath } from '../../../lib/api';
-import { Card, Toggle } from '../../common/ui';
+import { Button, Card, ProgressBar, Toggle } from '../../common/ui';
+import { ConfirmModal } from '../../common/PageComponents';
 import Tx from '../../translation/Tx';
 import type { AppSettings } from '../../../types/mod';
 
 // Feature flags plus the dev-only dummy game directory. Both are "you asked
 // for it" territory, so they live away from the everyday preferences.
 export default function ExperimentalSection() {
+  const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const saveSettings = useAppStore((s) => s.saveSettings);
+  const copyPercent = useDevModsStore((s) => s.percent);
+  const copyMods = useDevModsStore((s) => s.copy);
   const [isCreatingDevPath, setIsCreatingDevPath] = useState(false);
+  const [copyConfirmOpen, setCopyConfirmOpen] = useState(false);
+  const isCopyingMods = copyPercent !== null;
 
   const update = async (patch: Partial<AppSettings>) => {
     if (settings) {
@@ -36,6 +44,11 @@ export default function ExperimentalSection() {
     } else {
       await saveSettings({ ...settings, devMode: false });
     }
+  };
+
+  const handleCopyMods = () => {
+    setCopyConfirmOpen(false);
+    void copyMods();
   };
 
   return (
@@ -124,16 +137,53 @@ export default function ExperimentalSection() {
         <Toggle
           checked={settings?.devMode ?? false}
           onChange={handleDevModeChange}
-          disabled={isCreatingDevPath}
+          disabled={isCreatingDevPath || isCopyingMods}
           label={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />}
           description={<Tx k="settings.preferences.developerModeDescription" fallback="Use a dummy Deadlock directory for local testing without game files." />}
         />
         {settings?.devMode && settings?.devDeadlockPath && (
-          <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
-            {settings.devDeadlockPath}
+          <div className="mt-2 space-y-3">
+            <div className="text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
+              {settings.devDeadlockPath}
+            </div>
+            <div className="space-y-2">
+              <div className="relative inline-flex">
+                <Button
+                  variant="secondary"
+                  icon={isCopyingMods ? undefined : Copy}
+                  disabled={!settings.deadlockPath || isCreatingDevPath || isCopyingMods}
+                  aria-busy={isCopyingMods}
+                  onClick={() => setCopyConfirmOpen(true)}
+                >
+                  {isCopyingMods && (
+                    <span className="tabular-nums">{copyPercent}%</span>
+                  )}
+                  <span className="text-trim-cap">{t('settings.preferences.copyModsToDev')}</span>
+                </Button>
+                {isCopyingMods && (
+                  <ProgressBar
+                    value={copyPercent ?? 0}
+                    max={100}
+                    label={t('settings.preferences.copyModsToDev')}
+                    className="pointer-events-none absolute inset-x-px bottom-px h-0.5! w-auto!"
+                  />
+                )}
+              </div>
+              <p className="text-xs text-text-secondary">
+                {t('settings.preferences.copyModsToDevDescription')}
+              </p>
+            </div>
           </div>
         )}
       </Card>
+      <ConfirmModal
+        isOpen={copyConfirmOpen && !!settings?.devMode}
+        onCancel={() => setCopyConfirmOpen(false)}
+        onConfirm={handleCopyMods}
+        title={t('settings.preferences.copyModsToDevConfirmTitle')}
+        message={t('settings.preferences.copyModsToDevConfirmMessage')}
+        confirmLabel={t('settings.preferences.copyModsToDev')}
+      />
     </>
   );
 }
