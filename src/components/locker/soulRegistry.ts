@@ -29,24 +29,34 @@ export interface SoulRegistry {
   register(id: string, el: HTMLElement): void;
   setRoot(id: string, root: THREE.Object3D | null): void;
   unregister(id: string): void;
+  subscribe(listener: () => void): () => void;
 }
 
 export function createSoulRegistry(): SoulRegistry {
   const tiles = new Map<string, SoulTile>();
+  const listeners = new Set<() => void>();
+  const notify = () => { for (const listener of listeners) listener(); };
   return {
     tiles,
     register(id, el) {
       const existing = tiles.get(id);
       if (existing) existing.el = el;
       else tiles.set(id, { el, root: null });
+      notify();
     },
     setRoot(id, root) {
       const existing = tiles.get(id);
       if (existing) existing.root = root;
       else tiles.set(id, { el: null, root });
+      notify();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
     },
     unregister(id) {
       tiles.delete(id);
+      notify();
     },
   };
 }

@@ -1,9 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUpToLine, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, FolderPlus, Ghost, Images, Layers, MoreVertical, Music, Palette, Plus, PowerOff, Settings2, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   getGamebananaCategories,
   getHeroColorSupport,
@@ -266,7 +267,32 @@ function FacetSheenDefs() {
 export default function Locker() {
   const { t } = useTranslation();
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
-    useAppStore();
+    useAppStore(useShallow((s) => ({
+      settings: s.settings,
+      mods: s.mods,
+      modsLoading: s.modsLoading,
+      modsError: s.modsError,
+      loadSettings: s.loadSettings,
+      loadMods: s.loadMods,
+      toggleMod: s.toggleMod,
+      reorderMods: s.reorderMods,
+      deleteMods: s.deleteMods,
+      setModPriorityFolder: s.setModPriorityFolder,
+      setBrowseUi: s.setBrowseUi,
+      setLockerHeroName: s.setLockerHeroName,
+      lockerModImages: s.lockerModImages,
+      lockerHideHeroName: s.lockerHideHeroName,
+      lockerModThumbnails: s.lockerModThumbnails,
+      lockerThumbHideHeroName: s.lockerThumbHideHeroName,
+      loadLockerModImages: s.loadLockerModImages,
+      shuffleOnLaunch: s.shuffleOnLaunch,
+      setShuffleOnLaunch: s.setShuffleOnLaunch,
+      shuffleIncluded: s.shuffleIncluded,
+      toggleShuffleIncluded: s.toggleShuffleIncluded,
+      setShuffleIncluded: s.setShuffleIncluded,
+      shuffleVariants: s.shuffleVariants,
+      setShuffleVariant: s.setShuffleVariant,
+    })));
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
     () => lockerCategoriesCache ?? []
@@ -430,6 +456,13 @@ export default function Locker() {
     (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`),
     [navigate]
   );
+  const toggleFavoriteHero = useCallback((hero: HeroCategory) => {
+    setFavoriteHeroes((prev) =>
+      prev.includes(hero.id)
+        ? prev.filter((id) => id !== hero.id)
+        : [...prev, hero.id]
+    );
+  }, []);
   const openHeroInBrowse = useCallback(
     (hero: HeroCategory) => {
       setBrowseUi({
@@ -760,6 +793,11 @@ export default function Locker() {
     [heroMods, heroSounds, overrideHeroNames]
   );
 
+  const galleryFacets = useMemo(
+    () => new Map(baseHeroList.map((hero) => [hero.id, heroFacets(hero.id, hero.name)])),
+    [baseHeroList, heroFacets]
+  );
+
   // Sorted hero list for display
   const heroList = useMemo(() => {
     return [...baseHeroList].sort((a, b) => {
@@ -774,11 +812,11 @@ export default function Locker() {
       if (aActive !== bActive) return aActive ? -1 : 1;
       // Then heroes with any locker content (skins or sounds), enabled or not
       const aHasContent =
-        countLockerSkins(heroMods.map.get(a.id) ?? []) > 0 ||
-        countLockerSkins(heroSounds.map.get(a.id) ?? []) > 0;
+        (heroMods.map.get(a.id)?.length ?? 0) > 0 ||
+        (heroSounds.map.get(a.id)?.length ?? 0) > 0;
       const bHasContent =
-        countLockerSkins(heroMods.map.get(b.id) ?? []) > 0 ||
-        countLockerSkins(heroSounds.map.get(b.id) ?? []) > 0;
+        (heroMods.map.get(b.id)?.length ?? 0) > 0 ||
+        (heroSounds.map.get(b.id)?.length ?? 0) > 0;
       if (aHasContent !== bHasContent) return aHasContent ? -1 : 1;
       // Then alphabetically
       return a.name.localeCompare(b.name);
@@ -793,8 +831,8 @@ export default function Locker() {
     return heroList.filter((hero) => {
       if (favoriteHeroes.includes(hero.id)) return true;
       return (
-        countLockerSkins(heroMods.map.get(hero.id) ?? []) > 0 ||
-        countLockerSkins(heroSounds.map.get(hero.id) ?? []) > 0
+        (heroMods.map.get(hero.id)?.length ?? 0) > 0 ||
+        (heroSounds.map.get(hero.id)?.length ?? 0) > 0
       );
     });
   }, [heroList, hideEmptyHeroes, favoriteHeroes, heroMods, heroSounds]);
@@ -1386,21 +1424,15 @@ export default function Locker() {
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
-              facets={heroFacets(hero.id, hero.name)}
+              facets={galleryFacets.get(hero.id)!}
               inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
               cardImage={heroCardImage(hero.id)}
               hideHeroName={heroHideName(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
               typeaheadClassName={heroTypeaheadCardState(hero.id)}
-              onNavigate={() => goToHero(hero)}
-              onBrowse={() => openHeroInBrowse(hero)}
-              onToggleFavorite={() =>
-                setFavoriteHeroes((prev) =>
-                  prev.includes(hero.id)
-                    ? prev.filter((id) => id !== hero.id)
-                    : [...prev, hero.id]
-                )
-              }
+              onNavigate={goToHero}
+              onBrowse={openHeroInBrowse}
+              onToggleFavorite={toggleFavoriteHero}
             />
           ))}
         </div>
@@ -1753,9 +1785,9 @@ interface HeroGalleryCardProps {
    *  already shows the hero name. Only meaningful when cardImage is set. */
   hideHeroName?: boolean;
   isFavorite: boolean;
-  onNavigate: () => void;
-  onBrowse: () => void;
-  onToggleFavorite: () => void;
+  onNavigate: (hero: HeroCategory) => void;
+  onBrowse: (hero: HeroCategory) => void;
+  onToggleFavorite: (hero: HeroCategory) => void;
   /** Typeahead highlight/dim classes, merged into the card root. Applied to the
    *  card itself rather than a wrapper so the ring tracks the hover transform. */
   typeaheadClassName?: string;
@@ -2878,7 +2910,7 @@ function HeroGallerySkeleton() {
   );
 }
 
-function HeroGalleryCard({
+const HeroGalleryCard = memo(function HeroGalleryCard({
   hero,
   facets,
   inShufflePool,
@@ -2955,7 +2987,7 @@ function HeroGalleryCard({
 
   return (
     <div
-      onClick={onNavigate}
+      onClick={() => onNavigate(hero)}
       data-locker-hero-id={hero.id}
       className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${typeaheadClassName}`}
     >
@@ -3006,7 +3038,7 @@ function HeroGalleryCard({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          onBrowse();
+          onBrowse(hero);
         }}
         aria-label={t('locker.page.browseHeroSkins', { hero: hero.name })}
         title={t('locker.page.browseHeroSkins', { hero: hero.name })}
@@ -3019,7 +3051,7 @@ function HeroGalleryCard({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          onToggleFavorite();
+          onToggleFavorite(hero);
         }}
         aria-label={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
         title={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
@@ -3092,7 +3124,7 @@ function HeroGalleryCard({
       )}
     </div>
   );
-}
+});
 
 function HeroCard({
   hero,

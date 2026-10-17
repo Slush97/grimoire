@@ -467,7 +467,7 @@ export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
 }
 
 export function countLockerSkins(mods: Mod[]): number {
-  return groupLockerSkins(mods).length;
+  return new Set(mods.map(getLockerSkinKey)).size;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSoulRegistry } from './soulRegistry';
@@ -21,9 +21,29 @@ import { useSoulRegistry } from './soulRegistry';
 const SPIN_RATE = 0.5; // rad/sec, matching the prior per-card auto-orbit.
 
 /** Build the camera, lit scene, and run the per-tile scissor render loop. */
-function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) {
+export function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) {
   const registry = useSoulRegistry();
   const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+  const spinningRef = useRef(false);
+
+  useEffect(() => {
+    const wake = () => invalidate();
+    const unsubscribe = registry.subscribe(wake);
+    // The loop sleeps when no loaded tile intersects the pane. Wake for model
+    // arrivals, scrolls (including ancestor scrolls), and pane/window resizing.
+    window.addEventListener('scroll', wake, { capture: true, passive: true });
+    window.addEventListener('resize', wake);
+    const observer = new ResizeObserver(wake);
+    if (paneRef.current) observer.observe(paneRef.current);
+    wake();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('scroll', wake, true);
+      window.removeEventListener('resize', wake);
+      observer.disconnect();
+    };
+  }, [registry, invalidate, paneRef]);
 
   // Camera and lit scene are held in refs (not useMemo) because three objects
   // are mutated every frame (camera aspect, scene add/remove), which the hook
@@ -81,6 +101,10 @@ function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) 
     gl.clear();
     gl.setScissorTest(true);
 
+    let visible = false;
+    // Demand mode's first delta includes time spent asleep. Offscreen models
+    // used to retain their angle, so do not advance them by that idle time.
+    const spinDelta = spinningRef.current ? delta : 0;
     for (const tile of registry.tiles.values()) {
       const root = tile.root;
       const el = tile.el;
@@ -115,7 +139,8 @@ function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) 
       camera.aspect = r.width / r.height;
       camera.updateProjectionMatrix();
 
-      root.rotation.y += delta * SPIN_RATE;
+      visible = true;
+      root.rotation.y += spinDelta * SPIN_RATE;
       // Swap this tile's model into the holder (clearing whatever was there),
       // then render. The holder only ever contains this one tile's model.
       holder.clear();
@@ -123,6 +148,8 @@ function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) 
       gl.render(scene, camera);
     }
     holder.clear();
+    spinningRef.current = visible;
+    if (visible) invalidate();
   }, 1);
 
   return null;
@@ -147,6 +174,7 @@ export default function SoulContainerCanvas({
           override the wrapper above and swallow every click on the page. We
           don't raycast, so force it back to none (merged after r3f's default). */}
       <Canvas
+        frameloop="demand"
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true }}
         style={{ pointerEvents: 'none' }}

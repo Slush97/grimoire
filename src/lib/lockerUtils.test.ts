@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { countLockerSkins, groupLockerSkins, modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
 
 function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: number }): Mod {
   return {
@@ -96,5 +96,24 @@ describe('inferHeroFromTitle', () => {
     expect(inferHeroFromTitle('Deadman Danny Crash Test')).toBe('Deadman Danny');
     expect(inferHeroFromTitle('Nurse Harrow VO')).toBe('Nurse Harrow');
     expect(inferHeroFromTitle('RatKing recolor')).toBe('Rat King');
+  });
+});
+
+
+describe('countLockerSkins', () => {
+  it('counts submission, local archive and standalone groups without merging namespaces', () => {
+    const mods = [
+      mod({ id: 'gb-a', metaKey: 'a', priority: 9, gameBananaId: 42 }),
+      mod({ id: 'gb-b', metaKey: 'b', priority: 1, gameBananaId: 42, enabled: false }),
+      mod({ id: 'local-a', metaKey: 'c', priority: 3, localGroupId: '42' }),
+      mod({ id: 'local-b', metaKey: 'd', priority: 2, localGroupId: '42', gameBananaId: 42 }),
+      mod({ id: '42', metaKey: 'e', priority: 4, gameBananaId: 0 }),
+      mod({ id: 'standalone', metaKey: 'f', priority: 5, enabled: false }),
+    ];
+    const original = [...mods];
+    expect(countLockerSkins(mods)).toBe(4);
+    expect(countLockerSkins(mods)).toBe(groupLockerSkins(mods).length);
+    expect(mods).toEqual(original);
+    expect(countLockerSkins([])).toBe(0);
   });
 });
