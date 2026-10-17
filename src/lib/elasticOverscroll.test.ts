@@ -19,12 +19,12 @@ describe('rubberBand', () => {
     }
   });
 
-  it('gives one mouse-wheel notch a small give, not a lurch', () => {
+  it('gives one mouse-wheel notch a visible give, not a lurch', () => {
     const windowsNotch = rubberBand(100 * ELASTIC.inputScale);
     const linuxNotch = rubberBand(53 * ELASTIC.inputScale);
-    expect(windowsNotch).toBeGreaterThan(8);
-    expect(windowsNotch).toBeLessThan(20);
-    expect(linuxNotch).toBeGreaterThan(5);
+    expect(windowsNotch).toBeGreaterThan(18);
+    expect(windowsNotch).toBeLessThan(35);
+    expect(linuxNotch).toBeGreaterThan(10);
     expect(linuxNotch).toBeLessThan(windowsNotch);
   });
 
@@ -44,31 +44,40 @@ describe('wheelDeltaPx', () => {
 });
 
 describe('springStep', () => {
-  const settle = (x: number, v: number, rate: number) => {
+  const settle = (x: number, v: number, rate: number, damping?: number) => {
     let t = 0;
     let peakPastTarget = 0;
     while (!springSettled(x, v, 0) && t < 5) {
-      [x, v] = springStep(x, v, 0, rate, 1 / 60);
+      [x, v] = springStep(x, v, 0, rate, 1 / 60, damping);
       peakPastTarget = Math.max(peakPastTarget, -x);
       t += 1 / 60;
     }
     return { t, peakPastTarget };
   };
 
-  it('returns a displaced offset to rest without overshooting', () => {
-    const { t, peakPastTarget } = settle(40, 0, ELASTIC.returnRate);
+  it('never overshoots when critically damped', () => {
+    const { t, peakPastTarget } = settle(40, 0, 17);
     expect(peakPastTarget).toBe(0);
     expect(t).toBeGreaterThan(0.2);
     expect(t).toBeLessThan(0.6);
   });
 
+  it('snaps back past rest on release, then settles within a second', () => {
+    const { t, peakPastTarget } = settle(40, 0, ELASTIC.returnRate, ELASTIC.returnDamping);
+    expect(peakPastTarget).toBeGreaterThan(40 * 0.1);
+    expect(peakPastTarget).toBeLessThan(40 * 0.3);
+    expect(t).toBeLessThan(1);
+  });
+
   it('is exact for any step size, so a long frame cannot blow it up', () => {
-    const [x1] = springStep(40, 0, 0, ELASTIC.returnRate, 0.2);
-    let x = 40;
-    let v = 0;
-    for (let i = 0; i < 20; i++) [x, v] = springStep(x, v, 0, ELASTIC.returnRate, 0.01);
-    expect(x1).toBeCloseTo(x, 6);
-    expect(Math.abs(springStep(40, 0, 0, ELASTIC.returnRate, 10)[0])).toBeLessThan(1e-6);
+    for (const damping of [1, ELASTIC.returnDamping]) {
+      const [x1] = springStep(40, 0, 0, ELASTIC.returnRate, 0.2, damping);
+      let x = 40;
+      let v = 0;
+      for (let i = 0; i < 20; i++) [x, v] = springStep(x, v, 0, ELASTIC.returnRate, 0.01, damping);
+      expect(x1).toBeCloseTo(x, 6);
+      expect(Math.abs(springStep(40, 0, 0, ELASTIC.returnRate, 10, damping)[0])).toBeLessThan(1e-6);
+    }
   });
 
   it('follows a moving target while input arrives', () => {

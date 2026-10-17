@@ -46,7 +46,8 @@ function claimedBelow(target: EventTarget | null, scroller: HTMLElement, down: b
 /**
  * Rubber-band overscroll for a scroll container: a wheel or touchpad scroll
  * that pushes past the top or bottom drags the content a little way with
- * resistance, and a critically damped spring returns it once input stops.
+ * resistance, and an underdamped spring snaps it back (with a small
+ * overshoot) once input stops.
  *
  * Passive listener, never preventDefault: native scrolling is untouched. The
  * in-flow children carry a transform only while displaced and go back to no
@@ -110,7 +111,9 @@ function attachElasticOverscroll(scroller: HTMLElement): () => void {
     lastFrame = now;
     if (pulling && now - lastInput > ELASTIC.releaseDelayMs) pulling = false;
     const target = pulling ? rubberBand(pull) : 0;
-    [offset, velocity] = springStep(offset, velocity, target, pulling ? ELASTIC.followRate : ELASTIC.returnRate, dt);
+    [offset, velocity] = pulling
+      ? springStep(offset, velocity, target, ELASTIC.followRate, dt)
+      : springStep(offset, velocity, target, ELASTIC.returnRate, dt, ELASTIC.returnDamping);
     if (!pulling && springSettled(offset, velocity, 0)) {
       stop();
       return;

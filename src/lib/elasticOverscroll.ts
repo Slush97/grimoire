@@ -1,17 +1,19 @@
-// Pure math behind useElasticOverscroll: rubber-band resistance and a
-// critically damped spring. No DOM here so it can be unit tested.
+// Pure math behind useElasticOverscroll: rubber-band resistance and a damped
+// spring. No DOM here so it can be unit tested.
 
 export const ELASTIC = {
   /** Asymptote of the pull, in px. The offset approaches it, never reaches it. */
-  maxPx: 56,
+  maxPx: 120,
   /** Rubber-band stiffness (UIScrollView uses 0.55). Lower feels heavier. */
   resistance: 0.55,
-  /** Wheel delta to rubber-band input. A 100px Windows notch gives about 14px. */
-  inputScale: 0.35,
+  /** Wheel delta to rubber-band input. A 100px Windows notch gives about 26px. */
+  inputScale: 0.6,
   /** Spring rate (1/s) while input is arriving: how quickly the content follows. */
   followRate: 38,
-  /** Spring rate (1/s) on release: about 380ms back to rest, no overshoot. */
-  returnRate: 17,
+  /** Spring natural frequency (1/s) on release. */
+  returnRate: 16,
+  /** Damping ratio on release. Below 1 it overshoots rest by about 20% and wobbles once. */
+  returnDamping: 0.45,
   /** Quiet time after the last wheel event that counts as letting go. */
   releaseDelayMs: 90,
 } as const;
@@ -40,11 +42,23 @@ export function wheelDeltaPx(delta: number, deltaMode: number, pageHeight: numbe
 }
 
 /**
- * One step of a critically damped spring toward `target`: exact for any dt,
- * so a dropped frame cannot make it overshoot or blow up.
+ * One step of a damped spring toward `target`. Critically damped (no
+ * overshoot) at the default `damping` of 1, underdamped below it. Exact for
+ * any dt, so a dropped frame cannot add overshoot or blow it up.
  */
-export function springStep(x: number, v: number, target: number, rate: number, dt: number): [number, number] {
+export function springStep(x: number, v: number, target: number, rate: number, dt: number, damping = 1): [number, number] {
   const d = x - target;
+  if (damping < 1) {
+    const decay = damping * rate;
+    const freq = rate * Math.sqrt(1 - damping * damping);
+    const e = Math.exp(-decay * dt);
+    const cos = Math.cos(freq * dt);
+    const sin = Math.sin(freq * dt);
+    return [
+      target + e * (d * cos + ((v + decay * d) / freq) * sin),
+      e * (v * cos - ((decay * v + rate * rate * d) / freq) * sin),
+    ];
+  }
   const e = Math.exp(-rate * dt);
   const c = v + rate * d;
   return [target + (d + c * dt) * e, (v - rate * c * dt) * e];
