@@ -2255,6 +2255,8 @@
       "favorite": "Favorite",
       "unfavorite": "Unfavorite",
       "lockerSections": "Locker sections",
+      "previousHero": "Previous hero: {{hero}}",
+      "nextHero": "Next hero: {{hero}}",
       "hero3dModel": "{{hero}} 3D model"
     },
     "cursors": {
