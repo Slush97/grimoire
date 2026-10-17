@@ -651,6 +651,9 @@ export interface Mod {
   gameBananaId?: number;
   gameBananaFileId?: number;
   vpkIndex?: number;
+  /** Where the VPK sat in the downloaded archive ("<variant folder>/<name>").
+   *  Lets an update tell which new VPK replaces which old one. */
+  archiveVpkPath?: string;
   categoryId?: number;
   categoryName?: string;
   sourceSection?: string;

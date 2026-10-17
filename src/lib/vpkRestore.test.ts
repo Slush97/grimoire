@@ -42,7 +42,7 @@ describe('createEnabledVpkRestoreSnapshot', () => {
       { enabled: false, vpkIndex: 0 },
       { enabled: false, vpkIndex: 1 },
     ]);
-    expect(snap).toEqual({ hadEnabled: false, enabledIndexes: new Set(), enabledUnindexed: false });
+    expect(snap).toMatchObject({ hadEnabled: false, enabledIndexes: new Set(), enabledUnindexed: false });
   });
 
   it('records the indexes of the enabled, indexed VPKs', () => {
@@ -61,7 +61,7 @@ describe('createEnabledVpkRestoreSnapshot', () => {
       { enabled: true },
       { enabled: false, vpkIndex: 1 },
     ]);
-    expect(snap).toEqual({ hadEnabled: true, enabledIndexes: new Set(), enabledUnindexed: true });
+    expect(snap).toMatchObject({ hadEnabled: true, enabledIndexes: new Set(), enabledUnindexed: true });
   });
 });
 
@@ -114,6 +114,64 @@ describe('shouldRestoreVpkEnabled', () => {
     const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 })];
     expect(shouldRestoreVpkEnabled(fresh[0], fresh, snap)).toBe(false);
     expect(shouldRestoreVpkEnabled(fresh[1], fresh, snap)).toBe(true);
+  });
+
+  it('restores every part when a fully enabled multi-part mod gains a part', () => {
+    const snap = createEnabledVpkRestoreSnapshot([
+      { enabled: true, vpkIndex: 0 },
+      { enabled: true, vpkIndex: 1 },
+    ]);
+    const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 }), mod({ id: 'n2', vpkIndex: 2 })];
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, snap))).toEqual([true, true, true]);
+  });
+
+  it('keeps the one variant that was on when only one of several was kept', () => {
+    const snap = createEnabledVpkRestoreSnapshot([{ enabled: true, vpkIndex: 1 }]);
+    const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 }), mod({ id: 'n2', vpkIndex: 2 })];
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, snap))).toEqual([false, true, false]);
+  });
+
+  it('matches by archive path over a size order that moved', () => {
+    const snap = createEnabledVpkRestoreSnapshot([
+      { enabled: true, vpkIndex: 0, archiveVpkPath: 'Red/skin_dir.vpk' },
+      { enabled: false, vpkIndex: 1, archiveVpkPath: 'Blue/skin_dir.vpk' },
+    ]);
+    const fresh = [
+      mod({ id: 'blue', vpkIndex: 0, archiveVpkPath: 'Blue/skin_dir.vpk' }),
+      mod({ id: 'red', vpkIndex: 1, archiveVpkPath: 'Red/skin_dir.vpk' }),
+    ];
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, snap))).toEqual([false, true]);
+  });
+
+  it('maps a renamed part to the old part its name starts with, preferring the longest', () => {
+    const snap = createEnabledVpkRestoreSnapshot([
+      { enabled: true, vpkIndex: 0, archiveVpkPath: 'skin_dir.vpk' },
+      { enabled: false, vpkIndex: 1, archiveVpkPath: 'skin_red_dir.vpk' },
+    ]);
+    const fresh = [
+      mod({ id: 'red', vpkIndex: 0, archiveVpkPath: 'skin_red_v2_dir.vpk' }),
+      mod({ id: 'base', vpkIndex: 1, archiveVpkPath: 'skin_v2_dir.vpk' }),
+    ];
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, snap))).toEqual([false, true]);
+  });
+
+  it('turns on a new named part only when every old part was on', () => {
+    const fresh = [
+      mod({ id: 'body', vpkIndex: 2, archiveVpkPath: 'hero_body.vpk' }),
+      mod({ id: 'voice', vpkIndex: 0, archiveVpkPath: 'hero_voice.vpk' }),
+      mod({ id: 'vfx', vpkIndex: 1, archiveVpkPath: 'hero_vfx.vpk' }),
+    ];
+    const allOn = createEnabledVpkRestoreSnapshot([
+      { enabled: true, vpkIndex: 0, archiveVpkPath: 'hero_voice.vpk' },
+      { enabled: true, vpkIndex: 1, archiveVpkPath: 'hero_body.vpk' },
+    ]);
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, allOn))).toEqual([true, true, true]);
+
+    const voiceOff = createEnabledVpkRestoreSnapshot([
+      { enabled: false, vpkIndex: 0, archiveVpkPath: 'hero_voice.vpk' },
+      { enabled: true, vpkIndex: 1, archiveVpkPath: 'hero_body.vpk' },
+    ]);
+    expect(fresh.map((m) => shouldRestoreVpkEnabled(m, fresh, voiceOff))).toEqual([true, false, false]);
   });
 });
 
@@ -183,6 +241,27 @@ describe('Global placement restore', () => {
     const fresh = [mod({ id: 'replacement' })];
 
     expect(shouldRestoreVpkGlobal(fresh[0], fresh, snap)).toBe(true);
+  });
+
+  it('keeps every part Global when a fully Global mod gains a part', () => {
+    const snap = createGlobalVpkRestoreSnapshot([
+      { priorityMod: true, vpkIndex: 0 },
+      { priorityMod: true, vpkIndex: 1 },
+    ]);
+    const fresh = [mod({ id: 'n0', vpkIndex: 0 }), mod({ id: 'n1', vpkIndex: 1 }), mod({ id: 'n2', vpkIndex: 2 })];
+    expect(fresh.map((m) => shouldRestoreVpkGlobal(m, fresh, snap))).toEqual([true, true, true]);
+  });
+
+  it('restores Global placement by archive path', () => {
+    const snap = createGlobalVpkRestoreSnapshot([
+      { priorityMod: true, vpkIndex: 0, archiveVpkPath: 'hero_body.vpk' },
+      { priorityMod: false, vpkIndex: 1, archiveVpkPath: 'hero_voice.vpk' },
+    ]);
+    const fresh = [
+      mod({ id: 'voice', vpkIndex: 0, archiveVpkPath: 'hero_voice.vpk' }),
+      mod({ id: 'body', vpkIndex: 1, archiveVpkPath: 'hero_body_v2.vpk' }),
+    ];
+    expect(fresh.map((m) => shouldRestoreVpkGlobal(m, fresh, snap))).toEqual([false, true]);
   });
 
   it('flags mixed legacy placement as ambiguous instead of promoting ordinary siblings', () => {

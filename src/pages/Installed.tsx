@@ -2038,6 +2038,7 @@ export default function Installed() {
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
         vpkIndex: m.vpkIndex,
+        archiveVpkPath: m.archiveVpkPath,
         sha256: m.sha256,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
@@ -2166,12 +2167,14 @@ export default function Installed() {
             batch.snapshots.map((snapshot) => ({
               enabled: snapshot.wasEnabled,
               vpkIndex: snapshot.vpkIndex,
+              archiveVpkPath: snapshot.archiveVpkPath,
             })),
           );
           const restoreGlobal = createGlobalVpkRestoreSnapshot(
             batch.snapshots.map((snapshot) => ({
               priorityMod: snapshot.wasGlobal,
               vpkIndex: snapshot.vpkIndex,
+              archiveVpkPath: snapshot.archiveVpkPath,
             })),
           );
           if (restoreGlobal.ambiguous) {

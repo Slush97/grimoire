@@ -1021,6 +1021,7 @@ async function executeDownload(
     // archives (e.g. Tailed_mod vs Tailed_mod_Beard). Drives the picker label
     // and the persisted variantLabel.
     const variantByFile = new Map<string, string>();
+    const archivePathByFile = new Map<string, string>();
 
     // Extract if archive
     if (isArchive(downloadPath)) {
@@ -1077,6 +1078,7 @@ async function executeDownload(
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
             // Archive folder + original basename: stable across machines/redownloads.
             stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+            archivePathByFile.set(r.fileName, r.archiveFolder ? `${r.archiveFolder}/${r.sourceFileName}` : r.sourceFileName);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -1169,7 +1171,8 @@ async function executeDownload(
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
-        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
+        const archiveVpkPath = archivePathByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex, archiveVpkPath };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
@@ -1538,6 +1541,7 @@ async function executeOneClickDownload(
     let installedVpks: string[] = [];
     let vpkIndexByFile = new Map<string, number>();
     const variantByFile = new Map<string, string>();
+    const archivePathByFile = new Map<string, string>();
 
     if (isArchive(downloadPath)) {
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
@@ -1586,6 +1590,7 @@ async function executeOneClickDownload(
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
             // Archive folder + original basename: stable across machines/redownloads.
             stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+            archivePathByFile.set(r.fileName, r.archiveFolder ? `${r.archiveFolder}/${r.sourceFileName}` : r.sourceFileName);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -1667,7 +1672,8 @@ async function executeOneClickDownload(
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
         const vpkIndex = vpkIndexByFile.get(vpkFileName);
-        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
+        const archiveVpkPath = archivePathByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex, archiveVpkPath };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 

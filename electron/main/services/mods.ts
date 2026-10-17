@@ -176,6 +176,7 @@ export interface Mod {
     gameBananaId?: number;
     gameBananaFileId?: number;
     vpkIndex?: number;
+    archiveVpkPath?: string;
     categoryId?: number;
     categoryName?: string;
     sourceSection?: string;

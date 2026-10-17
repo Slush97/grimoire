@@ -239,6 +239,7 @@ function enrichMod(mod: Mod): WireMod {
             gameBananaId: metadata.gameBananaId,
             gameBananaFileId: metadata.gameBananaFileId,
             vpkIndex: metadata.vpkIndex,
+            archiveVpkPath: metadata.archiveVpkPath,
             categoryId: metadata.categoryId,
             categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,
