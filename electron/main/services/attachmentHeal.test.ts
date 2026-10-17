@@ -121,6 +121,13 @@ describe('healModAttachments', () => {
         expect(h.retarget).not.toHaveBeenCalled();
     });
 
+    it('accepts a repack that folded a path the mod listed twice', async () => {
+        h.entries.set(modPath, [{ path: WEREWOLF, size: 100 }, { path: 'README.txt', size: 0 }, { path: 'README.txt', size: 0 }]);
+        vpkmergeHeals([WEREWOLF], [{ path: WEREWOLF, size: 140 }, { path: 'README.txt', size: 0 }]);
+        await expect(healModAttachments(dir, 'silver')).resolves.toBe(1);
+        expect(await fs.readFile(modPath, 'utf8')).toBe('healed');
+    });
+
     it('refuses a repack that resized an entry it did not heal', async () => {
         vpkmergeHeals([WEREWOLF], [{ path: WEREWOLF, size: 140 }, { path: MATERIAL.toUpperCase(), size: 11 }]);
         await expect(healModAttachments(dir, 'silver')).rejects.toThrow(/skin\.vmat_c changed size/);

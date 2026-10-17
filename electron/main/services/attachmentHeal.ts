@@ -71,7 +71,9 @@ function repackMismatch(input: string, output: string, healed: string[]): string
     const key = (path: string) => path.replace(/\\/g, '/').toLowerCase();
     const changed = new Set(healed.map(key));
     const sizes = new Map(after.map((e) => [key(e.path), e.size]));
-    if (sizes.size !== before.length) return `${before.length} entries became ${sizes.size}`;
+    // A tree can list the same path twice, and the repack keeps one copy.
+    const paths = new Set(before.map((e) => key(e.path))).size;
+    if (sizes.size !== paths) return `${paths} entries became ${sizes.size}`;
     for (const entry of before) {
         const size = sizes.get(key(entry.path));
         if (size === undefined) return `${entry.path} is missing`;

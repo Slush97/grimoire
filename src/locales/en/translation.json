@@ -1384,6 +1384,8 @@
       "fixAll_other": "Fix all {{count}}",
       "healed_one": "Fixed {{count}} mod",
       "healed_other": "Fixed {{count}} mods",
+      "progress": "Fixing {{name}}…",
+      "progressCount": "Fixing {{name}} ({{current}} of {{total}})",
       "failed": "Couldn't fix {{name}}: {{error}}"
     },
     "unknown": {
