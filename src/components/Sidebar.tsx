@@ -144,9 +144,11 @@ export default function Sidebar() {
   const installedCount = mods.length;
 
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
+  const stashStatusRef = useRef(stashStatus);
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
   const [launchMode, setLaunchMode] = useState<LaunchMode>(readLaunchModePreference);
   const [gameRunning, setGameRunning] = useState(false);
+  const gameRunningRef = useRef(gameRunning);
   const [stopPending, setStopPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
   // Toasts can carry an optional action button (used for "Enable" after a
@@ -286,19 +288,34 @@ export default function Sidebar() {
   }, [collapsed]);
 
   const refreshStashStatus = useCallback(async () => {
+    let next: VanillaStashStatus;
     try {
-      setStashStatus(await getVanillaStashStatus());
+      next = await getVanillaStashStatus();
     } catch {
-      setStashStatus({ active: false });
+      next = { active: false };
     }
+    // Polling usually returns the same status. Skip the setter entirely so
+    // unchanged ticks do not schedule React work, even with other pending state.
+    const prev = stashStatusRef.current;
+    if (
+      prev.active === next.active &&
+      prev.startedAt === next.startedAt &&
+      prev.modCount === next.modCount
+    ) return;
+    stashStatusRef.current = next;
+    setStashStatus(next);
   }, []);
 
   const refreshGameStatus = useCallback(async () => {
+    let next: boolean;
     try {
-      setGameRunning((await getGameRunningStatus()).running);
+      next = (await getGameRunningStatus()).running;
     } catch {
-      setGameRunning(false);
+      next = false;
     }
+    if (gameRunningRef.current === next) return;
+    gameRunningRef.current = next;
+    setGameRunning(next);
   }, []);
 
   useEffect(() => {
@@ -589,22 +606,19 @@ export default function Sidebar() {
   // Enable the glide transition only briefly around an active-target change, so
   // selecting a tab/settings animates the highlight, while nav-list scrolling
   // (same target, new position) tracks instantly with no trailing ease.
-  const [indicatorSliding, setIndicatorSliding] = useState(false);
-  const slideTimerRef = useRef<number | null>(null);
+  const indicatorRef = useRef<HTMLDivElement | null>(null);
+  const indicatorVisible = !!activeNavMetrics && activeNavTone !== 'test';
   useEffect(() => {
-    setIndicatorSliding(true);
-    if (slideTimerRef.current !== null) window.clearTimeout(slideTimerRef.current);
-    slideTimerRef.current = window.setTimeout(() => {
-      setIndicatorSliding(false);
-      slideTimerRef.current = null;
+    const indicator = indicatorRef.current;
+    if (!indicator) return;
+    // Only this DOM class changes when the transition expires. Updating React
+    // state here used to render every nav item twice for each navigation.
+    indicator.classList.add('sidebar-active-indicator--sliding');
+    const timer = window.setTimeout(() => {
+      indicator.classList.remove('sidebar-active-indicator--sliding');
     }, 300);
-    return () => {
-      if (slideTimerRef.current !== null) {
-        window.clearTimeout(slideTimerRef.current);
-        slideTimerRef.current = null;
-      }
-    };
-  }, [activeNavIndex, settingsActive]);
+    return () => window.clearTimeout(timer);
+  }, [activeNavIndex, settingsActive, indicatorVisible]);
 
   useEffect(() => {
     const aside = asideRef.current;
@@ -822,10 +836,9 @@ export default function Sidebar() {
           their transparent active surfaces reveal it. */}
       {activeNavMetrics && activeNavTone !== 'test' && (
         <div
+          ref={indicatorRef}
           aria-hidden
-          className={`sidebar-active-indicator pointer-events-none absolute left-0 top-0 z-0 overflow-hidden rounded-sm ${
-            indicatorSliding ? 'sidebar-active-indicator--sliding' : ''
-          }`}
+          className="sidebar-active-indicator pointer-events-none absolute left-0 top-0 z-0 overflow-hidden rounded-sm"
           style={{
             width: activeNavMetrics.width,
             height: activeNavMetrics.height,

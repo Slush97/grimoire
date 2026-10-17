@@ -1,20 +1,9 @@
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
-import Browse from './pages/Browse';
-import Discover from './pages/Discover';
-import Servers from './pages/Servers';
-import Locker from './pages/Locker';
-import Foundry from './pages/Foundry';
-import Conflicts from './pages/Conflicts';
-import Profiles from './pages/Profiles';
-import Settings from './pages/Settings';
-import Crosshair from './pages/Crosshair';
-import Autoexec from './pages/Autoexec';
-import Stats from './pages/Stats';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useSocialStore } from './stores/socialStore';
 import { useAppStore } from './stores/appStore';
@@ -23,6 +12,21 @@ import { rollMemeAppTitle } from './lib/easterEggs';
 import { useGlobalModFileDrop } from './lib/useGlobalModFileDrop';
 import { ModSafetySync } from './components/ModSafety';
 import { listenForModUpdateChanges } from './lib/updateCheckCache';
+
+// Keep other pages (including the 3D viewers) out of shell startup. Installed
+// stays eager because it is the initial page, avoiding a startup chunk waterfall.
+// Declare these once so route changes keep the same lazy component identity.
+const Browse = lazy(() => import('./pages/Browse'));
+const Discover = lazy(() => import('./pages/Discover'));
+const Servers = lazy(() => import('./pages/Servers'));
+const Locker = lazy(() => import('./pages/Locker'));
+const Foundry = lazy(() => import('./pages/Foundry'));
+const Conflicts = lazy(() => import('./pages/Conflicts'));
+const Profiles = lazy(() => import('./pages/Profiles'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Crosshair = lazy(() => import('./pages/Crosshair'));
+const Autoexec = lazy(() => import('./pages/Autoexec'));
+const Stats = lazy(() => import('./pages/Stats'));
 
 const GASSY_SOUND = getAssetPath('/sounds/gassy.mp3');
 

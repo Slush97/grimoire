@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -307,9 +307,11 @@ export default function Layout() {
         <GameinfoBanner />
         <AppUpdateBanner />
         <ModSafetyBanner />
-        <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
-          <Outlet />
-        </div>
+        <Suspense fallback={null}>
+          <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
+            <Outlet />
+          </div>
+        </Suspense>
       </main>
       </div>
       {/* Status indicators stack in the bottom-right corner. */}
