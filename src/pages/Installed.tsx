@@ -4645,25 +4645,27 @@ export default function Installed() {
               const pending = mods.filter((m) => updatesAvailable.has(m.id));
               if (pending.length === 0) return null;
               return (
-                <div className="update-stripes border border-accent/20 bg-bg-tertiary/40 rounded-md px-3 py-2 max-h-48 overflow-y-auto">
-                  <div className="text-[10px] uppercase tracking-wider text-accent mb-1.5 font-semibold">
-                    {t('installed.updateAll.receivingUpdates', { count: pending.length })}
+                <div className="update-stripes border border-accent/20 bg-bg-tertiary/40 rounded-md">
+                  <div className="max-h-48 overflow-y-auto px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-accent mb-1.5 font-semibold">
+                      {t('installed.updateAll.receivingUpdates', { count: pending.length })}
+                    </div>
+                    <ul className="space-y-1 text-sm text-text-primary">
+                      {pending.map((m) => (
+                        <li key={m.id} className="flex items-center gap-2 min-w-0">
+                          <Download className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                          <span className="truncate" title={m.name}>{m.name}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1 text-sm text-text-primary">
-                    {pending.map((m) => (
-                      <li key={m.id} className="flex items-center gap-2 min-w-0">
-                        <Download className="w-3.5 h-3.5 text-accent flex-shrink-0" />
-                        <span className="truncate" title={m.name}>{m.name}</span>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               );
             })()}
           </>
         }
         confirmLabel={`Update ${updatesAvailable.size}`}
-        variant="update"
+        variant="primary"
         onConfirm={handleUpdateAll}
         onCancel={() => setUpdateAllConfirmOpen(false)}
       />
