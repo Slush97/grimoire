@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type ComponentProps } from 'react';
+import { act, Profiler, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModCard } from './ModCard';
@@ -42,6 +42,39 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 describe('crash badges on installed cards', () => {
+  it('skips ordinary hover renders and preserves Shift preview over a stationary pointer', async () => {
+    const onRender = vi.fn();
+    const input = { ...props(0, true, 'grid'), onSelectToggle };
+    const render = async (shiftHeld: boolean, selectMode = false) => {
+      await act(async () => root.render(
+        <Profiler id="card" onRender={onRender}>
+          <ModCard {...input} shiftHeld={shiftHeld} selectMode={selectMode} />
+        </Profiler>
+      ));
+    };
+    const preview = () => host.querySelector('[aria-label="installed.card.selectNamed"]');
+    const pointer = async (type: string) => {
+      await act(async () => host.querySelector('[data-mod-entry-key]')?.dispatchEvent(new MouseEvent(type, { bubbles: true })));
+    };
+    // Use a real entry key to identify the card root.
+    input.entryKey = 'entry';
+    await render(false);
+    onRender.mockClear();
+    await pointer('pointerover');
+    expect(onRender).not.toHaveBeenCalled();
+    expect(preview()).toBeNull();
+    await render(true);
+    expect(preview()).not.toBeNull();
+    await pointer('pointerout');
+    expect(preview()).toBeNull();
+    await pointer('pointerover');
+    expect(preview()).not.toBeNull();
+    await render(false);
+    expect(preview()).toBeNull();
+    await render(false, true);
+    expect(preview()).not.toBeNull();
+  });
+
   it.each(['grid', 'compact', 'list'] as const)('keeps the crash action independent across badge combinations in %s', async view => {
     for (const enabled of [true, false]) for (let mask = 0; mask < 64; mask++) {
       await act(async () => root.render(<ModCard {...props(mask, enabled, view)} />));

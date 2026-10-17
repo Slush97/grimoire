@@ -1,4 +1,5 @@
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -94,6 +95,7 @@ import { decideFileDownload, replaceableFilesFor, resolveUpdateRun, sameFileModI
 import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
+import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
 import {
   createEnabledVpkRestoreSnapshot,
   createGlobalVpkRestoreSnapshot,
@@ -266,7 +268,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
       <InstalledEntryCard {...cardProps} />
     </div>
   );
-});
+}, sameEntryCardProps);
 
 // Stable fallback for cards with no conflicts; a fresh [] per render would
 // defeat InstalledEntryCard's memo on every page-level state change.
@@ -526,7 +528,26 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       }}
     />
   );
-});
+}, sameEntryCardProps);
+
+function previewEntriesForDrag(
+  entries: ModEntry[],
+  section: DragSection,
+  draft: { section: DragSection; keys: string[] } | null
+): ModEntry[] {
+  if (draft?.section !== section) return entries;
+  return orderEntriesByKeys(entries, draft.keys);
+}
+
+function orderEntriesByKeys(entries: ModEntry[], keys: string[]): ModEntry[] {
+  const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const ordered = keys
+    .map((key) => byKey.get(key))
+    .filter((entry): entry is ModEntry => !!entry);
+  const seen = new Set(ordered.map((entry) => entry.key));
+  const missing = entries.filter((entry) => !seen.has(entry.key));
+  return [...ordered, ...missing];
+}
 
 let installedPageScrollTop = 0;
 
@@ -602,7 +623,33 @@ export default function Installed() {
     soundVolume,
     setInstalledScrollTop,
     setBrowseUi,
-  } = useAppStore();
+  } = useAppStore(useShallow((state) => ({
+    settings: state.settings,
+    mods: state.mods,
+    modsLoading: state.modsLoading,
+    modsError: state.modsError,
+    modsNotice: state.modsNotice,
+    clearModsNotice: state.clearModsNotice,
+    soloRestore: state.soloRestore,
+    soloMod: state.soloMod,
+    restoreSoloMods: state.restoreSoloMods,
+    clearSoloRestore: state.clearSoloRestore,
+    loadSettings: state.loadSettings,
+    loadMods: state.loadMods,
+    toggleMod: state.toggleMod,
+    deleteMod: state.deleteMod,
+    reorderMods: state.reorderMods,
+    editLocalMod: state.editLocalMod,
+    setLocalVariantGroup: state.setLocalVariantGroup,
+    setModLockerHero: state.setModLockerHero,
+    setModGlobalType: state.setModGlobalType,
+    setModPriorityFolder: state.setModPriorityFolder,
+    setVariantLabel: state.setVariantLabel,
+    importCustomMods: state.importCustomMods,
+    soundVolume: state.soundVolume,
+    setInstalledScrollTop: state.setInstalledScrollTop,
+    setBrowseUi: state.setBrowseUi,
+  })));
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
@@ -3426,8 +3473,8 @@ export default function Installed() {
     }
   });
   const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
-  // commitLoadPosition is declared after the early returns (it reads the
-  // compact order built there); bridge it through the same synchronous-ref
+  // commitLoadPosition is declared later (it reads the compact order built
+  // below); bridge it through the same synchronous-ref
   // pattern as selectAllVisibleRef so a stable callback can live up here.
   const commitLoadPositionRef = useRef<(modId: string, newPosition: number) => Promise<void>>(
     () => Promise.resolve()
@@ -3441,37 +3488,6 @@ export default function Installed() {
     setSelectMode(true);
     toggleSelection({ key: entry.key, ids: entrySelectionIds(entry) }, shiftKey);
   });
-
-  if (!activeDeadlockPath) {
-    return (
-      <EmptyState
-        icon={Package}
-        title={t('installed.empty.noGamePathTitle')}
-        description={t('installed.empty.noGamePath')}
-        action={
-          <Button onClick={() => navigate('/settings')} icon={Settings}>
-            {t('sidebar.openSettings')}
-          </Button>
-        }
-      />
-    );
-  }
-
-  if (modsLoading) {
-    return <InstalledSkeleton viewMode={viewMode} gridStyle={cardSizeGridStyle} />;
-  }
-
-  if (modsError) {
-    return (
-      <EmptyState
-        icon={Package}
-        title={t('installed.empty.errorTitle')}
-        description={modsError ?? undefined}
-        variant="error"
-        action={<Button onClick={() => loadMods()}>{t('common.actions.retry')}</Button>}
-      />
-    );
-  }
 
   const compactOrder = buildCompactPriorityOrder(allEntries);
   const conflictCount = conflictPairCount;
@@ -3582,36 +3598,6 @@ export default function Installed() {
   // displayed order no longer maps to load-order priority; the canonical
   // priority order lives on enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
-  const matchesSearchEntry = (entry: ModEntry) =>
-    !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
-  const matchesSourceEntry = (entry: ModEntry) =>
-    entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
-  const matchesHeroEntry = (entry: ModEntry) =>
-    heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
-  const matchesTagEntry = (entry: ModEntry) =>
-    tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
-  // Selecting several lists unions them (same as tags), but the list axis as a
-  // whole ANDs with the others.
-  const matchesListEntry = (entry: ModEntry) =>
-    listFilter.length === 0 ||
-    (entryListIds.get(entry.key) ?? EMPTY_LIST_IDS).some((id) => listFilter.includes(id));
-  const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) &&
-    matchesSourceEntry(entry) &&
-    matchesHeroEntry(entry) &&
-    matchesTagEntry(entry) &&
-    matchesListEntry(entry);
-  const sortEntries = (entries: ModEntry[]): ModEntry[] => {
-    if (sortMode === 'name') {
-      return [...entries].sort((a, b) =>
-        entryName(a).localeCompare(entryName(b), undefined, { sensitivity: 'base' })
-      );
-    }
-    if (sortMode === 'recent') {
-      return [...entries].sort((a, b) => entryInstalledAt(b).localeCompare(entryInstalledAt(a)));
-    }
-    return entries; // 'priority' (already in load order).
-  };
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
@@ -3627,29 +3613,62 @@ export default function Installed() {
     tagFilter.length +
     listFilter.length +
     (sortActive ? 1 : 0);
-  const visibleEnabled = statusSel.includes('enabled')
-    ? sortEntries(enabledEntries.filter(matchesAllFilters))
-    : [];
-  const defaultSortedDisabled = sortEntries(disabledEntries.filter(matchesAllFilters));
-  const disabledDefaultIndex = new Map(
-    defaultSortedDisabled.map((entry, index) => [entry.key, index])
-  );
-  // A-Z drops the saved drag order (that's the point of asking for it) but
-  // keeps the pinned band: the star's promise is "pins it to the top", so
-  // favorites sort A-Z among themselves, then everything else does.
   const disabledAlphabetical = disabledSortMode === 'name';
-  const visibleDisabled = statusSel.includes('disabled')
-    ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
-        favorites: disabledFavorites,
-        manualOrder: disabledAlphabetical ? [] : disabledOrder,
-        keyOf: entryDisabledPreferenceKey,
-        fallback: disabledAlphabetical
-          ? (left, right) =>
-              entryName(left).localeCompare(entryName(right), undefined, { sensitivity: 'base' })
-          : (left, right) =>
-              (disabledDefaultIndex.get(left.key) ?? 0) - (disabledDefaultIndex.get(right.key) ?? 0),
-      }))
-    : [];
+  const { visibleEnabled, visibleDisabled } = useMemo(() => {
+    const matchesSearchEntry = (entry: ModEntry) =>
+      !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
+    const matchesSourceEntry = (entry: ModEntry) =>
+      entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
+    const matchesHeroEntry = (entry: ModEntry) =>
+      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry)).includes(heroFilter);
+    const matchesTagEntry = (entry: ModEntry) =>
+      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
+    // Selecting several lists unions them (same as tags), but the list axis as a
+    // whole ANDs with the others.
+    const matchesListEntry = (entry: ModEntry) =>
+      listFilter.length === 0 ||
+      (entryListIds.get(entry.key) ?? EMPTY_LIST_IDS).some((id) => listFilter.includes(id));
+    const matchesAllFilters = (entry: ModEntry) =>
+      matchesSearchEntry(entry) &&
+      matchesSourceEntry(entry) &&
+      matchesHeroEntry(entry) &&
+      matchesTagEntry(entry) &&
+      matchesListEntry(entry);
+    const sortEntries = (entries: ModEntry[]): ModEntry[] => {
+      if (sortMode === 'name') {
+        return [...entries].sort((a, b) =>
+          entryName(a).localeCompare(entryName(b), undefined, { sensitivity: 'base' })
+        );
+      }
+      if (sortMode === 'recent') {
+        return [...entries].sort((a, b) => entryInstalledAt(b).localeCompare(entryInstalledAt(a)));
+      }
+      return entries; // 'priority' (already in load order).
+    };
+    const visibleEnabled = statusSel.includes('enabled')
+      ? sortEntries(enabledEntries.filter(matchesAllFilters))
+      : [];
+    const defaultSortedDisabled = sortEntries(disabledEntries.filter(matchesAllFilters));
+    const disabledDefaultIndex = new Map(
+      defaultSortedDisabled.map((entry, index) => [entry.key, index])
+    );
+    // A-Z drops the saved drag order (that's the point of asking for it) but
+    // keeps the pinned band: the star's promise is "pins it to the top", so
+    // favorites sort A-Z among themselves, then everything else does.
+    const visibleDisabled = statusSel.includes('disabled')
+      ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
+          favorites: disabledFavorites,
+          manualOrder: disabledAlphabetical ? [] : disabledOrder,
+          keyOf: entryDisabledPreferenceKey,
+          fallback: disabledAlphabetical
+            ? (left, right) =>
+                entryName(left).localeCompare(entryName(right), undefined, { sensitivity: 'base' })
+            : (left, right) =>
+                (disabledDefaultIndex.get(left.key) ?? 0) - (disabledDefaultIndex.get(right.key) ?? 0),
+        }))
+      : [];
+    return { visibleEnabled, visibleDisabled };
+  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const detailsNavigationEntries = [...visibleEnabled, ...visibleDisabled].filter(
     (entry) => typeof entryPrimaryMod(entry).gameBananaId === 'number'
@@ -3679,8 +3698,7 @@ export default function Installed() {
   };
 
   // Keep the Ctrl/Cmd+A handler (installed above) pointed at the latest
-  // closures. Synchronous assignment (not useEffect) so the hook count stays
-  // stable across the early returns higher up.
+  // closures. Synchronous assignment keeps them current for keyboard events.
   selectAllVisibleRef.current = selectAllVisible;
   selectModeRef.current = selectMode;
 
@@ -3706,28 +3724,18 @@ export default function Installed() {
     );
   };
 
-  const orderEntriesByKeys = (entries: ModEntry[], keys: string[]): ModEntry[] => {
-    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
-    const ordered = keys
-      .map((key) => byKey.get(key))
-      .filter((entry): entry is ModEntry => !!entry);
-    const seen = new Set(ordered.map((entry) => entry.key));
-    const missing = entries.filter((entry) => !seen.has(entry.key));
-    return [...ordered, ...missing];
-  };
-
-  const previewEntriesForDrag = (
-    entries: ModEntry[],
-    section: DragSection
-  ): ModEntry[] => {
-    if (dragDraftOrder?.section !== section) {
-      return entries;
-    }
-    return orderEntriesByKeys(entries, dragDraftOrder.keys);
-  };
-
-  const previewEnabled = previewEntriesForDrag(visibleEnabled, 'enabled');
-  const previewDisabled = previewEntriesForDrag(visibleDisabled, 'disabled');
+  const previewEnabled = useMemo(
+    () => previewEntriesForDrag(visibleEnabled, 'enabled', dragDraftOrder),
+    [visibleEnabled, dragDraftOrder]
+  );
+  const previewDisabled = useMemo(
+    () => previewEntriesForDrag(visibleDisabled, 'disabled', dragDraftOrder),
+    [visibleDisabled, dragDraftOrder]
+  );
+  // dnd-kit broadcasts context changes whenever this array identity changes,
+  // even if every key is identical. Keep unrelated page state out of it.
+  const enabledSortableKeys = useMemo(() => previewEnabled.map((entry) => entry.key), [previewEnabled]);
+  const disabledSortableKeys = useMemo(() => previewDisabled.map((entry) => entry.key), [previewDisabled]);
 
   const sortableEnabled = viewIsReorderable && !selectMode && !shiftHeld;
 
@@ -3870,7 +3878,7 @@ export default function Installed() {
       entry.kind === 'single' ? (mergedSourceUpdates.get(entry.mod.id)?.size ?? 0) : 0,
     fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
-    loadCount: enabledModCount,
+    loadCount: isEntryEnabled(entry) ? enabledModCount : 0,
     selectMode,
     shiftHeld,
     selected: isEntrySelected(entry),
@@ -3931,7 +3939,7 @@ export default function Installed() {
         onDragCancel={resetDragState}
       >
         <SortableContext
-          items={entries.map((entry) => entry.key)}
+          items={section === 'enabled' ? enabledSortableKeys : disabledSortableKeys}
           strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
         >
           <div className={gridClasses} style={gridStyle}>
@@ -3954,6 +3962,37 @@ export default function Installed() {
       </DndContext>
     );
   };
+
+  if (!activeDeadlockPath) {
+    return (
+      <EmptyState
+        icon={Package}
+        title={t('installed.empty.noGamePathTitle')}
+        description={t('installed.empty.noGamePath')}
+        action={
+          <Button onClick={() => navigate('/settings')} icon={Settings}>
+            {t('sidebar.openSettings')}
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (modsLoading) {
+    return <InstalledSkeleton viewMode={viewMode} gridStyle={cardSizeGridStyle} />;
+  }
+
+  if (modsError) {
+    return (
+      <EmptyState
+        icon={Package}
+        title={t('installed.empty.errorTitle')}
+        description={modsError ?? undefined}
+        variant="error"
+        action={<Button onClick={() => loadMods()}>{t('common.actions.retry')}</Button>}
+      />
+    );
+  }
 
   // No mods at all
   if (mods.length === 0) {

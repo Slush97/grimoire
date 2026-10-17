@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
@@ -789,7 +789,14 @@ export function ModCard({
   group,
 }: ModCardProps) {
   const { t } = useTranslation();
+  const pointerInside = useRef(false);
   const [hovered, setHovered] = useState(false);
+  // Ordinary hover is styled by CSS. Only Shift-selection needs React state.
+  // Remember the pointer separately so pressing Shift over a stationary card
+  // still shows the preview before paint.
+  useLayoutEffect(() => {
+    setHovered(shiftHeld && !selectMode && pointerInside.current);
+  }, [shiftHeld, selectMode]);
   const selectionPreview = shiftHeld && hovered && !selectMode;
   const hasConflicts = conflicts.length > 0;
   const isGroupCard = !!group;
@@ -1305,8 +1312,14 @@ export function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={() => {
+        pointerInside.current = true;
+        if (shiftHeld && !selectMode) setHovered(true);
+      }}
+      onPointerLeave={() => {
+        pointerInside.current = false;
+        if (shiftHeld && !selectMode) setHovered(false);
+      }}
       onClickCapture={(event) => {
         if (!selectMode && event.shiftKey && onSelectToggle && isCardSelectClick(event.currentTarget, event.target)) {
           event.preventDefault();
