@@ -4038,7 +4038,6 @@ export default function Installed() {
       {(updatesAvailable.size > 0 || updateAllProgress) && (
         <Button
           variant="primary"
-          size="sm"
           onClick={() => setUpdateAllConfirmOpen(true)}
           icon={Download}
           isLoading={!!updateAllProgress}

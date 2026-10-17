@@ -162,7 +162,7 @@ export function BulkUnknownFixModal({
       aria-labelledby="bulk-unknown-title"
     >
       <div
-        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        className="bg-bg-secondary border border-hl/10 rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">

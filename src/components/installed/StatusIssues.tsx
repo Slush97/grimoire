@@ -29,7 +29,6 @@ export function StatusIssues({ issues }: { issues: StatusIssue[] }) {
     return (
       <Button
         variant={issue.variant}
-        size="sm"
         onClick={issue.onOpen}
         onContextMenu={issue.onContextMenu}
         icon={issue.icon}
@@ -46,7 +45,6 @@ export function StatusIssues({ issues }: { issues: StatusIssue[] }) {
       <MenuTrigger asChild>
         <Button
           variant={issues.some((issue) => issue.variant === 'danger') ? 'danger' : 'warning'}
-          size="sm"
           icon={AlertTriangle}
         >
           {t('installed.status.issues', { count: total })}
