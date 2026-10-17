@@ -64,6 +64,48 @@ function shouldIgnoreFile(filePath: string): boolean {
     return false;
 }
 
+interface ConflictFileIndex {
+    sources: string[][];
+    filesByMod: string[][];
+    ownersByFile: Map<string, number[]>;
+}
+
+// The VPK parser reuses arrays while its (path, mtime, size) fingerprint and
+// invalidation epoch are unchanged. Keep just the latest index, and rebuild
+// when any source array or its position changes. Settings are applied later
+// so ignores and metadata edits never require invalidating this index.
+let lastFileIndex: ConflictFileIndex | undefined;
+
+function conflictFileIndex(sources: string[][]): ConflictFileIndex {
+    const previous = lastFileIndex;
+    if (previous && previous.sources.length === sources.length &&
+        sources.every((files, i) => files === previous.sources[i])) {
+        return previous;
+    }
+
+    const ownersByFile = new Map<string, number[]>();
+    const filesByMod = sources.map((files, i) => {
+        const unique = [...new Set(files)];
+        for (const file of unique) {
+            const owners = ownersByFile.get(file);
+            if (owners) owners.push(i);
+            else ownersByFile.set(file, [i]);
+        }
+        return unique;
+    });
+    // Unique paths can never conflict. Drop them from the retained index so
+    // warm scans visit only shared paths, even for very large disjoint VPKs.
+    for (const [file, owners] of ownersByFile) {
+        if (owners.length < 2 || shouldIgnoreFile(file)) ownersByFile.delete(file);
+    }
+    lastFileIndex = {
+        sources,
+        filesByMod: filesByMod.map((files) => files.filter((file) => ownersByFile.has(file))),
+        ownersByFile,
+    };
+    return lastFileIndex;
+}
+
 export interface ModConflict {
     modA: string;      // mod ID
     modAName: string;  // mod display name
@@ -193,6 +235,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     const conflicts: ModConflict[] = [];
 
     if (enabledMods.length < 2) {
+        lastFileIndex = undefined;
         console.log(`[detectConflicts] enabled=${enabledMods.length} took=${Date.now() - scanStart}ms (trivial)`);
         return [];
     }
@@ -237,11 +280,11 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         enabledMods.map((mod) => mod.path),
         { stats: vpkStats }
     );
-    const modFileLists = new Map<string, Set<string>>();
+    const modFileLists = new Map<string, string[]>();
     for (const mod of enabledMods) {
         const files = parsedVpks.get(mod.path);
         if (files && files.length > 0) {
-            modFileLists.set(mod.id, new Set(files));
+            modFileLists.set(mod.id, files);
         }
     }
 
@@ -264,26 +307,28 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         identityById.set(mod.id, modConflictIdentity(mod));
     }
 
-    // Find file conflicts (overlapping files between mods)
+    // Index file owners instead of walking every file for every possible pair.
+    // Emit pairs in the original mod order, and paths in mod A's directory
+    // order, including when mod B lists those paths in a different order.
     const modsWithFiles = enabledMods.filter(m => modFileLists.has(m.id));
+    const index = conflictFileIndex(modsWithFiles.map((mod) => modFileLists.get(mod.id)!));
 
     for (let i = 0; i < modsWithFiles.length; i++) {
-        for (let j = i + 1; j < modsWithFiles.length; j++) {
-            const modA = modsWithFiles[i];
+        const modA = modsWithFiles[i];
+        const overlapsByMod = new Map<number, string[]>();
+        for (const file of index.filesByMod[i]) {
+            if (globalIgnored.has(file)) continue;
+            for (const j of index.ownersByFile.get(file)!) {
+                if (j <= i || wasReported(modA, modsWithFiles[j])) continue;
+                const overlapping = overlapsByMod.get(j);
+                if (overlapping) overlapping.push(file);
+                else overlapsByMod.set(j, [file]);
+            }
+        }
+        for (const j of [...overlapsByMod.keys()].sort((a, b) => a - b)) {
             const modB = modsWithFiles[j];
             if (wasReported(modA, modB)) continue;
-
-            const filesA = modFileLists.get(modA.id)!;
-            const filesB = modFileLists.get(modB.id)!;
-
-            // Find overlapping files (excluding metadata files and any path
-            // the user has globally silenced)
-            const overlapping: string[] = [];
-            for (const file of filesA) {
-                if (filesB.has(file) && !shouldIgnoreFile(file) && !globalIgnored.has(file)) {
-                    overlapping.push(file);
-                }
-            }
+            const overlapping = overlapsByMod.get(j)!;
 
             if (overlapping.length > 0) {
                 // Subtract any individually ignored files for this pair. If

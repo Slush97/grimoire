@@ -199,7 +199,7 @@ export default function Conflicts() {
   // Tracks which pair the user is currently toggling so we can disable just
   // that row's buttons during the round-trip without freezing the whole page.
   const [pendingPair, setPendingPair] = useState<string | null>(null);
-  const { loadMods } = useAppStore();
+  const loadMods = useAppStore((s) => s.loadMods);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 200);
