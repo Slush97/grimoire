@@ -1683,9 +1683,9 @@ body {
 /* Accent Glow for Enabled cards */
 .premium-card-glow-active:hover {
   box-shadow: 
-    0 0 25px rgba(249, 115, 22, 0.12),
+    0 0 25px color-mix(in srgb, var(--color-accent) 12%, transparent),
     0 12px 30px rgba(0, 0, 0, 0.55);
-  border-color: rgba(249, 115, 22, 0.45);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 
 /* Warning Glow for Conflict cards */

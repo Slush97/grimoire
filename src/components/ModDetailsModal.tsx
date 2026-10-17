@@ -82,10 +82,10 @@ interface ModDetailsModalProps {
   navigationDirection?: ModDetailsNavigationDirection;
   navigationLabel?: string;
   updateAvailable?: boolean;
-  /** Current file ids mapped to the local mods they replace. Keeping this
+  /** Current file rows that are actual replacement destinations. Keeping this
    *  separate from the mod-level badge prevents alternate variants from all
    *  being mislabeled as updates. */
-  updateTargets?: ReadonlyMap<number, readonly string[]>;
+  updateFileIds?: Set<number>;
   /** The installed file was archived by its author and no clear replacement
    *  was found. Shown as a quiet tag: it is not an update. */
   archivedByAuthor?: boolean;
@@ -152,7 +152,7 @@ function ModDetailsModal({
   navigationDirection = 'next',
   navigationLabel,
   updateAvailable,
-  updateTargets = new Map<number, readonly string[]>(),
+  updateFileIds = new Set<number>(),
   archivedByAuthor = false,
   replaceableFiles = [],
   onReplace,
@@ -236,7 +236,6 @@ function ModDetailsModal({
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const soundVolume = useAppStore((state) => state.soundVolume);
-  const installedMods = useAppStore((state) => state.mods);
   // Cursor into the images array - only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
@@ -488,11 +487,11 @@ function ModDetailsModal({
 
   const actionLabel = (fileId: number, archived = false) => {
     // A file you already own re-downloads itself = "Reinstall". A current file
-    // in updateTargets is the confident successor of a stale install: clicking
+    // in updateFileIds is the confident successor of a stale install: clicking
     // it replaces that install, so it reads "Update". Every other file is a
     // plain Install that deletes nothing. Both hosts classify the same way, so
     // a file reads the same from Installed or from Browse.
-    if (updateTargets.has(fileId) && !archived) return t('profiles.actions.update');
+    if (updateFileIds.has(fileId) && !archived) return t('profiles.actions.update');
     if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
     return t('modDetails.actions.install');
   };
@@ -591,10 +590,9 @@ function ModDetailsModal({
     // Highlight the actual replacement target, not every sibling. A target can
     // already be installed: then Update promotes it and removes the stale
     // predecessor without downloading a duplicate.
-    const isUpdate = updateTargets.has(file.id) && !archived;
+    const isUpdate = updateFileIds.has(file.id) && !archived;
     const installedFileState = installedFileStates?.get(file.id);
-    const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true ||
-      (isUpdate && installedMods.some((mod) => mod.enabled && updateTargets.get(file.id)?.includes(mod.id)));
+    const isActive = activeFileIds.has(file.id) || installedFileState?.enabled === true;
     const fileDownload = selectFileDownloadActivity(downloadActivity, mod.id, file.id);
     const isDownloadingThis =
       fileDownload.phase === 'starting' ||
@@ -649,8 +647,13 @@ function ModDetailsModal({
         </div>
         <div className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 max-w-full items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
+            <p className="min-w-0 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
             {archived && <ArchivedTag />}
+            {isActive && (
+              <span className="flex-shrink-0 self-center rounded bg-state-success/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-state-success">
+                {t('common.status.active')}
+              </span>
+            )}
           </div>
           {file.description && (
             <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
@@ -684,11 +687,6 @@ function ModDetailsModal({
           )}
         </div>
         <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
-          {isActive && (
-            <span className="flex-shrink-0 self-center rounded bg-state-success/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-state-success">
-              {t('common.status.active')}
-            </span>
-          )}
           {showEnablePill && installedFileState && (
             <Button
               type="button"
@@ -792,11 +790,6 @@ function ModDetailsModal({
                   <ChevronRight className="w-4 h-4 flex-shrink-0" />
                 )}
                 <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
-                {installedFileIsArchived && (
-                  <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
-                    {t('modDetails.files.yourVersion')}
-                  </span>
-                )}
               </span>
               <span className="flex-shrink-0 text-2xs leading-none text-text-tertiary">
                 ({archivedFiles.length})

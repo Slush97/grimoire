@@ -23,7 +23,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 - **Tints:** translucent hover fills, hairlines and bevels use `hl/N` (`bg-hl/5`, `border-hl/10`), never `white/N`. `hl` is white today; a light theme flips it.
 - **Text:** `text-text-primary`, `text-text-secondary`, `text-text-tertiary`. Prefer them over `text-white` (literal white stays only over imagery).
 - **Accent** is user-chosen at runtime (`src/lib/accentColor.ts`); orange is only the default. It means three things: the primary action, selected, focused. Never decoration. Design against the token, never a hue.
-- **Mod updates** use fixed orange `state-update`, independent of the accent. Use `Tag tone="update"` and `Button variant="update"` for update indicators and actions. The variant picker's Update button and Installed's Update all button currently use the primary accent style.
+- **Mod updates** use fixed orange `state-update`, independent of the accent. Use `Tag tone="update"` and `Button variant="update"` for update indicators and actions.
 - **State** (`state-success | state-warning | state-danger | state-info`) only for real states: an error, a warning, a finished download. Not for "Active", "Valid" or "Configured" chips; plain text says those.
 - **Brand** (`brand-discord | brand-kofi`) only for the brand's own buttons.
 - No raw hex, no raw Tailwind palette colors (`red-500`, `zinc-300`). Add a token if something is genuinely new and reusable.

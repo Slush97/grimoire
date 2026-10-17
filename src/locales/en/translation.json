@@ -2944,8 +2944,7 @@
       "modDetails": "mod details"
     },
     "files": {
-      "archived": "Archived files",
-      "yourVersion": "Your version"
+      "archived": "Archived files"
     },
     "changelog": {
       "unavailable": "Changelog unavailable.",

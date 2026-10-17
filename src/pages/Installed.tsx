@@ -1271,7 +1271,7 @@ export default function Installed() {
       scope,
       flagged: summary.flagged || offlineFlag,
       archived: summary.archived,
-      updateTargets: summary.targets,
+      updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, source ? [source] : []),
     };
   }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable]);
@@ -4916,7 +4916,7 @@ export default function Installed() {
           dateModified={detailsDates?.dateModified}
           offline={detailsOffline}
           updateAvailable={detailsUpdate.flagged}
-          updateTargets={detailsUpdate.updateTargets}
+          updateFileIds={detailsUpdate.updateFileIds}
           archivedByAuthor={detailsUpdate.archived}
           replaceableFiles={detailsUpdate.replaceableFiles}
           onReplace={handleDetailsDownload}

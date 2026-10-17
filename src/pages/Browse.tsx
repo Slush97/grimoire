@@ -1856,7 +1856,7 @@ export default function Browse() {
       classification,
       flagged: summary.flagged,
       archived: summary.archived,
-      updateTargets: summary.targets,
+      updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
     };
   }, [selectedMod, visibleMods, mergedFileIds]);
@@ -2500,7 +2500,7 @@ export default function Browse() {
         section={selectedDetailsSection}
         installed={installedIds.has(selectedMod.id)}
         updateAvailable={selectedUpdate.flagged}
-        updateTargets={selectedUpdate.updateTargets}
+        updateFileIds={selectedUpdate.updateFileIds}
         archivedByAuthor={selectedUpdate.archived}
         replaceableFiles={selectedUpdate.replaceableFiles}
         onReplace={handleDownload}
