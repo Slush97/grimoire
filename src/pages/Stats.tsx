@@ -35,11 +35,12 @@ export default function Stats() {
     const detectSteamUsers = usePlayerStore((s) => s.detectSteamUsers)
     const loadTrackedPlayers = usePlayerStore((s) => s.loadTrackedPlayers)
     const refreshTrackedProfiles = usePlayerStore((s) => s.refreshTrackedProfiles)
-    const trackedPlayers = usePlayerStore((s) => s.trackedPlayers)
+    const trackedPlayers = usePlayerStore((s) => s.trackedPlayers.data)
     const selectedAccountId = usePlayerStore((s) => s.selectedAccountId)
     const selectPlayer = usePlayerStore((s) => s.selectPlayer)
     const syncPlayerData = usePlayerStore((s) => s.syncPlayerData)
-    const playerData = usePlayerStore((s) => s.playerData)
+    const playerDataStatus = usePlayerStore((s) => s.playerData.status)
+    const playerDataError = usePlayerStore((s) => s.playerData.error)
     const loadHeroes = useHeroStore((s) => s.loadHeroes)
 
     useEffect(() => {
@@ -53,11 +54,11 @@ export default function Stats() {
 
     // Auto-select the primary (or first) tracked player.
     useEffect(() => {
-        if (!selectedAccountId && trackedPlayers.data.length > 0) {
-            const primary = trackedPlayers.data.find((p) => p.is_primary === 1)
-            selectPlayer(primary?.account_id ?? trackedPlayers.data[0].account_id)
+        if (!selectedAccountId && trackedPlayers.length > 0) {
+            const primary = trackedPlayers.find((p) => p.is_primary === 1)
+            selectPlayer(primary?.account_id ?? trackedPlayers[0].account_id)
         }
-    }, [trackedPlayers.data, selectedAccountId, selectPlayer])
+    }, [trackedPlayers, selectedAccountId, selectPlayer])
 
     const handleRefresh = () => {
         refreshTrackedProfiles(0)
@@ -100,12 +101,12 @@ export default function Stats() {
                 />
             )
         }
-        if (playerData.status === 'error') {
+        if (playerDataStatus === 'error') {
             return (
                 <EmptyState
                     icon={AlertCircle}
                     title={<Tx k="stats.error.playerDataTitle" fallback="Failed to load player data" />}
-                    description={playerData.error}
+                    description={playerDataError}
                     variant="error"
                     action={
                         <Button variant="secondary" icon={RefreshCw} onClick={() => syncPlayerData(selectedAccountId)}>
@@ -115,7 +116,7 @@ export default function Stats() {
                 />
             )
         }
-        if (playerData.status === 'idle' || playerData.status === 'loading') {
+        if (playerDataStatus === 'idle' || playerDataStatus === 'loading') {
             return (
                 <div className="space-y-4" aria-busy>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

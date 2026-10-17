@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrendingUp } from 'lucide-react'
 import type { MMRSnapshot, PlayerMMRHistoryEntry } from '../../types/deadlock-stats'
@@ -52,14 +52,11 @@ function divisionForScore(v: number): { division: number; tier: number } {
     return { division, tier }
 }
 
-function formatDay(ms: number, locale: string, withYear = false): string {
-    // Format with the active UI language so axis/tooltip dates match the user's
-    // locale instead of the OS default.
-    return new Date(ms).toLocaleDateString(locale || undefined, {
-        month: 'short',
-        day: 'numeric',
-        ...(withYear ? { year: '2-digit' as const } : {}),
-    })
+function formatDay(ms: number, formatter: Intl.DateTimeFormat): string {
+    const date = new Date(ms)
+    // toLocaleDateString used to tolerate invalid API timestamps; Intl.format
+    // throws instead, so retain the previous fallback for malformed history.
+    return Number.isNaN(date.getTime()) ? date.toLocaleDateString() : formatter.format(date)
 }
 
 /**
@@ -110,9 +107,17 @@ function smoothPath(pts: { x: number; y: number }[]): string {
     return d
 }
 
-export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
+export const MmrChart = memo(function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
     const { t, i18n } = useTranslation()
     const locale = i18n.language
+    // Hover updates are frequent. Reuse Intl formatters instead of rebuilding
+    // their locale data for every header and tooltip date on every move.
+    const dateFormat = useMemo(() => new Intl.DateTimeFormat(locale || undefined, {
+        month: 'short', day: 'numeric',
+    }), [locale])
+    const yearDateFormat = useMemo(() => new Intl.DateTimeFormat(locale || undefined, {
+        month: 'short', day: 'numeric', year: '2-digit',
+    }), [locale])
     const svgRef = useRef<SVGSVGElement>(null)
     const [hovered, setHovered] = useState<number | null>(null)
     const ranks = useHeroStore((s) => s.ranks)
@@ -239,10 +244,10 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
         const withYear = tSpan > 320 * 86_400_000
         const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({
             f,
-            label: formatDay(t0 + f * tSpan, locale, withYear),
+            label: formatDay(t0 + f * tSpan, withYear ? yearDateFormat : dateFormat),
         }))
         return { xy, line, area, vMin, vMax, t0, tSpan, boundaries, ticks }
-    }, [points, height, locale])
+    }, [points, height, dateFormat, yearDateFormat])
 
     const rangeButtons = (
         <div className="flex gap-1">
@@ -318,7 +323,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                         {delta.toFixed(1)}
                     </span>
                     <span className="ml-1.5">
-                        {formatDay(first.t, locale)} to {formatDay(last.t, locale)}
+                        {formatDay(first.t, dateFormat)} to {formatDay(last.t, dateFormat)}
                         {fromSnapshots ? ` ${t('stats.mmrChart.localDailySnapshots')}` : ''}
                     </span>
                 </div>
@@ -450,7 +455,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                                     </span>
                                 </div>
                                 <div className="text-xs text-text-secondary leading-tight">
-                                    {formatDay(hoveredPoint.t, locale)}
+                                    {formatDay(hoveredPoint.t, dateFormat)}
                                 </div>
                             </div>
                         </div>
@@ -480,4 +485,4 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
             </div>
         </div>
     )
-}
+})

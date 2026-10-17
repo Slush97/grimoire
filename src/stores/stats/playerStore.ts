@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { shallow } from 'zustand/shallow'
 import type {
     TrackedPlayer,
     PlayerMMR,
@@ -32,6 +33,17 @@ const EMPTY_BUNDLE: PlayerDataBundle = {
     aggregated: null,
     localMMRHistory: [],
     localMatchHistory: [],
+}
+
+// IPC returns fresh objects even when the database rows have not changed.
+// Preserve the loaded state in that case so a profile age check on remount
+// does not render the entire dashboard a second time.
+function loadedPlayers(previous: Async<TrackedPlayer[]>, players: TrackedPlayer[]): Async<TrackedPlayer[]> {
+    if (previous.status === 'loaded' && previous.data.length === players.length &&
+        players.every((player, i) => shallow(player, previous.data[i]))) {
+        return previous
+    }
+    return asyncLoaded(players)
 }
 
 interface PlayerState {
@@ -111,7 +123,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set((s) => ({ trackedPlayers: asyncLoading(s.trackedPlayers) }))
         try {
             const players = (await window.electronAPI.stats.getTrackedPlayers()) as TrackedPlayer[]
-            set({ trackedPlayers: asyncLoaded(players) })
+            set((s) => ({ trackedPlayers: loadedPlayers(s.trackedPlayers, players) }))
         } catch (err) {
             set((s) => ({ trackedPlayers: asyncError(s.trackedPlayers, err) }))
         }
@@ -125,7 +137,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             const players = (await window.electronAPI.stats.refreshTrackedProfiles(
                 maxAgeSeconds
             )) as TrackedPlayer[]
-            set({ trackedPlayers: asyncLoaded(players) })
+            set((s) => ({ trackedPlayers: loadedPlayers(s.trackedPlayers, players) }))
         } catch {
             // Keep whatever is already on screen.
         }
