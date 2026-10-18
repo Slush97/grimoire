@@ -8,6 +8,7 @@ const harness = vi.hoisted(() => ({ userData: '' }));
 vi.mock('electron', () => ({ app: { getPath: () => harness.userData } }));
 
 import { getMetadataPath } from '../utils/paths';
+import * as vpkIdentity from './vpkIdentity';
 import {
     backfillMissingMetadataHashes,
     backupMetadataSidecar,
@@ -18,6 +19,7 @@ import {
     removeModMetadata,
     saveMetadata,
     setModMetadata,
+    setModMetadataWithHash,
 } from './metadata';
 
 let sandbox: string;
@@ -36,6 +38,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(harness.userData, { recursive: true, force: true });
 });
 
@@ -92,6 +95,26 @@ describe('separate developer metadata', () => {
         });
 
         expect(updated).toBe(0);
+        expect(readFileSync(getMetadataPath(false), 'utf8')).toBe(normalBytes);
+        expect(readFileSync(getMetadataPath(true), 'utf8')).toBe(devBytes);
+    });
+
+    it.each([false, true])('refuses a metadata write if its mode changes while hashing (starts in dev: %s)', async (startsInDev) => {
+        const normalBytes = JSON.stringify({ 'pak01_dir.vpk': normalRow });
+        const devBytes = JSON.stringify({ 'pak01_dir.vpk': devRow });
+        put(getMetadataPath(false), normalBytes);
+        put(getMetadataPath(true), devBytes);
+        mode(startsInDev);
+        let finishHash!: (identity: Awaited<ReturnType<typeof vpkIdentity.resolveVpkIdentity>>) => void;
+        vi.spyOn(vpkIdentity, 'resolveVpkIdentity').mockImplementationOnce(() => new Promise((resolve) => {
+            finishHash = resolve;
+        }));
+
+        const write = setModMetadataWithHash('pak01_dir.vpk', { modName: 'Changed identity' }, join(sandbox, 'pak01_dir.vpk'));
+        mode(!startsInDev);
+        finishHash({ sha256: hash('changed skin'), source: 'live' });
+
+        await expect(write).rejects.toThrow('metadata mode changed');
         expect(readFileSync(getMetadataPath(false), 'utf8')).toBe(normalBytes);
         expect(readFileSync(getMetadataPath(true), 'utf8')).toBe(devBytes);
     });

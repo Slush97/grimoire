@@ -4,7 +4,7 @@ import type { AppSettings } from '../../../src/types/mod';
 import { createModUpdateController } from './modUpdateController';
 import { getActiveDeadlockPath, loadSettings } from './settings';
 import { fetchModDetails } from './gamebanana';
-import { isDownloadCancelled, isDownloadTargetQueued } from './download';
+import { getCurrentDownload, getDownloadQueue, isDownloadCancelled, isDownloadTargetQueued } from './download';
 import { queueModReplacement, readReplacementMods } from './modReplacement';
 import { writeSnapshot } from './snapshots';
 import { isCopyingModsToDev } from './devMods';
@@ -35,13 +35,18 @@ function activePath(settings: AppSettings): string | null {
     return path ? resolve(path) : null;
 }
 
+function hasDownloadWork(): boolean {
+    return modUpdates.isBusy() || getCurrentDownload() !== null || getDownloadQueue().length > 0;
+}
+
 /** Pending downloads and manual choices retain their original metadata mode. */
 export function assertModUpdateSettingsChange(current: AppSettings, next: AppSettings): void {
-    if (modUpdates.isBusy() && (current.devMode !== next.devMode || activePath(current) !== activePath(next))) {
-        throw new Error('Finish or cancel mod updates before changing the active installation or developer mode.');
+    if (current.devMode === next.devMode && activePath(current) === activePath(next)) return;
+    if (hasDownloadWork()) {
+        throw new Error('Finish or cancel mod downloads and updates before changing the active installation or developer mode.');
     }
 }
 
 export function assertNoModUpdates(): void {
-    if (modUpdates.isBusy()) throw new Error('Finish or cancel mod updates before replacing the developer library.');
+    if (hasDownloadWork()) throw new Error('Finish or cancel mod downloads and updates before replacing the developer library.');
 }

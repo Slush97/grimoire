@@ -17,7 +17,6 @@ interface UpdateGroup {
     modId: number;
     modName: string;
     section: string;
-    details: GameBananaModDetails;
     pending: Map<number, string[]>;
     expected: Map<string, Mod>;
     removed: boolean;
@@ -54,6 +53,7 @@ export function createModUpdateController(deps: Dependencies) {
     const reservedTargets = new Set<string>();
     const validatingSources = new Set<string>();
     const preparingSources = new Set<string>();
+    const pendingChoices = new Set<{ modId: number; fileId: number; cancelled: boolean }>();
     let preparation = Promise.resolve();
 
     // Only preparation is serialized here. Transfer and finalization belong to FIFO.
@@ -186,9 +186,8 @@ export function createModUpdateController(deps: Dependencies) {
                         const details = await deps.details(modId, section);
                         assertContext();
                         const group = [...groups.values()].find(candidate => candidate.modId === modId && candidate.section === section && !candidate.removed)
-                            ?? { id: `${++sequence}:${key}`, modId, section, modName: details.name, details, pending: new Map<number, string[]>(), expected: new Map<string, Mod>(), removed: false };
+                            ?? { id: `${++sequence}:${key}`, modId, section, modName: details.name, pending: new Map<number, string[]>(), expected: new Map<string, Mod>(), removed: false };
                         group.modName = details.name;
-                        group.details = details;
                         selectedMods.forEach(mod => group.expected.set(mod.id, { ...mod }));
                         groups.set(group.id, group);
                         const scope = installed.filter(mod => (mod.sourceSection ?? 'Mod') === section);
@@ -230,17 +229,29 @@ export function createModUpdateController(deps: Dependencies) {
         const group = groups.get(requestId);
         const sources = group?.pending.get(oldFileId);
         if (!group || !sources) throw new Error('This replacement is no longer pending.');
-        const file = group.details.files?.find(file => file.id === newFileId && !file.isArchived);
-        if (!file || oldFileId === newFileId) throw new Error('Invalid replacement file.');
+        if (oldFileId === newFileId) throw new Error('Invalid replacement file.');
         const releaseValidation = reserveValidation(sources);
-        // Reserve before awaiting scans so double clicks cannot submit the same source.
+        const choice = { modId: group.modId, fileId: newFileId, cancelled: false };
+        pendingChoices.add(choice);
+        // Reserve before validation so double clicks cannot submit the same source.
         group.pending.delete(oldFileId);
         jobs++;
         publish();
         try {
             await prepare(async () => {
+                if (choice.cancelled) return;
                 const path = assertContext().deadlockPath;
+                if (group.removed) throw new Error('This replacement request was removed.');
+                // The picker fetches current uploads when opened. Validate against
+                // those uploads without changing the captured predecessor proof.
+                const details = await deps.details(group.modId, group.section);
+                if (choice.cancelled) return;
+                assertContext();
+                if (group.removed) throw new Error('This replacement request was removed.');
+                const file = details.files?.find(file => file.id === newFileId && !file.isArchived);
+                if (!file) throw new Error('Invalid replacement file.');
                 const installed = visibleInstalledMods(await deps.mods(path));
+                if (choice.cancelled) return;
                 if (group.removed) throw new Error('This replacement request was removed.');
                 if (installed.some(mod => mod.gameBananaId === group.modId && mod.gameBananaFileId === newFileId && (mod.sourceSection ?? 'Mod') === group.section) || mergeSourceFileIds(installed).has(newFileId)) {
                     throw new Error('This replacement file is already installed.');
@@ -250,13 +261,26 @@ export function createModUpdateController(deps: Dependencies) {
                 enqueue(group, { modId: group.modId, fileId: newFileId, fileName: file.fileName, modName: group.modName, section: group.section, isReplacement: true }, sources, false, sources.map(id => group.expected.get(id)!), oldFileId);
             });
         } catch (error) {
+            if (choice.cancelled) return;
             if (!group.removed) addPendingSources(group, oldFileId, sources);
             throw error;
         } finally {
+            pendingChoices.delete(choice);
             releaseValidation();
             jobs--;
             publish();
         }
+    }
+
+    /** Cancel the optimistic queue row before its validated download is enqueued. */
+    function cancelPendingChoiceTarget(modId: number, fileId: number): boolean {
+        let cancelled = false;
+        for (const choice of pendingChoices) {
+            if (choice.modId !== modId || choice.fileId !== fileId || choice.cancelled) continue;
+            choice.cancelled = true;
+            cancelled = true;
+        }
+        return cancelled;
     }
 
     function remove(requestId: string) {
@@ -307,7 +331,7 @@ export function createModUpdateController(deps: Dependencies) {
                     }
                 }
                 group ??= { id: String(++sequence), modId: args.modId, modName: args.modName ?? String(args.modId), section,
-                    details: { id: args.modId, name: args.modName ?? String(args.modId), nsfw: false }, pending: new Map(), expected: new Map(), removed: false };
+                    pending: new Map(), expected: new Map(), removed: false };
                 const promote = installed.some(mod => mod.gameBananaId === args.modId && mod.gameBananaFileId === args.fileId && (mod.sourceSection ?? 'Mod') === section && !sources.includes(mod.id));
                 await snapshot();
                 const expectedSources = manualFileId === undefined ? initial.sources : sources.map(id => group!.expected.get(id)!);
@@ -327,5 +351,5 @@ export function createModUpdateController(deps: Dependencies) {
         }
     }
 
-    return { start, choose, remove, replace, getState, isBusy: busy };
+    return { start, choose, remove, replace, cancelPendingChoiceTarget, getState, isBusy: busy };
 }

@@ -595,14 +595,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Save settings to backend
   saveSettings: async (settings: AppSettings) => {
+    const previous = get().settings;
+    // Send this action's changes so a delayed path switch cannot undo other saves.
+    const patch = Object.fromEntries(Object.entries(settings).filter(([key, value]) =>
+      !previous || value !== previous[key as keyof AppSettings],
+    )) as Partial<AppSettings>;
     set({ settingsLoading: true, settingsError: null });
     try {
-      await api.setSettings(settings);
-      setDateFormat(settings.dateFormat);
-      applyLanguagePreference(settings.language);
-      set({ settings, settingsLoading: false });
+      const saved = await api.setSettings(patch);
+      setDateFormat(saved.dateFormat);
+      applyLanguagePreference(saved.language);
+      set({ settings: saved, settingsLoading: false });
       // Reload mods if path changed
-      if (getActiveDeadlockPath(settings)) {
+      if (getActiveDeadlockPath(saved)) {
         get().loadMods({ force: true });
       }
     } catch (err) {

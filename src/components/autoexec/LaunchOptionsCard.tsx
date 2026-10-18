@@ -5,7 +5,6 @@ import { getSettings, setSettings } from '../../lib/api';
 import { Card, Button } from '../common/ui';
 import { Input } from '../common/forms';
 import Tx from '../translation/Tx';
-import type { AppSettings } from '../../types/mod';
 import type { SteamLaunchOptionsStatus } from '../../types/electron';
 
 /**
@@ -48,12 +47,7 @@ export default memo(function LaunchOptionsCard() {
     setMessage(null);
     setMessageTone(null);
     try {
-      // Re-read settings immediately before writing: this card holds its value
-      // from mount, and another surface (Settings, the welcome flow) may have
-      // changed an unrelated field in the meantime. Spreading a stale snapshot
-      // would silently roll that change back.
-      const current: AppSettings = await getSettings();
-      await setSettings({ ...current, steamLaunchOptions: draft, steamLaunchOptionsManaged: true });
+      await setSettings({ steamLaunchOptions: draft, steamLaunchOptionsManaged: true });
       setSaved(draft);
       setManaged(true);
       setMessage(t('autoexec.launchOptions.saved'));

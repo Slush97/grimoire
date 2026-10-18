@@ -17,6 +17,7 @@ const harness = vi.hoisted(() => ({
     scanMods: vi.fn(),
     extractArchive: vi.fn(),
     assertVpkSafety: vi.fn(),
+    copying: false,
     settings: { autoEnableDownloads: true, autoDisableSiblingVariants: true },
 }));
 
@@ -36,6 +37,7 @@ vi.mock('./settings', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./settings')>()),
     loadSettings: () => harness.settings,
 }));
+vi.mock('./devMods', () => ({ isCopyingModsToDev: () => harness.copying }));
 vi.mock('./metadata', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./metadata')>()),
     getModMetadata: () => undefined,
@@ -176,11 +178,31 @@ describe('managed download FIFO', () => {
         harness.setModMetadataWithHash.mockReset();
         harness.extractArchive.mockReset();
         harness.assertVpkSafety.mockReset().mockResolvedValue(undefined);
+        harness.copying = false;
     });
 
     afterAll(async () => {
         await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
         await fs.rm(root, { recursive: true, force: true });
+    });
+
+    it('refuses ordinary, one-click, and managed jobs during developer library replacement', async () => {
+        harness.copying = true;
+        const operations = [
+            () => downloadMod('/game', args(100), mainWindow),
+            () => downloadModFromUrl('/game', { archiveUrl: `${harness.baseUrl}/101.vpk`, modId: 101 }, mainWindow),
+            () => enqueueManagedDownload('/game', args(102), mainWindow, { execute: emptyInstall, afterInstall: async () => {} }),
+        ];
+        for (const operation of operations) {
+            await expect(async () => operation()).rejects.toThrow('developer library copy');
+        }
+        expect(getDownloadQueue()).toEqual([]);
+        expect(getCurrentDownload()).toBeNull();
+        expect(harness.fetchModDetails).not.toHaveBeenCalled();
+
+        harness.copying = false;
+        await downloadMod('/game', args(100), mainWindow);
+        expect(completions()).toEqual([100]);
     });
 
     it('enqueues every job immediately and finishes replacement before the next update or Browse install', async () => {

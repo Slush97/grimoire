@@ -12,13 +12,14 @@ import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { fetchModDetails, type GameBananaModDetails } from './gamebanana';
-import { makeDisabledFileName, scanMods, disableMod, enableMod } from './mods';
-import { imprintFreshlyInstalled } from './imprintMods';
+import { makeDisabledFileName, scanMods, disableMod, enableMod, generateModId, runExclusiveModMutation } from './mods';
+import { imprintFreshlyInstalled, imprintOneMod } from './imprintMods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import { forgeFileNameStem } from './forgeProtocol';
 import { gameBananaFileServerSelector } from './gamebananaFileServers';
 import { downloadTransfer, DownloadSuspendedError, isDownloadSuspended, type DownloadTransferCheckpoint, type DownloadServerStatus } from './downloadTransfer';
-import { loadSettings } from './settings';
+import { getActiveDeadlockPath, loadSettings } from './settings';
+import { isCopyingModsToDev } from './devMods';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
 // DownloadModArgs is single-sourced in src/types/electron.ts; re-exported
@@ -217,6 +218,10 @@ function newJob(): Pick<QueuedDownload, 'jobId' | 'phase' | 'started' | 'checkpo
     return { jobId: randomUUID(), phase: 'queued', started: false, checkpoint: {} };
 }
 
+function assertDownloadAllowed(): void {
+    if (isCopyingModsToDev()) throw new Error('Wait for the developer library copy to finish before downloading mods.');
+}
+
 async function cleanupJob(item: QueuedDownload): Promise<void> {
     if (item.workDir) {
         await cleanupDownloadWorkDir(item.workDir);
@@ -348,6 +353,7 @@ export function downloadMod(
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
 ): Promise<DownloadInstallResult> {
+    assertDownloadAllowed();
     // Dedup at (modId, fileId), not modId alone: a single submission can have
     // multiple files (Gold/Silver variants, lite/HD versions) and profile
     // imports legitimately queue several of them back-to-back. Also check the
@@ -381,6 +387,7 @@ export function enqueueManagedDownload(
     mainWindow: BrowserWindow | null,
     hooks: ManagedDownloadHooks,
 ): Promise<DownloadInstallResult> {
+    assertDownloadAllowed();
     if (isDownloadTargetQueued(args.modId, args.fileId)) {
         return Promise.reject(new Error('This mod file is already queued or downloading.'));
     }
@@ -410,6 +417,7 @@ export function downloadModFromUrl(
     oneClick: OneClickInstallArgs,
     mainWindow: BrowserWindow | null
 ): Promise<DownloadInstallResult> {
+    assertDownloadAllowed();
     validateDownloadUrl(oneClick.archiveUrl);
 
     const fileName = deriveFileNameFromUrl(oneClick.archiveUrl);
@@ -1624,6 +1632,13 @@ export async function installForgeVpk(
     },
     mainWindow: BrowserWindow | null
 ): Promise<DownloadInstallResult> {
+    assertDownloadAllowed();
+    const devMode = loadSettings().devMode;
+    const assertContext = () => {
+        if (getActiveDeadlockPath() !== deadlockPath || loadSettings().devMode !== devMode) {
+            throw new Error('The active mod installation changed before the Forge mod could be installed.');
+        }
+    };
     // Synthetic negative id, matching the convention direct-URL installs use:
     // keeps UI events addressable without colliding with real GameBanana ids.
     const modId = -Math.floor(Date.now() / 1000);
@@ -1639,14 +1654,8 @@ export async function installForgeVpk(
         const stem = forgeFileNameStem(forge.name);
         const stagedPath = join(workDir, `${stem}.vpk`);
         await fs.copyFile(forge.sourcePath, stagedPath);
-
-        const renamed = await renameVpksToAvoidConflicts(
-            deadlockPath,
-            targetPath,
-            [{ path: stagedPath, fileName: basename(stagedPath) }],
-            forge.name
-        );
-        const installedVpks = renamed.map((r) => r.fileName);
+        // A safety review can wait for the user without holding the mutation queue.
+        await assertVpkSafety(stagedPath, { allowUntrusted: true, context: 'installation', name: forge.name });
 
         // SoundForge output is hero voice/ability audio, so classify it as a
         // Sound mod: that is what makes stampVpkLockerHero run its VPK-tree
@@ -1672,19 +1681,40 @@ export async function installForgeVpk(
             },
         };
 
-        for (const vpkFileName of installedVpks) {
-            const vpkPath = join(targetPath, vpkFileName);
-            const base = stampVpkLockerHero(metadata, section, vpkPath);
-            await setModMetadataWithHash(vpkFileName, base, vpkPath);
-        }
+        const installedVpks = await runExclusiveModMutation(async () => {
+            assertDownloadAllowed();
+            assertContext();
+            const renamed = await renameVpksToAvoidConflicts(
+                deadlockPath,
+                targetPath,
+                [{ path: stagedPath, fileName: basename(stagedPath) }],
+                forge.name
+            );
+            const names = renamed.map((entry) => entry.fileName);
+            for (const name of names) {
+                const vpkPath = join(targetPath, name);
+                const base = stampVpkLockerHero(metadata, section, vpkPath);
+                await setModMetadataWithHash(name, base, vpkPath);
+            }
+            return names;
+        });
 
-        const settings = loadSettings();
-        if (settings.experimentalVpkImprinting) {
-            await imprintFreshlyInstalled(deadlockPath, installedVpks);
+        if (loadSettings().experimentalVpkImprinting) {
+            for (const name of installedVpks) {
+                try {
+                    assertDownloadAllowed();
+                    assertContext();
+                    // Queue the imprint without an intervening scan: its lock
+                    // checks the captured mode and path before touching metadata.
+                    await imprintOneMod(deadlockPath, generateModId(name));
+                } catch (err) {
+                    console.warn(`[forgeInstall] Failed to imprint ${name}:`, err);
+                }
+            }
         }
 
         for (const name of installedVpks) {
-            await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+            await assertVpkSafety(join(targetPath, name), { context: 'installation', name: forge.name });
         }
 
         // Sibling-variant handling is skipped on purpose: it keys off a real

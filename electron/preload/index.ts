@@ -110,7 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('copy-mods-to-dev-progress', listener);
     },
     getSettings: () => ipcRenderer.invoke('get-settings'),
-    setSettings: (settings: AppSettings) => ipcRenderer.invoke('set-settings', settings),
+    setSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('set-settings', patch),
 
     // Mod transfer between mod managers (neutral interchange format; no cloud)
     interchange: {

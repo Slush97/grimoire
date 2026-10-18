@@ -41,22 +41,26 @@ ipcMain.handle('get-settings', (): AppSettings => {
 });
 
 // set-settings
-ipcMain.handle('set-settings', async (_, settings: AppSettings): Promise<void> => {
+ipcMain.handle('set-settings', async (_, patch: Partial<AppSettings>): Promise<AppSettings> => {
     const current = loadSettings();
+    const settings = { ...current, ...patch };
     assertModUpdateSettingsChange(current, settings);
-    const safetyWasOn = current.experimentalModSafety;
-    const socialWasOn = current.experimentalSocial;
     assertUpdateChannelChange(settings.updateChannel);
-    const persist = (): void => {
-        assertModUpdateSettingsChange(loadSettings(), settings);
-        saveSettings({ ...settings, lastDialogDirectory: loadSettings().lastDialogDirectory });
+    const persist = () => {
+        const previous = loadSettings();
+        // A path switch can wait behind mod writes while other preferences save.
+        const saved = { ...previous, ...patch, lastDialogDirectory: previous.lastDialogDirectory };
+        assertModUpdateSettingsChange(previous, saved);
+        assertUpdateChannelChange(saved.updateChannel);
+        saveSettings(saved);
+        return { previous, saved };
     };
-    if (settings.devMode !== current.devMode || settings.devDeadlockPath !== current.devDeadlockPath || settings.deadlockPath !== current.deadlockPath) {
-        // Finish in-flight mod writes before changing their metadata destination.
-        await runExclusiveModMutation(async () => persist());
-    } else {
-        persist();
-    }
+    // Finish in-flight mod writes before changing their metadata destination.
+    const changesInstallation = settings.devMode !== current.devMode ||
+        settings.devDeadlockPath !== current.devDeadlockPath || settings.deadlockPath !== current.deadlockPath;
+    const { previous, saved } = changesInstallation
+        ? await runExclusiveModMutation(async () => persist())
+        : persist();
     syncUpdaterWithSettings();
     syncWindowBackgroundWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must
@@ -65,10 +69,11 @@ ipcMain.handle('set-settings', async (_, settings: AppSettings): Promise<void> =
     // Startup skips the installed-mod check while the review is off, so turning
     // it on checks the library now instead of at the next launch.
     const deadlockPath = getActiveDeadlockPath();
-    if (settings.experimentalModSafety && !safetyWasOn && deadlockPath) {
+    if (saved.experimentalModSafety && !previous.experimentalModSafety && deadlockPath) {
         auditInstalledSafety(deadlockPath).catch(err => console.error('[mod-safety] Inspection failed:', err));
     }
     // Launch skips the saved-session check while Social is off, so turning it
     // on restores the session now instead of at the next launch.
-    if (settings.experimentalSocial && !socialWasOn) void hydrateSocialSession();
+    if (saved.experimentalSocial && !previous.experimentalSocial) void hydrateSocialSession();
+    return saved;
 });

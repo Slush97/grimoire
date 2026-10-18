@@ -32,7 +32,10 @@ the restore stops and keeps its backup available to retry.
 
 Developer mode uses `mod-metadata.dev.json` and `mod-metadata.dev.backups`, separate
 from normal mode's `mod-metadata.json` and `mod-metadata.backups`. Each mode creates
-and maintains its own metadata. Under the developer folder path, **Copy mods to
+and maintains its own metadata. Mode switches wait for mod writes and are refused
+while downloads or update work remain. Settings save only the requested changes,
+so a delayed mode switch preserves preferences saved while it waits.
+Under the developer folder path, **Copy mods to
 dev mode** explicitly replaces the developer library and metadata with copies
 of the normal library. This includes disabled mods, overflow and Global folders,
 split archive chunks, Locker artifacts, and custom card sources. Normal files,

@@ -23,7 +23,9 @@ const h = vi.hoisted(() => ({
 vi.mock('./metadata', () => ({ getModMetadata: (k: string) => h.metaMap[k] }));
 vi.mock('./mods', () => ({ scanMods: vi.fn() }));
 vi.mock('./vpk', () => ({ parseVpkDirectoriesAsync: vi.fn() }));
-vi.mock('./settings', () => ({ loadSettings: vi.fn(() => ({})) }));
+vi.mock('./settings', async importOriginal => ({
+    ...(await importOriginal<typeof import('./settings')>()), loadSettings: vi.fn(() => ({})),
+}));
 
 import {
   conflictPairKey,

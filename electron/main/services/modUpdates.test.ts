@@ -3,6 +3,7 @@ import type { AppSettings } from '../../../src/types/mod';
 
 const h = vi.hoisted(() => ({
     busy: vi.fn(), create: vi.fn(), copying: vi.fn(), settings: vi.fn(),
+    currentDownload: vi.fn(), downloadQueue: vi.fn(),
 }));
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }));
 vi.mock('./modUpdateController', () => ({ createModUpdateController: h.create }));
@@ -14,7 +15,10 @@ vi.mock('./settings', async (importOriginal) => {
     };
 });
 vi.mock('./gamebanana', () => ({ fetchModDetails: vi.fn() }));
-vi.mock('./download', () => ({ isDownloadCancelled: vi.fn(), isDownloadTargetQueued: vi.fn() }));
+vi.mock('./download', () => ({
+    isDownloadCancelled: vi.fn(), isDownloadTargetQueued: vi.fn(),
+    getCurrentDownload: h.currentDownload, getDownloadQueue: h.downloadQueue,
+}));
 vi.mock('./modReplacement', () => ({ queueModReplacement: vi.fn(), readReplacementMods: vi.fn() }));
 vi.mock('./snapshots', () => ({ writeSnapshot: vi.fn() }));
 vi.mock('./devMods', () => ({ isCopyingModsToDev: h.copying }));
@@ -27,6 +31,8 @@ beforeEach(() => {
     h.busy.mockReturnValue(true);
     h.copying.mockReturnValue(false);
     h.settings.mockReturnValue(settings);
+    h.currentDownload.mockReturnValue(null);
+    h.downloadQueue.mockReturnValue([]);
 });
 
 describe('update installation guards', () => {
@@ -51,6 +57,18 @@ describe('update installation guards', () => {
         h.busy.mockReturnValue(false);
         expect(() => assertModUpdateSettingsChange(settings, { ...settings, devMode: true })).not.toThrow();
         expect(assertNoModUpdates).not.toThrow();
+    });
+
+    it.each(['active', 'queued'])('blocks mode and installation changes for %s ordinary downloads', (phase) => {
+        h.busy.mockReturnValue(false);
+        if (phase === 'active') h.currentDownload.mockReturnValue({ jobId: 'ordinary' });
+        else h.downloadQueue.mockReturnValue([{ jobId: 'one-click' }]);
+
+        expect(() => assertModUpdateSettingsChange(settings, { ...settings, devMode: true })).toThrow('Finish or cancel');
+        expect(() => assertModUpdateSettingsChange(settings, { ...settings, deadlockPath: 'different' })).toThrow('Finish or cancel');
+        expect(assertNoModUpdates).toThrow('Finish or cancel');
+        expect(() => assertModUpdateSettingsChange(settings, { ...settings, accentColor: 'changed' })).not.toThrow();
+        expect(() => assertModUpdateSettingsChange(settings, { ...settings, devDeadlockPath: 'inactive' })).not.toThrow();
     });
 
     it('refuses starting updates while a developer-library copy is queued or running', () => {

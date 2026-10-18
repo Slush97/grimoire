@@ -11,10 +11,12 @@ import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/s
 import {
     scanMods,
     scanModsAfterMutations,
+    healModFolders,
     enableMod,
     enableModUnlocked,
     disableMod,
     deleteMods,
+    deleteModsUnlocked,
     setModPriority,
     reorderMods,
     swapModPriority,
@@ -82,6 +84,12 @@ import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/f
 import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
+
+function assertActiveModInstallation(deadlockPath: string, devMode: boolean): void {
+    if (getActiveDeadlockPath() !== deadlockPath || loadSettings().devMode !== devMode) {
+        throw new Error('The active installation changed before the mod could be updated.');
+    }
+}
 
 interface UnknownCacheBulkRequest {
     modId: string;
@@ -539,6 +547,7 @@ ipcMain.handle(
     'apply-unknown-mod-match',
     async (_, modId: string, match: ApplyUnknownModMatchArgs): Promise<Mod> => {
         const deadlockPath = getActiveDeadlockPath();
+        const devMode = loadSettings().devMode;
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
@@ -561,6 +570,7 @@ ipcMain.handle(
         }
 
         const wasEnabled = target.enabled;
+        assertActiveModInstallation(deadlockPath, devMode);
         const downloadResult = await downloadMod(deadlockPath, {
             modId: match.gameBananaId,
             fileId: matchFileId,
@@ -569,45 +579,65 @@ ipcMain.handle(
             section: match.sourceSection ?? 'Mod',
         }, getMainWindow());
         const installedFileNames = new Set(downloadResult.installedVpks);
+        assertActiveModInstallation(deadlockPath, devMode);
+        return runExclusiveModMutation(async () => {
+            assertActiveModInstallation(deadlockPath, devMode);
+            await healModFolders(deadlockPath);
+            const afterDownload = await scanMods(deadlockPath);
+            const downloaded = afterDownload
+                .filter((candidate) => {
+                    if (candidate.id === target.id) return false;
+                    return installedFileNames.has(candidate.fileName);
+                })
+                .sort((a, b) => downloadResult.installedVpks.indexOf(a.fileName) - downloadResult.installedVpks.indexOf(b.fileName));
 
-        const afterDownload = await scanMods(deadlockPath);
-        const downloaded = afterDownload
-            .filter((candidate) => {
-                if (candidate.id === target.id) return false;
-                return installedFileNames.has(candidate.fileName);
-            })
-            .sort((a, b) => downloadResult.installedVpks.indexOf(a.fileName) - downloadResult.installedVpks.indexOf(b.fileName));
-
-        if (downloaded.length === 0) {
-            throw new Error('Download completed, but the installed replacement VPK could not be found. The unknown mod was kept.');
-        }
-
-        const { skipped } = await deleteMods(deadlockPath, [target]);
-        if (skipped.length > 0) {
-            throw new Error('The unknown mod changed during the download. It was kept.');
-        }
-
-        const finalFileNames: string[] = [];
-        if (wasEnabled) {
-            for (const replacement of downloaded) {
-                if (!replacement.enabled) {
-                    const enabled = await enableMod(deadlockPath, replacement.id);
-                    finalFileNames.push(enabled.fileName);
-                } else {
-                    finalFileNames.push(replacement.fileName);
-                }
+            if (downloaded.length === 0) {
+                throw new Error('Download completed, but the installed replacement VPK could not be found. The unknown mod was kept.');
             }
-        } else {
-            finalFileNames.push(...downloaded.map((replacement) => replacement.fileName));
-        }
 
-        const finalMods = await scanMods(deadlockPath);
-        const finalReplacement =
-            finalMods.find((candidate) => candidate.fileName === finalFileNames[0]) ??
-            downloaded[0];
-        return enrichMod(finalReplacement ?? downloaded[0]);
+            const { skipped } = await deleteModsUnlocked(deadlockPath, [target]);
+            if (skipped.length > 0) {
+                throw new Error('The unknown mod changed during the download. It was kept.');
+            }
+
+            const finalFileNames: string[] = [];
+            if (wasEnabled) {
+                for (const replacement of downloaded) {
+                    if (!replacement.enabled) {
+                        const enabled = await enableModUnlocked(deadlockPath, replacement.id);
+                        finalFileNames.push(enabled.fileName);
+                    } else {
+                        finalFileNames.push(replacement.fileName);
+                    }
+                }
+            } else {
+                finalFileNames.push(...downloaded.map((replacement) => replacement.fileName));
+            }
+
+            const finalMods = await scanMods(deadlockPath);
+            const finalReplacement =
+                finalMods.find((candidate) => candidate.fileName === finalFileNames[0]) ??
+                downloaded[0];
+            return enrichMod(finalReplacement ?? downloaded[0]);
+        });
     }
 );
+
+async function applyUnknownModMetadata(deadlockPath: string, modId: string, data: ModMetadata): Promise<WireMod> {
+    const devMode = loadSettings().devMode;
+    const { target, updated } = await runExclusiveModMutation(async () => {
+        assertActiveModInstallation(deadlockPath, devMode);
+        const mods = await scanMods(deadlockPath);
+        const target = mods.find((mod) => mod.id === modId);
+        if (!target) throw new Error(`Mod not found: ${modId}`);
+        await setModMetadataWithHash(target.metaKey, data, target.path);
+        return { target, updated: enrichMod(target) };
+    });
+    assertActiveModInstallation(deadlockPath, devMode);
+    await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
+    assertActiveModInstallation(deadlockPath, devMode);
+    return updated;
+}
 
 // apply-unknown-custom-mod
 ipcMain.handle(
@@ -621,20 +651,11 @@ ipcMain.handle(
             throw new Error('A name is required');
         }
 
-        const mods = await scanMods(deadlockPath);
-        const target = mods.find((m) => m.id === modId);
-        if (!target) {
-            throw new Error(`Mod not found: ${modId}`);
-        }
-
-        await setModMetadataWithHash(target.metaKey, {
+        return applyUnknownModMetadata(deadlockPath, modId, {
             modName: args.name.trim(),
             thumbnailUrl: args.thumbnailDataUrl,
             nsfw: !!args.nsfw,
-        }, target.path);
-
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
-        return enrichMod(target);
+        });
     }
 );
 
@@ -670,13 +691,7 @@ ipcMain.handle(
             throw new Error('A GameBanana mod selection is required');
         }
 
-        const mods = await scanMods(deadlockPath);
-        const target = mods.find((m) => m.id === modId);
-        if (!target) {
-            throw new Error(`Mod not found: ${modId}`);
-        }
-
-        await setModMetadataWithHash(target.metaKey, {
+        return applyUnknownModMetadata(deadlockPath, modId, {
             modName: args.modName.trim(),
             gameBananaId: args.gameBananaId,
             gameBananaFileId: args.gameBananaFileId,
@@ -684,10 +699,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
             categoryName: args.categoryName,
             sourceSection: args.sourceSection,
-        }, target.path);
-
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
-        return enrichMod(target);
+        });
     }
 );
 

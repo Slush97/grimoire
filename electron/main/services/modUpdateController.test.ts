@@ -214,6 +214,182 @@ describe('main-process update coordination', () => {
         expect(h.controller.isBusy()).toBe(false);
     });
 
+    it('accepts newly uploaded manual destinations while retaining the original source proof', async () => {
+        const h = setup();
+        const original = mod('old', 10, 'No match');
+        h.setMods([original]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const updatedFile = { ...file(30, 'New upload'), fileName: 'new-upload.zip' };
+        h.deps.details.mockResolvedValue(details(1, [updatedFile]));
+        h.setMods([{ ...original, gameBananaFileId: 99 }]);
+
+        await h.controller.choose({ requestId, oldFileId: 10, newFileId: 30 });
+
+        expect(h.deps.details).toHaveBeenLastCalledWith(1, 'Mod');
+        expect(h.deps.replace).toHaveBeenCalledWith('normal', expect.objectContaining({
+            fileId: 30, fileName: 'new-upload.zip', section: 'Mod',
+        }), ['old'], false, [original]);
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.isBusy()).toBe(false);
+    });
+
+    it.each(['removed', 'archived'] as const)('rejects a destination %s since matching and leaves the manual choice retryable', async status => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match')]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        h.deps.details.mockResolvedValue(details(1, status === 'archived' ? [{ ...file(20, 'Original'), isArchived: true }] : []));
+
+        await expect(h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 })).rejects.toThrow('Invalid replacement file');
+
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({
+            busy: true, updatingModIds: ['old'], manualRequests: [{ id: requestId, sourceFileIds: [10] }],
+        });
+        h.deps.details.mockResolvedValue(details(1, [file(30, 'Fresh upload')]));
+        await h.controller.choose({ requestId, oldFileId: 10, newFileId: 30 });
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.isBusy()).toBe(false);
+    });
+
+    it('keeps manual choices retryable after the destination refresh fails', async () => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match')]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        h.deps.details.mockRejectedValueOnce(new Error('offline'));
+
+        await expect(h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 })).rejects.toThrow('offline');
+
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState().manualRequests[0]).toMatchObject({ id: requestId, sourceModIds: ['old'] });
+        await h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.isBusy()).toBe(false);
+    });
+
+    it('reserves manual sources during the destination fetch and honors request removal', async () => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match')]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const refresh = deferred();
+        h.deps.details.mockImplementationOnce(async id => {
+            await refresh.promise;
+            return details(id, [file(20, 'Original')]);
+        });
+        const choice = h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        await flush();
+        expect(h.deps.details).toHaveBeenCalledTimes(2);
+        expect(h.controller.getState()).toMatchObject({ busy: true, updatingModIds: ['old'], manualRequests: [] });
+        await expect(h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 })).rejects.toThrow('no longer pending');
+        await expect(h.controller.replace({ modId: 1, fileId: 30, fileName: 'other.zip', replacementModIds: ['old'] })).rejects.toThrow('already being updated');
+
+        h.controller.remove(requestId);
+        refresh.resolve();
+        await expect(choice).rejects.toThrow('request was removed');
+
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], manualRequests: [] });
+    });
+
+    it('rejects a metadata mode change while refreshing a manual destination', async () => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match')]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const refresh = deferred();
+        h.deps.details.mockImplementationOnce(async id => {
+            await refresh.promise;
+            return details(id, [file(20, 'Original')]);
+        });
+        const choice = h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        await flush();
+        h.setContext({ deadlockPath: 'sandbox', devMode: true });
+        refresh.resolve();
+
+        await expect(choice).rejects.toThrow('installation changed');
+
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({
+            busy: true, updatingModIds: ['old'], manualRequests: [{ id: requestId, sourceFileIds: [10] }],
+        });
+    });
+
+    it('can cancel a manual choice before destination validation starts', async () => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match')]);
+        await h.controller.start(['old']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const choice = h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(true);
+        await expect(choice).resolves.toBeUndefined();
+
+        expect(h.deps.details).toHaveBeenCalledOnce();
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], manualRequests: [] });
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(false);
+    });
+
+    it.each([
+        ['details', false], ['details', true], ['scan', false], ['scan', true],
+    ] as const)('cancels during %s validation (lookup fails: %s) without losing other sources or blocking a later batch', async (stage, fails) => {
+        const h = setup();
+        const installed = [mod('old', 10, 'No match'), mod('other', 11, 'Unmatched')];
+        h.setMods(installed);
+        await h.controller.start(['old', 'other']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const validation = deferred();
+        if (stage === 'details') {
+            h.deps.details.mockImplementationOnce(async id => {
+                await validation.promise;
+                return details(id, [file(20, 'Original')]);
+            });
+        } else {
+            h.deps.mods.mockImplementationOnce(async () => {
+                await validation.promise;
+                return installed;
+            });
+        }
+        const choice = h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        await flush();
+        expect(h.deps.details).toHaveBeenCalledTimes(2);
+        if (stage === 'scan') expect(h.deps.mods).toHaveBeenCalledTimes(2);
+        expect(h.controller.cancelPendingChoiceTarget(2, 20)).toBe(false);
+        expect(h.controller.cancelPendingChoiceTarget(1, 21)).toBe(false);
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(true);
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(false);
+        if (fails) validation.reject(new Error('lookup failed'));
+        else validation.resolve();
+        await expect(choice).resolves.toBeUndefined();
+
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({
+            busy: true, updatingModIds: ['other'], manualRequests: [{ id: requestId, sourceFileIds: [11], sourceModIds: ['other'] }], errors: [],
+        });
+        await h.controller.choose({ requestId, oldFileId: 11, newFileId: 20 });
+        expect(h.deps.replace.mock.calls[0][2]).toEqual(['other']);
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.isBusy()).toBe(false);
+
+        await h.controller.start(['old']);
+        const retryRequestId = h.controller.getState().manualRequests[0].id;
+        expect(retryRequestId).not.toBe(requestId);
+        expect(h.deps.snapshot).toHaveBeenCalledTimes(2);
+        await h.controller.choose({ requestId: retryRequestId, oldFileId: 10, newFileId: 20 });
+        expect(h.deps.replace.mock.calls[1][2]).toEqual(['old']);
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(false);
+        h.work[1].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], manualRequests: [] });
+    });
+
     it('uses the matching preference and promotes an installed successor without downloading', async () => {
         const h = setup();
         h.setMods([mod('old', 10, 'Original'), mod('installed', 20, 'Original')]);

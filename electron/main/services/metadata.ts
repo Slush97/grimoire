@@ -305,9 +305,14 @@ export async function setModMetadataWithHash(
     data: ModMetadata,
     filePath: string
 ): Promise<void> {
+    const metadataPath = getMetadataPath();
+    const { sha256 } = await resolveVpkIdentity(filePath);
+    if (getMetadataPath() !== metadataPath) {
+        throw new Error('The active metadata mode changed before the mod could be saved.');
+    }
     setModMetadata(fileName, {
         ...data,
-        sha256: (await resolveVpkIdentity(filePath)).sha256,
+        sha256,
     });
 }
 

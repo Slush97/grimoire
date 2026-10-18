@@ -15,6 +15,7 @@ vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafe
 import {
     healModFolders,
     healModFoldersExclusive,
+    enableMod,
     runExclusiveModMutation,
     scanMods,
     scanModsAfterMutations,
@@ -48,6 +49,44 @@ afterEach(async () => {
 
 const put = (folder: string, files: Record<string, string>) =>
     Promise.all(Object.entries(files).map(([name, bytes]) => fs.writeFile(join(folder, name), bytes)));
+
+describe('queued metadata mode changes', () => {
+    it.each([
+        { devMode: false, changeMode: true },
+        { devMode: true, changeMode: true },
+        { devMode: false, changeMode: false },
+        { devMode: true, changeMode: false },
+    ])('refuses a mutation queued behind an installation change: %j', async ({ devMode, changeMode }) => {
+        const settingsPath = join(h.userData, 'settings.json');
+        const settings = { devMode, deadlockPath: root, devDeadlockPath: join(root, 'developer') };
+        await fs.writeFile(settingsPath, JSON.stringify(settings));
+        await put(disabled, { 'original_dir.vpk': 'original mod' });
+        const target = (await scanMods(root)).find(mod => !mod.enabled)!;
+        const normal = JSON.stringify({ 'normal_dir.vpk': { modName: 'Normal identity' } });
+        const developer = JSON.stringify({ 'developer_dir.vpk': { modName: 'Developer identity' } });
+        await fs.writeFile(join(h.userData, 'mod-metadata.json'), normal);
+        await fs.writeFile(join(h.userData, 'mod-metadata.dev.json'), developer);
+        let release!: () => void;
+        const held = runExclusiveModMutation(() => new Promise<void>(resolve => { release = resolve; }));
+        // Wait until the first operation holds the lock before queueing both.
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        const switching = runExclusiveModMutation(async () => {
+            const patch = changeMode ? { devMode: !devMode }
+                : devMode ? { devDeadlockPath: 'another-developer-path' } : { deadlockPath: 'another-normal-path' };
+            await fs.writeFile(settingsPath, JSON.stringify({ ...settings, ...patch }));
+        });
+        const mutation = enableMod(root, target.id);
+        const rejected = expect(mutation).rejects.toThrow('active mod installation changed');
+        release();
+        await held;
+        await switching;
+        await rejected;
+        expect(await fs.readFile(join(disabled, 'original_dir.vpk'), 'utf8')).toBe('original mod');
+        expect(await fs.readdir(addons)).toEqual(['.disabled']);
+        expect(await fs.readFile(join(h.userData, 'mod-metadata.json'), 'utf8')).toBe(normal);
+        expect(await fs.readFile(join(h.userData, 'mod-metadata.dev.json'), 'utf8')).toBe(developer);
+    });
+});
 
 async function snapshotTree(dir: string, into: Record<string, string> = {}): Promise<Record<string, string>> {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {

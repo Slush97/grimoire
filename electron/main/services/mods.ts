@@ -8,7 +8,7 @@ import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata, 
 import { compareFileContents } from './fileMatch';
 import { resolveVpkIdentity, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from './vpkIdentity';
 import { findChunkSiblingNames } from './vpk';
-import { loadSettings } from './settings';
+import { getActiveDeadlockPath, loadSettings } from './settings';
 import { assertVpkSafety, moveSafetySnapshot, forgetSafetySnapshot } from './modSafety';
 import { forgetVdataSnapshot, moveVdataSnapshot } from './vdataCheck';
 import { notifyModChanges } from './modChangeObservation';
@@ -1115,10 +1115,17 @@ export interface ModMutationOptions {
     healPath?: string;
 }
 function withModMutationLock<T>(fn: () => Promise<T>, opts: ModMutationOptions = {}): Promise<T> {
+    const settings = loadSettings();
+    const activePath = getActiveDeadlockPath(settings);
     // Compute the game-running state once per locked batch and park it for the
     // duration, so applyProfile's per-mod snapshot syncs don't each spawn a
     // pgrep/tasklist (turning N+M+2 spawns into 1).
     const scoped = async (): Promise<T> => {
+        // A queued settings change may have changed the installation or sidecar.
+        const current = loadSettings();
+        if (current.devMode !== settings.devMode || getActiveDeadlockPath(current) !== activePath) {
+            throw new Error('The active mod installation changed. Please try again.');
+        }
         if (!opts.exemptFromVanillaWindow && isVanillaWindowActive()) {
             throw new Error(VANILLA_WINDOW_LOCK_MESSAGE);
         }

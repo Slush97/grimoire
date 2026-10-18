@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { downloadModFromUrl } from './download';
-import { loadSettings } from './settings';
+import { getActiveDeadlockPath, loadSettings } from './settings';
 import { validateDownloadUrl } from './security';
 import { fetchModDetails } from './gamebanana';
 
@@ -81,10 +81,7 @@ export async function handleOneClickInstall(
     mainWindow: BrowserWindow | null
 ): Promise<void> {
     const settings = loadSettings();
-    const deadlockPath =
-        settings.devMode && settings.devDeadlockPath
-            ? settings.devDeadlockPath
-            : settings.deadlockPath;
+    const deadlockPath = getActiveDeadlockPath(settings);
 
     if (!deadlockPath) {
         mainWindow?.webContents.send('one-click-install', {
@@ -109,6 +106,18 @@ export async function handleOneClickInstall(
         } catch (err) {
             console.warn('[oneClick] Could not resolve mod details:', err);
         }
+    }
+
+    // Details can take long enough for the selected installation to change.
+    const current = loadSettings();
+    if (current.devMode !== settings.devMode || getActiveDeadlockPath(current) !== deadlockPath) {
+        mainWindow?.webContents.send('one-click-install', {
+            archiveUrl: parsed.archiveUrl,
+            modId: parsed.modId,
+            modType: parsed.modType,
+            error: 'The active mod installation changed. Try the install again.',
+        });
+        return;
     }
 
     mainWindow?.webContents.send('one-click-install', {

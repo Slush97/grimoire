@@ -94,12 +94,19 @@ briefly expose the predecessor's stale Update or Replace action during that gap.
 The update menu uses the same completion acknowledgement for replaced source IDs.
 Flags for a reused local ID are dropped when its GameBanana file identity changes.
 
-Selecting a manual replacement reserves its source and appends a FIFO job.
+Selecting a manual replacement reserves its source and validates the destination
+against fresh main-process file details before appending a FIFO job. Removed or
+archived destinations leave the original choice available to retry, and new
+uploads can be selected without restarting the batch.
+Removing the optimistic download during validation excludes that source without
+enqueueing it.
 Other unresolved source files remain available. A failed choice returns for
 retry only if its predecessor still exists with the original identity. Explicit
 cancellation or queue removal excludes that work from the batch. Active install
 and developer-mode changes, and developer-library replacement, are refused while
-the session has work remaining. Normal and developer metadata stay isolated.
+downloads or update work remain. Downloads cannot start during a developer-library
+copy. Mode changes also reject older queued mod mutations before they can write
+to the other sidecar. Normal and developer metadata stay isolated.
 
 Focused tests cover the actual FIFO, finalization ordering, cancellation,
 matching, promotions, duplicate destinations, preparation races, source identity,

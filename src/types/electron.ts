@@ -870,7 +870,7 @@ export interface ElectronAPI {
     copyModsToDev: () => Promise<void>;
     onCopyModsToDevProgress: (callback: (percent: number) => void) => () => void;
     getSettings: () => Promise<AppSettings>;
-    setSettings: (settings: AppSettings) => Promise<void>;
+    setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
 
     // Mod transfer between mod managers (neutral interchange format; no cloud)
     interchange: {

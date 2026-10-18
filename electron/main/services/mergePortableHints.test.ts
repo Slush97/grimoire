@@ -11,7 +11,9 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('electron', () => ({ app: { getVersion: () => '0.0.0-test' } }));
 vi.mock('./deadlock', () => ({ metaKeyFor: vi.fn((p: string) => p) }));
-vi.mock('./settings', () => ({ loadSettings: vi.fn(() => ({})) }));
+vi.mock('./settings', async importOriginal => ({
+    ...(await importOriginal<typeof import('./settings')>()), loadSettings: vi.fn(() => ({})),
+}));
 vi.mock('./mods', () => ({
     scanMods: vi.fn(),
     disableModUnlocked: vi.fn(),

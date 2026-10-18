@@ -113,8 +113,8 @@ export async function getSettings(): Promise<AppSettings> {
   return window.electronAPI.getSettings();
 }
 
-export async function setSettings(settings: AppSettings): Promise<void> {
-  return window.electronAPI.setSettings(settings);
+export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  return window.electronAPI.setSettings(patch);
 }
 
 // Mod transfer between mod managers (neutral interchange format; no cloud)

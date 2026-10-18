@@ -56,8 +56,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                     setLocalPath(detected);
                     setIsValidPath(true);
                     // Save immediately
-                    const settings = await getSettings();
-                    await setSettings({ ...settings, deadlockPath: detected });
+                    await setSettings({ deadlockPath: detected });
                 } else {
                     setIsValidPath(false);
                     setDetectFailed(true);
@@ -110,8 +109,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
             setIsValidPath(valid);
 
             if (valid) {
-                const settings = await getSettings();
-                await setSettings({ ...settings, deadlockPath: selected });
+                await setSettings({ deadlockPath: selected });
                 setDetectFailed(false);
             } else {
                 setDetectFailed(true);
@@ -149,8 +147,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
 
     const handleAutoCheckUpdates = async (checked: boolean) => {
         setAutoCheckUpdates(checked);
-        const settings = await getSettings();
-        await setSettings({ ...settings, autoCheckAppUpdates: checked });
+        await setSettings({ autoCheckAppUpdates: checked });
     };
 
     const canProceed = isValidPath && gameinfoConfigured;

@@ -112,7 +112,8 @@ ipcMain.handle('cancel-active-download', (): boolean => {
 // cancel-download-target (exact optimistic/queued/active target)
 ipcMain.handle('cancel-download-target', (_, modId: number, fileId: number, jobId?: string): boolean => {
     if (jobId !== undefined && typeof jobId !== 'string') return false;
-    return cancelDownloadTarget(modId, fileId, jobId);
+    return cancelDownloadTarget(modId, fileId, jobId)
+        || (jobId === undefined && modUpdates.cancelPendingChoiceTarget(modId, fileId));
 });
 
 // one-click-suspicious-response (renderer relays user's modal decision)

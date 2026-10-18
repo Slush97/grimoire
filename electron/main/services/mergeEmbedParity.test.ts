@@ -44,7 +44,9 @@ vi.mock('electron', () => ({
     },
 }));
 vi.mock('./deadlock', () => ({ metaKeyFor: vi.fn((p: string) => p) }));
-vi.mock('./settings', () => ({ loadSettings: vi.fn(() => ({})) }));
+vi.mock('./settings', async importOriginal => ({
+    ...(await importOriginal<typeof import('./settings')>()), loadSettings: vi.fn(() => ({})),
+}));
 vi.mock('./mods', () => ({
     scanMods: vi.fn(),
     disableModUnlocked: vi.fn(),

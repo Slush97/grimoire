@@ -25,7 +25,7 @@ const current = {
     devMode: false, devDeadlockPath: 'sandbox', experimentalModSafety: false,
     experimentalSocial: false, lastDialogDirectory: 'remembered', updateChannel: 'stable',
 } as AppSettings;
-const setSettings = (settings: AppSettings) => h.handlers.get('set-settings')!({}, settings) as Promise<void>;
+const setSettings = (patch: Partial<AppSettings>) => h.handlers.get('set-settings')!({}, patch) as Promise<AppSettings>;
 function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>(done => { resolve = done; });
@@ -35,6 +35,7 @@ function deferred() {
 beforeEach(() => {
     vi.clearAllMocks();
     h.load.mockReturnValue(current);
+    h.save.mockImplementation((saved: AppSettings) => { h.load.mockReturnValue(saved); });
     h.exclusive.mockImplementation((operation: () => Promise<void>) => operation());
     h.audit.mockResolvedValue(undefined);
     h.updateGuard.mockReset();
@@ -42,6 +43,46 @@ beforeEach(() => {
 });
 
 describe('developer metadata switching', () => {
+    it('merges a delayed mode change with newer preferences and returns the saved settings', async () => {
+        const lock = deferred();
+        h.exclusive.mockImplementation(async (operation: () => Promise<AppSettings>) => {
+            await lock.promise;
+            return operation();
+        });
+
+        const switching = setSettings({ devMode: true });
+        const preference = await setSettings({ keepModBackups: true });
+        expect(preference).toEqual({ ...current, keepModBackups: true });
+        expect(h.save).toHaveBeenCalledOnce();
+
+        lock.resolve();
+        await expect(switching).resolves.toEqual({ ...current, devMode: true, keepModBackups: true });
+        expect(h.load()).toEqual({ ...current, devMode: true, keepModBackups: true });
+    });
+
+    it('keeps activation side effects tied to the actual previous settings after a delayed save', async () => {
+        const lock = deferred();
+        h.exclusive.mockImplementation(async (operation: () => Promise<AppSettings>) => {
+            await lock.promise;
+            return operation();
+        });
+        const switching = setSettings({ devMode: true });
+        await setSettings({ experimentalModSafety: true, experimentalSocial: true });
+
+        lock.resolve();
+        await switching;
+
+        expect(h.load()).toMatchObject({ devMode: true, experimentalModSafety: true, experimentalSocial: true });
+        expect(h.audit).toHaveBeenCalledOnce();
+        expect(h.hydrate).toHaveBeenCalledOnce();
+    });
+
+    it('preserves the current settings for an empty patch', async () => {
+        await expect(setSettings({})).resolves.toEqual(current);
+        expect(h.save).toHaveBeenCalledWith(current);
+        expect(h.exclusive).not.toHaveBeenCalled();
+    });
+
     it('refuses installation changes while update work remains', async () => {
         h.updateGuard.mockImplementation(() => { throw new Error('Finish or cancel mod updates'); });
         await expect(setSettings({ ...current, devMode: true })).rejects.toThrow('Finish or cancel mod updates');
