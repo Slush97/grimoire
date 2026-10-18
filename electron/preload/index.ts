@@ -65,6 +65,7 @@ import type {
     DownloadErrorData,
     ModsAutoDisabledData,
     DownloadQueueData,
+    DownloadQueueItem,
     OneClickInstallData,
     OneClickSuspiciousFilesData,
     MultiVpkPickData,
@@ -554,6 +555,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cancelActiveDownload: () => ipcRenderer.invoke('cancel-active-download'),
     cancelDownloadTarget: (modId: number, fileId: number, jobId?: string) =>
         ipcRenderer.invoke('cancel-download-target', modId, fileId, jobId),
+    cancelQueuedDownloads: (pendingTargets: Pick<DownloadQueueItem, 'modId' | 'fileId'>[] = []) =>
+        ipcRenderer.invoke('cancel-queued-downloads', pendingTargets),
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);

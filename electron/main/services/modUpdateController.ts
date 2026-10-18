@@ -298,6 +298,8 @@ export function createModUpdateController(deps: Dependencies) {
         const newBatch = !busy();
         if (newBatch) begin();
         const releaseValidation = reserveValidation(sources);
+        const choice = { modId: args.modId, fileId: args.fileId, cancelled: false };
+        pendingChoices.add(choice);
         jobs++;
         affectedModIds.add(args.modId);
         publish();
@@ -311,12 +313,14 @@ export function createModUpdateController(deps: Dependencies) {
                 installed => ({ sources: installed.filter(mod => sources.includes(mod.id)).map(mod => ({ ...mod })) }),
                 error => ({ error }),
             );
-            const { completion } = await prepare(async () => {
+            const prepared = await prepare(async () => {
                 const initial = await requested;
+                if (choice.cancelled) return;
                 if ('error' in initial) throw initial.error;
                 if (initial.sources.length !== sources.length) throw new Error('The file being replaced has changed.');
                 const path = assertContext().deadlockPath;
                 const installed = visibleInstalledMods(await deps.mods(path));
+                if (choice.cancelled) return;
                 if (!sources.every(id => installed.some(mod => mod.id === id))) throw new Error('The file being replaced has changed.');
                 if (sources.some(id => reservedSources.has(id))) throw new Error('This installed file is already being updated.');
                 const section = args.section ?? 'Mod';
@@ -334,17 +338,21 @@ export function createModUpdateController(deps: Dependencies) {
                     pending: new Map(), expected: new Map(), removed: false };
                 const promote = installed.some(mod => mod.gameBananaId === args.modId && mod.gameBananaFileId === args.fileId && (mod.sourceSection ?? 'Mod') === section && !sources.includes(mod.id));
                 await snapshot();
+                if (choice.cancelled) return;
                 const expectedSources = manualFileId === undefined ? initial.sources : sources.map(id => group!.expected.get(id)!);
                 const completion = enqueue(group, { ...args, isReplacement: true }, sources, promote, expectedSources, manualFileId);
                 submitted = true;
+                pendingChoices.delete(choice);
                 return { completion };
             });
             releaseValidation();
-            await completion;
+            await prepared?.completion;
         } catch (error) {
+            if (choice.cancelled && !submitted) return;
             if (!submitted && group && manualFileId !== undefined && !group.removed) addPendingSources(group, manualFileId, sources);
             throw error;
         } finally {
+            pendingChoices.delete(choice);
             releaseValidation();
             jobs--;
             publish();

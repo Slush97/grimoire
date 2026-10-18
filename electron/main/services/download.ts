@@ -312,12 +312,24 @@ export function removeFromQueue(modId: number, fileId?: number, jobId?: string):
     );
     if (index !== -1) {
         const removed = downloadQueue.splice(index, 1)[0];
-        if (priorityJobId === removed.jobId) priorityJobId = null;
-        void cleanupJob(removed).then(() => removed.reject(new Error('Cancelled by user')));
+        cancelQueuedJob(removed);
         emitQueueUpdate();
         return true;
     }
     return false;
+}
+
+function cancelQueuedJob(item: QueuedDownload): void {
+    if (priorityJobId === item.jobId) priorityJobId = null;
+    void cleanupJob(item).then(() => item.reject(new Error('Cancelled by user')));
+}
+
+/** Remove waiting jobs together without cancelling the active installation. */
+export function cancelQueuedDownloads(): void {
+    const removed = downloadQueue.splice(0);
+    if (removed.length === 0) return;
+    removed.forEach(cancelQueuedJob);
+    emitQueueUpdate();
 }
 
 /** Cancel one exact target regardless of whether it is queued or active. */

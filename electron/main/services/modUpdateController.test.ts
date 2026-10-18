@@ -502,6 +502,56 @@ describe('main-process update coordination', () => {
         expect(h.controller.isBusy()).toBe(false);
     });
 
+    it.each(['initial scan', 'current scan', 'snapshot'] as const)('cancels a standalone replacement during its %s without enqueueing or keeping the batch busy', async stage => {
+        const h = setup();
+        const validation = deferred();
+        const original = mod('old', 10, 'Original');
+        if (stage === 'initial scan') {
+            h.deps.mods.mockImplementationOnce(async () => { await validation.promise; return [original]; });
+        } else if (stage === 'current scan') {
+            h.deps.mods.mockResolvedValueOnce([original]).mockImplementationOnce(async () => { await validation.promise; return [original]; });
+        } else {
+            h.deps.snapshot.mockImplementationOnce(() => validation.promise);
+        }
+        const result = h.controller.replace({ modId: 1, fileId: 20, fileName: 'archive.zip', replacementModIds: ['old'] });
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: true, updatingModIds: ['old'] });
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(true);
+        validation.resolve();
+        await expect(result).resolves.toBeUndefined();
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], manualRequests: [], errors: [] });
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(false);
+
+        const retry = h.controller.replace({ modId: 1, fileId: 20, fileName: 'archive.zip', replacementModIds: ['old'] });
+        await flush();
+        expect(h.deps.replace).toHaveBeenCalledOnce();
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(false);
+        h.work[0].resolve();
+        await retry;
+        expect(h.controller.isBusy()).toBe(false);
+    });
+
+    it('cancels a validated manual choice together with remaining manual requests without restoring either', async () => {
+        const h = setup();
+        h.setMods([mod('old', 10, 'No match'), mod('other', 11, 'Unmatched')]);
+        await h.controller.start(['old', 'other']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        const validation = deferred();
+        h.deps.details.mockImplementationOnce(async id => {
+            await validation.promise;
+            return details(id, [file(20, 'Original')]);
+        });
+        const choice = h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        await flush();
+        expect(h.controller.cancelPendingChoiceTarget(1, 20)).toBe(true);
+        for (const request of h.controller.getState().manualRequests) h.controller.remove(request.id);
+        validation.resolve();
+        await expect(choice).resolves.toBeUndefined();
+        expect(h.deps.replace).not.toHaveBeenCalled();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], manualRequests: [], errors: [] });
+    });
+
     it('holds standalone replacements until the bulk matching pass and recovery snapshot finish', async () => {
         const h = setup();
         h.setMods([mod('one', 10, 'Original'), mod('two', 11, 'Original', 2), mod('three', 12, 'Original', 3)]);

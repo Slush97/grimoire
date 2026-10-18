@@ -9,6 +9,7 @@ import type {
 } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
 import { rollPreparingSuffix } from '../lib/easterEggs';
+import { showToast } from '../stores/toastStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import DownloadQueueRows from './downloads/DownloadQueueRows';
 import Tx from './translation/Tx';
@@ -56,6 +57,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         progress: downloadActivity.current ? downloadActivity.progress : null,
     };
     const [isExpanded, setIsExpanded] = useState(false);
+    const [cancellingQueued, setCancellingQueued] = useState(false);
     const [serverStatus, setServerStatus] = useState<DownloadServerStatusData | null>(null);
 
     // Speed/ETA derived from the rate of the current download's progress
@@ -134,6 +136,21 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         if (!current) return;
         cancelDownloadRequest(current.modId, current.fileId);
         await window.electronAPI.cancelDownloadTarget(current.modId, current.fileId, current.jobId);
+    };
+
+    const handleCancelAllQueued = async () => {
+        if (cancellingQueued) return;
+        setCancellingQueued(true);
+        const pendingTargets = queueState.queue.filter(item => !item.jobId)
+            .map(({ modId, fileId }) => ({ modId, fileId }));
+        queueState.queue.forEach(({ modId, fileId }) => cancelDownloadRequest(modId, fileId));
+        try {
+            await window.electronAPI.cancelQueuedDownloads(pendingTargets);
+        } catch {
+            showToast(t('downloadQueue.cancelAllFailed'), { tone: 'error' });
+        } finally {
+            setCancellingQueued(false);
+        }
     };
 
     const totalItems = queueState.queue.length + (queueState.currentDownload ? 1 : 0) + manualRequests.length;
@@ -305,13 +322,23 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
 
                     {(queueState.queue.length > 0 || manualRequests.length > 0) && (
                         <div className="px-4 py-2 max-h-56 overflow-y-auto">
-                            <p className="text-2xs uppercase tracking-wider text-text-secondary mb-1">
-                                <Tx
-                                    k="downloadQueue.queuedHeader"
-                                    values={{ count: queueState.queue.length + manualRequests.length }}
-                                    fallback={`Queued (${queueState.queue.length + manualRequests.length})`}
-                                />
-                            </p>
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                                <p className="text-2xs uppercase tracking-wider text-text-secondary">
+                                    <Tx
+                                        k="downloadQueue.queuedHeader"
+                                        values={{ count: queueState.queue.length + manualRequests.length }}
+                                        fallback={`Queued (${queueState.queue.length + manualRequests.length})`}
+                                    />
+                                </p>
+                                <button
+                                    type="button"
+                                    disabled={cancellingQueued}
+                                    onClick={() => void handleCancelAllQueued()}
+                                    className="shrink-0 cursor-pointer text-2xs text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-50"
+                                >
+                                    {t('downloadQueue.cancelAll')}
+                                </button>
+                            </div>
                             <DownloadQueueRows items={queueState.queue} manualRequests={manualRequests}
                                 priorityDeferred={queueState.currentDownload?.phase === 'installing' || queueState.currentDownload?.phase === 'finalizing'}
                                 onCancel={handleCancelQueued} onOpenReplacement={openReplacement} />

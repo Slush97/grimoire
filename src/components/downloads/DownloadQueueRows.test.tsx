@@ -61,7 +61,9 @@ describe('download queue controls', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       const row = this.closest('li');
       const index = row?.parentElement ? [...row.parentElement.children].indexOf(row) : 0;
-      return { x: 0, y: index * 44, top: index * 44, bottom: index * 44 + 40, left: 0, right: 300, width: 300, height: 40, toJSON: () => ({}) };
+      const fixed = this.closest<HTMLElement>('[style*="position: fixed"]');
+      const top = fixed ? parseFloat(fixed.style.top) || 0 : index * 44;
+      return { x: 0, y: top, top, bottom: top + 40, left: 0, right: 300, width: 300, height: 40, toJSON: () => ({}) };
     });
   });
   afterEach(() => {
@@ -121,12 +123,30 @@ describe('download queue controls', () => {
     expect(rows().map(row => row.getAttribute('data-queue-job-id'))).toEqual(['a', 'c', null]);
   });
 
-  it('drags through the real pointer sensor and leaves concurrent additions in main order', async () => {
+  it('leaves the queue unchanged when returning to the original position', async () => {
     await render();
     const handle = rows()[1].querySelector<HTMLButtonElement>('[title^="downloadQueue.reorder"]')!;
     await pointer(handle, 'pointerdown', 60);
     await pointer(document, 'pointermove', 70);
     await pointer(document, 'pointermove', 10);
+    await pointer(document, 'pointermove', 60);
+    await pointer(document, 'pointerup', 60);
+    expect(move).not.toHaveBeenCalled();
+    expect(rows().map(row => row.getAttribute('data-queue-job-id'))).toEqual(['a', 'b', 'c', null]);
+  });
+
+  it.each(['number', 'gap', 'filename'])('drags from the %s and leaves concurrent additions in main order', async target => {
+    await render();
+    const handle = rows()[1].querySelector<HTMLButtonElement>('[title^="downloadQueue.reorder"]')!;
+    expect(handle.textContent).toBe('2b.zip');
+    expect(handle.querySelector('svg')).toBeNull();
+    const dragTarget = target === 'number' ? handle.firstElementChild!
+      : target === 'filename' ? handle.querySelector('[title="b.zip"]')! : handle;
+    await pointer(dragTarget, 'pointerdown', 60);
+    await pointer(document, 'pointermove', 70);
+    await pointer(document, 'pointermove', 10);
+    expect(rows().map(row => row.getAttribute('data-queue-job-id'))).toEqual(['a', 'b', 'c', null]);
+    expect(move).not.toHaveBeenCalled();
     items = [...items, { jobId: 'd', modId: 4, fileId: 4, fileName: 'd.zip' }];
     await render();
     await pointer(document, 'pointerup', 10);

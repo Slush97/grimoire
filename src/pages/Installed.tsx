@@ -3470,13 +3470,16 @@ export default function Installed() {
             ))}
           </div>
         </SortableContext>
-        <DragOverlay>
-          {activeEntry ? (
-            <div className="pointer-events-none opacity-95 shadow-2xl">
-              {renderEntryCard(activeEntry)}
-            </div>
-          ) : null}
-        </DragOverlay>
+        {createPortal(
+          <DragOverlay zIndex={40} className="pointer-events-none">
+            {activeEntry ? (
+              <div className="opacity-95 shadow-2xl">
+                {renderEntryCard(activeEntry)}
+              </div>
+            ) : null}
+          </DragOverlay>,
+          document.body,
+        )}
       </DndContext>
     );
   };

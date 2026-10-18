@@ -451,6 +451,8 @@
     }
   },
   "downloadQueue": {
+    "cancelAll": "Cancel all",
+    "cancelAllFailed": "Could not cancel all queued downloads.",
     "cancelDownload": "Cancel download",
     "collapse": "Collapse",
     "downloads": "Downloads",

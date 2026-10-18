@@ -63,6 +63,7 @@ vi.mock('./vpk', async (importOriginal) => ({
 import {
     cancelActiveDownload,
     cancelDownloadTarget,
+    cancelQueuedDownloads,
     downloadMod,
     downloadModFromUrl,
     enqueueManagedDownload,
@@ -235,6 +236,44 @@ describe('managed download FIFO', () => {
         expect(completions()).toEqual([1, 2, 3]);
         expect(harness.fetchModDetails).toHaveBeenCalledTimes(1);
         expect(harness.fetchModDetails).toHaveBeenCalledWith(3, 'Mod', { includeSubmitter: true });
+    });
+
+    it('cancels all waiting jobs together, keeps the active job, and accepts later downloads', async () => {
+        const release = deferred();
+        const started = deferred();
+        const first = enqueueManagedDownload('/game', args(80), mainWindow, {
+            execute: async () => { started.resolve(); await release.promise; return { installedVpks: [] }; },
+            afterInstall: async () => {},
+        });
+        const waitingExecute = vi.fn(emptyInstall);
+        const second = enqueueManagedDownload('/game', args(81), mainWindow, {
+            execute: waitingExecute, afterInstall: async () => {},
+        }).catch((error: unknown) => error);
+        const browse = downloadMod('/game', args(82), mainWindow).catch((error: unknown) => error);
+        try {
+            await started.promise;
+            const current = getCurrentDownload();
+            harness.send.mockClear();
+            cancelQueuedDownloads();
+            expect(getCurrentDownload()).toEqual(current);
+            expect(getDownloadQueue()).toEqual([]);
+            expect(harness.send.mock.calls.filter(([channel]) => channel === 'download-queue-updated')).toHaveLength(1);
+            expect(isDownloadCancelled(await second)).toBe(true);
+            expect(isDownloadCancelled(await browse)).toBe(true);
+            expect(waitingExecute).not.toHaveBeenCalled();
+            expect(harness.fetchModDetails).not.toHaveBeenCalled();
+
+            const later = enqueueManagedDownload('/game', args(83), mainWindow, { execute: emptyInstall, afterInstall: async () => {} });
+            expect(getDownloadQueue().map(item => item.modId)).toEqual([83]);
+            release.resolve();
+            await Promise.all([first, later]);
+            expect(completions()).toEqual([80, 83]);
+            cancelQueuedDownloads();
+            expect(getCurrentDownload()).toBeNull();
+        } finally {
+            release.resolve();
+            await Promise.allSettled([first, second, browse]);
+        }
     });
 
     it('keeps managed installs disabled even when downloads auto-enable and delays completion until finalized', async () => {
@@ -629,6 +668,44 @@ describe('managed download FIFO', () => {
         }
     });
 
+    it('cancels paused and unstarted jobs together and removes retained staging without touching the active transfer', async () => {
+        const firstTransfer = controlledTransfer(84);
+        const chosenTransfer = controlledTransfer(85);
+        const createDirectory = vi.spyOn(fs, 'mkdtemp');
+        const afterInstall = vi.fn(async () => {});
+        const first = enqueueManagedDownload('/game', args(84), mainWindow, { afterInstall })
+            .catch((error: unknown) => error);
+        const chosen = enqueueManagedDownload('/game', args(85), mainWindow, { afterInstall: async () => {} });
+        const waiting = downloadMod('/game', args(86), mainWindow).catch((error: unknown) => error);
+        try {
+            await vi.waitFor(() => expect(getCurrentDownload()?.progress?.downloaded).toBe(64 * 1024));
+            const workDir = await createDirectory.mock.results[0].value as string;
+            expect(prioritizeQueuedDownload(queuedJobId(85))).toBe(true);
+            await vi.waitFor(() => {
+                expect(getCurrentDownload()?.modId).toBe(85);
+                expect(getCurrentDownload()?.progress?.downloaded).toBe(64 * 1024);
+            });
+            expect(getDownloadQueue()[0]).toMatchObject({ modId: 84, phase: 'paused' });
+            const current = getCurrentDownload();
+            cancelQueuedDownloads();
+            expect(getCurrentDownload()).toEqual(current);
+            expect(getDownloadQueue()).toEqual([]);
+            expect(isDownloadCancelled(await first)).toBe(true);
+            expect(isDownloadCancelled(await waiting)).toBe(true);
+            await expect(fs.stat(workDir)).rejects.toMatchObject({ code: 'ENOENT' });
+            expect(afterInstall).not.toHaveBeenCalled();
+            expect(firstTransfer.requests).toHaveLength(1);
+            finishTransfer(chosenTransfer);
+            await chosen;
+            expect(completions()).toEqual([85]);
+        } finally {
+            finishTransfer(firstTransfer);
+            finishTransfer(chosenTransfer);
+            await Promise.allSettled([first, chosen, waiting]);
+            createDirectory.mockRestore();
+        }
+    });
+
     it.each(['ordinary', 'one-click'] as const)('resumes an interrupted %s download through the same FIFO', async (kind) => {
         const transfer = controlledTransfer(56);
         const release = deferred();
@@ -685,6 +762,35 @@ describe('managed download FIFO', () => {
             await Promise.all([first, second]);
             expect(completions()).toEqual([58, 59]);
             expect(chosenBefore).not.toHaveBeenCalled();
+            expect(transfer.requests).toHaveLength(2);
+            expect(transfer.requests[1].range).toBe(`bytes=${64 * 1024}-`);
+        } finally {
+            finishTransfer(transfer);
+            await Promise.allSettled([first, second, chosen]);
+        }
+    });
+
+    it('preserves the interrupted active transfer when all waiting jobs are cancelled during a priority handoff', async () => {
+        const transfer = controlledTransfer(87);
+        const first = enqueueManagedDownload('/game', args(87), mainWindow, { afterInstall: async () => {} });
+        const second = enqueueManagedDownload('/game', args(88), mainWindow, { execute: emptyInstall, afterInstall: async () => {} })
+            .catch((error: unknown) => error);
+        const chosenBefore = vi.fn(async () => {});
+        const chosen = enqueueManagedDownload('/game', args(89), mainWindow, {
+            beforeStart: chosenBefore, execute: emptyInstall, afterInstall: async () => {},
+        }).catch((error: unknown) => error);
+        try {
+            await vi.waitFor(() => expect(getCurrentDownload()?.progress?.downloaded).toBe(64 * 1024));
+            const activeId = getCurrentDownload()!.jobId;
+            expect(prioritizeQueuedDownload(queuedJobId(89))).toBe(true);
+            cancelQueuedDownloads();
+            expect(getCurrentDownload()?.jobId).toBe(activeId);
+            expect(getDownloadQueue()).toEqual([]);
+            expect(isDownloadCancelled(await second)).toBe(true);
+            expect(isDownloadCancelled(await chosen)).toBe(true);
+            await first;
+            expect(chosenBefore).not.toHaveBeenCalled();
+            expect(completions()).toEqual([87]);
             expect(transfer.requests).toHaveLength(2);
             expect(transfer.requests[1].range).toBe(`bytes=${64 * 1024}-`);
         } finally {

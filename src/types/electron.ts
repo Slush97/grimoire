@@ -1244,6 +1244,7 @@ export interface ElectronAPI {
     removeFromQueue: (modId: number, fileId?: number) => Promise<boolean>;
     cancelActiveDownload: () => Promise<boolean>;
     cancelDownloadTarget: (modId: number, fileId: number, jobId?: string) => Promise<boolean>;
+    cancelQueuedDownloads: (pendingTargets?: Pick<DownloadQueueItem, 'modId' | 'fileId'>[]) => Promise<void>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler

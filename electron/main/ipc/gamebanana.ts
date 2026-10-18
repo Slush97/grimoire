@@ -20,7 +20,20 @@ import {
     type GameBananaCollection,
     type GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, moveQueuedDownload, prioritizeQueuedDownload, removeFromQueue, cancelActiveDownload, cancelDownloadTarget, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
+import {
+    downloadMod,
+    getDownloadQueue,
+    getCurrentDownload,
+    moveQueuedDownload,
+    prioritizeQueuedDownload,
+    removeFromQueue,
+    cancelActiveDownload,
+    cancelDownloadTarget,
+    cancelQueuedDownloads,
+    resolveSuspiciousFileDecision,
+    resolveMultiVpkPick,
+    type DownloadModArgs,
+} from '../services/download';
 import { getMainWindow } from '../index';
 import type {
     BrowseModsArgs,
@@ -28,6 +41,7 @@ import type {
     GetModCommentsArgs,
     GetModUpdatesArgs,
     GetCategoriesArgs,
+    DownloadQueueItem,
 } from '../../../src/types/electron';
 import { updateModNsfw } from '../services/modDatabase';
 import { modUpdates } from '../services/modUpdates';
@@ -114,6 +128,18 @@ ipcMain.handle('cancel-download-target', (_, modId: number, fileId: number, jobI
     if (jobId !== undefined && typeof jobId !== 'string') return false;
     return cancelDownloadTarget(modId, fileId, jobId)
         || (jobId === undefined && modUpdates.cancelPendingChoiceTarget(modId, fileId));
+});
+
+ipcMain.handle('cancel-queued-downloads', (_, pendingTargets: Pick<DownloadQueueItem, 'modId' | 'fileId'>[] = []): void => {
+    if (!Array.isArray(pendingTargets) || pendingTargets.some(target =>
+        !target || !Number.isInteger(target.modId) || !Number.isInteger(target.fileId))) return;
+    const current = getCurrentDownload();
+    cancelQueuedDownloads();
+    for (const { modId, fileId } of pendingTargets) {
+        if (current?.modId === modId && current.fileId === fileId) continue;
+        modUpdates.cancelPendingChoiceTarget(modId, fileId);
+    }
+    for (const request of modUpdates.getState().manualRequests) modUpdates.remove(request.id);
 });
 
 // one-click-suspicious-response (renderer relays user's modal decision)

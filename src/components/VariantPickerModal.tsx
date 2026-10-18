@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
     DndContext,
@@ -558,13 +559,16 @@ export default function VariantPickerModal({
                         ))}
                     </div>
                 </SortableContext>
-                <DragOverlay>
-                    {activeVariant ? (
-                        <div className="pointer-events-none opacity-95 shadow-2xl">
-                            {renderVariantRow(activeVariant, activeIndex, sectionVariants, true)}
-                        </div>
-                    ) : null}
-                </DragOverlay>
+                {createPortal(
+                    <DragOverlay zIndex={60} className="pointer-events-none">
+                        {activeVariant ? (
+                            <div className="opacity-95 shadow-2xl">
+                                {renderVariantRow(activeVariant, activeIndex, sectionVariants, true)}
+                            </div>
+                        ) : null}
+                    </DragOverlay>,
+                    document.body,
+                )}
             </DndContext>
         );
     };

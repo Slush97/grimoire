@@ -46,9 +46,13 @@ regardless of automatic enabling. The queue awaits predecessor cleanup and
 enabled, Global, and explicit local-group restoration before emitting completion
 or starting the next install. Ordinary Browse downloads use the same FIFO.
 
-Waiting downloads can be reordered using their drag handles, including keyboard
-sorting. Download now interrupts a transferable job and moves it to the start of
-the waiting queue with its saved progress. Extraction, choices, installation, and
+Waiting downloads can be reordered by dragging their queue number, filename, or
+the gap between them, or using keyboard sorting from the same control.
+Rows animate into place during dragging; their order is saved only on drop.
+Cancel all beside the queued count removes waiting downloads and manual requests,
+including paused transfers. The current download or installation keeps running.
+Download now interrupts a transferable job and moves it to the start of the
+waiting queue with its saved progress. Extraction, choices, installation, and
 finalization finish before the prioritized job starts. Suspended transfers retain
 their temporary archive and resume safely; servers that cannot resume cause a
 fresh transfer. Queue IDs, phases, and retained progress come from main, so a UI
