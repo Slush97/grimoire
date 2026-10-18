@@ -1,5 +1,15 @@
 # Queued mod updates
 
+Update checks are owned by `modUpdateCheckStore.ts`, mounted once by the app.
+Checks continue across tabs and publish shared flags for Installed to read.
+The shell loads the installed library even when starting on another tab.
+Library changes, matching preferences, and file-list invalidation trigger checks;
+window focus retries failed or expired requests through `updateCheckCache.ts`.
+File lists stay cached for 30 minutes, with at most five requests in flight.
+Passes are serialized so changes during a check cannot multiply the request cap
+or publish obsolete flags. Merged sources and ignored variants retain their
+existing matching rules. There is no periodic polling.
+
 Bulk updates are owned by `modUpdateController.ts` in the main process, with
 runtime dependencies in `modUpdates.ts`. State stays in memory and survives
 renderer navigation. The Installed toolbar shows `Updating` until both queued

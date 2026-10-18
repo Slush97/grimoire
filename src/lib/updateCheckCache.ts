@@ -15,7 +15,6 @@ export class UpdateCheckCache {
   private fileRows = new Map<number, readonly UpdateFileRow[]>();
   private entries = new Map<number, CacheEntry>();
   private listeners = new Set<() => void>();
-  private revision = 0;
 
   get rows(): ReadonlyMap<number, readonly UpdateFileRow[]> {
     return this.fileRows;
@@ -27,8 +26,6 @@ export class UpdateCheckCache {
       this.listeners.delete(listener);
     };
   };
-
-  getRevision = (): number => this.revision;
 
   /** Drop rows known to be stale, such as after a download or update. */
   invalidate(modIds: Iterable<number>): void {
@@ -75,7 +72,6 @@ export class UpdateCheckCache {
   }
 
   private notify(): void {
-    this.revision += 1;
     for (const listener of this.listeners) listener();
   }
 }

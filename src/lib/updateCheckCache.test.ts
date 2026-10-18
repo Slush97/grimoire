@@ -41,11 +41,9 @@ describe('mod update cache refreshes', () => {
     expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.has('pak01')).toBe(true);
     const notify = vi.fn();
     cache.subscribe(notify);
-    const before = cache.getRevision();
 
     cache.invalidate([7]);
     expect(notify).toHaveBeenCalledTimes(1);
-    expect(cache.getRevision()).toBeGreaterThan(before);
     await cache.load(7, async () => rows(2));
     expect(computeUpdateFlags(installed, cache.rows).updatesAvailable.size).toBe(0);
   });

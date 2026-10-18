@@ -72,6 +72,7 @@ export default function Layout() {
   const oledMode = useAppStore((s) => s.settings?.oledMode);
   const loadStoreSettings = useAppStore((s) => s.loadSettings);
   const loadAppearanceImages = useAppStore((s) => s.loadAppearanceImages);
+  const activeDeadlockPath = useAppStore((s) => getActiveDeadlockPath(s.settings));
 
   // Batch local import. Hosted here rather than on Installed because that page
   // early-returns an empty state with no mods: a first-ever import flips it to
@@ -87,6 +88,12 @@ export default function Layout() {
     loadStoreSettings();
     loadAppearanceImages();
   }, [loadStoreSettings, loadAppearanceImages]);
+  useEffect(() => {
+    if (activeDeadlockPath) {
+      const state = useAppStore.getState();
+      void state.loadMods({ silent: state.modsLoaded });
+    }
+  }, [activeDeadlockPath]);
   useEffect(() => {
     applyAccentColor(accentColor);
   }, [accentColor]);

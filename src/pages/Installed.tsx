@@ -1,4 +1,4 @@
-import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -58,10 +58,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
+import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
-import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
@@ -95,7 +96,7 @@ import {
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
-import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
+import { mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
@@ -1213,18 +1214,11 @@ export default function Installed() {
   const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
   // Monotonic guard so a slower linked-item fetch can't clobber a newer one.
   const detailsRequestIdRef = useRef(0);
-  // Installed file IDs with an available update on GameBanana.
-  const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+  const updatesAvailable = useModUpdateCheckStore(state => state.updatesAvailable);
+  const mergedSourceUpdates = useModUpdateCheckStore(state => state.staleMergeSources);
   const updateModCount = useMemo(
     () => groupModUpdates(visibleMods, updatesAvailable).length,
     [visibleMods, updatesAvailable],
-  );
-  const updateCheckRevision = useSyncExternalStore(updateCheckCache.subscribe, updateCheckCache.getRevision);
-  // Merged mod id -> fileNames of its absorbed sources whose GameBanana file is
-  // gone. Kept apart from `updatesAvailable` because runUpdate has nothing to
-  // re-download for a merged VPK; this is surfaced as information only.
-  const [mergedSourceUpdates, setMergedSourceUpdates] = useState<Map<string, Set<string>>>(
-    new Map(),
   );
 
   const detailsInstalledMods = useMemo(
@@ -1946,7 +1940,9 @@ export default function Installed() {
       }
     } finally {
       if (ignored.size > 0) {
-        setUpdatesAvailable(previous => new Set([...previous].filter(id => !ignored.has(id))));
+        useModUpdateCheckStore.setState(state => ({
+          updatesAvailable: new Set([...state.updatesAvailable].filter(id => !ignored.has(id))),
+        }));
         await loadMods({ silent: true, force: true });
       }
     }
@@ -2487,12 +2483,6 @@ export default function Installed() {
     loadSettings();
   }, [loadSettings]);
 
-  useEffect(() => {
-    if (activeDeadlockPath) {
-      loadMods({ silent: useAppStore.getState().modsLoaded });
-    }
-  }, [activeDeadlockPath, loadMods]);
-
   // Ctrl/Cmd+A: enter select mode (if not already) and select every visible
   // mod after search filtering. Must live above the early returns below so
   // the hook order is stable across renders. The handler reads the latest
@@ -2554,87 +2544,6 @@ export default function Installed() {
       loadConflictData();
     }
   }, [mods]);
-
-  // Flag an installed file when it is no longer current on GameBanana AND
-  // either a successor is matched or the row was deleted (see
-  // classifyModFiles). An archived file with no successor is a retired addon
-  // or a legacy alternate, not an update, so it is never flagged.
-  useEffect(() => {
-    let cancelled = false;
-    const checkUpdates = async () => {
-      // Absorbed merge sources never enter `targets`: runUpdate would rewrite
-      // the source VPK on disk and leave the merged VPK stale, so they can't be
-      // updated in place. They are still checked separately below and reported
-      // as information on the merged mod (see `mergedTargets`).
-      // Mods with `ignoreUpdates` set are excluded too: the user pinned the
-      // installed version on purpose (e.g. the author replaced the file with
-      // one they don't want) and shouldn't see the pulse.
-      const targets = visibleMods.filter(
-        (m) =>
-          !!m.gameBananaId &&
-          typeof m.gameBananaFileId === 'number' &&
-          m.gameBananaFileId > 0 &&
-          !m.ignoreUpdates,
-      );
-      // Merged mods carry their sources' provenance in the manifest, so the
-      // same file-list check answers "did any ingredient go stale?".
-      const mergedTargets = visibleMods.filter((m) => !!m.merged && !m.ignoreUpdates);
-      if (targets.length === 0 && mergedTargets.length === 0) {
-        setUpdatesAvailable(new Set());
-        setMergedSourceUpdates(new Map());
-        return;
-      }
-
-      // One fetch per GB mod id; variants and merge sources share the result.
-      const uniqueIds = new Map<number, string>();
-      for (const m of targets) {
-        if (!uniqueIds.has(m.gameBananaId!)) {
-          uniqueIds.set(m.gameBananaId!, m.sourceSection ?? 'Mod');
-        }
-      }
-      for (const m of mergedTargets) {
-        for (const source of m.merged!.sources) {
-          if (typeof source.gameBananaId !== 'number') continue;
-          if (!uniqueIds.has(source.gameBananaId)) {
-            uniqueIds.set(source.gameBananaId, source.section ?? 'Mod');
-          }
-        }
-      }
-
-      // Cap concurrency. An unbounded Promise.all here bursts N parallel
-      // requests through the rate limiter and pins ~N JSON payloads in
-      // renderer memory; with 70+ installed mods that visibly stalls the
-      // page on mount. The slim getModFileList only pulls _idRow + _aFiles.
-      const queue = Array.from(uniqueIds.entries());
-      let cursor = 0;
-      const worker = async () => {
-        while (!cancelled) {
-          const idx = cursor++;
-          if (idx >= queue.length) return;
-          const [gbId, section] = queue[idx];
-          try {
-            await updateCheckCache.load(gbId, async () => (await getModFileList(gbId, section)).files);
-          } catch {
-            // Network or API failure: keep any last known rows; focus or a later mount retries.
-          }
-        }
-      };
-      const concurrency = Math.min(5, queue.length);
-      await Promise.all(Array.from({ length: concurrency }, worker));
-
-      if (cancelled) return;
-      const flags = computeUpdateFlags(visibleMods, updateCheckCache.rows, autoMatchRemainingFiles);
-      setUpdatesAvailable(flags.updatesAvailable);
-      setMergedSourceUpdates(flags.staleMergeSources);
-    };
-    checkUpdates();
-    return () => {
-      cancelled = true;
-    };
-    // `visibleMods` is derived from `mods` and changes only when `mods`
-    // does; listing it directly would re-fire on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mods, updateCheckRevision, autoMatchRemainingFiles]);
 
   // Group variants sharing a GB mod id under a single card. Singletons and
   // custom imports (no GB id) keep their old card behavior. Absorbed merge

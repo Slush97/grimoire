@@ -13,6 +13,7 @@ import { rollMemeAppTitle } from './lib/easterEggs';
 import { useGlobalModFileDrop } from './lib/useGlobalModFileDrop';
 import { ModSafetySync } from './components/ModSafety';
 import { listenForModUpdateChanges } from './lib/updateCheckCache';
+import { listenForModUpdateChecks } from './stores/modUpdateCheckStore';
 
 // Keep other pages (including the 3D viewers) out of shell startup. Installed
 // stays eager because it is the initial page, avoiding a startup chunk waterfall.
@@ -38,6 +39,7 @@ export default function App() {
   // a dropped file:// URL. Registered zones still handle their own file types.
   const fileDragOver = useGlobalModFileDrop();
 
+  useEffect(listenForModUpdateChecks, []);
   useEffect(() => listenForModUpdateChanges(window.electronAPI, window), []);
   useEffect(() => listenForModBackupChanges(), []);
 
