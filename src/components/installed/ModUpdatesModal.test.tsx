@@ -44,6 +44,8 @@ describe('mod update menu', () => {
     props.updateIds = new Set(['1', '2', '4', '5']);
     await render();
     expect(rows()).toHaveLength(3);
+    expect(document.querySelector('h2')?.textContent).toBe('installed.updateAll.confirmTitle 4');
+    expect(document.body.textContent).toContain('installed.updateAll.receivingUpdates 3');
     expect(rows()[0].textContent).toBe('Example mod(2)');
     expect(rows()[1].textContent).toBe('Example mod(1)');
     expect(rows()[2].textContent).toBe('Example mod(1)');
@@ -112,7 +114,7 @@ describe('mod update menu', () => {
     props.mods.push(mod('4', { gameBananaId: 11 }), mod('5', { ignoreUpdates: true }));
     props.updateIds = new Set(['1', '2', '4', '5']);
     await render();
-    const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'installed.updateAll.updateAllCount 3')!;
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'installed.updateAll.updateAll')!;
     await act(async () => confirm.click());
     expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['1', '2', '4']);
     expect(props.onClose).toHaveBeenCalledOnce();

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, ExternalLink, Eye, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Mod } from '../../types/mod';
+import { groupModUpdates } from '../../lib/updateActions';
 import { showToast } from '../../stores/toastStore';
 import { ConfirmModal } from '../common/PageComponents';
 import { IconButton } from '../common/ui';
@@ -16,27 +17,9 @@ interface Props {
   onClose: () => void;
 }
 
-/** The update workflow groups by submission and section, independently of local cards. */
-function groupUpdates(mods: Mod[], updateIds: ReadonlySet<string>) {
-  const groups = new Map<string, { key: string; name: string; pending: Mod[]; installed: Mod[] }>();
-  for (const mod of mods) {
-    const key = mod.gameBananaId
-      ? `${mod.sourceSection ?? 'Mod'}:${mod.gameBananaId}`
-      : mod.id;
-    let group = groups.get(key);
-    if (!group) {
-      group = { key, name: mod.name, pending: [], installed: [] };
-      groups.set(key, group);
-    }
-    group.installed.push(mod);
-    if (updateIds.has(mod.id) && !mod.ignoreUpdates) group.pending.push(mod);
-  }
-  return [...groups.values()].filter(group => group.pending.length > 0);
-}
-
 export default function ModUpdatesModal({ mods, updateIds, busy, onUpdate, onIgnore, onOpen, onClose }: Props) {
   const { t } = useTranslation();
-  const groups = useMemo(() => groupUpdates(mods, updateIds), [mods, updateIds]);
+  const groups = useMemo(() => groupModUpdates(mods, updateIds), [mods, updateIds]);
   const [ignoring, setIgnoring] = useState<string | null>(null);
   const pendingIds = groups.flatMap(group => group.pending.map(mod => mod.id));
   const disabled = busy || ignoring !== null;
@@ -117,7 +100,7 @@ export default function ModUpdatesModal({ mods, updateIds, busy, onUpdate, onIgn
           </div>
         </>
       }
-      confirmLabel={t('installed.updateAll.updateAllCount', { count: pendingIds.length })}
+      confirmLabel={t('installed.updateAll.updateAll')}
       variant="primary"
       busy={disabled}
       onConfirm={() => update(pendingIds)}

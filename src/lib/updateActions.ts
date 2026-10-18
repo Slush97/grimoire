@@ -1,3 +1,4 @@
+import type { Mod } from '../types/mod';
 import {
   isUpdateFlagged,
   type InstalledUpdateEntry,
@@ -46,6 +47,25 @@ export function modUpdateGroup<T extends { gameBananaId?: number; sourceSection?
 ): T[] {
   if (gameBananaId === null) return [];
   return mods.filter(mod => mod.gameBananaId === gameBananaId && (mod.sourceSection ?? 'Mod') === section);
+}
+
+/** The update workflow groups by submission and section, independently of local cards. */
+export function groupModUpdates(mods: readonly Mod[], updateIds: ReadonlySet<string>) {
+  if (updateIds.size === 0) return [];
+  const groups = new Map<string, { key: string; name: string; pending: Mod[]; installed: Mod[] }>();
+  for (const mod of mods) {
+    const key = mod.gameBananaId
+      ? `${mod.sourceSection ?? 'Mod'}:${mod.gameBananaId}`
+      : mod.id;
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, name: mod.name, pending: [], installed: [] };
+      groups.set(key, group);
+    }
+    group.installed.push(mod);
+    if (updateIds.has(mod.id) && !mod.ignoreUpdates) group.pending.push(mod);
+  }
+  return [...groups.values()].filter(group => group.pending.length > 0);
 }
 
 /** A stale installed file the details view offers to replace explicitly. */

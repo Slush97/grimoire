@@ -94,7 +94,7 @@ import {
 } from '../lib/stableKeyMigration';
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
-import { decideFileDownload, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
+import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
@@ -1213,8 +1213,12 @@ export default function Installed() {
   const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
   // Monotonic guard so a slower linked-item fetch can't clobber a newer one.
   const detailsRequestIdRef = useRef(0);
-  // Map of mod id → true if a newer version exists on GameBanana.
+  // Installed file IDs with an available update on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+  const updateModCount = useMemo(
+    () => groupModUpdates(visibleMods, updatesAvailable).length,
+    [visibleMods, updatesAvailable],
+  );
   const updateCheckRevision = useSyncExternalStore(updateCheckCache.subscribe, updateCheckCache.getRevision);
   // Merged mod id -> fileNames of its absorbed sources whose GameBanana file is
   // gone. Kept apart from `updatesAvailable` because runUpdate has nothing to
@@ -3669,12 +3673,12 @@ export default function Installed() {
       },
     });
   }
-  const hasStatusButtons =
-    statusIssues.length > 0 || updatesAvailable.size > 0 || updateBusy || unknownMods.length > 0;
+  const showUpdateButton = updateModCount > 0 || updateBusy;
+  const hasStatusButtons = statusIssues.length > 0 || showUpdateButton || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
       <StatusIssues issues={statusIssues} />
-      {(updatesAvailable.size > 0 || updateBusy) && (
+      {showUpdateButton && (
         <Button
           variant="primary"
           onClick={() => setUpdateAllConfirmOpen(true)}
@@ -3689,7 +3693,7 @@ export default function Installed() {
         >
           {updateBusy
             ? t('installed.updateAll.updating')
-            : t('installed.updateAll.updateCount', { count: updatesAvailable.size })}
+            : t('installed.updateAll.updateCount', { count: updateModCount })}
         </Button>
       )}
       {unknownMods.length > 0 && fixUnknownHidden && (

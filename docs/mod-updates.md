@@ -6,6 +6,8 @@ renderer navigation. The Installed toolbar shows `Updating` until both queued
 replacements and outstanding manual choices finish or are removed.
 
 The update menu groups pending variants by GameBanana submission and section.
+The toolbar's `Update (n)` counts these mods; the menu title `Update n files?`
+counts their pending files. Its footer action is `Update all`.
 Each mod shows its pending variant count, with variant names in the name's
 tooltip. A row can start just that mod's updates or ignore updates for all of
 its installed variants. Starting updates closes the menu and uses the same
