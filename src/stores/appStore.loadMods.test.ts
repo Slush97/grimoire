@@ -85,4 +85,54 @@ describe('appStore loadMods refreshes', () => {
 
     expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['after-mutation']);
   });
+
+  it('coalesces completed updates into a fresh scan after an older read finishes', async () => {
+    let resolveFirst!: (mods: Mod[]) => void;
+    let resolveFresh!: (mods: Mod[]) => void;
+    getMods
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFresh = resolve; }));
+
+    const first = useAppStore.getState().loadMods();
+    const completion = useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
+    const nextCompletion = useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
+    expect(getMods).toHaveBeenCalledTimes(1);
+
+    resolveFirst([mod('old')]);
+    await first;
+    expect(getMods).toHaveBeenCalledTimes(2);
+    resolveFresh([mod('updated')]);
+    await Promise.all([completion, nextCompletion]);
+    expect(getMods).toHaveBeenCalledTimes(2);
+    expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['updated']);
+    expect(useAppStore.getState().modsLoading).toBe(false);
+  });
+
+  it('refreshes again when another update completes during a follow-up scan', async () => {
+    let resolveFirst!: (mods: Mod[]) => void;
+    let resolveFresh!: (mods: Mod[]) => void;
+    getMods
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFresh = resolve; }))
+      .mockResolvedValueOnce([mod('last-update')]);
+
+    const first = useAppStore.getState().loadMods();
+    const completion = useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
+    resolveFirst([mod('old')]);
+    await first;
+    const nextCompletion = useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
+    expect(getMods).toHaveBeenCalledTimes(2);
+
+    resolveFresh([mod('first-update')]);
+    await Promise.all([completion, nextCompletion]);
+    expect(getMods).toHaveBeenCalledTimes(3);
+    expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['last-update']);
+  });
+
+  it('starts a completion refresh immediately when no scan is in flight', async () => {
+    getMods.mockResolvedValueOnce([mod('updated')]);
+    await useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
+    expect(getMods).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['updated']);
+  });
 });

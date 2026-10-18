@@ -53,7 +53,19 @@ describe('assertReplacementSafety', () => {
         expect(h.assertVpkSafety).toHaveBeenCalledExactlyOnceWith(candidatePath, {
             context: 'installation',
             name: 'HUD Mod',
+            signal: undefined,
         });
+    });
+
+    it('passes cancellation to an installed candidate review without deleting either version', async () => {
+        const { root, oldPath, candidatePath, candidate } = await rejectedUpdate();
+        const abort = new AbortController();
+        await assertReplacementSafety(root, [candidate.id], abort.signal);
+        expect(h.assertVpkSafety).toHaveBeenCalledExactlyOnceWith(candidatePath, {
+            context: 'installation', name: 'HUD Mod', signal: abort.signal,
+        });
+        expect(existsSync(oldPath)).toBe(true);
+        expect(existsSync(candidatePath)).toBe(true);
     });
 
     it('fails when the user keeps the candidate disabled again, leaving both versions on disk', async () => {

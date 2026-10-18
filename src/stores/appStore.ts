@@ -431,8 +431,9 @@ interface AppState {
    *  page with the loading skeleton. Refreshes are silent by default once a
    *  library has loaded; pass `{ silent: false }` only for an explicit blocking
    *  reload. Pass `{ force: true }` after a filesystem mutation so an older
-   *  in-flight scan cannot be reused. */
-  loadMods: (opts?: { silent?: boolean; force?: boolean }) => Promise<void>;
+   *  in-flight scan cannot be reused. Use `{ afterCurrent: true }` for queued
+   *  writes to wait for the current scan and share one fresh follow-up. */
+  loadMods: (opts?: { silent?: boolean; force?: boolean; afterCurrent?: boolean }) => Promise<void>;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
   toggleMod: (modId: string) => Promise<boolean>;
@@ -770,6 +771,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   // supersedes an older scan when a mutation or path change makes reuse unsafe.
   loadMods: (opts) => {
     const existing = modsLoadInFlight;
+    // Update completions need a scan that starts after their write. Wait for
+    // older reads, then let concurrent completion requests share one new scan.
+    if (opts?.afterCurrent && existing && existing.generation === modsGeneration) {
+      return existing.promise.then(() => get().loadMods({ silent: opts.silent }));
+    }
     if (!opts?.force && existing && existing.generation === modsGeneration) {
       return existing.promise;
     }

@@ -43,6 +43,22 @@ export interface DownloadInstallResult {
     installedVpks: string[];
 }
 
+export interface ManagedDownloadHooks {
+    beforeStart?: () => Promise<void>;
+    /** Promotions can reuse installed files instead of downloading them again. */
+    execute?: (signal: AbortSignal) => Promise<DownloadInstallResult>;
+    afterInstall: (result: DownloadInstallResult) => Promise<void>;
+}
+
+/** Includes cancellation before a queued download starts and picker dismissal. */
+export function isDownloadCancelled(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return message === 'CANCELLED_BY_USER'
+        || message === 'Cancelled by user'
+        || message === 'User cancelled multi-VPK pick'
+        || message === 'User cancelled install due to suspicious files';
+}
+
 export interface OneClickInstallArgs {
     archiveUrl: string;
     modType?: string;
@@ -174,6 +190,7 @@ interface QueuedDownload {
     args: DownloadModArgs;
     directUrl?: string;
     enrichedDetails?: GameBananaModDetails;
+    hooks?: ManagedDownloadHooks;
     mainWindow: BrowserWindow | null;
     resolve: (result: DownloadInstallResult) => void;
     reject: (error: Error) => void;
@@ -182,6 +199,7 @@ interface QueuedDownload {
 const downloadQueue: QueuedDownload[] = [];
 let isProcessingQueue = false;
 let currentDownloadInfo: DownloadQueueItem | null = null;
+let currentManagedDownload: { cancelled: boolean; finalizing: boolean; abort: AbortController } | null = null;
 
 // Cancellation handle for the in-flight phase of the current download. The
 // active phase (HTTP fetch, multi-VPK picker prompt) installs a teardown
@@ -206,6 +224,11 @@ export function getDownloadQueue(): DownloadQueueItem[] {
  */
 export function getCurrentDownload(): DownloadQueueItem | null {
     return currentDownloadInfo;
+}
+
+export function isDownloadTargetQueued(modId: number, fileId: number): boolean {
+    return (currentDownloadInfo?.modId === modId && currentDownloadInfo.fileId === fileId)
+        || downloadQueue.some((item) => item.args.modId === modId && item.args.fileId === fileId);
 }
 
 /**
@@ -280,6 +303,30 @@ export function downloadMod(
         downloadQueue.push({ deadlockPath, args, mainWindow, resolve, reject });
         emitQueueUpdate();
         processQueue();
+    });
+}
+
+/** Queue a replacement and finish its filesystem work before advancing FIFO. */
+export function enqueueManagedDownload(
+    deadlockPath: string,
+    args: DownloadModArgs,
+    mainWindow: BrowserWindow | null,
+    hooks: ManagedDownloadHooks,
+): Promise<DownloadInstallResult> {
+    if (isDownloadTargetQueued(args.modId, args.fileId)) {
+        return Promise.reject(new Error('This mod file is already queued or downloading.'));
+    }
+    return new Promise((resolve, reject) => {
+        downloadQueue.push({
+            deadlockPath,
+            args: { ...args, isReplacement: true },
+            mainWindow,
+            hooks,
+            resolve,
+            reject,
+        });
+        emitQueueUpdate();
+        void processQueue();
     });
 }
 
@@ -366,24 +413,43 @@ async function processQueue(): Promise<void> {
             fileName: item.args.fileName,
             modName: item.args.modName,
         };
+        const abort = new AbortController();
+        currentManagedDownload = item.hooks ? { cancelled: false, finalizing: false, abort } : null;
         emitQueueUpdate(); // Notify UI that queue changed and current download started
         try {
-            const result = item.directUrl
+            await item.hooks?.beforeStart?.();
+            if (currentManagedDownload?.cancelled) throw new Error('CANCELLED_BY_USER');
+            const result = item.hooks?.execute
+                ? await item.hooks.execute(abort.signal)
+                : item.directUrl
                 ? await executeOneClickDownload(
                     item.deadlockPath,
                     item.args,
                     item.directUrl,
                     item.enrichedDetails,
-                    item.mainWindow
+                    item.mainWindow,
+                    abort
                 )
-                : await executeDownload(item.deadlockPath, item.args, item.mainWindow);
+                : await executeDownload(item.deadlockPath, item.args, item.mainWindow, !!item.hooks, abort);
+            if (item.hooks) {
+                if (currentManagedDownload?.cancelled) throw new Error('CANCELLED_BY_USER');
+                currentManagedDownload!.finalizing = true;
+                currentCancelHandler = null;
+                await item.hooks.afterInstall(result);
+                item.mainWindow?.webContents.send('download-complete', {
+                    modId: item.args.modId,
+                    fileId: item.args.fileId,
+                });
+            }
             item.resolve(result);
         } catch (error) {
-            const err = error instanceof Error ? error : new Error(String(error));
+            const err = currentManagedDownload?.cancelled
+                ? new Error('CANCELLED_BY_USER')
+                : error instanceof Error ? error : new Error(String(error));
             // Surface user-cancellation so the renderer can clear the row.
             // The multi-VPK-picker cancel path already emits download-error
             // itself; this only covers HTTP-phase cancels which don't.
-            if (err.message === 'CANCELLED_BY_USER') {
+            if (err.message === 'CANCELLED_BY_USER' || (item.hooks && isDownloadCancelled(err))) {
                 item.mainWindow?.webContents.send('download-error', {
                     modId: item.args.modId,
                     fileId: item.args.fileId,
@@ -394,6 +460,7 @@ async function processQueue(): Promise<void> {
             item.reject(err);
         }
         currentCancelHandler = null;
+        currentManagedDownload = null;
         currentDownloadInfo = null;
     }
 
@@ -699,10 +766,12 @@ async function installAsCursorMod(
     deadlockPath: string,
     archivePath: string,
     workDir: string,
-    source: CursorPackSource
+    source: CursorPackSource,
+    autoApply = true,
 ): Promise<boolean> {
     const packs = await installCursorArchive(archivePath, workDir, source);
     if (packs.length === 0) return false;
+    if (!autoApply) return true;
     const { activeId } = await getCursorPacks();
     const target = packs.find((p) => p.id === activeId)
         ?? (loadSettings().autoEnableDownloads === true ? packs[0] : undefined);
@@ -724,14 +793,31 @@ function prettifyVariant(folder: string): string {
         .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+async function assertDownloadSafety(
+    path: string,
+    options: Parameters<typeof assertVpkSafety>[1],
+    abort?: AbortController,
+): Promise<void> {
+    if (!abort) return assertVpkSafety(path, options);
+    const previous = currentCancelHandler;
+    const cancel = () => abort.abort(new Error('CANCELLED_BY_USER'));
+    currentCancelHandler = cancel;
+    try {
+        await assertVpkSafety(path, { ...options, signal: abort.signal });
+    } finally {
+        if (currentCancelHandler === cancel) currentCancelHandler = previous;
+    }
+}
+
 async function renameVpksToAvoidConflicts(
     _deadlockPath: string,
     targetPath: string,
     extractedVpks: ExtractedVpk[],
-    nameHint?: string
+    nameHint?: string,
+    abort?: AbortController,
 ): Promise<RenamedVpk[]> {
     // Validate the entire selection before moving any candidate or replacing peers.
-    for (const vpk of extractedVpks) await assertVpkSafety(vpk.path, { allowUntrusted: true, context: 'installation', name: nameHint });
+    for (const vpk of extractedVpks) await assertDownloadSafety(vpk.path, { allowUntrusted: true, context: 'installation', name: nameHint }, abort);
     const taken = existsSync(targetPath)
         ? new Set((await fs.readdir(targetPath)).map((n) => n.toLowerCase()))
         : new Set<string>();
@@ -894,7 +980,9 @@ export async function applyPostInstallEnableRules(
 async function executeDownload(
     deadlockPath: string,
     args: DownloadModArgs,
-    mainWindow: BrowserWindow | null
+    mainWindow: BrowserWindow | null,
+    managed = false,
+    abort?: AbortController,
 ): Promise<DownloadInstallResult> {
     const { modId, fileId, fileName, section = 'Mod' } = args;
 
@@ -903,6 +991,7 @@ async function executeDownload(
     // Get mod details to find download URL. includeSubmitter so the author
     // name can be stamped into metadata (and later into the imprint).
     const details: GameBananaModDetails = await fetchModDetails(modId, section, { includeSubmitter: true });
+    if (managed && currentManagedDownload?.cancelled) throw new Error('CANCELLED_BY_USER');
 
     if (!details.files || details.files.length === 0) {
         throw new Error(
@@ -1062,19 +1151,20 @@ async function executeDownload(
 
             throw extractError;
         }
+        if (managed && currentManagedDownload?.cancelled) throw new Error('CANCELLED_BY_USER');
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         if (extractedVpks.length === 0 && await installAsCursorMod(deadlockPath, downloadPath, workDir, {
             name: details.name,
             gameBananaId: modId,
             gameBananaFileId: fileId,
-        })) {
-            mainWindow?.webContents.send('download-complete', { modId, fileId });
+        }, !managed)) {
+            if (!managed) mainWindow?.webContents.send('download-complete', { modId, fileId });
             return { installedVpks: [] };
         }
 
         // Rename VPKs to avoid conflicts
-        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
+        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name, abort);
         const stableKeyByFile = new Map<string, string>();
         for (const r of renamed) {
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
@@ -1126,7 +1216,7 @@ async function executeDownload(
                     await fs.unlink(downloadPath).catch(() => { });
                 }
                 installedVpks = [];
-                mainWindow?.webContents.send('download-error', {
+                if (!managed) mainWindow?.webContents.send('download-error', {
                     modId,
                     fileId,
                     errorCode: 'CANCELLED_BY_USER',
@@ -1160,7 +1250,8 @@ async function executeDownload(
             deadlockPath,
             targetPath,
             [{ path: downloadPath, fileName: basename(downloadPath) }],
-            details.name
+            details.name,
+            abort
         );
         installedVpks = renamed.map((r) => r.fileName);
     }
@@ -1191,10 +1282,10 @@ async function executeDownload(
     // Review final bytes before any old variant is disabled or an update caller
     // receives success and deletes its previous version.
     for (const name of installedVpks) {
-        await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+        await assertDownloadSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName }, abort);
     }
 
-    await applyPostInstallEnableRules(
+    if (!managed) await applyPostInstallEnableRules(
         deadlockPath,
         installedVpks,
         { modId, fileId, eventModId: modId, eventFileId: fileId, isReplacement: !!args.isReplacement },
@@ -1202,9 +1293,8 @@ async function executeDownload(
         '[downloadMod]',
     );
 
-    // Notify completion
-    console.log(`[downloadMod] Sending download-complete event`);
-    mainWindow?.webContents.send('download-complete', { modId, fileId });
+    // Managed jobs report completion after replacement finalization.
+    if (!managed) mainWindow?.webContents.send('download-complete', { modId, fileId });
     return { installedVpks };
     } finally {
         await cleanupDownloadWorkDir(workDir);
@@ -1257,6 +1347,7 @@ function awaitMultiVpkPick(
     vpkFileSizes: Record<string, number>,
     mainWindow: BrowserWindow | null
 ): Promise<{ selected: string[] } | null> {
+    if (currentManagedDownload?.cancelled) return Promise.resolve(null);
     return new Promise((resolve) => {
         const wrappedResolve = (decision: { selected: string[] } | null) => {
             currentCancelHandler = null;
@@ -1280,12 +1371,22 @@ function awaitMultiVpkPick(
 }
 
 /**
- * Cancel the in-flight download phase (HTTP fetch or multi-VPK picker prompt)
+ * Cancel the in-flight phase (HTTP fetch, multi-VPK picker or safety review)
  * for the currently-processing queue item. Returns true when a handler was
  * available and invoked. Safe no-op when nothing is in flight or the active
- * phase is non-cancellable (e.g. extracting, writing metadata).
+ * phase is non-cancellable (e.g. extracting, writing metadata). A managed job
+ * can defer cancellation until installation finishes, before its finalizer.
  */
 export function cancelActiveDownload(): boolean {
+    if (currentManagedDownload) {
+        if (currentManagedDownload.finalizing || currentManagedDownload.cancelled) return false;
+        currentManagedDownload.cancelled = true;
+        currentManagedDownload.abort.abort(new Error('CANCELLED_BY_USER'));
+        const handler = currentCancelHandler;
+        currentCancelHandler = null;
+        handler?.();
+        return true;
+    }
     if (!currentCancelHandler) return false;
     const handler = currentCancelHandler;
     currentCancelHandler = null;
@@ -1341,7 +1442,8 @@ async function executeOneClickDownload(
     args: DownloadModArgs,
     archiveUrl: string,
     enrichedDetails: GameBananaModDetails | undefined,
-    mainWindow: BrowserWindow | null
+    mainWindow: BrowserWindow | null,
+    abort?: AbortController,
 ): Promise<DownloadInstallResult> {
     const { modId, fileId, fileName, section = 'Mod' } = args;
 
@@ -1586,7 +1688,7 @@ async function executeOneClickDownload(
             return { installedVpks: [] };
         }
 
-        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);
+        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName, abort);
         const stableKeyByFile = new Map<string, string>();
         for (const r of renamed) {
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
@@ -1664,7 +1766,8 @@ async function executeOneClickDownload(
             deadlockPath,
             targetPath,
             [{ path: downloadPath, fileName: basename(downloadPath) }],
-            oneClickModName
+            oneClickModName,
+            abort
         );
         installedVpks = renamed.map((r) => r.fileName);
     }
@@ -1687,7 +1790,7 @@ async function executeOneClickDownload(
     }
 
     for (const name of installedVpks) {
-        await assertVpkSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName });
+        await assertDownloadSafety(join(targetPath, name), { context: 'installation', name: getModMetadata(name)?.modName }, abort);
     }
 
     await applyPostInstallEnableRules(

@@ -88,6 +88,7 @@ import './ipc/mods';
 import './ipc/crashAdvisories';
 import { startCrashAdvisories } from './services/crashAdvisories';
 import './ipc/gamebanana';
+import './ipc/modUpdates';
 import './ipc/gamebananaFileServers';
 import './ipc/system';
 import './ipc/conflicts';

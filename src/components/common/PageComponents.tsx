@@ -1,8 +1,9 @@
 import { useId, type ReactNode } from 'react';
-import { Loader2, type LucideIcon } from 'lucide-react';
+import { Loader2, X, type LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalBody, ModalFooter } from './Modal';
 import { Skeleton } from './Skeleton';
-import { Button } from './ui';
+import { Button, IconButton } from './ui';
 import Tx from '../translation/Tx';
 
 // ============================================================================
@@ -233,6 +234,8 @@ interface ConfirmModalProps {
     onCancel: () => void;
     /** The confirmed action is running: blocks dismissal and disables both buttons. */
     busy?: boolean;
+    /** Optional header dismissal for dialogs that need an explicit close control. */
+    showClose?: boolean;
     /** Rendered under the message, e.g. progress while `busy`. */
     children?: ReactNode;
 }
@@ -247,13 +250,18 @@ export function ConfirmModal({
     onConfirm,
     onCancel,
     busy = false,
+    showClose = false,
     children,
 }: ConfirmModalProps) {
+    const { t } = useTranslation();
     const titleId = useId();
     return (
         <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size="sm" dismissable={!busy}>
             <ModalBody className="pt-5">
-                <h2 id={titleId} className="mb-2 font-reaver text-base font-semibold text-text-primary">{title}</h2>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                    <h2 id={titleId} className="font-reaver text-base font-semibold text-text-primary">{title}</h2>
+                    {showClose && <IconButton icon={X} size="sm" label={t('common.actions.close')} onClick={onCancel} disabled={busy} />}
+                </div>
                 <div className="text-sm text-text-secondary">{message}</div>
                 {children}
             </ModalBody>

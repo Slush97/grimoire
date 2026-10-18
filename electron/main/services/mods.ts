@@ -999,84 +999,87 @@ async function allocatePrioritySlot(deadlockPath: string): Promise<AllocatedSlot
  * happens on the next enable.
  */
 export function setModPriorityFolder(deadlockPath: string, modId: string, priority: boolean): Promise<Mod> {
-    return withModMutationLock(async () => {
-        const mods = await scanMods(deadlockPath);
-        await syncRunningGameModSnapshotFromMods(mods);
-        const target = mods.find((m) => m.id === modId);
-        if (!target) throw new Error(`Mod not found: ${modId}`);
+    return withModMutationLock(() => setModPriorityFolderUnlocked(deadlockPath, modId, priority), { healPath: deadlockPath });
+}
 
-        const alreadyThere = isPriorityFolderPath(target.path);
-        if (alreadyThere === priority) {
-            // Folder already correct; just make sure the flag agrees so a
-            // later disable/enable round trip preserves the choice.
-            setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
-            return target;
-        }
+/** Unlocked priority move, for use only inside a runExclusiveModMutation batch. */
+export async function setModPriorityFolderUnlocked(deadlockPath: string, modId: string, priority: boolean): Promise<Mod> {
+    const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
+    const target = mods.find((m) => m.id === modId);
+    if (!target) throw new Error(`Mod not found: ${modId}`);
 
-        // Refuse before touching metadata: writing the flag first would let a
-        // remove blocked by this guard clear the flag while the VPK stays in
-        // the priority root, stranding an unflagged Global mod (invisible to
-        // the Global surfaces, demoted to addons on its next enable).
-        if (target.enabled) {
-            assertCanMoveLoadedGameMod(target);
-        }
+    const alreadyThere = isPriorityFolderPath(target.path);
+    if (alreadyThere === priority) {
+        // Folder already correct; just make sure the flag agrees so a
+        // later disable/enable round trip preserves the choice.
+        setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
+        return target;
+    }
 
-        if (!target.enabled) {
-            // Nothing to move: the file is parked in .disabled/ under a
-            // free-form name. The flag alone decides where the next enable
-            // puts it.
-            setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
-            return target;
-        }
+    // Refuse before touching metadata: writing the flag first would let a
+    // remove blocked by this guard clear the flag while the VPK stays in
+    // the priority root, stranding an unflagged Global mod (invisible to
+    // the Global surfaces, demoted to addons on its next enable).
+    if (target.enabled) {
+        assertCanMoveLoadedGameMod(target);
+    }
 
-        let destination: AllocatedSlot;
-        if (priority) {
-            destination = await allocatePrioritySlot(deadlockPath);
-        } else {
-            const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
-            destination = await allocateSlot(deadlockPath, {
-                disabledForbidden,
-                preferred: [getModMetadata(target.metaKey)?.lastPriority],
-            });
-        }
+    if (!target.enabled) {
+        // Nothing to move: the file is parked in .disabled/ under a
+        // free-form name. The flag alone decides where the next enable
+        // puts it.
+        setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
+        return target;
+    }
 
-        // Keep placement and metadata atomic from the caller's perspective.
-        //
-        // Moving IN: rename first, then stamp the destination key. If the app
-        // crashes between those steps, healModFolders sees a user VPK in grimoire and
-        // self-heals the missing flag. Allocation/rename failures leave the
-        // original metadata untouched.
-        //
-        // Moving OUT: clear first so the migrated row is already correct when
-        // the rename lands. If the rename fails (or the app crashes before it),
-        // healModFolders sees the still-resident priority VPK and restores the flag.
+    let destination: AllocatedSlot;
+    if (priority) {
+        destination = await allocatePrioritySlot(deadlockPath);
+    } else {
+        const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
+        destination = await allocateSlot(deadlockPath, {
+            disabledForbidden,
+            preferred: [getModMetadata(target.metaKey)?.lastPriority],
+        });
+    }
+
+    // Keep placement and metadata atomic from the caller's perspective.
+    //
+    // Moving IN: rename first, then stamp the destination key. If the app
+    // crashes between those steps, healModFolders sees a user VPK in grimoire and
+    // self-heals the missing flag. Allocation/rename failures leave the
+    // original metadata untouched.
+    //
+    // Moving OUT: clear first so the migrated row is already correct when
+    // the rename lands. If the rename fails (or the app crashes before it),
+    // healModFolders sees the still-resident priority VPK and restores the flag.
+    if (!priority) {
+        setModMetadata(target.metaKey, { priorityMod: undefined });
+    }
+
+    let moved: Mod;
+    try {
+        moved = await moveModToFolderAs(target, destination.folder, destination.fileName, true);
+    } catch (err) {
         if (!priority) {
-            setModMetadata(target.metaKey, { priorityMod: undefined });
-        }
-
-        let moved: Mod;
-        try {
-            moved = await moveModToFolderAs(target, destination.folder, destination.fileName, true);
-        } catch (err) {
-            if (!priority) {
-                // Best-effort immediate rollback; healModFolders is the durable
-                // fallback if persisting this restoration itself fails.
-                try {
-                    setModMetadata(target.metaKey, { priorityMod: true });
-                } catch {
-                    // Preserve the original filesystem error.
-                }
+            // Best-effort immediate rollback; healModFolders is the durable
+            // fallback if persisting this restoration itself fails.
+            try {
+                setModMetadata(target.metaKey, { priorityMod: true });
+            } catch {
+                // Preserve the original filesystem error.
             }
-            throw err;
         }
-        if (priority) {
-            setModMetadata(moved.metaKey, { priorityMod: true });
-        }
-        modTrace(
-            `priority: "${target.name}" ${target.metaKey} -> ${moved.metaKey} (global=${priority})`
-        );
-        return moved;
-    }, { healPath: deadlockPath });
+        throw err;
+    }
+    if (priority) {
+        setModMetadata(moved.metaKey, { priorityMod: true });
+    }
+    modTrace(
+        `priority: "${target.name}" ${target.metaKey} -> ${moved.metaKey} (global=${priority})`
+    );
+    return moved;
 }
 
 
@@ -1351,7 +1354,7 @@ async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod>
  * new file id, so the update must not delete the version they supersede until
  * this passes. Unlocked because the check can wait on the user's review.
  */
-export async function assertReplacementSafety(deadlockPath: string, modIds: string[]): Promise<void> {
+export async function assertReplacementSafety(deadlockPath: string, modIds: string[], signal?: AbortSignal): Promise<void> {
     const mods = await scanMods(deadlockPath);
     const replacements = modIds.map((modId) => {
         const mod = mods.find((m) => m.id === modId);
@@ -1362,6 +1365,7 @@ export async function assertReplacementSafety(deadlockPath: string, modIds: stri
         await assertVpkSafety(mod.path, {
             context: 'installation',
             name: getModMetadata(mod.metaKey)?.modName ?? mod.name,
+            signal,
         });
     }
 }
@@ -1380,35 +1384,42 @@ export function deleteMods(
     entries: DeleteModEntry[],
     onProgress?: (progress: DeleteModsProgress) => void
 ): Promise<DeleteModsResult> {
-    return withModMutationLock(async () => {
-        const mods = await scanMods(deadlockPath);
-        await syncRunningGameModSnapshotFromMods(mods);
-        const byId = new Map(mods.map((m) => [m.id, m]));
-        const resolved = entries.map((entry) => {
-            const mod = byId.get(entry.id);
-            return mod && mod.size === entry.size && mod.installedAt === entry.installedAt ? mod : undefined;
-        });
-        assertCanMoveLoadedGameMods(resolved.filter((m) => m !== undefined));
+    return withModMutationLock(() => deleteModsUnlocked(deadlockPath, entries, onProgress), { healPath: deadlockPath });
+}
 
-        const skipped: string[] = [];
-        for (const [i, target] of resolved.entries()) {
-            if (target) {
-                const metadata = getModMetadata(target.metaKey);
-                await captureModBackup(target.path, isPriorityFolderPath(target.path)
-                    ? { ...metadata, priorityMod: true }
-                    : metadata, target.name);
-                await deleteVpkSet(target.path);
-                // Metadata is keyed by metaKey. Left behind, the next mod
-                // assigned the same slot would inherit the deleted mod's
-                // gameBananaId, thumbnail, category, etc. via setModMetadata's merge.
-                removeModMetadata(target.metaKey);
-            } else {
-                skipped.push(entries[i].id);
-            }
-            onProgress?.({ done: i + 1, total: entries.length });
+/** Unlocked guarded deletion, for use only inside a runExclusiveModMutation batch. */
+export async function deleteModsUnlocked(
+    deadlockPath: string,
+    entries: DeleteModEntry[],
+    onProgress?: (progress: DeleteModsProgress) => void
+): Promise<DeleteModsResult> {
+    const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
+    const byId = new Map(mods.map((m) => [m.id, m]));
+    const resolved = entries.map((entry) => {
+        const mod = byId.get(entry.id);
+        return mod && mod.size === entry.size && mod.installedAt === entry.installedAt ? mod : undefined;
+    });
+    assertCanMoveLoadedGameMods(resolved.filter((m) => m !== undefined));
+
+    const skipped: string[] = [];
+    for (const [i, target] of resolved.entries()) {
+        if (target) {
+            const metadata = getModMetadata(target.metaKey);
+            await captureModBackup(target.path, isPriorityFolderPath(target.path)
+                ? { ...metadata, priorityMod: true }
+                : metadata, target.name);
+            await deleteVpkSet(target.path);
+            // Metadata is keyed by metaKey. Left behind, the next mod
+            // assigned the same slot would inherit the deleted mod's
+            // gameBananaId, thumbnail, category, etc. via setModMetadata's merge.
+            removeModMetadata(target.metaKey);
+        } else {
+            skipped.push(entries[i].id);
         }
-        return { skipped };
-    }, { healPath: deadlockPath });
+        onProgress?.({ done: i + 1, total: entries.length });
+    }
+    return { skipped };
 }
 
 /**

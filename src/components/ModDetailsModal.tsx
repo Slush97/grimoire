@@ -609,7 +609,7 @@ function ModDetailsModal({
       !!onEnableFile &&
       !isBusyThis;
     const showDeleteButton = !!installedFileState && !!onDeleteFile;
-    const replaceOptions = !archived && !isUpdate && !isInstalled && onReplace ? replaceableFiles : [];
+    const replaceOptions = !archived && !isUpdate && !isInstalled && !isBusyThis && onReplace ? replaceableFiles : [];
     const pickReplacement = (replaced: ReplaceableFile) =>
       setReplaceCandidate({ fileId: file.id, fileName: file.fileName, replaced });
     const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
@@ -1226,6 +1226,7 @@ function ModDetailsModal({
         {replaceCandidate && onReplace && (
           <ConfirmModal
             isOpen
+            showClose
             title={t('modDetails.replace.confirmTitle')}
             message={t('modDetails.replace.confirmBody', {
               newName: replaceCandidate.fileName,

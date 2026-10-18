@@ -112,6 +112,30 @@ describe('mod safety authorization', () => {
         expect(await fs.readFile(candidate, 'utf8')).toBe('inert');
         expect(await fs.readFile(join(h.userData, 'mod-quarantine', 'a'.repeat(64), 'test.vpk'), 'utf8')).toBe('inert');
     });
+    it('aborts only the cancelled review without rejecting another operation waiting on the same version', async () => {
+        h.reports.push(script(), script());
+        const abort = new AbortController();
+        const cancelled = assertVpkSafety(candidate, { context: 'installation', signal: abort.signal }).catch(error => error);
+        const first = await prompt();
+        const other = assertVpkSafety(candidate).catch(error => String(error));
+        await vi.waitFor(() => expect(getModSafetyPrompts()).toHaveLength(2));
+        const otherId = getModSafetyPrompts().find(request => request.id !== first.id)!.id;
+        abort.abort(new Error('CANCELLED_BY_USER'));
+        expect(await cancelled).toEqual(new Error('CANCELLED_BY_USER'));
+        expect(getModSafetyPrompts().map(request => request.id)).toEqual([otherId]);
+        await expect(fs.stat(join(h.userData, 'mod-safety-trust.json'))).rejects.toThrow();
+        await expect(fs.stat(join(h.userData, 'mod-quarantine'))).rejects.toThrow();
+        expect(await fs.readFile(candidate, 'utf8')).toBe('inert');
+        respondToModSafety(otherId, false);
+        expect(await other).toContain('MOD_SAFETY_TRUST_REQUIRED');
+    });
+    it('does not inspect or open a prompt after its operation was already cancelled', async () => {
+        const abort = new AbortController();
+        abort.abort(new Error('CANCELLED_BY_USER'));
+        await expect(assertVpkSafety(candidate, { signal: abort.signal })).rejects.toThrow('CANCELLED_BY_USER');
+        expect(h.messages).toHaveLength(0);
+        expect(getModSafetyPrompts()).toEqual([]);
+    });
     it('rejects a file changed during the confirmation instead of approving the new bytes', async () => {
         h.reports.push(script(), script('b'.repeat(64)));
         const result = assertVpkSafety(candidate).catch(e => String(e));

@@ -31,9 +31,6 @@ import {
   getGamebananaSections,
   getGamebananaCategories,
   backfillGameBananaFileId,
-  createSnapshot,
-  deleteReplacedMod,
-  assertReplacementSafety,
   isGameRunningModLockError,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
@@ -79,12 +76,6 @@ import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { mergeSourceFileIds } from '../lib/updateCheck';
 import { visibleInstalledMods } from '../lib/visibleMods';
-import {
-  createEnabledVpkRestoreSnapshot,
-  createGlobalVpkRestoreSnapshot,
-  restoreReplacementVpkState,
-} from '../lib/vpkRestore';
-import { findReplacementTargetIdsAfterInstall, modsByIds } from '../lib/replacementCleanup';
 import { showToast } from '../stores/toastStore';
 import { useCursorPackStore } from '../stores/cursorPackStore';
 import { BrowseArtistBanner } from '../components/browse/BrowseArtistBanner';
@@ -414,7 +405,6 @@ export default function Browse() {
   const loadMods = useAppStore((s) => s.loadMods);
   const deleteMod = useAppStore((s) => s.deleteMod);
   const toggleMod = useAppStore((s) => s.toggleMod);
-  const setModPriorityFolder = useAppStore((s) => s.setModPriorityFolder);
   const installedMods = useAppStore((s) => s.mods);
   const cursorPacks = useCursorPackStore((s) => s.packs);
   const loadCursorPacks = useCursorPackStore((s) => s.load);
@@ -1879,89 +1869,19 @@ export default function Browse() {
         visibleMods.filter((mod) => mod.gameBananaId === selectedMod.id),
         { replaceFileId },
       );
-      const replacedIds = new Set(decision.replacedModIds);
-      const replacementTargets = visibleMods.filter((mod) => replacedIds.has(mod.id));
-      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
-      const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
-      if (restoreGlobal.ambiguous) {
-        throw new Error(t('installed.updateAll.ambiguousGlobalState'));
-      }
-
-      if (replacementTargets.length > 0) {
-        try {
-          await createSnapshot('pre-update');
-        } catch (error) {
-          console.warn('[Browse download] Failed to capture replacement snapshot:', error);
-        }
-      }
-
-      // When the user already has the picked file (an update onto an installed
-      // successor, or a confirmed replace onto it), nothing is downloaded: the
-      // replaced file is deleted and its state restored onto the installed one.
-      const installedReplacementIds = visibleMods
-        .filter(
-          (mod) =>
-            mod.gameBananaId === selectedMod.id &&
-            mod.gameBananaFileId === fileId &&
-            !replacedIds.has(mod.id),
-        )
-        .map((mod) => mod.id);
-
-      if (installedReplacementIds.length === 0) {
-        // Snapshot capture can leave an optimistic row on screen long enough
-        // for the user to cancel it. Do not cross IPC after that cancellation.
-        if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
-        await downloadMod(
-          selectedMod.id,
-          fileId,
-          fileName,
-          selectedDetailsSection,
-          effectiveCategoryId,
-          selectedMod.name,
-          decision.replacedModIds.length > 0,
-        );
-        await loadMods();
-        const installedAfterDownload = useAppStore.getState().mods;
-        const targetIds = findReplacementTargetIdsAfterInstall(
-          installedAfterDownload,
-          replacementTargets,
-          fileId,
-        );
-        for (const target of modsByIds(targetIds, installedAfterDownload)) await deleteReplacedMod(target);
-      } else {
-        if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
-        await assertReplacementSafety(installedReplacementIds);
-        for (const target of replacementTargets) await deleteReplacedMod(target);
-      }
+      // Honor a queued click canceled before it reaches the main process.
+      if (!isDownloadRequestPending(selectedMod.id, fileId)) return;
+      await downloadMod(
+        selectedMod.id,
+        fileId,
+        fileName,
+        selectedDetailsSection,
+        effectiveCategoryId,
+        selectedMod.name,
+        decision.replacedModIds.length > 0,
+        decision.replacedModIds,
+      );
       await loadMods({ force: true });
-
-      if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
-        const replacements = useAppStore
-          .getState()
-          .mods.filter(
-            (mod) => mod.gameBananaId === selectedMod.id && mod.gameBananaFileId === fileId,
-          );
-        const failures = await restoreReplacementVpkState(
-          replacements,
-          restoreEnabled,
-          restoreGlobal,
-          {
-            setGlobal: (modId) => setModPriorityFolder(modId, true),
-            enable: async (modId) => {
-              if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
-            },
-          },
-        );
-        if (failures.length > 0) {
-          showToast(
-            t('installed.updateAll.restoreStateFailed', {
-              details: failures.map((failure) => `${failure.action}: ${String(failure.error)}`).join('; '),
-            }),
-            { tone: 'warning', duration: 7000 },
-          );
-          await loadMods({ force: true });
-        }
-      }
     } catch (err) {
       toastModActionError(err);
     } finally {

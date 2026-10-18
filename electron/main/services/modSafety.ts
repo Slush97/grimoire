@@ -183,17 +183,21 @@ export function respondToModSafety(id: string, accepted: boolean): void {
 }
 
 function ask(name: string, report: ModSafetyReport, canTrust: boolean, restartRequired = false,
-    context: ModSafetyPrompt['context'] = 'activation'): Promise<boolean> {
+    context: ModSafetyPrompt['context'] = 'activation', signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     return new Promise(resolve => {
         const id = randomUUID();
         const timer = setTimeout(() => finish(false), 300000);
+        const abort = () => finish(false);
         function finish(accepted: boolean) {
             if (!pending.delete(id)) return;
             clearTimeout(timer);
+            signal?.removeEventListener('abort', abort);
             notifyModSafetyChanged();
             resolve(accepted);
         }
         pending.set(id, { prompt: { id, name, report, canTrust, restartRequired, context }, finish });
+        signal?.addEventListener('abort', abort, { once: true });
         notifyModSafetyChanged();
     });
 }
@@ -254,15 +258,21 @@ export async function pruneModQuarantine(): Promise<void> {
 }
 
 export async function assertVpkSafety(path: string, options: {
-    prompt?: boolean; allowUntrusted?: boolean; context?: ModSafetyPrompt['context']; name?: string;
+    prompt?: boolean; allowUntrusted?: boolean; context?: ModSafetyPrompt['context']; name?: string; signal?: AbortSignal;
 } = {}): Promise<void> {
+    options.signal?.throwIfAborted();
     const report = await inspectVpkSafety(path);
-    if (await isModSafetyTrusted(report)) return;
+    options.signal?.throwIfAborted();
+    const trusted = await isModSafetyTrusted(report);
+    options.signal?.throwIfAborted();
+    if (trusted) return;
     if (report.verdict === 'requires-trust' && options.allowUntrusted) return;
     if (options.prompt !== false) {
-        const accepted = await ask(options.name ?? basename(path), report, report.verdict === 'requires-trust', false, options.context);
+        const accepted = await ask(options.name ?? basename(path), report, report.verdict === 'requires-trust', false, options.context, options.signal);
+        options.signal?.throwIfAborted();
         if (accepted) {
             const current = await inspectVpkSafety(path);
+            options.signal?.throwIfAborted();
             if (current.fingerprint === report.fingerprint && current.verdict === 'requires-trust') {
                 await saveApproval(current);
                 return;

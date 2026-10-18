@@ -9,6 +9,7 @@ import { syncForgeBridgeWithSettings } from '../services/forgeBridge';
 import { assertUpdateChannelChange, syncUpdaterWithSettings } from '../services/updater';
 import { hydrateOnBoot as hydrateSocialSession } from '../services/socialAuth';
 import { runExclusiveModMutation } from '../services/mods';
+import { assertModUpdateSettingsChange, assertNoModUpdates } from '../services/modUpdates';
 
 // detect-deadlock
 ipcMain.handle('detect-deadlock', (): string | null => {
@@ -27,9 +28,12 @@ ipcMain.handle('create-dev-deadlock-path', (): string => {
     return ensureDevDeadlockPath();
 });
 
-ipcMain.handle('copy-mods-to-dev', (event) => copyModsToDev((percent) => {
-    if (!event.sender.isDestroyed()) event.sender.send('copy-mods-to-dev-progress', percent);
-}));
+ipcMain.handle('copy-mods-to-dev', (event) => {
+    assertNoModUpdates();
+    return copyModsToDev((percent) => {
+        if (!event.sender.isDestroyed()) event.sender.send('copy-mods-to-dev-progress', percent);
+    });
+});
 
 // get-settings
 ipcMain.handle('get-settings', (): AppSettings => {
@@ -39,13 +43,15 @@ ipcMain.handle('get-settings', (): AppSettings => {
 // set-settings
 ipcMain.handle('set-settings', async (_, settings: AppSettings): Promise<void> => {
     const current = loadSettings();
+    assertModUpdateSettingsChange(current, settings);
     const safetyWasOn = current.experimentalModSafety;
     const socialWasOn = current.experimentalSocial;
     assertUpdateChannelChange(settings.updateChannel);
     const persist = (): void => {
+        assertModUpdateSettingsChange(loadSettings(), settings);
         saveSettings({ ...settings, lastDialogDirectory: loadSettings().lastDialogDirectory });
     };
-    if (settings.devMode !== current.devMode || settings.devDeadlockPath !== current.devDeadlockPath) {
+    if (settings.devMode !== current.devMode || settings.devDeadlockPath !== current.devDeadlockPath || settings.deadlockPath !== current.deadlockPath) {
         // Finish in-flight mod writes before changing their metadata destination.
         await runExclusiveModMutation(async () => persist());
     } else {

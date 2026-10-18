@@ -73,10 +73,8 @@ interface Props {
     /** Trigger an in-place update for every flagged variant in this group.
      *  Omitted when nothing in the group has an update. */
     onUpdateGroup?: () => void | Promise<void>;
-    /** True while an update run is in progress (shared with the page-level
-     *  Update-all button) so this modal mirrors the same disabled/progress UX. */
+    /** Shared batch state keeps this action disabled while work remains. */
     isUpdating?: boolean;
-    updateProgress?: { done: number; total: number } | null;
     onClose: () => void;
 }
 
@@ -147,7 +145,6 @@ export default function VariantPickerModal({
     variantsWithUpdate,
     onUpdateGroup,
     isUpdating = false,
-    updateProgress = null,
     onClose,
 }: Props) {
     const { t } = useTranslation();
@@ -623,8 +620,8 @@ export default function VariantPickerModal({
                                             : t('variantPicker.updateGroupHint', { count: variantsWithUpdate.size })
                                     }
                                 >
-                                    {isUpdating && updateProgress
-                                        ? t('variantPicker.updatingProgress', { done: updateProgress.done, total: updateProgress.total })
+                                    {isUpdating
+                                        ? t('installed.updateAll.updating')
                                         : t('variantPicker.updateCount', { count: variantsWithUpdate.size })}
                                 </Button>
                             )}

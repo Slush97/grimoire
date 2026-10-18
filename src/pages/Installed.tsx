@@ -57,10 +57,11 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
+import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
-import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, deleteReplacedMod, assertReplacementSafety, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, restoreLocalVariantGroupReplacement, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, MergeSourceReplacement, AssociateUnknownModArgs } from '../types/mod';
@@ -92,21 +93,12 @@ import {
 } from '../lib/stableKeyMigration';
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
-import { decideFileDownload, replaceableFilesFor, resolveUpdateRun, sameFileModIds, summarizeUpdateScope } from '../lib/updateActions';
+import { decideFileDownload, replaceableFilesFor, sameFileModIds, summarizeUpdateScope } from '../lib/updateActions';
 import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
-import {
-  createEnabledVpkRestoreSnapshot,
-  createGlobalVpkRestoreSnapshot,
-  restoreReplacementVpkState,
-  type EnabledVpkRestoreSnapshot,
-  type GlobalVpkRestoreSnapshot,
-} from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
-import { findReplacementTargetIdsAfterInstall, modsByIds } from '../lib/replacementCleanup';
-import { planLocalVariantUpdateRestore } from '../lib/localVariantUpdateRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
@@ -1270,19 +1262,11 @@ export default function Installed() {
     };
   }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
 
-  // "Update all" confirm + progress. Progress is null when idle, otherwise
-  // { done, total } so the button can render "Updating 2/5…" and stay disabled
-  // for the duration of the run.
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
-  const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
-  const [updateAllError, setUpdateAllError] = useState<string | null>(null);
-  // Mods whose file the author deleted with no confident successor, found
-  // during an update run. The installs are kept untouched; a toast offers a
-  // manual pick via the details modal, whose explicit Replace action handles
-  // the delete + re-enable flow.
-  const [updatePickQueue, setUpdatePickQueue] = useState<{ id: string; name: string }[]>([]);
+  const updateBusy = useModUpdatesStore((state) => state.state.busy || state.submitting);
+  const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   useElasticOverscroll(installedScrollRef);
   const latestInstalledScrollTopRef = useRef(
@@ -1900,144 +1884,18 @@ export default function Installed() {
         visibleMods.filter((mod) => mod.gameBananaId === detailsMod.id),
         { replaceFileId },
       );
-      const replacedIds = new Set(decision.replacedModIds);
-      const replacementTargets = mods.filter((mod) => replacedIds.has(mod.id));
-      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
-      const restoreGlobal = createGlobalVpkRestoreSnapshot(replacementTargets);
-      if (restoreGlobal.ambiguous) {
-        throw new Error(t('installed.updateAll.ambiguousGlobalState'));
-      }
-
-      if (replacementTargets.length > 0) {
-        // Snapshot before the destructive delete so the user can roll back,
-        // matching runUpdate's pre-update snapshot. Non-fatal on failure: a
-        // missing snapshot must not block the update the user just asked for.
-        try {
-          await createSnapshot('pre-update');
-        } catch (err) {
-          console.warn('[Update] failed to capture pre-update snapshot:', err);
-        }
-      }
-
-      const installedReplacementIds = visibleMods
-        .filter(
-          (mod) =>
-            mod.gameBananaId === detailsMod.id &&
-            mod.gameBananaFileId === fileId &&
-            !replacedIds.has(mod.id),
-        )
-        .map((mod) => mod.id);
       if (!isDownloadRequestPending(detailsMod.id, fileId)) return;
-      let installedBeforeCleanup: typeof mods;
-      let targetIds: string[];
-      if (installedReplacementIds.length === 0) {
-        await downloadMod(
-          detailsMod.id,
-          fileId,
-          fileName,
-          detailsSection,
-          detailsCategoryId,
-          detailsMod.name,
-          decision.replacedModIds.length > 0,
-        );
-        await loadMods();
-        installedBeforeCleanup = useAppStore.getState().mods;
-        targetIds = findReplacementTargetIdsAfterInstall(
-          installedBeforeCleanup,
-          replacementTargets,
-          fileId,
-        );
-      } else {
-        await assertReplacementSafety(installedReplacementIds);
-        installedBeforeCleanup = useAppStore.getState().mods;
-        targetIds = replacementTargets.map((mod) => mod.id);
-      }
-      const targetMods = modsByIds(targetIds, installedBeforeCleanup);
-
-      // A GameBanana update is normally forbidden from entering a local
-      // variant group. The narrow restore IPC proves this is a replacement for
-      // a still-installed adopted member, then copies that group's established
-      // identity before the source is deleted. If the mapping is ambiguous,
-      // keep the old source rather than split the card and orphan preferences.
-      const groupedReplacement = replacementTargets.some((target) => !!target.localGroupId);
-      let localGroupRestore = planLocalVariantUpdateRestore(
-        replacementTargets,
-        installedBeforeCleanup,
-        targetIds,
+      await downloadMod(
         detailsMod.id,
         fileId,
+        fileName,
+        detailsSection,
+        detailsCategoryId,
+        detailsMod.name,
+        decision.replacedModIds.length > 0,
+        decision.replacedModIds,
       );
-      if (groupedReplacement && !localGroupRestore) {
-        throw new Error(t('installed.variants.updateRestoreFailed'));
-      }
-      // A Global local group must stay wholly in the priority folder. Move the
-      // fresh files first (the existing restore operation owns filesystem
-      // placement), then recompute because that move changes local mod ids.
-      // Main refuses to stamp group metadata until placement matches, so a
-      // failed move leaves the still-installed source and its preferences safe.
-      if (localGroupRestore && restoreGlobal.allGlobal) {
-        const replacementIds = new Set(localGroupRestore.replacementModIds);
-        for (const replacement of installedBeforeCleanup) {
-          if (replacementIds.has(replacement.id) && !replacement.priorityMod) {
-            await setModPriorityFolder(replacement.id, true);
-          }
-        }
-        await loadMods({ force: true });
-        installedBeforeCleanup = useAppStore.getState().mods;
-        localGroupRestore = planLocalVariantUpdateRestore(
-          replacementTargets,
-          installedBeforeCleanup,
-          targetIds,
-          detailsMod.id,
-          fileId,
-        );
-        if (!localGroupRestore) {
-          throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
-        }
-      }
-      if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
-      for (const target of targetMods) await deleteReplacedMod(target);
-
       await loadMods({ force: true });
-
-      // Replacement downloads land disabled with fresh metadata. Restore both
-      // enabled state and the user's Global priority-root placement after
-      // reloading. Match by GB ids because local ids change on reinstall.
-      let restoreFailureMessage: string | null = null;
-      if (restoreEnabled.hadEnabled || restoreGlobal.hadGlobal) {
-        const newMods = useAppStore
-          .getState()
-          .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        const restoreFailures = await restoreReplacementVpkState(
-          newMods,
-          restoreEnabled,
-          restoreGlobal,
-          {
-            setGlobal: (modId) => setModPriorityFolder(modId, true),
-            enable: async (modId) => {
-              if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
-            },
-          },
-        );
-        if (restoreFailures.length > 0) {
-          const summary = restoreFailures
-            .map((failure) => `${failure.action}: ${String(failure.error)}`)
-            .join('; ');
-          restoreFailureMessage = t('installed.updateAll.restoreStateFailed', { details: summary });
-        }
-      }
-
-      // Always reconcile the store with what actually landed on disk, even when
-      // the state restore below failed.
-      await loadMods({ force: true });
-
-      // A restore failure is NOT an update failure: the new file is installed
-      // and only its enabled/Global state is off. Throwing here would report a
-      // succeeded update as a failed one, so surface it in the overlay instead.
-      if (restoreFailureMessage) {
-        showToast(restoreFailureMessage, { tone: 'warning', duration: 7000 });
-      }
-
       updateCheckCache.invalidate([detailsMod.id]);
 
       // Keep the overlay open on the freshly installed file so the row flips to
@@ -2061,329 +1919,22 @@ export default function Installed() {
     }
   });
 
-  /**
-   * Re-download each target mod and restore its pre-update enabled state.
-   * Downloads always go to the disabled folder by default, so without the
-   * restore step the user would have to manually re-enable every updated mod.
-   * Failures are caught per-item so one bad mod doesn't halt the rest.
-   * Drives the same `updateAllProgress` state regardless of caller, so the
-   * Update-all button reflects per-group updates too.
-   */
   const runUpdate = async (targets: typeof mods) => {
-    setUpdatePickQueue([]);
-    const snapshots = targets
-      .filter((m) => m.gameBananaId && typeof m.gameBananaFileId === 'number')
-      .map((m) => ({
-        oldId: m.id,
-        modName: m.name,
-        gameBananaId: m.gameBananaId!,
-        gameBananaFileId: m.gameBananaFileId!,
-        fileName: m.fileName,
-        vpkIndex: m.vpkIndex,
-        archiveVpkPath: m.archiveVpkPath,
-        sha256: m.sha256,
-        section: m.sourceSection ?? 'Mod',
-        categoryId: m.categoryId ?? 0,
-        wasEnabled: m.enabled,
-        wasGlobal: !!m.priorityMod,
-        localGroupId: m.localGroupId,
-      }));
-    if (snapshots.length === 0) return;
-
-    // Group by GameBanana mod id so we fetch fresh file metadata once per
-    // mod. Reusing each row's stored fileId would 404 whenever an author
-    // replaced their upload (new file id) — the most common cause of
-    // "update failed" reports.
-    const groups = new Map<number, typeof snapshots>();
-    for (const s of snapshots) {
-      const arr = groups.get(s.gameBananaId) ?? [];
-      arr.push(s);
-      groups.set(s.gameBananaId, arr);
+    try {
+      await startUpdates(targets.map((mod) => mod.id));
+    } catch (error) {
+      showToast(toastErrorMessage(error), { tone: 'error' });
     }
-
-    setUpdateAllProgress({ done: 0, total: snapshots.length });
-    const failures: string[] = [];
-    // Rows needing a manual file pick. Their installs are left untouched, so
-    // they stay flagged and the details modal's update path can finish the job.
-    const needsPick: { id: string; name: string }[] = [];
-    // Track the (gameBananaId, fileId) actually downloaded so re-enable can
-    // still find the new install even when we redirected a stale snapshot.
-    const completed: {
-      gameBananaId: number;
-      gameBananaFileId: number;
-      restoreEnabled: EnabledVpkRestoreSnapshot;
-      restoreGlobal: GlobalVpkRestoreSnapshot;
-      fileName: string;
-    }[] = [];
-    let progress = 0;
-    // Guard so a multi-group update writes exactly one recovery snapshot, not
-    // one per group.
-    let snapshotTaken = false;
-
-    for (const [, group] of groups) {
-      let details: GameBananaModDetails;
-      try {
-        details = await getModDetails(group[0].gameBananaId, group[0].section);
-      } catch (err) {
-        for (const s of group) {
-          failures.push(`${s.fileName}: failed to fetch mod details (${String(err)})`);
-          progress += 1;
-          setUpdateAllProgress({ done: progress, total: snapshots.length });
-        }
-        continue;
-      }
-
-      // Classify with the same rules as the cards and the details popups, so
-      // Update-all cannot disagree with the row labelled Update. Everything is
-      // resolved before any delete/download runs, including the optional
-      // remaining-file match. Unresolved deleted files keep their installs
-      // and go to the manual-pick queue; unresolved archived files are skipped.
-      const steps = resolveUpdateRun(
-        classifyModFiles(group[0].gameBananaId, details.files ?? [], visibleMods, mergedFileIds, autoMatchRemainingFiles),
-        group.map((snapshot) => ({ id: snapshot.oldId, gameBananaFileId: snapshot.gameBananaFileId })),
-      );
-      const resolutions = group.map((snapshot, index) => {
-        const step = steps[index];
-        const file = step.kind === 'update'
-          ? details.files?.find((candidate) => candidate.id === step.fileId)
-          : undefined;
-        return { snapshot, step, file };
-      });
-
-      // Capture a recovery snapshot before any delete runs in this group.
-      // We only snapshot once per runUpdate invocation (guarded by the
-      // `snapshotTaken` flag below), so a 50-mod update writes one file, not
-      // one per mod. Failure is non-fatal: a missing snapshot must not block
-      // the update the user just clicked.
-      if (!snapshotTaken && resolutions.some((r) => r.file)) {
-        snapshotTaken = true;
-        try {
-          await createSnapshot('pre-update');
-        } catch (err) {
-          console.warn('[Update] failed to capture pre-update snapshot:', err);
-        }
-      }
-
-      const okBatches = new Map<
-        string,
-        {
-          gameBananaId: number;
-          fileId: number;
-          fileName: string;
-          section: string;
-          categoryId: number;
-          promote: boolean;
-          snapshots: Array<(typeof snapshots)[number]>;
-        }
-      >();
-
-      for (const { snapshot, step, file } of resolutions) {
-        if (file) {
-          const batchKey = `${snapshot.gameBananaId}:${file.id}`;
-          const batch =
-            okBatches.get(batchKey) ??
-            {
-              gameBananaId: snapshot.gameBananaId,
-              fileId: file.id,
-              fileName: file.fileName,
-              section: snapshot.section,
-              categoryId: snapshot.categoryId,
-              promote: step.kind === 'update' && step.promote,
-              snapshots: [],
-            };
-          batch.snapshots.push(snapshot);
-          okBatches.set(batchKey, batch);
-          continue;
-        }
-        if (step.kind === 'needs-pick') {
-          needsPick.push({ id: snapshot.oldId, name: snapshot.modName });
-          console.warn(`[Update] ${snapshot.fileName}: deleted on GameBanana and no clear replacement match exists`);
-        }
-        progress += 1;
-        setUpdateAllProgress({ done: progress, total: snapshots.length });
-      }
-
-      for (const batch of okBatches.values()) {
-        try {
-          const restoreEnabled = createEnabledVpkRestoreSnapshot(
-            batch.snapshots.map((snapshot) => ({
-              enabled: snapshot.wasEnabled,
-              vpkIndex: snapshot.vpkIndex,
-              archiveVpkPath: snapshot.archiveVpkPath,
-            })),
-          );
-          const restoreGlobal = createGlobalVpkRestoreSnapshot(
-            batch.snapshots.map((snapshot) => ({
-              priorityMod: snapshot.wasGlobal,
-              vpkIndex: snapshot.vpkIndex,
-              archiveVpkPath: snapshot.archiveVpkPath,
-            })),
-          );
-          if (restoreGlobal.ambiguous) {
-            throw new Error(t('installed.updateAll.ambiguousGlobalState'));
-          }
-          // The successor may already be installed (for example the user got V5
-          // from Browse while V4 stayed). Then the update is a promotion, not
-          // another download: delete the stale install and restore its state
-          // onto the existing file. That file never passed this update's
-          // download gate (it may be one the user kept disabled), so it is
-          // checked before the stale install is deleted.
-          if (batch.promote) {
-            await assertReplacementSafety(
-              visibleMods
-                .filter((mod) => mod.gameBananaId === batch.gameBananaId && mod.gameBananaFileId === batch.fileId)
-                .map((mod) => mod.id),
-            );
-          } else {
-            await downloadMod(
-              batch.gameBananaId,
-              batch.fileId,
-              batch.fileName,
-              batch.section,
-              batch.categoryId,
-              batch.snapshots[0].modName,
-              true,
-            );
-          }
-          await loadMods();
-          const installedAfterDownload = useAppStore.getState().mods;
-          const cleanupTargets = batch.snapshots.map((snapshot) => ({
-            id: snapshot.oldId,
-            gameBananaId: snapshot.gameBananaId,
-            gameBananaFileId: snapshot.gameBananaFileId,
-            vpkIndex: snapshot.vpkIndex,
-            sha256: snapshot.sha256,
-          }));
-          const targetIds = findReplacementTargetIdsAfterInstall(
-            installedAfterDownload,
-            cleanupTargets,
-            batch.fileId,
-          );
-          const targetMods = modsByIds(targetIds, installedAfterDownload);
-          const groupedReplacement = batch.snapshots.some((snapshot) => !!snapshot.localGroupId);
-          let localGroupRestore = planLocalVariantUpdateRestore(
-            batch.snapshots,
-            installedAfterDownload,
-            targetIds,
-            batch.gameBananaId,
-            batch.fileId,
-          );
-          if (groupedReplacement && !localGroupRestore) {
-            throw new Error(t('installed.variants.updateRestoreFailed'));
-          }
-          if (localGroupRestore && restoreGlobal.allGlobal) {
-            const replacementIds = new Set(localGroupRestore.replacementModIds);
-            for (const replacement of installedAfterDownload) {
-              if (replacementIds.has(replacement.id) && !replacement.priorityMod) {
-                await setModPriorityFolder(replacement.id, true);
-              }
-            }
-            await loadMods({ force: true });
-            const installedAfterPriorityRestore = useAppStore.getState().mods;
-            localGroupRestore = planLocalVariantUpdateRestore(
-              batch.snapshots,
-              installedAfterPriorityRestore,
-              targetIds,
-              batch.gameBananaId,
-              batch.fileId,
-            );
-            if (!localGroupRestore) {
-              throw new Error(t('installed.variants.updateRestoreGlobalFailed'));
-            }
-          }
-          if (localGroupRestore) await restoreLocalVariantGroupReplacement(localGroupRestore);
-          for (const target of targetMods) await deleteReplacedMod(target);
-          completed.push({
-            gameBananaId: batch.gameBananaId,
-            gameBananaFileId: batch.fileId,
-            restoreEnabled,
-            restoreGlobal,
-            fileName: batch.fileName,
-          });
-        } catch (err) {
-          for (const snapshot of batch.snapshots) {
-            failures.push(`${snapshot.fileName}: ${String(err)}`);
-          }
-        } finally {
-          progress += batch.snapshots.length;
-          setUpdateAllProgress({ done: progress, total: snapshots.length });
-        }
-      }
-    }
-
-    // Refresh even if every target was skipped and the mod list stayed unchanged.
-    updateCheckCache.invalidate(groups.keys());
-
-    // Refresh once so the new installs are in the store with their new ids,
-    // then restore Global placement and enabled state. Match by GB ids; the
-    // local mod id changes on reinstall.
-    await loadMods({ force: true });
-    const refreshed = useAppStore.getState().mods;
-    for (const c of completed) {
-      if (!c.restoreEnabled.hadEnabled && !c.restoreGlobal.hadGlobal) continue;
-      const newMods = refreshed.filter(
-        (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
-      );
-      const restoreFailures = await restoreReplacementVpkState(
-        newMods,
-        c.restoreEnabled,
-        c.restoreGlobal,
-        {
-          setGlobal: (modId) => setModPriorityFolder(modId, true),
-          enable: async (modId) => {
-            if (!await toggleMod(modId)) throw new Error('Failed to enable replacement mod');
-          },
-        },
-      );
-      for (const failure of restoreFailures) {
-        failures.push(`restore ${failure.action} ${c.fileName}: ${String(failure.error)}`);
-      }
-    }
-    setUpdateAllProgress(null);
-    if (needsPick.length > 0) {
-      setUpdatePickQueue(needsPick);
-    }
-    if (failures.length > 0) {
-      setUpdateAllError(`${failures.length} mod${failures.length === 1 ? '' : 's'} failed to update. See console for details.`);
-      console.warn('[Update] failures:', failures);
-    }
-  };
-
-  /**
-   * Walk the manual-pick queue: open the details modal for the next mod that
-   * still exists so the user can choose the replacement file. The modal's
-   * update path (handleDetailsDownload) handles delete + re-enable.
-   */
-  const openNextUpdatePick = () => {
-    const queue = [...updatePickQueue];
-    while (queue.length > 0) {
-      const next = queue.shift()!;
-      const mod = mods.find((m) => m.id === next.id);
-      if (mod) {
-        setUpdatePickQueue(queue);
-        void openModDetails(mod);
-        return;
-      }
-    }
-    setUpdatePickQueue([]);
   };
 
   const handleUpdateAll = async () => {
     setUpdateAllConfirmOpen(false);
-    setUpdateAllError(null);
-    await runUpdate(mods.filter((m) => updatesAvailable.has(m.id)));
+    await runUpdate(mods.filter((mod) => updatesAvailable.has(mod.id)));
   };
 
-  /**
-   * Update every flagged variant within one grouped mod. Invoked from the
-   * variant picker so the user doesn't have to bounce out to the mod page.
-   */
   const handleUpdateGroup = async (variantIds: readonly string[]) => {
     const groupIds = new Set(variantIds);
-    setUpdateAllError(null);
-    await runUpdate(
-      mods.filter((m) => groupIds.has(m.id) && updatesAvailable.has(m.id)),
-    );
+    await runUpdate(mods.filter((mod) => groupIds.has(mod.id) && updatesAvailable.has(mod.id)));
   };
 
   const exitSelectMode = () => {
@@ -4068,26 +3619,26 @@ export default function Installed() {
     });
   }
   const hasStatusButtons =
-    statusIssues.length > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
+    statusIssues.length > 0 || updatesAvailable.size > 0 || updateBusy || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
       <StatusIssues issues={statusIssues} />
-      {(updatesAvailable.size > 0 || updateAllProgress) && (
+      {(updatesAvailable.size > 0 || updateBusy) && (
         <Button
           variant="primary"
           onClick={() => setUpdateAllConfirmOpen(true)}
           icon={Download}
-          isLoading={!!updateAllProgress}
+          isLoading={updateBusy}
           aria-live="polite"
           title={
-            updateAllProgress
-              ? 'Update in progress. Please wait until all mods finish before starting another.'
-              : "Re-download every mod with a newer version on GameBanana and restore each one's enabled state"
+            updateBusy
+              ? t('installed.updateAll.inProgress')
+              : t('installed.updateAll.hint')
           }
         >
-          {updateAllProgress
-            ? `Updating ${updateAllProgress.done}/${updateAllProgress.total}…`
-            : `Update all (${updatesAvailable.size})`}
+          {updateBusy
+            ? t('installed.updateAll.updating')
+            : t('installed.updateAll.updateCount', { count: updatesAvailable.size })}
         </Button>
       )}
       {unknownMods.length > 0 && fixUnknownHidden && (
@@ -4628,7 +4179,7 @@ export default function Installed() {
 
       <ConfirmModal
         isOpen={updateAllConfirmOpen}
-        title={`Update all (${updatesAvailable.size})?`}
+        title={t('installed.updateAll.confirmTitle', { count: updatesAvailable.size })}
         message={
           <>
             <p className="mb-3">
@@ -4657,63 +4208,11 @@ export default function Installed() {
             })()}
           </>
         }
-        confirmLabel={`Update ${updatesAvailable.size}`}
+        confirmLabel={t('installed.updateAll.updateCount', { count: updatesAvailable.size })}
         variant="primary"
         onConfirm={handleUpdateAll}
         onCancel={() => setUpdateAllConfirmOpen(false)}
       />
-
-      {(updateAllError || updatePickQueue.length > 0) && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-          {updateAllError && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="max-w-md bg-state-danger/10 border border-state-danger/40 text-state-danger rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
-            >
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <div className="flex-1 text-sm text-text-primary">{updateAllError}</div>
-              <button
-                type="button"
-                onClick={() => setUpdateAllError(null)}
-                className="text-state-danger hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-state-danger"
-                aria-label={t('installed.updateAll.dismissError')}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          {updatePickQueue.length > 0 && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="max-w-md bg-bg-secondary border border-accent/40 rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
-            >
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-accent" />
-              <div className="flex-1 text-sm text-text-primary">
-                <p>
-                  {updatePickQueue.length === 1
-                    ? `${updatePickQueue[0].name} needs a manual file pick: the author replaced their files and no clear match exists. The installed version was kept.`
-                    : `${updatePickQueue.length} mods need a manual file pick: the authors replaced their files and no clear match exists. The installed versions were kept.`}
-                </p>
-                <Button size="sm" variant="primary" className="mt-2" onClick={openNextUpdatePick}>
-                  {updatePickQueue.length === 1
-                    ? t('installed.updateAll.pickReplacement', { count: 1 })
-                    : t('installed.updateAll.pickReplacement', { count: updatePickQueue.length })}
-                </Button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setUpdatePickQueue([])}
-                className="text-text-muted hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                aria-label={t('installed.updateAll.dismissPickNotice')}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       <OutdatedVdataModal
         mods={outdatedVdataMods}
@@ -4858,8 +4357,7 @@ export default function Installed() {
                 ? () => handleUpdateGroup(liveEntry.variants.map((variant) => variant.id))
                 : undefined
             }
-            isUpdating={!!updateAllProgress}
-            updateProgress={updateAllProgress}
+            isUpdating={updateBusy}
             onClose={() => setPickerGroupId(null)}
           />
         );

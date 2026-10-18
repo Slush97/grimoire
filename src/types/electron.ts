@@ -1,4 +1,5 @@
 import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
+import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from './modUpdates';
 import type {
     Mod,
     AppSettings,
@@ -113,12 +114,12 @@ export interface DownloadModArgs {
     modName?: string;
     section?: string;
     categoryId?: number;
-    /** The download replaces installed content (an update, a confirmed
-     *  replace, a reinstall, or a merge-source refresh). The caller removes
-     *  what it replaces and restores the enabled and Global state itself, so
-     *  the backend leaves the mod's other files enabled instead of switching
-     *  sibling variants off. */
+    /** Replaces installed content without auto-disabling sibling variants.
+     *  With replacementModIds, main owns cleanup and state restoration.
+     *  Legacy merge/source callers still finalize their own replacement. */
     isReplacement?: boolean;
+    /** Installed sources finalized by main after a successful queued install. */
+    replacementModIds?: string[];
 }
 
 export interface GetCategoriesArgs {
@@ -908,7 +909,6 @@ export interface ElectronAPI {
     deleteMod: (entry: DeleteModEntry) => Promise<DeleteModsResult>;
     deleteMods: (entries: DeleteModEntry[]) => Promise<DeleteModsResult>;
     onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => () => void;
-    assertReplacementSafety: (modIds: string[]) => Promise<void>;
     revealModInFolder: (modId: string) => Promise<void>;
     detectUnknownModFilters: (modId: string, requestId?: string) => Promise<UnknownModFilterGuess>;
     detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) => Promise<UnknownModFilterGuess[]>;
@@ -923,9 +923,6 @@ export interface ElectronAPI {
         modIds: string[],
         target: LocalVariantGroupTarget
     ) => Promise<SetLocalVariantGroupResult>;
-    restoreLocalVariantGroupReplacement: (
-        args: RestoreLocalVariantGroupReplacementArgs
-    ) => Promise<void>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
@@ -1166,6 +1163,11 @@ export interface ElectronAPI {
     getModUpdates: (args: GetModUpdatesArgs) => Promise<GameBananaModUpdatesResponse>;
     getSubmitterLinks: (memberId: number) => Promise<GameBananaArtistLink[]>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
+    startModUpdates: (args: StartModUpdatesArgs) => Promise<void>;
+    getModUpdateState: () => Promise<ModUpdateState>;
+    onModUpdateStateUpdated: (callback: (state: ModUpdateState) => void) => () => void;
+    chooseModUpdateReplacement: (args: ChooseModUpdateReplacementArgs) => Promise<void>;
+    removeModUpdateRequest: (requestId: string) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
     getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;

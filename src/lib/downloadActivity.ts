@@ -43,6 +43,7 @@ let subscribers = 0;
 let backendRevision = 0;
 let stopListening: (() => void) | null = null;
 const listeners = new Set<() => void>();
+const PROGRESS_INTERVAL_MS = 100;
 
 const targetKey = (modId: number, fileId: number) => `${modId}:${fileId}`;
 const itemKey = (item: Pick<DownloadQueueItem, 'modId' | 'fileId'>) =>
@@ -87,6 +88,9 @@ export function applyDownloadExtracting(
 function beginListening() {
   if (stopListening || typeof window === 'undefined') return;
 
+  let active = true;
+  let lastProgressAt: number | null = null;
+  const resetProgressTiming = () => { lastProgressAt = null; };
   const hydrationRevision = backendRevision;
   void Promise.all([
     window.electronAPI.getDownloadQueue(),
@@ -94,14 +98,14 @@ function beginListening() {
   ]).then(([queue, current]) => {
     // An event that arrived while these IPC reads were in flight is newer than
     // the hydration response and must win.
-    if (backendRevision !== hydrationRevision) return;
+    if (!active || backendRevision !== hydrationRevision) return;
     const currentKey = current ? itemKey(current) : null;
     // The two IPC reads are concurrent, so the queue read can observe an item
     // just before it is shifted while the current read observes it just after.
     const hydratedQueue = currentKey ? queue.filter((item) => itemKey(item) !== currentKey) : queue;
     const backendKeys = new Set([...hydratedQueue, ...(current ? [current] : [])].map(itemKey));
-    const switched = itemKey(snapshot.current ?? { modId: 0, fileId: 0 }) !==
-      itemKey(current ?? { modId: 0, fileId: 0 });
+    const switched = (snapshot.current ? itemKey(snapshot.current) : null) !== currentKey;
+    if (switched) resetProgressTiming();
     publish({
       ...snapshot,
       queue: hydratedQueue,
@@ -111,7 +115,7 @@ function beginListening() {
       extracting: switched ? false : snapshot.extracting,
     });
   }).catch((error) => {
-    console.error('[DownloadActivity] Failed to hydrate queue state:', error);
+    if (active) console.error('[DownloadActivity] Failed to hydrate queue state:', error);
   });
 
   const queueUnsub = window.electronAPI.onDownloadQueueUpdated((data) => {
@@ -119,8 +123,9 @@ function beginListening() {
     const backendKeys = new Set(
       [...data.queue, ...(data.currentDownload ? [data.currentDownload] : [])].map(itemKey),
     );
-    const switched = itemKey(snapshot.current ?? { modId: 0, fileId: 0 }) !==
-      itemKey(data.currentDownload ?? { modId: 0, fileId: 0 });
+    const switched = (snapshot.current ? itemKey(snapshot.current) : null) !==
+      (data.currentDownload ? itemKey(data.currentDownload) : null);
+    if (switched) resetProgressTiming();
     publish({
       current: data.currentDownload,
       queue: data.queue,
@@ -131,18 +136,30 @@ function beginListening() {
   });
 
   const progressUnsub = window.electronAPI.onDownloadProgress((data) => {
+    if (!snapshot.current || itemKey(snapshot.current) !== targetKey(data.modId, data.fileId)) return;
+    const now = Date.now();
+    const elapsed = lastProgressAt === null ? Infinity : now - lastProgressAt;
+    const finished = data.total > 0 && data.downloaded >= data.total;
+    // Network chunks can arrive much faster than the UI can paint. Keep first
+    // and final samples immediate without relying on background-throttled frames.
+    if (!finished && elapsed >= 0 && elapsed < PROGRESS_INTERVAL_MS) return;
+    lastProgressAt = now;
     const next = applyDownloadProgress(snapshot, data);
     if (next !== snapshot) publish(next);
   });
 
   const extractingUnsub = window.electronAPI.onDownloadExtracting((data) => {
     const next = applyDownloadExtracting(snapshot, data);
-    if (next !== snapshot) publish(next);
+    if (next !== snapshot) {
+      resetProgressTiming();
+      publish(next);
+    }
   });
 
   const settle = (modId: number, fileId: number) => {
     backendRevision += 1;
     const key = targetKey(modId, fileId);
+    if (snapshot.current && itemKey(snapshot.current) === key) resetProgressTiming();
     publish({
       ...snapshot,
       requested: snapshot.requested.filter((item) => itemKey(item) !== key),
@@ -154,6 +171,7 @@ function beginListening() {
   const errorUnsub = window.electronAPI.onDownloadError(({ modId, fileId }) => settle(modId, fileId));
 
   stopListening = () => {
+    active = false;
     queueUnsub();
     progressUnsub();
     extractingUnsub();
@@ -183,7 +201,12 @@ export function useDownloadActivity(): DownloadActivitySnapshot {
  * byte-progress tick. File-level progress UI should use useDownloadActivity.
  */
 export function useDownloadQueueActivity(): DownloadQueueActivitySnapshot {
-  return useSyncExternalStore(subscribe, () => queueSnapshot, () => EMPTY_SNAPSHOT);
+  return useSyncExternalStore(subscribe, getDownloadQueueActivitySnapshot, () => EMPTY_SNAPSHOT);
+}
+
+/** Queue membership for event handlers that do not need a React subscription. */
+export function getDownloadQueueActivitySnapshot(): DownloadQueueActivitySnapshot {
+  return queueSnapshot;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from '../../src/types/modUpdates';
 import type {
     PortableProfile,
     PortableResolvedMod,
@@ -50,7 +51,6 @@ import type {
     ImportCustomModsBatchArgs,
     ImportCustomModsProgress,
     LocalVariantGroupTarget,
-    RestoreLocalVariantGroupReplacementArgs,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
     ImportSpiritUrnGlbArgs,
@@ -181,7 +181,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('delete-mods-progress', handler);
         return () => ipcRenderer.removeListener('delete-mods-progress', handler);
     },
-    assertReplacementSafety: (modIds: string[]) => ipcRenderer.invoke('assert-replacement-safety', modIds),
     revealModInFolder: (modId: string) => ipcRenderer.invoke('reveal-mod-in-folder', modId),
     healModAttachments: (modId: string) => ipcRenderer.invoke('heal-mod-attachments', modId),
     detectUnknownModFilters: (modId: string, requestId?: string) =>
@@ -207,8 +206,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('edit-local-mod', modId, args),
     setLocalVariantGroup: (modIds: string[], target: LocalVariantGroupTarget) =>
         ipcRenderer.invoke('set-local-variant-group', modIds, target),
-    restoreLocalVariantGroupReplacement: (args: RestoreLocalVariantGroupReplacementArgs) =>
-        ipcRenderer.invoke('restore-local-variant-group-replacement', args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
     setModLockerHero: (modId: string, heroName: string | null) =>
@@ -442,6 +439,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModUpdates: (args: GetModUpdatesArgs) => ipcRenderer.invoke('get-mod-updates', args),
     getSubmitterLinks: (memberId: number) => ipcRenderer.invoke('get-submitter-links', memberId),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
+    startModUpdates: (args: StartModUpdatesArgs) => ipcRenderer.invoke('start-mod-updates', args),
+    getModUpdateState: () => ipcRenderer.invoke('get-mod-update-state'),
+    onModUpdateStateUpdated: (callback: (state: ModUpdateState) => void) => {
+        const listener = (_: unknown, state: ModUpdateState) => callback(state);
+        ipcRenderer.on('mod-update-state-updated', listener);
+        return () => ipcRenderer.removeListener('mod-update-state-updated', listener);
+    },
+    chooseModUpdateReplacement: (args: ChooseModUpdateReplacementArgs) => ipcRenderer.invoke('choose-mod-update-replacement', args),
+    removeModUpdateRequest: (requestId: string) => ipcRenderer.invoke('remove-mod-update-request', requestId),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>
         ipcRenderer.invoke('get-gamebanana-categories', args),

@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => unknown>(),
     load: vi.fn(), save: vi.fn(), exclusive: vi.fn(),
     updater: vi.fn(), background: vi.fn(), bridge: vi.fn(), audit: vi.fn(), hydrate: vi.fn(),
-    copy: vi.fn(),
+    copy: vi.fn(), updateGuard: vi.fn(), copyGuard: vi.fn(),
 }));
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args: unknown[]) => unknown) => h.handlers.set(name, handler) } }));
 vi.mock('../services/settings', () => ({ loadSettings: h.load, saveSettings: h.save, getActiveDeadlockPath: () => 'game' }));
@@ -18,6 +18,7 @@ vi.mock('../services/socialAuth', () => ({ hydrateOnBoot: h.hydrate }));
 vi.mock('../services/deadlock', () => ({ detectDeadlockPath: vi.fn(), looksLikeDeadlockPath: vi.fn() }));
 vi.mock('../services/dev', () => ({ ensureDevDeadlockPath: vi.fn() }));
 vi.mock('../services/devMods', () => ({ copyModsToDev: h.copy }));
+vi.mock('../services/modUpdates', () => ({ assertModUpdateSettingsChange: h.updateGuard, assertNoModUpdates: h.copyGuard }));
 import './settings';
 
 const current = {
@@ -36,9 +37,24 @@ beforeEach(() => {
     h.load.mockReturnValue(current);
     h.exclusive.mockImplementation((operation: () => Promise<void>) => operation());
     h.audit.mockResolvedValue(undefined);
+    h.updateGuard.mockReset();
+    h.copyGuard.mockReset();
 });
 
 describe('developer metadata switching', () => {
+    it('refuses installation changes while update work remains', async () => {
+        h.updateGuard.mockImplementation(() => { throw new Error('Finish or cancel mod updates'); });
+        await expect(setSettings({ ...current, devMode: true })).rejects.toThrow('Finish or cancel mod updates');
+        expect(h.save).not.toHaveBeenCalled();
+    });
+
+    it('checks the update guard again after waiting for other mod mutations', async () => {
+        h.updateGuard.mockImplementationOnce(() => {});
+        h.updateGuard.mockImplementationOnce(() => { throw new Error('Updates started while waiting'); });
+        await expect(setSettings({ ...current, devMode: true })).rejects.toThrow('Updates started while waiting');
+        expect(h.save).not.toHaveBeenCalled();
+    });
+
     it('waits for in-flight mod writes before enabling developer mode', async () => {
         const lock = deferred();
         h.exclusive.mockImplementation(async (operation: () => Promise<void>) => {

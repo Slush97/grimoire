@@ -15,7 +15,6 @@ import {
     enableModUnlocked,
     disableMod,
     deleteMods,
-    assertReplacementSafety,
     setModPriority,
     reorderMods,
     swapModPriority,
@@ -76,9 +75,9 @@ import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerMod
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
 import { assertCompatibleLocalVariantClassifications, planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
-import { planLocalVariantReplacementRestore } from '../services/localVariantReplacement';
+import { refreshEmbedAfterMetadataChange, toLocalVariantGroupMember } from '../services/modReplacement';
 import { resolveImportedVariantLabel } from '../../../src/lib/customModImport';
-import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, RestoreLocalVariantGroupReplacementArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
@@ -453,14 +452,6 @@ ipcMain.handle('delete-mods', async (event, entries: DeleteModEntry[]): Promise<
     return deleteMods(deadlockPath, entries, (progress) => event.sender.send('delete-mods-progress', progress));
 });
 
-ipcMain.handle('assert-replacement-safety', async (_, modIds: string[]): Promise<void> => {
-    const deadlockPath = getActiveDeadlockPath();
-    if (!deadlockPath) {
-        throw new Error('No Deadlock path configured');
-    }
-    await assertReplacementSafety(deadlockPath, modIds);
-});
-
 // detect-unknown-mod-filters
 ipcMain.handle('detect-unknown-mod-filters', async (event, modId: string, requestId?: string): Promise<UnknownModFilterGuess> => {
     const deadlockPath = getActiveDeadlockPath();
@@ -618,47 +609,6 @@ ipcMain.handle(
     }
 );
 
-/**
- * Best-effort embed refresh after a metadata-changing handler (associate /
- * apply-custom / edit-local). A mod identified AFTER it was imprinted would
- * otherwise carry a stale embed until the next bulk run; refreshing here keeps
- * the embedded record in step with the sidecar the moment the user fixes it.
- *
- * Locking: these handlers do NOT run inside runExclusiveModMutation (they call
- * scanMods / setModMetadataWithHash directly, holding no lock), and the mod-
- * mutation lock is a non-reentrant queue, so nesting would deadlock ONLY if we
- * were already inside it. We are not: imprintOneMod acquires the lock itself,
- * so awaiting it here is safe. Awaited (not fire-and-forget) so the refresh is
- * serialized before the handler's response, but failures are swallowed: the
- * metadata change already succeeded, and a missed refresh just leaves the
- * embed stale until the next bulk imprint classifies it eligible again.
- *
- * apply-unknown-mod-match needs no call here: it installs a fresh replacement
- * (imprinted by the download path when the setting is on) and deletes the old
- * file, so no surviving file's sidecar is re-stamped.
- */
-async function refreshEmbedAfterMetadataChange(
-    deadlockPath: string,
-    modId: string,
-    metaKey: string,
-    modPath: string
-): Promise<void> {
-    try {
-        if (!loadSettings().experimentalVpkImprinting) return;
-        // The sidecar flag alone misses a VPK dropped into addons mid-session:
-        // the startup backfill has not seen it, so `imprinted` is unset even
-        // though the file carries an embed, and bailing here would silently
-        // leave the wrong embed in the file after the user just corrected the
-        // identity. Consult the file itself too (the same predicate the
-        // backfill and the import handler use). A foreign embed surviving to
-        // imprintOneMod fails soft into the warn below, unchanged.
-        if (!getModMetadata(metaKey)?.imprinted && !hasAnyImprint(modPath)) return;
-        await imprintOneMod(deadlockPath, modId);
-    } catch (err) {
-        console.warn(`[mods] Post-associate embed refresh failed for ${metaKey}:`, err);
-    }
-}
-
 // apply-unknown-custom-mod
 ipcMain.handle(
     'apply-unknown-custom-mod',
@@ -806,33 +756,6 @@ ipcMain.handle(
     }
 );
 
-function toLocalVariantGroupMember(mod: Mod): LocalVariantGroupMember {
-    const meta = getModMetadata(mod.metaKey);
-    const categoryHero = !meta?.lockerHero
-        ? inferHeroFromTitle(meta?.categoryName || '') ?? undefined
-        : undefined;
-    return {
-        id: mod.id,
-        metaKey: mod.metaKey,
-        // scanMods derives `name` from the filename; the sidecar is what the UI
-        // actually shows, so prefer it.
-        name: meta?.modName ?? mod.name,
-        gameBananaId: meta?.gameBananaId,
-        localGroupId: meta?.localGroupId,
-        // A locally-grouped re-import may retain adopted GameBanana category
-        // provenance. Locker treats that category as a hero even without an
-        // explicit lockerHero, so expose the same effective classification to
-        // the group profile and let new variants inherit it.
-        lockerHero: meta?.lockerHero ?? categoryHero,
-        lockerHeroSource: meta?.lockerHeroSource ?? (categoryHero ? 'title' : undefined),
-        lockerHeroVpkChecked: meta?.lockerHeroVpkChecked,
-        globalType: meta?.globalType,
-        globalTypeClassifierVersion: meta?.globalTypeClassifierVersion,
-        priorityMod: meta?.priorityMod,
-        merged: !!meta?.merged,
-    };
-}
-
 /**
  * set-local-variant-group - make several locally imported VPKs variants of one
  * mod, or take one back out.
@@ -913,53 +836,6 @@ ipcMain.handle(
         // rename invalidates the locked snapshot; only then re-scan.
         const mods = renamed.length > 0 ? await scanMods(deadlockPath) : snapshot;
         return { groupId, mods: mods.map(enrichMod) };
-    }
-);
-
-/**
- * Update-only counterpart to set-local-variant-group. A normal GameBanana mod
- * remains impossible to group through the public grouping planner. This path
- * is allowed only while the old, explicitly grouped member still exists and
- * every replacement carries the exact GB mod/file provenance the update chose.
- */
-ipcMain.handle(
-    'restore-local-variant-group-replacement',
-    async (_, args: RestoreLocalVariantGroupReplacementArgs): Promise<void> => {
-        const deadlockPath = getActiveDeadlockPath();
-        if (!deadlockPath) throw new Error('No Deadlock path configured');
-
-        const changed = await runExclusiveModMutation(async () => {
-            const all = await scanMods(deadlockPath);
-            const members = all.map((mod) => ({
-                ...toLocalVariantGroupMember(mod),
-                gameBananaFileId: getModMetadata(mod.metaKey)?.gameBananaFileId,
-            }));
-            const plan = planLocalVariantReplacementRestore(members, args);
-            const classification = {
-                ...plan.classification,
-                globalTypeClassifierVersion:
-                    plan.classification.globalTypeClassifierVersion ??
-                    GLOBAL_CLASSIFIER_VERSION,
-            };
-            const changedMods: Mod[] = [];
-            for (const metaKey of plan.replacementMetaKeys) {
-                const mod = all.find((candidate) => candidate.metaKey === metaKey);
-                if (!mod) throw new Error(`Replacement metadata target disappeared: ${metaKey}`);
-                setModMetadata(metaKey, {
-                    localGroupId: plan.groupId,
-                    modName: plan.modName,
-                    ...classification,
-                });
-                changedMods.push(mod);
-            }
-            return changedMods;
-        }, { healPath: deadlockPath });
-
-        // The group name is part of the imprint metadata. Refresh only after
-        // releasing the non-reentrant mutation lock, matching local renames.
-        for (const mod of changed) {
-            await refreshEmbedAfterMetadataChange(deadlockPath, mod.id, mod.metaKey, mod.path);
-        }
     }
 );
 

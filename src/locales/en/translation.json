@@ -1472,12 +1472,19 @@
     "updateAll": {
       "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",
       "receivingUpdates": "Mods receiving updates ({{count}})",
-      "dismissError": "Dismiss update error",
-      "restoreStateFailed": "The mod was updated, but its previous state could not be fully restored ({{details}})",
-      "ambiguousGlobalState": "This update was not applied because the old multi-file install has mixed Global placement and no saved variant identities. Make every file Global or remove every file from Global, then try again.",
-      "pickReplacement_one": "Pick replacement",
-      "pickReplacement_other": "Pick replacements ({{count}})",
-      "dismissPickNotice": "Dismiss manual pick notice"
+      "updateCount": "Update ({{count}})",
+      "updating": "Updating",
+      "confirmTitle": "Update ({{count}})?",
+      "inProgress": "Updates are in progress. Resolve or cancel pending replacements to finish.",
+      "hint": "Download available updates and restore each mod's enabled state.",
+      "manualNotice": "{{name}} needs a manual replacement. Its installed files were kept.",
+      "chooseReplacement": "Choose replacement",
+      "needsManualReplacement": "Needs manual replacement",
+      "cancelRequest": "Cancel this update",
+      "cancelFailed": "Could not cancel this update.",
+      "failed": "Could not update {{name}}.",
+      "loadReplacementFailed": "Could not load replacement choices. Try again from the download queue.",
+      "replacementFailed": "Could not replace this file. Your installed version was kept."
     },
     "delete": {
       "title": "Delete Mod?",
@@ -1493,8 +1500,7 @@
       "groupConfirm_other": "Delete {{count}}",
       "progress": "Deleting {{done}} of {{total}}...",
       "skipped_one": "{{count}} mod changed since you selected it and was not deleted.",
-      "skipped_other": "{{count}} mods changed since you selected them and were not deleted.",
-      "replacedChanged": "The old file changed during the update, so it was kept and the update stopped. Refresh and try again."
+      "skipped_other": "{{count}} mods changed since you selected them and were not deleted."
     },
     "details": {
       "loading": "Loading mod details...",
@@ -3084,8 +3090,7 @@
     "updateInProgress": "Update already in progress",
     "updateGroupHint_one": "Re-download {{count}} file and restore its enabled state",
     "updateGroupHint_other": "Re-download {{count}} files and restore their enabled state",
-    "updatingProgress": "Updating {{done}}/{{total}}",
-    "updateCount": "Update {{count}}"
+    "updateCount": "Update ({{count}})"
   },
   "imageContextMenu": {
     "image": "Image",

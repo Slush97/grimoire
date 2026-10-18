@@ -79,6 +79,10 @@ async function planCopy(source: string, destination: string, plan: CopyPlan, ski
 
 let copying = false;
 
+export function isCopyingModsToDev(): boolean {
+    return copying;
+}
+
 /** Explicitly replace the sandbox library without changing the normal install. */
 export async function copyModsToDev(onProgress?: (percent: number) => void): Promise<void> {
     if (copying) throw new Error('Mods are already being copied to developer mode.');

@@ -30,6 +30,7 @@ import type {
     GetCategoriesArgs,
 } from '../../../src/types/electron';
 import { updateModNsfw } from '../services/modDatabase';
+import { modUpdates } from '../services/modUpdates';
 
 // browse-mods
 ipcMain.handle(
@@ -75,7 +76,8 @@ ipcMain.handle('download-mod', async (_, args: DownloadModArgs): Promise<void> =
         throw new Error('No Deadlock path configured');
     }
     const mainWindow = getMainWindow();
-    await downloadMod(deadlockPath, args, mainWindow);
+    if (args.replacementModIds?.length) await modUpdates.replace(args);
+    else await downloadMod(deadlockPath, args, mainWindow);
 });
 
 // get-download-queue
