@@ -613,7 +613,10 @@ export default function VariantPickerModal({
                                     size="sm"
                                     icon={Download}
                                     isLoading={isUpdating}
-                                    onClick={() => void onUpdateGroup()}
+                                    onClick={() => {
+                                        void onUpdateGroup();
+                                        onClose();
+                                    }}
                                     title={
                                         isUpdating
                                             ? t('variantPicker.updateInProgress')
