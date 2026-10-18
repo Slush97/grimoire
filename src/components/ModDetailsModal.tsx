@@ -606,7 +606,8 @@ function ModDetailsModal({
     const isDownloadingThis =
       fileDownload.phase === 'starting' ||
       fileDownload.phase === 'downloading' ||
-      fileDownload.phase === 'extracting';
+      fileDownload.phase === 'extracting' ||
+      fileDownload.phase === 'finishing';
     const isQueuedThis = fileDownload.phase === 'queued';
     // Only this row's own download/queue state should lock its buttons. A
     // download in progress on a *different* file must leave this row clickable
@@ -800,9 +801,11 @@ function ModDetailsModal({
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {fileDownload.phase === 'extracting'
                   ? t('modDetails.status.extracting')
-                  : pct !== null
-                    ? `${pct}%`
-                    : t('modDetails.status.starting')}
+                  : fileDownload.phase === 'finishing'
+                    ? t('modDetails.status.finishing')
+                    : pct !== null
+                      ? `${pct}%`
+                      : t('modDetails.status.starting')}
               </>
             ) : isQueuedThis ? (
               <>

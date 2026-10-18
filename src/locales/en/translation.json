@@ -2963,6 +2963,7 @@
       "queued": "Queued",
       "starting": "Starting",
       "extracting": "Extracting...",
+      "finishing": "Finishing...",
       "updatesIgnored": "Updates ignored",
       "archivedByAuthor": "Archived by author",
       "archivedByAuthorTitle": "The author archived the file you have. Grimoire found no clear replacement for it, so it is not treated as an update."

@@ -6,8 +6,10 @@ import type { DownloadEventData, DownloadProgressData, DownloadQueueData, Downlo
 import {
   applyDownloadExtracting,
   applyDownloadProgress,
+  acknowledgeDownloadCompletions,
   cancelDownloadRequest,
   getVisibleDownloadQueue,
+  getPendingDownloadCompletions,
   isDownloadRequestPending,
   isModDownloadPending,
   requestDownload,
@@ -22,6 +24,7 @@ const state = (over: Partial<DownloadActivitySnapshot> = {}): DownloadActivitySn
   current: null,
   queue: [],
   requested: [],
+  finishing: [],
   progress: null,
   extracting: false,
   ...over,
@@ -58,6 +61,7 @@ describe('download progress subscriptions', () => {
   }
 
   beforeEach(async () => {
+    acknowledgeDownloadCompletions(getPendingDownloadCompletions());
     now = 1000;
     renders = 0;
     queueRenders = 0;
@@ -144,6 +148,38 @@ describe('download progress subscriptions', () => {
     now++;
     act(() => progress(sample(0)));
     expect(latest.progress?.downloaded).toBe(0);
+  });
+
+  it('keeps a completed file busy after the FIFO advances until its library refresh is acknowledged', () => {
+    const completed = { ...active, jobId: 'completed' };
+    act(() => showCurrent(completed));
+    act(() => complete(completed));
+    const captured = getPendingDownloadCompletions();
+    act(() => showCurrent(item(7, 11)));
+
+    expect(selectFileDownloadActivity(latest, 7, 10)).toEqual({ phase: 'finishing' });
+    expect(requestDownload(active)).toBe(false);
+    expect(getVisibleDownloadQueue(latest)).toEqual({ current: item(7, 11), queue: [] });
+
+    act(() => acknowledgeDownloadCompletions(captured));
+    expect(selectFileDownloadActivity(latest, 7, 10)).toEqual({ phase: 'idle' });
+  });
+
+  it('acknowledges only the completions captured before a scan and preserves newer jobs of the same target', () => {
+    const first = { ...active, jobId: 'first' };
+    act(() => complete(first));
+    const captured = getPendingDownloadCompletions();
+    const later = { ...active, jobId: 'later' };
+    act(() => complete(later));
+    act(() => acknowledgeDownloadCompletions(captured));
+    expect(getPendingDownloadCompletions()).toEqual([later]);
+  });
+
+  it('does not retain failed or canceled jobs as completed installs', () => {
+    act(() => fail(active));
+    act(() => queue({ queue: [], count: 0, currentDownload: null }));
+    expect(selectFileDownloadActivity(latest, 7, 10)).toEqual({ phase: 'idle' });
+    expect(getPendingDownloadCompletions()).toEqual([]);
   });
 
   it('hydrates phase and saved bytes after a UI subscription restarts', async () => {

@@ -9,6 +9,7 @@ import { showToast } from './toastStore';
 import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
+import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
@@ -782,6 +783,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const silent = opts?.silent ?? get().modsLoaded;
     const gen = ++modsGeneration;
+    const completedDownloads = getPendingDownloadCompletions();
     if (!silent) set({ modsLoading: true, modsError: null });
     const promise = (async () => {
       try {
@@ -822,6 +824,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               shuffleVariants: migrated.shuffleVariants,
             });
           }
+          acknowledgeDownloadCompletions(completedDownloads);
         } else if (!silent) {
           // Superseded by a newer load/mutation: drop the stale list, but still
           // clear our own spinner so the page doesn't hang on it.

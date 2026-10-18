@@ -71,6 +71,9 @@ window so transfer chunks cannot continually redraw the whole queue.
 Focus refreshes skip active update transfers. Job completions wait for any
 older library scan, then share a fresh scan so replaced files stay current even
 while manual choices remain. The batch also refreshes when it settles.
+Completed files stay busy in details views until a successful library scan that
+started after completion has published its results. Advancing the queue cannot
+briefly expose the predecessor's stale Update or Replace action during that gap.
 
 Selecting a manual replacement reserves its source and appends a FIFO job.
 Other unresolved source files remain available. A failed choice returns for

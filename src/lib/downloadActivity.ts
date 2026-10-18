@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import type { DownloadQueueItem } from '../types/electron';
+import type { DownloadEventData, DownloadQueueItem } from '../types/electron';
 
 export interface DownloadActivitySnapshot {
   current: DownloadQueueItem | null;
   queue: DownloadQueueItem[];
   requested: DownloadQueueItem[];
+  /** Successful installs awaiting a library scan that started after completion. */
+  finishing: readonly DownloadEventData[];
   progress: { downloaded: number; total: number } | null;
   extracting: boolean;
 }
@@ -20,12 +22,14 @@ export type FileDownloadActivity =
   | { phase: 'starting'; progress: null }
   | { phase: 'downloading'; progress: { downloaded: number; total: number } | null }
   | { phase: 'extracting'; progress: { downloaded: number; total: number } | null }
+  | { phase: 'finishing' }
   | { phase: 'queued'; position: number };
 
 const EMPTY_SNAPSHOT: DownloadActivitySnapshot = {
   current: null,
   queue: [],
   requested: [],
+  finishing: [],
   progress: null,
   extracting: false,
 };
@@ -134,6 +138,7 @@ function beginListening() {
     const switched = jobKey(snapshot.current) !== jobKey(data.currentDownload);
     if (switched) resetProgressTiming();
     publish({
+      ...snapshot,
       current: data.currentDownload,
       queue: data.queue,
       requested: snapshot.requested.filter((item) => !backendKeys.has(itemKey(item))),
@@ -165,7 +170,8 @@ function beginListening() {
     }
   });
 
-  const settle = (modId: number, fileId: number, jobId?: string) => {
+  const settle = (data: DownloadEventData, succeeded: boolean) => {
+    const { modId, fileId, jobId } = data;
     backendRevision += 1;
     const key = targetKey(modId, fileId);
     const activeSettled = snapshot.current && itemKey(snapshot.current) === key
@@ -173,13 +179,16 @@ function beginListening() {
     if (activeSettled) resetProgressTiming();
     publish({
       ...snapshot,
+      finishing: succeeded
+        ? [...snapshot.finishing.filter(item => !sameCompletion(item, data)), data]
+        : snapshot.finishing,
       requested: snapshot.requested.filter((item) => itemKey(item) !== key),
       progress: activeSettled ? null : snapshot.progress,
       extracting: activeSettled ? false : snapshot.extracting,
     });
   };
-  const completeUnsub = window.electronAPI.onDownloadComplete(({ modId, fileId, jobId }) => settle(modId, fileId, jobId));
-  const errorUnsub = window.electronAPI.onDownloadError(({ modId, fileId, jobId }) => settle(modId, fileId, jobId));
+  const completeUnsub = window.electronAPI.onDownloadComplete(data => settle(data, true));
+  const errorUnsub = window.electronAPI.onDownloadError(data => settle(data, false));
 
   stopListening = () => {
     active = false;
@@ -220,6 +229,21 @@ export function getDownloadQueueActivitySnapshot(): DownloadQueueActivitySnapsho
   return queueSnapshot;
 }
 
+function sameCompletion(a: DownloadEventData, b: DownloadEventData): boolean {
+  return a.modId === b.modId && a.fileId === b.fileId && a.jobId === b.jobId;
+}
+
+/** Capture before scanning so an older read cannot release a newer completion. */
+export function getPendingDownloadCompletions(): readonly DownloadEventData[] {
+  return snapshot.finishing;
+}
+
+/** Called only after the fresh installed state has been published. */
+export function acknowledgeDownloadCompletions(completions: readonly DownloadEventData[]): void {
+  const finishing = snapshot.finishing.filter(item => !completions.some(completion => sameCompletion(item, completion)));
+  if (finishing.length !== snapshot.finishing.length) publish({ ...snapshot, finishing });
+}
+
 /**
  * Optimistically marks a click before the backend queue event crosses IPC.
  * Returns false for a duplicate target, providing a synchronous double-click
@@ -230,6 +254,7 @@ export function requestDownload(item: DownloadQueueItem): boolean {
   if (snapshot.current && itemKey(snapshot.current) === key) return false;
   if (snapshot.queue.some((queued) => itemKey(queued) === key)) return false;
   if (snapshot.requested.some((requested) => itemKey(requested) === key)) return false;
+  if (snapshot.finishing.some(item => targetKey(item.modId, item.fileId) === key)) return false;
   publish({ ...snapshot, requested: [...snapshot.requested, item] });
   return true;
 }
@@ -280,6 +305,7 @@ export function selectFileDownloadActivity(
     }
     return { phase: 'queued', position: state.queue.length + requestIndex + 1 };
   }
+  if (state.finishing.some(item => targetKey(item.modId, item.fileId) === key)) return { phase: 'finishing' };
   return { phase: 'idle' };
 }
 

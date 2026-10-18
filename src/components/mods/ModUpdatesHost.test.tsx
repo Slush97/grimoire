@@ -11,7 +11,7 @@ import { ModUpdateNotices, ModUpdateReplacementHost } from './ModUpdatesHost';
 
 const mocks = vi.hoisted(() => ({
   app: { mods: [] as Mod[], settings: null, loadMods: vi.fn() },
-  activity: { current: null, queue: [], requested: [], progress: null, extracting: false } as DownloadActivitySnapshot,
+  activity: { current: null, queue: [], requested: [], finishing: [], progress: null, extracting: false } as DownloadActivitySnapshot,
   details: vi.fn(), choose: vi.fn(), remove: vi.fn(), toast: vi.fn(),
   progressListener: null as ((data: DownloadProgressData) => void) | null,
   errorListener: null as ((data: DownloadErrorData) => void) | null,
@@ -49,7 +49,7 @@ describe('update queue and replacement notices', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.app.mods = [];
-    mocks.activity = { current: null, queue: [], requested: [], progress: null, extracting: false };
+    mocks.activity = { current: null, queue: [], requested: [], finishing: [], progress: null, extracting: false };
     mocks.modalProps = null;
     mocks.progressListener = null;
     mocks.errorListener = null;

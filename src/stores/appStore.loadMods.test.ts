@@ -3,6 +3,12 @@ import type { Mod } from '../types/mod';
 import * as api from '../lib/api';
 import { useAppStore } from './appStore';
 
+const completions = vi.hoisted(() => ({ pending: vi.fn(), acknowledge: vi.fn() }));
+vi.mock('../lib/downloadActivity', () => ({
+  getPendingDownloadCompletions: completions.pending,
+  acknowledgeDownloadCompletions: completions.acknowledge,
+}));
+
 vi.mock('../i18n', () => ({
   default: { t: (key: string) => key },
   applyLanguagePreference: vi.fn(),
@@ -31,6 +37,8 @@ function mod(id: string): Mod {
 describe('appStore loadMods refreshes', () => {
   beforeEach(() => {
     getMods.mockReset();
+    completions.pending.mockReset().mockReturnValue([]);
+    completions.acknowledge.mockReset();
     useAppStore.setState({
       mods: [],
       modsLoaded: false,
@@ -134,5 +142,45 @@ describe('appStore loadMods refreshes', () => {
     await useAppStore.getState().loadMods({ silent: true, afterCurrent: true });
     expect(getMods).toHaveBeenCalledOnce();
     expect(useAppStore.getState().mods.map((entry) => entry.id)).toEqual(['updated']);
+  });
+
+  it('releases completed file actions only after publishing the refreshed installed mods', async () => {
+    const captured = [{ modId: 7, fileId: 10, jobId: 'completed' }];
+    completions.pending.mockReturnValue(captured);
+    getMods.mockResolvedValueOnce([mod('updated')]);
+    completions.acknowledge.mockImplementation(() => {
+      expect(useAppStore.getState().mods.map(entry => entry.id)).toEqual(['updated']);
+    });
+    await useAppStore.getState().loadMods({ silent: true });
+    expect(completions.acknowledge).toHaveBeenCalledExactlyOnceWith(captured);
+  });
+
+  it('does not release completions that arrive after a scan starts or from a superseded scan', async () => {
+    let resolveOld!: (mods: Mod[]) => void;
+    let resolveFresh!: (mods: Mod[]) => void;
+    const oldCompletion = [{ modId: 7, fileId: 10, jobId: 'old' }];
+    const laterCompletions = [...oldCompletion, { modId: 7, fileId: 11, jobId: 'later' }];
+    completions.pending.mockReturnValueOnce(oldCompletion).mockReturnValueOnce(laterCompletions);
+    getMods
+      .mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveFresh = resolve; }));
+    const old = useAppStore.getState().loadMods({ silent: true });
+    const fresh = useAppStore.getState().loadMods({ silent: true, force: true });
+    resolveOld([mod('stale')]);
+    await old;
+    expect(completions.acknowledge).not.toHaveBeenCalled();
+    resolveFresh([mod('updated')]);
+    await fresh;
+    expect(completions.acknowledge).toHaveBeenCalledExactlyOnceWith(laterCompletions);
+  });
+
+  it('retains completed actions when the refresh fails so stale update actions stay unavailable', async () => {
+    const captured = [{ modId: 7, fileId: 10 }];
+    completions.pending.mockReturnValue(captured);
+    getMods.mockRejectedValueOnce(new Error('scan failed')).mockResolvedValueOnce([mod('updated')]);
+    await useAppStore.getState().loadMods({ silent: true });
+    expect(completions.acknowledge).not.toHaveBeenCalled();
+    await useAppStore.getState().loadMods({ silent: true });
+    expect(completions.acknowledge).toHaveBeenCalledExactlyOnceWith(captured);
   });
 });

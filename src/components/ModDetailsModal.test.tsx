@@ -10,12 +10,13 @@ import PreferencesSection from './settings/sections/PreferencesSection';
 const mocks = vi.hoisted(() => ({
   store: { settings: {} as AppSettings, soundVolume: 1, saveSettings: vi.fn() },
   replace: vi.fn(), download: vi.fn(), translate: (key: string) => key,
+  filePhase: 'idle' as 'idle' | 'queued' | 'finishing',
 }));
 vi.mock('../stores/appStore', () => ({ useAppStore: (selector: (state: typeof mocks.store) => unknown) => selector(mocks.store) }));
 vi.mock('../lib/api', () => ({ getModComments: vi.fn(), getModUpdates: vi.fn() }));
 vi.mock('../lib/downloadActivity', () => ({
   useDownloadActivity: () => ({ current: null, queue: [], requested: [], progress: null, extracting: false }),
-  selectFileDownloadActivity: () => ({ phase: 'idle' }),
+  selectFileDownloadActivity: () => mocks.filePhase === 'queued' ? { phase: 'queued', position: 1 } : { phase: mocks.filePhase },
 }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: mocks.translate }),
@@ -50,6 +51,7 @@ describe('file replacement preferences', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.filePhase = 'idle';
     mocks.store.settings = {} as AppSettings;
     mocks.store.saveSettings.mockImplementation(async (settings: AppSettings) => { mocks.store.settings = settings; });
     previousApi = window.electronAPI;
@@ -74,6 +76,31 @@ describe('file replacement preferences', () => {
     await render(false, { ignoreUpdates: true, onToggleIgnoreUpdates: toggle });
     await act(async () => button('modDetails.status.updatesIgnored').click());
     expect(toggle).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a completed automatic update hidden while its library refresh is pending in manual replacement', async () => {
+    const stale = { updateFileIds: new Set([30]), replaceableFiles: [] };
+    await render(false, stale);
+    expect(button('profiles.actions.update')).toBeDefined();
+    mocks.filePhase = 'queued';
+    await render(false, stale);
+    expect(host.textContent).not.toContain('profiles.actions.update');
+    mocks.filePhase = 'finishing';
+    await render(false, stale);
+    expect(host.textContent).not.toContain('profiles.actions.update');
+    mocks.filePhase = 'idle';
+    await render(false, { installedFileIds: new Set([30]), replaceableFiles: [] });
+    expect(host.textContent).not.toContain('profiles.actions.update');
+    expect(host.textContent).not.toContain('modDetails.actions.install');
+  });
+
+  it('keeps ordinary download actions disabled while the library refresh finishes', async () => {
+    mocks.filePhase = 'finishing';
+    await render(false, { manualReplacement: false, updateFileIds: new Set([30]), replaceableFiles: [] });
+    const finishing = button('modDetails.status.finishing');
+    expect(finishing.disabled).toBe(true);
+    await act(async () => finishing.click());
+    expect(mocks.download).not.toHaveBeenCalled();
   });
 
   it('keeps the warning enabled when a checked confirmation is canceled', async () => {
