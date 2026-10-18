@@ -137,6 +137,22 @@ describe('update queue and replacement notices', () => {
     expect(host.textContent).toContain('/s');
   });
 
+  it('resets speed when another job starts for the same file', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+    mocks.activity.current = { jobId: 'first', modId: 10, fileId: 30, fileName: 'active.zip' };
+    await render(<DownloadQueueIndicator />);
+    await act(async () => mocks.progressListener!({ jobId: 'first', modId: 10, fileId: 30, downloaded: 0, total: 1000 }));
+    clock.mockReturnValue(250);
+    await act(async () => mocks.progressListener!({ jobId: 'first', modId: 10, fileId: 30, downloaded: 250, total: 1000 }));
+    expect(host.textContent).toContain('/s');
+    mocks.activity = { ...mocks.activity, current: { ...mocks.activity.current, jobId: 'second' } };
+    await render(<DownloadQueueIndicator />);
+    expect(host.textContent).not.toContain('/s');
+    clock.mockReturnValue(500);
+    await act(async () => mocks.progressListener!({ jobId: 'first', modId: 10, fileId: 30, downloaded: 500, total: 1000 }));
+    expect(host.textContent).not.toContain('/s');
+  });
+
   it('places manual groups after actual queued downloads and supports canceling the group', async () => {
     mocks.activity.queue = [{ modId: 11, fileId: 30, fileName: 'automatic.zip' }];
     await render(<DownloadQueueIndicator />);
@@ -144,6 +160,8 @@ describe('update queue and replacement notices', () => {
     const rows = [...host.querySelectorAll('li')];
     expect(rows[0].textContent).toContain('automatic.zip');
     expect(rows[1].textContent).toContain('Manual mod');
+    expect(rows[0].querySelector('span')?.textContent).toBe('1');
+    expect(rows[1].querySelectorAll('span')[1]?.textContent).toBe('2');
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="installed.updateAll.cancelRequest"]')!.click());
     expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(request.id);
   });

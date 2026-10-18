@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DownloadEventData, DownloadProgressData, DownloadQueueData, ElectronAPI } from '../types/electron';
+import type { DownloadEventData, DownloadProgressData, DownloadQueueData, DownloadQueueItem, ElectronAPI } from '../types/electron';
 import {
   applyDownloadExtracting,
   applyDownloadProgress,
@@ -44,7 +44,7 @@ describe('download progress subscriptions', () => {
   let previousApi: ElectronAPI;
   const active = item(7, 10);
   const sample = (downloaded: number, total = 1000) => ({ modId: 7, fileId: 10, downloaded, total });
-  const showCurrent = (current = active) => queue({ queue: [], count: 0, currentDownload: current });
+  const showCurrent = (current: DownloadQueueItem = active) => queue({ queue: [], count: 0, currentDownload: current });
 
   function ActivityProbe() {
     latest = useDownloadActivity();
@@ -115,6 +115,70 @@ describe('download progress subscriptions', () => {
     expect(latest.progress).toBeNull();
     act(() => progress({ ...sample(3), fileId: 11 }));
     expect(latest.progress?.downloaded).toBe(3);
+  });
+
+  it('hydrates retained progress when switching jobs and keeps paused queue snapshots', () => {
+    const paused = { ...active, jobId: 'first', phase: 'paused' as const, progress: { downloaded: 350, total: 1000 } };
+    act(() => queue({ queue: [paused], count: 1, currentDownload: { ...item(7, 11), jobId: 'second', phase: 'downloading', progress: { downloaded: 80, total: 200 } } }));
+    expect(latest.progress).toEqual({ downloaded: 80, total: 200 });
+    expect(latest.queue).toEqual([paused]);
+    act(() => queue({ queue: [], count: 0, currentDownload: { ...paused, phase: 'downloading' } }));
+    expect(latest.progress).toEqual(paused.progress);
+  });
+
+  it('resets presentation for a different job of the same target and ignores stale job samples', () => {
+    act(() => showCurrent({ ...active, jobId: 'old', phase: 'installing' }));
+    expect(latest.extracting).toBe(true);
+    act(() => showCurrent({ ...active, jobId: 'new', phase: 'downloading', progress: { downloaded: 20, total: 100 } }));
+    expect(latest.extracting).toBe(false);
+    act(() => progress({ ...sample(900), jobId: 'old' }));
+    expect(latest.progress).toEqual({ downloaded: 20, total: 100 });
+    act(() => progress({ ...sample(30, 100), jobId: 'new' }));
+    expect(latest.progress).toEqual({ downloaded: 30, total: 100 });
+    act(() => complete({ ...active, jobId: 'old' }));
+    expect(latest.progress).toEqual({ downloaded: 30, total: 100 });
+  });
+
+  it('publishes safe transfer restarts immediately rather than retaining stale paused progress', () => {
+    act(() => progress(sample(700)));
+    now++;
+    act(() => progress(sample(0)));
+    expect(latest.progress?.downloaded).toBe(0);
+  });
+
+  it('hydrates phase and saved bytes after a UI subscription restarts', async () => {
+    act(() => root.unmount());
+    vi.spyOn(window.electronAPI, 'getCurrentDownload').mockResolvedValue({
+      ...item(8, 12), jobId: 'restored', phase: 'finalizing', progress: { downloaded: 100, total: 100 },
+    });
+    root = createRoot(host);
+    await act(async () => root.render(createElement(ActivityProbe)));
+    expect(latest.current?.jobId).toBe('restored');
+    expect(latest.progress).toEqual({ downloaded: 100, total: 100 });
+    expect(latest.extracting).toBe(true);
+  });
+
+  it('refreshes saved bytes for the same job after resubscribing', async () => {
+    act(() => showCurrent({ ...active, jobId: 'same', progress: { downloaded: 20, total: 100 } }));
+    act(() => root.unmount());
+    vi.spyOn(window.electronAPI, 'getCurrentDownload').mockResolvedValue({
+      ...active, jobId: 'same', phase: 'downloading', progress: { downloaded: 70, total: 100 },
+    });
+    root = createRoot(host);
+    await act(async () => root.render(createElement(ActivityProbe)));
+    expect(latest.progress).toEqual({ downloaded: 70, total: 100 });
+  });
+
+  it('preserves distinct backend jobs sharing a synthetic one-click target during hydration', async () => {
+    act(() => root.unmount());
+    const queued = { ...item(-1, -1), jobId: 'waiting' };
+    const current = { ...item(-1, -1), jobId: 'active' };
+    vi.spyOn(window.electronAPI, 'getCurrentDownload').mockResolvedValue(current);
+    vi.spyOn(window.electronAPI, 'getDownloadQueue').mockResolvedValue([current, queued]);
+    root = createRoot(host);
+    await act(async () => root.render(createElement(ActivityProbe)));
+    expect(latest.current).toEqual(current);
+    expect(latest.queue).toEqual([queued]);
   });
 
   it('ignores hydration from a subscription that has been removed', async () => {

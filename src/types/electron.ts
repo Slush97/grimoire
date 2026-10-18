@@ -535,6 +535,7 @@ export interface StopGameResult {
 }
 
 export interface DownloadProgressData {
+    jobId?: string;
     modId: number;
     fileId: number;
     downloaded: number;
@@ -542,6 +543,7 @@ export interface DownloadProgressData {
 }
 
 export interface DownloadServerStatusData {
+    jobId?: string;
     modId: number;
     fileId: number;
     server: string;
@@ -567,11 +569,13 @@ export interface GameBananaFileServerDiagnostics {
 }
 
 export interface DownloadEventData {
+    jobId?: string;
     modId: number;
     fileId: number;
 }
 
 export interface DownloadErrorData {
+    jobId?: string;
     modId: number;
     fileId: number;
     errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
@@ -587,6 +591,10 @@ export interface ModsAutoDisabledData {
 }
 
 export interface DownloadQueueItem {
+    /** Assigned by main. Optimistic renderer requests have no job id yet. */
+    jobId?: string;
+    phase?: 'queued' | 'preparing' | 'downloading' | 'paused' | 'installing' | 'finalizing';
+    progress?: { downloaded: number; total: number };
     modId: number;
     fileId: number;
     fileName: string;
@@ -1228,10 +1236,12 @@ export interface ElectronAPI {
 
     // Download Queue
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
+    moveQueuedDownload: (jobId: string, beforeJobId: string | null) => Promise<boolean>;
+    prioritizeQueuedDownload: (jobId: string) => Promise<boolean>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number, fileId?: number) => Promise<boolean>;
     cancelActiveDownload: () => Promise<boolean>;
-    cancelDownloadTarget: (modId: number, fileId: number) => Promise<boolean>;
+    cancelDownloadTarget: (modId: number, fileId: number, jobId?: string) => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler

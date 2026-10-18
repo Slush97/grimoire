@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import type { FileHandle } from 'fs/promises';
 import http, { type IncomingHttpHeaders, type IncomingMessage } from 'http';
 import https from 'https';
+import { finished } from 'stream/promises';
 import { describeNetworkError } from './networkErrors';
 import { isAllowedGameBananaDownloadHostname } from './security';
 
@@ -18,16 +19,46 @@ export interface DownloadTransferOptions {
     mirrorConnectionTimeoutMs?: number;
     stallTimeoutMs?: number;
     signal?: AbortSignal;
+    pauseSignal?: AbortSignal;
+    checkpoint?: DownloadTransferCheckpoint;
+    resolveRedirectCandidates?: (redirectUrl: string, signal?: AbortSignal) => Promise<readonly string[] | undefined>;
     onServerStatus?: (status: DownloadServerStatus) => void;
 }
 
 const DEFAULT_MIRROR_CONNECTION_TIMEOUT_MS = 10_000;
 
 type Validator = { header: 'ETag' | 'Last-Modified'; value: string };
-type TransferState = { total?: number; validator?: Validator };
+
+/** Retained only by one queued job, alongside its partial archive. */
+export interface DownloadTransferCheckpoint {
+    total?: number;
+    validator?: Validator;
+    candidateUrl?: string;
+    candidateUrls?: readonly string[];
+    destinationPath?: string;
+}
+
+export class DownloadSuspendedError extends Error {
+    constructor() {
+        super('DOWNLOAD_SUSPENDED');
+        this.name = 'DownloadSuspendedError';
+    }
+}
+
+export function isDownloadSuspended(error: unknown): error is DownloadSuspendedError {
+    return error instanceof DownloadSuspendedError;
+}
 
 class RetryableTransferError extends Error { }
 class RestartTransferError extends RetryableTransferError { }
+class RedirectCandidates extends Error {
+    readonly urls: readonly string[];
+
+    constructor(urls: readonly string[]) {
+        super('Download route selected');
+        this.urls = urls;
+    }
+}
 class FatalDiskError extends Error {
     constructor(error: unknown) {
         super(error instanceof Error ? error.message : String(error), { cause: error });
@@ -133,8 +164,15 @@ async function singleResponse(
             settled = true;
             clearTimeout(timeout);
             signal?.removeEventListener('abort', abort);
-            if (error) reject(error);
-            else resolve(response!);
+            if (error) {
+                // A suspended job must not release the FIFO while its socket is
+                // still open, including requests waiting for response headers.
+                if (request.closed) reject(error);
+                else {
+                    request.once('close', () => reject(error));
+                    request.destroy();
+                }
+            } else resolve(response!);
         };
         const timeout = setTimeout(() => {
             const error = new RetryableTransferError(
@@ -155,13 +193,15 @@ async function requestResponse(
     headers: Record<string, string>,
     connectionTimeoutMs: number,
     signal?: AbortSignal,
+    resolveRedirectCandidates?: DownloadTransferOptions['resolveRedirectCandidates'],
 ): Promise<IncomingMessage> {
     let url = initialUrl;
     for (let redirects = 0; redirects <= 5; redirects += 1) {
         const response = await singleResponse(url, headers, connectionTimeoutMs, signal);
         if (![301, 302, 303, 307, 308].includes(response.statusCode ?? 0)) return response;
         const location = response.headers.location;
-        response.resume();
+        response.destroy();
+        await finished(response, { cleanup: true }).catch(() => undefined);
         if (!location) throw new RetryableTransferError('Download redirect did not include a location');
         if (redirects === 5) throw new RetryableTransferError('Too many download redirects');
         const redirected = new URL(location, url);
@@ -175,6 +215,19 @@ async function requestResponse(
             throw new RetryableTransferError(
                 `Download redirect was rejected: ${redirected.protocol}//${redirected.hostname}`,
             );
+        }
+        const candidates = await resolveRedirectCandidates?.(redirected.toString(), signal);
+        if (candidates?.length) {
+            for (const candidate of candidates) {
+                const parsed = new URL(candidate);
+                const localCandidate = localTestRedirect && parsed.hostname === previous.hostname &&
+                    ['http:', 'https:'].includes(parsed.protocol);
+                if (!localCandidate && !(parsed.protocol === 'https:' &&
+                    isAllowedGameBananaDownloadHostname(parsed.hostname))) {
+                    throw new RetryableTransferError('Download route returned an untrusted server');
+                }
+            }
+            throw new RedirectCandidates(candidates);
         }
         url = redirected.toString();
     }
@@ -219,6 +272,7 @@ async function consumeResponse(
         file = await fs.open(destinationPath, mode);
     } catch (error) {
         response.destroy();
+        await finished(response, { cleanup: true }).catch(() => undefined);
         throw new FatalDiskError(error);
     }
 
@@ -240,6 +294,7 @@ async function consumeResponse(
     };
 
     signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
     armStallTimer();
     let transferError: Error | undefined;
     let closeError: unknown;
@@ -252,6 +307,7 @@ async function consumeResponse(
             received += chunk.length;
             onProgress(startingOffset + received, total ?? 0);
         }
+        if (signal?.aborted) throw cancellationError();
         if (!response.complete) {
             throw new RetryableTransferError('Download response ended before the full body was received');
         }
@@ -268,6 +324,8 @@ async function consumeResponse(
     } finally {
         if (stallTimer) clearTimeout(stallTimer);
         signal?.removeEventListener('abort', abort);
+        response.destroy();
+        await finished(response, { cleanup: true }).catch(() => undefined);
         try {
             await file.close();
         } catch (error) {
@@ -281,9 +339,9 @@ async function consumeResponse(
 async function attemptCandidate(
     url: string,
     destinationPath: string,
-    state: TransferState,
+    state: DownloadTransferCheckpoint,
     options: Pick<DownloadTransferOptions,
-        'onProgress' | 'onResponseFilename' | 'connectionTimeoutMs' | 'stallTimeoutMs' | 'signal'>,
+        'onProgress' | 'onResponseFilename' | 'connectionTimeoutMs' | 'stallTimeoutMs' | 'signal' | 'resolveRedirectCandidates'>,
     onAccepted?: () => void,
 ): Promise<void> {
     const offset = await fileSize(destinationPath);
@@ -296,7 +354,9 @@ async function attemptCandidate(
         headers.Range = `bytes=${offset}-`;
         headers['If-Range'] = state.validator!.value;
     }
-    const response = await requestResponse(url, headers, options.connectionTimeoutMs!, options.signal);
+    const response = await requestResponse(
+        url, headers, options.connectionTimeoutMs!, options.signal, options.resolveRedirectCandidates,
+    );
     const disposition = response.headers['content-disposition'];
     if (typeof disposition === 'string') {
         const filename = parseContentDispositionFilename(disposition);
@@ -305,7 +365,8 @@ async function attemptCandidate(
 
     if (offset > 0 && response.statusCode === 416) {
         const total = parseUnsatisfiedRange(response.headers['content-range']);
-        response.resume();
+        response.destroy();
+        await finished(response, { cleanup: true }).catch(() => undefined);
         if (total === offset && total === state.total && sameValidator(state.validator!, response.headers)) return;
         throw new RestartTransferError('Download server rejected the resume offset');
     }
@@ -321,7 +382,8 @@ async function attemptCandidate(
             (state.total !== undefined && range.total !== state.total) ||
             !sameValidator(state.validator!, response.headers) ||
             (contentLength !== undefined && contentLength !== range.end - range.start + 1)) {
-            response.resume();
+            response.destroy();
+            await finished(response, { cleanup: true }).catch(() => undefined);
             throw new RestartTransferError('Download server returned an incompatible resume response');
         }
         mode = 'a';
@@ -336,8 +398,10 @@ async function attemptCandidate(
         expectedResponseBytes = parseLength(response.headers['content-length']);
         total = expectedResponseBytes;
         state.validator = responseValidator(response.headers);
+        if (offset > 0) options.onProgress(0, total ?? 0);
     } else {
-        response.resume();
+        response.destroy();
+        await finished(response, { cleanup: true }).catch(() => undefined);
         throw new RetryableTransferError(`Download failed with status ${response.statusCode}`);
     }
 
@@ -375,6 +439,8 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
         candidateUrls,
         destinationPath,
         signal,
+        pauseSignal,
+        checkpoint,
         onServerStatus,
         connectionTimeoutMs = 30_000,
         mirrorConnectionTimeoutMs = DEFAULT_MIRROR_CONNECTION_TIMEOUT_MS,
@@ -382,27 +448,48 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
     } = options;
     if (candidateUrls.length === 0) throw new Error('No download servers available');
 
-    // A previous invocation's file has no in-memory validator, so it cannot be
-    // resumed safely. Partials are intentionally durable only within this call.
-    await removePartial(destinationPath);
-    const state: TransferState = {};
+    const state: DownloadTransferCheckpoint = checkpoint ?? {};
+    if (state.destinationPath !== undefined && state.destinationPath !== destinationPath) {
+        throw new Error('Download checkpoint belongs to a different destination');
+    }
+    if (state.destinationPath === undefined) {
+        // A partial without its in-memory checkpoint has no trusted identity.
+        await removePartial(destinationPath);
+        state.destinationPath = destinationPath;
+    }
+    const interruptedSignal = signal && pauseSignal
+        ? AbortSignal.any([signal, pauseSignal])
+        : signal ?? pauseSignal;
+    const resetState = () => {
+        state.total = undefined;
+        state.validator = undefined;
+    };
+    const checkInterruption = async () => {
+        if (signal?.aborted) {
+            await removePartial(destinationPath).catch(() => undefined);
+            resetState();
+            throw cancellationError();
+        }
+        if (pauseSignal?.aborted) throw new DownloadSuspendedError();
+    };
     let lastError: Error | undefined;
     let previousServer: string | undefined;
 
-    const urls = [...new Set(candidateUrls)];
-    for (const [index, url] of urls.entries()) {
-        if (signal?.aborted) {
-            await removePartial(destinationPath).catch(() => undefined);
-            throw cancellationError();
-        }
+    const urls = [...new Set(state.candidateUrls ?? candidateUrls)];
+    const firstIndex = Math.max(0, state.candidateUrl ? urls.indexOf(state.candidateUrl) : 0);
+    let routeChanges = 0;
+    for (let index = firstIndex; index < urls.length; index += 1) {
+        await checkInterruption();
+        const url = urls[index];
+        state.candidateUrl = url;
         const server = displayServerName(url);
         // Only the last candidate is a route GameBanana itself vouched for. The
         // rest are speculative mirrors, so a dead one must not eat the full budget.
         const candidateConnectionTimeoutMs = index === urls.length - 1
             ? connectionTimeoutMs
             : Math.min(connectionTimeoutMs, mirrorConnectionTimeoutMs);
-        if (index === 0) onServerStatus?.({ phase: 'selected', server });
-        else onServerStatus?.({ phase: 'switching', server, previousServer: previousServer! });
+        if (previousServer === undefined) onServerStatus?.({ phase: 'selected', server });
+        else onServerStatus?.({ phase: 'switching', server, previousServer });
 
         try {
             // One bounded retry lets a candidate that cannot safely resume use
@@ -411,9 +498,10 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
                 try {
                     await attemptCandidate(url, destinationPath, state, {
                         ...options,
+                        signal: interruptedSignal,
                         connectionTimeoutMs: candidateConnectionTimeoutMs,
                         stallTimeoutMs,
-                    }, index === 0 ? undefined : () => {
+                    }, previousServer === undefined ? undefined : () => {
                         onServerStatus?.({ phase: 'selected', server });
                     });
                     return;
@@ -422,13 +510,26 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
                     await removePartial(destinationPath).catch((cleanupError) => {
                         throw new FatalDiskError(cleanupError);
                     });
-                    state.total = undefined;
-                    state.validator = undefined;
+                    resetState();
+                    options.onProgress(0, 0);
                 }
             }
         } catch (error) {
+            await checkInterruption();
+            if (error instanceof RedirectCandidates) {
+                if (++routeChanges > 10) {
+                    lastError = new Error('Too many download route changes');
+                    break;
+                }
+                const routes = [...new Set([...error.urls, ...urls.slice(index + 1)])];
+                urls.splice(index, urls.length - index, ...routes);
+                state.candidateUrls = [...urls];
+                index -= 1;
+                continue;
+            }
             if (isCancellation(error, signal)) {
                 await removePartial(destinationPath).catch(() => undefined);
+                resetState();
                 throw cancellationError();
             }
             if (error instanceof FatalDiskError) {
@@ -439,8 +540,8 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
                 await removePartial(destinationPath).catch((cleanupError) => {
                     throw new FatalDiskError(cleanupError);
                 });
-                state.total = undefined;
-                state.validator = undefined;
+                resetState();
+                options.onProgress(0, 0);
             }
             lastError = error instanceof Error ? error : new Error(String(error));
             console.warn(`[download] ${server} failed: ${lastError.message}`);
@@ -449,5 +550,6 @@ export async function downloadTransfer(options: DownloadTransferOptions): Promis
     }
 
     await removePartial(destinationPath).catch(() => undefined);
+    resetState();
     throw lastError ?? new Error('Download failed');
 }

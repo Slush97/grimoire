@@ -545,12 +545,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Download Queue
     getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
+    moveQueuedDownload: (jobId: string, beforeJobId: string | null) =>
+        ipcRenderer.invoke('move-queued-download', jobId, beforeJobId),
+    prioritizeQueuedDownload: (jobId: string) => ipcRenderer.invoke('prioritize-queued-download', jobId),
     getCurrentDownload: () => ipcRenderer.invoke('get-current-download'),
     removeFromQueue: (modId: number, fileId?: number) =>
         ipcRenderer.invoke('remove-from-queue', modId, fileId),
     cancelActiveDownload: () => ipcRenderer.invoke('cancel-active-download'),
-    cancelDownloadTarget: (modId: number, fileId: number) =>
-        ipcRenderer.invoke('cancel-download-target', modId, fileId),
+    cancelDownloadTarget: (modId: number, fileId: number, jobId?: string) =>
+        ipcRenderer.invoke('cancel-download-target', modId, fileId, jobId),
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);

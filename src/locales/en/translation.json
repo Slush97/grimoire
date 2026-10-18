@@ -454,6 +454,8 @@
     "cancelDownload": "Cancel download",
     "collapse": "Collapse",
     "downloads": "Downloads",
+    "downloadNow": "Download now",
+    "downloadNext": "Download next after the current installation finishes",
     "eta": {
       "seconds_one": "{{count}}s",
       "seconds_other": "{{count}}s",
@@ -462,12 +464,15 @@
       "left": "{{eta}} left"
     },
     "noDownloads": "No downloads",
+    "paused": "Paused · {{percent}}%",
     "preparing": "Preparing…",
     "queuedHeader_one": "Queued ({{count}})",
     "queuedHeader_other": "Queued ({{count}})",
     "remainingQueued_one": "{{count}} queued",
     "remainingQueued_other": "{{count}} queued",
     "removeFromQueue": "Remove from queue",
+    "reorder": "Reorder {{name}}",
+    "reorderFailed": "Could not change the download order.",
     "serverAutomatic": "Automatic · {{server}}",
     "serverSwitching": "Switching from {{server}}…",
     "showDetails": "Show download details"

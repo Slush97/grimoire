@@ -3,9 +3,14 @@ import { mkdtempSync } from 'fs';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
-import { downloadTransfer } from './downloadTransfer';
+import {
+    downloadTransfer,
+    DownloadSuspendedError,
+    isDownloadSuspended,
+    type DownloadTransferCheckpoint,
+} from './downloadTransfer';
 
 const roots: string[] = [];
 const servers: Server[] = [];
@@ -397,6 +402,261 @@ describe('downloadTransfer', () => {
             destinationPath: path,
             onProgress: () => undefined,
         })).rejects.toThrow('Download redirect was rejected');
+        await expect(fs.stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('resumes repeated suspensions from closed partial files with the original validator', async () => {
+        const body = Buffer.from('abcdefghijklmnopqrstuvwxyz');
+        const ranges: Array<string | undefined> = [];
+        const ifRanges: Array<string | string[] | undefined> = [];
+        const openResponses = new Set<ServerResponse>();
+        const url = await listen((request, response) => {
+            ranges.push(request.headers.range);
+            ifRanges.push(request.headers['if-range']);
+            const offset = Number(/^bytes=(\d+)-$/.exec(request.headers.range ?? '')?.[1] ?? 0);
+            openResponses.add(response);
+            response.on('close', () => openResponses.delete(response));
+            response.writeHead(offset ? 206 : 200, {
+                'Content-Length': body.length - offset,
+                ...(offset ? { 'Content-Range': `bytes ${offset}-${body.length - 1}/${body.length}` } : {}),
+                ETag: '"pause-v1"',
+            });
+            if (offset < 16) response.write(body.subarray(offset, offset + 8));
+            else response.end(body.subarray(offset));
+        });
+        const path = destination('repeated-pause.zip');
+        const checkpoint: DownloadTransferCheckpoint = {};
+
+        for (const expectedSize of [8, 16]) {
+            const pause = new AbortController();
+            const error = await downloadTransfer({
+                candidateUrls: [url], destinationPath: path, checkpoint,
+                pauseSignal: pause.signal,
+                onProgress: () => pause.abort(),
+            }).catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(DownloadSuspendedError);
+            expect(isDownloadSuspended(error)).toBe(true);
+            expect(await fs.readFile(path)).toEqual(body.subarray(0, expectedSize));
+            expect(checkpoint.total).toBe(body.length);
+            await vi.waitFor(() => expect(openResponses.size).toBe(0));
+            // On Windows this also verifies no open destination handle survives.
+            await fs.rename(path, `${path}.closed`);
+            await fs.rename(`${path}.closed`, path);
+        }
+
+        await downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint,
+            onProgress: () => undefined,
+        });
+        expect(ranges).toEqual([undefined, 'bytes=8-', 'bytes=16-']);
+        expect(ifRanges).toEqual([undefined, '"pause-v1"', '"pause-v1"']);
+        expect(await fs.readFile(path)).toEqual(body);
+        expect(isDownloadSuspended(new Error('CANCELLED_BY_USER'))).toBe(false);
+    });
+
+    it('suspends a request waiting for headers without retaining a live connection', async () => {
+        let requested!: () => void;
+        const requestSeen = new Promise<void>((resolve) => { requested = resolve; });
+        let closed = false;
+        const url = await listen((_request, response) => {
+            response.on('close', () => { closed = true; });
+            requested();
+        });
+        const path = destination('pause-before-headers.zip');
+        const pause = new AbortController();
+        const transfer = downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint: {},
+            pauseSignal: pause.signal, onProgress: () => undefined,
+        });
+        const rejection = expect(transfer).rejects.toBeInstanceOf(DownloadSuspendedError);
+        await requestSeen;
+        pause.abort();
+        await rejection;
+        await vi.waitFor(() => expect(closed).toBe(true));
+        await expect(fs.stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('validates a complete partial when suspension races the final transfer sample', async () => {
+        const body = Buffer.from('a completed suspended archive');
+        const ranges: Array<string | undefined> = [];
+        const url = await listen((request, response) => {
+            ranges.push(request.headers.range);
+            if (request.headers.range) {
+                response.writeHead(416, {
+                    'Content-Range': `bytes */${body.length}`,
+                    ETag: '"complete"',
+                });
+                response.end();
+            } else {
+                response.writeHead(200, { 'Content-Length': body.length, ETag: '"complete"' });
+                response.end(body);
+            }
+        });
+        const path = destination('complete-suspended.zip');
+        const checkpoint: DownloadTransferCheckpoint = {};
+        const pause = new AbortController();
+        await expect(downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint,
+            pauseSignal: pause.signal, onProgress: () => pause.abort(),
+        })).rejects.toBeInstanceOf(DownloadSuspendedError);
+        await downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint, onProgress: () => undefined,
+        });
+        expect(ranges).toEqual([undefined, `bytes=${body.length}-`]);
+        expect(await fs.readFile(path)).toEqual(body);
+    });
+
+    it('cancels an already suspended checkpoint and gives cancellation precedence over suspension', async () => {
+        let requests = 0;
+        const url = await listen((_request, response) => {
+            requests += 1;
+            response.writeHead(200, { 'Content-Length': 20, ETag: '"cancel-paused"' });
+            response.write(Buffer.alloc(5, 1));
+        });
+        const path = destination('cancel-paused.zip');
+        const checkpoint: DownloadTransferCheckpoint = {};
+        const pause = new AbortController();
+        await expect(downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint,
+            pauseSignal: pause.signal, onProgress: () => pause.abort(),
+        })).rejects.toBeInstanceOf(DownloadSuspendedError);
+
+        const cancel = new AbortController();
+        cancel.abort();
+        await expect(downloadTransfer({
+            candidateUrls: [url], destinationPath: path, checkpoint,
+            signal: cancel.signal, pauseSignal: pause.signal, onProgress: () => undefined,
+        })).rejects.toThrow('CANCELLED_BY_USER');
+        expect(requests).toBe(1);
+        expect(checkpoint.validator).toBeUndefined();
+        await expect(fs.stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it.each(['ignored range', 'changed validator', 'missing validator'])(
+        'resets displayed progress before safely restarting a paused transfer with %s', async (scenario) => {
+            const oldBody = Buffer.from('old archive contents');
+            const newBody = Buffer.from('different replacement archive contents');
+            const requests: Array<string | undefined> = [];
+            const url = await listen((request, response) => {
+                requests.push(request.headers.range);
+                if (requests.length === 1) {
+                    response.writeHead(200, {
+                        'Content-Length': oldBody.length,
+                        ...(scenario === 'missing validator' ? {} : { ETag: '"old"' }),
+                    });
+                    response.write(oldBody.subarray(0, 5));
+                } else if (scenario === 'changed validator' && request.headers.range) {
+                    response.writeHead(206, {
+                        'Content-Length': newBody.length - 5,
+                        'Content-Range': `bytes 5-${newBody.length - 1}/${newBody.length}`,
+                        ETag: '"new"',
+                    });
+                    response.end(newBody.subarray(5));
+                } else {
+                    response.writeHead(200, { 'Content-Length': newBody.length, ETag: '"new"' });
+                    response.end(newBody);
+                }
+            });
+            const path = destination('restart-paused.zip');
+            const checkpoint: DownloadTransferCheckpoint = {};
+            const pause = new AbortController();
+            await expect(downloadTransfer({
+                candidateUrls: [url], destinationPath: path, checkpoint,
+                pauseSignal: pause.signal, onProgress: () => pause.abort(),
+            })).rejects.toBeInstanceOf(DownloadSuspendedError);
+            const progress: Array<[number, number]> = [];
+            await downloadTransfer({
+                candidateUrls: [url], destinationPath: path, checkpoint,
+                onProgress: (downloaded, total) => progress.push([downloaded, total]),
+            });
+            expect(progress[0][0]).toBe(0);
+            expect(progress.at(-1)).toEqual([newBody.length, newBody.length]);
+            expect(requests).toEqual(scenario === 'missing validator'
+                ? [undefined, undefined]
+                : scenario === 'changed validator'
+                    ? [undefined, 'bytes=5-', undefined]
+                    : [undefined, 'bytes=5-']);
+            expect(await fs.readFile(path)).toEqual(newBody);
+        },
+    );
+
+    it('discards a previous invocation partial when no checkpoint is retained', async () => {
+        const body = Buffer.from('fresh invocation payload');
+        const ranges: Array<string | undefined> = [];
+        const url = await listen((request, response) => {
+            ranges.push(request.headers.range);
+            response.writeHead(200, { 'Content-Length': body.length, ETag: '"fresh"' });
+            if (ranges.length === 1) response.write(body.subarray(0, 5));
+            else response.end(body);
+        });
+        const path = destination('fresh-invocation.zip');
+        const pause = new AbortController();
+        await expect(downloadTransfer({
+            candidateUrls: [url], destinationPath: path, pauseSignal: pause.signal,
+            onProgress: () => pause.abort(),
+        })).rejects.toBeInstanceOf(DownloadSuspendedError);
+        await downloadTransfer({
+            candidateUrls: [url], destinationPath: path, onProgress: () => undefined,
+        });
+        expect(ranges).toEqual([undefined, undefined]);
+        expect(await fs.readFile(path)).toEqual(body);
+    });
+
+    it('retains the selected redirect route across suspension without resolving mirrors again', async () => {
+        const body = Buffer.from('resolved mirror archive contents');
+        const ranges: Array<string | undefined> = [];
+        const mirror = await listen((request, response) => {
+            ranges.push(request.headers.range);
+            const offset = request.headers.range ? 7 : 0;
+            response.writeHead(offset ? 206 : 200, {
+                'Content-Length': body.length - offset,
+                ...(offset ? { 'Content-Range': `bytes ${offset}-${body.length - 1}/${body.length}` } : {}),
+                ...(!offset ? { 'Content-Disposition': 'attachment; filename="resolved.zip"' } : {}),
+                ETag: '"resolved"',
+            });
+            if (offset) response.end(body.subarray(offset));
+            else response.write(body.subarray(0, 7));
+        });
+        let redirects = 0;
+        const router = await listen((_request, response) => {
+            redirects += 1;
+            response.writeHead(302, { Location: mirror });
+            response.end();
+        });
+        const resolver = vi.fn(async () => [mirror]);
+        const path = destination('resolved-pause.zip');
+        const checkpoint: DownloadTransferCheckpoint = {};
+        const pause = new AbortController();
+        let filename: string | undefined;
+        await expect(downloadTransfer({
+            candidateUrls: [router], destinationPath: path, checkpoint,
+            pauseSignal: pause.signal, resolveRedirectCandidates: resolver,
+            onResponseFilename: (value) => { filename = value; },
+            onProgress: () => pause.abort(),
+        })).rejects.toBeInstanceOf(DownloadSuspendedError);
+        await downloadTransfer({
+            candidateUrls: [router], destinationPath: path, checkpoint,
+            resolveRedirectCandidates: resolver,
+            onResponseFilename: (value) => { filename = value; },
+            onProgress: () => undefined,
+        });
+        expect(resolver).toHaveBeenCalledTimes(1);
+        expect(redirects).toBe(1);
+        expect(ranges).toEqual([undefined, 'bytes=7-']);
+        expect(filename).toBe('resolved.zip');
+        expect(await fs.readFile(path)).toEqual(body);
+    });
+
+    it('rejects untrusted redirect candidates before making a request', async () => {
+        const url = await listen((_request, response) => {
+            response.writeHead(302, { Location: '/trusted.zip' });
+            response.end();
+        });
+        const path = destination('untrusted-route.zip');
+        await expect(downloadTransfer({
+            candidateUrls: [url], destinationPath: path, onProgress: () => undefined,
+            resolveRedirectCandidates: async () => ['http://example.com/untrusted.zip'],
+        })).rejects.toThrow('Download route returned an untrusted server');
         await expect(fs.stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     });
 });

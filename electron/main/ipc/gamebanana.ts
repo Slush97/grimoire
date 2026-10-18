@@ -20,7 +20,7 @@ import {
     type GameBananaCollection,
     type GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, cancelDownloadTarget, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, moveQueuedDownload, prioritizeQueuedDownload, removeFromQueue, cancelActiveDownload, cancelDownloadTarget, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
 import type {
     BrowseModsArgs,
@@ -85,6 +85,15 @@ ipcMain.handle('get-download-queue', () => {
     return getDownloadQueue();
 });
 
+ipcMain.handle('move-queued-download', (_, jobId: string, beforeJobId: string | null): boolean => {
+    if (typeof jobId !== 'string' || (beforeJobId !== null && typeof beforeJobId !== 'string')) return false;
+    return moveQueuedDownload(jobId, beforeJobId);
+});
+
+ipcMain.handle('prioritize-queued-download', (_, jobId: string): boolean => {
+    return typeof jobId === 'string' && prioritizeQueuedDownload(jobId);
+});
+
 // get-current-download
 ipcMain.handle('get-current-download', () => {
     return getCurrentDownload();
@@ -101,8 +110,9 @@ ipcMain.handle('cancel-active-download', (): boolean => {
 });
 
 // cancel-download-target (exact optimistic/queued/active target)
-ipcMain.handle('cancel-download-target', (_, modId: number, fileId: number): boolean => {
-    return cancelDownloadTarget(modId, fileId);
+ipcMain.handle('cancel-download-target', (_, modId: number, fileId: number, jobId?: string): boolean => {
+    if (jobId !== undefined && typeof jobId !== 'string') return false;
+    return cancelDownloadTarget(modId, fileId, jobId);
 });
 
 // one-click-suspicious-response (renderer relays user's modal decision)

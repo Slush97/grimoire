@@ -1,16 +1,10 @@
-import { createServer, type Server } from 'http';
-import { mkdtempSync } from 'fs';
-import { promises as fs } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const harness = vi.hoisted(() => ({ userData: '' }));
 const selectorMocks = vi.hoisted(() => ({ getCandidates: vi.fn() }));
 const transferMocks = vi.hoisted(() => ({ downloadTransfer: vi.fn() }));
 
 vi.mock('electron', () => ({
-    app: { getPath: () => harness.userData, getVersion: () => 'test' },
+    app: { getPath: () => '', getVersion: () => 'test' },
     BrowserWindow: class BrowserWindow {
         static getAllWindows() { return []; }
     },
@@ -19,158 +13,73 @@ vi.mock('@grimoire/social-types/heroes', () => ({ inferHeroFromTitle: () => null
 vi.mock('./gamebananaFileServers', () => ({
     gameBananaFileServerSelector: { getCandidates: selectorMocks.getCandidates },
 }));
-vi.mock('./downloadTransfer', () => ({ downloadTransfer: transferMocks.downloadTransfer }));
+vi.mock('./downloadTransfer', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./downloadTransfer')>()),
+    downloadTransfer: transferMocks.downloadTransfer,
+}));
 
 import { downloadFile } from './download';
+import type { DownloadTransferOptions } from './downloadTransfer';
 
-async function listen(server: Server): Promise<number> {
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Test server did not bind');
-    return address.port;
-}
+const route = 'https://gamebanana.com/dl/123';
+const chosen = 'https://filecache20.gamebanana.com/mods/uhd.zip?token=fixture';
+const fastest = 'https://filecache45.gamebanana.com/mods/uhd.zip?token=fixture';
+const canonical = 'https://files.gamebanana.com/mods/uhd.zip?token=fixture';
 
-async function close(server: Server): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-        server.close((error) => error ? reject(error) : resolve());
-    });
+function options(): DownloadTransferOptions {
+    return transferMocks.downloadTransfer.mock.calls[0][0];
 }
 
 describe('downloadFile GameBanana fileserver handoff', () => {
-    let root: string;
-
-    beforeAll(() => {
-        root = mkdtempSync(join(tmpdir(), 'download-fileserver-handoff-'));
-        harness.userData = join(root, 'user-data');
-    });
-
     beforeEach(() => {
         selectorMocks.getCandidates.mockReset();
-        transferMocks.downloadTransfer.mockReset();
+        transferMocks.downloadTransfer.mockReset().mockResolvedValue(undefined);
     });
+    afterEach(() => vi.restoreAllMocks());
 
-    afterAll(async () => {
-        await fs.rm(root, { recursive: true, force: true });
-    });
-
-    it('turns a GameBanana filecache redirect into an ordered failover transfer', async () => {
-        const directUrl = 'https://filecache20.gamebanana.com/mods/uhd.zip?token=fixture';
-        const fastestUrl = 'https://filecache45.gamebanana.com/mods/uhd.zip?token=fixture';
-        const secondUrl = 'https://filecache12.gamebanana.com/mods/uhd.zip?token=fixture';
-        const server = createServer((_request, response) => {
-            response.writeHead(307, { Location: directUrl });
-            response.end();
+    it('routes all transfers through the resumable helper and ranks GameBanana mirrors', async () => {
+        const second = 'https://filecache12.gamebanana.com/mods/uhd.zip?token=fixture';
+        selectorMocks.getCandidates.mockResolvedValue([fastest, second, canonical]);
+        const checkpoint = {};
+        const pause = new AbortController();
+        const progress = vi.fn();
+        const filename = vi.fn();
+        const status = vi.fn();
+        await downloadFile(route, 'uhd.zip', progress, undefined, undefined, filename,
+            undefined, status, checkpoint, pause.signal);
+        expect(options()).toMatchObject({
+            candidateUrls: [route], destinationPath: 'uhd.zip',
+            connectionTimeoutMs: 30_000, stallTimeoutMs: 60_000,
+            onProgress: progress, onResponseFilename: filename, onServerStatus: status,
+            checkpoint, pauseSignal: pause.signal,
         });
-        const port = await listen(server);
-        const destinationPath = join(root, 'uhd.zip');
-        const statuses: unknown[] = [];
-        selectorMocks.getCandidates.mockResolvedValue([
-            fastestUrl,
-            secondUrl,
-            'https://files.gamebanana.com/mods/uhd.zip?token=fixture',
-        ]);
-        transferMocks.downloadTransfer.mockImplementation(async (options) => {
-            options.onServerStatus?.({ phase: 'selected', server: 'filecache45' });
-        });
-
-        try {
-            await downloadFile(
-                `http://127.0.0.1:${port}/dl/123`,
-                destinationPath,
-                vi.fn(),
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                (status) => statuses.push(status),
-            );
-        } finally {
-            await close(server);
-        }
-
-        expect(selectorMocks.getCandidates).toHaveBeenCalledWith(
-            'https://files.gamebanana.com/mods/uhd.zip?token=fixture',
-            expect.any(AbortSignal),
-            'filecache20.gamebanana.com',
-        );
-        expect(transferMocks.downloadTransfer).toHaveBeenCalledWith(expect.objectContaining({
-            candidateUrls: [fastestUrl, secondUrl, directUrl],
-            destinationPath,
-            connectionTimeoutMs: 30_000,
-            stallTimeoutMs: 60_000,
-        }));
-        expect(statuses).toEqual([
-            { phase: 'selected', server: 'filecache45' },
-        ]);
+        await expect(options().resolveRedirectCandidates!(chosen, options().signal)).resolves.toEqual([fastest, second, chosen]);
+        expect(selectorMocks.getCandidates).toHaveBeenCalledExactlyOnceWith(canonical, expect.any(AbortSignal), 'filecache20.gamebanana.com');
+        await expect(options().resolveRedirectCandidates!(route, options().signal)).resolves.toBeUndefined();
     });
 
     it('does not repeat the GameBanana-assigned server when the selector already ranked it', async () => {
-        const directUrl = 'https://filecache20.gamebanana.com/mods/uhd.zip?token=fixture';
-        const fastestUrl = 'https://filecache45.gamebanana.com/mods/uhd.zip?token=fixture';
-        const server = createServer((_request, response) => {
-            response.writeHead(307, { Location: directUrl });
-            response.end();
-        });
-        const port = await listen(server);
-        selectorMocks.getCandidates.mockResolvedValue([
-            fastestUrl,
-            directUrl,
-            'https://files.gamebanana.com/mods/uhd.zip?token=fixture',
-        ]);
-        transferMocks.downloadTransfer.mockResolvedValue(undefined);
-
-        try {
-            await downloadFile(`http://127.0.0.1:${port}/dl/123`, join(root, 'dedupe.zip'), vi.fn());
-        } finally {
-            await close(server);
-        }
-
-        expect(transferMocks.downloadTransfer).toHaveBeenCalledWith(expect.objectContaining({
-            candidateUrls: [fastestUrl, directUrl],
-        }));
+        selectorMocks.getCandidates.mockResolvedValue([fastest, chosen, canonical]);
+        await downloadFile(route, 'dedupe.zip', vi.fn());
+        await expect(options().resolveRedirectCandidates!(chosen, options().signal)).resolves.toEqual([fastest, chosen]);
     });
 
-    it('downloads from the server GameBanana chose when mirror selection fails', async () => {
-        const directUrl = 'https://filecache53.gamebanana.com/mods/uhd.zip?token=fixture';
-        const server = createServer((_request, response) => {
-            response.writeHead(307, { Location: directUrl });
-            response.end();
-        });
-        const port = await listen(server);
+    it('uses the GameBanana-assigned server if mirror selection fails', async () => {
         selectorMocks.getCandidates.mockRejectedValue(new Error('directory timed out'));
-        transferMocks.downloadTransfer.mockResolvedValue(undefined);
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-        try {
-            await downloadFile(`http://127.0.0.1:${port}/dl/123`, join(root, 'fallback.zip'), vi.fn());
-        } finally {
-            warn.mockRestore();
-            await close(server);
-        }
-
-        expect(transferMocks.downloadTransfer).toHaveBeenCalledWith(expect.objectContaining({
-            candidateUrls: [directUrl],
-        }));
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        await downloadFile(route, 'fallback.zip', vi.fn());
+        await expect(options().resolveRedirectCandidates!(chosen, options().signal)).resolves.toEqual([chosen]);
     });
 
-    it('surfaces the transfer failure instead of hanging when every server fails', async () => {
-        const directUrl = 'https://filecache53.gamebanana.com/mods/uhd.zip?token=fixture';
-        const server = createServer((_request, response) => {
-            response.writeHead(307, { Location: directUrl });
-            response.end();
-        });
-        const port = await listen(server);
-        selectorMocks.getCandidates.mockResolvedValue([]);
-        transferMocks.downloadTransfer.mockRejectedValue(
-            new Error('Download connection timed out after 30 seconds'),
-        );
-
-        try {
-            await expect(
-                downloadFile(`http://127.0.0.1:${port}/dl/123`, join(root, 'failed.zip'), vi.fn()),
-            ).rejects.toThrow('Download connection timed out after 30 seconds');
-        } finally {
-            await close(server);
-        }
+    it('surfaces transfer failures and forwards cancellation to server selection', async () => {
+        transferMocks.downloadTransfer.mockRejectedValueOnce(new Error('Download connection timed out'));
+        await expect(downloadFile(route, 'failed.zip', vi.fn())).rejects.toThrow('Download connection timed out');
+        transferMocks.downloadTransfer.mockResolvedValue(undefined);
+        const abort = new AbortController();
+        await downloadFile(route, 'cancelled.zip', vi.fn(), undefined, undefined, undefined, abort.signal);
+        abort.abort();
+        selectorMocks.getCandidates.mockRejectedValueOnce(new Error('selection cancelled'));
+        const last = transferMocks.downloadTransfer.mock.calls.at(-1)![0] as DownloadTransferOptions;
+        await expect(last.resolveRedirectCandidates!(chosen, abort.signal)).rejects.toThrow('selection cancelled');
     });
 });

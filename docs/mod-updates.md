@@ -24,7 +24,15 @@ One best-effort pre-update recovery snapshot covers the entire batch.
 validation runs when its job starts. Installation leaves new VPKs disabled,
 regardless of automatic enabling. The queue awaits predecessor cleanup and
 enabled, Global, and explicit local-group restoration before emitting completion
-or starting the next install. Ordinary Browse downloads retain their FIFO order.
+or starting the next install. Ordinary Browse downloads use the same FIFO.
+
+Waiting downloads can be reordered using their drag handles, including keyboard
+sorting. Download now interrupts a transferable job and moves it to the start of
+the waiting queue with its saved progress. Extraction, choices, installation, and
+finalization finish before the prioritized job starts. Suspended transfers retain
+their temporary archive and resume safely; servers that cannot resume cause a
+fresh transfer. Queue IDs, phases, and retained progress come from main, so a UI
+reload preserves the display. Queue state is not persisted across app restarts.
 
 `modReplacement.ts` shares this executor between Browse and Installed for
 details-page updates, reinstalls, and confirmed replacements. Immutable source
@@ -40,7 +48,9 @@ review without answering other reviews of the same version.
 
 Manual choices are grouped by GameBanana submission and section, separately from
 runnable queue entries. They appear after executable downloads and keep the
-download popup visible even when nothing is transferring. A Layout-level notice
+download popup visible even when nothing is transferring. The queue
+uses the same numbered waiting rows, with manual requests pinned to the bottom.
+These rows cannot be dragged or prioritized. A Layout-level notice
 shows one mod at a time. Dismissing notices or dialogs retains the queue shortcut.
 The existing details dialog supplies descriptions, filename tooltips, and the
 single-choice or dropdown replacement control. In this view, Replace is the
