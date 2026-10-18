@@ -173,9 +173,8 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     return (
         <div className={`pointer-events-auto ${className}`}>
             {/* Collapsed view: compact panel with filename + percent and an
-                inline progress bar across the bottom edge. Clicking the body
-                pops the expanded panel; the trailing X (when a download is
-                actually in flight) cancels the active fetch. */}
+                inline progress bar across the bottom edge. Clicking opens
+                the expanded panel with its download controls. */}
             {!isExpanded && (
                 <div
                     className="group relative flex w-80 items-stretch overflow-hidden rounded-2xl border border-hl/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
@@ -217,20 +216,6 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                         </div>
                         <ChevronUp className="h-4 w-4 flex-shrink-0 text-text-secondary opacity-0 transition-opacity group-hover:opacity-100" />
                     </button>
-                    {queueState.currentDownload && (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                void handleCancelActive();
-                            }}
-                            className="flex flex-shrink-0 items-center justify-center border-l border-hl/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
-                            aria-label={t('downloadQueue.cancelDownload')}
-                            title={t('downloadQueue.cancelDownload')}
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
-                    )}
                     <span
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-hl/5"
