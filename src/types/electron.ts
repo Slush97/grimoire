@@ -572,6 +572,8 @@ export interface DownloadEventData {
     jobId?: string;
     modId: number;
     fileId: number;
+    /** Replaced installed sources, retained until the renderer's fresh scan. */
+    replacementModIds?: string[];
 }
 
 export interface DownloadErrorData {

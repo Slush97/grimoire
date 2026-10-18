@@ -46,7 +46,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     const { t } = useTranslation();
     const downloadActivity = useDownloadActivity();
     const manualRequests = useModUpdatesStore((state) => state.state.manualRequests);
-    const preparingUpdates = useModUpdatesStore((state) => state.state.preparing || state.submitting);
+    const preparingUpdates = useModUpdatesStore((state) => state.state.preparing || state.submittingModIds.size > 0);
     const openReplacement = useModUpdatesStore((state) => state.openRequest);
     const { current, queue, requested } = downloadActivity;
     const visibleDownloads = useMemo(() => getVisibleDownloadQueue({ current, queue, requested }), [current, queue, requested]);

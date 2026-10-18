@@ -160,7 +160,7 @@ export default function Layout() {
       const downloads = getDownloadQueueActivitySnapshot();
       // Completed jobs refresh the library. Refocusing mid-transfer should not
       // start another full scan alongside that work, especially for large libraries.
-      if (updates.submitting || updates.state.preparing ||
+      if (updates.submittingModIds.size > 0 || updates.state.preparing ||
         (updates.state.busy && (downloads.current || downloads.queue.length > 0 || downloads.requested.length > 0))) return;
       const now = Date.now();
       if (now - lastRun < 1500) return;

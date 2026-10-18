@@ -180,9 +180,12 @@ beforeEach(() => {
 
 describe('queued mod replacements', () => {
     it('adds every replacement to the FIFO synchronously before reading its sources', () => {
-        void queueModReplacement('/game', args, ['old'], null);
+        const sources = ['old'];
+        void queueModReplacement('/game', { ...args, replacementModIds: ['stale'] }, sources, null);
         void queueModReplacement('/game', { ...args, fileId: 21 }, ['other'], null);
         expect(state.jobs.map((job) => job.args.fileId)).toEqual([20, 21]);
+        expect(state.jobs.map((job) => job.args.replacementModIds)).toEqual([['old'], ['other']]);
+        expect(state.jobs[0].args.replacementModIds).not.toBe(sources);
         expect(state.events).toEqual([]);
     });
 

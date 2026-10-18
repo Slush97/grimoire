@@ -16,6 +16,7 @@ import {
   selectFileDownloadActivity,
   useDownloadActivity,
   useDownloadQueueActivity,
+  usePendingDownloadCompletions,
   type DownloadActivitySnapshot,
 } from './downloadActivity';
 
@@ -102,6 +103,30 @@ describe('download progress subscriptions', () => {
     act(() => progress(sample(1000)));
     expect(latest.progress).toEqual({ downloaded: 1000, total: 1000 });
     expect(renders - initial).toBe(11);
+  });
+
+  it('retains replacement sources until a fresh scan without redrawing on byte progress', async () => {
+    let finishingRenders = 0;
+    let finishing: readonly DownloadEventData[] = [];
+    function FinishingProbe() {
+      finishing = usePendingDownloadCompletions();
+      finishingRenders++;
+      return null;
+    }
+    await act(async () => root.render(createElement(FinishingProbe)));
+    const initial = finishingRenders;
+    act(() => progress(sample(100)));
+    expect(finishingRenders).toBe(initial);
+    const completed = { ...active, jobId: 'replacement', replacementModIds: ['old-a', 'old-b'] };
+    act(() => complete(completed));
+    expect(finishing).toEqual([completed]);
+    expect(finishingRenders).toBe(initial + 1);
+    const captured = getPendingDownloadCompletions();
+    act(() => showCurrent(item(7, 11)));
+    expect(finishing).toEqual([completed]);
+    expect(finishingRenders).toBe(initial + 1);
+    act(() => acknowledgeDownloadCompletions(captured));
+    expect(finishing).toEqual([]);
   });
 
   it('does not treat an unknown total as a finished download', () => {

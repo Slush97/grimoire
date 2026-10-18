@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type ComponentProps } from 'react';
+import { act, useState, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mod } from '../../types/mod';
@@ -30,7 +30,7 @@ describe('mod update menu', () => {
     vi.clearAllMocks();
     props = {
       mods: [mod('1', { variantLabel: 'Variant A' }), mod('2', { fileDescription: 'Variant B' }), mod('3')],
-      updateIds: new Set(['1', '2']), busy: false,
+      updateIds: new Set(['1', '2']),
       onUpdate: vi.fn(), onIgnore: vi.fn().mockResolvedValue(undefined), onOpen: vi.fn(), onClose: vi.fn(),
     };
     host = document.createElement('div');
@@ -62,16 +62,70 @@ describe('mod update menu', () => {
     expect(rows()[0].querySelector('[title]')?.getAttribute('title')).toBe('Description\narchive.zip\n3.vpk');
   });
 
-  it('updates only the selected mod pending variants and closes before preflight finishes', async () => {
+  it('keeps the menu open and allows another mod to start while the first submission is pending', async () => {
     props.mods.push(mod('4', { gameBananaId: 11 }));
     props.updateIds = new Set(['1', '2', '4']);
     let finish!: () => void;
-    props.onUpdate = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    props.onUpdate = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }))
+      .mockResolvedValue(undefined);
     await render();
     await act(async () => rowButton(0, 'update').click());
     expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['1', '2']);
+    expect(props.onClose).not.toHaveBeenCalled();
+    props.updateIds = new Set(['4']);
+    await render();
+    expect(rows()).toHaveLength(1);
+    expect(rowButton(0, 'update').disabled).toBe(false);
+    await act(async () => rowButton(0, 'update').click());
+    expect(props.onUpdate).toHaveBeenNthCalledWith(2, ['4']);
+    expect(props.onClose).not.toHaveBeenCalled();
+    await act(async () => finish());
+  });
+
+  it('leaves an unaccepted submission available for retry when its pending IDs remain', async () => {
+    // The parent handles a start failure and keeps its update IDs eligible.
+    props.onUpdate = vi.fn().mockResolvedValue(undefined);
+    await render();
+    await act(async () => rowButton(0, 'update').click());
+    expect(rows()).toHaveLength(1);
+    expect(props.onClose).not.toHaveBeenCalled();
+    await act(async () => rowButton(0, 'update').click());
+    expect(props.onUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  function LiveMenu() {
+    const [ids, setIds] = useState(props.updateIds);
+    return <ModUpdatesModal {...props} updateIds={ids} onUpdate={selected => {
+      setIds(previous => new Set([...previous].filter(id => !selected.includes(id))));
+      return props.onUpdate(selected);
+    }} />;
+  }
+
+  it('removes a clicked row synchronously so an immediate second click cannot resubmit it', async () => {
+    props.mods.push(mod('4', { gameBananaId: 11 }));
+    props.updateIds = new Set(['1', '2', '4']);
+    await act(async () => root.render(<LiveMenu />));
+    const clicked = rowButton(0, 'update');
+    act(() => {
+      clicked.click();
+      expect(document.contains(clicked)).toBe(false);
+      clicked.click();
+    });
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['1', '2']);
+    expect(rows()).toHaveLength(1);
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('removes the dialog immediately on Update all without rendering an empty list', async () => {
+    await act(async () => root.render(<LiveMenu />));
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'installed.updateAll.updateAll')!;
+    act(() => {
+      confirm.click();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['1', '2']);
     expect(props.onClose).toHaveBeenCalledOnce();
-    finish();
   });
 
   it('opens the installed location of a pending variant when its name or link is clicked', async () => {
@@ -117,6 +171,9 @@ describe('mod update menu', () => {
     const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'installed.updateAll.updateAll')!;
     await act(async () => confirm.click());
     expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['1', '2', '4']);
+    expect(props.onClose).not.toHaveBeenCalled();
+    props.updateIds = new Set();
+    await render();
     expect(props.onClose).toHaveBeenCalledOnce();
   });
 });

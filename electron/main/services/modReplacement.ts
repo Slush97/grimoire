@@ -159,7 +159,7 @@ export function queueModReplacement(
     let promoted: Mod[] = [];
     let enabled: ReturnType<typeof createEnabledVpkRestoreSnapshot>;
     let global: ReturnType<typeof createGlobalVpkRestoreSnapshot>;
-    return enqueueManagedDownload(deadlockPath, args, mainWindow, {
+    return enqueueManagedDownload(deadlockPath, { ...args, replacementModIds: [...sourceModIds] }, mainWindow, {
         beforeStart: async () => {
             assertContext();
             const installed = await readReplacementMods(deadlockPath);

@@ -66,6 +66,20 @@ describe('app-wide mod update checks', () => {
     expect(mocks.files).toHaveBeenCalledTimes(2);
   });
 
+  it('drops a completed predecessor flag immediately when its local ID is reused', async () => {
+    stop = listenForModUpdateChecks();
+    await vi.waitFor(() => expect(useModUpdateCheckStore.getState().updatesAvailable.has('old')).toBe(true));
+    const response = deferred<{ files: UpdateFileRow[] }>();
+    mocks.files.mockReturnValue(response.promise);
+    updateCheckCache.invalidate([7]);
+    await vi.waitFor(() => expect(mocks.files).toHaveBeenCalledTimes(2));
+    useAppStore.setState({ mods: [mod('old', { gameBananaFileId: 2 })] });
+    expect(useModUpdateCheckStore.getState().updatesAvailable.size).toBe(0);
+    response.resolve({ files: rows() });
+    await vi.waitFor(() => expect(updateCheckCache.rows.get(7)).toEqual(rows()));
+    expect(useModUpdateCheckStore.getState().updatesAvailable.size).toBe(0);
+  });
+
   it('does not publish obsolete flags when the installed library changes mid-check', async () => {
     const response = deferred<{ files: UpdateFileRow[] }>();
     mocks.files.mockReturnValue(response.promise);

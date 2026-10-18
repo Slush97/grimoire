@@ -1488,7 +1488,6 @@
       "updating": "Updating",
       "confirmTitle_one": "Update {{count}} file?",
       "confirmTitle_other": "Update {{count}} files?",
-      "inProgress": "Updates are in progress. Resolve or cancel pending replacements to finish.",
       "hint": "Download available updates and restore each mod's enabled state.",
       "updateMod": "Update {{name}}",
       "ignoreMod": "Ignore updates for {{name}}",

@@ -12,16 +12,21 @@ existing matching rules. There is no periodic polling.
 
 Bulk updates are owned by `modUpdateController.ts` in the main process, with
 runtime dependencies in `modUpdates.ts`. State stays in memory and survives
-renderer navigation. The Installed toolbar shows `Updating` until both queued
-replacements and outstanding manual choices finish or are removed.
+renderer navigation. The Installed toolbar shows `Update (n)` for mods that have
+not started updating. Selected, preparing, queued, active, and manual-pending
+files leave the menu immediately. Further selections append to the same FIFO
+session, sharing its recovery snapshot. The toolbar button disappears when no
+eligible updates remain.
+Clicks commit their optimistic removal immediately, and an empty menu renders
+no dialog while its close callback settles.
 
 The update menu groups pending variants by GameBanana submission and section.
 The toolbar's `Update (n)` counts these mods; the menu title `Update n files?`
 counts their pending files. Its footer action is `Update all`.
 Each mod shows its pending variant count, with variant names in the name's
 tooltip. A row can start just that mod's updates or ignore updates for all of
-its installed variants. Starting updates closes the menu and uses the same
-batch executor as the footer action.
+its installed variants. Starting one mod keeps the menu open for the others;
+the menu closes when none remain. The footer uses the same batch executor.
 The mod page's ignore/resume toggle applies to the same full submission and
 section. Its state follows all installed variants; resuming also clears a mixed
 ignore state left by an earlier per-file toggle or an interrupted save.
@@ -29,7 +34,7 @@ Clicking a mod name or its link reveals that installed card, expands its section
 and opens its usual details view or variant picker. Filters are cleared only
 when they hide the target.
 
-Every submission is fetched and classified before the batch enters the existing
+Each selection is fetched and classified before its jobs enter the existing
 download FIFO. Matching uses the same classifier and remaining-file preference
 as the details page. VPKs targeting one archive share a download. An already
 installed successor is promoted through the same FIFO without another transfer.
@@ -86,6 +91,8 @@ while manual choices remain. The batch also refreshes when it settles.
 Completed files stay busy in details views until a successful library scan that
 started after completion has published its results. Advancing the queue cannot
 briefly expose the predecessor's stale Update or Replace action during that gap.
+The update menu uses the same completion acknowledgement for replaced source IDs.
+Flags for a reused local ID are dropped when its GameBanana file identity changes.
 
 Selecting a manual replacement reserves its source and appends a FIFO job.
 Other unresolved source files remain available. A failed choice returns for

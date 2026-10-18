@@ -93,7 +93,7 @@ import {
   STABLE_KEY_PREFERENCES_MIGRATED_EVENT,
   type StableKeyPreferencesMigratedDetail,
 } from '../lib/stableKeyMigration';
-import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
+import { isDownloadRequestPending, releaseDownloadRequest, requestDownload, usePendingDownloadCompletions } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { mergeSourceFileIds } from '../lib/updateCheck';
@@ -1216,9 +1216,20 @@ export default function Installed() {
   const detailsRequestIdRef = useRef(0);
   const updatesAvailable = useModUpdateCheckStore(state => state.updatesAvailable);
   const mergedSourceUpdates = useModUpdateCheckStore(state => state.staleMergeSources);
+  const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
+  const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
+  const finishing = usePendingDownloadCompletions();
+  const unavailableUpdateIds = useMemo(() => new Set([
+    ...updatingModIds, ...submittingModIds,
+    ...finishing.flatMap(item => item.replacementModIds ?? []),
+  ]), [updatingModIds, submittingModIds, finishing]);
+  const menuUpdateIds = useMemo(
+    () => new Set([...updatesAvailable].filter(id => !unavailableUpdateIds.has(id))),
+    [updatesAvailable, unavailableUpdateIds],
+  );
   const updateModCount = useMemo(
-    () => groupModUpdates(visibleMods, updatesAvailable).length,
-    [visibleMods, updatesAvailable],
+    () => groupModUpdates(visibleMods, menuUpdateIds).length,
+    [visibleMods, menuUpdateIds],
   );
 
   const detailsInstalledMods = useMemo(
@@ -1271,7 +1282,6 @@ export default function Installed() {
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
-  const updateBusy = useModUpdatesStore((state) => state.state.busy || state.submitting);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   useElasticOverscroll(installedScrollRef);
@@ -1918,17 +1928,12 @@ export default function Installed() {
     }
   });
 
-  const runUpdate = async (targets: typeof mods) => {
+  const handleUpdateGroup = async (variantIds: readonly string[]) => {
     try {
-      await startUpdates(targets.map((mod) => mod.id));
+      await startUpdates(variantIds.filter(id => menuUpdateIds.has(id)));
     } catch (error) {
       showToast(toastErrorMessage(error), { tone: 'error' });
     }
-  };
-
-  const handleUpdateGroup = async (variantIds: readonly string[]) => {
-    const groupIds = new Set(variantIds);
-    await runUpdate(mods.filter((mod) => groupIds.has(mod.id) && updatesAvailable.has(mod.id)));
   };
 
   const handleIgnoreUpdateGroup = async (modIds: string[]) => {
@@ -3582,7 +3587,7 @@ export default function Installed() {
       },
     });
   }
-  const showUpdateButton = updateModCount > 0 || updateBusy;
+  const showUpdateButton = updateModCount > 0;
   const hasStatusButtons = statusIssues.length > 0 || showUpdateButton || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex flex-wrap items-center gap-2">
@@ -3592,17 +3597,10 @@ export default function Installed() {
           variant="primary"
           onClick={() => setUpdateAllConfirmOpen(true)}
           icon={Download}
-          isLoading={updateBusy}
           aria-live="polite"
-          title={
-            updateBusy
-              ? t('installed.updateAll.inProgress')
-              : t('installed.updateAll.hint')
-          }
+          title={t('installed.updateAll.hint')}
         >
-          {updateBusy
-            ? t('installed.updateAll.updating')
-            : t('installed.updateAll.updateCount', { count: updateModCount })}
+          {t('installed.updateAll.updateCount', { count: updateModCount })}
         </Button>
       )}
       {unknownMods.length > 0 && fixUnknownHidden && (
@@ -4144,8 +4142,7 @@ export default function Installed() {
       {updateAllConfirmOpen && (
         <ModUpdatesModal
           mods={visibleMods}
-          updateIds={updatesAvailable}
-          busy={updateBusy}
+          updateIds={menuUpdateIds}
           onUpdate={handleUpdateGroup}
           onIgnore={handleIgnoreUpdateGroup}
           onOpen={openUpdateMenuMod}
@@ -4296,7 +4293,7 @@ export default function Installed() {
                 ? () => handleUpdateGroup(liveEntry.variants.map((variant) => variant.id))
                 : undefined
             }
-            isUpdating={updateBusy}
+            isUpdating={liveEntry.variants.some(variant => unavailableUpdateIds.has(variant.id))}
             onClose={() => setPickerGroupId(null)}
           />
         );

@@ -11,11 +11,12 @@ const EMPTY_STATE: ModUpdateState = {
   errors: [],
   revision: 0,
   affectedModIds: [],
+  updatingModIds: [],
 };
 
 interface ModUpdatesStore {
   state: ModUpdateState;
-  submitting: boolean;
+  submittingModIds: ReadonlySet<string>;
   selectedRequestId: string | null;
   dismissedNotices: ReadonlySet<string>;
   start: (modIds: string[]) => Promise<void>;
@@ -26,16 +27,23 @@ interface ModUpdatesStore {
 
 export const useModUpdatesStore = create<ModUpdatesStore>((set, get) => ({
   state: EMPTY_STATE,
-  submitting: false,
+  submittingModIds: new Set(),
   selectedRequestId: null,
   dismissedNotices: new Set(),
   start: async (modIds) => {
-    if (get().state.busy || get().submitting || modIds.length === 0) return;
-    set({ submitting: true });
+    const current = get();
+    const reserved = new Set([...current.state.updatingModIds, ...current.submittingModIds]);
+    const pendingIds = [...new Set(modIds)].filter(id => !reserved.has(id));
+    if (pendingIds.length === 0) return;
+    set({ submittingModIds: new Set([...current.submittingModIds, ...pendingIds]) });
     try {
-      await startModUpdates({ modIds });
+      await startModUpdates({ modIds: pendingIds });
     } finally {
-      set({ submitting: false });
+      set(current => {
+        const submittingModIds = new Set(current.submittingModIds);
+        for (const id of pendingIds) submittingModIds.delete(id);
+        return { submittingModIds };
+      });
     }
   },
   openRequest: (id) => set({ selectedRequestId: id }),

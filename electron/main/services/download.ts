@@ -502,6 +502,7 @@ async function processQueue(): Promise<void> {
                     await item.hooks.afterInstall(result);
                     item.mainWindow?.webContents.send('download-complete', {
                         jobId: item.jobId, modId: item.args.modId, fileId: item.args.fileId,
+                        replacementModIds: item.args.replacementModIds,
                     });
                 }
                 await cleanupJob(item);

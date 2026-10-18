@@ -48,6 +48,28 @@ function setup() {
 beforeEach(() => vi.restoreAllMocks());
 
 describe('main-process update coordination', () => {
+    it.each(['bulk', 'manual', 'details'] as const)('retains sources in every published state until %s replacement settles', async kind => {
+        const h = setup();
+        let standalone: Promise<unknown> | undefined;
+        if (kind === 'details') {
+            standalone = h.controller.replace({ modId: 1, fileId: 20, fileName: 'archive.zip', replacementModIds: ['old'] });
+        } else {
+            if (kind === 'manual') h.setMods([mod('old', 10, 'No match')]);
+            await h.controller.start(['old']);
+            if (kind === 'manual') {
+                await h.controller.choose({ requestId: h.controller.getState().manualRequests[0].id, oldFileId: 10, newFileId: 20 });
+            }
+        }
+        await flush();
+        expect(h.work).toHaveLength(1);
+        expect(h.states.length).toBeGreaterThan(0);
+        expect(h.states.every(state => state.updatingModIds.includes('old'))).toBe(true);
+        h.work[0].resolve();
+        await standalone;
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [] });
+    });
+
     it('finishes matching every submission before enqueuing the full batch', async () => {
         const h = setup();
         h.setMods([mod('one', 10, 'Original'), mod('two', 11, 'Original', 2)]);
@@ -70,15 +92,106 @@ describe('main-process update coordination', () => {
         expect(h.controller.isBusy()).toBe(false);
     });
 
-    it('combines VPK replacements from the same archive and rejects a second batch', async () => {
+    it('combines VPK replacements from the same archive and skips sources already updating', async () => {
         const h = setup();
         h.setMods([mod('one', 10, 'Original'), mod('two', 10, 'Original')]);
         await h.controller.start(['one', 'two', 'one']);
         expect(h.deps.replace).toHaveBeenCalledOnce();
         expect(h.deps.replace.mock.calls[0][2]).toEqual(['one', 'two']);
-        await expect(h.controller.start(['one'])).rejects.toThrow('already in progress');
+        await h.controller.start(['one']);
+        expect(h.deps.details).toHaveBeenCalledOnce();
+        expect(h.deps.replace).toHaveBeenCalledOnce();
         h.work[0].resolve();
         await flush();
+    });
+
+    it('appends another submission during a download and shares the active recovery snapshot', async () => {
+        const h = setup();
+        h.setMods([mod('one', 10, 'Original'), mod('two', 11, 'Original', 2)]);
+        await h.controller.start(['one']);
+        await h.controller.start(['one', 'two']);
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['one'], ['two']]);
+        expect(h.deps.snapshot).toHaveBeenCalledExactlyOnceWith('normal');
+        expect(h.controller.getState().updatingModIds).toEqual(['one', 'two']);
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: true, updatingModIds: ['two'] });
+        h.work[1].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [] });
+    });
+
+    it('reserves additive starts immediately and keeps preparing while later matching remains', async () => {
+        const h = setup();
+        h.setMods([mod('one', 10, 'Original'), mod('two', 11, 'Original', 2)]);
+        const firstMatch = deferred();
+        const secondMatch = deferred();
+        h.deps.details.mockImplementation(async id => {
+            await (id === 1 ? firstMatch : secondMatch).promise;
+            return details(id, [file(id + 20, 'Original')]);
+        });
+        const first = h.controller.start(['one']);
+        const second = h.controller.start(['one', 'two']);
+        await h.controller.start(['two']);
+        expect(h.controller.getState()).toMatchObject({ preparing: true, updatingModIds: ['one', 'two'] });
+        await flush();
+        expect(h.deps.details.mock.calls).toEqual([[1, 'Mod']]);
+        firstMatch.resolve();
+        await first;
+        await flush();
+        expect(h.controller.getState().preparing).toBe(true);
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['one']]);
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: true, preparing: true, updatingModIds: ['two'] });
+        secondMatch.resolve();
+        await second;
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['one'], ['two']]);
+        expect(h.deps.snapshot).toHaveBeenCalledOnce();
+        h.work[1].resolve();
+        await flush();
+        expect(h.controller.isBusy()).toBe(false);
+    });
+
+    it('adds work while manual choices remain without duplicating their submission group', async () => {
+        const h = setup();
+        h.setMods([mod('manual1', 10, 'X'), mod('manual2', 11, 'Y'), mod('auto', 12, 'Original', 2)]);
+        await h.controller.start(['manual1']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        await h.controller.start(['manual1', 'manual2', 'auto']);
+        expect(h.controller.getState()).toMatchObject({
+            busy: true,
+            manualRequests: [{ id: requestId, sourceFileIds: [10, 11], sourceModIds: ['manual1', 'manual2'] }],
+        });
+        expect(new Set(h.controller.getState().updatingModIds)).toEqual(new Set(['manual1', 'manual2', 'auto']));
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['auto']]);
+        expect(h.deps.snapshot).toHaveBeenCalledOnce();
+        h.controller.remove(requestId);
+        expect(h.controller.getState().updatingModIds).toEqual(['auto']);
+        h.work[0].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [] });
+    });
+
+    it('retains later manual sources from the same archive when an earlier choice fails', async () => {
+        const h = setup();
+        h.setMods([mod('one', 10, 'X'), mod('two', 10, 'X')]);
+        await h.controller.start(['one']);
+        const requestId = h.controller.getState().manualRequests[0].id;
+        await h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        await h.controller.start(['two']);
+        expect(h.controller.getState().manualRequests[0]).toMatchObject({ id: requestId, sourceModIds: ['two'] });
+        h.work[0].reject(new Error('network failed'));
+        await flush();
+        expect(h.controller.getState().manualRequests).toEqual([expect.objectContaining({
+            id: requestId, sourceFileIds: [10], sourceModIds: ['two', 'one'],
+        })]);
+        expect(new Set(h.controller.getState().updatingModIds)).toEqual(new Set(['one', 'two']));
+        await h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
+        expect(h.deps.replace.mock.calls[1][2]).toEqual(['two', 'one']);
+        h.work[1].resolve();
+        await flush();
+        expect(h.controller.getState()).toMatchObject({ busy: false, manualRequests: [], updatingModIds: [] });
     });
 
     it('groups multiple unresolved files per submission, after automatic classification', async () => {
@@ -137,7 +250,7 @@ describe('main-process update coordination', () => {
         h.work[0].reject(new Error('network failed'));
         h.work[1].resolve();
         await flush();
-        expect(h.controller.getState()).toMatchObject({ busy: false, errors: [{ modId: 1, message: 'network failed' }] });
+        expect(h.controller.getState()).toMatchObject({ busy: false, updatingModIds: [], errors: [{ modId: 1, message: 'network failed' }] });
     });
 
     it('skips an already queued destination without attaching destructive finalization', async () => {
@@ -146,6 +259,7 @@ describe('main-process update coordination', () => {
         await h.controller.start(['old']);
         expect(h.deps.replace).not.toHaveBeenCalled();
         expect(h.controller.getState().errors[0].message).toContain('already queued');
+        expect(h.controller.getState().updatingModIds).toEqual([]);
         expect(h.controller.isBusy()).toBe(false);
     });
 
@@ -158,10 +272,11 @@ describe('main-process update coordination', () => {
         h.work[0].reject(new Error('network failed'));
         await flush();
         expect(h.controller.getState().manualRequests[0].sourceFileIds).toEqual([10]);
+        expect(h.controller.getState().updatingModIds).toEqual(['old']);
         await h.controller.choose({ requestId, oldFileId: 10, newFileId: 20 });
         h.work[1].reject(new Error('CANCELLED'));
         await flush();
-        expect(h.controller.getState()).toMatchObject({ busy: false, manualRequests: [] });
+        expect(h.controller.getState()).toMatchObject({ busy: false, manualRequests: [], updatingModIds: [] });
     });
 
     it('removal during manual failure does not reintroduce pending work', async () => {

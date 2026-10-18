@@ -238,6 +238,11 @@ export function getPendingDownloadCompletions(): readonly DownloadEventData[] {
   return snapshot.finishing;
 }
 
+/** Stable between completions and scans, regardless of transfer progress. */
+export function usePendingDownloadCompletions(): readonly DownloadEventData[] {
+  return useSyncExternalStore(subscribe, getPendingDownloadCompletions, () => EMPTY_SNAPSHOT.finishing);
+}
+
 /** Called only after the fresh installed state has been published. */
 export function acknowledgeDownloadCompletions(completions: readonly DownloadEventData[]): void {
   const finishing = snapshot.finishing.filter(item => !completions.some(completion => sameCompletion(item, completion)));

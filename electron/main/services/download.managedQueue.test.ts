@@ -219,7 +219,7 @@ describe('managed download FIFO', () => {
         harness.scanMods.mockResolvedValue([{ id: 'fresh', fileName: 'fixture_4_dir.vpk', enabled: false }]);
         const finalize = deferred();
         const finalizing = deferred();
-        const copy = enqueueManagedDownload('/game', args(4), mainWindow, {
+        const copy = enqueueManagedDownload('/game', { ...args(4), replacementModIds: ['old-one', 'old-two'] }, mainWindow, {
             afterInstall: async ({ installedVpks }) => {
                 expect(installedVpks).toEqual(['fixture_4_dir.vpk']);
                 expect(await fs.readFile(join(harness.disabledPath, installedVpks[0]), 'utf8')).toBe('fixture-vpk');
@@ -233,6 +233,9 @@ describe('managed download FIFO', () => {
         finalize.resolve();
         await copy;
         expect(completions()).toEqual([4]);
+        expect(harness.send).toHaveBeenCalledWith('download-complete', expect.objectContaining({
+            modId: 4, fileId: 4, jobId: expect.any(String), replacementModIds: ['old-one', 'old-two'],
+        }));
 
         harness.scanMods.mockResolvedValue([{ id: 'legacy', fileName: 'fixture_5_dir.vpk', enabled: false }]);
         await downloadMod('/game', { ...args(5), isReplacement: true }, mainWindow);

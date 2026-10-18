@@ -57,8 +57,8 @@ describe('update queue and replacement notices', () => {
     mocks.choose.mockResolvedValue(undefined);
     mocks.details.mockResolvedValue({ id: 10, name: 'Manual mod', nsfw: false, files: [] });
     useModUpdatesStore.setState({
-      state: { busy: true, preparing: false, manualRequests: [request], errors: [], revision: 0, affectedModIds: [] },
-      submitting: false, selectedRequestId: null, dismissedNotices: new Set(),
+      state: { busy: true, preparing: false, updatingModIds: [], manualRequests: [request], errors: [], revision: 0, affectedModIds: [] },
+      submittingModIds: new Set(), selectedRequestId: null, dismissedNotices: new Set(),
     });
     Object.assign(window, { electronAPI: {
       onDownloadProgress: (listener: (data: DownloadProgressData) => void) => {

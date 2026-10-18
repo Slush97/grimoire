@@ -79,6 +79,22 @@ export function listenForModUpdateChecks(): () => void {
   }
 
   const unsubscribeMods = useAppStore.subscribe((state, previous) => {
+    if (state.mods !== previous.mods) {
+      // A restored load-order slot can reuse the predecessor's local ID. Drop
+      // its old flag before the scan releases the download's finishing state.
+      const currentById = new Map(state.mods.map(mod => [mod.id, mod]));
+      const previousById = new Map(previous.mods.map(mod => [mod.id, mod]));
+      const { updatesAvailable } = useModUpdateCheckStore.getState();
+      const retained = [...updatesAvailable].filter(id => {
+        const before = previousById.get(id);
+        const after = currentById.get(id);
+        return before && after && !after.ignoreUpdates && before.gameBananaId === after.gameBananaId &&
+          before.gameBananaFileId === after.gameBananaFileId && (before.sourceSection ?? 'Mod') === (after.sourceSection ?? 'Mod');
+      });
+      if (retained.length !== updatesAvailable.size) {
+        useModUpdateCheckStore.setState({ updatesAvailable: new Set(retained) });
+      }
+    }
     if (state.mods !== previous.mods ||
       getActiveDeadlockPath(state.settings) !== getActiveDeadlockPath(previous.settings) ||
       state.settings?.devMode !== previous.settings?.devMode ||

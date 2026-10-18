@@ -18,6 +18,8 @@ export interface ModUpdateError {
 export interface ModUpdateState {
   busy: boolean;
   preparing: boolean;
+  /** Local installed file IDs already claimed by update work. */
+  updatingModIds: string[];
   manualRequests: ModUpdateManualRequest[];
   errors: ModUpdateError[];
   revision: number;

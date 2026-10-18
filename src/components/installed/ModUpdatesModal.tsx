@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Download, ExternalLink, Eye, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Mod } from '../../types/mod';
@@ -10,19 +11,18 @@ import { IconButton } from '../common/ui';
 interface Props {
   mods: Mod[];
   updateIds: ReadonlySet<string>;
-  busy: boolean;
   onUpdate: (modIds: string[]) => void | Promise<void>;
   onIgnore: (modIds: string[]) => Promise<void>;
   onOpen: (modId: string) => void;
   onClose: () => void;
 }
 
-export default function ModUpdatesModal({ mods, updateIds, busy, onUpdate, onIgnore, onOpen, onClose }: Props) {
+export default function ModUpdatesModal({ mods, updateIds, onUpdate, onIgnore, onOpen, onClose }: Props) {
   const { t } = useTranslation();
   const groups = useMemo(() => groupModUpdates(mods, updateIds), [mods, updateIds]);
   const [ignoring, setIgnoring] = useState<string | null>(null);
   const pendingIds = groups.flatMap(group => group.pending.map(mod => mod.id));
-  const disabled = busy || ignoring !== null;
+  const disabled = ignoring !== null;
 
   useEffect(() => {
     if (groups.length === 0) onClose();
@@ -30,8 +30,8 @@ export default function ModUpdatesModal({ mods, updateIds, busy, onUpdate, onIgn
 
   const update = (modIds: string[]) => {
     if (disabled || modIds.length === 0) return;
-    void onUpdate(modIds);
-    onClose();
+    // Remove accepted rows before another click can reach the same button.
+    flushSync(() => { void onUpdate(modIds); });
   };
 
   const ignore = async (group: typeof groups[number]) => {
@@ -45,6 +45,8 @@ export default function ModUpdatesModal({ mods, updateIds, busy, onUpdate, onIgn
       setIgnoring(null);
     }
   };
+
+  if (groups.length === 0) return null;
 
   return (
     <ConfirmModal

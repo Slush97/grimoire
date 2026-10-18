@@ -23,6 +23,10 @@ interface UpdateGroup {
     removed: boolean;
 }
 
+function addPendingSources(group: UpdateGroup, fileId: number, sources: string[]) {
+    group.pending.set(fileId, [...new Set([...(group.pending.get(fileId) ?? []), ...sources])]);
+}
+
 interface Dependencies {
     context: () => ModUpdateContext;
     mods: (path: string) => Promise<Mod[]>;
@@ -39,7 +43,6 @@ interface Dependencies {
 /** Matching finishes for the whole batch before any replacement enters FIFO. */
 export function createModUpdateController(deps: Dependencies) {
     let context: ModUpdateContext | null = null;
-    let preparing = false;
     let jobs = 0;
     let revision = 0;
     let sequence = 0;
@@ -50,6 +53,7 @@ export function createModUpdateController(deps: Dependencies) {
     const reservedSources = new Set<string>();
     const reservedTargets = new Set<string>();
     const validatingSources = new Set<string>();
+    const preparingSources = new Set<string>();
     let preparation = Promise.resolve();
 
     // Only preparation is serialized here. Transfer and finalization belong to FIFO.
@@ -59,7 +63,7 @@ export function createModUpdateController(deps: Dependencies) {
         return result;
     };
     const reserveValidation = (sources: string[]) => {
-        if (sources.some(id => validatingSources.has(id) || reservedSources.has(id))) {
+        if (sources.some(id => preparingSources.has(id) || validatingSources.has(id) || reservedSources.has(id))) {
             throw new Error('This installed file is already being updated.');
         }
         sources.forEach(id => validatingSources.add(id));
@@ -67,9 +71,14 @@ export function createModUpdateController(deps: Dependencies) {
     };
 
     const hasPending = () => [...groups.values()].some(group => group.pending.size > 0);
-    const busy = () => preparing || jobs > 0 || hasPending();
+    const updatingSources = () => new Set([
+        ...preparingSources, ...validatingSources, ...reservedSources,
+        ...[...groups.values()].flatMap(group => [...group.pending.values()].flat()),
+    ]);
+    const busy = () => preparingSources.size > 0 || jobs > 0 || hasPending();
     const getState = (): ModUpdateState => ({
-        busy: busy(), preparing, revision,
+        busy: busy(), preparing: preparingSources.size > 0, revision,
+        updatingModIds: [...updatingSources()],
         affectedModIds: [...affectedModIds],
         errors: errors.map(error => ({ ...error })),
         manualRequests: [...groups.values()].filter(group => group.pending.size > 0).map(group => ({
@@ -137,7 +146,7 @@ export function createModUpdateController(deps: Dependencies) {
                             mod.gameBananaFileId === expected.gameBananaFileId && mod.size === expected.size &&
                             mod.installedAt === expected.installedAt && (!expected.sha256 || expected.sha256 === mod.sha256);
                     }));
-                    if (remaining.length > 0 && !group.removed) group.pending.set(manualFileId, remaining);
+                    if (remaining.length > 0 && !group.removed) addPendingSources(group, manualFileId, remaining);
                 } catch (scanError) { console.warn('[mod-updates] Could not recover replacement choice:', scanError); }
             }
         }).finally(() => {
@@ -150,14 +159,15 @@ export function createModUpdateController(deps: Dependencies) {
     }
 
     async function start(modIds: string[]) {
-        if (busy()) throw new Error('Mod updates are already in progress.');
-        begin();
-        preparing = true;
+        const updating = updatingSources();
+        const selected = new Set(modIds.filter(id => !updating.has(id)));
+        if (selected.size === 0) return;
+        if (!busy()) begin();
+        selected.forEach(id => preparingSources.add(id));
         publish();
         try {
             await prepare(async () => {
                 const installed = visibleInstalledMods(await deps.mods(assertContext().deadlockPath));
-                const selected = new Set(modIds);
                 const targets = installed.filter(mod => selected.has(mod.id) && !mod.ignoreUpdates && typeof mod.gameBananaId === 'number');
                 const bySubmission = new Map<string, Mod[]>();
                 for (const mod of targets) {
@@ -175,7 +185,11 @@ export function createModUpdateController(deps: Dependencies) {
                     try {
                         const details = await deps.details(modId, section);
                         assertContext();
-                        const group: UpdateGroup = { id: `${++sequence}:${key}`, modId, section, modName: details.name, details, pending: new Map(), expected: new Map(selectedMods.map(mod => [mod.id, { ...mod }])), removed: false };
+                        const group = [...groups.values()].find(candidate => candidate.modId === modId && candidate.section === section && !candidate.removed)
+                            ?? { id: `${++sequence}:${key}`, modId, section, modName: details.name, details, pending: new Map<number, string[]>(), expected: new Map<string, Mod>(), removed: false };
+                        group.modName = details.name;
+                        group.details = details;
+                        selectedMods.forEach(mod => group.expected.set(mod.id, { ...mod }));
                         groups.set(group.id, group);
                         const scope = installed.filter(mod => (mod.sourceSection ?? 'Mod') === section);
                         const classification = classifyModFiles(modId, details.files ?? [], scope, mergeSourceFileIds(scope), autoMatch);
@@ -183,9 +197,7 @@ export function createModUpdateController(deps: Dependencies) {
                         for (const step of resolveUpdateRun(classification, selectedMods)) {
                             if (step.kind === 'needs-pick') {
                                 const old = selectedMods.find(mod => mod.id === step.modId)!;
-                                const ids = group.pending.get(old.gameBananaFileId!) ?? [];
-                                ids.push(old.id);
-                                group.pending.set(old.gameBananaFileId!, ids);
+                                addPendingSources(group, old.gameBananaFileId!, [old.id]);
                             } else if (step.kind === 'update') {
                                 const job = destinations.get(step.fileId) ?? { sources: [], promote: step.promote };
                                 job.sources.push(step.modId);
@@ -209,7 +221,7 @@ export function createModUpdateController(deps: Dependencies) {
                 }
             });
         } finally {
-            preparing = false;
+            selected.forEach(id => preparingSources.delete(id));
             publish(jobs === 0);
         }
     }
@@ -238,7 +250,7 @@ export function createModUpdateController(deps: Dependencies) {
                 enqueue(group, { modId: group.modId, fileId: newFileId, fileName: file.fileName, modName: group.modName, section: group.section, isReplacement: true }, sources, false, sources.map(id => group.expected.get(id)!), oldFileId);
             });
         } catch (error) {
-            if (!group.removed) group.pending.set(oldFileId, sources);
+            if (!group.removed) addPendingSources(group, oldFileId, sources);
             throw error;
         } finally {
             releaseValidation();
@@ -306,7 +318,7 @@ export function createModUpdateController(deps: Dependencies) {
             releaseValidation();
             await completion;
         } catch (error) {
-            if (!submitted && group && manualFileId !== undefined && !group.removed) group.pending.set(manualFileId, sources);
+            if (!submitted && group && manualFileId !== undefined && !group.removed) addPendingSources(group, manualFileId, sources);
             throw error;
         } finally {
             releaseValidation();
