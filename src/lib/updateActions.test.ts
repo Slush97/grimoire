@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideFileDownload, replaceableFilesFor, resolveUpdateRun, sameFileModIds, summarizeUpdateScope } from './updateActions';
+import { decideFileDownload, modUpdateGroup, replaceableFilesFor, resolveUpdateRun, summarizeUpdateScope } from './updateActions';
 import { classifyModFiles, type InstalledUpdateEntry, type UpdateFileRow } from './updateFileMatch';
 import snapshot from './__fixtures__/gamebanana/files-2026-10-02.json';
 
@@ -311,11 +311,46 @@ describe('a successor the user already installed', () => {
   });
 });
 
-describe('sameFileModIds', () => {
-  it('returns every VPK of the same GameBanana file', () => {
-    const mods = [vpk('a', 1), vpk('b', 1), vpk('c', 2), { id: 'local' }];
+describe('modUpdateGroup', () => {
+  it('includes every archive and extracted VPK of the submission, scoped to its section', () => {
+    const mods = [
+      vpk('a', 1), vpk('b', 1), vpk('c', 2),
+      { ...vpk('explicit-mod', 3), sourceSection: 'Mod' },
+      { ...vpk('sound', 4), sourceSection: 'Sound' },
+      vpk('other-submission', 1, { gameBananaId: 99 }), { id: 'local' },
+    ];
 
-    expect(sameFileModIds(mods, 'a')).toEqual(['a', 'b']);
-    expect(sameFileModIds(mods, 'local')).toEqual(['local']);
+    expect(modUpdateGroup(mods, QOL).map(mod => mod.id)).toEqual(['a', 'b', 'c', 'explicit-mod']);
+    expect(modUpdateGroup(mods, QOL, 'Sound').map(mod => mod.id)).toEqual(['sound']);
+    expect(modUpdateGroup(mods, null)).toEqual([]);
+  });
+
+  it('restores both update matches after ignoring and resuming three installed variants', () => {
+    const installed = [
+      vpk('no-hotel', 10, { fileDescription: 'No Hotel version' }),
+      vpk('main', 11, { fileDescription: 'G-Man Mod' }),
+      vpk('portraits', 30),
+    ];
+    const files: UpdateFileRow[] = [
+      { id: 20, fileName: 'gman-no-hotel.zip', description: 'No Hotel version', isArchived: false },
+      { id: 21, fileName: 'gman.zip', description: 'G-Man Mod', isArchived: false },
+      { id: 30, fileName: 'portraits.zip', isArchived: false },
+    ];
+    const expected = new Map([[20, ['no-hotel']], [21, ['main']]]);
+    expect(summarizeUpdateScope(classifyModFiles(QOL, files, installed)).targets).toEqual(expected);
+
+    const ignored = modUpdateGroup(installed, QOL).map(mod => ({ ...mod, ignoreUpdates: true }));
+    expect(summarizeUpdateScope(classifyModFiles(QOL, files, ignored)).flagged).toBe(false);
+
+    // The old file-scoped toggle restored just the clicked archive.
+    const partial = ignored.map(mod => mod.id === 'no-hotel' ? { ...mod, ignoreUpdates: false } : mod);
+    expect(summarizeUpdateScope(classifyModFiles(QOL, files, partial)).targets.size).toBe(1);
+    expect(modUpdateGroup(partial, QOL).some(mod => mod.ignoreUpdates)).toBe(true);
+
+    const resumed = modUpdateGroup(partial, QOL).map(mod => ({ ...mod, ignoreUpdates: false }));
+    const classification = classifyModFiles(QOL, files, resumed);
+    expect(summarizeUpdateScope(classification).targets).toEqual(expected);
+    expect(classification.states.get(30)).toEqual({ kind: 'current' });
+    expect([...classification.sourceIds.values()].flat()).toEqual(['no-hotel', 'main', 'portraits']);
   });
 });

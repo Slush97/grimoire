@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../types/mod';
@@ -35,7 +35,7 @@ describe('file replacement preferences', () => {
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent === label)!;
   const replaceButton = () => host.querySelector<HTMLButtonElement>('[title="modDetails.replace.action"]')!;
   const checkbox = () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-  const render = async (preferences = false) => {
+  const render = async (preferences = false, overrides: Partial<ComponentProps<typeof ModDetailsModal>> = {}) => {
     await act(async () => root.render(<>
       {preferences && <PreferencesSection />}
       <ModDetailsModal
@@ -43,6 +43,7 @@ describe('file replacement preferences', () => {
         replaceableFiles={[{ fileId: 20, fileName: 'old.zip', label: 'Old variant' }]}
         onReplace={mocks.replace} onDownload={mocks.download} onClose={vi.fn()}
         hideNsfwPreviews={false} manualReplacement offline variant="sidebar"
+        {...overrides}
       />
     </>));
   };
@@ -61,6 +62,18 @@ describe('file replacement preferences', () => {
     act(() => root.unmount());
     host.remove();
     window.electronAPI = previousApi;
+  });
+
+  it('keeps the resume-updates control visible and blocks duplicate toggles while saving', async () => {
+    const toggle = vi.fn();
+    await render(false, { ignoreUpdates: true, ignoreUpdatesPending: true, onToggleIgnoreUpdates: toggle });
+    const resume = button('modDetails.status.updatesIgnored');
+    expect(resume.disabled).toBe(true);
+    await act(async () => resume.click());
+    expect(toggle).not.toHaveBeenCalled();
+    await render(false, { ignoreUpdates: true, onToggleIgnoreUpdates: toggle });
+    await act(async () => button('modDetails.status.updatesIgnored').click());
+    expect(toggle).toHaveBeenCalledOnce();
   });
 
   it('keeps the warning enabled when a checked confirmation is canceled', async () => {

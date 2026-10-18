@@ -94,7 +94,7 @@ import {
 } from '../lib/stableKeyMigration';
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
-import { decideFileDownload, replaceableFilesFor, sameFileModIds, summarizeUpdateScope } from '../lib/updateActions';
+import { decideFileDownload, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
 import { computeUpdateFlags, mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
@@ -1200,7 +1200,7 @@ export default function Installed() {
   // True when the overlay is showing cached-catalog data because the live
   // GameBanana fetch failed; drives the offline banner in the modal.
   const [detailsOffline, setDetailsOffline] = useState(false);
-  const [detailsIgnoreUpdates, setDetailsIgnoreUpdates] = useState(false);
+  const [detailsIgnoreUpdatesPending, setDetailsIgnoreUpdatesPending] = useState(false);
   // GameBanana id the overlay is showing. Every installed-state value below is
   // derived live from the store off this id rather than snapshotted when the
   // overlay opens: a snapshot went stale the moment the user installed a
@@ -1223,25 +1223,30 @@ export default function Installed() {
     new Map(),
   );
 
+  const detailsInstalledMods = useMemo(
+    () => modUpdateGroup(visibleMods, detailsGameBananaId, detailsSection),
+    [visibleMods, detailsGameBananaId, detailsSection],
+  );
+  // A mixed state can remain after an interrupted save or a previous per-file
+  // toggle. Resume detection for the whole submission when any variant is ignored.
+  const detailsIgnoreUpdates = detailsInstalledMods.some(mod => mod.ignoreUpdates);
+
   // Installed/enabled GameBanana fileIds for the mod the details overlay is
-  // showing, aggregated across every sibling that shares the GB id (not just
-  // the clicked file) so multi-variant groups flag every owned row. Derived
+  // showing, aggregated across every sibling in the same submission and section
+  // so multi-variant groups flag every owned row. Derived
   // from the visible mods so an install, delete or toggle performed while the
   // overlay is open updates it on the spot, the way Browse feeds the same
   // modal, and a file held only inside a merge does not read as installed.
   const { detailsInstalledFileIds, detailsActiveFileIds } = useMemo(() => {
     const installedFileIds = new Set<number>();
     const activeFileIds = new Set<number>();
-    if (detailsGameBananaId !== null) {
-      for (const candidate of visibleMods) {
-        if (candidate.gameBananaId !== detailsGameBananaId) continue;
-        if (typeof candidate.gameBananaFileId !== 'number') continue;
-        installedFileIds.add(candidate.gameBananaFileId);
-        if (candidate.enabled) activeFileIds.add(candidate.gameBananaFileId);
-      }
+    for (const candidate of detailsInstalledMods) {
+      if (typeof candidate.gameBananaFileId !== 'number') continue;
+      installedFileIds.add(candidate.gameBananaFileId);
+      if (candidate.enabled) activeFileIds.add(candidate.gameBananaFileId);
     }
     return { detailsInstalledFileIds: installedFileIds, detailsActiveFileIds: activeFileIds };
-  }, [visibleMods, detailsGameBananaId]);
+  }, [detailsInstalledMods]);
   // Files the user has inside a merge are never proposed as successors.
   const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
   const autoMatchRemainingFiles = settings?.autoMatchRemainingFiles ?? true;
@@ -1250,7 +1255,7 @@ export default function Installed() {
   // Each download still replaces only its matched or explicitly chosen file.
   const detailsUpdate = useMemo(() => {
     const files = detailsMod?.files ?? [];
-    const classification = classifyModFiles(detailsMod?.id ?? -1, files, visibleMods, mergedFileIds, autoMatchRemainingFiles);
+    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedFileIds, autoMatchRemainingFiles);
     const source = detailsSourceModId ? mods.find((mod) => mod.id === detailsSourceModId) : undefined;
     const summary = summarizeUpdateScope(classification);
     // The offline fallback has no file rows; keep the card's verdict for the badge.
@@ -1260,9 +1265,9 @@ export default function Installed() {
       flagged: summary.flagged || offlineFlag,
       archived: summary.archived,
       updateFileIds: new Set(summary.targets.keys()),
-      replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
+      replaceableFiles: replaceableFilesFor(summary.needsPick, detailsInstalledMods),
     };
-  }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
+  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
@@ -1334,7 +1339,6 @@ export default function Installed() {
     // Installed/active file sets and the update pulse are derived from this id
     // against the live mod list, so nothing to snapshot here.
     setDetailsGameBananaId(m.gameBananaId);
-    setDetailsIgnoreUpdates(!!m.ignoreUpdates);
     setDetailsDates(null);
     setDetailsOffline(false);
     const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null);
@@ -1390,7 +1394,6 @@ export default function Installed() {
     setDetailsMod(null);
     setDetailsError(null);
     setDetailsOffline(false);
-    setDetailsIgnoreUpdates(false);
     setDetailsSourceModId(null);
     setDetailsGameBananaId(null);
     setDetailsDates(null);
@@ -1426,7 +1429,7 @@ export default function Installed() {
     // A linked item has no clicked entry, so choose an installed sibling as
     // its anchor. The file sets and update pulse follow from that anchor plus
     // the live mod list.
-    const linkedCandidates = mods.filter((candidate) => candidate.gameBananaId === item.id);
+    const linkedCandidates = modUpdateGroup(visibleMods, item.id, item.section);
     // Prefer the sibling that actually carries the update pulse. Choosing the
     // first installed sibling could anchor on a current variant and suppress
     // both the badge and the stale variant's replacement plan.
@@ -1435,7 +1438,6 @@ export default function Installed() {
       ?? null;
     setDetailsGameBananaId(item.id);
     setDetailsSourceModId(source?.id ?? null);
-    setDetailsIgnoreUpdates(!!source?.ignoreUpdates);
     setDetailsDates(null);
 
     const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
@@ -1475,24 +1477,22 @@ export default function Installed() {
 
   const getUnknownCache = (mod: Mod) => unknownFilterCache[unknownModCacheKey(mod)];
 
-  // Flip the ignoreUpdates flag for the currently-open installed file (every
-  // VPK extracted from it, since update state is per GameBanana file) and
-  // refresh the mods store so the next updatesAvailable recompute (driven by
-  // the [mods] useEffect) picks the new flag up. Optimistically toggle the
-  // local state first so the pill flips immediately even if the IPC + scan
-  // round-trip is slow.
+  // Match the update menu: ignore/resume every installed variant, then rescan
+  // after the writes so an older in-flight scan cannot retain stale flags.
   const handleToggleIgnoreUpdates = useStableCallback(async () => {
-    if (!detailsSourceModId) return;
+    if (detailsIgnoreUpdatesPending || detailsInstalledMods.length === 0) return;
     const next = !detailsIgnoreUpdates;
-    setDetailsIgnoreUpdates(next);
+    setDetailsIgnoreUpdatesPending(true);
     try {
-      for (const id of sameFileModIds(visibleMods, detailsSourceModId)) {
-        await setModIgnoreUpdates(id, next);
+      for (const mod of detailsInstalledMods) {
+        if (!!mod.ignoreUpdates !== next) await setModIgnoreUpdates(mod.id, next);
       }
-      await loadMods({ silent: true });
     } catch (err) {
       console.error('[Installed] toggle ignoreUpdates failed:', err);
-      setDetailsIgnoreUpdates(!next);
+      showToast(toastErrorMessage(err), { tone: 'error' });
+    } finally {
+      await loadMods({ silent: true, force: true });
+      setDetailsIgnoreUpdatesPending(false);
     }
   });
 
@@ -1884,7 +1884,7 @@ export default function Installed() {
       const decision = decideFileDownload(
         fileId,
         detailsUpdate.classification,
-        visibleMods.filter((mod) => mod.gameBananaId === detailsMod.id),
+        detailsInstalledMods,
         { replaceFileId },
       );
       if (!isDownloadRequestPending(detailsMod.id, fileId)) return;
@@ -1903,14 +1903,12 @@ export default function Installed() {
 
       // Keep the overlay open on the freshly installed file so the row flips to
       // Installed/Active and the button to "Reinstall" in place. Re-anchor the
-      // source entry first: an update or reinstall deletes the old local id, and
-      // leaving it dangling would break the ignore-updates toggle and navigation.
-      const installed = useAppStore
-        .getState()
-        .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
+      // source entry first: an update or reinstall deletes the old local id,
+      // which navigation and the offline update badge still use.
+      const installed = modUpdateGroup(useAppStore.getState().mods, detailsMod.id, detailsSection)
+        .find(mod => mod.gameBananaFileId === fileId);
       if (installed) {
         setDetailsSourceModId(installed.id);
-        setDetailsIgnoreUpdates(!!installed.ignoreUpdates);
       }
     } catch (err) {
       // The error dialog below only renders when no mod is loaded, and the
@@ -4443,8 +4441,9 @@ export default function Installed() {
           replaceableFiles={detailsUpdate.replaceableFiles}
           onReplace={handleDetailsDownload}
           ignoreUpdates={detailsIgnoreUpdates}
+          ignoreUpdatesPending={detailsIgnoreUpdatesPending}
           onToggleIgnoreUpdates={
-            detailsSourceModId ? handleToggleIgnoreUpdates : undefined
+            detailsInstalledMods.length > 0 ? handleToggleIgnoreUpdates : undefined
           }
           onClose={closeModDetails}
           onViewArtist={openArtistPage}

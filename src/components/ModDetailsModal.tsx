@@ -97,9 +97,10 @@ interface ModDetailsModalProps {
   /** Manual queue choices use the replacement action preference and omit reinstall/enable. */
   manualReplacement?: boolean;
   /** When provided, render a toggle next to the Update/Installed badge that
-   *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
-   *  installed-mod path; Browse leaves both undefined. */
+   *  flips ignoreUpdates for every installed variant of this submission.
+   *  Only meaningful in the installed-mod path. */
   ignoreUpdates?: boolean;
+  ignoreUpdatesPending?: boolean;
   onToggleIgnoreUpdates?: () => void;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
@@ -159,6 +160,7 @@ function ModDetailsModal({
   onReplace,
   manualReplacement = false,
   ignoreUpdates,
+  ignoreUpdatesPending = false,
   onToggleIgnoreUpdates,
   onClose,
   onDownload,
@@ -1080,6 +1082,8 @@ function ModDetailsModal({
               <button
                 type="button"
                 onClick={onToggleIgnoreUpdates}
+                disabled={ignoreUpdatesPending}
+                aria-busy={ignoreUpdatesPending}
                 className={
                   ignoreUpdates
                     ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'

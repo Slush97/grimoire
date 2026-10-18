@@ -10,6 +10,9 @@ Each mod shows its pending variant count, with variant names in the name's
 tooltip. A row can start just that mod's updates or ignore updates for all of
 its installed variants. Starting updates closes the menu and uses the same
 batch executor as the footer action.
+The mod page's ignore/resume toggle applies to the same full submission and
+section. Its state follows all installed variants; resuming also clears a mixed
+ignore state left by an earlier per-file toggle or an interrupted save.
 Clicking a mod name or its link reveals that installed card, expands its section,
 and opens its usual details view or variant picker. Filters are cleared only
 when they hide the target.

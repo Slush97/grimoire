@@ -38,18 +38,14 @@ export function summarizeUpdateScope(
   return summary;
 }
 
-/** Local ids of every VPK extracted from the same GameBanana file as `modId`
- *  (just `modId` without GameBanana provenance). Update state is per file, so
- *  ignoring updates applies to all of them. */
-export function sameFileModIds(mods: readonly InstalledUpdateEntry[], modId: string): string[] {
-  const mod = mods.find((candidate) => candidate.id === modId);
-  if (!mod || typeof mod.gameBananaId !== 'number' || typeof mod.gameBananaFileId !== 'number') return [modId];
-  return mods
-    .filter(
-      (candidate) =>
-        candidate.gameBananaId === mod.gameBananaId && candidate.gameBananaFileId === mod.gameBananaFileId,
-    )
-    .map((candidate) => candidate.id);
+/** All installed variants of the submission shown by a mod page or update row. */
+export function modUpdateGroup<T extends { gameBananaId?: number; sourceSection?: string }>(
+  mods: readonly T[],
+  gameBananaId: number | null,
+  section = 'Mod',
+): T[] {
+  if (gameBananaId === null) return [];
+  return mods.filter(mod => mod.gameBananaId === gameBananaId && (mod.sourceSection ?? 'Mod') === section);
 }
 
 /** A stale installed file the details view offers to replace explicitly. */
