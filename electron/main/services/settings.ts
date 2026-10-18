@@ -22,6 +22,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
     autoMatchRemainingFiles: true,
+    skipModReplacementConfirmation: false,
+    swapManualReplacementActions: true,
     keepModBackups: false,
     autoEnableDownloads: false,
     steamLaunchOptions: '',

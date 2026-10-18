@@ -45,7 +45,7 @@ import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
 import { RevealImage } from './common/RevealImage';
-import { ArchivedTag, Button, IconButton, Tag } from './common/ui';
+import { ArchivedTag, Button, CheckboxMark, IconButton, Tag } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import ImageContextMenu from './ImageContextMenu';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
@@ -94,7 +94,7 @@ interface ModDetailsModalProps {
    *  exactly what gets deleted before calling `onReplace`. */
   replaceableFiles?: ReplaceableFile[];
   onReplace?: (fileId: number, fileName: string, replacedFileId: number) => void;
-  /** Manual queue choices prioritize replacement and omit reinstall/enable actions. */
+  /** Manual queue choices use the replacement action preference and omit reinstall/enable. */
   manualReplacement?: boolean;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
@@ -238,6 +238,9 @@ function ModDetailsModal({
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const soundVolume = useAppStore((state) => state.soundVolume);
+  const settings = useAppStore((state) => state.settings);
+  const saveSettings = useAppStore((state) => state.saveSettings);
+  const prioritizeReplacement = manualReplacement && (settings?.swapManualReplacementActions ?? true);
   // Cursor into the images array - only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
@@ -274,6 +277,7 @@ function ModDetailsModal({
   const [replaceCandidate, setReplaceCandidate] = useState<
     { fileId: number; fileName: string; replaced: ReplaceableFile } | null
   >(null);
+  const [dontAskAgain, setDontAskAgain] = useState(false);
   // Backdrop dismissal for the two nested overlays. The hook ignores drags
   // that only end on the backdrop, so releasing a text selection (or the
   // lightbox drag) outside the panel no longer closes them.
@@ -615,9 +619,15 @@ function ModDetailsModal({
     const showDeleteButton = !manualReplacement && !!installedFileState && !!onDeleteFile;
     const showDownloadButton = !manualReplacement || (isUpdate ? !isBusyThis : !isInstalled);
     const replaceOptions = !archived && !isUpdate && !isInstalled && !isBusyThis && onReplace ? replaceableFiles : [];
-    const swapActions = manualReplacement && replaceOptions.length > 0;
-    const pickReplacement = (replaced: ReplaceableFile) =>
+    const swapActions = prioritizeReplacement && replaceOptions.length > 0;
+    const pickReplacement = (replaced: ReplaceableFile) => {
+      if (settings?.skipModReplacementConfirmation) {
+        onReplace?.(file.id, file.fileName, replaced.fileId);
+        return;
+      }
+      setDontAskAgain(false);
       setReplaceCandidate({ fileId: file.id, fileName: file.fileName, replaced });
+    };
     const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
     const pct = fileProgress && fileProgress.total > 0
       ? Math.round((fileProgress.downloaded / fileProgress.total) * 100)
@@ -625,7 +635,7 @@ function ModDetailsModal({
     const replacementTitle = replaceOptions.length === 1
       ? t('modDetails.replace.action', { name: replaceOptions[0].fileName })
       : t('modDetails.replace.menu');
-    const replacementButton = manualReplacement ? (
+    const replacementButton = prioritizeReplacement ? (
       <Button
         type="button"
         variant="primary"
@@ -1263,8 +1273,23 @@ function ModDetailsModal({
             onCancel={() => setReplaceCandidate(null)}
             onConfirm={() => {
               setReplaceCandidate(null);
+              if (dontAskAgain && settings) {
+                void saveSettings({ ...settings, skipModReplacementConfirmation: true });
+              }
               onReplace(replaceCandidate.fileId, replaceCandidate.fileName, replaceCandidate.replaced.fileId);
             }}
+            footerStart={
+              <label className="group flex cursor-pointer select-none items-center gap-2 text-xs text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={dontAskAgain}
+                  onChange={(event) => setDontAskAgain(event.target.checked)}
+                  className="peer sr-only"
+                />
+                <CheckboxMark checked={dontAskAgain} className="peer-focus-visible:ring-2 peer-focus-visible:ring-accent" />
+                {t('modDetails.replace.dontAskAgain')}
+              </label>
+            }
           />
         )}
 

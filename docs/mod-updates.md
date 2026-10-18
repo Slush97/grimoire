@@ -35,8 +35,12 @@ download popup visible even when nothing is transferring. A Layout-level notice
 shows one mod at a time. Dismissing notices or dialogs retains the queue shortcut.
 The existing details dialog supplies descriptions, filename tooltips, and the
 single-choice or dropdown replacement control. In this view, Replace is the
-full-size action and Install is the secondary icon action. Reinstall and Enable
-are omitted; Update stays available until that file is queued or updating.
+full-size action and Install is the secondary icon action by default. Preferences
+can turn off this swap. Reinstall and Enable are omitted; Update stays available
+until that file is queued or updating.
+The replacement confirmation has a Don't ask again checkbox, saved when the user
+confirms. The skip-confirmation preference defaults off and can be turned off
+again to restore the warning. These preferences do not change update matching.
 
 Renderer progress publications are limited to ten per second, with immediate
 first and final samples. Queue-only subscribers and queued rows remain stable

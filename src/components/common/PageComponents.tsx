@@ -238,6 +238,8 @@ interface ConfirmModalProps {
     showClose?: boolean;
     /** Rendered under the message, e.g. progress while `busy`. */
     children?: ReactNode;
+    /** Optional control at the left of the footer, before the action buttons. */
+    footerStart?: ReactNode;
 }
 
 export function ConfirmModal({
@@ -252,6 +254,7 @@ export function ConfirmModal({
     busy = false,
     showClose = false,
     children,
+    footerStart,
 }: ConfirmModalProps) {
     const { t } = useTranslation();
     const titleId = useId();
@@ -266,6 +269,7 @@ export function ConfirmModal({
                 {children}
             </ModalBody>
             <ModalFooter>
+                {footerStart && <div className="mr-auto">{footerStart}</div>}
                 <Button variant="secondary" onClick={onCancel} disabled={busy}>
                     {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
                 </Button>

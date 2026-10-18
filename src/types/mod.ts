@@ -1156,6 +1156,10 @@ export interface AppSettings {
   /** Pair one unmatched installed file with one remaining new upload after
    *  normal update matching, even when their names and descriptions differ. */
   autoMatchRemainingFiles: boolean;
+  /** Skip the confirmation before manually replacing an installed mod file. */
+  skipModReplacementConfirmation: boolean;
+  /** Make Replace the main action in the manual update replacement view. */
+  swapManualReplacementActions: boolean;
   /** Retain removed mod files for 24 hours. Disabling stops new captures only. */
   keepModBackups: boolean;
   /** After a successful GameBanana download, immediately enable the installed
