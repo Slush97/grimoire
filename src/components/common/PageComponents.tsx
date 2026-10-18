@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { Loader2, X, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Modal, ModalBody, ModalFooter } from './Modal';
+import { Modal, ModalBody, ModalFooter, type ModalSize } from './Modal';
 import { Skeleton } from './Skeleton';
 import { Button, IconButton } from './ui';
 import Tx from '../translation/Tx';
@@ -230,6 +230,7 @@ interface ConfirmModalProps {
     confirmLabel?: ReactNode;
     cancelLabel?: ReactNode;
     variant?: 'danger' | 'primary' | 'update';
+    size?: ModalSize;
     onConfirm: () => void;
     onCancel: () => void;
     /** The confirmed action is running: blocks dismissal and disables both buttons. */
@@ -249,6 +250,7 @@ export function ConfirmModal({
     confirmLabel,
     cancelLabel,
     variant = 'primary',
+    size = 'sm',
     onConfirm,
     onCancel,
     busy = false,
@@ -259,7 +261,7 @@ export function ConfirmModal({
     const { t } = useTranslation();
     const titleId = useId();
     return (
-        <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size="sm" dismissable={!busy}>
+        <Modal open={isOpen} onClose={onCancel} labelledBy={titleId} size={size} dismissable={!busy}>
             <ModalBody className="pt-5">
                 <div className="mb-2 flex items-start justify-between gap-3">
                     <h2 id={titleId} className="font-reaver text-base font-semibold text-text-primary">{title}</h2>

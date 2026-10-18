@@ -5,6 +5,15 @@ runtime dependencies in `modUpdates.ts`. State stays in memory and survives
 renderer navigation. The Installed toolbar shows `Updating` until both queued
 replacements and outstanding manual choices finish or are removed.
 
+The update menu groups pending variants by GameBanana submission and section.
+Each mod shows its pending variant count, with variant names in the name's
+tooltip. A row can start just that mod's updates or ignore updates for all of
+its installed variants. Starting updates closes the menu and uses the same
+batch executor as the footer action.
+Clicking a mod name or its link reveals that installed card, expands its section,
+and opens its usual details view or variant picker. Filters are cleared only
+when they hide the target.
+
 Every submission is fetched and classified before the batch enters the existing
 download FIFO. Matching uses the same classifier and remaining-file preference
 as the details page. VPKs targeting one archive share a download. An already

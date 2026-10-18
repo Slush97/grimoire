@@ -76,6 +76,7 @@ import ModDetailsModal from '../components/ModDetailsModal';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
+import ModUpdatesModal from '../components/installed/ModUpdatesModal';
 import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
@@ -239,6 +240,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
   return (
     <div
       ref={setNodeRef}
+      data-installed-entry-key={cardProps.entry.key}
       // content-visibility:auto skips layout + paint for offscreen cards (most of
       // the cost of mounting a large library) but implies contain:paint, which
       // clips whatever the card paints outside its box AND traps it in its own
@@ -1263,6 +1265,7 @@ export default function Installed() {
   }, [detailsMod, detailsSourceModId, mods, visibleMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
+  const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const updateBusy = useModUpdatesStore((state) => state.state.busy || state.submitting);
@@ -1927,14 +1930,24 @@ export default function Installed() {
     }
   };
 
-  const handleUpdateAll = async () => {
-    setUpdateAllConfirmOpen(false);
-    await runUpdate(mods.filter((mod) => updatesAvailable.has(mod.id)));
-  };
-
   const handleUpdateGroup = async (variantIds: readonly string[]) => {
     const groupIds = new Set(variantIds);
     await runUpdate(mods.filter((mod) => groupIds.has(mod.id) && updatesAvailable.has(mod.id)));
+  };
+
+  const handleIgnoreUpdateGroup = async (modIds: string[]) => {
+    const ignored = new Set<string>();
+    try {
+      for (const id of modIds) {
+        await setModIgnoreUpdates(id, true);
+        ignored.add(id);
+      }
+    } finally {
+      if (ignored.size > 0) {
+        setUpdatesAvailable(previous => new Set([...previous].filter(id => !ignored.has(id))));
+        await loadMods({ silent: true, force: true });
+      }
+    }
   };
 
   const exitSelectMode = () => {
@@ -3267,11 +3280,51 @@ export default function Installed() {
     });
 
   /** Locate the entry that holds a given mod id within a section's entries. */
-  const findEntryForModId = (entries: ModEntry[], id: string): ModEntry | undefined => {
+  const findEntryForModId = useCallback((entries: ModEntry[], id: string): ModEntry | undefined => {
     return entries.find((e) =>
       e.kind === 'single' ? e.mod.id === id : e.variants.some((v) => v.id === id)
     );
+  }, []);
+
+  const openUpdateMenuMod = (modId: string) => {
+    const entry = findEntryForModId(allEntries, modId);
+    if (!entry) return;
+    if (![...visibleEnabled, ...visibleDisabled].some(candidate => candidate.key === entry.key)) {
+      setSearch('');
+      setSourceSel(['gamebanana', 'local']);
+      setStatusSel(['enabled', 'disabled']);
+      setHeroFilter('all');
+      setTagFilter([]);
+      setListFilter([]);
+    }
+    if (isEntryEnabled(entry)) setEnabledCollapsed(false);
+    else setDisabledCollapsed(false);
+    setGridWarm(true);
+    setUpdateMenuTargetId(modId);
   };
+
+  // Reveal the card after filters and section expansion have committed, then
+  // open exactly the view its normal click uses. Re-align after skipped layout.
+  useLayoutEffect(() => {
+    if (!updateMenuTargetId) return;
+    const entry = findEntryForModId(allEntries, updateMenuTargetId);
+    if (!entry) {
+      setUpdateMenuTargetId(null);
+      return;
+    }
+    const card = installedScrollRef.current?.querySelector<HTMLElement>(
+      `[data-installed-entry-key="${window.CSS.escape(entry.key)}"]`
+    );
+    if (!card) return;
+    card.scrollIntoView({ block: 'center' });
+    const frame = window.requestAnimationFrame(() => {
+      card.scrollIntoView({ block: 'center' });
+      if (entry.kind === 'group') openEntryPicker(entry.groupKey);
+      else openEntryDetails(entry.mod);
+      setUpdateMenuTargetId(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [updateMenuTargetId, allEntries, visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed, gridWarm, findEntryForModId, openEntryPicker, openEntryDetails]);
 
   const previewEnabled = useMemo(
     () => previewEntriesForDrag(visibleEnabled, 'enabled', dragDraftOrder),
@@ -4177,42 +4230,17 @@ export default function Installed() {
         </InstalledSection>
       )}
 
-      <ConfirmModal
-        isOpen={updateAllConfirmOpen}
-        title={t('installed.updateAll.confirmTitle', { count: updatesAvailable.size })}
-        message={
-          <>
-            <p className="mb-3">
-              {t('installed.updateAll.description')}
-            </p>
-            {(() => {
-              const pending = mods.filter((m) => updatesAvailable.has(m.id));
-              if (pending.length === 0) return null;
-              return (
-                <div className="update-stripes border border-accent/20 bg-bg-tertiary/40 rounded-md">
-                  <div className="max-h-48 overflow-y-auto px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-wider text-accent mb-1.5 font-semibold">
-                      {t('installed.updateAll.receivingUpdates', { count: pending.length })}
-                    </div>
-                    <ul className="space-y-1 text-sm text-text-primary">
-                      {pending.map((m) => (
-                        <li key={m.id} className="flex items-center gap-2 min-w-0">
-                          <Download className="w-3.5 h-3.5 text-accent flex-shrink-0" />
-                          <span className="truncate" title={m.name}>{m.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              );
-            })()}
-          </>
-        }
-        confirmLabel={t('installed.updateAll.updateCount', { count: updatesAvailable.size })}
-        variant="primary"
-        onConfirm={handleUpdateAll}
-        onCancel={() => setUpdateAllConfirmOpen(false)}
-      />
+      {updateAllConfirmOpen && (
+        <ModUpdatesModal
+          mods={visibleMods}
+          updateIds={updatesAvailable}
+          busy={updateBusy}
+          onUpdate={handleUpdateGroup}
+          onIgnore={handleIgnoreUpdateGroup}
+          onOpen={openUpdateMenuMod}
+          onClose={() => setUpdateAllConfirmOpen(false)}
+        />
+      )}
 
       <OutdatedVdataModal
         mods={outdatedVdataMods}
