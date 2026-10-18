@@ -16,7 +16,7 @@ await cp(resolve(fixture), game, { recursive: true });
 await mkdir(userData);
 await mkdir(resolve(screenshots), { recursive: true });
 await writeFile(join(userData, 'settings.json'), JSON.stringify({
-  deadlockPath: game, hasCompletedSetup: true, experimentalModRepairs: true,
+  deadlockPath: game, hasCompletedSetup: true,
   autoCheckAppUpdates: false, autoCheckModUpdates: false, language: 'en',
 }));
 const env = { ...process.env };
@@ -49,6 +49,7 @@ try {
   assert.equal(review[0].kind, 'checked');
   assert.equal(review[0].findings.filter(f => f.status === 'repairable').length, 4);
   assert.equal(new Set(review[0].findings.map(f => f.entry)).size, 3);
+  assert.deepEqual(await readFile(originalPath), original);
   await dialog.getByRole('button', { name: 'Repair', exact: true }).click();
   await dialog.getByText('No supported repairs found.', { exact: false }).waitFor({ timeout: 30000 });
   await dialog.getByRole('button', { name: 'Show original backup', exact: true }).waitFor();

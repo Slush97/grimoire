@@ -1,8 +1,9 @@
 # Mod repairs
 
-Enable **Settings > Experimental > Mod repairs**, then use **Repair mods** on
-Installed. Review scans enabled archives without writing. Repair checks the
-current library again under the mod mutation lock, saves the original archive
+Use **Repair mods** on Installed when you have enabled mods. Review scans
+enabled archives without writing. Choose **Repair** for a mod to apply the
+supported changes. Repair checks the current library again under the mod
+mutation lock, saves the original archive
 under `userData/mod-repair-backups/<sha256>.vpk`, and replaces the selected archive.
 The result offers **Show original backup**. The backup can be imported again to
 recover the original mod. Keep Deadlock closed while repairing loaded mods.

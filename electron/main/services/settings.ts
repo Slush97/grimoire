@@ -26,7 +26,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     steamLaunchOptionsManaged: false,
     activeProfileId: null,
     confirmProfileUpdate: true,
-    experimentalModRepairs: false,
     experimentalStats: false,
     experimentalCrosshair: false,
     experimentalSocial: false,

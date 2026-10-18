@@ -50,12 +50,6 @@ export default function ExperimentalSection() {
           </p>
 
           <Toggle
-            checked={settings?.experimentalModRepairs ?? false}
-            onChange={(checked) => update({ experimentalModRepairs: checked })}
-            label={<Tx k="settings.experimental.modRepairs" fallback="Mod repairs" />}
-            description={<Tx k="settings.experimental.modRepairsDescription" fallback="Restore missing game data and repair supported skeleton changes from Installed. Original files are backed up." />}
-          />
-          <Toggle
             checked={settings?.experimentalStats ?? false}
             onChange={(checked) => update({ experimentalStats: checked })}
             label={<Tx k="settings.experimental.statsDashboard" fallback="Stats Dashboard" />}

@@ -5,12 +5,11 @@ import { tmpdir } from 'node:os';
 
 const h = vi.hoisted(() => ({
     run: vi.fn(), guard: vi.fn(), retarget: vi.fn(), setHash: vi.fn(), safety: vi.fn(),
-    enabled: true, userData: '', staged: '', path: '', metaSha: 'old',
+    userData: '', staged: '', path: '', metaSha: 'old',
     entries: new Map<string, Array<{ path: string; size: number }>>(),
     trees: new Map<string, string[] | null>(),
 }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
-vi.mock('./settings', () => ({ loadSettings: () => ({ experimentalModRepairs: h.enabled }) }));
 vi.mock('./deadlock', () => ({ getCitadelPath: (path: string) => path, metaKeyFor: () => 'pak04_dir.vpk' }));
 vi.mock('./gameSessionMods', () => ({ syncRunningGameModSnapshotFromMods: vi.fn(), assertCanMoveLoadedGameMod: h.guard }));
 vi.mock('./imprintMods', () => ({ freezeLegacyVpkIndexes: vi.fn() }));
@@ -39,7 +38,6 @@ beforeEach(async () => {
     h.userData = join(dir, 'user');
     h.path = join(dir, 'pak04_dir.vpk');
     h.staged = join(dir, '.repair.tmp');
-    h.enabled = true;
     h.metaSha = 'old';
     h.setHash.mockImplementation(async () => { h.metaSha = await fs.readFile(h.path, 'utf8') === 'repaired' ? 'new' : 'old'; });
     h.trees.clear();
@@ -66,13 +64,10 @@ it('keeps a durable original backup, replaces the archive and updates profile id
     await expect(fs.stat(h.staged)).rejects.toThrow();
 });
 
-it('refuses loaded mods and a disabled experiment before running the engine', async () => {
+it('refuses loaded mods before running the engine', async () => {
     h.guard.mockImplementation(() => { throw new Error('loaded'); });
     await expect(repairModCompatibility(dir, 'skin')).rejects.toThrow('loaded');
     expect(h.run).not.toHaveBeenCalled();
-    h.guard.mockReset();
-    h.enabled = false;
-    await expect(repairModCompatibility(dir, 'skin')).rejects.toThrow('Experimental');
     expect(await fs.readFile(h.path, 'utf8')).toBe('original');
 });
 

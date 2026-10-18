@@ -4119,7 +4119,7 @@ export default function Installed() {
     hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
         {statusButtons}
-        {settings?.experimentalModRepairs && enabledModCount > 0 && (
+        {enabledModCount > 0 && (
           <Button variant="secondary" onClick={() => setCompatibilityOpen(true)}>
             {t('installed.repairs.button')}
           </Button>

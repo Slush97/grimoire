@@ -11,7 +11,6 @@ import { runVpkmergeStdout } from './modMerger';
 import { runExclusiveModMutation, scanMods } from './mods';
 import { assertVpkSafety, carryVpkSafety, moveSafetySnapshot } from './modSafety';
 import { modTempPath } from './modTemps';
-import { loadSettings } from './settings';
 import { retargetProfileModSha } from './profiles';
 import { findChunkSiblingNames, parseVpkDirectoriesAsync, parseVpkEntryStats } from './vpk';
 
@@ -30,7 +29,6 @@ async function fileHash(path: string): Promise<string> {
 
 export function repairModCompatibility(deadlockPath: string, modId: string): Promise<CompatibilityRepairResult> {
     return runExclusiveModMutation(async () => {
-        if (!loadSettings().experimentalModRepairs) throw new Error('Enable mod repairs in Experimental settings first.');
         const installed = await scanMods(deadlockPath);
         const mod = installed.find((entry) => entry.id === modId);
         if (!mod) throw new Error(`Mod not found: ${modId}`);

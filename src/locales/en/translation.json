@@ -954,9 +954,7 @@
       "fixUnknownMods": "Fix Unknown Mods",
       "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
-      "foundry": "Door Stuck",
-      "modRepairs": "Mod repairs",
-      "modRepairsDescription": "Restore missing game data, footstep sounds and supported skeleton changes from Installed. Original files are backed up."
+      "foundry": "Door Stuck"
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
