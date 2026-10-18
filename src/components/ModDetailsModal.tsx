@@ -94,6 +94,8 @@ interface ModDetailsModalProps {
    *  exactly what gets deleted before calling `onReplace`. */
   replaceableFiles?: ReplaceableFile[];
   onReplace?: (fileId: number, fileName: string, replacedFileId: number) => void;
+  /** Manual queue choices prioritize replacement and omit reinstall/enable actions. */
+  manualReplacement?: boolean;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
    *  installed-mod path; Browse leaves both undefined. */
@@ -155,6 +157,7 @@ function ModDetailsModal({
   archivedByAuthor = false,
   replaceableFiles = [],
   onReplace,
+  manualReplacement = false,
   ignoreUpdates,
   onToggleIgnoreUpdates,
   onClose,
@@ -604,18 +607,48 @@ function ModDetailsModal({
     // so the user can queue several variants in one go.
     const isBusyThis = isDownloadingThis || isQueuedThis;
     const showEnablePill =
+      !manualReplacement &&
       !!installedFileState &&
       !installedFileState.enabled &&
       !!onEnableFile &&
       !isBusyThis;
-    const showDeleteButton = !!installedFileState && !!onDeleteFile;
+    const showDeleteButton = !manualReplacement && !!installedFileState && !!onDeleteFile;
+    const showDownloadButton = !manualReplacement || (isUpdate ? !isBusyThis : !isInstalled);
     const replaceOptions = !archived && !isUpdate && !isInstalled && !isBusyThis && onReplace ? replaceableFiles : [];
+    const swapActions = manualReplacement && replaceOptions.length > 0;
     const pickReplacement = (replaced: ReplaceableFile) =>
       setReplaceCandidate({ fileId: file.id, fileName: file.fileName, replaced });
     const fileProgress = 'progress' in fileDownload ? fileDownload.progress : null;
     const pct = fileProgress && fileProgress.total > 0
       ? Math.round((fileProgress.downloaded / fileProgress.total) * 100)
       : null;
+    const replacementTitle = replaceOptions.length === 1
+      ? t('modDetails.replace.action', { name: replaceOptions[0].fileName })
+      : t('modDetails.replace.menu');
+    const replacementButton = manualReplacement ? (
+      <Button
+        type="button"
+        variant="primary"
+        icon={Replace}
+        title={replacementTitle}
+        className="min-w-[110px] max-w-full"
+        onClick={replaceOptions.length === 1 ? () => pickReplacement(replaceOptions[0]) : undefined}
+        disabled={isBusyThis}
+      >
+        {t('modDetails.replace.confirm')}
+        {replaceOptions.length > 1 && <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />}
+      </Button>
+    ) : (
+      <IconButton
+        icon={Replace}
+        label={replacementTitle}
+        className={replaceOptions.length > 1 ? 'w-auto! gap-1 px-2.5' : undefined}
+        onClick={replaceOptions.length === 1 ? () => pickReplacement(replaceOptions[0]) : undefined}
+        disabled={isBusyThis}
+      >
+        {replaceOptions.length > 1 && <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />}
+      </IconButton>
+    );
 
     return (
       <div
@@ -711,25 +744,19 @@ function ModDetailsModal({
               disabled={isBusyThis || deleteInProgress}
             />
           )}
-          {replaceOptions.length === 1 && (
+          {swapActions && (
             <IconButton
-              icon={Replace}
-              label={t('modDetails.replace.action', { name: replaceOptions[0].fileName })}
-              onClick={() => pickReplacement(replaceOptions[0])}
+              icon={Download}
+              label={t('modDetails.actions.install')}
+              onClick={() => onDownload(file.id, file.fileName)}
               disabled={isBusyThis}
             />
           )}
+          {replaceOptions.length === 1 && replacementButton}
           {replaceOptions.length > 1 && (
             <MenuRoot kind="dropdown">
               <MenuTrigger asChild disabled={isBusyThis}>
-                <IconButton
-                  icon={Replace}
-                  label={t('modDetails.replace.menu')}
-                  className="w-auto! gap-1 px-2.5"
-                  disabled={isBusyThis}
-                >
-                  <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
-                </IconButton>
+                {replacementButton}
               </MenuTrigger>
               <MenuContent variant="picker" className="w-[300px] max-w-[calc(100vw-24px)]">
                 <p className="px-3 pb-1 pt-2 text-2xs uppercase tracking-wider text-text-secondary">
@@ -749,7 +776,7 @@ function ModDetailsModal({
               </MenuContent>
             </MenuRoot>
           )}
-          <Button
+          {showDownloadButton && !swapActions && <Button
             type="button"
             variant={isUpdate ? 'update' : !isInstalled ? 'primary' : 'secondary'}
             onClick={() => onDownload(file.id, file.fileName)}
@@ -778,7 +805,7 @@ function ModDetailsModal({
                 {actionLabel(file.id, archived)}
               </>
             )}
-          </Button>
+          </Button>}
         </div>
       </div>
     );

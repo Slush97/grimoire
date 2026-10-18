@@ -102,6 +102,7 @@ export function ModUpdateReplacementHost() {
     <ModDetailsModal
       mod={loaded.details}
       section={request.section}
+      manualReplacement
       installed={installedFileIds.size > 0}
       installedFileIds={installedFileIds}
       activeFileIds={activeFileIds}

@@ -34,7 +34,9 @@ runnable queue entries. They appear after executable downloads and keep the
 download popup visible even when nothing is transferring. A Layout-level notice
 shows one mod at a time. Dismissing notices or dialogs retains the queue shortcut.
 The existing details dialog supplies descriptions, filename tooltips, and the
-single-choice or dropdown replacement control.
+single-choice or dropdown replacement control. In this view, Replace is the
+full-size action and Install is the secondary icon action. Reinstall and Enable
+are omitted; Update stays available until that file is queued or updating.
 
 Renderer progress publications are limited to ten per second, with immediate
 first and final samples. Queue-only subscribers and queued rows remain stable
