@@ -551,6 +551,12 @@ export interface DownloadServerStatusData {
     previousServer?: string;
 }
 
+export interface GameBananaDownloadProxyConfig {
+    enabled: boolean;
+    url: string;
+    hasCredentials: boolean;
+}
+
 export interface GameBananaFileServerDiagnostics {
     status: 'healthy' | 'degraded' | 'unavailable';
     availableServers: number;
@@ -984,6 +990,8 @@ export interface ElectronAPI {
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
+    getGameBananaDownloadProxy: () => Promise<GameBananaDownloadProxyConfig>;
+    setGameBananaDownloadProxy: (config: Pick<GameBananaDownloadProxyConfig, 'enabled' | 'url'>) => Promise<GameBananaDownloadProxyConfig>;
     refreshGameBananaFileServerCache: () => Promise<GameBananaFileServerDiagnostics>;
     testGameBananaFileServers: () => Promise<GameBananaFileServerDiagnostics>;
     applyHeroSound: (

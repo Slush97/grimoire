@@ -256,6 +256,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('clear-preview-cache'),
     getGameBananaFileServerDiagnostics: () =>
         ipcRenderer.invoke('gamebanana-fileservers:getDiagnostics'),
+    getGameBananaDownloadProxy: () => ipcRenderer.invoke('gamebanana-download-proxy:get'),
+    setGameBananaDownloadProxy: (config) => ipcRenderer.invoke('gamebanana-download-proxy:set', config),
     refreshGameBananaFileServerCache: () =>
         ipcRenderer.invoke('gamebanana-fileservers:refreshCache'),
     testGameBananaFileServers: () =>

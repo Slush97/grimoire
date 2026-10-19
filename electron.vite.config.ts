@@ -66,6 +66,8 @@ export default defineConfig(({ mode }) => {
                 // unreliable. Externalizing it shipped a launch crash in 1.15.1
                 // (ERR_MODULE_NOT_FOUND from app.asar).
                 exclude: [
+                    'https-proxy-agent',
+                    'socks-proxy-agent',
                     'acorn',
                     'electron-updater',
                     'electron-log',

@@ -1003,6 +1003,22 @@
       "cleanupDescription": "Remove leftover archive downloads (zip, 7z, rar).",
       "cleanup": "Cleanup"
     },
+    "downloadProxy": {
+      "title": "GameBanana download proxy",
+      "description": "Route mod downloads and server tests through your proxy. Browsing and game traffic keep their usual connection.",
+      "enable": "Use download proxy",
+      "url": "Proxy URL",
+      "urlHint": "Use the HTTP or SOCKS listening address from your VPN app, or an endpoint from your proxy provider.",
+      "placeholder": "http://127.0.0.1:7890",
+      "credentialsSaved": "Credentials are saved securely. Saving this endpoint again keeps them. Clear the saved proxy to remove them.",
+      "downloadActive": "Wait for the current download to finish before changing the proxy.",
+      "save": "Save proxy",
+      "clear": "Clear saved proxy",
+      "loading": "Loading proxy settings...",
+      "loadFailed": "Couldn't read the saved proxy. Save it again or clear it to restore direct downloads.",
+      "saved": "Proxy settings saved. Run the download server test again to check this connection.",
+      "saveFailed": "Couldn't save the proxy: {{error}}"
+    },
     "downloadServers": {
       "title": "Download servers",
       "automatic": "Automatic",

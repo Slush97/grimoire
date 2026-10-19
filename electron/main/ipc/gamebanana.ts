@@ -35,6 +35,8 @@ import {
     type DownloadModArgs,
 } from '../services/download';
 import { getMainWindow } from '../index';
+import { getGameBananaDownloadProxyConfig, saveGameBananaDownloadProxyConfig } from '../services/gamebananaDownloadProxy';
+import { gameBananaFileServerSelector } from '../services/gamebananaFileServers';
 import type {
     BrowseModsArgs,
     GetModDetailsArgs,
@@ -45,6 +47,14 @@ import type {
 } from '../../../src/types/electron';
 import { updateModNsfw } from '../services/modDatabase';
 import { modUpdates } from '../services/modUpdates';
+
+ipcMain.handle('gamebanana-download-proxy:get', () => getGameBananaDownloadProxyConfig());
+ipcMain.handle('gamebanana-download-proxy:set', async (_, config: unknown) => {
+    if (getCurrentDownload()) throw new Error('Wait for the current download to finish before changing its proxy.');
+    const saved = await saveGameBananaDownloadProxyConfig(config);
+    gameBananaFileServerSelector.resetRouting();
+    return saved;
+});
 
 // browse-mods
 ipcMain.handle(

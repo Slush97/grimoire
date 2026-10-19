@@ -954,6 +954,17 @@ describe('gameBananaFileServerSelector', () => {
 });
 
 describe('isCanonicalGameBananaFilesUrl', () => {
+    it('clears measured server choices when the download proxy changes', async () => {
+        const fetchImpl = vi.fn(async () => directoryResponse([server('filecache45', 500)]));
+        const selector = createGameBananaFileServerSelector({ fetchImpl, probeCandidate: async () => 1000 });
+        await selector.getCandidates(canonicalUrl);
+        expect(await selector.getDiagnostics()).toMatchObject({ preferredServer: 'filecache45', needsProbe: false });
+        const requests = fetchImpl.mock.calls.length;
+        selector.resetRouting();
+        expect(await selector.getDiagnostics()).toMatchObject({ needsProbe: true, testedServers: [] });
+        expect(fetchImpl).toHaveBeenCalledTimes(requests);
+    });
+
     it.each([
         'http://files.gamebanana.com/mods/file.zip',
         'https://files.gamebanana.com.evil.test/mods/file.zip',

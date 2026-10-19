@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import type { FileHandle } from 'fs/promises';
-import http, { type IncomingHttpHeaders, type IncomingMessage } from 'http';
+import http, { type Agent, type IncomingHttpHeaders, type IncomingMessage } from 'http';
 import https from 'https';
 import { finished } from 'stream/promises';
 import { describeNetworkError } from './networkErrors';
@@ -23,6 +23,7 @@ export interface DownloadTransferOptions {
     checkpoint?: DownloadTransferCheckpoint;
     resolveRedirectCandidates?: (redirectUrl: string, signal?: AbortSignal) => Promise<readonly string[] | undefined>;
     onServerStatus?: (status: DownloadServerStatus) => void;
+    agent?: Agent;
 }
 
 const DEFAULT_MIRROR_CONNECTION_TIMEOUT_MS = 10_000;
@@ -138,6 +139,7 @@ async function singleResponse(
     headers: Record<string, string>,
     connectionTimeoutMs: number,
     signal?: AbortSignal,
+    agent?: Agent,
 ): Promise<IncomingMessage> {
     return new Promise((resolve, reject) => {
         if (signal?.aborted) {
@@ -153,7 +155,7 @@ async function singleResponse(
         }
 
         let settled = false;
-        const request = protocol.get(parsed, { headers }, (response) => finish(undefined, response));
+        const request = protocol.get(parsed, { headers, agent }, (response) => finish(undefined, response));
         const abort = () => {
             const error = cancellationError();
             request.destroy(error);
@@ -194,10 +196,11 @@ async function requestResponse(
     connectionTimeoutMs: number,
     signal?: AbortSignal,
     resolveRedirectCandidates?: DownloadTransferOptions['resolveRedirectCandidates'],
+    agent?: Agent,
 ): Promise<IncomingMessage> {
     let url = initialUrl;
     for (let redirects = 0; redirects <= 5; redirects += 1) {
-        const response = await singleResponse(url, headers, connectionTimeoutMs, signal);
+        const response = await singleResponse(url, headers, connectionTimeoutMs, signal, agent);
         if (![301, 302, 303, 307, 308].includes(response.statusCode ?? 0)) return response;
         const location = response.headers.location;
         response.destroy();
@@ -341,7 +344,8 @@ async function attemptCandidate(
     destinationPath: string,
     state: DownloadTransferCheckpoint,
     options: Pick<DownloadTransferOptions,
-        'onProgress' | 'onResponseFilename' | 'connectionTimeoutMs' | 'stallTimeoutMs' | 'signal' | 'resolveRedirectCandidates'>,
+        'onProgress' | 'onResponseFilename' | 'connectionTimeoutMs' | 'stallTimeoutMs' | 'signal' |
+        'resolveRedirectCandidates' | 'agent'>,
     onAccepted?: () => void,
 ): Promise<void> {
     const offset = await fileSize(destinationPath);
@@ -355,7 +359,7 @@ async function attemptCandidate(
         headers['If-Range'] = state.validator!.value;
     }
     const response = await requestResponse(
-        url, headers, options.connectionTimeoutMs!, options.signal, options.resolveRedirectCandidates,
+        url, headers, options.connectionTimeoutMs!, options.signal, options.resolveRedirectCandidates, options.agent,
     );
     const disposition = response.headers['content-disposition'];
     if (typeof disposition === 'string') {

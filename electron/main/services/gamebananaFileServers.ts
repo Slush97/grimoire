@@ -1,5 +1,6 @@
 import type { GameBananaFileServerDiagnostics } from '../../../src/types/electron';
 import { gamebananaRateLimiter } from './rateLimiter';
+import { fetchGameBananaDownload } from './gamebananaDownloadProxy';
 
 const FILESERVERS_URL = 'https://gamebanana.com/apiv11/Util/Fileservers?_nPage=1';
 const GRIMOIRE_FILES_URL =
@@ -15,6 +16,7 @@ const FILESERVER_HOST_PATTERN = /^filecache\d+\.gamebanana\.com$/;
 type FetchLike = typeof globalThis.fetch;
 
 export interface GameBananaFileServerSelector {
+    resetRouting(): void;
     getCandidates(
         canonicalUrl: string,
         signal?: AbortSignal,
@@ -367,7 +369,7 @@ export function createGameBananaFileServerSelector(
     overrides: Partial<GameBananaFileServerSelectorDependencies> = {},
 ): GameBananaFileServerSelector {
     const baseDependencies = {
-        fetchImpl: overrides.fetchImpl ?? globalThis.fetch.bind(globalThis),
+        fetchImpl: overrides.fetchImpl ?? fetchGameBananaDownload,
         now: overrides.now ?? Date.now,
         cacheTtlMs: overrides.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
         requestTimeoutMs: overrides.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
@@ -385,6 +387,7 @@ export function createGameBananaFileServerSelector(
     let refreshInFlight: Promise<GameBananaFileServerDiagnostics> | null = null;
     let testInFlight: Promise<GameBananaFileServerDiagnostics> | null = null;
     let routingGeneration = 0;
+    let proxyGeneration = 0;
 
     async function getDirectory(signal?: AbortSignal, force = false): Promise<DirectoryServer[]> {
         if (!force && cachedDirectory && baseDependencies.now() < cachedDirectory.expiresAt) {
@@ -541,16 +544,25 @@ export function createGameBananaFileServerSelector(
     }
 
     return {
+        resetRouting() {
+            cachedOrder = null;
+            lastLocalProbe = null;
+            routingGeneration += 1;
+            proxyGeneration += 1;
+        },
         getCandidates,
         testServers(signal?: AbortSignal): Promise<GameBananaFileServerDiagnostics> {
             if (testInFlight) return testInFlight;
             testInFlight = (async () => {
+                const initialGeneration = proxyGeneration;
                 const source = await resolveTestSource(baseDependencies, signal);
+                if (proxyGeneration !== initialGeneration) throw new Error('Download route changed during server testing');
                 const previousProbe = lastLocalProbe;
                 const previousOrder = cachedOrder ? [...cachedOrder] : null;
                 cachedOrder = null;
                 routingGeneration += 1;
                 await getCandidates(source.url, signal, source.assignedHost);
+                if (proxyGeneration !== initialGeneration) throw new Error('Download route changed during server testing');
                 const completedProbe = lastLocalProbe;
                 if (!completedProbe || completedProbe === previousProbe) {
                     cachedOrder = previousOrder;

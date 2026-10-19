@@ -20,6 +20,7 @@ import { gameBananaFileServerSelector } from './gamebananaFileServers';
 import { downloadTransfer, DownloadSuspendedError, isDownloadSuspended, type DownloadTransferCheckpoint, type DownloadServerStatus } from './downloadTransfer';
 import { getActiveDeadlockPath, loadSettings } from './settings';
 import { isCopyingModsToDev } from './devMods';
+import { getGameBananaDownloadProxyAgent } from './gamebananaDownloadProxy';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import type { LockerHeroSource } from '../../../src/types/mod';
 // DownloadModArgs is single-sourced in src/types/electron.ts; re-exported
@@ -578,6 +579,7 @@ export async function downloadFile(
     if (abort) currentCancelHandler = cancel;
     try {
         await downloadTransfer({
+            agent: await getGameBananaDownloadProxyAgent(url),
             candidateUrls: [url], destinationPath: destPath, onProgress,
             onResponseFilename, connectionTimeoutMs,
             stallTimeoutMs: Math.min(responseTimeoutMs, 60_000),

@@ -43,6 +43,7 @@ describe('MaintenanceSection', () => {
       refreshGameBananaFileServerCache: vi.fn(),
       testGameBananaFileServers: vi.fn(),
       getCurrentDownload: vi.fn(async () => null),
+      getGameBananaDownloadProxy: vi.fn(async () => ({ enabled: false, url: '', hasCredentials: false })),
       onDownloadQueueUpdated: vi.fn(() => vi.fn()),
     } as unknown as Window['electronAPI'];
   });
