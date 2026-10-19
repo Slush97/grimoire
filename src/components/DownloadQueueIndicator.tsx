@@ -334,7 +334,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                     type="button"
                                     disabled={cancellingQueued}
                                     onClick={() => void handleCancelAllQueued()}
-                                    className="shrink-0 cursor-pointer text-2xs text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-50"
+                                    className="shrink-0 cursor-pointer text-2xs text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-50"
                                 >
                                     {t('downloadQueue.cancelAll')}
                                 </button>
