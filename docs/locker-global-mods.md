@@ -204,7 +204,7 @@ the behavior this fix exists to remove.
 - **Locker > General > Global tab** (`src/pages/Locker.tsx`): last tab in the
   rail, with a live count. Cards are ordinary multi-toggle cards, never the
   prop-container single-select 3D treatment (`isPropContainer` is forced false).
-  The card kebab offers **Remove from Global** instead of the seven
+  The card kebab offers **Remove from Global** instead of the eight
   classification destinations. Where a classification card carries the
   add-to-shuffle toggle, a Global card carries a non-interactive pin instead
   (`ShuffleAlwaysOnBadge`, `src/components/locker/ShuffleControls.tsx`): the
@@ -329,3 +329,11 @@ single-card toggle, so a bulk change is one storage write and one state update.
   at render (`resolvableSelected`) so a reload behind the dialog cannot leave
   the footer count and an enabled Add button pointing at nothing;
   `GlobalModPicker` has not been given the same treatment.
+
+## Shared effects
+
+General > Effects contains shared particle replacements under `particles/generic/`,
+including dash, jump and slide trails. Hero model, material and ability payloads
+keep their hero classification even when they include a shared particle. Classifier
+version 5 rechecks older unclassified installs. Other unmatched mods can be filed
+manually using the Unassigned picker, which offers General categories and heroes.

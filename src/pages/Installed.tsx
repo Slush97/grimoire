@@ -83,7 +83,7 @@ import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, modLoadOrder } from '../lib/lockerUtils';
+import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOrder } from '../lib/lockerUtils';
 import {
   canJoinLocalVariantGroup,
   localVariantSelectionEligibility,
@@ -4692,7 +4692,7 @@ export default function Installed() {
                         onClick={() => handleBulkTagGlobal(type)}
                         className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
                       >
-                        {GLOBAL_MOD_TYPE_LABELS[type]}
+                        {globalModTypeLabel(type, t)}
                       </button>
                     ))}
                     <div className="my-1 h-px bg-border" />

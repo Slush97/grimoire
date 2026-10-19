@@ -6,7 +6,7 @@ import type { Mod, UnknownModDetectionProgress, UnknownModFilterGuess, Associate
 import type { GameBananaMod } from '../../../types/gamebanana';
 import { getModThumbnail } from '../../../types/gamebanana';
 import ModThumbnail from '../../ModThumbnail';
-import { GLOBAL_MOD_TYPE_LABELS } from '../../../lib/lockerUtils';
+import { globalModTypeLabel } from '../../../lib/lockerUtils';
 import { formatBytes } from '../../../lib/formatBytes';
 import { Button } from '../../common/ui';
 import { Select } from '../../common/forms';
@@ -450,7 +450,7 @@ function UnknownManualSearch({
           )}
           {mod.globalType && (
             <span className="rounded-full bg-bg-primary/60 border border-hl/10 px-2 py-0.5 text-text-secondary">
-              {GLOBAL_MOD_TYPE_LABELS[mod.globalType] ?? mod.globalType}
+              {globalModTypeLabel(mod.globalType, t)}
             </span>
           )}
         </div>

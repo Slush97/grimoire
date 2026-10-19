@@ -15,7 +15,7 @@ import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
 import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
@@ -596,7 +596,7 @@ function ModListRowContent({
   const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
   const listHeroFacePosX = listHeroName ? getHeroFacePosition(listHeroName).x : 50;
   const taxonomyLabel = taxonomy.globalType
-    ? (GLOBAL_MOD_TYPE_LABELS[taxonomy.globalType] ?? taxonomy.globalType)
+    ? globalModTypeLabel(taxonomy.globalType, t)
     : taxonomy.categoryLabel;
 
   return (
@@ -1046,7 +1046,7 @@ export function ModCard({
   // mod has no hero, so the two chips never both show.
   const cardTaxonomy = getInstalledCardTaxonomy(mod);
   const cardGlobalLabel = cardTaxonomy.globalType
-    ? (GLOBAL_MOD_TYPE_LABELS[cardTaxonomy.globalType] ?? cardTaxonomy.globalType)
+    ? globalModTypeLabel(cardTaxonomy.globalType, t)
     : undefined;
   // One stable taxonomy model for every grid size:
   //   1. the hero identity, when present (bare portrait);
@@ -1202,7 +1202,7 @@ export function ModCard({
                 >
                   {GLOBAL_MOD_TYPE_ORDER.map((type) => (
                     <MenuRadioItem key={type} value={type} disabled={menuBusy}>
-                      {GLOBAL_MOD_TYPE_LABELS[type]}
+                      {globalModTypeLabel(type, t)}
                     </MenuRadioItem>
                   ))}
                 </MenuRadioGroup>

@@ -482,9 +482,14 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
+  effects: 'Effects',
   announcer: 'Announcer / SFX',
   'killstreak-music': 'Killstreak Music',
 };
+
+export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
+  return type === 'effects' ? t('locker.page.effects') : GLOBAL_MOD_TYPE_LABELS[type];
+}
 
 /** Carousel/section order for the global types. */
 export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
@@ -493,6 +498,7 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'hideout',
   'icons',
   'hud',
+  'effects',
   'announcer',
   'killstreak-music',
 ];
@@ -531,6 +537,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     hideout: [],
     icons: [],
     hud: [],
+    effects: [],
     announcer: [],
     'killstreak-music': [],
   };

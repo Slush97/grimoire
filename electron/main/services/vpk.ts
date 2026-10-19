@@ -830,6 +830,7 @@ const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
 // `sounds/abilities|heroes|vo/<codename>/` (SOUND_HERO_PATTERNS), so this never
 // catches a hero-tied sound.
 const ANNOUNCER_PATTERN = /(?:^|\/)sounds\/mods\//i;
+const SHARED_EFFECT_PATTERN = /^particles\/generic\/.+\.vpcf_c$/i;
 
 /**
  * Distinct hero codenames referenced by panorama/images/heroes files. The
@@ -877,7 +878,7 @@ function heroImageHeroes(paths: string[]): Set<string> {
  * an older version, so pattern improvements (e.g. new HUD paths) reach
  * already-installed mods without a manual retag or a metadata migration.
  */
-export const GLOBAL_CLASSIFIER_VERSION = 4;
+export const GLOBAL_CLASSIFIER_VERSION = 5;
 
 export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.length === 0) return null;
@@ -909,6 +910,7 @@ export function classifyGlobalModType(paths: string[]): GlobalModType | null {
 
     if (paths.some((p) => HUD_PATTERN.test(p))) return 'hud';
     if (paths.some((p) => ANNOUNCER_PATTERN.test(p))) return 'announcer';
+    if (paths.some((p) => SHARED_EFFECT_PATTERN.test(p))) return 'effects';
     return null;
 }
 

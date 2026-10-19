@@ -16,6 +16,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
 import CategoryModPicker from '../components/locker/CategoryModPicker';
@@ -50,10 +51,9 @@ import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { RevealImage } from '../components/common/RevealImage';
-import { HeroSelect } from '../components/common/HeroSelect';
 import {
   FAVORITE_HEROES_KEY,
-  GLOBAL_MOD_TYPE_LABELS,
+  globalModTypeLabel,
   GLOBAL_MOD_TYPE_ORDER,
   activeLockerSkin,
   buildHeroList,
@@ -1560,21 +1560,15 @@ export default function Locker() {
                       {isSound ? t('locker.page.sound') : ''}
                       {subtitle}
                     </div>
-                    <HeroSelect
-                      ariaLabel={t('locker.page.tagAsHeroNamed', { name: mod.name })}
-                      value={mod.lockerHero ?? ''}
-                      onChange={(next) => {
-                        void tagModHero(mod.id, next.length > 0 ? next : null);
+                    <UnassignedModTagSelect
+                      name={mod.name}
+                      heroes={tagHeroOptions}
+                      onTagHero={async (hero) => {
+                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
                       }}
-                      size="sm"
-                      options={[
-                        { value: '', label: t('locker.page.tagAsHero'), muted: true },
-                        ...tagHeroOptions.map((hero) => ({
-                          value: hero.name,
-                          label: hero.name,
-                          heroName: hero.name,
-                        })),
-                      ]}
+                      onTagGeneral={async (type) => {
+                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
+                      }}
                     />
                   </div>
                 </div>
@@ -1869,7 +1863,7 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
 
 /**
  * Synthetic tab id for the Global (precedence) tab in the General view. It is
- * NOT a GlobalModType: those seven are the classification axis stored in the
+ * NOT a GlobalModType: these are the classification axis stored in the
  * metadata sidecar's `globalType`, while Global is folder placement
  * (Mod.priorityMod). Keeping it a separate sentinel is what stops a Global mod
  * from ever being written into the classification field.
@@ -1920,7 +1914,7 @@ function generalTabLabel(
     const id = customTabCategoryId(tab);
     return categories.find((category) => category.id === id)?.name ?? '';
   }
-  return GLOBAL_MOD_TYPE_LABELS[tab];
+  return globalModTypeLabel(tab, t);
 }
 
 interface LockerGlobalViewProps {
@@ -2422,7 +2416,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   )}
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.global.propEmpty', {
-                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                      type: globalModTypeLabel(activeType, t),
                     })}
                   </p>
                   <button
@@ -2836,7 +2830,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               </button>
             ) : /* The Global tab is folder placement, not classification, so its
                 cards get the one action that makes sense there. Offering the
-                seven classification types would write `globalType` on a mod
+                classification types would write `globalType` on a mod
                 whose whole point is where its VPK lives. */
             isPriorityTab ? (
               <>
@@ -2892,7 +2886,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     isCurrent ? 'text-accent' : 'text-text-primary'
                   }`}
                 >
-                  {GLOBAL_MOD_TYPE_LABELS[type]}
+                  {globalModTypeLabel(type, t)}
                   {isCurrent && <Check className="h-3.5 w-3.5" />}
                 </button>
               );
