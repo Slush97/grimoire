@@ -5,6 +5,7 @@ import { Modal } from '../common/Modal';
 import { ModalHeader } from '../common/ui';
 import { foundryFullImage } from '../../lib/api';
 import type { TextureGridItem } from '../../types/foundry';
+import { SaveAssetButton } from './SaveAssetButton';
 
 interface TextureLightboxProps {
   /** The asset to enlarge, or null when closed. Drives the Modal open state so
@@ -93,11 +94,12 @@ export default function TextureLightbox({ item, heroName, onClose }: TextureLigh
             )}
           </div>
 
-          {dims && (
-            <div className="border-t border-border px-5 py-2 text-2xs text-text-secondary">
-              {t('foundry.lightbox.nativeSize', 'Native size')}: {dims}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+            <span className="text-2xs text-text-secondary">
+              {dims && `${t('foundry.lightbox.nativeSize', 'Native size')}: ${dims}`}
+            </span>
+            <SaveAssetButton request={{ kind: 'texture', category: item.category, path: item.path }} />
+          </div>
         </>
       )}
     </Modal>

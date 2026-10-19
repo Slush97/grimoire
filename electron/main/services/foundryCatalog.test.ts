@@ -24,6 +24,7 @@ vi.mock('./modMerger', () => ({
 import {
     ensureCategoryThumbnails,
     ensureFullImage,
+    ensureNativeTextureFile,
     ensureVoiceclip,
     warmCache,
 } from './foundryCatalog';
@@ -145,6 +146,15 @@ describe('Foundry asset cache independence', () => {
         expect(await ensureVoiceclip(game, soundPath)).toBe(expected);
         expect(mocks.runVpkmerge).toHaveBeenCalledTimes(1);
         expect(mocks.runVpkmergeStdout).not.toHaveBeenCalled();
+    });
+
+    it('exports native textures separately from the 1024px preview cache', async () => {
+        await ensureFullImage(game, 'item-icon', texture.path);
+        const native = await ensureNativeTextureFile(game, 'item-icon', texture.path);
+        expect(native).toContain('item-icon@native');
+        expect(mocks.runVpkmerge.mock.calls.map(([args]) => flagValue(args, '--thumb-size'))).toEqual(['1024', '65535']);
+        expect(await ensureNativeTextureFile(game, 'item-icon', texture.path)).toBe(native);
+        expect(mocks.runVpkmerge).toHaveBeenCalledTimes(2);
     });
 
     it.each(['size', 'nanosecond mtime'])('invalidates cached audio when VPK %s changes', async (change) => {

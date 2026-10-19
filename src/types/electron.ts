@@ -1453,6 +1453,7 @@ export interface ElectronAPI {
             entryPath: string
         ) => Promise<string | null>;
         voiceclip: (vsndPath: string) => Promise<string | null>;
+        exportAsset: (request: import('./foundry').FoundryAssetExportRequest) => Promise<import('./foundry').VpkExportResult>;
         warmCache: () => Promise<void>;
         exportHeroEffect: (
             req: import('./foundry').HeroEffectExportRequest

@@ -18,6 +18,7 @@ import {
 } from '../services/foundryCatalog';
 import { buildHeroEffectVpkForExport } from '../services/heroColors';
 import { exportVpkViaDialog } from '../services/foundryExport';
+import { exportFoundryAsset } from '../services/foundryAssetExport';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -39,6 +40,10 @@ function requireDeadlockPath(): string {
     }
     return deadlockPath;
 }
+
+ipcMain.handle('foundry:exportAsset', async (_e, request: unknown): Promise<VpkExportResult> => {
+    return exportFoundryAsset(requireDeadlockPath(), request);
+});
 
 ipcMain.handle('foundry:heroes', async (): Promise<HeroInfo[]> => {
     return getHeroRoster(requireDeadlockPath());

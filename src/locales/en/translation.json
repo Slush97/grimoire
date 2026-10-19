@@ -287,6 +287,12 @@
         "matchVolume": "Match the original volume",
         "matchUnavailable": "original unavailable"
       }
+    },
+    "save": {
+      "texture": "Save PNG",
+      "sound": "Save preview as MP3",
+      "saved": "Asset saved.",
+      "failed": "Could not save asset: {{error}}"
     }
   },
   "autoexec": {

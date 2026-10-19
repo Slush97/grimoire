@@ -1527,6 +1527,10 @@ export async function foundryVoiceclip(vsndPath: string): Promise<string | null>
   return window.electronAPI.foundry.voiceclip(vsndPath);
 }
 
+export async function foundryExportAsset(request: import('../types/foundry').FoundryAssetExportRequest): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.foundry.exportAsset(request);
+}
+
 export async function foundryWarmCache(): Promise<void> {
   return window.electronAPI.foundry.warmCache();
 }

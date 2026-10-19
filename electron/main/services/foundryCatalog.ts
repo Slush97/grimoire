@@ -411,9 +411,29 @@ export async function ensureFullImage(
     category: TextureCategory,
     entryPath: string
 ): Promise<string | null> {
+    const image = await ensureImageFile(deadlockPath, category, entryPath, FULL_SIZE);
+    return image ? thumbUrl(image.key, image.category, image.file) : null;
+}
+
+export async function ensureNativeTextureFile(
+    deadlockPath: string,
+    category: TextureCategory,
+    entryPath: string
+): Promise<string | null> {
+    // VTEX dimensions are u16, so this bound preserves every source pixel.
+    const image = await ensureImageFile(deadlockPath, category, entryPath, 65535);
+    return image ? join(thumbsRoot(), image.key, image.category, image.file) : null;
+}
+
+async function ensureImageFile(
+    deadlockPath: string,
+    category: TextureCategory,
+    entryPath: string,
+    maxSize: number
+): Promise<{ key: string; category: string; file: string } | null> {
     const fp = await buildFingerprint(deadlockPath);
     const key = fingerprintKey(fp);
-    const fullCategory = `${category}@full`;
+    const fullCategory = `${category}@${maxSize === FULL_SIZE ? 'full' : 'native'}`;
     const dir = join(thumbsRoot(), key, fullCategory);
     const indexPath = join(dir, 'index.json');
 
@@ -425,7 +445,7 @@ export async function ensureFullImage(
     if (cachedFile) {
         try {
             await fs.access(join(dir, cachedFile));
-            return thumbUrl(key, fullCategory, cachedFile);
+            return { key, category: fullCategory, file: cachedFile };
         } catch {
             delete index[entryPath]; // cache entry lost its PNG; re-decode below
         }
@@ -442,7 +462,7 @@ export async function ensureFullImage(
         '--thumbs',
         dir,
         '--thumb-size',
-        String(FULL_SIZE),
+        String(maxSize),
     ]);
 
     const manifest = (await readManifest(join(dir, 'manifest.json'))) ?? [];
@@ -451,7 +471,7 @@ export async function ensureFullImage(
 
     index[entryPath] = decoded.file;
     await fs.writeFile(indexPath, JSON.stringify(index)).catch(() => {});
-    return thumbUrl(key, fullCategory, decoded.file);
+    return { key, category: fullCategory, file: decoded.file };
 }
 
 function voiceclipsRoot(): string {
@@ -473,15 +493,24 @@ export async function ensureVoiceclip(
     deadlockPath: string,
     vsndPath: string
 ): Promise<string | null> {
+    const file = await ensureVoiceclipFile(deadlockPath, vsndPath);
+    if (!file) return null;
+    const mp3 = await fs.readFile(file);
+    return `data:audio/mpeg;base64,${mp3.toString('base64')}`;
+}
+
+export async function ensureVoiceclipFile(
+    deadlockPath: string,
+    vsndPath: string
+): Promise<string | null> {
     const fp = await buildFingerprint(deadlockPath);
     const key = fingerprintKey(fp);
     const dir = join(voiceclipsRoot(), key);
     const hash = createHash('sha1').update(vsndPath).digest('hex');
     const file = join(dir, `${hash}.mp3`);
 
-    let mp3: Buffer;
     try {
-        mp3 = await fs.readFile(file);
+        await fs.access(file);
     } catch {
         await pruneStaleVoiceclips(key);
         await fs.mkdir(dir, { recursive: true });
@@ -496,12 +525,12 @@ export async function ensureVoiceclip(
                 '--out',
                 file,
             ]);
-            mp3 = await fs.readFile(file);
+            await fs.access(file);
         } catch {
             return null; // missing entry or unsupported codec; no audition
         }
     }
-    return `data:audio/mpeg;base64,${mp3.toString('base64')}`;
+    return file;
 }
 
 /** Remove voiceclip caches for any fingerprint other than the current one. */

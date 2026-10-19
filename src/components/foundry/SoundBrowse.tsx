@@ -29,6 +29,7 @@ import {
     getHeroAbilitySlots,
 } from '../../lib/api';
 import { showToast } from '../../stores/toastStore';
+import { SaveAssetButton } from './SaveAssetButton';
 import { useAppStore } from '../../stores/appStore';
 import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../types/foundry';
 import type { HeroAbilitySlot } from '../../types/mod';
@@ -633,6 +634,7 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                         <Tx k="foundry.sound.swap.buttonLabel" fallback="Swap" />
                     </button>
                 )}
+                {targetClip && <SaveAssetButton compact request={{ kind: 'sound', path: targetClip }} />}
             </div>
             {swap && swapOpen && (
                 <SwapPanel
