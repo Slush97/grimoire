@@ -84,7 +84,7 @@ const PANORAMA_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     Yamato: 'yamato',
 };
 
-// LEGACY panorama codenames. Six heroes were renamed during development; the
+// Legacy panorama codenames. Heroes were renamed during development; the
 // deadlock-api `class_name` (above) is the current name, but a lot of shipped
 // community icon packs (catlock, irl_hero_icons, "did you see that", ...) still
 // author their card art under the OLD codename. Verified against the user's
@@ -98,6 +98,8 @@ const PANORAMA_CODENAME_ALIASES: Readonly<Record<string, string[]>> = {
     'Lady Geist': ['spectre'],
     'Mo & Krill': ['digger'],
     Dynamo: ['sumo'],
+    // Vyper's hero definition still references kali_* for every portrait slot.
+    Vyper: ['kali'],
 };
 
 /** Resolve a hero display name (e.g. "Vindicta") to its primary panorama
