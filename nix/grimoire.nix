@@ -61,7 +61,7 @@ stdenv.mkDerivation (finalAttrs: {
     # (.github/workflows/nix.yml) runs that build on every PR that touches
     # pnpm-lock.yaml, so a stale hash fails CI instead of downstream users.
     fetcherVersion = 4;
-    hash = "sha256-QxZ15pvgjTFCw0vjvrkaKYBPbEUk+YvfZN3VZs3nae8=";
+    hash = "sha256-AsQv/h9lip586nAx4UqIJZsEGemVR1O8tSqThJB9Muc=";
   };
 
   nativeBuildInputs = [
