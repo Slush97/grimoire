@@ -49,8 +49,8 @@ interface LockerHeroViewProps {
   isFavorite: boolean;
   onBack: () => void;
   onToggleFavorite: () => void;
-  onSelect: (modId: string) => void | Promise<void>;
-  onToggleVariant: (modId: string) => void | Promise<void>;
+  onSelect: (modId: string) => Promise<boolean> | void;
+  onToggleVariant: (modId: string) => Promise<boolean> | void;
   /** Reorder the load order of this hero's enabled skins. `orderedModIds` is
    *  the new desired order of enabled skin VPK ids (lower index = loads first). */
   onReorderSkins?: (orderedModIds: string[]) => void | Promise<void>;
@@ -220,14 +220,14 @@ export function LockerHeroView({
     });
   };
 
-  const handleSelect = async (modId: string) => {
+  const handleSelect = (modId: string) => {
     rememberPoseSkinSelection(modId);
-    await onSelect(modId);
+    return onSelect(modId);
   };
 
-  const handleToggleVariant = async (modId: string) => {
+  const handleToggleVariant = (modId: string) => {
     rememberPoseSkinSelection(modId);
-    await onToggleVariant(modId);
+    return onToggleVariant(modId);
   };
 
   // Content-pane heading, Global-view style (section title + count). The Cards

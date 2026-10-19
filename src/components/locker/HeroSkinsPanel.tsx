@@ -21,6 +21,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
 import { shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
+import { shakeElement } from '../../lib/shakeElement';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
@@ -152,12 +153,12 @@ interface HeroSkinsPanelProps {
   /** Set the active group/skin for this hero. Cross-group exclusive — selecting
    *  one disables every other enabled mod for the hero. Used for single-variant
    *  groups and the group header. */
-  onSelect: (modId: string) => void;
+  onSelect: (modId: string) => Promise<boolean> | void;
   /** Toggle a single variant within an expanded multi-variant group. Disables
    *  enabled mods from other groups for the hero but preserves sibling variants
    *  in the same group, so a model VPK + voice-lines VPK can both stay on.
    *  Falls back to onSelect when not provided. */
-  onToggleVariant?: (modId: string) => void;
+  onToggleVariant?: (modId: string) => Promise<boolean> | void;
   /** Request deletion of a whole skin group (all its variant VPKs). The page
    *  owns the confirmation dialog + the delete; the panel only asks. When
    *  omitted, no delete affordance is shown. */
@@ -361,6 +362,11 @@ export function SkinLoadOrderStrip({
   );
 }
 
+async function toggleSkin(mod: Mod, onToggle: HeroSkinsPanelProps['onSelect'], element: Element | null) {
+  const toggled = await onToggle(mod.id);
+  if (mod.enabled && toggled === false) shakeElement(element);
+}
+
 /** One skin group as a media card (hero detail view). Every card holds the same
  *  height (media + title + a fixed status row); the variant chooser opens as a
  *  floating popover so expanding it never reflows the grid. */
@@ -384,8 +390,8 @@ function SkinGroupCard({
   shuffleArmed,
 }: {
   group: SkinGroup;
-  onSelect: (modId: string) => void;
-  onToggleVariant?: (modId: string) => void;
+  onSelect: HeroSkinsPanelProps['onSelect'];
+  onToggleVariant?: HeroSkinsPanelProps['onToggleVariant'];
   onRequestDelete?: (modIds: string[], name: string) => void;
   hideNsfwPreviews: boolean;
   useHeroPortraitThumbnails: boolean;
@@ -519,7 +525,7 @@ function SkinGroupCard({
           (z-30) so those keep their own handlers. */}
       <button
         type="button"
-        onClick={() => (isMulti ? setVariantsOpen((open) => !open) : onSelect(primary.id))}
+        onClick={() => (isMulti ? setVariantsOpen((open) => !open) : toggleSkin(primary, onSelect, cardRef.current))}
         aria-pressed={isMulti ? undefined : groupActive}
         aria-expanded={isMulti ? variantsOpen : undefined}
         aria-label={
@@ -660,7 +666,7 @@ function SkinGroupCard({
                     key={variant.id}
                     type="button"
                     onClick={() =>
-                      onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
+                      toggleSkin(variant, onToggleVariant ?? onSelect, cardRef.current)
                     }
                     aria-pressed={variant.enabled}
                     title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
@@ -702,8 +708,8 @@ function SkinGroupRow({
   shuffleArmed,
 }: {
   group: SkinGroup;
-  onSelect: (modId: string) => void;
-  onToggleVariant?: (modId: string) => void;
+  onSelect: HeroSkinsPanelProps['onSelect'];
+  onToggleVariant?: HeroSkinsPanelProps['onToggleVariant'];
   onRequestDelete?: (modIds: string[], name: string) => void;
   hideNsfwPreviews: boolean;
   useHeroPortraitThumbnails: boolean;
@@ -735,8 +741,10 @@ function SkinGroupRow({
   const hasShuffleControl = shufflePinned || !!onToggleIncluded;
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
+  const rowRef = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={rowRef}
       className={`group/row relative rounded-md border transition-colors ${
         groupActive
           ? 'border-accent/60 bg-hl/[0.04] backdrop-blur-sm'
@@ -801,7 +809,7 @@ function SkinGroupRow({
       <button
         type="button"
         onClick={() => {
-          if (!isMulti) onSelect(primary.id);
+          if (!isMulti) void toggleSkin(primary, onSelect, rowRef.current);
         }}
         aria-disabled={isMulti}
         className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
@@ -894,7 +902,7 @@ function SkinGroupRow({
                 key={variant.id}
                 type="button"
                 onClick={() =>
-                  onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
+                  toggleSkin(variant, onToggleVariant ?? onSelect, rowRef.current)
                 }
                 aria-pressed={variant.enabled}
                 title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}

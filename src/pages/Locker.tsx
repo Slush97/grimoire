@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
+import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
@@ -1127,15 +1128,15 @@ export default function Locker() {
   const setActiveSkin = async (heroId: number, modId: string) => {
     const skins = heroMods.map.get(heroId) ?? [];
     const sounds = heroSounds.map.get(heroId) ?? [];
-    if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return;
-    await toggleMod(modId);
+    if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return false;
+    return toggleMod(modId);
   };
 
   const toggleHeroVariant = async (heroId: number, modId: string) => {
     const skins = heroMods.map.get(heroId) ?? [];
     const sounds = heroSounds.map.get(heroId) ?? [];
-    if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return;
-    await toggleMod(modId);
+    if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return false;
+    return toggleMod(modId);
   };
 
   // Heroes that have at least one installed skin.
@@ -1217,22 +1218,20 @@ export default function Locker() {
   // global types keep normal multi-toggle.
   const selectGlobalMod = async (modId: string) => {
     const target = mods.find((m) => m.id === modId);
-    if (!target) return;
+    if (!target) return false;
     const targetType = getEffectiveGlobalType(target);
     if (!isPropContainerType(targetType)) {
-      await toggleMod(modId);
-      return;
+      return toggleMod(modId);
     }
     if (target.enabled) {
-      await toggleMod(modId);
-      return;
+      return toggleMod(modId);
     }
     const active = mods.filter(
       (m) =>
         m.id !== modId && m.enabled && getEffectiveGlobalType(m) === targetType
     );
     for (const m of active) await toggleMod(m.id);
-    await toggleMod(modId);
+    return toggleMod(modId);
   };
 
   // Sorted hero name list for the "tag as hero" dropdown on Unassigned cards.
@@ -1773,8 +1772,8 @@ interface HeroCardProps {
   expanded: boolean;
   onToggleExpanded: () => void;
   onBrowseSkins: () => void;
-  onSelect: (modId: string) => void;
-  onToggleVariant: (modId: string) => void;
+  onSelect: (modId: string) => Promise<boolean> | void;
+  onToggleVariant: (modId: string) => Promise<boolean> | void;
   onRequestDelete: (modIds: string[], name: string) => void;
   includedSkinKeys: Set<string>;
   onToggleShuffleIncluded: (skinKey: string) => void;
@@ -1928,7 +1927,7 @@ interface LockerGlobalViewProps {
   groups: GlobalModGroups;
   hideNsfw: boolean;
   onBack: () => void;
-  onToggle: (modId: string) => void | Promise<unknown>;
+  onToggle: (modId: string) => Promise<boolean> | void;
   /** Reassign a mod to another global type, or null to drop it off the axis. */
   onSetGlobalType: (modId: string, globalType: GlobalModType | null) => void | Promise<unknown>;
   /** Request deletion of a global mod (its VPK). The page owns the confirm. */
@@ -2754,7 +2753,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           button) so the heading/markup stays valid. */}
                       <button
                         type="button"
-                        onClick={() => onToggle(mod.id)}
+                        onClick={async (e) => {
+                          const card = e.currentTarget.parentElement;
+                          const toggled = await onToggle(mod.id);
+                          if (mod.enabled && toggled === false) shakeElement(card);
+                        }}
                         aria-pressed={mod.enabled}
                         aria-label={
                           mod.enabled
