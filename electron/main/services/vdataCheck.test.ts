@@ -94,6 +94,28 @@ describe('checkOutdatedVdata', () => {
         expect(vdata.staleModelsSnapshot(mod)?.[0].attachments).toEqual(['lean']);
     });
 
+    it('checks a standalone cat form and flags missing camera data after an earlier fix', async () => {
+        const entry = 'models/abilities/nano_catform_model.vmdl_c';
+        const mod = await vpk('pak51_dir.vpk', [entry]);
+        respond({}, { [mod]: [{ entry, status: 'stale', stale: ['standing_pivot', 'CitadelCameraSettings_t'] }] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+        expect(h.run).toHaveBeenCalledTimes(1);
+        expect(vdata.staleModelsSnapshot(mod)).toEqual([{ entry, attachments: ['standing_pivot', 'CitadelCameraSettings_t'] }]);
+        expect(h.send).toHaveBeenCalledWith('mod-vdata-checked');
+    });
+
+    it('shows skipped wolf poses again and clears the warning after repair', async () => {
+        const entry = 'models/heroes_wip/werewolf/transform/werewolf_transform.vmdl_c';
+        const mod = await vpk('pak41_dir.vpk', [entry]);
+        respond({}, { [mod]: [{ entry, status: 'stale', stale: ['far_01', 'far_02'] }] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+        expect(vdata.staleModelsSnapshot(mod)?.[0].attachments).toEqual(['far_01', 'far_02']);
+        await fs.writeFile(mod, 'complete camera repair');
+        respond({}, { [mod]: [{ entry, status: 'current', stale: [] }] });
+        await vdata.checkOutdatedVdata(dir, [mod]);
+        expect(vdata.staleModelsSnapshot(mod)).toBeUndefined();
+    });
+
     it('drops a stale model flag once the mod is healed', async () => {
         const mod = await vpk('pak01_dir.vpk', [WEREWOLF]);
         respond({}, { [mod]: [modelReport('stale', ['standing_pivot'])] });

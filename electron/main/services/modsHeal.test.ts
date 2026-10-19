@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const h = vi.hoisted(() => ({
@@ -203,7 +203,7 @@ describe('healModFolders', () => {
 
         await healModFolders(root);
 
-        expect(await fs.readdir(addons).then((names) => names.sort())).toEqual(['.disabled', current.split('/').pop(), 'pak01_dir.vpk'].sort());
+        expect(await fs.readdir(addons).then((names) => names.sort())).toEqual(['.disabled', basename(current), 'pak01_dir.vpk'].sort());
     });
 
     it('stamps priorityMod on a flagless resident of the priority root', async () => {

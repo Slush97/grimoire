@@ -138,6 +138,7 @@ import { HeroTagLabel } from '../components/installed/chips';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
+import { CompatibilityRepairsModal } from '../components/installed/CompatibilityRepairsModal';
 import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
 import { StaleModelsModal } from '../components/installed/StaleModelsModal';
 import { StatusIssues, type StatusIssue } from '../components/installed/StatusIssues';
@@ -1280,6 +1281,7 @@ export default function Installed() {
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
+  const [compatibilityOpen, setCompatibilityOpen] = useState(false);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const startUpdates = useModUpdatesStore((state) => state.start);
@@ -3626,6 +3628,11 @@ export default function Installed() {
     hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
         {statusButtons}
+        {enabledModCount > 0 && (
+          <Button variant="secondary" onClick={() => setCompatibilityOpen(true)}>
+            {t('installed.repairs.button')}
+          </Button>
+        )}
         {/* After the status buttons: copy enabled names in load order. */}
         {enabledModCount > 0 && (
           <Button
@@ -4153,6 +4160,7 @@ export default function Installed() {
         />
       )}
 
+      <CompatibilityRepairsModal open={compatibilityOpen} onClose={() => setCompatibilityOpen(false)} mods={mods} />
       <OutdatedVdataModal
         mods={outdatedVdataMods}
         open={outdatedVdataOpen}

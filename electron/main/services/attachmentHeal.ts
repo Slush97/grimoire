@@ -15,7 +15,7 @@ interface HealedModel { entry: string; attachments: string[]; blocks: number }
 
 /**
  * Rewrites a mod's stale hero models (see `staleModelsSnapshot`) with the
- * game's camera and aim attachments. vpkmerge patches only those floats and
+ * game's camera and aim data, including missing transform-camera inputs, and
  * repacks every other entry unchanged into a same-folder temp, which replaces
  * the mod by rename, so any failure leaves the original untouched. Returns how
  * many models were healed: 0 when none was stale.
@@ -42,7 +42,7 @@ export function healModAttachments(deadlockPath: string, modId: string): Promise
             if (healed.length === 0) return 0;
             const mismatch = repackMismatch(mod.path, staged, healed.map((m) => m.entry));
             if (mismatch) throw new Error(`Heal repack check failed: ${mismatch}. The mod was left untouched.`);
-            // Same content apart from model floats, so the mod keeps its trust state.
+            // Only model camera data changed, so the mod keeps its trust state.
             if (await carryVpkSafety([mod.path], staged) === 'differs') {
                 await assertVpkSafety(staged, { name: mod.name });
             }

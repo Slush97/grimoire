@@ -913,6 +913,8 @@ export interface ElectronAPI {
     onModVdataChecked: (callback: () => void) => () => void;
     /** Rewrites the mod's `staleModels` from the game's models. Resolves to how many were healed. */
     healModAttachments: (modId: string) => Promise<number>;
+    reviewModCompatibility: () => Promise<import('../lib/modCompatibility').CompatibilityReview[]>;
+    repairModCompatibility: (modId: string) => Promise<import('../lib/modCompatibility').CompatibilityRepairResult>;
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;

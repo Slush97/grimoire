@@ -2,6 +2,7 @@ import { ipcMain, shell } from 'electron';
 import { modSafetySnapshot } from '../services/modSafety';
 import { checkOutdatedVdata, outdatedVdataSnapshot, staleModelsSnapshot } from '../services/vdataCheck';
 import { healModAttachments } from '../services/attachmentHeal';
+import { repairModCompatibility, reviewModCompatibility } from '../services/compatibilityHeal';
 import { importDisabledVpk } from '../services/importDisabledVpk';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, existsSync } from 'fs';
@@ -2256,3 +2257,16 @@ function catalogThumbnailUrl(gamebananaId: number | undefined): string | undefin
     if (!gamebananaId) return undefined;
     return getModById(gamebananaId)?.thumbnailUrl ?? undefined;
 }
+
+ipcMain.handle('review-mod-compatibility', async () => {
+    const path = getActiveDeadlockPath();
+    if (!path) throw new Error('No Deadlock path configured');
+    return reviewModCompatibility(path);
+});
+
+ipcMain.handle('repair-mod-compatibility', async (_, modId: string) => {
+    if (typeof modId !== 'string' || !modId) throw new Error('Invalid mod ID');
+    const path = getActiveDeadlockPath();
+    if (!path) throw new Error('No Deadlock path configured');
+    return repairModCompatibility(path, modId);
+});

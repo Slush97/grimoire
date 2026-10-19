@@ -20,8 +20,8 @@ import { parseVpkDirectoriesAsync } from './vpk';
 const SAMPLE_SIZE = 8;
 // Keeps one spawn's argv far below the ~32K character Windows command line cap.
 const BATCH_SIZE = 50;
-/** Only hero models carry the attachments the model check compares. */
-const HERO_MODEL = /^models\/heroes[^/]*\/.+\.vmdl_c$/;
+/** Calico's playable cat form lives with abilities rather than hero models. */
+const CAMERA_MODEL = /^models\/(?:heroes[^/]*\/.+|abilities\/nano_catform_model)\.vmdl_c$/;
 
 interface FileStat { size: number; mtimeMs: number }
 interface Snapshot extends FileStat { outdated: OutdatedVdata[]; staleModels: StaleModel[] }
@@ -111,7 +111,7 @@ async function check(deadlockPath: string, modPaths: string[]): Promise<void> {
         fresh.set(path, snapshot);
         const entries = trees.get(path) ?? [];
         if (entries.some((entry) => entry.endsWith('.vdata_c'))) vdataMods.push(path);
-        if (entries.some((entry) => HERO_MODEL.test(entry))) modelMods.push(path);
+        if (entries.some((entry) => CAMERA_MODEL.test(entry))) modelMods.push(path);
     }
     // Only fields the mod deletes are flagged: fields it has that the game
     // dropped are left alone.

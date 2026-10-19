@@ -25,6 +25,7 @@ import {
   ShuffleIncludeButton,
 } from '../components/locker/ShuffleControls';
 import { LockerHeroView } from './LockerHero';
+import { getLockerHeroNeighbors } from '../lib/lockerHeroNavigation';
 import ModThumbnail from '../components/ModThumbnail';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
@@ -1047,6 +1048,11 @@ export default function Locker() {
   const selectedHeroMissing = selectedHeroRouteParam !== null && !selectedHero;
   const heroOverlay = useOverlayExit(selectedHero);
   const overlayHero = heroOverlay.item;
+  const heroNeighbors = getLockerHeroNeighbors(heroList, displayedHeroList, selectedHeroId ?? -1);
+  const navigateAdjacentHero = useCallback(
+    (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`, { replace: true }),
+    [navigate],
+  );
   const missingOverlay = useOverlayExit(selectedHeroMissing ? true : null);
   const globalOverlay = useOverlayExit(globalSelected ? true : null);
 
@@ -1590,6 +1596,11 @@ export default function Locker() {
           <LockerHeroView
             key={overlayHero.id}
             hero={overlayHero}
+            navigation={{
+              ...heroNeighbors,
+              onNavigate: navigateAdjacentHero,
+              enabled: !heroOverlay.closing,
+            }}
             skinList={selectedHeroMods}
             soundList={selectedHeroSoundList}
             skinCount={selectedHeroSkinCount}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import HeroSkinsPanel, { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
+import { HeroNavigation } from '../components/locker/HeroNavigation';
 import { LockerModImagePicker } from '../components/locker/LockerModImagePicker';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
@@ -38,6 +39,7 @@ import type { VariantChoice } from '../lib/lockerRandomizer';
 
 interface LockerHeroViewProps {
   hero: HeroCategory;
+  navigation: Omit<ComponentProps<typeof HeroNavigation>, 'children'>;
   skinList: Mod[];
   /** Sound-section mods mapped to this hero. Optional because the gallery
    *  view in `Locker.tsx` keeps the same prop surface and may not split sounds
@@ -82,6 +84,7 @@ function poseSkinSelectionKey(mod: Mod): string {
 
 export function LockerHeroView({
   hero,
+  navigation,
   skinList,
   soundList = [],
   skinCount,
@@ -271,7 +274,7 @@ export function LockerHeroView({
     );
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div data-locker-hero-view className="relative flex h-full overflow-hidden">
       {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
           panel so it can bleed through the frosted-glass rail + selection
           column. The image is sized to the window height with natural aspect
@@ -412,18 +415,20 @@ export function LockerHeroView({
 
         {/* Hero Name. Hidden when the active skin's backdrop already shows the
             hero name (issue #208). */}
-        {hideHeroName && backdropImage ? null : nameFailed ? (
-          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-            {hero.name}
-          </h2>
-        ) : (
-          <img
-            src={getHeroNamePath(hero.name)}
-            alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
-            onError={() => setNameFailed(true)}
-          />
-        )}
+        <HeroNavigation {...navigation}>
+          {hideHeroName && backdropImage ? null : nameFailed ? (
+            <h2 className="truncate text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              {hero.name}
+            </h2>
+          ) : (
+            <img
+              src={getHeroNamePath(hero.name)}
+              alt={hero.name}
+              className="h-8 w-auto max-w-full object-contain"
+              onError={() => setNameFailed(true)}
+            />
+          )}
+        </HeroNavigation>
 
         <nav aria-label={t('locker.hero.lockerSections')} className="flex flex-col gap-1.5">
           {sections.map(({ id, label, icon: Icon, count, disabled }) => {

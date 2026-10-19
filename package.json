@@ -20,6 +20,8 @@
     "postinstall": "install-electron && node scripts/fetch-vpkmerge.mjs",
     "fetch-vpkmerge": "node scripts/fetch-vpkmerge.mjs",
     "fetch-hero-icons": "node scripts/fetch-hero-icons.mjs",
+    "fetch-locker-art": "node scripts/fetch-locker-art.mjs",
+    "locker-art:check": "node scripts/fetch-locker-art.mjs --check",
     "generate-hero-chip-icons": "node scripts/generate-hero-chip-icons.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",

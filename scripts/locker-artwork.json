@@ -1,0 +1,310 @@
+[
+  {
+    "hero": "Abrams",
+    "url": "https://cdn.deadlock.wiki/Abrams_Render.png",
+    "sha256": "8a052ae82829e9f388335c60d3c1c8b6d8da41c80cee12262d1c33dd1c88fb06",
+    "width": 1639,
+    "height": 1440
+  },
+  {
+    "hero": "Apollo",
+    "url": "https://cdn.deadlock.wiki/Apollo_Render.png",
+    "sha256": "cb4a936638c463040199a5d5dabdb7d931fbf1577d8248177e06d5bac5de0296",
+    "width": 1976,
+    "height": 1440
+  },
+  {
+    "hero": "Baba",
+    "url": "https://cdn.deadlock.wiki/Baba_Render.png",
+    "sha256": "68e9bc485b696d726e80e5d8a59b8482888d01d95f74c1050f537d89cb6f912a",
+    "width": 1668,
+    "height": 1440
+  },
+  {
+    "hero": "Bebop",
+    "url": "https://cdn.deadlock.wiki/Bebop_Render.png",
+    "sha256": "c33877c07a2a5f1241737396c980cca80942538bae4eb5665158491e1d445b23",
+    "width": 1632,
+    "height": 1440
+  },
+  {
+    "hero": "Billy",
+    "url": "https://cdn.deadlock.wiki/Billy_Render.png",
+    "sha256": "52787b4a0b5a28b55dc83d4b782e92c52400a9b5ca3a827cc197e1504fee2e95",
+    "width": 1959,
+    "height": 1440
+  },
+  {
+    "hero": "Calico",
+    "url": "https://cdn.deadlock.wiki/Calico_Render.png",
+    "sha256": "1f9731ba0144b01321cbbf6ab90ebcce76869302eb1f9bdbac9e426e1ef6d401",
+    "width": 1760,
+    "height": 1440
+  },
+  {
+    "hero": "Celeste",
+    "url": "https://cdn.deadlock.wiki/Celeste_Render.png",
+    "sha256": "a856107dfdfb974af73457baee33499f4010042d755990f96a947a60dce6404e",
+    "width": 1681,
+    "height": 1440
+  },
+  {
+    "hero": "Deadman Danny",
+    "url": "https://cdn.deadlock.wiki/Deadman_Danny_Render.png",
+    "sha256": "cabd6c92493fe4a466781d06125abf5eff5a461a7c30543d927ccd547260b066",
+    "width": 1464,
+    "height": 1440
+  },
+  {
+    "hero": "Doorman",
+    "url": "https://cdn.deadlock.wiki/The_Doorman_Render.png",
+    "sha256": "f0e737932ccbf5636484501390b06a719e2e80ec5d414c85421c1722073d1766",
+    "width": 1649,
+    "height": 1440
+  },
+  {
+    "hero": "Drifter",
+    "url": "https://cdn.deadlock.wiki/Drifter_Render.png",
+    "sha256": "fc69c6bec1695e40e59fb495fe1a067b97455cb2b787b5771792696758a5600f",
+    "width": 1684,
+    "height": 1440
+  },
+  {
+    "hero": "Dynamo",
+    "url": "https://cdn.deadlock.wiki/Dynamo_Render.png",
+    "sha256": "6192f59f8ad6c1460030116afa3e7cb1fff8f8921f004d496f1b1e18ccb7bc3d",
+    "width": 1479,
+    "height": 1440
+  },
+  {
+    "hero": "Graves",
+    "url": "https://cdn.deadlock.wiki/Graves_Render.png",
+    "sha256": "da54d920b6f9a860f6dd2f033a907edb9f7958a3bba7bfdc5b4a688bd3ba86bc",
+    "width": 1558,
+    "height": 1440
+  },
+  {
+    "hero": "Grey Talon",
+    "url": "https://cdn.deadlock.wiki/Grey_Talon_Render.png",
+    "sha256": "8726474d36cf16252a82bf7f3108080b4e7f72b0ec994f5edd906d08c623053b",
+    "width": 1698,
+    "height": 1440
+  },
+  {
+    "hero": "Haze",
+    "url": "https://cdn.deadlock.wiki/Haze_Render.png",
+    "sha256": "3056dea015121c1d92c5458db138afa6733e094e1270c82d8007b11f74da84b8",
+    "width": 1508,
+    "height": 1440
+  },
+  {
+    "hero": "Holliday",
+    "url": "https://cdn.deadlock.wiki/Holliday_Render.png",
+    "sha256": "0f2c0f7db3c2305c099e6c1f2516ad691aa43cca8d11bf287a8f4b3be38e93e8",
+    "width": 1112,
+    "height": 1024
+  },
+  {
+    "hero": "Infernus",
+    "url": "https://cdn.deadlock.wiki/Infernus_Render.png",
+    "sha256": "1750119fe3de70bbf0ac798544a1a21090f6fa7fd1711f9d32497ac2f48bd7d2",
+    "width": 1754,
+    "height": 1440
+  },
+  {
+    "hero": "Ivy",
+    "url": "https://cdn.deadlock.wiki/Ivy_Render.png",
+    "sha256": "f8c754fcc319fce41ef11a30028a563ef7ff3d8680eb07908f303c46ef1998d3",
+    "width": 1727,
+    "height": 1440
+  },
+  {
+    "hero": "Kelvin",
+    "url": "https://cdn.deadlock.wiki/Kelvin_Render.png",
+    "sha256": "4cf0be18bd38f892845bfcac00a56974e8d0872d216bf6f9012628cce880b45d",
+    "width": 1781,
+    "height": 1440
+  },
+  {
+    "hero": "Lady Geist",
+    "url": "https://cdn.deadlock.wiki/Lady_Geist_Render.png",
+    "sha256": "9a36e996267a7380e01168b0f900af2720dd339513da2ea73de149f067ba901d",
+    "width": 1834,
+    "height": 1440
+  },
+  {
+    "hero": "Lash",
+    "url": "https://cdn.deadlock.wiki/Lash_Render.png",
+    "sha256": "5ce8e0c393d4d5c8a8cb81db3db51632bf45287fd0ad7e27fd5d965a5e26e4ac",
+    "width": 1783,
+    "height": 1440
+  },
+  {
+    "hero": "McGinnis",
+    "url": "https://cdn.deadlock.wiki/McGinnis_Render.png",
+    "sha256": "ca10e2ee5256b33907ec2b5e7bdafc1ef5fda2a16f500cd025e672c1e98b44c3",
+    "width": 1642,
+    "height": 1440
+  },
+  {
+    "hero": "Mina",
+    "url": "https://cdn.deadlock.wiki/Mina_Render.png",
+    "sha256": "25b9cb0036e23921bbb5208c803a76693321b5a89e8c42680abfa832b9aec19c",
+    "width": 1762,
+    "height": 1440
+  },
+  {
+    "hero": "Mirage",
+    "url": "https://cdn.deadlock.wiki/Mirage_Render.png",
+    "sha256": "7bc05c15603a4246ea2bd03eca08046936dfa5a93b28a703f6c682a7512ea2c3",
+    "width": 1594,
+    "height": 1440
+  },
+  {
+    "hero": "Mo & Krill",
+    "url": "https://cdn.deadlock.wiki/Mo_%26_Krill_Render.png",
+    "sha256": "0b0862b0c24a2a392616937e8b6e3756d9b87586505534e2aa080584c1970cc6",
+    "width": 1687,
+    "height": 1440
+  },
+  {
+    "hero": "Nurse Harrow",
+    "url": "https://cdn.deadlock.wiki/Nurse_Harrow_Render.png",
+    "sha256": "0c6439a3543922d06a75b066046a6b6f37274b045d6bb4e04278c94ef03baa98",
+    "width": 1625,
+    "height": 1440
+  },
+  {
+    "hero": "Paige",
+    "url": "https://cdn.deadlock.wiki/Paige_Render.png",
+    "sha256": "0b42e918c82e629bec9e8afc501ea94180bc85da96aa111eaa2b9bf661a62c4e",
+    "width": 1608,
+    "height": 1440
+  },
+  {
+    "hero": "Paradox",
+    "url": "https://cdn.deadlock.wiki/Paradox_Render.png",
+    "sha256": "5f0ddc2fbcf936ce5976e884dea9e3556ee91cea59b449dc550e61dad9fc6875",
+    "width": 1704,
+    "height": 1440
+  },
+  {
+    "hero": "Pocket",
+    "url": "https://cdn.deadlock.wiki/Pocket_Render.png",
+    "sha256": "e004dc55107922fcb20704f2ed0f31642df9ae5bd49da9f76691399e2d557838",
+    "width": 1827,
+    "height": 1440
+  },
+  {
+    "hero": "Rat King",
+    "url": "https://cdn.deadlock.wiki/Rat_King_Render.png",
+    "sha256": "d1fdb179fbc1509c1c0fa23d631ebab7438cfc4675cac5631c11fcad7c779fda",
+    "width": 1779,
+    "height": 1440
+  },
+  {
+    "hero": "Rem",
+    "url": "https://cdn.deadlock.wiki/Rem_Render.png",
+    "sha256": "e6f63478ccdcaca90271d322a9749d09476be3ee7b100ed9770d6a3e8921795c",
+    "width": 1734,
+    "height": 1440
+  },
+  {
+    "hero": "Seven",
+    "url": "https://cdn.deadlock.wiki/Seven_Render.png",
+    "sha256": "9f493010c6d294fe10466c72dd051b2d6ff006e684d4209b289e662bb7164bbb",
+    "width": 1680,
+    "height": 1440
+  },
+  {
+    "hero": "Shiv",
+    "url": "https://cdn.deadlock.wiki/Shiv_Render.png",
+    "sha256": "807543a7de23765f521c4f4d3dd10d6507f10ae1280b62a6c5f076e699bb7991",
+    "width": 1808,
+    "height": 1440
+  },
+  {
+    "hero": "Silver",
+    "url": "https://cdn.deadlock.wiki/Silver_Render.png",
+    "sha256": "034a8035221f1f7424c0b6a7d0d639185b775f88a5ff5f2a9a956a3f06054ac9",
+    "width": 1503,
+    "height": 1440
+  },
+  {
+    "hero": "Sinclair",
+    "url": "https://cdn.deadlock.wiki/Sinclair_Render.png",
+    "sha256": "8a4217e3fd3dabe14e2cd51c6d6a9a88afaa614fb219877cf348423f67058bd0",
+    "width": 1562,
+    "height": 1440
+  },
+  {
+    "hero": "Solomon",
+    "url": "https://cdn.deadlock.wiki/Solomon_Render.png",
+    "sha256": "cfd37311f16dcc8ad9c4a833cc5f68555a6e00384f9336d939aa2cf527814f98",
+    "width": 1769,
+    "height": 1440
+  },
+  {
+    "hero": "Venator",
+    "url": "https://cdn.deadlock.wiki/Venator_Render.png",
+    "sha256": "c8845d55c9424940f3dd42d2d4a03f3ad9b14facac2135521282f1fc0a129a90",
+    "width": 1639,
+    "height": 1440
+  },
+  {
+    "hero": "Victor",
+    "url": "https://cdn.deadlock.wiki/Victor_Render.png",
+    "sha256": "c10c1dc067d503a20c2c37d918956a7b56a92101329297d538984d34c627a45b",
+    "width": 1583,
+    "height": 1440
+  },
+  {
+    "hero": "Vindicta",
+    "url": "https://cdn.deadlock.wiki/Vindicta_Render.png",
+    "sha256": "9991c4f3bb62da349eb367d35fdc34bc6fd7059b5c4c7e4d7df8a2ab9a09b40f",
+    "width": 1613,
+    "height": 1440
+  },
+  {
+    "hero": "Violet",
+    "url": "https://cdn.deadlock.wiki/Violet_Render.png",
+    "sha256": "96527dbd06f1a1f1423abc6056ad1e8833ded03a0be01e8cd0b4b88950920837",
+    "width": 1761,
+    "height": 1440
+  },
+  {
+    "hero": "Viscous",
+    "url": "https://cdn.deadlock.wiki/Viscous_Render.png",
+    "sha256": "d337364070cca2aafd39cac2d3df839f6a4b48e11484d2dc40bfb6a7defd8aa1",
+    "width": 1750,
+    "height": 1440
+  },
+  {
+    "hero": "Vyper",
+    "url": "https://cdn.deadlock.wiki/Vyper_Render.png",
+    "sha256": "96717d307661cd63a6b658bcd6076a2af3631b2192942825b2f3f05f68bace16",
+    "width": 2080,
+    "height": 1440
+  },
+  {
+    "hero": "Warden",
+    "url": "https://cdn.deadlock.wiki/Warden_Render.png",
+    "sha256": "19dcfd39ef9eb6566bcc25f8590635aaf6d6fea6ecc146b91f1ea69913ec9625",
+    "width": 1513,
+    "height": 1440
+  },
+  {
+    "hero": "Wraith",
+    "url": "https://cdn.deadlock.wiki/Wraith_Render.png",
+    "sha256": "1f3510ac705fcfa8da7baaa772ae5b3027ab88e0f82c636d77ccdf33b3476fd4",
+    "width": 1683,
+    "height": 1440
+  },
+  {
+    "hero": "Yamato",
+    "url": "https://cdn.deadlock.wiki/archive/20260615003216%21Yamato_Render.png",
+    "sha256": "122da3da0702188a45b6c40266161727c6480bc4589b4d8f9fced36f35bb219f",
+    "width": 1555,
+    "height": 1440
+  }
+]
