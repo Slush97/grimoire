@@ -39,7 +39,7 @@ beforeEach(() => {
   useAppStore.setState({ settings: { ...useAppStore.getState().settings!, experimentalModSafety: true } });
   useCrashAdvisoryStore.setState({ findings: [finding], detailId: null, dismissed: [] });
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 describe('crash badges on installed cards', () => {
   it('skips ordinary hover renders and preserves Shift preview over a stationary pointer', async () => {
@@ -111,5 +111,53 @@ describe('crash badges on installed cards', () => {
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-pressed]')!.click());
     expect(onSelectToggle).toHaveBeenCalledOnce();
     expect(useCrashAdvisoryStore.getState().detailId).toBeNull();
+  });
+});
+
+describe('blocked mod toggles', () => {
+  it.each([
+    { enabled: true, toggled: false, reducedMotion: false, shakes: true },
+    { enabled: true, toggled: true, reducedMotion: false, shakes: false },
+    { enabled: false, toggled: false, reducedMotion: false, shakes: false },
+    { enabled: true, toggled: false, reducedMotion: true, shakes: false },
+  ])('gives feedback only for a blocked disable: %j', async ({ enabled, toggled, reducedMotion, shakes }) => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: reducedMotion })));
+    onToggle.mockResolvedValueOnce(toggled);
+    await act(async () => root.render(<ModCard {...props(0, enabled, 'grid')} entryKey="test" />));
+    const card = host.querySelector<HTMLElement>('[data-mod-entry-key="test"]')!;
+    const animate = vi.fn();
+    Object.defineProperties(card, {
+      animate: { value: animate },
+      getAnimations: { value: () => [] },
+    });
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="installed.card.disableMod"], [aria-label="installed.card.enableMod"]')!.click());
+
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(animate).toHaveBeenCalledTimes(shakes ? 1 : 0);
+  });
+
+  it('restarts repeated feedback without cancelling other card animations', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+    onToggle.mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+    await act(async () => root.render(<ModCard {...props(0, true, 'list')} entryKey="test" />));
+    const card = host.querySelector<HTMLElement>('[data-mod-entry-key="test"]')!;
+    const animate = vi.fn();
+    const cancelShake = vi.fn();
+    const cancelOther = vi.fn();
+    Object.defineProperties(card, {
+      animate: { value: animate },
+      getAnimations: { value: () => [
+        { id: 'blocked-action-shake', cancel: cancelShake },
+        { id: 'other', cancel: cancelOther },
+      ] },
+    });
+    const toggle = host.querySelector<HTMLButtonElement>('[aria-label="installed.card.disableMod"]')!;
+    await act(async () => toggle.click());
+    await act(async () => toggle.click());
+
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(cancelShake).toHaveBeenCalledTimes(2);
+    expect(cancelOther).not.toHaveBeenCalled();
   });
 });

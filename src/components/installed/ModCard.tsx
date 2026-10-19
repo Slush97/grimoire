@@ -19,6 +19,7 @@ import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_
 import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
+import { shakeElement } from '../../lib/shakeElement';
 import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../../lib/imageActions';
 import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
@@ -77,7 +78,7 @@ interface ModCardProps {
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
-  onToggle: () => void;
+  onToggle: () => Promise<boolean> | void;
   /** Disable every other mod, enable only this one, and launch the game. Used
    *  for A/B testing a single skin. */
   onSoloLaunch?: () => void;
@@ -798,6 +799,7 @@ export function ModCard({
 }: ModCardProps) {
   const { t } = useTranslation();
   const pointerInside = useRef(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const backups = useModBackupsStore((state) => state.backups);
   const backupIdentity = getModBackupIdentity(mod, mod.fileName, mod.name);
   const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
@@ -1318,7 +1320,10 @@ export function ModCard({
         </MenuRoot>
       </div>
         <button
-          onClick={onToggle}
+          onClick={async () => {
+            const toggled = await onToggle();
+            if (mod.enabled && toggled === false) shakeElement(cardRef.current);
+          }}
           aria-pressed={mod.enabled}
           aria-label={mod.enabled ? t('installed.card.disableMod') : t('installed.card.enableMod')}
           title={mod.enabled ? t('installed.card.disableMod') : t('installed.card.enableMod')}
@@ -1343,6 +1348,7 @@ export function ModCard({
           this one rather than a second, image-only menu. */}
       <MenuTrigger asChild disabled={selectMode}>
     <div
+      ref={cardRef}
       data-mod-entry-key={entryKey}
       onPointerEnter={() => {
         pointerInside.current = true;

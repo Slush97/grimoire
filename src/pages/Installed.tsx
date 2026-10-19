@@ -295,7 +295,7 @@ interface InstalledEntryCardProps {
   onViewAuthor: (mod: Mod) => void;
   /** Opens the variant picker for a group, by its shared grouping key. */
   onOpenPicker: (groupKey: string) => void;
-  onToggle: (entry: ModEntry) => void;
+  onToggle: (entry: ModEntry) => Promise<boolean>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
@@ -2393,7 +2393,7 @@ export default function Installed() {
    * action is single-mod.
    */
   const toggleVariant = async (target: Mod) => {
-    await toggleMod(target.id);
+    return toggleMod(target.id);
   };
 
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
@@ -2411,9 +2411,10 @@ export default function Installed() {
    *  whole group; otherwise open the picker so the user can choose the files. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
     if (group.enabledVariants.length > 0) {
-      await setGroupEnabled(group, false);
+      return setGroupEnabled(group, false);
     } else {
       setPickerGroupId(group.groupKey);
+      return true;
     }
   };
 
@@ -2693,8 +2694,7 @@ export default function Installed() {
     }
   });
   const toggleEntry = useStableCallback((entry: ModEntry) => {
-    if (entry.kind === 'group') void handleGroupToggle(entry);
-    else void toggleMod(entry.mod.id);
+    return entry.kind === 'group' ? handleGroupToggle(entry) : toggleMod(entry.mod.id);
   });
   // Persist outside the setState updater: StrictMode double-invokes an updater,
   // and a write is a side effect even when it happens to be idempotent.

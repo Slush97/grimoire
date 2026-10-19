@@ -39,6 +39,7 @@ import { Input } from './common/forms';
 import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
+import { shakeElement } from '../lib/shakeElement';
 
 type DropPosition = 'before' | 'after';
 type VariantSection = 'enabled' | 'disabled';
@@ -49,7 +50,7 @@ interface Props {
     modName: string;
     variants: Mod[];
     /** Toggle a single variant's enabled state. Variants are independent. */
-    onToggle: (target: Mod) => Promise<void> | void;
+    onToggle: (target: Mod) => Promise<boolean> | void;
     /** Swap a variant with its picker-neighbor. */
     onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
     /** Drag-drop reorder. Drops source before or after neighbor in load order. */
@@ -216,11 +217,12 @@ export default function VariantPickerModal({
         }
     };
 
-    const pick = async (target: Mod) => {
+    const pick = async (target: Mod, row: HTMLElement | null) => {
         if (pending) return;
         setPending(target.id);
         try {
-            await onToggle(target);
+            const toggled = await onToggle(target);
+            if (target.enabled && toggled === false) shakeElement(row);
         } finally {
             setPending(null);
         }
@@ -328,7 +330,7 @@ export default function VariantPickerModal({
             >
                 <button
                     type="button"
-                    onClick={overlay ? undefined : () => pick(v)}
+                    onClick={overlay ? undefined : (event) => pick(v, event.currentTarget.parentElement)}
                     disabled={overlay || !!pending || isEditing}
                     className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
                     title={isActive ? 'Disable this file' : 'Enable this file'}
