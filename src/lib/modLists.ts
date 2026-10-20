@@ -27,6 +27,8 @@
  * saved by a shipped build.
  */
 
+import { isModListIcon, type ModListIcon } from './modListIcons';
+
 export const MOD_LISTS_KEY = 'installedModLists';
 
 /** Defensive clamp so pathological stored data can't blow out the filter UI. */
@@ -36,6 +38,7 @@ export interface ModList {
   /** Opaque, stable across renames. Filter selections reference this. */
   id: string;
   name: string;
+  icon?: ModListIcon;
   /** modPreferenceKey values. */
   keys: string[];
 }
@@ -87,7 +90,7 @@ function normalizeList(value: unknown, taken: Set<string>): ModList | null {
     : [];
 
   taken.add(id);
-  return { id, name, keys };
+  return { id, name, keys, ...(isModListIcon(raw.icon) ? { icon: raw.icon } : {}) };
 }
 
 export function readStoredModLists(): ModList[] {
@@ -175,6 +178,10 @@ export function renameList(
 
 export function deleteList(lists: readonly ModList[], id: string): ModList[] {
   return lists.filter((list) => list.id !== id);
+}
+
+export function setListIcon(lists: readonly ModList[], id: string, icon: ModListIcon): ModList[] {
+  return lists.map((list) => list.id === id ? { ...list, icon } : list);
 }
 
 /**

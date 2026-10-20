@@ -120,6 +120,7 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  setListIcon,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -4273,6 +4274,7 @@ export default function Installed() {
             if (!bulkProgress) setManagingLists(false);
           }}
           onRename={renameModList}
+          onIcon={(id, icon) => commitModLists(setListIcon(modLists, id, icon))}
           onDelete={deleteModList}
           onSetEnabled={setModListEnabled}
           progress={bulkProgress}

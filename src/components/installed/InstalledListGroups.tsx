@@ -1,9 +1,10 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { ChevronRight, List } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../common/ui';
+import { Badge, Button } from '../common/ui';
+import { ModListGlyph } from './ModListIcon';
 import { installedListEntryKey, type InstalledListGroup } from '../../lib/installedListGroups';
-import { isEntryEnabled, type ModEntry } from '../../lib/modEntries';
+import type { ModEntry } from '../../lib/modEntries';
 
 function ListSection({ group, collapsed, onToggle, gridClassName, gridStyle, renderEntry }: {
   group: InstalledListGroup;
@@ -15,7 +16,6 @@ function ListSection({ group, collapsed, onToggle, gridClassName, gridStyle, ren
 }) {
   const { t } = useTranslation();
   const contentId = useId();
-  const enabled = group.entries.filter(isEntryEnabled).length;
   return <section>
     <h2>
       <button
@@ -23,17 +23,16 @@ function ListSection({ group, collapsed, onToggle, gridClassName, gridStyle, ren
         aria-expanded={!collapsed}
         aria-controls={contentId}
         onClick={onToggle}
-        className="flex h-11 w-full cursor-pointer items-center gap-3 px-4 text-left text-sm text-text-primary transition-colors hover:bg-hl/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+        className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-sm text-left text-xs text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
         <ChevronRight aria-hidden className={`h-4 w-4 shrink-0 text-text-tertiary ${collapsed ? '' : 'rotate-90'}`} />
-        <List aria-hidden className="h-4 w-4 shrink-0 text-text-secondary" />
+        <ModListGlyph icon={group.icon} />
         <span className="min-w-0 truncate font-semibold">{group.name}</span>
-        <span className="text-xs tabular-nums text-text-tertiary">{t('installed.lists.memberCount', { count: group.entries.length })}</span>
-        {group.entries.length > 0 && <span className="ml-auto shrink-0 text-xs tabular-nums text-text-secondary">{t('installed.lists.enabledCount', { count: enabled })}</span>}
+        <span title={t('installed.lists.memberCount', { count: group.entries.length })}><Badge className="tabular-nums">{group.entries.length}</Badge></span>
       </button>
     </h2>
     <div id={contentId} hidden={collapsed}>
-      {!collapsed && <div className="px-4 pb-4 pt-1">
+      {!collapsed && <div className="pb-4 pt-2">
         {group.entries.length > 0 ? <div className={gridClassName} style={gridStyle}>
           {group.entries.map((entry) => {
             const occurrence = installedListEntryKey(group.id, entry);
@@ -64,7 +63,7 @@ export function InstalledListGroups({ groups, collapsed, showEmpty, onToggle, on
     <Button variant="secondary" onClick={onManage}>{t('installed.lists.manageTitle')}</Button>
   </div>;
   if (visibleGroups.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">{t('installed.lists.noMatches')}</p>;
-  return <div className="divide-y divide-border overflow-hidden rounded-sm border border-border">
+  return <div className="divide-y divide-border">
     {visibleGroups.map((group) => <ListSection key={group.id} group={group} collapsed={collapsed.has(group.id)} onToggle={() => onToggle(group.id)} {...grid} />)}
   </div>;
 }

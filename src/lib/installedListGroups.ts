@@ -3,9 +3,7 @@ import type { ModList } from './modLists';
 import { entrySelectionIds, type SelectionEntry } from '../components/installed/selection';
 
 export type InstalledListView = 'all' | 'lists';
-export interface InstalledListGroup {
-  id: string;
-  name: string;
+export interface InstalledListGroup extends Pick<ModList, 'id' | 'name' | 'icon'> {
   entries: ModEntry[];
 }
 export interface InstalledListPreferences {
@@ -40,7 +38,7 @@ export function installedListEntryKey(listId: string, entry: ModEntry): string {
 export function buildInstalledListGroups(entries: readonly ModEntry[], lists: readonly ModList[]): InstalledListGroup[] {
   return lists.map((list) => {
     const keys = new Set(list.keys);
-    return { id: list.id, name: list.name, entries: entries.filter((entry) => keys.has(entryDisabledPreferenceKey(entry))) };
+    return { id: list.id, name: list.name, ...(list.icon ? { icon: list.icon } : {}), entries: entries.filter((entry) => keys.has(entryDisabledPreferenceKey(entry))) };
   });
 }
 

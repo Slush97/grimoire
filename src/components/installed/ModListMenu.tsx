@@ -20,6 +20,7 @@ import {
   MenuSubTrigger,
 } from '../common/menu';
 import type { ModList } from '../../lib/modLists';
+import { ModListGlyph } from './ModListIcon';
 
 interface ModListSubmenuProps {
   lists: readonly ModList[];
@@ -44,7 +45,7 @@ export function ModListSubmenu({ lists, memberIds, onToggle, onCreateNew }: ModL
             checked={memberIds.includes(list.id)}
             onCheckedChange={() => onToggle(list.id)}
           >
-            {list.name}
+            <span className="flex items-center gap-2"><ModListGlyph icon={list.icon} />{list.name}</span>
           </MenuCheckboxItem>
         ))}
         {lists.length > 0 && <MenuSeparator />}
