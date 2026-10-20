@@ -19,10 +19,8 @@ import { listInstalledUserVpks } from './modLibrary';
 import { parseVpkDirectoryCached } from './vpk';
 import { vpkmergeBinaryPath, runVpkmerge } from './modMerger';
 import { getModMetadata } from './metadata';
-import type { HeroPortrait } from '../../../src/types/portrait';
-
 import { codenamesForHero } from './heroCodenames';
-export { codenameForHero, codenamesForHero } from './heroCodenames';
+import type { HeroPortrait } from '../../../src/types/portrait';
 
 function sanitize(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]+/g, '_');

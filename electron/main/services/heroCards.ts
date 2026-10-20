@@ -37,7 +37,7 @@ import {
 } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { resolveVpkIdentity } from './vpkIdentity';
-import { codenamesForHero } from './heroPortraits';
+import { codenamesForHero } from './heroCodenames';
 import type {
     ApplyHeroCardResult,
     LockerCardSelection,

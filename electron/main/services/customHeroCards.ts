@@ -23,7 +23,7 @@ import {
     vpkmergeBinaryPath,
     verifyVpkOutput,
 } from './modMerger';
-import { codenamesForHero } from './heroPortraits';
+import { codenamesForHero } from './heroCodenames';
 import {
     baseCardPakPath,
     customCardVpkPath,

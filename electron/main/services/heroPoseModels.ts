@@ -35,7 +35,7 @@ import { exportParticleBundle } from './heroParticleExport';
 import { exportModelAttachments } from './modelAttachments';
 import { readHeroAnimationMetadata } from './heroAnimationMetadata';
 import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
-import { codenamesForHero } from './heroPortraits';
+import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
 export const HERO_POSE_SCHEME = 'grimoire-hero';
