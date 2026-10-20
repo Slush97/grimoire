@@ -29,6 +29,7 @@ import {
   type StableKeyMigrationPlan,
 } from '../lib/stableKeyMigration';
 import { migrateLockerImageSurface } from '../lib/lockerImageMigration';
+import type { BrowseSections } from '../lib/browseSections';
 
 // Cache entry with timestamp for TTL support
 interface CacheEntry<T> {
@@ -197,6 +198,7 @@ export interface BrowseUiState {
   layout: BrowseLayout;
   sort: BrowseSortOption;
   section: string;
+  selectedSections: BrowseSections;
   // Recency window. Routes browsing through the local catalog mirror (see
   // useLocalSearch in Browse.tsx). addedFrom/addedTo are 'YYYY-MM-DD' inputs
   // used only when addedWithin === 'custom'.
@@ -283,6 +285,7 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   layout: readPersistedLayout(),
   sort: readPersistedSort(),
   section: 'Mod',
+  selectedSections: ['Mod'],
   addedWithin: 'all',
   addedFrom: '',
   addedTo: '',
@@ -1301,11 +1304,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBrowseUi: (partial: Partial<BrowseUiState>) => {
     const current = get().browseUi;
     const next = { ...current, ...partial };
-    if (next.section !== current.section) {
+    if (partial.selectedSections) {
+      next.section = partial.selectedSections[0];
+    } else if (partial.section !== undefined || partial.submitter) {
+      next.selectedSections = [next.section];
+    }
+    if (current.selectedSections.length === 1 && (
+      next.section !== current.section || next.selectedSections.length > 1
+    )) {
       next.categoryIdsBySection = {
         ...current.categoryIdsBySection,
         [current.section]: current.categoryId,
       };
+    }
+    if (next.section !== current.section || (
+      current.selectedSections.length > 1 && next.selectedSections.length === 1
+    )) {
       next.categoryId = partial.categoryId ?? next.categoryIdsBySection[next.section] ?? 'all';
       next.heroCategoryId = partial.heroCategoryId ?? (
         next.section === 'Sound' && current.soundNoHero
@@ -1318,6 +1332,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (next.section !== 'Sound' && next.heroCategoryId === 'none') {
       next.heroCategoryId = 'all';
+    }
+    if (next.selectedSections.length > 1) {
+      next.categoryId = 'all';
+      if (next.heroCategoryId === 'none') next.heroCategoryId = 'all';
     }
     // An override belongs to the exact navigation that supplied it. Any
     // ordinary submitter change must drop it so a later Installed/Browse link

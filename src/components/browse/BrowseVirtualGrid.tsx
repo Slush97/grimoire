@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { browseModKey, browseModSection } from '../../lib/browseSections';
 import type { GameBananaMod } from '../../types/gamebanana';
 import type { BrowseLayout } from '../../stores/appStore';
 import type { BrowseCardDesign, ViewMode } from './cardGeometry';
@@ -19,16 +20,15 @@ type BrowseVirtualGridProps = {
   viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   cardSize: number;
-  section: string;
-  installedIds: Set<number>;
-  installedByGbId: Map<number, { id: string; enabled: boolean }>;
+  installedIds: Set<string>;
+  installedByGbId: Map<string, { id: string; enabled: boolean }>;
   queuedByModId: Map<number, { position: number }>;
   downloadingModId?: number;
   volume: number;
   onVolumeChange: (volume: number) => void;
   hideNsfwPreviews: boolean;
-  playingModId: number | null;
-  onPlayingModIdChange: Dispatch<SetStateAction<number | null>>;
+  playingModId: string | null;
+  onPlayingModIdChange: Dispatch<SetStateAction<string | null>>;
   suppressHoverIntentRef: RefObject<boolean>;
   actionContextKey: string;
   onModClick: (mod: GameBananaMod) => void;
@@ -51,7 +51,6 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
   viewMode,
   cardDesign,
   cardSize,
-  section,
   installedIds,
   installedByGbId,
   queuedByModId,
@@ -107,17 +106,18 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
           >
             {rowMods.map((mod, index) => {
               const queuedState = queuedByModId.get(mod.id);
-              const installedLocal = installedByGbId.get(mod.id);
+              const itemKey = browseModKey(mod);
+              const installedLocal = installedByGbId.get(itemKey);
               return (
                 <div
-                  key={mod.id}
+                  key={itemKey}
                   className="browse-result-card min-w-0 [contain:layout_style]"
                   style={{ animationDelay: `${Math.min(index * 18, 72)}ms` }}
                 >
                   <MemoizedModCard
-                    key={mod.id}
+                    key={itemKey}
                     mod={mod}
-                    installed={installedIds.has(mod.id)}
+                    installed={installedIds.has(itemKey)}
                     installedDisabled={!!installedLocal && !installedLocal.enabled}
                     downloading={downloadingModId === mod.id}
                     queuePosition={queuedState?.position}
@@ -126,18 +126,18 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
                     cardSize={cardSize}
                     cardWidth={columnWidth}
                     cardHeight={cardHeight}
-                    section={section}
+                    section={browseModSection(mod)}
                     volume={volume}
                     onVolumeChange={onVolumeChange}
                     hideNsfwPreviews={hideNsfwPreviews}
-                    isPlaying={playingModId === mod.id}
+                    isPlaying={playingModId === itemKey}
                     suppressHoverIntentRef={suppressHoverIntentRef}
                     enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
                     actionContextKey={actionContextKey}
                     onPlayingChange={(playing) => {
                       onPlayingModIdChange((prev) => {
-                        if (playing) return mod.id;
-                        return prev === mod.id ? null : prev;
+                        if (playing) return itemKey;
+                        return prev === itemKey ? null : prev;
                       });
                     }}
                     onClick={() => onModClick(mod)}

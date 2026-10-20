@@ -25,27 +25,18 @@ export function getReadableDensity(targetWidth: number): BrowseReadableDensity {
   return 'full';
 }
 
-function estimateReadableCardBodyHeight(density: BrowseReadableDensity, section: string): number {
-  const isSound = section === 'Sound';
-
-  // The category/hero/NSFW chips now float over the thumbnail (revealed on
-  // hover), so the body no longer reserves a chip row or its margin.
-  if (density === 'micro') {
-    return 8 + 16 + (isSound ? 8 + 28 : 0) + 8 + 24 + 8;
-  }
-
-  if (density === 'compact') {
-    return 12 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
-  }
-
-  return 14 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
+// Match the compact caption to its actual type size. Sound controls stay
+// inside the artwork and never add a row to the caption.
+function estimateReadableCardBodyHeight(density: BrowseReadableDensity, innerWidth: number): number {
+  if (density === 'micro') return 16 + 16 + 8 + 24;
+  const titleSize = Math.min(17, Math.max(11, innerWidth * 0.053571));
+  return 24 + titleSize * 1.28 + 1 + 16 + 8 + 28;
 }
 
 export function estimateBrowseRowHeight(
   columnWidth: number,
   layout: BrowseLayout,
-  cardDesign: BrowseCardDesign,
-  section: string
+  cardDesign: BrowseCardDesign
 ): number {
   if (layout === 'list') return 112;
   if (cardDesign === 'classic') {
@@ -53,13 +44,6 @@ export function estimateBrowseRowHeight(
   }
 
   const density = getReadableDensity(columnWidth);
-  const mediaHeight =
-    density === 'micro'
-      ? columnWidth * 0.5625
-      : density === 'compact'
-        ? columnWidth * 0.56
-        : columnWidth * 0.571429;
-  const bodyHeight = estimateReadableCardBodyHeight(density, section);
-
-  return Math.ceil(mediaHeight + bodyHeight);
+  const mediaHeight = Math.max(0, columnWidth - 2) * (9 / 16);
+  return Math.ceil(mediaHeight + estimateReadableCardBodyHeight(density, columnWidth - 2) + 2);
 }

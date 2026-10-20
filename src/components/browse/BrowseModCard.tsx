@@ -6,6 +6,7 @@ import { getModThumbnail, getSoundPreviewUrl, formatDate, isModOutdated } from '
 import ModThumbnail from '../ModThumbnail';
 import ImageContextMenu from '../ImageContextMenu';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
+import { BrowseCardAudio } from './BrowseCardAudio';
 import { Tag } from '../common/ui';
 import { RevealImage } from '../common/RevealImage';
 import { SkeletonModCard } from '../common/Skeleton';
@@ -32,6 +33,7 @@ import { formatCount, getReadableCardChips } from './cardUtils';
 
 // Treat Enter/Space as a click on role="button" divs (keyboard navigation).
 function handleCardKeyDown(e: React.KeyboardEvent, onClick: () => void): void {
+  if (e.target !== e.currentTarget) return;
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
     onClick();
@@ -56,7 +58,6 @@ function ReadableBrowseModCard({
   onVolumeChange,
   hideNsfwPreviews,
   isPlaying,
-  suppressHoverIntentRef,
   onPlayingChange,
   onClick,
   onQuickDownload,
@@ -68,14 +69,11 @@ function ReadableBrowseModCard({
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
-  const hasAudioPreview = Boolean(audioPreview);
   const inferredHero = inferHeroFromTitle(mod.name);
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
   const readableDensity = getReadableDensity(readableCardWidth);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const [audioControlsActive, setAudioControlsActive] = useState(false);
   const readableScale = readableCardWidth / BROWSE_READABLE_CARD_GOLDEN;
   const chipRowWidth = Math.round(readableCardWidth - 24 * readableScale);
   const chips = getReadableCardChips(mod, section, inferredHero);
@@ -84,33 +82,12 @@ function ReadableBrowseModCard({
   // "Last updated" sits in the stats row when the card is wide enough; on
   // narrower cards it drops to its own line under the author so it can't
   // squash the likes/views counts.
-  const showUpdated = readableDensity === 'full';
-  const updatedInline = showUpdated && readableCardWidth >= BROWSE_READABLE_UPDATED_INLINE_MIN;
-  const updatedOwnLine = showUpdated && !updatedInline;
+  const updatedInline = readableDensity === 'full' && readableCardWidth >= BROWSE_READABLE_UPDATED_INLINE_MIN;
+  const updatedWithAuthor = readableDensity === 'full' && !updatedInline;
   const isMicro = readableDensity === 'micro';
-  const isCompactReadable = readableDensity === 'compact';
   const actionIconOnly = readableCardWidth < 220;
-  const showInlineAudioPreview = isSoundSection && hasAudioPreview;
   const cardFrameStyle = typeof cardHeight === 'number' ? { height: `${cardHeight}px` } : undefined;
-  const mediaHeightClass = isMicro
-    ? 'aspect-[16/9]'
-    : isCompactReadable
-      ? 'h-[56cqw]'
-      : 'h-[57.1429cqw]';
-  const bodyPaddingClass = isMicro
-    ? 'px-[clamp(8px,5cqw,10px)] pb-[clamp(7px,4.6429cqw,9px)] pt-[clamp(7px,4.6429cqw,9px)]'
-    : isCompactReadable
-      ? 'px-[clamp(12px,5cqw,14px)] pb-[clamp(12px,5cqw,14px)] pt-[clamp(12px,5cqw,14px)]'
-      : 'px-[clamp(14px,5cqw,16px)] pb-[clamp(14px,5cqw,16px)] pt-[clamp(14px,5cqw,16px)]';
-  // Chips moved onto the thumbnail overlay, so the title is now the first body
-  // row in every density and needs no top margin.
-  const titleMarginClass = 'mt-0';
-  const footerMarginClass = isMicro
-    ? 'mt-[clamp(6px,3.5714cqw,8px)]'
-    : 'mt-[clamp(7px,3.5714cqw,11px)]';
-  const footerHeightClass = isMicro
-    ? 'h-6'
-    : 'h-[clamp(24px,10cqw,32px)]';
+  const bodyPaddingClass = isMicro ? 'p-2' : 'p-3';
   const media = isSoundSection ? (
     <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
       {heroRenderUrl ? (
@@ -175,18 +152,6 @@ function ReadableBrowseModCard({
     <div
       onClick={onClick}
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
-      onMouseEnter={() => {
-        if (!suppressHoverIntentRef?.current) setAudioControlsActive(true);
-      }}
-      onMouseLeave={() => {
-        if (!isPlaying) setAudioControlsActive(false);
-      }}
-      onFocus={() => setAudioControlsActive(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
-          setAudioControlsActive(false);
-        }
-      }}
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
@@ -201,10 +166,10 @@ function ReadableBrowseModCard({
               : 'border-hl/[0.07]'
       }`}
     >
-      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
+      <div className="browse-readable-card-media relative aspect-video shrink-0 overflow-hidden rounded-t-xl bg-bg-tertiary">
         {media}
         {showChips && chips.length > 0 && (
-          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
+          <div className={`browse-readable-card-chips pointer-events-none absolute inset-x-0 z-10 flex items-end px-2 py-2 ${audioPreview ? 'top-0' : 'bottom-0'}`}>
             <div className="pointer-events-auto min-w-0">
               <BrowseReadableChipRow
                 chips={chips}
@@ -215,105 +180,40 @@ function ReadableBrowseModCard({
             </div>
           </div>
         )}
+        {audioPreview && (
+          <BrowseCardAudio
+            src={audioPreview}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
+            onPlayingChange={onPlayingChange}
+            compact={isMicro}
+          />
+        )}
       </div>
 
       <div
-        className={`browse-readable-card-body relative flex flex-none flex-col ${bodyPaddingClass}`}
+        className={`browse-readable-card-body relative flex min-h-0 flex-1 flex-col gap-2 ${bodyPaddingClass}`}
       >
-        <div className={`${titleMarginClass} min-w-0`}>
+        <div className="min-w-0 shrink-0">
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`block truncate font-mod-title font-semibold text-mod-title ${
-              isMicro
-                ? 'text-[13px] leading-4'
-                : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
-            }`}
+            className={`block truncate font-mod-title font-semibold text-mod-title ${isMicro ? 'text-[13px] leading-4' : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'}`}
             title={mod.name}
           >
             {mod.name}
           </h3>
           {showAuthor && (
-            <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85">
-              by {mod.submitter?.name ?? t('browse.card.unknownAuthor')}
-            </p>
+            <div className="flex h-4 min-w-0 items-center gap-2 text-xs leading-4">
+              <p className="min-w-0 flex-1 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85" title={mod.submitter?.name}>
+                by {mod.submitter?.name ?? t('browse.card.unknownAuthor')}
+              </p>
+              {updatedWithAuthor && <BrowseReadableUpdatedLine timestamp={mod.dateModified} />}
+            </div>
           )}
-          {updatedOwnLine && <BrowseReadableUpdatedLine timestamp={mod.dateModified} variant="block" />}
         </div>
 
-        {showInlineAudioPreview && (
-          <div
-            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-hl/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
-              isMicro ? 'h-7' : 'h-[clamp(33px,12.8571cqw,41px)]'
-            }`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {audioControlsActive ? (
-              <>
-                <AudioPreviewPlayer
-                  src={audioPreview!}
-                  compact
-                  variant="inline"
-                  volume={volume}
-                  onPlayingChange={onPlayingChange}
-                  className="min-w-0 flex-1"
-                />
-                <div className="relative ml-[clamp(6px,2.1429cqw,8px)] flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowVolumeSlider((value) => !value)}
-                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80 transition-colors hover:bg-hl/10 hover:text-white cursor-pointer"
-                    title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
-                    aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
-                    aria-expanded={showVolumeSlider}
-                  >
-                    {volume > 0 ? (
-                      <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
-                    ) : (
-                      <VolumeX className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
-                    )}
-                  </button>
-                  {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-hl/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={Math.round(volume * 100)}
-                        onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
-                        className="w-24 h-1 accent-accent cursor-pointer"
-                        title={`Volume: ${Math.round(volume * 100)}%`}
-                        aria-label={t('browse.card.volume')}
-                      />
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className={`flex min-w-0 flex-1 items-center ${isMicro ? 'gap-2' : 'gap-4'}`}>
-                <span
-                  className={`flex flex-shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary shadow-sm ${
-                    isMicro ? 'h-5 w-5' : 'h-8 w-8'
-                  }`}
-                >
-                  <Play className={`${isMicro ? 'h-3 w-3' : 'h-4 w-4'} ml-0.5 fill-current`} />
-                </span>
-                <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
-                {!isMicro && (
-                  <>
-                    <span className="flex-shrink-0 text-[10px] tabular-nums text-text-secondary">0:00</span>
-                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/80">
-                      <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className={`${footerMarginClass} flex ${footerHeightClass} items-center justify-between gap-[clamp(6px,4.2857cqw,14px)]`}>
+        <div className={`mt-auto flex shrink-0 items-center justify-between gap-2 ${isMicro ? 'h-6' : 'h-7'}`}>
           <BrowseReadableStatsRow mod={mod} density={readableDensity} showUpdated={updatedInline} />
           <BrowseReadableAction
             modName={mod.name}

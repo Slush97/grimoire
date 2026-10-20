@@ -11,6 +11,45 @@ const sqooky: BrowseArtistRef = { id: 3826762, name: 'Sqooky!' };
 describe('appStore Browse section filters', () => {
   beforeEach(() => useAppStore.getState().resetBrowseUi());
 
+  it('keeps shared filters when combining sections and clears section-only categories', () => {
+    const { setBrowseUi } = useAppStore.getState();
+    setBrowseUi({ search: 'blue', heroCategoryId: 42, categoryId: 100 });
+    setBrowseUi({ selectedSections: ['Mod', 'Sound', 'Wip'] });
+    expect(useAppStore.getState().browseUi).toMatchObject({
+      section: 'Mod', selectedSections: ['Mod', 'Sound', 'Wip'],
+      search: 'blue', heroCategoryId: 42, categoryId: 'all',
+    });
+  });
+
+  it('returns to one section for explicit item or artist navigation', () => {
+    const { setBrowseUi } = useAppStore.getState();
+    setBrowseUi({ selectedSections: ['Mod', 'Sound'] });
+    setBrowseUi({ section: 'Wip' });
+    expect(useAppStore.getState().browseUi.selectedSections).toEqual(['Wip']);
+    setBrowseUi({ selectedSections: ['Mod', 'Sound'] });
+    setBrowseUi({ submitter: sqooky });
+    expect(useAppStore.getState().browseUi.selectedSections).toEqual(['Mod']);
+    setBrowseUi({ submitter: undefined, selectedSections: ['Mod', 'Sound'] });
+    setBrowseUi({ submitter: sqooky, section: 'Sound' });
+    expect(useAppStore.getState().browseUi).toMatchObject({ section: 'Sound', selectedSections: ['Sound'] });
+  });
+
+  it('clears Sounds-only No hero when combining sections', () => {
+    const { setBrowseUi } = useAppStore.getState();
+    setBrowseUi({ section: 'Sound', heroCategoryId: 'none' });
+    setBrowseUi({ selectedSections: ['Sound', 'Wip'] });
+    expect(useAppStore.getState().browseUi.heroCategoryId).toBe('all');
+  });
+
+  it('restores section categories after leaving a combined feed', () => {
+    const { setBrowseUi } = useAppStore.getState();
+    setBrowseUi({ categoryId: 100 });
+    setBrowseUi({ selectedSections: ['Mod', 'Sound'] });
+    setBrowseUi({ selectedSections: ['Sound'] });
+    setBrowseUi({ section: 'Mod' });
+    expect(useAppStore.getState().browseUi.categoryId).toBe(100);
+  });
+
   it('keeps the selected hero and shared filters through all sections', () => {
     const { setBrowseUi } = useAppStore.getState();
     setBrowseUi({ heroCategoryId: 42, search: 'blue', sort: 'popular', addedWithin: 'custom', addedFrom: '2026-10-01', addedTo: '2026-10-08' });
