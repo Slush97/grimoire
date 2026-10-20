@@ -79,6 +79,7 @@ import { visibleInstalledMods } from '../lib/visibleMods';
 import { showToast } from '../stores/toastStore';
 import { useCursorPackStore } from '../stores/cursorPackStore';
 import { BrowseArtistBanner } from '../components/browse/BrowseArtistBanner';
+import { BrowseErrorDescription } from '../components/browse/BrowseErrorDescription';
 import { ModCardSkeleton } from '../components/browse/BrowseModCard';
 import { BrowseVirtualGrid } from '../components/browse/BrowseVirtualGrid';
 import {
@@ -301,27 +302,6 @@ function appendUniqueModsById(previous: GameBananaMod[], next: GameBananaMod[]):
 
 
 
-
-// Render an error string with any embedded https:// URLs as clickable links.
-function renderErrorWithLinks(text: string): React.ReactNode {
-  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
-  return parts.map((part, i) => {
-    if (/^https?:\/\//.test(part)) {
-      return (
-        <a
-          key={i}
-          href={part}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="underline text-accent hover:text-accent-hover"
-        >
-          {part}
-        </a>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
 
 const USER_CANCELLED_MESSAGES = new Set(['Cancelled by user', 'CANCELLED_BY_USER', 'User cancelled multi-VPK pick']);
 
@@ -3037,7 +3017,7 @@ export default function Browse() {
                 <EmptyState
                   icon={AlertTriangle}
                   title={t('browse.empty.couldntLoadMods')}
-                  description={renderErrorWithLinks(error)}
+                  description={<BrowseErrorDescription error={error} />}
                   variant="error"
                   action={<Button onClick={handleRetryFetch}>{t('common.actions.retry')}</Button>}
                 />
@@ -3110,9 +3090,10 @@ export default function Browse() {
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
-                <span className="text-sm">{t('browse.loadMore.couldntLoadMore')} {renderErrorWithLinks(loadMoreError)}</span>
+                <AlertTriangle className="w-4 h-4 text-state-warning shrink-0" />
+                <span className="text-sm">{t('browse.loadMore.couldntLoadMore')}</span>
               </div>
+              <BrowseErrorDescription error={loadMoreError} />
               <Button onClick={handleRetryFetch} variant="secondary" size="sm">{t('common.actions.retry')}</Button>
             </div>
           )}

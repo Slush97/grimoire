@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
+import { fetchGameBananaApi } from './gamebananaTransport';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
@@ -329,7 +330,7 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
 
         const request = createTimeoutSignal(timeoutMs, options.signal);
         try {
-            const response = await fetch(url, {
+            const response = await fetchGameBananaApi(url, {
                 headers: {
                     Accept: 'application/json',
                     'User-Agent': GRIMOIRE_USER_AGENT,
