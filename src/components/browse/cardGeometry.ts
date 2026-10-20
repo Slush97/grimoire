@@ -25,10 +25,12 @@ export function getReadableDensity(targetWidth: number): BrowseReadableDensity {
   return 'full';
 }
 
-// Every result reserves the same title and footer rows. Sound playback lives
-// inside the artwork, so it does not change the grid geometry.
-function estimateReadableCardBodyHeight(density: BrowseReadableDensity): number {
-  return density === 'micro' ? 16 + 32 + 8 + 24 : 24 + 40 + 4 + 16 + 8 + 28;
+// Match the compact caption to its actual type size. Sound controls stay
+// inside the artwork and never add a row to the caption.
+function estimateReadableCardBodyHeight(density: BrowseReadableDensity, innerWidth: number): number {
+  if (density === 'micro') return 16 + 16 + 8 + 24;
+  const titleSize = Math.min(17, Math.max(11, innerWidth * 0.053571));
+  return 24 + titleSize * 1.28 + 1 + 16 + 8 + 28;
 }
 
 export function estimateBrowseRowHeight(
@@ -43,5 +45,5 @@ export function estimateBrowseRowHeight(
 
   const density = getReadableDensity(columnWidth);
   const mediaHeight = Math.max(0, columnWidth - 2) * (9 / 16);
-  return Math.ceil(mediaHeight + estimateReadableCardBodyHeight(density) + 2);
+  return Math.ceil(mediaHeight + estimateReadableCardBodyHeight(density, columnWidth - 2) + 2);
 }

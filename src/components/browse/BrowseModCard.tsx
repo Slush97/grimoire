@@ -198,14 +198,14 @@ function ReadableBrowseModCard({
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`line-clamp-2 font-mod-title font-semibold text-mod-title ${isMicro ? 'text-xs leading-4' : 'text-base leading-5'}`}
+            className={`block truncate font-mod-title font-semibold text-mod-title ${isMicro ? 'text-[13px] leading-4' : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'}`}
             title={mod.name}
           >
             {mod.name}
           </h3>
           {showAuthor && (
-            <div className="mt-1 flex h-4 min-w-0 items-center gap-2 text-xs leading-4">
-              <p className="min-w-0 flex-1 truncate text-text-secondary" title={mod.submitter?.name}>
+            <div className="flex h-4 min-w-0 items-center gap-2 text-xs leading-4">
+              <p className="min-w-0 flex-1 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85" title={mod.submitter?.name}>
                 by {mod.submitter?.name ?? t('browse.card.unknownAuthor')}
               </p>
               {updatedWithAuthor && <BrowseReadableUpdatedLine timestamp={mod.dateModified} />}
