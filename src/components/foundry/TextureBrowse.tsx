@@ -12,6 +12,8 @@ interface TextureBrowseProps {
   heroes: HeroInfo[];
   /** codename -> display name, resolved once by the Foundry shell. */
   heroNames: Map<string, string>;
+  /** Keep the model/VFX list scoped to the open workshop. */
+  heroCodename?: string;
 }
 
 // The two large, hero-scoped texture families the reskin/VFX work targets. These
@@ -33,10 +35,11 @@ const LIMIT = 400;
  * stay bounded, and each row decodes its texture full-size on click. One IPC
  * call per (category, hero, search); the lightbox does the on-demand decode.
  */
-export default function TextureBrowse({ heroes, heroNames }: TextureBrowseProps) {
+export default function TextureBrowse({ heroes, heroNames, heroCodename }: TextureBrowseProps) {
   const { t } = useTranslation();
   const [category, setCategory] = useState<TextureCategory>('hero-model');
-  const [heroFilter, setHeroFilter] = useState('');
+  const [pickedHero, setPickedHero] = useState('');
+  const heroFilter = heroCodename ?? pickedHero;
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<TextureEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,7 +120,8 @@ export default function TextureBrowse({ heroes, heroNames }: TextureBrowseProps)
           <Users size={14} className="text-text-secondary" />
           <select
             value={heroFilter}
-            onChange={(e) => setHeroFilter(e.target.value)}
+            onChange={(e) => setPickedHero(e.target.value)}
+            disabled={!!heroCodename}
             className="bg-transparent text-sm text-text-primary focus:outline-none"
           >
             <option value="" className="bg-bg-secondary">

@@ -13,6 +13,8 @@ interface LibraryBrowseProps {
   heroNames: Map<string, string>;
   /** Category the grid opens on (the Items sub-tool lands on item icons). */
   initialCategory?: TextureCategory;
+  /** Keep hero assets scoped to the open workshop. Item icons are shared. */
+  heroCodename?: string;
 }
 
 // The bounded, thumbnailable categories the browse grid surfaces this pass.
@@ -27,14 +29,15 @@ const CATEGORIES: { value: TextureCategory; labelKey: string; fallback: string }
  * client-side hero/search narrowing and an enlarge-on-click lightbox. One IPC
  * call per category (thumbnails decoded once and cached); filtering is local.
  */
-export default function LibraryBrowse({ heroNames, initialCategory = 'ability-icon' }: LibraryBrowseProps) {
+export default function LibraryBrowse({ heroNames, initialCategory = 'ability-icon', heroCodename }: LibraryBrowseProps) {
   const { t } = useTranslation();
   const [category, setCategory] = useState<TextureCategory>(initialCategory);
   const [items, setItems] = useState<TextureGridItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [heroFilter, setHeroFilter] = useState('all');
+  const [pickedHero, setPickedHero] = useState('all');
+  const heroFilter = category === 'item-icon' ? 'all' : heroCodename ?? pickedHero;
   const [lightbox, setLightbox] = useState<TextureGridItem | null>(null);
 
   const loadCategory = useCallback(async (cat: TextureCategory) => {
@@ -52,7 +55,7 @@ export default function LibraryBrowse({ heroNames, initialCategory = 'ability-ic
   }, []);
 
   useEffect(() => {
-    setHeroFilter('all');
+    setPickedHero('all');
     void loadCategory(category);
   }, [category, loadCategory]);
 
@@ -84,12 +87,12 @@ export default function LibraryBrowse({ heroNames, initialCategory = 'ability-ic
           </select>
         </div>
 
-        {presentHeroes.length > 0 && (
+        {!heroCodename && presentHeroes.length > 0 && (
           <div className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2 py-1.5">
             <Users size={14} className="text-text-secondary" />
             <select
               value={heroFilter}
-              onChange={(e) => setHeroFilter(e.target.value)}
+              onChange={(e) => setPickedHero(e.target.value)}
               className="bg-transparent text-sm text-text-primary focus:outline-none"
             >
               <option value="all" className="bg-bg-secondary">

@@ -171,12 +171,12 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
             <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
           ) : section === 'icons' ? (
             <div className="space-y-8">
-              <TextureBrowse heroes={scopedRoster} heroNames={heroNames} />
+              <TextureBrowse heroes={scopedRoster} heroNames={heroNames} heroCodename={hero.codename} />
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-white/90">
                   {t('foundry.workshop.abilityIcons', 'Ability & item icons')}
                 </h4>
-                <LibraryBrowse heroNames={heroNames} initialCategory="ability-icon" />
+                <LibraryBrowse heroNames={heroNames} initialCategory="ability-icon" heroCodename={hero.codename} />
               </div>
             </div>
           ) : null}
