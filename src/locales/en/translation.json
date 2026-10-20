@@ -1349,16 +1349,46 @@
       "namePlaceholder": "e.g. Ivy skins",
       "manage": "Manage",
       "manageTitle": "Manage lists",
-      "manageSubtitle": "Deleting a list never deletes its mods.",
-      "emptyHint": "No lists yet. Right-click a mod and choose Add to list.",
+      "emptyHint": "Create a list, then add mods from a card's menu.",
       "memberCount_one": "{{count}} mod",
       "memberCount_other": "{{count}} mods",
       "duplicateName": "Another list already uses that name.",
-      "deleteList": "Delete {{name}}",
       "enableAll": "Enable all",
       "disableAll": "Disable all",
       "enabling": "Enabling {{done}}/{{total}}...",
-      "disabling": "Disabling {{done}}/{{total}}..."
+      "disabling": "Disabling {{done}}/{{total}}...",
+      "view": "Lists",
+      "allMods": "All mods",
+      "viewLists": "Lists",
+      "addTo": "Add selected to list",
+      "removeFrom": "Remove selected from list",
+      "loadOrder": "Load order {{value}}",
+      "actions": "Actions for {{name}}",
+      "emptyTitle": "No lists yet",
+      "emptyList": "Add mods from a card's Add to list menu.",
+      "noMatches": "No matching lists.",
+      "unlisted": "Not in a list",
+      "addingMod": "Add {{name}}",
+      "addedTo": "Added to {{name}}",
+      "created": "Created {{name}}",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteMessage": "The mods won't be deleted.",
+      "chooseIcon": "Choose icon for {{name}}",
+      "icon": "List icon",
+      "icons": {
+        "list": "Default",
+        "shirt": "Clothing",
+        "music": "Music",
+        "flask": "Testing",
+        "swords": "Combat",
+        "eye": "Visuals",
+        "wrench": "Tweaks",
+        "package": "Package",
+        "heart": "Heart",
+        "star": "Star",
+        "shield": "Shield",
+        "palette": "Colors"
+      }
     },
     "profiles": {
       "trigger": "Profiles",
@@ -2898,7 +2928,9 @@
     "section": {
       "sounds": "Sounds",
       "wips": "WiPs",
-      "label": "Section"
+      "label": "Section",
+      "combineHint": "Click to include or exclude a section. Keep at least one selected.",
+      "catalogHint": "Choose a section. Combined feeds are available after the catalog syncs."
     },
     "search": {
       "placeholder": "Search mods...",
@@ -2997,7 +3029,14 @@
       "outdatedPrefix": "Outdated · "
     },
     "errors": {
-      "noDownloadableFiles": "No downloadable files found"
+      "noDownloadableFiles": "No downloadable files found",
+      "connection": "Couldn't reach GameBanana. Check your connection and try again.",
+      "timeout": "GameBanana took too long to respond. Try again. If this keeps happening, check your connection or try another network.",
+      "rateLimited": "GameBanana is rate-limiting Grimoire. Wait a minute, then try again.",
+      "blocked": "GameBanana refused Grimoire's request. The website may still work in your browser. Try again later, or share the technical details with support if this continues.",
+      "unavailable": "GameBanana couldn't return the mod list. Try again later.",
+      "unexpected": "Grimoire couldn't load the mod list. Try again. If this keeps happening, share the technical details with support.",
+      "technicalDetails": "Technical details"
     }
   },
   "modDetails": {
@@ -3096,7 +3135,8 @@
     "deliveredViaGithub": "Updates are delivered automatically through GitHub Releases. Click Check for Updates to look now.",
     "manualDownloadRequired": "Download updates manually on macOS.",
     "manualUnsignedExplanation": "The macOS build is ad-hoc signed rather than notarized, so macOS will not let Grimoire replace itself in place. Checking for updates still works.",
-    "manualDownloadLink": "Open the releases page"
+    "manualDownloadLink": "Open the releases page",
+    "githubReleases": "GitHub Releases"
   },
   "appUpdateBanner": {
     "readyToInstallVersion": "Grimoire {{version}} is ready to install",

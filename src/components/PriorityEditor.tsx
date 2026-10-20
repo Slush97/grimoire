@@ -51,6 +51,7 @@ export default function PriorityEditor({
   const startEdit = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     if ('preventDefault' in e) e.preventDefault();
+    if (!onCommit) return;
     setDraft(String(value));
     setEditing(true);
     setError(null);
@@ -101,18 +102,18 @@ export default function PriorityEditor({
   // is invalid HTML and React 19 surfaces it as a hydration warning.
   return (
     <span
-      role="button"
+      role={onCommit ? 'button' : undefined}
       ref={chipRef}
-      tabIndex={0}
-      onClick={startEdit}
-      onContextMenu={startEdit}
+      tabIndex={onCommit ? 0 : undefined}
+      onClick={onCommit ? startEdit : undefined}
+      onContextMenu={onCommit ? startEdit : undefined}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           startEdit(e);
         }
       }}
-      className="group/order-chip relative inline-flex cursor-pointer items-center justify-center rounded-sm focus:outline-none before:absolute before:-inset-1"
-      aria-label={t('installed.priorityEditor.chipAriaLabel', { value })}
+      className={`group/order-chip relative inline-flex items-center justify-center rounded-sm focus:outline-none before:absolute before:-inset-1 ${onCommit ? 'cursor-pointer' : 'cursor-default'}`}
+      aria-label={onCommit ? t('installed.priorityEditor.chipAriaLabel', { value }) : t('installed.lists.loadOrder', { value })}
     >
       <Tag
         // The visible chip deliberately uses the same geometry, neutral tone,

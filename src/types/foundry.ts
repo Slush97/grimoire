@@ -32,7 +32,7 @@ export type TextureCategory =
 
 /** One texture entry from `catalog texture --json`. `path` is the verbatim
  *  swap/recolor target inside the pak; `label` is the filename rendered as prose
- *  (search key); `hero` is the codename when the path encodes one. */
+ *  (search key); `hero` is resolved to the roster codename when known. */
 export interface TextureEntry {
     path: string;
     category: TextureCategory;
@@ -40,7 +40,7 @@ export interface TextureEntry {
     label: string;
 }
 
-/** Filters accepted by `getTextures`; all optional and AND-combined by the CLI. */
+/** Filters accepted by `getTextures`; hero aliases resolve before the limit. */
 export interface TextureFilters {
     category?: TextureCategory;
     hero?: string;

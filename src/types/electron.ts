@@ -676,6 +676,7 @@ export interface SyncProgressData {
 export interface SearchLocalModsOptions {
     query?: string;
     section?: string;
+    sections?: string[];
     categoryId?: number;
     /** Root category name for `categoryId`, resolved from the live category
      *  tree. The cached catalog stores only a mod's root category *name* (the

@@ -20,7 +20,7 @@ vi.mock('./modMerger', () => ({
   runVpkmerge: h.run, runVpkmergeStdout: h.stdout, verifyVpkOutput: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./heroParticleExport', () => ({ exportParticleBundle: h.particles }));
-vi.mock('./heroPortraits', () => ({
+vi.mock('./heroCodenames', () => ({
   codenamesForHero: (name: string) => name === 'Seven' ? ['gigawatt'] : name === 'Twin' ? ['twin_a', 'twin_b'] : ['yamato'],
 }));
 vi.mock('./deadlock', () => ({

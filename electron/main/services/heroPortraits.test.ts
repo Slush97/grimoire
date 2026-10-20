@@ -21,7 +21,8 @@ vi.mock('./modMerger', () => ({
     runVpkmerge: mocks.runVpkmerge,
 }));
 
-import { codenameForHero, codenamesForHero, getHeroPortraits } from './heroPortraits';
+import { codenameForHero, codenamesForHero } from './heroCodenames';
+import { getHeroPortraits } from './heroPortraits';
 
 describe('Vyper portrait paths', () => {
     beforeEach(async () => {

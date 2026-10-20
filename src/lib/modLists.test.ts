@@ -9,6 +9,7 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  setListIcon,
   toggleListMembership,
   writeStoredModLists,
 } from './modLists';
@@ -38,6 +39,20 @@ describe('storage key', () => {
 });
 
 describe('readStoredModLists', () => {
+  it('preserves preset icons and drops unknown icons without losing the list', () => {
+    installLocalStorage({ [MOD_LISTS_KEY]: JSON.stringify([
+      { ...list('skins', 'Skins', ['gamebanana:1']), icon: 'shirt' },
+      { ...list('old', 'Old'), icon: 'unknown' },
+    ]) });
+    expect(readStoredModLists()).toEqual([
+      { ...list('skins', 'Skins', ['gamebanana:1']), icon: 'shirt' }, list('old', 'Old'),
+    ]);
+    const updated = setListIcon(readStoredModLists(), 'skins', 'shield');
+    writeStoredModLists(updated);
+    expect(readStoredModLists()[0]).toEqual({ ...list('skins', 'Skins', ['gamebanana:1']), icon: 'shield' });
+    expect(renameList(updated, 'skins', 'Outfits').lists[0].icon).toBe('shield');
+    expect(addListMembership(updated, 'skins', 'gamebanana:2')[0].icon).toBe('shield');
+  });
   it('returns an empty list when storage is absent or malformed', () => {
     installLocalStorage({ [MOD_LISTS_KEY]: '{bad json' });
     expect(readStoredModLists()).toEqual([]);
@@ -100,6 +115,14 @@ describe('readStoredModLists', () => {
 });
 
 describe('createList', () => {
+  it('creates the list and files the captured card identities in one operation', () => {
+    const result = createList([], 'New skins', ['localgroup:skin', 'localgroup:skin', '']);
+    expect(result.lists).toEqual([list('new-skins', 'New skins', ['localgroup:skin'])]);
+    const again = createList(result.lists, 'NEW SKINS', ['sha256:another']);
+    expect(again.id).toBe(result.id);
+    expect(again.lists[0].keys).toEqual(['localgroup:skin', 'sha256:another']);
+    expect(createList(again.lists, 'New skins', ['localgroup:skin']).lists).toEqual(again.lists);
+  });
   it('appends a list with a slugified id', () => {
     const { lists, id } = createList([], '  Ivy Skins  ');
 

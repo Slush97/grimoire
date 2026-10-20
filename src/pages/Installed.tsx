@@ -106,10 +106,12 @@ import { mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
+import { entryCardShell } from '../components/installed/entryCardShell';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
+  modPreferenceKey,
   readStoredDisabledFavorites,
   readStoredDisabledOrder,
   toggleFavoriteKey,
@@ -125,6 +127,7 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  setListIcon,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -137,6 +140,9 @@ import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
+import { InstalledListGroups } from '../components/installed/InstalledListGroups';
+import { InstalledListControls, InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
+import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
@@ -230,45 +236,33 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
-  const isList = cardProps.viewMode === 'list';
+  const shell = entryCardShell(cardProps.viewMode === 'list');
   const style: CSSProperties = {
+    ...shell.style,
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
-    position: 'relative',
     zIndex: isDragging ? 1 : undefined,
-    // Sizing estimate for the content-visibility skip. The property itself lives
-    // in className (not here) so a :hover variant can lift it, see below. The
-    // `auto` keyword keeps the real size once a card has been rendered; the
-    // estimate only stands in before first view. dnd-kit drag measurement is
-    // unaffected: offscreen items still have placeholder boxes.
-    containIntrinsicSize: isList ? 'auto 72px' : 'auto 280px',
   };
 
   return (
     <div
       ref={setNodeRef}
       data-installed-entry-key={cardProps.entry.key}
-      // content-visibility:auto skips layout + paint for offscreen cards (most of
-      // the cost of mounting a large library) but implies contain:paint, which
-      // clips whatever the card paints outside its box AND traps it in its own
-      // stacking context. On grid/compact the enabled-card :hover lifts + scales
-      // the card: that expansion would be cropped and stuck behind neighbors. So
-      // on hover we lift containment (-> visible) and raise z so the expanded card
-      // renders whole and on top. The has-menu-open lift does the same for an open
-      // action menu that would otherwise paint behind the next card.
-      // overflow-anchor:none opts every card out of the browser's scroll
-      // anchoring. Without it, pinning a card near the bottom of a long library
-      // dragged the viewport along with it: Chrome had picked that card as the
-      // scroll anchor, so when the star moved it to the top of the disabled
-      // section the scroller "helpfully" followed it thousands of pixels up.
-      // Excluding cards leaves the grid container as the anchor, which never
-      // moves on a reorder, so the view stays put through pin / unpin / delete.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [overflow-anchor:none] [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      className={`${shell.className} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...(sortableDisabled ? {} : attributes)}
       {...(sortableDisabled ? {} : listeners)}
     >
+      <InstalledEntryCard {...cardProps} />
+    </div>
+  );
+}, sameEntryCardProps);
+
+/** Lists-view grid item: the same shell as SortableEntryCard, without dnd-kit. */
+const StaticEntryCard = memo(function StaticEntryCard(cardProps: InstalledEntryCardProps) {
+  return (
+    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell(cardProps.viewMode === 'list')}>
       <InstalledEntryCard {...cardProps} />
     </div>
   );
@@ -320,10 +314,14 @@ interface InstalledEntryCardProps {
   /** Move an entry into or out of the citadel/grimoire priority root. */
   onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
-  onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
+  onCommitPriority?: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
   onCopyShareCode: (mod: Mod) => void;
-  onSelectToggle: (entry: ModEntry, shiftKey: boolean) => void;
+  /** Selection key when the same entry renders more than once (Lists view);
+   *  undefined means entry.key. Passed as data, not baked into a per-card
+   *  onSelectToggle closure, so the memo holds. */
+  occurrenceKey: string | undefined;
+  onSelectToggle: (entry: ModEntry, shiftKey: boolean, occurrenceKey: string | undefined) => void;
   onToggleFavorite: (entry: ModEntry) => void;
   /** All user lists, for the card's "Add to list" submenu. */
   lists: readonly ModList[];
@@ -376,6 +374,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onCommitPriority,
   onUnmerge,
   onCopyShareCode,
+  occurrenceKey,
   onSelectToggle,
   onToggleFavorite,
   lists,
@@ -427,13 +426,13 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         fixingUnknown={fixingUnknown}
         loadPosition={loadPosition}
         loadCount={loadCount}
-        onCommitPriority={(p) => onCommitPriority(mod.id, p)}
+        onCommitPriority={onCommitPriority ? (p) => onCommitPriority(mod.id, p) : undefined}
         onUnmerge={mod.merged ? () => onUnmerge(mod) : undefined}
         onCopyShareCode={mod.merged ? () => onCopyShareCode(mod) : undefined}
         selectMode={selectMode}
         shiftHeld={shiftHeld}
         selected={selected}
-        onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
+        onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey, occurrenceKey)}
         favorite={favorite}
         // Settable in both sections: starring while enabled pre-pins the entry
         // for the moment it later gets disabled. On an enabled card the star is
@@ -505,11 +504,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
-      onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
+      onCommitPriority={onCommitPriority ? (p) => onCommitPriority(entry.primary.id, p) : undefined}
       selectMode={selectMode}
       shiftHeld={shiftHeld}
       selected={selected}
-      onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
+      onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey, occurrenceKey)}
       favorite={favorite}
       onToggleFavorite={() => onToggleFavorite(entry)}
       // A group shares one preference key with its variants, so filing the card
@@ -676,8 +675,17 @@ export default function Installed() {
     return () => window.removeEventListener(STABLE_KEY_PREFERENCES_MIGRATED_EVENT, handleMigration);
   }, []);
   // Entry the "New list" dialog was opened from, so creating also files it.
-  const [creatingListFor, setCreatingListFor] = useState<ModEntry | null>(null);
+  const [creatingList, setCreatingList] = useState<{ keys: string[]; modName?: string } | null>(null);
   const [managingLists, setManagingLists] = useState(false);
+  const [listPreferences, setListPreferences] = useState(readInstalledListPreferences);
+  const [searchListState, setSearchListState] = useState<{ query: string; collapsed: string[] }>({ query: '', collapsed: [] });
+  const listsView = listPreferences.view === 'lists';
+  const collapsedLists = useMemo(() => new Set(listPreferences.collapsed), [listPreferences.collapsed]);
+  const updateListPreferences = (next: typeof listPreferences) => {
+    setListPreferences(next);
+    writeInstalledListPreferences(next);
+  };
+  const setListView = (view: InstalledListView) => updateListPreferences({ ...listPreferences, view });
 
   // Applying (or saving) a profile from the header control changes what is
   // enabled behind the page's back: there is no event or subscription to hear
@@ -960,9 +968,8 @@ export default function Installed() {
   const shiftHeld = useShiftKey();
   const [enabledCollapsed, setEnabledCollapsed] = useState(false);
   const [disabledCollapsed, setDisabledCollapsed] = useState(false);
-  const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(mods, () =>
-    visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed)
-  );
+  const getVisibleSelection = useStableCallback(() => visibleSelection);
+  const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(mods, getVisibleSelection);
   // Per-item progress for the in-flight bulk enable/disable. While set, the
   // action bar swaps its buttons for a "Enabling 2/5…" line so users see
   // incremental progress on large selections.
@@ -2744,17 +2751,23 @@ export default function Installed() {
   const toggleEntryList = useStableCallback((entry: ModEntry, listId: string) => {
     commitModLists(toggleListMembership(modLists, listId, entryDisabledPreferenceKey(entry)));
   });
-  const openCreateListFor = useStableCallback((entry: ModEntry) => setCreatingListFor(entry));
+  const openCreateListFor = useStableCallback((entry: ModEntry) => setCreatingList({ keys: [entryDisabledPreferenceKey(entry)], modName: entryName(entry) }));
   // Create, and file the entry the dialog was opened from into the new list.
   // createList reuses an existing list when the name matches, so typing the
   // name of a list you already have files it there instead of duplicating.
   // Filing is add-only for exactly that reason: a toggle here would un-file a
   // mod that is already in the list whose name was typed.
-  const createListForEntry = useStableCallback((name: string) => {
-    const entry = creatingListFor;
-    const { lists, id } = createList(modLists, name);
-    if (!id) return;
-    commitModLists(entry ? addListMembership(lists, id, entryDisabledPreferenceKey(entry)) : lists);
+  // With nothing to file (Manage's create box), a taken name changes nothing,
+  // so it reports false and the dialog says the name is in use.
+  const createModList = useStableCallback((name: string, keys: readonly string[]): boolean => {
+    const { lists, id } = createList(modLists, name, keys);
+    const existing = modLists.find((list) => list.id === id);
+    if (!id || (existing && keys.length === 0)) return false;
+    commitModLists(lists);
+    updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => key !== id) });
+    setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => key !== id) }));
+    showToast(keys.length > 0 ? t('installed.lists.addedTo', { name: existing?.name ?? name }) : t('installed.lists.created', { name }), { tone: 'success' });
+    return true;
   });
   const renameModList = useStableCallback((id: string, name: string) => {
     // renameList no-ops on a rejected name (blank, or taken by another list)
@@ -2766,6 +2779,8 @@ export default function Installed() {
   });
   const deleteModList = useStableCallback((id: string) => {
     commitModLists(deleteList(modLists, id));
+    updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) =>
+      key !== id) });
     // Drop the selection too, or the grid keeps filtering on a list that no
     // longer exists and shows an empty shelf with no visible cause.
     setListFilter((prev) => prev.filter((selected) => selected !== id));
@@ -2995,9 +3010,9 @@ export default function Installed() {
   );
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
-  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean) => {
+  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean, occurrenceKey: string = entry.key) => {
     setSelectMode(true);
-    toggleSelection({ key: entry.key, ids: entrySelectionIds(entry) }, shiftKey);
+    toggleSelection({ key: occurrenceKey, ids: entrySelectionIds(entry) }, shiftKey);
   });
 
   const compactOrder = buildCompactPriorityOrder(allEntries);
@@ -3109,6 +3124,17 @@ export default function Installed() {
   // displayed order no longer maps to load-order priority; the canonical
   // priority order lives on enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
+  const toggleList = (key: string) => {
+    if (searchNeedle) {
+      const next = new Set(searchListState.query === searchNeedle ? searchListState.collapsed : []);
+      if (!next.delete(key)) next.add(key);
+      setSearchListState({ query: searchNeedle, collapsed: [...next] });
+      return;
+    }
+    const next = new Set(collapsedLists);
+    if (!next.delete(key)) next.add(key);
+    updateListPreferences({ ...listPreferences, collapsed: [...next] });
+  };
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
@@ -3116,7 +3142,7 @@ export default function Installed() {
   const filtersActive =
     sourceActive || statusActive || heroActive || tagFilter.length > 0 || listFilter.length > 0 || requirementsOnly;
   const sortActive = sortMode !== 'priority';
-  const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
+  const viewIsReorderable = !listsView && !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
     (sourceActive ? 1 : 0) +
     (requirementsOnly ? 1 : 0) +
@@ -3183,7 +3209,23 @@ export default function Installed() {
     return { visibleEnabled, visibleDisabled };
   }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
-  const detailsNavigationEntries = [...visibleEnabled, ...visibleDisabled].filter(
+  const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
+  const activeCollapsedLists = searchNeedle
+    ? new Set(searchListState.query === searchNeedle ? searchListState.collapsed : []) : collapsedLists;
+  const visibleSelection = listsView
+    ? listSelectionEntries(listGroups, activeCollapsedLists)
+    : visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed);
+  const selectedListKeys = [...new Set(selectedMods.map(modPreferenceKey))];
+  const fileSelection = (id: string, add: boolean) => {
+    const selectedKeys = new Set(selectedListKeys);
+    commitModLists(add
+      ? selectedListKeys.reduce((next, key) => addListMembership(next, id, key), modLists)
+      : modLists.map((list) => list.id === id ? { ...list, keys: list.keys.filter((key) => !selectedKeys.has(key)) } : list));
+  };
+  const navigationEntries = listsView
+    ? [...new Map(visibleListOccurrences(listGroups, activeCollapsedLists).map(({ entry }) => [entry.key, entry])).values()]
+    : [...visibleEnabled, ...visibleDisabled];
+  const detailsNavigationEntries = navigationEntries.filter(
     (entry) => typeof entryPrimaryMod(entry).gameBananaId === 'number'
   );
   const detailsNavigationIndex = detailsSourceModId
@@ -3205,8 +3247,7 @@ export default function Installed() {
 
   const selectAllVisible = () => {
     setSelectedIds(new Set(
-      visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed)
-        .flatMap((entry) => entry.ids)
+      visibleSelection.flatMap((entry) => entry.ids)
     ));
   };
 
@@ -3251,6 +3292,11 @@ export default function Installed() {
     }
     if (isEntryEnabled(entry)) setEnabledCollapsed(false);
     else setDisabledCollapsed(false);
+    if (listsView) {
+      const reveal = new Set(buildInstalledListGroups([entry], modLists).filter((list) => list.entries.length > 0).map((list) => list.id));
+      updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => !reveal.has(key)) });
+      setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => !reveal.has(key)) }));
+    }
     setGridWarm(true);
     setUpdateMenuTargetId(modId);
   };
@@ -3433,7 +3479,7 @@ export default function Installed() {
    * entries/conflicts, useStableCallback handlers), or derived per card, so
    * unrelated page state changes leave the card subtrees untouched.
    */
-  const cardPropsFor = (entry: ModEntry): InstalledEntryCardProps => ({
+  const cardPropsFor = (entry: ModEntry, occurrenceKey?: string): InstalledEntryCardProps => ({
     entry,
     viewMode,
     hideNsfwPreviews: installedHideNsfwPreviews,
@@ -3468,9 +3514,10 @@ export default function Installed() {
     onTagGlobal: tagEntryGlobal,
     onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
-    onCommitPriority: commitEntryPriority,
+    onCommitPriority: listsView ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
+    occurrenceKey,
     onSelectToggle: selectToggleEntry,
     onToggleFavorite: toggleEntryFavorite,
     lists: modLists,
@@ -3481,6 +3528,13 @@ export default function Installed() {
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
 
+  const gridClasses =
+    layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
+  const gridStyle =
+    layout === 'list'
+      ? undefined
+      : cardSizeGridStyle;
+
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
     // A-Z is a display order, so a drop in the disabled section would have
@@ -3490,13 +3544,6 @@ export default function Installed() {
     const activeEntry = draggingSection === section
       ? entries.find((entry) => entry.key === draggingKey)
       : undefined;
-    const gridClasses =
-      layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
-    const gridStyle =
-      layout === 'list'
-        ? undefined
-        : cardSizeGridStyle;
-
     return (
       <DndContext
         sensors={sortableSensors}
@@ -3720,14 +3767,14 @@ export default function Installed() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setSearchListState({ query: '', collapsed: [] }); }}
               placeholder={t('installed.filters.searchPlaceholder')}
               className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => { setSearch(''); setSearchListState({ query: '', collapsed: [] }); }}
                 title={t('installed.filters.clearSearch')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
               >
@@ -3736,6 +3783,11 @@ export default function Installed() {
             )}
           </div>
           <div className="flex flex-wrap items-center justify-start gap-2 xl:ml-auto xl:justify-end">
+            <InstalledListControls
+              view={listPreferences.view}
+              onView={setListView}
+              onManage={() => setManagingLists(true)}
+            />
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
                 claiming a second strip below the search. Copy-enabled sits
@@ -4119,7 +4171,7 @@ export default function Installed() {
         />
       )}
 
-      {(searchNeedle || filtersActive) && totalMatches === 0 && (
+      {!listsView && (searchNeedle || filtersActive) && totalMatches === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
           <Search className="w-12 h-12 mb-3 opacity-50" />
           <p className="mb-2">
@@ -4151,7 +4203,18 @@ export default function Installed() {
           it stays hidden, because an empty result there is about the query or
           filter, not about the install (and the no-matches empty state above
           should not get a stray button row under it). */}
-      {(visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
+      {listsView && <InstalledListGroups
+        groups={listGroups}
+        collapsed={activeCollapsedLists}
+        showEmpty={!searchNeedle && !filtersActive}
+        onToggle={toggleList}
+        onManage={() => setManagingLists(true)}
+        gridClassName={gridClasses}
+        gridStyle={gridStyle}
+        mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}
+        renderEntry={(entry, occurrence) => <StaticEntryCard {...cardPropsFor(entry, occurrence)} />}
+      />}
+      {!listsView && (visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
           <InstalledSection
             title={t('installed.sections.enabled', { count: visibleEnabled.length })}
@@ -4165,7 +4228,7 @@ export default function Installed() {
         </div>
       )}
 
-      {visibleDisabled.length > 0 && (
+      {!listsView && visibleDisabled.length > 0 && (
         <InstalledSection
           title={t('installed.sections.disabled', { count: visibleDisabled.length })}
           count={visibleDisabled.length}
@@ -4240,21 +4303,23 @@ export default function Installed() {
 
       {/* Conditionally rendered so each opening is a fresh mount: draft names
           and armed delete confirmations reset without a sync effect. */}
-      {creatingListFor && (
+      {creatingList && (
         <CreateModListModal
-          modName={entryName(creatingListFor)}
-          onClose={() => setCreatingListFor(null)}
-          onCreate={createListForEntry}
+          modName={creatingList.modName}
+          onClose={() => setCreatingList(null)}
+          onCreate={(name) => createModList(name, creatingList.keys)}
         />
       )}
       {managingLists && (
         <ManageModListsModal
           lists={modLists}
+          onCreate={(name) => createModList(name, [])}
           counts={listCounts}
           onClose={() => {
             if (!bulkProgress) setManagingLists(false);
           }}
           onRename={renameModList}
+          onIcon={(id, icon) => commitModLists(setListIcon(modLists, id, icon))}
           onDelete={deleteModList}
           onSetEnabled={setModListEnabled}
           progress={bulkProgress}
@@ -4642,6 +4707,13 @@ export default function Installed() {
                 </Button>
               )}
               <span className="h-5 w-px bg-border" />
+              <InstalledListSelectionMenu
+                lists={modLists}
+                disabled={selectedMods.length === 0}
+                onAdd={(id) => fileSelection(id, true)}
+                onRemove={(id) => fileSelection(id, false)}
+                onCreate={() => setCreatingList({ keys: selectedListKeys })}
+              />
               <Button
                 variant="secondary"
                 size="sm"

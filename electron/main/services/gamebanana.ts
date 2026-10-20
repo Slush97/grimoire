@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
+import { fetchGameBananaApi } from './gamebananaTransport';
 import { parseRequirements } from '../../../src/lib/modRequirements';
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
@@ -332,7 +333,7 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
 
         const request = createTimeoutSignal(timeoutMs, options.signal);
         try {
-            const response = await fetch(url, {
+            const response = await fetchGameBananaApi(url, {
                 headers: {
                     Accept: 'application/json',
                     'User-Agent': GRIMOIRE_USER_AGENT,

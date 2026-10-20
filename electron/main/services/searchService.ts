@@ -169,6 +169,34 @@ function applyHiddenCreatorFilter(
     conditions.push(`(mods.submitter_id IS NULL OR mods.submitter_id NOT IN (${placeholders.join(', ')}))`);
 }
 
+export function applyBrowseScope(
+    conditions: string[],
+    params: Record<string, unknown>,
+    options: SearchOptions
+): void {
+    if (options.sections?.length) {
+        const placeholders = [...new Set(options.sections)].map((section, index) => {
+            const key = `section_${index}`;
+            params[key] = section;
+            return `@${key}`;
+        });
+        conditions.push(`mods.section IN (${placeholders.join(', ')})`);
+    } else if (options.section) {
+        conditions.push('mods.section = @section');
+        params.section = options.section;
+    }
+
+    if (options.sections && options.sections.length > 1 && options.heroName) {
+        const modConditions: string[] = [];
+        applyCategoryFilter(modConditions, params, undefined, undefined, undefined, options.heroCategoryIds);
+        params.heroName = options.heroName;
+        const modMatch = modConditions[0] ?? 'hero_name_match(mods.name, @heroName)';
+        conditions.push(`((mods.section = 'Mod' AND ${modMatch}) OR (mods.section <> 'Mod' AND hero_name_match(mods.name, @heroName)))`);
+    } else {
+        applyCategoryFilter(conditions, params, options.categoryId, options.categoryName, options.heroName, options.heroCategoryIds);
+    }
+}
+
 /**
  * Fallback search used when the FTS5 path returns zero results. FTS5 is
  * tokenized and prefix-only, so creative names ("MìnaMod-v2", typos, partial
@@ -187,11 +215,6 @@ function runFallbackSubstringSearch(
     offset: number
 ): SearchResult {
     const {
-        section,
-        categoryId,
-        categoryName,
-        heroName,
-        heroCategoryIds,
         sortBy,
         nsfw,
         addedWithin,
@@ -216,12 +239,7 @@ function runFallbackSubstringSearch(
         conditions.push(`LOWER(mods.name) LIKE @${key}`);
     });
 
-    if (section) {
-        conditions.push('mods.section = @section');
-        params.section = section;
-    }
-
-    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds);
+    applyBrowseScope(conditions, params, options);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
@@ -256,11 +274,6 @@ export function searchMods(options: SearchOptions): SearchResult {
     const database = initDatabase();
     const {
         query,
-        section,
-        categoryId,
-        categoryName,
-        heroName,
-        heroCategoryIds,
         sortBy = 'relevance',
         nsfw = 'all',
         addedWithin = 'all',
@@ -303,12 +316,7 @@ export function searchMods(options: SearchOptions): SearchResult {
     }
 
     // Filter by section
-    if (section) {
-        conditions.push('mods.section = @section');
-        params.section = section;
-    }
-
-    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds);
+    applyBrowseScope(conditions, params, options);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
