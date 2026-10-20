@@ -8,7 +8,7 @@ export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequ
   if (!Array.isArray(raw)) return { status: 'unavailable', checkedAt };
   const items: ModRequirement[] = [];
   for (const row of raw) {
-    if (!Array.isArray(row) || (row.length !== 4 && row.length !== 6) || !row.every(v => typeof v === 'string')) {
+    if (!Array.isArray(row) || ![2, 4, 6].includes(row.length) || !row.every(v => typeof v === 'string')) {
       return { status: 'unavailable', checkedAt };
     }
     const name = row[0].trim();
@@ -18,10 +18,16 @@ export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequ
       const parsed = new URL(row[1]);
       if (['https:', 'http:'].includes(parsed.protocol) && !parsed.username && !parsed.password) url = parsed.href;
     } catch { /* Text-only requirements have no URL. */ }
+    // Most mods use GameBanana's simple [name, url] form, which carries no
+    // state or importance; authors fill it with credits and recommendations.
+    if (row.length === 2) {
+      items.push({ name, url, state: 'on', importance: 'optional' });
+      continue;
+    }
     const state = row[2].toLowerCase();
     const importance = row[row.length === 6 ? 4 : 3].toLowerCase();
     items.push({ name, url,
-      state: state === '1' || state === 'on' ? 'on' : state === 'off' ? 'off' : 'unknown',
+      state: ['1', 'on', 'enabled'].includes(state) ? 'on' : ['off', 'disabled'].includes(state) ? 'off' : 'unknown',
       importance: importance === '7' || importance === 'required' ? 'required'
         : ['optional', 'recommended'].includes(importance) ? 'optional' : 'unknown',
     });
@@ -33,9 +39,11 @@ export interface RequirementMatch { modId: string; name: string; enabled: boolea
 export type RequirementMod = Pick<Mod, 'id' | 'name' | 'enabled' | 'gameBananaId' | 'sourceSection' | 'merged'>;
 export type RequirementState = 'enabled' | 'disabled' | 'missing' | 'met' | 'manual' | 'optional';
 export function matchRequirement(item: ModRequirement, mods: readonly RequirementMod[]): { state: RequirementState; matches: RequirementMatch[] } {
-  if (item.importance === 'optional') return { state: 'optional', matches: [] };
-  const target = item.url ? parseGameBananaItemUrl(item.url) : null;
-  if (!target || item.importance === 'unknown' || item.state === 'unknown') return { state: 'manual', matches: [] };
+  // Authors fill requirements with credits, notes and off-site tools, so only a
+  // GameBanana item marked Required is checked. An unrecognised state label is
+  // read as On, the usual meaning for a required mod.
+  const target = item.importance === 'required' && item.url ? parseGameBananaItemUrl(item.url) : null;
+  if (!target) return { state: 'optional', matches: [] };
   const matches: RequirementMatch[] = [];
   for (const mod of mods) {
     const identities = [{ id: mod.gameBananaId, section: mod.sourceSection ?? 'Mod' },

@@ -18,6 +18,18 @@ describe('GameBanana requirement parsing', () => {
     for (const raw of [null, []]) expect(parseRequirements(raw, 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [] });
     for (const raw of [undefined, {}, [['model']], [['model', '', 1, 7]]]) expect(parseRequirements(raw, 100)).toEqual({ status: 'unavailable', checkedAt: 100 });
   });
+  it('reads the simple [name, url] form as optional notes', () => {
+    expect(parseRequirements([['optimize mod screenspace_city', 'https://gamebanana.com/mods/722853'], ['a pc helps', '']], 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [
+      { name: 'optimize mod screenspace_city', url: 'https://gamebanana.com/mods/722853', state: 'on', importance: 'optional' },
+      { name: 'a pc helps', url: undefined, state: 'on', importance: 'optional' },
+    ] });
+  });
+  it('reads Enabled and Disabled labels as states', () => {
+    const [enabled, disabled] = [['Enabled', 'on'], ['Disabled', 'off']].map(([label]) =>
+      parseRequirements([['Universal Mod Manager', 'https://gamebanana.com/mods/693642', label, 'BlueColor', 'Required', 'OrangeColor']], 100));
+    expect(enabled).toMatchObject({ items: [{ state: 'on', importance: 'required' }] });
+    expect(disabled).toMatchObject({ items: [{ state: 'off', importance: 'required' }] });
+  });
   it('removes unsafe links and preserves text-only requirements', () => {
     const result = parseRequirements([['Manual step', 'javascript:alert(1)', 'On', '', 'Required', '']]);
     expect(result.status === 'loaded' && result.items[0]).toEqual({ name: 'Manual step', url: undefined, state: 'on', importance: 'required' });
@@ -76,9 +88,14 @@ describe('installed requirement state', () => {
     expect(matchRequirement(off, [base(true)]).state).toBe('manual');
     expect(matchRequirement(off, [base(false)]).state).toBe('met');
   });
-  it('requires manual review for external links and unknown states', () => {
-    expect(matchRequirement({ ...requirement, url: 'https://example.com/manual' }, []).state).toBe('manual');
-    expect(matchRequirement({ ...requirement, state: 'unknown' }, [base(true)]).state).toBe('manual');
+  it('treats external links, text-only rows and unknown importance as notes', () => {
+    expect(matchRequirement({ ...requirement, url: 'https://example.com/manual' }, []).state).toBe('optional');
+    expect(matchRequirement({ ...requirement, url: undefined }, []).state).toBe('optional');
+    expect(matchRequirement({ ...requirement, importance: 'unknown' }, []).state).toBe('optional');
+  });
+  it('reads an unknown state as On', () => {
+    expect(matchRequirement({ ...requirement, state: 'unknown' }, [base(true)]).state).toBe('enabled');
+    expect(matchRequirement({ ...requirement, state: 'unknown' }, []).state).toBe('missing');
   });
   it('never treats unavailable data as a satisfied check', () => {
     expect(hasRequirementIssues(undefined, [])).toBe(false);
