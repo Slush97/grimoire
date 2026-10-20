@@ -1781,6 +1781,25 @@
       "unsupported": "Left unchanged. This difference needs another repair or an author update.",
       "details": "Details",
       "backups": "Show original backup"
+    },
+    "folders": {
+      "view": "Installed organization",
+      "loadOrder": "Load order {{value}}",
+      "flat": "Flat",
+      "folders": "Folders",
+      "unfiled": "Unfiled",
+      "create": "New folder",
+      "menuTrigger": "Add to folder",
+      "deleteFolder": "Delete folder \"{{name}}\"",
+      "emptyHint": "Create a folder, then add mods from their card menu or by selecting several mods.",
+      "manage": "Manage folders",
+      "nameLabel": "Folder name",
+      "namePlaceholder": "For example, Skins or WIP",
+      "empty": "No matching mods in this folder.",
+      "addTo": "Add selected to folder",
+      "removeFrom": "Remove selected from folder",
+      "manageHint": "Deleting a folder keeps its mods.",
+      "hint": "Mods can appear in several folders. Switch to Flat to edit load order."
     }
   },
   "locker": {

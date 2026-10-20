@@ -14,6 +14,7 @@ import { Input } from '../common/forms';
 import type { ModList } from '../../lib/modLists';
 
 interface ManageModListsModalProps {
+  folder?: boolean;
   lists: readonly ModList[];
   /** Live member counts by list id (orphaned keys excluded). */
   counts: ReadonlyMap<string, number>;
@@ -27,6 +28,7 @@ interface ManageModListsModalProps {
 }
 
 interface ListRowProps {
+  folder: boolean;
   list: ModList;
   count: number;
   busy: boolean;
@@ -35,7 +37,7 @@ interface ListRowProps {
   onSetEnabled: (id: string, enabled: boolean) => void;
 }
 
-function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled }: ListRowProps) {
+function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled, folder }: ListRowProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(list.name);
   const [rejected, setRejected] = useState(false);
@@ -79,7 +81,7 @@ function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled }: ListRo
               setRejected(false);
             }
           }}
-          aria-label={t('installed.lists.nameLabel')}
+          aria-label={folder ? t('installed.folders.nameLabel') : t('installed.lists.nameLabel')}
           maxLength={80}
         />
         <span className="flex-shrink-0 whitespace-nowrap text-xs tabular-nums text-text-secondary">
@@ -115,7 +117,7 @@ function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled }: ListRo
             size="sm"
             tone="danger"
             icon={Trash2}
-            label={t('installed.lists.deleteList', { name: list.name })}
+            label={folder ? t('installed.folders.deleteFolder', { name: list.name }) : t('installed.lists.deleteList', { name: list.name })}
             onClick={() => setConfirmingDelete(true)}
           />
         )}
@@ -132,6 +134,7 @@ function ListRow({ list, count, busy, onRename, onDelete, onSetEnabled }: ListRo
  * drafts and no half-armed delete confirmations.
  */
 export function ManageModListsModal({
+  folder = false,
   lists,
   counts,
   onClose,
@@ -151,8 +154,8 @@ export function ManageModListsModal({
     >
       <ModalHeader
         titleId="manage-mod-lists-title"
-        title={t('installed.lists.manageTitle')}
-        subtitle={t('installed.lists.manageSubtitle')}
+        title={folder ? t('installed.folders.manage') : t('installed.lists.manageTitle')}
+        subtitle={folder ? t('installed.folders.manageHint') : t('installed.lists.manageSubtitle')}
         onClose={onClose}
         closeLabel={t('common.actions.close')}
       />
@@ -166,11 +169,12 @@ export function ManageModListsModal({
           </p>
         )}
         {lists.length === 0 ? (
-          <p className="text-sm text-text-secondary">{t('installed.lists.emptyHint')}</p>
+          <p className="text-sm text-text-secondary">{folder ? t('installed.folders.emptyHint') : t('installed.lists.emptyHint')}</p>
         ) : (
           <ul className="space-y-2">
             {lists.map((list) => (
               <ListRow
+                folder={folder}
                 key={list.id}
                 list={list}
                 count={counts.get(list.id) ?? 0}

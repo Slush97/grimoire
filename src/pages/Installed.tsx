@@ -104,6 +104,7 @@ import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
+  modPreferenceKey,
   readStoredDisabledFavorites,
   readStoredDisabledOrder,
   toggleFavoriteKey,
@@ -131,6 +132,9 @@ import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
+import { InstalledFolderGroups } from '../components/installed/InstalledFolderGroups';
+import { InstalledFolderControls, InstalledFolderSelectionMenu } from '../components/installed/InstalledFolderControls';
+import { buildInstalledFolders, folderSelectionEntries, installedFolderKey, visibleFolderOccurrences, readInstalledFolderPreferences, writeInstalledFolderPreferences, type InstalledFolderView } from '../lib/installedFolders';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
@@ -314,7 +318,7 @@ interface InstalledEntryCardProps {
   /** Move an entry into or out of the citadel/grimoire priority root. */
   onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
-  onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
+  onCommitPriority?: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
   onCopyShareCode: (mod: Mod) => void;
   onSelectToggle: (entry: ModEntry, shiftKey: boolean) => void;
@@ -323,6 +327,7 @@ interface InstalledEntryCardProps {
   lists: readonly ModList[];
   /** Ids of the lists this entry belongs to (EMPTY_LIST_IDS when none). */
   listIds: readonly string[];
+  foldersView: boolean;
   onToggleList: (entry: ModEntry, listId: string) => void;
   onCreateList: (entry: ModEntry) => void;
 }
@@ -374,6 +379,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onToggleFavorite,
   lists,
   listIds,
+  foldersView,
   onToggleList,
   onCreateList,
 }: InstalledEntryCardProps) {
@@ -421,7 +427,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         fixingUnknown={fixingUnknown}
         loadPosition={loadPosition}
         loadCount={loadCount}
-        onCommitPriority={(p) => onCommitPriority(mod.id, p)}
+        onCommitPriority={onCommitPriority ? (p) => onCommitPriority(mod.id, p) : undefined}
         onUnmerge={mod.merged ? () => onUnmerge(mod) : undefined}
         onCopyShareCode={mod.merged ? () => onCopyShareCode(mod) : undefined}
         selectMode={selectMode}
@@ -435,6 +441,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onToggleFavorite={() => onToggleFavorite(entry)}
         lists={lists}
         listIds={listIds}
+        foldersView={foldersView}
         onToggleList={(listId) => onToggleList(entry, listId)}
         onCreateList={() => onCreateList(entry)}
       />
@@ -499,7 +506,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
-      onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
+      onCommitPriority={onCommitPriority ? (p) => onCommitPriority(entry.primary.id, p) : undefined}
       selectMode={selectMode}
       shiftHeld={shiftHeld}
       selected={selected}
@@ -510,6 +517,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // files the whole submission. That matches how the star already behaves.
       lists={lists}
       listIds={listIds}
+      foldersView={foldersView}
       onToggleList={(listId) => onToggleList(entry, listId)}
       onCreateList={() => onCreateList(entry)}
       group={{
@@ -670,8 +678,17 @@ export default function Installed() {
     return () => window.removeEventListener(STABLE_KEY_PREFERENCES_MIGRATED_EVENT, handleMigration);
   }, []);
   // Entry the "New list" dialog was opened from, so creating also files it.
-  const [creatingListFor, setCreatingListFor] = useState<ModEntry | null>(null);
+  const [creatingListKeys, setCreatingListKeys] = useState<string[] | null>(null);
   const [managingLists, setManagingLists] = useState(false);
+  const [folderPreferences, setFolderPreferences] = useState(readInstalledFolderPreferences);
+  const [searchFolderState, setSearchFolderState] = useState<{ query: string; collapsed: string[] }>({ query: '', collapsed: [] });
+  const foldersView = folderPreferences.view === 'folders';
+  const collapsedFolders = useMemo(() => new Set(folderPreferences.collapsed), [folderPreferences.collapsed]);
+  const updateFolderPreferences = (next: typeof folderPreferences) => {
+    setFolderPreferences(next);
+    writeInstalledFolderPreferences(next);
+  };
+  const setFolderView = (view: InstalledFolderView) => updateFolderPreferences({ ...folderPreferences, view });
 
   // Applying (or saving) a profile from the header control changes what is
   // enabled behind the page's back: there is no event or subscription to hear
@@ -946,9 +963,8 @@ export default function Installed() {
   const shiftHeld = useShiftKey();
   const [enabledCollapsed, setEnabledCollapsed] = useState(false);
   const [disabledCollapsed, setDisabledCollapsed] = useState(false);
-  const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(mods, () =>
-    visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed)
-  );
+  const getVisibleSelection = useStableCallback(() => visibleSelection);
+  const { selectedIds, setSelectedIds, toggleSelection } = useInstalledSelection(mods, getVisibleSelection);
   // Per-item progress for the in-flight bulk enable/disable. While set, the
   // action bar swaps its buttons for a "Enabling 2/5…" line so users see
   // incremental progress on large selections.
@@ -2713,17 +2729,16 @@ export default function Installed() {
   const toggleEntryList = useStableCallback((entry: ModEntry, listId: string) => {
     commitModLists(toggleListMembership(modLists, listId, entryDisabledPreferenceKey(entry)));
   });
-  const openCreateListFor = useStableCallback((entry: ModEntry) => setCreatingListFor(entry));
+  const openCreateListFor = useStableCallback((entry: ModEntry) => setCreatingListKeys([entryDisabledPreferenceKey(entry)]));
   // Create, and file the entry the dialog was opened from into the new list.
   // createList reuses an existing list when the name matches, so typing the
   // name of a list you already have files it there instead of duplicating.
   // Filing is add-only for exactly that reason: a toggle here would un-file a
   // mod that is already in the list whose name was typed.
   const createListForEntry = useStableCallback((name: string) => {
-    const entry = creatingListFor;
     const { lists, id } = createList(modLists, name);
     if (!id) return;
-    commitModLists(entry ? addListMembership(lists, id, entryDisabledPreferenceKey(entry)) : lists);
+    commitModLists((creatingListKeys ?? []).reduce((next, key) => addListMembership(next, id, key), lists));
   });
   const renameModList = useStableCallback((id: string, name: string) => {
     // renameList no-ops on a rejected name (blank, or taken by another list)
@@ -2735,6 +2750,8 @@ export default function Installed() {
   });
   const deleteModList = useStableCallback((id: string) => {
     commitModLists(deleteList(modLists, id));
+    updateFolderPreferences({ ...folderPreferences, collapsed: folderPreferences.collapsed.filter((key) =>
+      key !== installedFolderKey('enabled', id) && key !== installedFolderKey('disabled', id)) });
     // Drop the selection too, or the grid keeps filtering on a list that no
     // longer exists and shows an empty shelf with no visible cause.
     setListFilter((prev) => prev.filter((selected) => selected !== id));
@@ -2964,9 +2981,9 @@ export default function Installed() {
   );
   const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
   const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
-  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean) => {
+  const selectToggleEntry = useStableCallback((entry: ModEntry, shiftKey: boolean, occurrenceKey: string = entry.key) => {
     setSelectMode(true);
-    toggleSelection({ key: entry.key, ids: entrySelectionIds(entry) }, shiftKey);
+    toggleSelection({ key: occurrenceKey, ids: entrySelectionIds(entry) }, shiftKey);
   });
 
   const compactOrder = buildCompactPriorityOrder(allEntries);
@@ -3078,6 +3095,17 @@ export default function Installed() {
   // displayed order no longer maps to load-order priority; the canonical
   // priority order lives on enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
+  const toggleFolder = (key: string) => {
+    if (searchNeedle) {
+      const next = new Set(searchFolderState.query === searchNeedle ? searchFolderState.collapsed : []);
+      if (!next.delete(key)) next.add(key);
+      setSearchFolderState({ query: searchNeedle, collapsed: [...next] });
+      return;
+    }
+    const next = new Set(collapsedFolders);
+    if (!next.delete(key)) next.add(key);
+    updateFolderPreferences({ ...folderPreferences, collapsed: [...next] });
+  };
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
@@ -3085,7 +3113,7 @@ export default function Installed() {
   const filtersActive =
     sourceActive || statusActive || heroActive || tagFilter.length > 0 || listFilter.length > 0;
   const sortActive = sortMode !== 'priority';
-  const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
+  const viewIsReorderable = !foldersView && !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
     (sourceActive ? 1 : 0) +
     (statusActive ? 1 : 0) +
@@ -3150,7 +3178,28 @@ export default function Installed() {
     return { visibleEnabled, visibleDisabled };
   }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
-  const detailsNavigationEntries = [...visibleEnabled, ...visibleDisabled].filter(
+  const enabledFolders = useMemo(() => buildInstalledFolders(visibleEnabled, modLists), [visibleEnabled, modLists]);
+  const disabledFolders = useMemo(() => buildInstalledFolders(visibleDisabled, modLists), [visibleDisabled, modLists]);
+  const activeCollapsedFolders = searchNeedle
+    ? new Set(searchFolderState.query === searchNeedle ? searchFolderState.collapsed : []) : collapsedFolders;
+  const visibleSelection = foldersView ? [
+    ...(enabledCollapsed ? [] : folderSelectionEntries(enabledFolders, 'enabled', activeCollapsedFolders)),
+    ...(disabledCollapsed ? [] : folderSelectionEntries(disabledFolders, 'disabled', activeCollapsedFolders)),
+  ] : visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed);
+  const selectedFolderKeys = [...new Set(selectedMods.map(modPreferenceKey))];
+  const fileSelection = (id: string, add: boolean) => {
+    const selectedKeys = new Set(selectedFolderKeys);
+    commitModLists(add
+      ? selectedFolderKeys.reduce((next, key) => addListMembership(next, id, key), modLists)
+      : modLists.map((list) => list.id === id ? { ...list, keys: list.keys.filter((key) => !selectedKeys.has(key)) } : list));
+  };
+  const navigationEntries = foldersView
+    ? [...new Map([
+        ...(enabledCollapsed ? [] : visibleFolderOccurrences(enabledFolders, 'enabled', activeCollapsedFolders)),
+        ...(disabledCollapsed ? [] : visibleFolderOccurrences(disabledFolders, 'disabled', activeCollapsedFolders)),
+      ].map(({ entry }) => [entry.key, entry])).values()]
+    : [...visibleEnabled, ...visibleDisabled];
+  const detailsNavigationEntries = navigationEntries.filter(
     (entry) => typeof entryPrimaryMod(entry).gameBananaId === 'number'
   );
   const detailsNavigationIndex = detailsSourceModId
@@ -3172,8 +3221,7 @@ export default function Installed() {
 
   const selectAllVisible = () => {
     setSelectedIds(new Set(
-      visibleSelectionEntries(visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed)
-        .flatMap((entry) => entry.ids)
+      visibleSelection.flatMap((entry) => entry.ids)
     ));
   };
 
@@ -3217,6 +3265,14 @@ export default function Installed() {
     }
     if (isEntryEnabled(entry)) setEnabledCollapsed(false);
     else setDisabledCollapsed(false);
+    if (foldersView) {
+      const section = isEntryEnabled(entry) ? 'enabled' : 'disabled';
+      const folders = buildInstalledFolders([entry], modLists);
+      const reveal = new Set(folders.filter((folder) => folder.entries.some((candidate) => candidate.key === entry.key))
+        .map((folder) => installedFolderKey(section, folder.id)));
+      updateFolderPreferences({ ...folderPreferences, collapsed: folderPreferences.collapsed.filter((key) => !reveal.has(key)) });
+      setSearchFolderState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => !reveal.has(key)) }));
+    }
     setGridWarm(true);
     setUpdateMenuTargetId(modId);
   };
@@ -3384,7 +3440,7 @@ export default function Installed() {
    * entries/conflicts, useStableCallback handlers), or derived per card, so
    * unrelated page state changes leave the card subtrees untouched.
    */
-  const cardPropsFor = (entry: ModEntry): InstalledEntryCardProps => ({
+  const cardPropsFor = (entry: ModEntry, occurrenceKey?: string): InstalledEntryCardProps => ({
     entry,
     viewMode,
     hideNsfwPreviews: installedHideNsfwPreviews,
@@ -3419,13 +3475,14 @@ export default function Installed() {
     onTagGlobal: tagEntryGlobal,
     onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
-    onCommitPriority: commitEntryPriority,
+    onCommitPriority: foldersView ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
-    onSelectToggle: selectToggleEntry,
+    onSelectToggle: occurrenceKey ? (selectedEntry, shiftKey) => selectToggleEntry(selectedEntry, shiftKey, occurrenceKey) : selectToggleEntry,
     onToggleFavorite: toggleEntryFavorite,
     lists: modLists,
     listIds: entryListIds.get(entry.key) ?? EMPTY_LIST_IDS,
+    foldersView,
     onToggleList: toggleEntryList,
     onCreateList: openCreateListFor,
   });
@@ -3447,6 +3504,19 @@ export default function Installed() {
       layout === 'list'
         ? undefined
         : cardSizeGridStyle;
+
+    if (foldersView) return <InstalledFolderGroups
+      folders={section === 'enabled' ? enabledFolders : disabledFolders}
+      section={section}
+      collapsed={activeCollapsedFolders}
+      showEmpty={!searchNeedle && !filtersActive}
+      onToggle={toggleFolder}
+      gridClassName={gridClasses}
+      gridStyle={gridStyle}
+      renderEntry={(entry, occurrence) => <div data-installed-entry-key={entry.key}>
+        <InstalledEntryCard {...cardPropsFor(entry, occurrence)} />
+      </div>}
+    />;
 
     return (
       <DndContext
@@ -3692,6 +3762,12 @@ export default function Installed() {
             )}
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <InstalledFolderControls
+              view={folderPreferences.view}
+              onView={setFolderView}
+              onCreate={() => setCreatingListKeys([])}
+              onManage={() => setManagingLists(true)}
+            />
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
                 claiming a second strip below the search. Copy-enabled sits
@@ -4106,6 +4182,7 @@ export default function Installed() {
           should not get a stray button row under it). */}
       {(visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
+          {foldersView && <p className="mb-4 text-xs text-text-tertiary">{t('installed.folders.hint')}</p>}
           <InstalledSection
             title={t('installed.sections.enabled', { count: visibleEnabled.length })}
             count={visibleEnabled.length}
@@ -4193,15 +4270,16 @@ export default function Installed() {
 
       {/* Conditionally rendered so each opening is a fresh mount: draft names
           and armed delete confirmations reset without a sync effect. */}
-      {creatingListFor && (
+      {creatingListKeys && (
         <CreateModListModal
-          modName={entryName(creatingListFor)}
-          onClose={() => setCreatingListFor(null)}
+          folder={foldersView}
+          onClose={() => setCreatingListKeys(null)}
           onCreate={createListForEntry}
         />
       )}
       {managingLists && (
         <ManageModListsModal
+          folder={foldersView}
           lists={modLists}
           counts={listCounts}
           onClose={() => {
@@ -4595,6 +4673,13 @@ export default function Installed() {
                 </Button>
               )}
               <span className="h-5 w-px bg-border" />
+              <InstalledFolderSelectionMenu
+                lists={modLists}
+                disabled={selectedMods.length === 0}
+                onAdd={(id) => fileSelection(id, true)}
+                onRemove={(id) => fileSelection(id, false)}
+                onCreate={() => setCreatingListKeys(selectedFolderKeys)}
+              />
               <Button
                 variant="secondary"
                 size="sm"

@@ -22,6 +22,7 @@ import {
 import type { ModList } from '../../lib/modLists';
 
 interface ModListSubmenuProps {
+  folder?: boolean;
   lists: readonly ModList[];
   /** List ids this card's mod already belongs to. */
   memberIds: readonly string[];
@@ -29,12 +30,12 @@ interface ModListSubmenuProps {
   onCreateNew: () => void;
 }
 
-export function ModListSubmenu({ lists, memberIds, onToggle, onCreateNew }: ModListSubmenuProps) {
+export function ModListSubmenu({ lists, memberIds, onToggle, onCreateNew, folder = false }: ModListSubmenuProps) {
   const { t } = useTranslation();
 
   return (
     <MenuSub>
-      <MenuSubTrigger icon={ListPlus}>{t('installed.lists.menuTrigger')}</MenuSubTrigger>
+      <MenuSubTrigger icon={ListPlus}>{folder ? t('installed.folders.menuTrigger') : t('installed.lists.menuTrigger')}</MenuSubTrigger>
       {/* Cap the height: a user with many lists would otherwise get a submenu
           taller than the window. */}
       <MenuSubContent className="max-h-72 overflow-y-auto">
@@ -49,7 +50,7 @@ export function ModListSubmenu({ lists, memberIds, onToggle, onCreateNew }: ModL
         ))}
         {lists.length > 0 && <MenuSeparator />}
         <MenuItem icon={Plus} onSelect={onCreateNew}>
-          {t('installed.lists.newList')}
+          {folder ? t('installed.folders.create') : t('installed.lists.newList')}
         </MenuItem>
       </MenuSubContent>
     </MenuSub>
@@ -57,6 +58,7 @@ export function ModListSubmenu({ lists, memberIds, onToggle, onCreateNew }: ModL
 }
 
 interface CreateModListModalProps {
+  folder?: boolean;
   /** Name of the mod being filed, shown as the dialog subtitle. */
   modName?: string;
   onClose: () => void;
@@ -69,7 +71,7 @@ interface CreateModListModalProps {
  * fires without an effect. Trades the Modal exit animation for that, same as
  * most dialogs in the app.
  */
-export function CreateModListModal({ modName, onClose, onCreate }: CreateModListModalProps) {
+export function CreateModListModal({ modName, onClose, onCreate, folder = false }: CreateModListModalProps) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const trimmed = name.trim();
@@ -86,7 +88,7 @@ export function CreateModListModal({ modName, onClose, onCreate }: CreateModList
       <form onSubmit={submit} className="flex min-h-0 flex-col">
         <ModalHeader
           titleId="create-mod-list-title"
-          title={t('installed.lists.createTitle')}
+          title={folder ? t('installed.folders.create') : t('installed.lists.createTitle')}
           subtitle={modName}
           subtitleTitle={modName}
           onClose={onClose}
@@ -97,8 +99,8 @@ export function CreateModListModal({ modName, onClose, onCreate }: CreateModList
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder={t('installed.lists.namePlaceholder')}
-            aria-label={t('installed.lists.nameLabel')}
+            placeholder={folder ? t('installed.folders.namePlaceholder') : t('installed.lists.namePlaceholder')}
+            aria-label={folder ? t('installed.folders.nameLabel') : t('installed.lists.nameLabel')}
             maxLength={80}
           />
         </ModalBody>
