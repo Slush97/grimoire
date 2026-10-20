@@ -35,11 +35,18 @@ export function installedListEntryKey(listId: string, entry: ModEntry): string {
   return JSON.stringify([listId, entry.key]);
 }
 
+/** Trailing group for entries in no list, named by the UI. Generated list ids
+ *  are slugs, so the colon keeps it clear of them. */
+export const UNLISTED_GROUP_ID = ':unlisted';
+
 export function buildInstalledListGroups(entries: readonly ModEntry[], lists: readonly ModList[]): InstalledListGroup[] {
-  return lists.map((list) => {
+  const groups: InstalledListGroup[] = lists.map((list) => {
     const keys = new Set(list.keys);
     return { id: list.id, name: list.name, ...(list.icon ? { icon: list.icon } : {}), entries: entries.filter((entry) => keys.has(entryDisabledPreferenceKey(entry))) };
   });
+  const listed = new Set(lists.flatMap((list) => list.keys));
+  const unlisted = entries.filter((entry) => !listed.has(entryDisabledPreferenceKey(entry)));
+  return unlisted.length > 0 ? [...groups, { id: UNLISTED_GROUP_ID, name: '', entries: unlisted }] : groups;
 }
 
 export function visibleListOccurrences(groups: readonly InstalledListGroup[], collapsed: ReadonlySet<string>): { key: string; entry: ModEntry }[] {

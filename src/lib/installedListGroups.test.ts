@@ -8,6 +8,7 @@ import {
   INSTALLED_LIST_PREFS_KEY,
   readInstalledListPreferences,
   writeInstalledListPreferences,
+  UNLISTED_GROUP_ID,
 } from './installedListGroups';
 
 function mod(id: string, overrides: Partial<Mod> = {}): Mod {
@@ -21,8 +22,8 @@ function mod(id: string, overrides: Partial<Mod> = {}): Mod {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('installed lists', () => {
-  it('supports overlapping lists without inventing an unfiled list or changing entry order', () => {
-    const entries = buildModEntries([mod('b'), mod('a'), mod('c')]);
+  it('supports overlapping lists and collects unlisted entries last without changing entry order', () => {
+    const entries = buildModEntries([mod('b'), mod('a'), mod('c'), mod('d')]);
     const folders = buildInstalledListGroups(entries, [
       { id: 'skins', name: 'Skins', keys: ['sha256:a', 'sha256:b'] },
       { id: 'wip', name: 'WIP', keys: ['sha256:a'] },
@@ -33,8 +34,20 @@ describe('installed lists', () => {
         ['skins', [entries[0].key, entries[1].key]],
         ['wip', [entries[1].key]],
         ['missing', []],
+        [UNLISTED_GROUP_ID, [entries[2].key, entries[3].key]],
       ]);
-    expect(entries.map((entry) => entry.kind === 'single' && entry.mod.id)).toEqual(['b', 'a', 'c']);
+    expect(entries.map((entry) => entry.kind === 'single' && entry.mod.id)).toEqual(['b', 'a', 'c', 'd']);
+    expect(listSelectionEntries(folders, new Set([UNLISTED_GROUP_ID])).flatMap((entry) => entry.ids))
+      .toEqual(['b', 'a', 'a']);
+  });
+
+  it('puts every entry in the unlisted group when there are no lists, and omits it when empty', () => {
+    const entries = buildModEntries([mod('a'), mod('b')]);
+    expect(buildInstalledListGroups(entries, []).map((group) => [group.id, group.entries.length]))
+      .toEqual([[UNLISTED_GROUP_ID, 2]]);
+    expect(buildInstalledListGroups([], [])).toEqual([]);
+    expect(buildInstalledListGroups(entries, [{ id: 'all', name: 'All', keys: ['sha256:a', 'sha256:b'] }])
+      .map((group) => group.id)).toEqual(['all']);
   });
 
   it('shows enabled and disabled entries once per list, with variants kept together', () => {

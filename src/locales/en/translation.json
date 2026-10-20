@@ -1367,6 +1367,7 @@
       "emptyTitle": "No lists yet",
       "emptyList": "Add mods from a card's Add to list menu.",
       "noMatches": "No matching lists.",
+      "unlisted": "Not in a list",
       "addingMod": "Add {{name}}",
       "addedTo": "Added to {{name}}",
       "created": "Created {{name}}",

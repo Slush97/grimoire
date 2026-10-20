@@ -3255,13 +3255,9 @@ export default function Installed() {
     if (isEntryEnabled(entry)) setEnabledCollapsed(false);
     else setDisabledCollapsed(false);
     if (listsView) {
-      const containingLists = buildInstalledListGroups([entry], modLists).filter((list) => list.entries.length > 0);
-      if (containingLists.length === 0) setListView('all');
-      else {
-        const reveal = new Set(containingLists.map((list) => list.id));
-        updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => !reveal.has(key)) });
-        setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => !reveal.has(key)) }));
-      }
+      const reveal = new Set(buildInstalledListGroups([entry], modLists).filter((list) => list.entries.length > 0).map((list) => list.id));
+      updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => !reveal.has(key)) });
+      setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => !reveal.has(key)) }));
     }
     setGridWarm(true);
     setUpdateMenuTargetId(modId);
