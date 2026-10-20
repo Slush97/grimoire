@@ -2381,9 +2381,7 @@ export default function Browse() {
     layout === 'list'
       ? contentWidth
       : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
-  const virtualCardHeight = Math.max(...selectedSections.map((selected) =>
-    estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign, selected)
-  ));
+  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign);
   const virtualRowHeight = virtualCardHeight + gridGap;
   // Scroll anchor: when the grid's geometry changes (column count or row
   // height, e.g. the details sidebar opening/closing or a window resize),
