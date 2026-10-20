@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
+import { Agent, createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { mkdtempSync } from 'fs';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
@@ -63,6 +63,28 @@ describe('downloadTransfer', () => {
         expect(progress.at(-1)).toEqual([body.length, body.length]);
         expect(responseFilename).toBe('fixture archive.zip');
         expect(statuses).toEqual([{ phase: 'selected', server: '127.0.0.1' }]);
+    });
+
+    it('sends every request, including redirect hops, through the supplied agent', async () => {
+        const body = Buffer.from('proxied payload');
+        const url = await listen((request, response) => {
+            if (request.url === '/fixture.zip') {
+                response.writeHead(302, { Location: '/final.zip' });
+                response.end();
+                return;
+            }
+            response.writeHead(200, { 'Content-Length': body.length });
+            response.end(body);
+        });
+        const agent = new Agent();
+        const createConnection = vi.spyOn(agent, 'createConnection');
+        const path = destination('proxied.zip');
+
+        await downloadTransfer({ candidateUrls: [url], destinationPath: path, onProgress: () => {}, agent });
+        agent.destroy();
+
+        expect(await fs.readFile(path)).toEqual(body);
+        expect(createConnection).toHaveBeenCalledTimes(2);
     });
 
     it('resumes from the next server after the first server drops mid-body', async () => {

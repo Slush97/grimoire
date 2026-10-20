@@ -1,7 +1,9 @@
+import { Agent } from 'http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const selectorMocks = vi.hoisted(() => ({ getCandidates: vi.fn() }));
 const transferMocks = vi.hoisted(() => ({ downloadTransfer: vi.fn() }));
+const proxyMocks = vi.hoisted(() => ({ getGameBananaDownloadProxyAgent: vi.fn() }));
 
 vi.mock('electron', () => ({
     app: { getPath: () => '', getVersion: () => 'test' },
@@ -12,6 +14,9 @@ vi.mock('electron', () => ({
 vi.mock('@grimoire/social-types/heroes', () => ({ inferHeroFromTitle: () => null }));
 vi.mock('./gamebananaFileServers', () => ({
     gameBananaFileServerSelector: { getCandidates: selectorMocks.getCandidates },
+}));
+vi.mock('./gamebananaDownloadProxy', () => ({
+    getGameBananaDownloadProxyAgent: proxyMocks.getGameBananaDownloadProxyAgent,
 }));
 vi.mock('./downloadTransfer', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./downloadTransfer')>()),
@@ -34,6 +39,7 @@ describe('downloadFile GameBanana fileserver handoff', () => {
     beforeEach(() => {
         selectorMocks.getCandidates.mockReset();
         transferMocks.downloadTransfer.mockReset().mockResolvedValue(undefined);
+        proxyMocks.getGameBananaDownloadProxyAgent.mockReset().mockResolvedValue(undefined);
     });
     afterEach(() => vi.restoreAllMocks());
 
@@ -56,6 +62,14 @@ describe('downloadFile GameBanana fileserver handoff', () => {
         await expect(options().resolveRedirectCandidates!(chosen, options().signal)).resolves.toEqual([fastest, second, chosen]);
         expect(selectorMocks.getCandidates).toHaveBeenCalledExactlyOnceWith(canonical, expect.any(AbortSignal), 'filecache20.gamebanana.com');
         await expect(options().resolveRedirectCandidates!(route, options().signal)).resolves.toBeUndefined();
+    });
+
+    it('hands the GameBanana proxy agent to the transfer', async () => {
+        const agent = new Agent();
+        proxyMocks.getGameBananaDownloadProxyAgent.mockResolvedValue(agent);
+        await downloadFile(route, 'proxied.zip', vi.fn());
+        expect(proxyMocks.getGameBananaDownloadProxyAgent).toHaveBeenCalledExactlyOnceWith(route);
+        expect(options().agent).toBe(agent);
     });
 
     it('does not repeat the GameBanana-assigned server when the selector already ranked it', async () => {
