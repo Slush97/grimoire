@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 
 vi.mock('electron', () => ({ app: { getPath: () => testDirectory } }));
 
@@ -19,7 +20,19 @@ function row(id: number, section: string, name: string, date: number, subCategor
   };
 }
 
-describe('combined catalog search', () => {
+// After the documented `electron-rebuild -w better-sqlite3` step the native
+// module targets Electron's ABI and plain Node cannot load it. CI builds it for
+// Node, so the suite must never skip there.
+const nativeSqliteUnavailable = !process.env.CI && (() => {
+  try {
+    new Database(':memory:').close();
+    return false;
+  } catch {
+    return true;
+  }
+})();
+
+describe.skipIf(nativeSqliteUnavailable)('combined catalog search', () => {
   beforeAll(() => upsertMods([
     row(1, 'Mod', 'Blue suit', 40, 42),
     row(2, 'Sound', 'Haze blue audio', 30),
