@@ -56,7 +56,7 @@ export function requirementOrderIssues(source: GameBananaItemRef, snapshot: ModR
   const issues: RequirementOrderIssue[] = [];
   const owners = mods.filter(mod => mod.enabled && modRequirementRefs(mod).some(ref => requirementKey(ref) === requirementKey(source)));
   for (const item of snapshot.items) {
-    if (item.importance !== 'required' || item.state !== 'on') continue;
+    if (item.importance !== 'required' || item.state === 'off') continue;
     const matches = matchRequirement(item, mods).matches;
     const bases = mods.filter(mod => mod.enabled && matches.some(hit => hit.modId === mod.id)).sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
     for (const overlay of owners) {
