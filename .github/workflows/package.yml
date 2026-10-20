@@ -92,6 +92,12 @@ jobs:
           rm -rf dist release
           mkdir -p release
 
+      # electron-builder's rpm target shells out to rpmbuild, which the Ubuntu
+      # runner doesn't ship.
+      - name: Install rpmbuild
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
+
       - name: Build and package
         id: build
         working-directory: grimoire
@@ -117,6 +123,7 @@ jobs:
               "-c.portable.artifactName=Grimoire-Portable-Nightly-$day.\${ext}"
               "-c.appImage.artifactName=Grimoire-Nightly-$day.\${ext}"
               "-c.deb.artifactName=grimoire_nightly-${day}_amd64.\${ext}"
+              "-c.rpm.artifactName=grimoire-nightly-${day}.x86_64.\${ext}"
               "-c.dmg.artifactName=Grimoire-Nightly-$day-\${arch}.\${ext}"
               "-c.mac.artifactName=Grimoire-Nightly-$day-\${arch}-mac.\${ext}"
             )
@@ -171,7 +178,7 @@ jobs:
           # Hash user-facing artifacts only (skip auto-update metadata and blockmaps).
           # *.zip is the macOS update artifact; win/linux targets produce none.
           shopt -s nullglob
-          files=(*.exe *.AppImage *.deb *.dmg *.zip)
+          files=(*.exe *.AppImage *.deb *.rpm *.dmg *.zip)
           if [ ${#files[@]} -eq 0 ]; then
             echo "ERROR: no artifact files found to hash"
             exit 1
@@ -193,6 +200,7 @@ jobs:
             grimoire/release/*.exe
             grimoire/release/*.AppImage
             grimoire/release/*.deb
+            grimoire/release/*.rpm
             grimoire/release/*.dmg
             grimoire/release/*.zip
 
@@ -204,6 +212,7 @@ jobs:
             grimoire/release/*.exe
             grimoire/release/*.AppImage
             grimoire/release/*.deb
+            grimoire/release/*.rpm
             grimoire/release/*.dmg
             grimoire/release/*.zip
             grimoire/release/*.blockmap

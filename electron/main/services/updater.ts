@@ -8,7 +8,7 @@ import type { AppSettings, UpdateChannel } from '../../../src/types/mod';
 
 export type InstallSource = 'managed' | 'appimage' | 'standard' | 'manual';
 
-// Detect installs owned by a system package manager (apt/AUR/snap/flatpak).
+// Detect installs owned by a system package manager (apt/dnf/AUR/snap/flatpak).
 // In-app updates would fail on these because /opt and /usr are root-owned, so
 // we route those users to their package manager instead.
 export function getInstallSource(): InstallSource {

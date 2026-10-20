@@ -121,6 +121,7 @@ export default function UpdateModal({ onClose }: Props) {
                                         components={{
                                             arch: <code className="font-mono text-text-primary" />,
                                             apt: <code className="font-mono text-text-primary" />,
+                                            dnf: <code className="font-mono text-text-primary" />,
                                         }}
                                     />
                                 </p>
@@ -129,6 +130,7 @@ export default function UpdateModal({ onClose }: Props) {
                                         i18nKey="updateModal.managedAptRepo"
                                         components={{
                                             deb: <code className="font-mono text-text-primary" />,
+                                            rpm: <code className="font-mono text-text-primary" />,
                                             url: <code className="font-mono text-text-primary" />,
                                         }}
                                     />

@@ -7,7 +7,7 @@
   [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?label=release)](../../releases/latest)
   [![GitHub downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fdownloads-badge.json)](../../releases)
   [![GameBanana downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fgamebanana-badge.json)](https://gamebanana.com/tools/22583)
-  [![apt installs](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fapt-badge.json)](https://apt.grimoiremods.com)
+  [![apt + dnf installs](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fapt-badge.json)](https://apt.grimoiremods.com)
   [![AUR](https://img.shields.io/aur/version/grimoire-bin?label=aur)](https://aur.archlinux.org/packages/grimoire-bin)
   [![CI](https://img.shields.io/github/actions/workflow/status/Slush97/grimoire/ci.yml?branch=main&label=ci)](../../actions/workflows/ci.yml)
   [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/KgYGHEMq2P)
@@ -19,7 +19,7 @@
 [Latest release →](../../releases/latest)
 
 - Windows: `Grimoire-Setup-x.y.z.exe`
-- Linux: `.AppImage` or `.deb`
+- Linux: `.AppImage`, `.deb` or `.rpm`
 - Arch Linux: `yay -S grimoire-bin` ([AUR](https://aur.archlinux.org/packages/grimoire-bin))
 
 ### Debian / Ubuntu (apt)
@@ -34,6 +34,15 @@ sudo apt update && sudo apt install grimoire
 ```
 
 Afterwards `sudo apt upgrade` keeps it current. More detail: [docs/apt-repo.md](docs/apt-repo.md).
+
+### Fedora (dnf)
+
+```bash
+sudo curl -fsSL -o /etc/yum.repos.d/grimoire.repo https://rpm.grimoiremods.com/grimoire.repo
+sudo dnf install grimoire
+```
+
+`sudo dnf upgrade` keeps it current. On Bazzite, Silverblue and other atomic Fedoras, use the AppImage instead (it updates itself). More detail: [docs/rpm-repo.md](docs/rpm-repo.md).
 
 ### Nix / NixOS (flake)
 

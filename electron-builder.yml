@@ -47,9 +47,33 @@ linux:
   target:
     - AppImage
     - deb
+    - rpm
   category: Game
   icon: resources/icons
-  maintainer: esoc
+  maintainer: Slush97
+rpm:
+  # rpmbuild otherwise adds /usr/lib/.build-id links for the stock Electron
+  # binaries, and dnf refuses to install next to any other rpm that ships the
+  # same Electron version (file conflict on the shared link paths). fpm also
+  # lists only files by default, so uninstalling left /opt/Grimoire behind as
+  # a tree of empty directories.
+  fpm:
+    - --rpm-rpmbuild-define=_build_id_links none
+    - --rpm-auto-add-directories
+  afterRemove: resources/rpm-after-remove.tpl
+  # electron-builder's rpm defaults plus libsecret, which the deb defaults
+  # already include: safeStorage needs it to keep the social session token in
+  # the keyring.
+  depends:
+    - gtk3
+    - libnotify
+    - nss
+    - libXScrnSaver
+    - (libXtst or libXtst6)
+    - xdg-utils
+    - at-spi2-core
+    - (libuuid or libuuid1)
+    - libsecret
 win:
   target:
     - nsis

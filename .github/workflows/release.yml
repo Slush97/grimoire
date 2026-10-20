@@ -235,6 +235,96 @@ jobs:
             --endpoint-url "$R2_ENDPOINT" \
             --cache-control "no-cache"
 
+  # The dnf counterpart of apt-publish: a fresh, signed, latest-only repo under
+  # rpm/ in the same bucket, served at rpm.grimoiremods.com by the grimoire-apt
+  # Worker. It reuses the apt signing key and R2 secrets. Off until the repo
+  # variable RPM_PUBLISH_ENABLED is "true". See docs/rpm-repo.md.
+  rpm-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') && inputs.draft != true && vars.RPM_PUBLISH_ENABLED == 'true'
+
+    permissions:
+      contents: read
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      BUCKET: grimoire-apt
+
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-build
+          path: artifacts
+
+      - name: Install rpm tooling
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm createrepo-c
+
+      - name: Import signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          GNUPGHOME="$(mktemp -d)"; export GNUPGHOME
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
+          FPR="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
+          echo "APT_GPG_FPR=$FPR" >> "$GITHUB_ENV"
+
+      # The package is signed here, not in the build job, so the key never
+      # shares a runner with pnpm install and its dependency scripts. The
+      # GitHub release .rpm stays unsigned; dnf doesn't check signatures on a
+      # local file. repomd.xml is signed too, for repo_gpgcheck.
+      - name: Build signed repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          RPM="artifacts/grimoire-${VERSION}.x86_64.rpm"
+          if [ ! -f "$RPM" ]; then
+            echo "ERROR: $RPM not found in artifacts"; ls -la artifacts; exit 1
+          fi
+          mkdir -p repo/packages
+          cp "$RPM" repo/packages/
+          # Ubuntu's rpm macros point __gpg at /usr/bin/gpg2, which noble no
+          # longer ships.
+          rpmsign --addsign --define "__gpg /usr/bin/gpg" --define "_gpg_name ${APT_GPG_FPR}" \
+            repo/packages/*.rpm
+          createrepo_c repo
+          gpg --batch --yes --armor --detach-sign -u "$APT_GPG_FPR" repo/repodata/repomd.xml
+          gpg --armor --export "$APT_GPG_FPR" > repo/grimoire.gpg
+          cat > repo/grimoire.repo <<'EOF'
+          [grimoire]
+          name=Grimoire
+          baseurl=https://rpm.grimoiremods.com
+          enabled=1
+          gpgcheck=1
+          repo_gpgcheck=1
+          gpgkey=https://rpm.grimoiremods.com/grimoire.gpg
+          metadata_expire=6h
+          EOF
+
+      # Same ordering and caching as apt-publish: packages first and immutable,
+      # then repodata as no-cache, since repomd.xml keeps its path every release.
+      - name: Publish to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 sync repo/packages/ "s3://${BUCKET}/rpm/packages/" --delete \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync repo/repodata/ "s3://${BUCKET}/rpm/repodata/" --delete \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "no-cache"
+          for f in grimoire.gpg grimoire.repo; do
+            aws s3 cp "repo/$f" "s3://${BUCKET}/rpm/$f" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --cache-control "no-cache"
+          done
+
   # The flatpak repackages the released .deb (same binaries users already run)
   # rather than building from source, so it can only be assembled after the
   # release exists. This job patches the manifest to this version, builds the

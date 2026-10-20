@@ -238,6 +238,7 @@ export default function UpdatesSection() {
                   components={{
                     arch: <code className="font-mono text-text-primary" />,
                     apt: <code className="font-mono text-text-primary" />,
+                    dnf: <code className="font-mono text-text-primary" />,
                   }}
                 />
               </p>
@@ -246,6 +247,7 @@ export default function UpdatesSection() {
                   i18nKey="settings.updates.installedDeb"
                   components={{
                     deb: <code className="font-mono text-text-primary" />,
+                    rpm: <code className="font-mono text-text-primary" />,
                     url: <code className="font-mono text-text-primary" />,
                   }}
                 />
