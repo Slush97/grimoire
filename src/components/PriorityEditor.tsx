@@ -113,7 +113,7 @@ export default function PriorityEditor({
         }
       }}
       className={`group/order-chip relative inline-flex items-center justify-center rounded-sm focus:outline-none before:absolute before:-inset-1 ${onCommit ? 'cursor-pointer' : 'cursor-default'}`}
-      aria-label={onCommit ? t('installed.priorityEditor.chipAriaLabel', { value }) : t('installed.folders.loadOrder', { value })}
+      aria-label={onCommit ? t('installed.priorityEditor.chipAriaLabel', { value }) : t('installed.lists.loadOrder', { value })}
     >
       <Tag
         // The visible chip deliberately uses the same geometry, neutral tone,

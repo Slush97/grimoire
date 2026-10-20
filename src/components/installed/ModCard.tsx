@@ -131,7 +131,6 @@ interface ModCardProps {
    *  membership never enables, disables, or reorders anything. */
   lists?: readonly ModList[];
   listIds?: readonly string[];
-  foldersView?: boolean;
   onToggleList?: (listId: string) => void;
   onCreateList?: () => void;
   entryKey?: string;
@@ -793,7 +792,6 @@ export function ModCard({
   onToggleFavorite,
   lists,
   listIds = EMPTY_LIST_IDS,
-  foldersView = false,
   onToggleList,
   onCreateList,
   entryKey,
@@ -1140,7 +1138,6 @@ export function ModCard({
       {(hasTopActions || modBackups.length > 0) && <MenuSeparator />}
       {hasListActions && lists && onToggleList && onCreateList && (
         <ModListSubmenu
-          folder={foldersView}
           lists={lists}
           memberIds={listIds}
           onToggle={onToggleList}

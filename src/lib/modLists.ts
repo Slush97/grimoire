@@ -123,17 +123,23 @@ export function writeStoredModLists(lists: readonly ModList[]): void {
  */
 export function createList(
   lists: readonly ModList[],
-  rawName: string
+  rawName: string,
+  initialKeys: readonly string[] = [],
 ): { lists: ModList[]; id: string | null } {
   const name = normalizeName(rawName);
   if (!name) return { lists: [...lists], id: null };
 
   const token = nameToken(name);
   const existing = lists.find((list) => nameToken(list.name) === token);
-  if (existing) return { lists: [...lists], id: existing.id };
+  if (existing) {
+    return {
+      lists: initialKeys.reduce((next, key) => addListMembership(next, existing.id, key), [...lists]),
+      id: existing.id,
+    };
+  }
 
   const id = uniqueListId(name, new Set(lists.map((list) => list.id)));
-  return { lists: [...lists, { id, name, keys: [] }], id };
+  return { lists: [...lists, { id, name, keys: [...new Set(initialKeys.filter(Boolean))] }], id };
 }
 
 /**
