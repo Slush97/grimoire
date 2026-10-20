@@ -3,6 +3,7 @@ import { downloadModFromUrl } from './download';
 import { getActiveDeadlockPath, loadSettings } from './settings';
 import { validateDownloadUrl } from './security';
 import { fetchModDetails } from './gamebanana';
+import { requestRequirementCheck } from './requirementInstallCheck';
 
 export const GRIMOIRE_PROTOCOL = 'grimoire';
 
@@ -119,6 +120,13 @@ export async function handleOneClickInstall(
         });
         return;
     }
+
+    if (parsed.modId && !await requestRequirementCheck(mainWindow, {
+        id: parsed.modId, section: parsed.modType ?? 'Mod', name: enrichedDetails?.name ?? String(parsed.modId),
+        requirements: enrichedDetails?.requirements ?? { status: 'unavailable', checkedAt: Date.now() },
+    })) return;
+    const afterReview = loadSettings();
+    if (afterReview.devMode !== settings.devMode || getActiveDeadlockPath(afterReview) !== deadlockPath) return;
 
     mainWindow?.webContents.send('one-click-install', {
         archiveUrl: parsed.archiveUrl,

@@ -33,6 +33,7 @@ import ForgeInstallModal from './ForgeInstallModal';
 import ImportCustomModsModal from './ImportCustomModsModal';
 import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
+import { RequirementsHost } from './requirements/RequirementsHost';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 export default function Layout() {
@@ -422,6 +423,7 @@ export default function Layout() {
           onSubmittingChange={setBatchImportBusy}
         />
       )}
+      <RequirementsHost />
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>
   );

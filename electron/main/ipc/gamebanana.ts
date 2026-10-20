@@ -47,6 +47,36 @@ import type {
 } from '../../../src/types/electron';
 import { updateModNsfw } from '../services/modDatabase';
 import { modUpdates } from '../services/modUpdates';
+import { getCachedRequirements, requirementTargetsSchema } from '../services/modRequirementCache';
+import { fetchModRequirements } from '../services/gamebanana';
+import { requirementKey } from '../../../src/lib/modRequirements';
+import type { ModRequirementSnapshot } from '../../../src/types/gamebanana';
+import { respondToRequirementCheck } from '../services/requirementInstallCheck';
+
+const requirementFetches = new Map<string, Promise<ModRequirementSnapshot>>();
+ipcMain.handle('get-mod-requirements', async (_, input: unknown, refresh: unknown) => {
+    const targets = requirementTargetsSchema.parse(input);
+    const result: Record<string, ModRequirementSnapshot> = {};
+    const unique = [...new Map(targets.map(target => [requirementKey(target), target])).values()];
+    for (let i = 0; i < unique.length; i += 4) {
+        await Promise.all(unique.slice(i, i + 4).map(async target => {
+            const key = requirementKey(target);
+            const cached = refresh === true ? undefined : getCachedRequirements(target);
+            if (cached) { result[key] = cached; return; }
+            let pending = requirementFetches.get(key);
+            if (!pending) {
+                pending = fetchModRequirements(target.id, target.section)
+                    .catch((): ModRequirementSnapshot => ({ status: 'unavailable', checkedAt: Date.now() }));
+                requirementFetches.set(key, pending);
+            }
+            try { result[key] = await pending; } finally { if (requirementFetches.get(key) === pending) requirementFetches.delete(key); }
+        }));
+    }
+    return result;
+});
+ipcMain.handle('requirement-install-check:respond', (event, requestId: unknown, accepted: unknown) => {
+    if (typeof requestId === 'string' && typeof accepted === 'boolean') respondToRequirementCheck(event.sender.id, requestId, accepted);
+});
 
 ipcMain.handle('gamebanana-download-proxy:get', () => getGameBananaDownloadProxyConfig());
 ipcMain.handle('gamebanana-download-proxy:set', async (_, config: unknown) => {

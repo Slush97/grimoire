@@ -2,6 +2,8 @@ import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
+import { parseRequirements } from '../../../src/lib/modRequirements';
+import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
@@ -225,6 +227,7 @@ interface UpdatesResponseRaw {
 }
 
 interface ModDetailsRaw {
+    _aRequirements?: unknown;
     _idRow: number;
     _sName: string;
     _sText?: string;
@@ -784,6 +787,28 @@ export async function fetchSubmissions(
 /**
  * Fetch mod details including files
  */
+export async function fetchModRequirements(modId: number, section = 'Mod') {
+    // WiPs do not expose structured requirements; selecting the field is a 400.
+    if (section === 'Wip') return parseRequirements(null);
+    const raw = await fetchJson<{ _aRequirements?: unknown }>(
+        `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_aRequirements`,
+    );
+    const snapshot = await normalizeRequirements(raw._aRequirements, modId, section);
+    cacheRequirements({ id: modId, section }, snapshot);
+    return snapshot;
+}
+
+async function normalizeRequirements(raw: unknown, modId: number, section: string) {
+    const snapshot = parseRequirements(raw);
+    if (snapshot.status === 'loaded' && snapshot.items.some(item => item.state === 'unknown' || item.importance === 'unknown')) {
+        try {
+            const profile = await fetchJson<{ _aRequirements?: unknown }>(`${GAMEBANANA_API_BASE}/${section}/${modId}/ProfilePage`);
+            return parseRequirements(profile._aRequirements);
+        } catch { /* Preserve unknown enums for manual review when labels are unavailable. */ }
+    }
+    return snapshot;
+}
+
 export async function fetchModDetails(
     modId: number,
     section = 'Mod',
@@ -803,15 +828,20 @@ export async function fetchModDetails(
     if (options.includeSubmitter) {
         fields.push('_aSubmitter');
     }
+    if (section !== 'Wip') fields.push('_aRequirements');
     const params = new URLSearchParams({ _csvProperties: fields.join(',') });
     const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?${params.toString()}`;
     debugGameBanana('[fetchModDetails] URL:', url);
     const raw = await fetchJson<ModDetailsRaw>(url);
 
+    const requirements = section === 'Wip' ? parseRequirements(null) : await normalizeRequirements(raw._aRequirements, modId, section);
+    cacheRequirements({ id: modId, section }, requirements);
+
     return {
         id: raw._idRow,
         name: raw._sName,
         description: raw._sText,
+        requirements,
         nsfw: raw._bIsNsfw ?? false,
         gameId: raw._aGame?._idRow,
         gameName: raw._aGame?._sName,

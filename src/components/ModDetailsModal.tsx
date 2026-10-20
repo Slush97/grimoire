@@ -52,10 +52,15 @@ import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import { showToast } from '../stores/toastStore';
 import { selectFileDownloadActivity, useDownloadActivity } from '../lib/downloadActivity';
 import type { ReplaceableFile } from '../lib/updateActions';
+import { RequirementsPanel } from './requirements/RequirementsPanel';
+import { useRequirementsStore } from '../stores/requirementsStore';
+import { hasRequirementIssues } from '../lib/modRequirements';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
 interface ModDetailsModalProps {
+  onBack?: () => void;
+  requirementsLayer?: boolean;
   mod: GameBananaModDetails;
   section: string;
   installed: boolean;
@@ -139,6 +144,8 @@ interface ModDetailsModalProps {
 }
 
 function ModDetailsModal({
+  onBack,
+  requirementsLayer = false,
   mod,
   section,
   installed,
@@ -177,6 +184,9 @@ function ModDetailsModal({
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  const requirementMods = useAppStore(state => state.mods);
+  const requirementSnapshot = useRequirementsStore(state => state.snapshots[`${section}:${mod.id}`]) ?? mod.requirements;
+  const requirementIssues = hasRequirementIssues(requirementSnapshot, requirementMods);
   // One app-wide queue snapshot drives every host of this popup. This keeps
   // Browse, Installed, and downloads started elsewhere in sync without each
   // page trying to reconstruct active/queued/progress state independently.
@@ -391,6 +401,8 @@ function ModDetailsModal({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const requirements = useRequirementsStore.getState();
+      if (!requirementsLayer && (requirements.review || requirements.targets.length)) return;
       if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
         if (deleteCandidate) {
@@ -440,6 +452,8 @@ function ModDetailsModal({
       if (isSideButton(e)) e.preventDefault();
     };
     const handleMouseUp = (e: MouseEvent) => {
+      const requirements = useRequirementsStore.getState();
+      if (!requirementsLayer && (requirements.review || requirements.targets.length)) return;
       if (!isSideButton(e)) return;
       e.preventDefault();
       if (lightboxOpen) {
@@ -463,6 +477,7 @@ function ModDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     onClose,
+    requirementsLayer,
     images.length,
     lightboxOpen,
     deleteCandidate,
@@ -791,7 +806,7 @@ function ModDetailsModal({
           )}
           {showDownloadButton && !swapActions && <Button
             type="button"
-            variant={isUpdate ? 'update' : !isInstalled ? 'primary' : 'secondary'}
+            variant={isUpdate ? 'update' : !isInstalled && !requirementIssues ? 'primary' : 'secondary'}
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
             className="min-w-[110px] max-w-full"
@@ -1207,6 +1222,7 @@ function ModDetailsModal({
               onClick={() => onChangeView(isSidebar ? 'modal' : 'sidebar')}
             />
           )}
+          {onBack && <Button size="sm" variant="ghost" icon={ChevronLeft} onClick={onBack}>{t('requirements.back')}</Button>}
           <IconButton
             icon={X}
             label={t('common.actions.close')}
@@ -1587,6 +1603,7 @@ function ModDetailsModal({
                 </div>
               )}
 
+              <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
               {filesSection}
 
               {submitter && (

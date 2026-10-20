@@ -68,6 +68,7 @@ import { Button } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
+import { checkQuickInstallRequirements } from '../stores/requirementsStore';
 import { HiddenCreatorsModal, HiddenModsModal } from '../components/HiddenContentManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -1923,6 +1924,11 @@ export default function Browse() {
       // decision. Only fall back to the full list when every file is archived.
       const liveFiles = details.files.filter((f) => !f.isArchived);
       const installable = liveFiles.length > 0 ? liveFiles : details.files;
+
+      if (!await checkQuickInstallRequirements({ id: mod.id, section, name: details.name,
+        requirements: details.requirements ?? { status: 'unavailable', checkedAt: Date.now() },
+      }, useAppStore.getState().mods)) return;
+      if (getActiveDeadlockPath(useAppStore.getState().settings) !== activeDeadlockPath) return;
 
       // When a mod has more than one installable file (different versions,
       // variant builds, etc.) we used to silently pick whichever had the

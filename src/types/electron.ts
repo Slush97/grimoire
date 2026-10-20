@@ -1178,6 +1178,9 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModRequirements: (targets: import('./gamebanana').GameBananaItemRef[], refresh?: boolean) => Promise<Record<string, import('./gamebanana').ModRequirementSnapshot>>;
+    onRequirementInstallCheck: (callback: (request: { requestId: string; source: import('./gamebanana').ModRequirementSource }) => void) => () => void;
+    respondToRequirementInstallCheck: (requestId: string, accepted: boolean) => Promise<void>;
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     getModUpdates: (args: GetModUpdatesArgs) => Promise<GameBananaModUpdatesResponse>;

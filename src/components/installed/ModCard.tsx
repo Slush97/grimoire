@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RequirementWarning } from '../requirements/RequirementWarning';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
@@ -675,6 +676,7 @@ function ModListRowContent({
         <div className="min-w-0">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
+          <RequirementWarning mod={mod} />
           <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
           <StaleModelTag models={mod.staleModels} variant="inline" />
         </div>
@@ -1474,6 +1476,7 @@ export function ModCard({
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
               {!selectMode && <CrashAdvisoryBadge variant="overlay" modIds={mod.crashModIds ?? [mod.id]} />}
+              {!selectMode && <RequirementWarning mod={mod} variant="overlay" />}
               {mod.nsfw && (
                 <Tag
                   tone="danger"

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../../src/types/mod';
 import type { GameBananaModDetails } from '../../../src/types/gamebanana';
 
-const h = vi.hoisted(() => ({ settings: {} as AppSettings, download: vi.fn(), details: vi.fn(), send: vi.fn() }));
+const h = vi.hoisted(() => ({ settings: {} as AppSettings, download: vi.fn(), details: vi.fn(), send: vi.fn(), check: vi.fn() }));
+vi.mock('./requirementInstallCheck', () => ({ requestRequirementCheck: h.check }));
 vi.mock('electron', () => ({ app: { getPath: () => '' } }));
 vi.mock('./download', () => ({ downloadModFromUrl: h.download }));
 vi.mock('./gamebanana', () => ({ fetchModDetails: h.details }));
@@ -23,9 +24,22 @@ beforeEach(() => {
     vi.clearAllMocks();
     h.settings = { deadlockPath: 'normal', devDeadlockPath: 'developer', devMode: false } as AppSettings;
     h.download.mockResolvedValue({ installedVpks: [] });
+    h.check.mockResolvedValue(true);
 });
 
 describe('one-click installation context', () => {
+    it('does not download when the requirements review is canceled', async () => {
+        h.details.mockResolvedValue(details);
+        h.check.mockResolvedValue(false);
+        await handleOneClickInstall(parsed, window);
+        expect(h.download).not.toHaveBeenCalled();
+    });
+    it('does not install into a different installation after the requirements review', async () => {
+        h.details.mockResolvedValue(details);
+        h.check.mockImplementation(async () => { h.settings = { ...h.settings, devMode: true }; return true; });
+        await handleOneClickInstall(parsed, window);
+        expect(h.download).not.toHaveBeenCalled();
+    });
     it.each([
         { devMode: true },
         { deadlockPath: 'another-install' },

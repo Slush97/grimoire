@@ -439,6 +439,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
+    getModRequirements: (targets, refresh) => ipcRenderer.invoke('get-mod-requirements', targets, refresh),
+    onRequirementInstallCheck: (callback) => {
+        const listener = (_: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]) => callback(request);
+        ipcRenderer.on('requirement-install-check', listener);
+        return () => ipcRenderer.removeListener('requirement-install-check', listener);
+    },
+    respondToRequirementInstallCheck: (requestId, accepted) => ipcRenderer.invoke('requirement-install-check:respond', requestId, accepted),
     getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     getModUpdates: (args: GetModUpdatesArgs) => ipcRenderer.invoke('get-mod-updates', args),

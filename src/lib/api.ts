@@ -926,7 +926,12 @@ export async function getModDetails(
   section?: string,
   options: { includeSubmitter?: boolean } = {}
 ): Promise<GameBananaModDetails> {
-  return window.electronAPI.getModDetails({ modId, section, ...options });
+  const details = await window.electronAPI.getModDetails({ modId, section, ...options });
+  if (details.requirements) {
+    const { useRequirementsStore } = await import('../stores/requirementsStore');
+    useRequirementsStore.getState().remember({ id: modId, section: section ?? 'Mod' }, details.requirements);
+  }
+  return details;
 }
 
 export async function getModComments(modId: number, section?: string, page = 1): Promise<GameBananaCommentsResponse> {

@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest';
+import { hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, type RequirementMod } from './modRequirements';
+import type { MergedModInfo } from '../types/mod';
+import type { ModRequirement } from '../types/gamebanana';
+
+const requirement: ModRequirement = { name: 'Original Model Replacement Mod', url: 'https://gamebanana.com/mods/704252', state: 'on', importance: 'required' };
+const base = (enabled: boolean): RequirementMod => ({ id: 'base', name: 'Livewire Lunatic Seven', enabled, gameBananaId: 704252, sourceSection: 'Mod' });
+
+describe('GameBanana requirement parsing', () => {
+  it('parses the live four-column response without losing the target', () => {
+    expect(parseRequirements([['Original Model Replacement Mod', requirement.url, '1', '7']], 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [requirement] });
+  });
+  it('normalizes the labeled ProfilePage response', () => {
+    expect(parseRequirements([['Original Model Replacement Mod', requirement.url, 'On', 'BlueColor', 'Required', 'OrangeColor']], 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [requirement] });
+  });
+  it('distinguishes empty requirements from an omitted or malformed response', () => {
+    for (const raw of [null, []]) expect(parseRequirements(raw, 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [] });
+    for (const raw of [undefined, {}, [['model']], [['model', '', 1, 7]]]) expect(parseRequirements(raw, 100)).toEqual({ status: 'unavailable', checkedAt: 100 });
+  });
+  it('removes unsafe links and preserves text-only requirements', () => {
+    const result = parseRequirements([['Manual step', 'javascript:alert(1)', 'On', '', 'Required', '']]);
+    expect(result.status === 'loaded' && result.items[0]).toEqual({ name: 'Manual step', url: undefined, state: 'on', importance: 'required' });
+  });
+  it('keeps unrecognized enum codes for manual review', () => {
+    const result = parseRequirements([['Unknown', '', '999', '999']]);
+    expect(result.status === 'loaded' && result.items[0]).toMatchObject({ state: 'unknown', importance: 'unknown' });
+  });
+  it('keeps optional requirements out of warnings', () => {
+    const optional = { ...requirement, importance: 'optional' } satisfies ModRequirement;
+    expect(matchRequirement(optional, []).state).toBe('optional');
+  });
+});
+
+describe('installed requirement state', () => {
+  it('distinguishes missing, installed but disabled, and enabled', () => {
+    expect(matchRequirement(requirement, []).state).toBe('missing');
+    expect(matchRequirement(requirement, [base(false)]).state).toBe('disabled');
+    expect(matchRequirement(requirement, [base(false), { ...base(true), id: 'other-file' }]).state).toBe('enabled');
+  });
+  it('does not confuse equal numeric IDs in different sections', () => {
+    expect(matchRequirement(requirement, [{ ...base(true), sourceSection: 'Sound' }]).state).toBe('missing');
+  });
+  it('counts an enabled merged source and ignores its old enabled flag', () => {
+    const merged: MergedModInfo = { id: 'merge', createdAt: '', shareCode: '', sources: [{ fileName: 'base.vpk', modName: 'Base', gameBananaId: 704252, section: 'Mod', enabledAtMergeTime: false, priorityAtMergeTime: 1 }] };
+    const mod = { id: 'merged', name: 'Merged', enabled: true, merged } satisfies RequirementMod;
+    expect(matchRequirement(requirement, [mod]).state).toBe('enabled');
+    expect(matchRequirement(requirement, [{ ...mod, enabled: false }]).state).toBe('disabled');
+    expect(modRequirementRefs(mod)).toEqual([{ id: 704252, section: 'Mod' }]);
+  });
+  it('handles requirements that must be disabled without toggling anything', () => {
+    const off = { ...requirement, state: 'off' } satisfies ModRequirement;
+    expect(matchRequirement(off, [base(true)]).state).toBe('manual');
+    expect(matchRequirement(off, [base(false)]).state).toBe('met');
+  });
+  it('requires manual review for external links and unknown states', () => {
+    expect(matchRequirement({ ...requirement, url: 'https://example.com/manual' }, []).state).toBe('manual');
+    expect(matchRequirement({ ...requirement, state: 'unknown' }, [base(true)]).state).toBe('manual');
+  });
+  it('never treats unavailable data as a satisfied check', () => {
+    expect(hasRequirementIssues(undefined, [])).toBe(false);
+    expect(hasRequirementIssues({ status: 'unavailable', checkedAt: 100 }, [])).toBe(true);
+    expect(hasRequirementIssues({ status: 'loaded', checkedAt: 100, items: [] }, [])).toBe(false);
+  });
+});

@@ -98,6 +98,7 @@ export interface GameBananaFile {
 }
 
 export interface GameBananaModDetails {
+  requirements?: ModRequirementSnapshot;
   id: number;
   name: string;
   description?: string;
@@ -108,6 +109,22 @@ export interface GameBananaModDetails {
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
   submitter?: GameBananaSubmitter;
+}
+
+export interface ModRequirement {
+  name: string;
+  url?: string;
+  importance: 'required' | 'optional' | 'unknown';
+  state: 'on' | 'off' | 'unknown';
+}
+
+export type ModRequirementSnapshot =
+  | { status: 'loaded'; checkedAt: number; items: ModRequirement[] }
+  | { status: 'unavailable'; checkedAt: number };
+
+export interface ModRequirementSource extends GameBananaItemRef {
+  name: string;
+  requirements: ModRequirementSnapshot;
 }
 
 /** One row of a mod's file list as the Installed update check reads it. */
