@@ -2,6 +2,8 @@ import { formatDateParts } from '../lib/dateFormat';
 
 export interface GameBananaMod {
   id: number;
+  /** Item identity is section + id in a combined Browse feed. */
+  section?: string;
   name: string;
   profileUrl: string;
   dateAdded: number;

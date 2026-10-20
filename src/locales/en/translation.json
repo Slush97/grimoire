@@ -2898,7 +2898,9 @@
     "section": {
       "sounds": "Sounds",
       "wips": "WiPs",
-      "label": "Section"
+      "label": "Section",
+      "combineHint": "Click to include or exclude a section. Keep at least one selected.",
+      "catalogHint": "Choose a section. Combined feeds are available after the catalog syncs."
     },
     "search": {
       "placeholder": "Search mods...",
