@@ -2,6 +2,7 @@ import { Fragment, useId, type CSSProperties, type ReactNode } from 'react';
 import { ChevronRight, List } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../common/ui';
+import { EmptyState } from '../common/PageComponents';
 import { ModListGlyph } from './ModListIcon';
 import { installedListEntryKey, type InstalledListGroup } from '../../lib/installedListGroups';
 import type { ModEntry } from '../../lib/modEntries';
@@ -59,12 +60,13 @@ export function InstalledListGroups({ groups, collapsed, showEmpty, mountLimit, 
 }) {
   const { t } = useTranslation();
   const visibleGroups = groups.filter((group) => showEmpty || group.entries.length > 0);
-  if (groups.length === 0) return <div className="flex flex-col items-center gap-3 py-12 text-center">
-    <List className="h-8 w-8 text-text-tertiary" aria-hidden />
-    <h2 className="font-reaver text-base text-text-primary">{t('installed.lists.emptyTitle')}</h2>
-    <p className="max-w-sm text-sm text-text-secondary">{t('installed.lists.emptyHint')}</p>
-    <Button variant="secondary" onClick={onManage}>{t('installed.lists.manageTitle')}</Button>
-  </div>;
+  if (groups.length === 0) return <EmptyState
+    icon={List}
+    title={t('installed.lists.emptyTitle')}
+    description={t('installed.lists.emptyHint')}
+    action={<Button variant="secondary" onClick={onManage}>{t('installed.lists.manageTitle')}</Button>}
+    className="py-12"
+  />;
   if (visibleGroups.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">{t('installed.lists.noMatches')}</p>;
   const mountLimits = new Map<string, number>();
   let remaining = mountLimit;
