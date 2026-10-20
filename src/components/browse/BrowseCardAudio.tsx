@@ -14,7 +14,7 @@ export function BrowseCardAudio({ src, volume, onVolumeChange, onPlayingChange, 
   const [volumeOpen, setVolumeOpen] = useState(false);
   return (
     <div
-      className="absolute inset-x-2 bottom-2 z-10 flex h-10 items-center gap-2 rounded-sm border border-border bg-bg-sunken/95 px-2 text-text-primary"
+      className="absolute inset-x-2 bottom-2 z-10 flex h-10 items-center gap-2 rounded-sm border border-border bg-bg-sunken px-2 text-text-primary"
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
