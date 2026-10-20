@@ -7,7 +7,9 @@ or provide a proxy server.
 
 Enable the switch and save, then run Download servers > Test now. Server tests,
 the GameBanana download redirects and the files themselves use that route. Browse
-requests, other Grimoire services, Steam and the game keep their existing route.
+requests, other Grimoire services, Steam and the game keep their existing route (a
+GameBanana API request that fails over Node's network stack is retried once through
+Chromium, which follows the system proxy settings).
 SOCKS5 destination hostnames are resolved by the proxy.
 
 The proxy starts disabled. A configured proxy that is unavailable causes a
