@@ -29,6 +29,9 @@ describe('appStore Browse section filters', () => {
     setBrowseUi({ selectedSections: ['Mod', 'Sound'] });
     setBrowseUi({ submitter: sqooky });
     expect(useAppStore.getState().browseUi.selectedSections).toEqual(['Mod']);
+    setBrowseUi({ submitter: undefined, selectedSections: ['Mod', 'Sound'] });
+    setBrowseUi({ submitter: sqooky, section: 'Sound' });
+    expect(useAppStore.getState().browseUi).toMatchObject({ section: 'Sound', selectedSections: ['Sound'] });
   });
 
   it('clears Sounds-only No hero when combining sections', () => {

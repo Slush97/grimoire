@@ -2262,7 +2262,7 @@ export default function Browse() {
   const viewArtist = useStableCallback((artist: BrowseArtistRef) => {
     if (!artist?.id) return;
     closeSelectedMod();
-    setBrowseUi({ submitter: artist });
+    setBrowseUi({ submitter: artist, section: selectedDetailsSection });
     scrollContainerRef.current?.scrollTo({ top: 0 });
   });
   const clearArtist = () => setBrowseUi({ submitter: undefined });
