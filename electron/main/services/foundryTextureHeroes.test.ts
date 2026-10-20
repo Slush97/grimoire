@@ -70,6 +70,27 @@ describe('Foundry texture hero grouping', () => {
         expect(normalizeTextureHeroes(rows, heroes, { hero: 'viper' }).map((entry) => entry.path)).toEqual([entries[0].path]);
     });
 
+    it('groups backgrounds, reworked models and ability folders filed under asset-only names', () => {
+        const roster: HeroInfo[] = [
+            ['ghost', 'Lady Geist'], ['orion', 'Grey Talon'], ['bookworm', 'Paige'],
+            ['gigawatt', 'Seven'], ['chessmaster', 'Solomon'], ['deadpack', 'Deadman Danny'],
+        ].map(([codename, name]) => ({ codename, name, selectable: true, inDevelopment: false, disabled: false }));
+        const rows: TextureEntry[] = [
+            { path: 'panorama/images/heroes/backgrounds/geist_bg_psd.vtex_c', category: 'hero-image', hero: 'geist', label: 'bg' },
+            { path: 'panorama/images/heroes/backgrounds/grey_talon_bg_psd.vtex_c', category: 'hero-image', hero: 'grey', label: 'bg' },
+            { path: 'panorama/images/heroes/backgrounds/patience_bg_psd.vtex_c', category: 'hero-image', hero: 'patience', label: 'bg' },
+            { path: 'models/heroes_wip/geist/materials/geist_arm_vmat_g_tcolor_c36f4af0.vtex_c', category: 'hero-model', hero: 'geist', label: 'arm' },
+            { path: 'models/heroes_staging/grey_talon/materials/grey_talon_owl_body_color_png_174cf8c6.vtex_c', category: 'hero-model', hero: 'grey_talon', label: 'owl' },
+            { path: 'panorama/images/hud/abilities/giga_ball_psd.vtex_c', category: 'ability-icon', hero: null, label: 'giga ball' },
+            { path: 'panorama/images/hud/abilities/chess/chessmaster_bishop_psd.vtex_c', category: 'ability-icon', hero: 'chess', label: 'bishop' },
+            { path: 'materials/particle/abilities/airheart/airheart_skull_icon.vtex_c', category: 'ability-vfx', hero: 'airheart', label: 'skull' },
+        ];
+        expect(normalizeTextureHeroes(rows, roster).map((entry) => entry.hero)).toEqual([
+            'ghost', 'orion', 'bookworm', 'ghost', 'orion', 'gigawatt', 'chessmaster', 'deadpack',
+        ]);
+        expect(normalizeTextureHeroes(rows, roster, { hero: 'ghost' }).map((entry) => entry.path)).toEqual([rows[0].path, rows[3].path]);
+    });
+
     it('does not match a hero name that is only a substring', () => {
         const row = { ...entries[2], hero: 'bullfrog' };
         expect(normalizeTextureHeroes([row], heroes)[0].hero).toBe('bullfrog');

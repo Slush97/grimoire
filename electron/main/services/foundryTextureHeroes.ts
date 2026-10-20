@@ -6,6 +6,22 @@ import { codenamesForHero } from './heroCodenames';
 // Vyper in game.
 const HERO_IMAGE_ONLY_ALIASES = new Set(['kali']);
 
+// Asset-path codenames that are neither the class_name nor a card alias, so
+// they stay out of PANORAMA_CODENAME_ALIASES (the card scanners share it).
+// Backgrounds and reworked models use names like geist_bg_psd and
+// heroes_wip/geist, which a display name with a space never matches. Checked
+// against the game's vdata: Seven's abilities use giga_*.psd icons, Solomon's
+// use abilities/chess/, Grey Talon's owl is heroes_staging/grey_talon, and
+// Deadman Danny's abilities are the only users of the airheart particles.
+const ASSET_CODENAME_ALIASES: Readonly<Record<string, string[]>> = {
+    'Deadman Danny': ['airheart'],
+    'Grey Talon': ['grey', 'grey_talon'],
+    'Lady Geist': ['geist'],
+    Paige: ['patience'],
+    Seven: ['giga'],
+    Solomon: ['chess'],
+};
+
 function heroAliases(heroes: HeroInfo[], heroImages: boolean): Map<string, string> {
     const aliases = new Map<string, string>();
     for (const hero of heroes) {
@@ -18,6 +34,7 @@ function heroAliases(heroes: HeroInfo[], heroImages: boolean): Map<string, strin
         for (const alias of codenamesForHero(hero.name)) {
             if (heroImages || !HERO_IMAGE_ONLY_ALIASES.has(alias)) aliases.set(alias.toLowerCase(), hero.codename);
         }
+        for (const alias of ASSET_CODENAME_ALIASES[hero.name] ?? []) aliases.set(alias, hero.codename);
     }
     return aliases;
 }
