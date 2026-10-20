@@ -100,6 +100,7 @@ import { mergeSourceFileIds } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
+import { entryCardShell } from '../components/installed/entryCardShell';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -229,45 +230,33 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
-  const isList = cardProps.viewMode === 'list';
+  const shell = entryCardShell(cardProps.viewMode === 'list');
   const style: CSSProperties = {
+    ...shell.style,
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
-    position: 'relative',
     zIndex: isDragging ? 1 : undefined,
-    // Sizing estimate for the content-visibility skip. The property itself lives
-    // in className (not here) so a :hover variant can lift it, see below. The
-    // `auto` keyword keeps the real size once a card has been rendered; the
-    // estimate only stands in before first view. dnd-kit drag measurement is
-    // unaffected: offscreen items still have placeholder boxes.
-    containIntrinsicSize: isList ? 'auto 72px' : 'auto 280px',
   };
 
   return (
     <div
       ref={setNodeRef}
       data-installed-entry-key={cardProps.entry.key}
-      // content-visibility:auto skips layout + paint for offscreen cards (most of
-      // the cost of mounting a large library) but implies contain:paint, which
-      // clips whatever the card paints outside its box AND traps it in its own
-      // stacking context. On grid/compact the enabled-card :hover lifts + scales
-      // the card: that expansion would be cropped and stuck behind neighbors. So
-      // on hover we lift containment (-> visible) and raise z so the expanded card
-      // renders whole and on top. The has-menu-open lift does the same for an open
-      // action menu that would otherwise paint behind the next card.
-      // overflow-anchor:none opts every card out of the browser's scroll
-      // anchoring. Without it, pinning a card near the bottom of a long library
-      // dragged the viewport along with it: Chrome had picked that card as the
-      // scroll anchor, so when the star moved it to the top of the disabled
-      // section the scroller "helpfully" followed it thousands of pixels up.
-      // Excluding cards leaves the grid container as the anchor, which never
-      // moves on a reorder, so the view stays put through pin / unpin / delete.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [overflow-anchor:none] [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      className={`${shell.className} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...(sortableDisabled ? {} : attributes)}
       {...(sortableDisabled ? {} : listeners)}
     >
+      <InstalledEntryCard {...cardProps} />
+    </div>
+  );
+}, sameEntryCardProps);
+
+/** Lists-view grid item: the same shell as SortableEntryCard, without dnd-kit. */
+const StaticEntryCard = memo(function StaticEntryCard(cardProps: InstalledEntryCardProps) {
+  return (
+    <div data-installed-entry-key={cardProps.entry.key} {...entryCardShell(cardProps.viewMode === 'list')}>
       <InstalledEntryCard {...cardProps} />
     </div>
   );
@@ -322,7 +311,11 @@ interface InstalledEntryCardProps {
   onCommitPriority?: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
   onCopyShareCode: (mod: Mod) => void;
-  onSelectToggle: (entry: ModEntry, shiftKey: boolean) => void;
+  /** Selection key when the same entry renders more than once (Lists view);
+   *  undefined means entry.key. Passed as data, not baked into a per-card
+   *  onSelectToggle closure, so the memo holds. */
+  occurrenceKey: string | undefined;
+  onSelectToggle: (entry: ModEntry, shiftKey: boolean, occurrenceKey: string | undefined) => void;
   onToggleFavorite: (entry: ModEntry) => void;
   /** All user lists, for the card's "Add to list" submenu. */
   lists: readonly ModList[];
@@ -375,6 +368,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onCommitPriority,
   onUnmerge,
   onCopyShareCode,
+  occurrenceKey,
   onSelectToggle,
   onToggleFavorite,
   lists,
@@ -432,7 +426,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         selectMode={selectMode}
         shiftHeld={shiftHeld}
         selected={selected}
-        onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
+        onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey, occurrenceKey)}
         favorite={favorite}
         // Settable in both sections: starring while enabled pre-pins the entry
         // for the moment it later gets disabled. On an enabled card the star is
@@ -508,7 +502,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       selectMode={selectMode}
       shiftHeld={shiftHeld}
       selected={selected}
-      onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey)}
+      onSelectToggle={(event) => onSelectToggle(entry, event.shiftKey, occurrenceKey)}
       favorite={favorite}
       onToggleFavorite={() => onToggleFavorite(entry)}
       // A group shares one preference key with its variants, so filing the card
@@ -3474,7 +3468,8 @@ export default function Installed() {
     onCommitPriority: listsView ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
-    onSelectToggle: occurrenceKey ? (selectedEntry, shiftKey) => selectToggleEntry(selectedEntry, shiftKey, occurrenceKey) : selectToggleEntry,
+    occurrenceKey,
+    onSelectToggle: selectToggleEntry,
     onToggleFavorite: toggleEntryFavorite,
     lists: modLists,
     listIds: entryListIds.get(entry.key) ?? EMPTY_LIST_IDS,
@@ -3483,6 +3478,13 @@ export default function Installed() {
   });
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
+
+  const gridClasses =
+    layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
+  const gridStyle =
+    layout === 'list'
+      ? undefined
+      : cardSizeGridStyle;
 
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
@@ -3493,13 +3495,6 @@ export default function Installed() {
     const activeEntry = draggingSection === section
       ? entries.find((entry) => entry.key === draggingKey)
       : undefined;
-    const gridClasses =
-      layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
-    const gridStyle =
-      layout === 'list'
-        ? undefined
-        : cardSizeGridStyle;
-
     return (
       <DndContext
         sensors={sortableSensors}
@@ -4165,9 +4160,10 @@ export default function Installed() {
         showEmpty={!searchNeedle && !filtersActive}
         onToggle={toggleList}
         onManage={() => setManagingLists(true)}
-        gridClassName={layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4'}
-        gridStyle={layout === 'list' ? undefined : cardSizeGridStyle}
-        renderEntry={(entry, occurrence) => <div data-installed-entry-key={entry.key}><InstalledEntryCard {...cardPropsFor(entry, occurrence)} /></div>}
+        gridClassName={gridClasses}
+        gridStyle={gridStyle}
+        mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}
+        renderEntry={(entry, occurrence) => <StaticEntryCard {...cardPropsFor(entry, occurrence)} />}
       />}
       {!listsView && (visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
         <div className="mb-6">
