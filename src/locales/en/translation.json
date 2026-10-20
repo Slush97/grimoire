@@ -2997,7 +2997,14 @@
       "outdatedPrefix": "Outdated · "
     },
     "errors": {
-      "noDownloadableFiles": "No downloadable files found"
+      "noDownloadableFiles": "No downloadable files found",
+      "connection": "Couldn't reach GameBanana. Check your connection and try again.",
+      "timeout": "GameBanana took too long to respond. Try again. If this keeps happening, check your connection or try another network.",
+      "rateLimited": "GameBanana is rate-limiting Grimoire. Wait a minute, then try again.",
+      "blocked": "GameBanana refused Grimoire's request. The website may still work in your browser. Try again later, or share the technical details with support if this continues.",
+      "unavailable": "GameBanana couldn't return the mod list. Try again later.",
+      "unexpected": "Grimoire couldn't load the mod list. Try again. If this keeps happening, share the technical details with support.",
+      "technicalDetails": "Technical details"
     }
   },
   "modDetails": {
