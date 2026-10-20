@@ -14,7 +14,8 @@ interface ManageModListsModalProps {
   lists: readonly ModList[];
   counts: ReadonlyMap<string, number>;
   onClose: () => void;
-  onCreate: (name: string) => void;
+  /** False when the name is taken and nothing was created. */
+  onCreate: (name: string) => boolean;
   onRename: (id: string, name: string) => boolean;
   onIcon: (id: string, icon: ModListIcon) => void;
   onDelete: (id: string) => void;
@@ -76,12 +77,13 @@ function ListRow({ list, count, busy, onRename, onIcon, onDelete, onSetEnabled }
 export function ManageModListsModal({ lists, counts, onClose, onCreate, onRename, onIcon, onDelete, onSetEnabled, progress }: ManageModListsModalProps) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
+  const [nameTaken, setNameTaken] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ModList | null>(null);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || progress) return;
-    onCreate(name.trim());
-    setName('');
+    if (onCreate(name.trim())) setName('');
+    else setNameTaken(true);
   };
   return <>
     <Modal onClose={onClose} labelledBy="manage-mod-lists-title" size="md" dismissable={!progress} panelClassName="h-[min(400px,100%)]">
@@ -96,9 +98,12 @@ export function ManageModListsModal({ lists, counts, onClose, onCreate, onRename
         </ul> : <p className="py-8 text-center text-sm text-text-secondary">{t('installed.lists.emptyHint')}</p>}
       </ModalBody>
       <ModalFooter>
-        <form onSubmit={submit} className="flex w-full items-center gap-2">
-          <div className="min-w-0 flex-1"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('installed.lists.namePlaceholder')} aria-label={t('installed.lists.createTitle')} maxLength={80} disabled={!!progress} /></div>
-          <Button type="submit" variant="secondary" icon={Plus} disabled={!name.trim() || !!progress}>{t('installed.lists.createTitle')}</Button>
+        <form onSubmit={submit} className="w-full">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1"><Input value={name} onChange={(event) => { setName(event.target.value); setNameTaken(false); }} placeholder={t('installed.lists.namePlaceholder')} aria-label={t('installed.lists.createTitle')} aria-invalid={nameTaken} maxLength={80} disabled={!!progress} /></div>
+            <Button type="submit" variant="secondary" icon={Plus} disabled={!name.trim() || !!progress}>{t('installed.lists.createTitle')}</Button>
+          </div>
+          {nameTaken && <p className="mt-1 text-xs text-state-danger">{t('installed.lists.duplicateName')}</p>}
         </form>
       </ModalFooter>
     </Modal>

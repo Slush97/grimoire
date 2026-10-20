@@ -2726,13 +2726,17 @@ export default function Installed() {
   // name of a list you already have files it there instead of duplicating.
   // Filing is add-only for exactly that reason: a toggle here would un-file a
   // mod that is already in the list whose name was typed.
-  const createModList = useStableCallback((name: string, keys: readonly string[]) => {
+  // With nothing to file (Manage's create box), a taken name changes nothing,
+  // so it reports false and the dialog says the name is in use.
+  const createModList = useStableCallback((name: string, keys: readonly string[]): boolean => {
     const { lists, id } = createList(modLists, name, keys);
-    if (!id) return;
+    const existing = modLists.find((list) => list.id === id);
+    if (!id || (existing && keys.length === 0)) return false;
     commitModLists(lists);
     updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => key !== id) });
     setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => key !== id) }));
-    showToast(keys.length > 0 ? t('installed.lists.addedTo', { name }) : t('installed.lists.created', { name }), { tone: 'success' });
+    showToast(keys.length > 0 ? t('installed.lists.addedTo', { name: existing?.name ?? name }) : t('installed.lists.created', { name }), { tone: 'success' });
+    return true;
   });
   const renameModList = useStableCallback((id: string, name: string) => {
     // renameList no-ops on a rejected name (blank, or taken by another list)
