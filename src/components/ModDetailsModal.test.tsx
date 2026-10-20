@@ -6,6 +6,7 @@ import type { AppSettings } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
 import ModDetailsModal from './ModDetailsModal';
 import PreferencesSection from './settings/sections/PreferencesSection';
+import { useRequirementsStore } from '../stores/requirementsStore';
 
 const mocks = vi.hoisted(() => ({
   store: { settings: {} as AppSettings, soundVolume: 1, saveSettings: vi.fn() },
@@ -62,8 +63,25 @@ describe('file replacement preferences', () => {
   });
   afterEach(() => {
     act(() => root.unmount());
+    useRequirementsStore.getState().finish(false);
     host.remove();
     window.electronAPI = previousApi;
+  });
+
+  it('removes the original backdrop while navigating requirements and restores the same details tree', async () => {
+    await render(false, { variant: 'modal' });
+    const original = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(original.style.display).toBe('');
+    await act(async () => useRequirementsStore.getState().openTarget({ id: 704252, section: 'Mod' }));
+    expect(original.style.display).toBe('none');
+    expect(original.getAttribute('aria-hidden')).toBe('true');
+    await act(async () => useRequirementsStore.getState().back());
+    expect(document.querySelector('[role="dialog"]')).toBe(original);
+    expect(original.style.display).toBe('');
+    expect(original.getAttribute('aria-hidden')).toBeNull();
+    await render(false, { variant: 'modal', requirementsLayer: true });
+    await act(async () => useRequirementsStore.getState().openTarget({ id: 704252, section: 'Mod' }));
+    expect(original.style.display).toBe('');
   });
 
   it('keeps the resume-updates control visible and blocks duplicate toggles while saving', async () => {

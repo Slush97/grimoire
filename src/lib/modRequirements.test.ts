@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, type RequirementMod } from './modRequirements';
-import type { MergedModInfo } from '../types/mod';
+import { installedRequirementOrder } from './requirementLoadOrder';
+import type { MergedModInfo, Mod } from '../types/mod';
 import type { ModRequirement } from '../types/gamebanana';
 
 const requirement: ModRequirement = { name: 'Original Model Replacement Mod', url: 'https://gamebanana.com/mods/704252', state: 'on', importance: 'required' };
@@ -28,6 +29,29 @@ describe('GameBanana requirement parsing', () => {
   it('keeps optional requirements out of warnings', () => {
     const optional = { ...requirement, importance: 'optional' } satisfies ModRequirement;
     expect(matchRequirement(optional, []).state).toBe('optional');
+  });
+});
+
+describe('Installed requirement load order', () => {
+  const source = { id: 711434, section: 'Mod' };
+  const installed = (id: string, gameBananaId: number, priority: number, metaKey = `${id}.vpk`): Mod => ({
+    id, gameBananaId, priority, metaKey, name: id, fileName: `${id}.vpk`, path: '', size: 0, installedAt: '', enabled: true,
+  });
+  it('shows actual folder precedence rather than assuming the dependency loads first', () => {
+    const recolor = installed('recolor', source.id, 2);
+    const original = installed('base', 704252, 8);
+    expect(installedRequirementOrder(source, requirement, [original, recolor]).map(mod => mod.id)).toEqual(['recolor', 'base']);
+    expect(installedRequirementOrder(source, requirement, [{ ...original, metaKey: 'grimoire/base.vpk' }, recolor]).map(mod => mod.id)).toEqual(['base', 'recolor']);
+    expect(installedRequirementOrder(source, requirement, [{ ...original, metaKey: 'addons1/base.vpk', priority: 1 }, recolor]).map(mod => mod.id)).toEqual(['recolor', 'base']);
+  });
+  it('shows no pair for a disabled source, a missing dependency, or a single merged VPK', () => {
+    const recolor = installed('recolor', source.id, 2);
+    const original = installed('base', 704252, 8);
+    expect(installedRequirementOrder(source, requirement, [{ ...recolor, enabled: false }, original])).toEqual([]);
+    expect(installedRequirementOrder(source, requirement, [recolor])).toEqual([]);
+    const merged = { ...recolor, merged: { id: 'merge', createdAt: '', shareCode: '', sources: [{ fileName: 'base.vpk', modName: 'Base', gameBananaId: 704252, section: 'Mod', enabledAtMergeTime: true, priorityAtMergeTime: 8 }] } } satisfies Mod;
+    expect(installedRequirementOrder(source, requirement, [merged])).toEqual([]);
+    expect(installedRequirementOrder(source, { ...requirement, state: 'off' }, [recolor, original])).toEqual([]);
   });
 });
 

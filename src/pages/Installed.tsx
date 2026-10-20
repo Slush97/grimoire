@@ -75,6 +75,7 @@ import {
 } from '../lib/mergeSourceUpdate';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { useInstalledRequirements } from '../components/requirements/useInstalledRequirements';
+import { RequirementsControl } from '../components/requirements/RequirementsControl';
 import { useRequirementsStore } from '../stores/requirementsStore';
 import { hasRequirementIssues, modRequirementRefs, requirementKey } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
@@ -1303,6 +1304,7 @@ export default function Installed() {
     setTagFilter([]);
     setListFilter([]);
     setRequirementsOnly(false);
+    setSortMode('priority');
     setEnabledCollapsed(false);
     setDisabledCollapsed(false);
     setGridWarm(true);
@@ -3668,8 +3670,7 @@ export default function Installed() {
       )}
     </div>
   ) : null;
-  const topStatusActions =
-    hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
+  const topStatusActions = (
       <div className="flex flex-wrap items-center gap-2">
         {statusButtons}
         {enabledModCount > 0 && (
@@ -3688,21 +3689,20 @@ export default function Installed() {
             title={t('installed.actions.copyEnabledHint')}
           />
         )}
-        {viewIsReorderable && (
           <Button
             variant="secondary"
+            disabled={!viewIsReorderable}
             onClick={fixOrder}
             icon={Wrench}
             className="!px-2.5"
             aria-label={t('installed.actions.fixOrder')}
             title={t('installed.actions.fixOrderHint')}
           />
-        )}
       </div>
-    ) : null;
+    );
 
   return (
-    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
+    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
       <div
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
@@ -3710,11 +3710,8 @@ export default function Installed() {
             : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
         }`}
       >
-        {/* Row 1: search + view controls. The search takes every pixel the
-            controls don't need (uncapped flex-1) so there's no dead gap at wide
-            window widths, and shrinks to min-w instead of pushing the controls
-            onto a right-aligned orphan row when cramped. */}
-        <div className="flex items-center gap-2 lg:gap-3">
+        {/* Narrow windows give search its own row so controls wrap together. */}
+        <div className="flex flex-col items-stretch gap-2 xl:flex-row xl:items-center xl:gap-3">
           <div className="relative min-w-[11rem] flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
             <input
@@ -3735,13 +3732,12 @@ export default function Installed() {
               </button>
             )}
           </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-start gap-2 xl:ml-auto xl:justify-end">
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
                 claiming a second strip below the search. Copy-enabled sits
                 inside topStatusActions, immediately after Fix Unknown. */}
-            <Button size="sm" variant={requirementsOnly ? 'secondary' : 'ghost'} aria-pressed={requirementsOnly}
-              onClick={() => setRequirementsOnly(value => !value)}>{t('requirements.title')}{requirementIssueIds.size > 0 && <span className="text-state-warning">{requirementIssueIds.size}</span>}</Button>
+            <RequirementsControl count={requirementIssueIds.size} active={requirementsOnly} onClick={() => setRequirementsOnly(value => !value)} />
             {topStatusActions}
             {/* Retroactive bulk imprint launcher (experimental, opt-in).
                 Icon-only, same shape/height as the other toolbar icon buttons

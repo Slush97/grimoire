@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ExternalLink, Link2, RefreshCw } from 'lucide-react';
+import { ArrowDownUp, ArrowUpRight, Check, ChevronRight, ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import { Button, Tag } from '../common/ui';
 import { parseGameBananaItemUrl, type ModRequirementSource } from '../../types/gamebanana';
 import { matchRequirement, requirementKey } from '../../lib/modRequirements';
+import { installedRequirementOrder } from '../../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../../stores/requirementsStore';
 import { useAppStore } from '../../stores/appStore';
 import { showToast } from '../../stores/toastStore';
@@ -25,12 +26,13 @@ function RequirementIdentity({ item, target }: { item: ModRequirement; target: G
     }).catch(() => {});
     return () => { current = false; };
   }, [id, section]);
-  return <div className="flex items-center gap-3">
+  return <>
     {cached?.thumbnailUrl && <ModThumbnail src={cached.thumbnailUrl} alt="" nsfw={cached.isNsfw}
-      hideNsfw={shouldBlurNsfw(settings)} className="h-12 w-12 shrink-0 overflow-hidden rounded-sm" width={48} height={48} enableImageContextMenu={false} />}
-    <div className="min-w-0"><p className={cached ? 'font-mod-title text-base break-words' : 'text-sm break-words'}>{cached?.name ?? item.name}</p>
-      {cached && cached.name !== item.name && <p className="mt-1 text-xs text-text-secondary break-words">{item.name}</p>}</div>
-  </div>;
+      hideNsfw={shouldBlurNsfw(settings)} className="h-14 w-14 shrink-0 overflow-hidden rounded-sm" width={56} height={56} enableImageContextMenu={false} />}
+    {!cached?.thumbnailUrl && <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-sm bg-hl/5 text-text-muted"><Link2 className="h-5 w-5" /></span>}
+    <span className="min-w-0 flex-1 text-left"><span className={cached ? 'block font-mod-title text-lg leading-snug break-words' : 'block text-sm break-words'}>{cached?.name ?? item.name}</span>
+      {cached && cached.name !== item.name && <span className="mt-1 block text-xs text-text-secondary break-words">{item.name}</span>}</span>
+  </>;
 }
 
 export function RequirementsPanel({ source, onLocate }: { source: ModRequirementSource; onLocate?: (modId: string) => void }) {
@@ -47,11 +49,12 @@ export function RequirementsPanel({ source, onLocate }: { source: ModRequirement
   };
   if (snapshot.status === 'loaded' && !snapshot.items.length) return null;
   if (snapshot.status === 'unavailable') return (
-    <section className="rounded-sm border border-border bg-bg-sunken p-4 space-y-3" aria-label={t('requirements.title')}>
-      <h3 className="text-sm font-semibold">{t('requirements.unavailable')}</h3>
-      <p className="text-xs text-text-secondary">{t('requirements.loadError')}</p>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" icon={RefreshCw} isLoading={busy} onClick={() => void retry()}>{t('requirements.retry')}</Button>
+    <section className="space-y-4 py-1" aria-label={t('requirements.title')}>
+      <div className="flex items-start gap-3"><Link2 className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
+        <div><h3 className="text-sm font-semibold">{t('requirements.unavailable')}</h3>
+          <p className="mt-1 text-sm text-text-secondary">{t('requirements.loadError')}</p></div></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" icon={RefreshCw} isLoading={busy} onClick={() => void retry()}>{t('requirements.retry')}</Button>
         <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => window.open(`https://gamebanana.com/${source.section === 'Sound' ? 'sounds' : source.section === 'Wip' ? 'wips' : 'mods'}/${source.id}`, '_blank', 'noopener,noreferrer')}>{t('requirements.gamebanana')}</Button>
       </div>
     </section>
@@ -63,6 +66,7 @@ export function RequirementsPanel({ source, onLocate }: { source: ModRequirement
       const url = item.url;
       const disabled = match.state === 'disabled' ? match.matches.find(m => !m.enabled) : undefined;
       const issue = ['missing', 'disabled', 'manual'].includes(match.state);
+      const order = onLocate ? installedRequirementOrder(source, item, mods) : [];
       const enable = async () => {
         if (!disabled) return;
         setBusy(true);
@@ -70,20 +74,31 @@ export function RequirementsPanel({ source, onLocate }: { source: ModRequirement
         catch (error) { showToast(String(error), { tone: 'error' }); }
         finally { setBusy(false); }
       };
-      return <div key={`${item.name}:${index}`} className={`rounded-sm border bg-bg-sunken p-4 space-y-3 ${issue ? 'border-state-warning/30' : 'border-border'}`}>
+      const identity = <RequirementIdentity item={item} target={target} />;
+      return <div key={`${item.name}:${index}`} className="overflow-hidden rounded-sm border border-border bg-bg-sunken">
+        <div className="px-4 pt-3 pb-2">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4 shrink-0" />{item.importance === 'optional' ? t('requirements.optional') : item.importance === 'unknown' ? t('requirements.review') : t('requirements.required')}</div>
+          <h3 className="text-xs text-text-secondary">{item.importance === 'optional' ? t('requirements.optional') : item.importance === 'unknown' ? t('requirements.review') : t('requirements.required')}</h3>
           <Tag tone={issue ? 'warning' : 'neutral'}>{states[match.state]}</Tag>
         </div>
-        <RequirementIdentity item={item} target={target} />
-        {item.state === 'off' && <p className="text-xs text-text-secondary">{t('requirements.mustBeOff')}</p>}
-        {match.state === 'manual' && <p className="text-xs text-text-secondary">{t('requirements.manual')}</p>}
-        <div className="flex flex-wrap items-center gap-2">
-          {disabled && <Button size="sm" variant="primary" icon={Check} isLoading={busy} onClick={() => void enable()}>{t('requirements.enable')}</Button>}
-          {target ? <Button size="sm" variant={!disabled && issue ? 'primary' : 'secondary'} onClick={() => useRequirementsStore.getState().openTarget(target)}>{t('requirements.view')}</Button>
-            : url && <Button size="sm" icon={ExternalLink} onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}>{t('requirements.openLink')}</Button>}
-          {onLocate && match.matches.length > 0 && <Button size="sm" variant="ghost" onClick={() => onLocate(match.matches[0].modId)}>{t('requirements.locate')}</Button>}
         </div>
+        {target || url ? <button type="button" className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-text-primary transition-colors hover:bg-hl/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+          aria-label={target ? t('requirements.view') : t('requirements.openLink')} onClick={() => target ? useRequirementsStore.getState().openTarget(target) : url && window.open(url, '_blank', 'noopener,noreferrer')}>
+          {identity}{target ? <ChevronRight className="h-4 w-4 shrink-0 text-text-muted" /> : <ArrowUpRight className="h-4 w-4 shrink-0 text-text-muted" />}
+        </button> : <div className="flex items-center gap-3 px-4 py-3">{identity}</div>}
+        {(item.state === 'off' || match.state === 'manual') && <p className="px-4 pb-3 text-xs text-text-secondary">{item.state === 'off' ? t('requirements.mustBeOff') : t('requirements.manual')}</p>}
+        {(disabled || (onLocate && match.matches.length > 0 && order.length === 0)) && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-3">
+          {onLocate && match.matches.length > 0 && order.length === 0 && <Button size="sm" variant="ghost" onClick={() => onLocate(match.matches[0].modId)}>{t('requirements.locate')}</Button>}
+          {disabled && <Button size="sm" variant="secondary" icon={Check} isLoading={busy} onClick={() => void enable()}>{t('requirements.enable')}</Button>}
+        </div>}
+        {order.length > 0 && <details className="group border-t border-border text-sm">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"><ArrowDownUp className="h-4 w-4" />{t('requirements.loadOrder')}<ChevronRight className="ml-auto h-3 w-3 transition-transform group-open:rotate-90" /></summary>
+          <div className="space-y-3 px-4 pb-4">
+            <p className="text-xs text-text-secondary">{t('requirements.orderHint')}</p>
+            <ol className="space-y-2 border-l border-border pl-3">{order.map(mod => <li key={mod.id} className="min-w-0 break-words">{mod.name}</li>)}</ol>
+            {onLocate && <Button size="sm" variant="secondary" onClick={() => onLocate(order[0].id)}>{t('requirements.locateOrder')}</Button>}
+          </div>
+        </details>}
       </div>;
     })}
   </section>;

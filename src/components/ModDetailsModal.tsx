@@ -187,6 +187,7 @@ function ModDetailsModal({
   const requirementMods = useAppStore(state => state.mods);
   const requirementSnapshot = useRequirementsStore(state => state.snapshots[`${section}:${mod.id}`]) ?? mod.requirements;
   const requirementIssues = hasRequirementIssues(requirementSnapshot, requirementMods);
+  const requirementsCovered = useRequirementsStore(state => !requirementsLayer && (state.review !== null || state.targets.length > 0));
   // One app-wide queue snapshot drives every host of this popup. This keeps
   // Browse, Installed, and downloads started elsewhere in sync without each
   // page trying to reconstruct active/queued/progress state independently.
@@ -982,6 +983,9 @@ function ModDetailsModal({
   const modal = (
     <div
       className={outerClass}
+      style={requirementsCovered ? { display: 'none' } : undefined}
+      inert={requirementsCovered}
+      aria-hidden={requirementsCovered || undefined}
       onClick={isSidebar ? undefined : onClose}
       // The docked sidebar is a persistent, non-blocking panel, so it's a
       // labelled region, not a modal dialog (which would wrongly imply a
