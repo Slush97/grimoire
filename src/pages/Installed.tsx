@@ -76,6 +76,8 @@ import {
 import ModDetailsModal from '../components/ModDetailsModal';
 import { useInstalledRequirements } from '../components/requirements/useInstalledRequirements';
 import { RequirementsControl } from '../components/requirements/RequirementsControl';
+import { useRequirementOrderStore } from '../stores/requirementOrderStore';
+import { requirementOrderIssues } from '../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../stores/requirementsStore';
 import { hasRequirementIssues, modRequirementRefs, requirementKey } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
@@ -695,10 +697,11 @@ export default function Installed() {
   const visibleMods = useMemo(() => visibleInstalledMods(mods), [mods]);
   useInstalledRequirements(visibleMods);
   const requirementSnapshots = useRequirementsStore(state => state.snapshots);
+  const requirementFiles = useRequirementOrderStore(state => state.files);
   const [requirementsOnly, setRequirementsOnly] = useState(false);
   const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => modRequirementRefs(mod)
-    .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods))).map(mod => mod.id)),
-  [visibleMods, mods, requirementSnapshots]);
+    .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id))).map(mod => mod.id)),
+  [visibleMods, mods, requirementSnapshots, requirementFiles]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
   // carry a stale embed (legacy format / sidecar drift, pending re-imprint).
