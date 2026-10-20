@@ -110,7 +110,7 @@ export default function UpdateModal({ onClose }: Props) {
 
                 {/* Outside the scrolling body so it stays in view over long release notes. */}
                 {status?.downloading && (
-                    <div className="flex-shrink-0 px-5 pt-4">
+                    <div className="flex-shrink-0 border-b border-border px-5 py-4">
                         <div className="flex justify-between text-xs text-text-secondary mb-1">
                             <span>{t('updateModal.downloadingUpdate')}</span>
                             <span className="tabular-nums">{Math.round(status.progress)}%</span>
