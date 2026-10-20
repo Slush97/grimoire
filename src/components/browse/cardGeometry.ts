@@ -28,7 +28,7 @@ export function getReadableDensity(targetWidth: number): BrowseReadableDensity {
 // Every result reserves the same title and footer rows. Sound playback lives
 // inside the artwork, so it does not change the grid geometry.
 function estimateReadableCardBodyHeight(density: BrowseReadableDensity): number {
-  return density === 'micro' ? 16 + 32 + 8 + 24 : 24 + 40 + 16 + 8 + 28;
+  return density === 'micro' ? 16 + 32 + 8 + 24 : 24 + 40 + 4 + 16 + 8 + 28;
 }
 
 export function estimateBrowseRowHeight(
