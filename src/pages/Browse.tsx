@@ -719,15 +719,26 @@ export default function Browse() {
   // then. Fetching before the answer arrives would always open remote and
   // then need a corrective second request. Gate the first fetch on this.
   const [catalogChecked, setCatalogChecked] = useState(false);
+  // A combined feed is served only from the local catalog, so a section can
+  // join one only after its full sync has finished. The total row count is no
+  // gate: Mods sync first and cross LOCAL_CACHE_MIN_ROWS on their own, and
+  // WiPs hover around that threshold even when fully mirrored.
+  const [syncedSections, setSyncedSections] = useState<string[]>([]);
 
   const refreshLocalCacheState = useCallback(async (reason: string) => {
     try {
-      const count = await window.electronAPI.getLocalModCount();
+      const [count, status] = await Promise.all([
+        window.electronAPI.getLocalModCount(),
+        window.electronAPI.getSyncStatus(),
+      ]);
       const ready = count >= LOCAL_CACHE_MIN_ROWS;
+      const synced = Object.keys(status).filter((key) => (status[key]?.lastSync ?? 0) > 0);
       setHasLocalCache(ready);
-      traceBrowse(`catalog check (${reason}): count=${count} threshold=${LOCAL_CACHE_MIN_ROWS} ready=${ready}`);
+      setSyncedSections((prev) => (prev.join() === synced.join() ? prev : synced));
+      traceBrowse(`catalog check (${reason}): count=${count} threshold=${LOCAL_CACHE_MIN_ROWS} ready=${ready} synced=${synced.join(',')}`);
     } catch (err) {
       setHasLocalCache(false);
+      setSyncedSections([]);
       traceBrowse(`catalog check (${reason}) failed: ${String(err)}`);
     } finally {
       setCatalogChecked(true);
@@ -2761,7 +2772,7 @@ export default function Browse() {
               <BrowseSectionPicker
                 sections={sections}
                 selected={selectedSections}
-                canCombine={hasLocalCache}
+                canCombine={sections.every((entry) => syncedSections.includes(entry.modelName))}
                 onChange={(next) => setBrowseUi({ selectedSections: next })}
               />
             )}
