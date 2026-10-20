@@ -32,7 +32,7 @@ function ListSection({ group, collapsed, onToggle, gridClassName, gridStyle, ren
       </button>
     </h2>
     <div id={contentId} hidden={collapsed}>
-      {!collapsed && <div className="pb-4 pt-2">
+      {!collapsed && <div className="pb-4">
         {group.entries.length > 0 ? <div className={gridClassName} style={gridStyle}>
           {group.entries.map((entry) => {
             const occurrence = installedListEntryKey(group.id, entry);
