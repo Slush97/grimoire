@@ -3538,7 +3538,6 @@
     },
     "back": "Back",
     "missing": "Needs another mod",
-    "unchecked": "Couldn't check this mod",
     "disabled": "Needed mod is off",
     "optional": "Optional",
     "installTitle": "Before you install",

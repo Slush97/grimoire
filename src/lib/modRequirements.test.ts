@@ -97,9 +97,9 @@ describe('installed requirement state', () => {
     expect(matchRequirement({ ...requirement, state: 'unknown' }, [base(true)]).state).toBe('enabled');
     expect(matchRequirement({ ...requirement, state: 'unknown' }, []).state).toBe('missing');
   });
-  it('never treats unavailable data as a satisfied check', () => {
+  it('does not warn when the requirements could not be read', () => {
     expect(hasRequirementIssues(undefined, [])).toBe(false);
-    expect(hasRequirementIssues({ status: 'unavailable', checkedAt: 100 }, [])).toBe(true);
+    expect(hasRequirementIssues({ status: 'unavailable', checkedAt: 100 }, [])).toBe(false);
     expect(hasRequirementIssues({ status: 'loaded', checkedAt: 100, items: [] }, [])).toBe(false);
   });
 });

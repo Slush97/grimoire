@@ -27,7 +27,7 @@ export const useRequirementsStore = create<RequirementsStore>((set, get) => ({
   load: async (targets, refresh = false) => {
     const missing = [...new Map(targets.map(t => [requirementKey(t), t])).values()].filter(t => {
       const hit = get().snapshots[requirementKey(t)];
-      return refresh || !hit || Date.now() - hit.checkedAt > (hit.status === 'loaded' ? 24 * 60 * 60 * 1000 : 60000);
+      return refresh || !hit || Date.now() - hit.checkedAt > (hit.status === 'loaded' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000);
     });
     if (!missing.length) return;
     const key = missing.map(requirementKey).sort().join('|') + String(refresh);

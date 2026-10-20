@@ -59,7 +59,7 @@ export function matchRequirement(item: ModRequirement, mods: readonly Requiremen
 
 export function hasRequirementIssues(snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[]): boolean {
   if (!snapshot) return false;
-  if (snapshot.status === 'unavailable') return true;
+  if (snapshot.status === 'unavailable') return false;
   return snapshot.items.some(item => ['disabled', 'missing', 'manual'].includes(matchRequirement(item, mods).state));
 }
 

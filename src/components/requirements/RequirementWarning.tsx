@@ -20,13 +20,13 @@ export function RequirementWarning({ mod, variant = 'inline' }: { mod: Requireme
   });
   if (!source) return null;
   const snapshot = snapshots[requirementKey(source)];
-  const label = snapshot.status === 'unavailable' ? t('requirements.unchecked')
-    : snapshot.items.some(item => matchRequirement(item, mods).state === 'missing') ? t('requirements.missing')
+  if (snapshot?.status !== 'loaded') return null;
+  const label = snapshot.items.some(item => matchRequirement(item, mods).state === 'missing') ? t('requirements.missing')
     : snapshot.items.some(item => matchRequirement(item, mods).state === 'disabled') ? t('requirements.disabled')
     : orderIssues.length > 0 ? t('requirements.orderWarning')
     : hasRequirementIssues(snapshot, mods) ? t('requirements.review') : t('requirements.title');
   return <button type="button" data-card-action="true" className="cursor-pointer text-left rounded-sm focus-visible:outline-2 focus-visible:outline-accent" onClick={event => {
     event.stopPropagation();
     useRequirementsStore.getState().inspect({ ...source, name: mod.name, requirements: snapshot });
-  }}><Tag icon={Link2} tone={snapshot.status === 'loaded' && (hasRequirementIssues(snapshot, mods) || orderIssues.length > 0) ? 'warning' : 'neutral'} variant={variant}>{label}</Tag></button>;
+  }}><Tag icon={Link2} tone={hasRequirementIssues(snapshot, mods) || orderIssues.length > 0 ? 'warning' : 'neutral'} variant={variant}>{label}</Tag></button>;
 }
