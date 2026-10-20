@@ -58,6 +58,18 @@ describe('Foundry texture hero grouping', () => {
         expect(normalizeTextureHeroes([entries[0]], [...heroes, kali])[0].hero).toBe('viper');
     });
 
+    it('keeps Kali ability icons and model textures off Vyper', () => {
+        const kali = { ...heroes[1], codename: 'kali', name: 'Kali', selectable: false, disabled: true };
+        const rows: TextureEntry[] = [
+            entries[0],
+            { path: 'panorama/images/hud/abilities/kali/kali_speed_burst_psd.vtex_c', category: 'ability-icon', hero: 'kali', label: 'speed burst' },
+            { path: 'models/heroes_staging/kali/materials/kali_weapon_color_psd_5e679833.vtex_c', category: 'hero-model', hero: 'kali', label: 'weapon color' },
+        ];
+        expect(normalizeTextureHeroes(rows, [...heroes, kali]).map((entry) => entry.hero)).toEqual(['viper', 'kali', 'kali']);
+        expect(normalizeTextureHeroes(rows, heroes).map((entry) => entry.hero)).toEqual(['viper', 'kali', 'kali']);
+        expect(normalizeTextureHeroes(rows, heroes, { hero: 'viper' }).map((entry) => entry.path)).toEqual([entries[0].path]);
+    });
+
     it('does not match a hero name that is only a substring', () => {
         const row = { ...entries[2], hero: 'bullfrog' };
         expect(normalizeTextureHeroes([row], heroes)[0].hero).toBe('bullfrog');
