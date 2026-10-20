@@ -24,7 +24,7 @@ export function BrowseCardAudio({ src, volume, onVolumeChange, onPlayingChange, 
         variant="inline"
         volume={volume}
         onPlayingChange={onPlayingChange}
-        className={`min-w-0 flex-1 [&]:gap-2 [&>button]:h-7 [&>button]:w-7 ${compact ? '[&>span]:hidden' : ''}`}
+        className={`min-w-0 flex-1 [&]:gap-4 [&>button]:h-7 [&>button]:w-7 ${compact ? '[&>span]:hidden' : ''}`}
       />
       <div className="relative shrink-0">
         <button
