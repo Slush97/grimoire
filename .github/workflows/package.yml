@@ -156,6 +156,11 @@ jobs:
             # signature verification stays off so a future change of signer
             # can't strand installed clients on auto-update.
             if [ -n "$AZURE_SIGNING_ACCOUNT" ]; then
+              # Values pasted into the secrets UI pick up a trailing newline,
+              # which Azure.Identity rejects as an invalid tenant id.
+              for v in AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET; do
+                export "$v=$(printf %s "${!v}" | tr -d '[:space:]')"
+              done
               args+=(
                 "-c.win.azureSignOptions.endpoint=$AZURE_SIGNING_ENDPOINT"
                 "-c.win.azureSignOptions.codeSigningAccountName=$AZURE_SIGNING_ACCOUNT"
