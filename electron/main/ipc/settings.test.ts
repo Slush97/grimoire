@@ -4,7 +4,7 @@ import type { AppSettings } from '../services/settings';
 const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => unknown>(),
     load: vi.fn(), save: vi.fn(), exclusive: vi.fn(),
-    updater: vi.fn(), background: vi.fn(), bridge: vi.fn(), audit: vi.fn(), hydrate: vi.fn(),
+    updater: vi.fn(), background: vi.fn(), bridge: vi.fn(), crosshair: vi.fn(), audit: vi.fn(), hydrate: vi.fn(),
     copy: vi.fn(), updateGuard: vi.fn(), copyGuard: vi.fn(),
 }));
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args: unknown[]) => unknown) => h.handlers.set(name, handler) } }));
@@ -13,6 +13,7 @@ vi.mock('../services/mods', () => ({ runExclusiveModMutation: h.exclusive }));
 vi.mock('../services/modSafetyAudit', () => ({ auditInstalledSafety: h.audit }));
 vi.mock('../services/windowBackground', () => ({ syncWindowBackgroundWithSettings: h.background }));
 vi.mock('../services/forgeBridge', () => ({ syncForgeBridgeWithSettings: h.bridge }));
+vi.mock('../services/crosshairPresets', () => ({ syncCrosshairWithSettings: h.crosshair }));
 vi.mock('../services/updater', () => ({ assertUpdateChannelChange: vi.fn(), syncUpdaterWithSettings: h.updater }));
 vi.mock('../services/socialAuth', () => ({ hydrateOnBoot: h.hydrate }));
 vi.mock('../services/deadlock', () => ({ detectDeadlockPath: vi.fn(), looksLikeDeadlockPath: vi.fn() }));

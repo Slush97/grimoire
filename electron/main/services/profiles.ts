@@ -19,6 +19,7 @@ import {
 } from './profileResolver';
 import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
+import { loadSettings } from './settings';
 import {
     assertCanMoveLoadedGameMods,
     syncRunningGameModSnapshotFromMods,
@@ -609,8 +610,9 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         currentAutoexec.commands = profile.autoexecCommands;
     }
 
-    // Update crosshair if present in profile
-    if (profile.crosshair) {
+    // Update crosshair if present in profile. While the designer is off nothing
+    // shows or clears it, and the game would run it at every launch.
+    if (profile.crosshair && loadSettings().experimentalCrosshair) {
         currentAutoexec.crosshair = generateCrosshairCommands(profile.crosshair);
     }
 

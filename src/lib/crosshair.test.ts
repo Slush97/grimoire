@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCrosshairLayout } from './crosshair';
+import { computeCrosshairLayout, parseHeroSettingsCrosshair } from './crosshair';
 
 // Every expected value below comes from docs/crosshair-geometry.md, which was
 // measured against the shipped game (1440p screenshots + client.dll). If one
@@ -63,5 +63,41 @@ describe('computeCrosshairLayout', () => {
         const layout = computeCrosshairLayout({ pipWidth: 0.9, pipHeight: 16 }, 1);
         expect(layout.pips).toHaveLength(0);
         expect(layout.pipOutlines).toHaveLength(0);
+    });
+});
+
+describe('parseHeroSettingsCrosshair', () => {
+    // Trimmed from a real game/citadel/cfg/citadel_hero_settings.lst.
+    const file = `<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d} format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+{
+	base = 
+	{
+		crosshair_themed = "true"
+		crosshair_pip_gap_static = "true"
+		crosshair_pip_height = "6"
+		crosshair_dot_opacity = "0.24"
+		crosshair_color_g = "255"
+		mouse_sensitivity = "1"
+	}
+	heroes = 
+	{
+		inferno = 
+		{
+			crosshair_color_g = "0"
+		}
+	}
+}`;
+
+    it('reads the base crosshair and ignores per-hero overrides', () => {
+        expect(parseHeroSettingsCrosshair(file)).toEqual({
+            pipGapStatic: true,
+            pipHeight: 6,
+            dotOpacity: 0.24,
+            colorG: 255,
+        });
+    });
+
+    it('finds nothing in a file without a base block', () => {
+        expect(parseHeroSettingsCrosshair('{\n\theroes = \n\t{\n\t}\n}')).toEqual({});
     });
 });

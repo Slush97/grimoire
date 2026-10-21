@@ -10,6 +10,7 @@ import { assertUpdateChannelChange, syncUpdaterWithSettings } from '../services/
 import { hydrateOnBoot as hydrateSocialSession } from '../services/socialAuth';
 import { runExclusiveModMutation } from '../services/mods';
 import { assertModUpdateSettingsChange, assertNoModUpdates } from '../services/modUpdates';
+import { syncCrosshairWithSettings } from '../services/crosshairPresets';
 
 // detect-deadlock
 ipcMain.handle('detect-deadlock', (): string | null => {
@@ -63,6 +64,7 @@ ipcMain.handle('set-settings', async (_, patch: Partial<AppSettings>): Promise<A
         : persist();
     syncUpdaterWithSettings();
     syncWindowBackgroundWithSettings();
+    syncCrosshairWithSettings();
     // Bring the DeadlockForge bridge up or down to match. Toggling it off must
     // actually close the socket, not just start refusing requests on it.
     void syncForgeBridgeWithSettings();
