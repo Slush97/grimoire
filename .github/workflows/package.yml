@@ -109,6 +109,16 @@ jobs:
           # builds refuse to start without this set to an https:// URL so
           # installers can't ship pointing at localhost:8787.
           GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.slusheliott.workers.dev
+          # Azure Artifact Signing. Windows builds stay unsigned until the
+          # AZURE_SIGNING_* repo variables are set. electron-builder's
+          # Invoke-TrustedSigning picks the AZURE_* service principal up from
+          # the environment, so only the Windows job gets those.
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ matrix.platform == 'win' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_CLIENT_ID: ${{ matrix.platform == 'win' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ matrix.platform == 'win' && secrets.AZURE_CLIENT_SECRET || '' }}
         run: |
           args=(--publish never)
           if [ -n "$BUILD_VERSION" ]; then
@@ -141,8 +151,28 @@ jobs:
             fi
             pnpm exec electron-vite build && pnpm exec electron-builder --mac --arm64 "${args[@]}"
           else
+            if [ -n "$AZURE_SIGNING_ACCOUNT" ]; then
+              args+=(
+                "-c.win.azureSignOptions.endpoint=$AZURE_SIGNING_ENDPOINT"
+                "-c.win.azureSignOptions.codeSigningAccountName=$AZURE_SIGNING_ACCOUNT"
+                "-c.win.azureSignOptions.certificateProfileName=$AZURE_SIGNING_PROFILE"
+              )
+            fi
             pnpm exec electron-vite build && pnpm exec electron-builder --win "${args[@]}"
           fi
+
+      # electron-builder signs the app exe, vpkmerge.exe, the unpacked 7za.exe
+      # copies, the uninstaller, the installer and the portable exe. Fail if
+      # any of them came out unsigned, and print the subject so the exact CN is
+      # on record for win.publisherName.
+      - name: Verify Windows signatures
+        if: matrix.platform == 'win' && vars.AZURE_SIGNING_ACCOUNT != ''
+        working-directory: grimoire
+        shell: pwsh
+        run: |
+          $sigs = Get-ChildItem release -Recurse -Filter *.exe | Get-AuthenticodeSignature
+          $sigs | Format-Table Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } }, Path -AutoSize -Wrap
+          if ($sigs | Where-Object Status -ne 'Valid') { exit 1 }
 
       - name: Smoke test packaged app
         working-directory: grimoire

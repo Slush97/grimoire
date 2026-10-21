@@ -16,6 +16,7 @@ on:
 jobs:
   build:
     uses: ./.github/workflows/package.yml
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
