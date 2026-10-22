@@ -14,6 +14,7 @@ import {
   getHeroNamePath,
   getHeroWikiUrl,
 } from '../../lib/lockerUtils';
+import { HeroNavigation } from '../locker/HeroNavigation';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
@@ -22,6 +23,9 @@ import Tx from '../translation/Tx';
 
 interface HeroWorkshopProps {
   hero: HeroInfo;
+  previous: HeroInfo | undefined;
+  next: HeroInfo | undefined;
+  onNavigate: (hero: HeroInfo) => void;
   /** Full roster codename -> display name map (for the reused browse panels). */
   heroNames: Map<string, string>;
   onBack: () => void;
@@ -44,11 +48,17 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  * uses): there is no separate compose-and-forge step. The per-section apply paths
  * run through the existing Locker engines (e.g. sound via `applyHeroSound`).
  */
-export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopProps) {
+export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, onNavigate }: HeroWorkshopProps) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SectionId>('appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [currentHero, setCurrentHero] = useState(hero.codename);
+  if (currentHero !== hero.codename) {
+    setCurrentHero(hero.codename);
+    setRenderStep(0);
+    setNameFailed(false);
+  }
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -69,7 +79,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
         : '';
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div data-foundry-hero-view className="relative flex h-full overflow-hidden">
       {/* Hero render backdrop, anchored right, behind the frosted rail. */}
       <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
         {renderSrc ? (
@@ -118,18 +128,20 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
           {t('foundry.workshop.back', 'All heroes')}
         </button>
 
-        {nameFailed ? (
-          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-            {hero.name}
-          </h2>
-        ) : (
-          <img
-            src={getHeroNamePath(hero.name)}
-            alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
-            onError={() => setNameFailed(true)}
-          />
-        )}
+        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled>
+          {nameFailed ? (
+            <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              {hero.name}
+            </h2>
+          ) : (
+            <img
+              src={getHeroNamePath(hero.name)}
+              alt={hero.name}
+              className="h-8 max-w-full object-contain"
+              onError={() => setNameFailed(true)}
+            />
+          )}
+        </HeroNavigation>
 
         <nav aria-label={t('foundry.workshop.sections', 'Workshop sections')} className="flex flex-col gap-1.5">
           {sections.map(({ id, label, icon: Icon }) => {
@@ -156,7 +168,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
 
       {/* Content pane: the active section. */}
       <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass">
-        <div className="space-y-4 p-6">
+        <div key={hero.codename} className="space-y-4 p-6">
           {section === 'appearance' ? (
             <HeroEffectsPanel key={hero.name} heroName={hero.name} />
           ) : section === 'abilities' ? (
