@@ -1,7 +1,8 @@
-import { promises as fs, existsSync } from 'fs';
-import { join, basename, dirname } from 'path';
+import { promises as fs, existsSync, realpathSync } from 'fs';
+import { join, basename, dirname, win32 } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
+import { z } from 'zod';
 import { inspectVpkSafety, isModSafetyTrusted, moveSafetySnapshot } from './modSafety';
 import { moveVdataSnapshot } from './vdataCheck';
 import { assertActiveModsSafety, moveToDisabledLibrary } from './modSafetyAudit';
@@ -18,7 +19,7 @@ import {
     metaKeyFor,
     PRIORITY_FOLDER_NAME,
 } from './deadlock';
-import { loadSettings } from './settings';
+import { getActiveDeadlockPath, loadSettings } from './settings';
 import { writeLaunchOptions, readLaunchOptions, isSteamRunning, resolveLaunchOptionsWrite } from './launchOptions';
 import { findBottleForPath } from './steamRoots';
 import { launchAppInBottle } from './bottleLaunch';
@@ -143,6 +144,43 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const windowsProcessSchema = z.array(z.object({
+    ProcessId: z.number().int().positive().safe(),
+    ExecutablePath: z.string().nullable(),
+}));
+
+function canonicalWindowsPath(path: string): string {
+    try {
+        return realpathSync.native(path).toLowerCase();
+    } catch {
+        return win32.resolve(path).toLowerCase();
+    }
+}
+
+async function getWindowsDeadlockPids(): Promise<number[]> {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) return [];
+
+    // Avoid starting PowerShell on every idle poll when no game/tools are open.
+    const names = await runCommand('tasklist.exe', ['/FI', `IMAGENAME eq ${DEADLOCK_PROCESS_NAME}`, '/NH']);
+    if (!/deadlock\.exe/i.test(names.stdout)) return [];
+
+    // CSDK launches a different deadlock.exe. Query paths before treating any
+    // same-named process as the configured game or passing its PID to taskkill.
+    const result = await runCommand('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " +
+        "$ErrorActionPreference = 'Stop'; " +
+        "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Filter \"Name = 'deadlock.exe'\" | " +
+        'Select-Object ProcessId, ExecutablePath)',
+    ]);
+    if (result.code !== 0) throw new Error(result.stderr || 'Could not inspect Deadlock processes.');
+    const processes = windowsProcessSchema.parse(JSON.parse(result.stdout.replace(/^\uFEFF/, '')));
+    const expectedPath = canonicalWindowsPath(win32.join(deadlockPath, 'game', 'bin', 'win64', DEADLOCK_PROCESS_NAME));
+    return processes
+        .filter((proc) => proc.ExecutablePath && canonicalWindowsPath(proc.ExecutablePath) === expectedPath)
+        .map((proc) => proc.ProcessId);
+}
+
 /**
  * Check whether Deadlock is currently running. On Linux/Proton the kernel
  * comm name is truncated to 15 chars and Proton renames its main thread, so
@@ -153,12 +191,7 @@ function sleep(ms: number): Promise<void> {
 export async function isDeadlockRunning(): Promise<boolean> {
     try {
         if (process.platform === 'win32') {
-            const result = await runCommand('tasklist.exe', [
-                '/FI',
-                `IMAGENAME eq ${DEADLOCK_PROCESS_NAME}`,
-                '/NH',
-            ]);
-            return /deadlock\.exe/i.test(result.stdout);
+            return (await getWindowsDeadlockPids()).length > 0;
         }
         // macOS behaves like Linux here: the game runs as a Windows process
         // under a translation layer (Wine/CrossOver rather than Proton), so the
@@ -186,7 +219,7 @@ interface CommandResult {
 
 function runCommand(command: string, args: string[]): Promise<CommandResult> {
     return new Promise<CommandResult>((resolve, reject) => {
-        const proc = spawn(command, args, { windowsHide: true });
+        const proc = spawn(command, args, { windowsHide: true, timeout: 10_000 });
         let stdout = '';
         let stderr = '';
         proc.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
@@ -200,12 +233,13 @@ function runCommand(command: string, args: string[]): Promise<CommandResult> {
 
 async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
     if (process.platform === 'win32') {
-        return runCommand(
-            'taskkill.exe',
-            force
-                ? ['/F', '/IM', DEADLOCK_PROCESS_NAME, '/T']
-                : ['/IM', DEADLOCK_PROCESS_NAME, '/T']
-        );
+        const pids = await getWindowsDeadlockPids();
+        if (pids.length === 0) return { code: 0, stdout: '', stderr: '' };
+        return runCommand('taskkill.exe', [
+            ...(force ? ['/F'] : []),
+            ...pids.flatMap((pid) => ['/PID', String(pid)]),
+            '/T',
+        ]);
     }
     if (process.platform === 'linux' || process.platform === 'darwin') {
         return runCommand('pkill', [force ? '-KILL' : '-TERM', '-f', DEADLOCK_PROCESS_NAME]);
