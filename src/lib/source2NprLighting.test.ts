@@ -18,6 +18,10 @@ const step = (value: number, sharpness: number): number => evaluateStep(value, s
 const evaluateDirect = new Function('nDotL', 'uNprDirect', 'clamp', 'mix', 'nprPowerStep', body('nprDirectResponse'));
 const direct = (value: number): number => evaluateDirect(value, { x: 0.8, y: 0.9, z: 0.625, w: 0.25 }, clamp,
   (a: number, b: number, t: number) => a * (1 - t) + b * t, step);
+const evaluateRimExposure = new Function('incidentLight', 'uNprExposure', 'dot', 'vec3', 'min', 'max', 'mix', body('nprRimExposure'));
+const rimExposure = (brightness: number, target = 1): number => evaluateRimExposure([brightness, brightness, brightness],
+  { x: target, y: 0.15 }, (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + v * b[i], 0),
+  (...values: number[]) => values, Math.min, Math.max, (a: number, b: number, t: number) => a * (1 - t) + b * t);
 
 describe('NPR scalar lighting', () => {
   it.each([[0, 0], [0.25, 1 / 2048], [0.5, 0.5], [0.75, 2047 / 2048], [1, 1]])(
@@ -48,6 +52,13 @@ describe('NPR scalar lighting', () => {
     expect(a.uNprLighting.value).toBe(1);
     expect(b.uNprLighting.value).toBe(0);
     expect(a.uNprDirect.value).not.toBe(b.uNprDirect.value);
+    expect(a.uNprAmbientCube.value[0]).not.toBe(b.uNprAmbientCube.value[0]);
+    expect(a.uNprExposure.value).not.toBe(b.uNprExposure.value);
+  });
+  it('attenuates HDR rim light without boosting dark surfaces', () => {
+    for (const brightness of [0, 0.001, 0.1, 1]) expect(rimExposure(brightness)).toBeCloseTo(1, 12);
+    expect(rimExposure(100)).toBeCloseTo(0.1585, 12);
+    expect(rimExposure(100, 0)).toBe(1);
   });
 });
 

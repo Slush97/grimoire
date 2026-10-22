@@ -650,16 +650,16 @@ describe('NPR rim mask (F8)', () => {
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('nprMask.g : uRimMaskDefault');
-      expect(patch).toContain('nprRimTint * nprRim');
+    expect(patch).toContain('nprRimTint * nprRim');
   });
 
-    it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
+  it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('#ifdef USE_TRANSMISSION');
     expect(patch).toContain('1.0 - clamp(material.transmission, 0.0, 1.0)');
     expect(patch).toContain('mix(nprLit, nprLit *');
-      expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
-      expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
+    expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
+    expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
   });
 });
 

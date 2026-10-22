@@ -1392,7 +1392,10 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       if (useNprLighting()) {
         vec3 nprKey = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
         float ambientBand = nprAmbientBand(normal, geometryViewDir, nprKey);
-        reflectedLight.indirectDiffuse *= mix(0.55, 1.0, ambientBand);
+        vec3 rawAmbient = irradiance + iblIrradiance;
+        vec3 ambient = nprAmbientIrradiance(normal, rawAmbient) * mix(0.55, 1.0, ambientBand);
+        // Preserve Three's material energy split and both specular accumulators.
+        reflectedLight.indirectDiffuse *= ambient / max(rawAmbient, vec3(1e-5));
       }
     `,
     },
@@ -1476,7 +1479,17 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         }
 
         vec3 nprRimTint = mix(uRimColor, reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, 1.0 - nprSurfaceWeight);
-        if (useNprLighting()) nprRimTint = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
+        if (useNprLighting()) {
+          vec3 rimIncident = nprAmbientIrradiance(nprN, irradiance + iblIrradiance);
+          #if NUM_DIR_LIGHTS > 0
+            for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+              if (dot(directionalLights[i].direction, nprL) > 0.99) {
+                rimIncident += directionalLights[i].color * nprDirectResponse(max(dot(nprN, nprL), 0.0));
+              }
+            }
+          #endif
+          nprRimTint = (reflectedLight.directDiffuse + reflectedLight.indirectDiffuse) * nprRimExposure(rimIncident);
+        }
         vec3 nprOut = nprCel + nprRimTint * nprRim;
 
         if (uHasTransmissive > 0.5) {
@@ -1487,7 +1500,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           if (useNprLighting()) {
             float band = nprAmbientBand(nprN, nprV, nprL);
             float direct = nprDirectResponse(max(dot(nprN, nprL), 0.0));
-            vec3 ambient = (irradiance + iblIrradiance) * RECIPROCAL_PI;
+            vec3 ambient = nprAmbientIrradiance(nprN, irradiance + iblIrradiance) * RECIPROCAL_PI;
             nprOut += trans * ambient * (1.0 - band) * (1.0 - direct) * uTransStrength;
           } else {
             nprOut += trans * backLight;

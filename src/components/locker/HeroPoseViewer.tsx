@@ -16,6 +16,8 @@ import { Leva, folder, useControls } from 'leva';
 import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { captureViewerAmbient, viewerAmbientCube, VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR,
+  VIEWER_HEMISPHERE_INTENSITY, type NprAmbientCube, type ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
 import { FULL_EFFECTS_PREVIEW_DEFAULTS, heroPresentationStorageKey, initialHeroPreviewFlags } from './heroViewerDefaults';
 import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
 import { Loader2 } from 'lucide-react';
@@ -592,7 +594,7 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
   );
 }
 
-/** Image-based lighting from a studio room or the legacy baked dusk probe.
+/** Image-based lighting from a studio room or the bundled sky probe.
  *  Runs the selected source through PMREM and assigns the result as
  *  `scene.environment` so every MeshStandardMaterial gets real reflections and
  *  ambient instead of dead-flat directional-only shading. The PMREM target is
@@ -600,7 +602,9 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
  *  view shows a single viewer); SoulContainerViewer would want a shared probe.
  *  Drei Environment is not used here: the viewer needs HDRCubeTextureLoader's
  *  six-face Radiance cubemap path and HalfFloat PMREM for the Deadlock IBL. */
-function Environment({ intensity, studio }: { intensity: number; studio: boolean }) {
+function Environment({ intensity, studio, onProbe }: {
+  intensity: number; studio: boolean; onProbe: (probe: ViewerAmbientProbe) => void;
+}) {
   const { gl, scene } = useThree();
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability -- R3F owns this mutable Three.js scene.
@@ -608,8 +612,16 @@ function Environment({ intensity, studio }: { intensity: number; studio: boolean
   }, [scene, intensity]);
   useEffect(() => {
     let disposed = false;
+    onProbe({ kind: 'pending' });
     const pmrem = new THREE.PMREMGenerator(gl);
     let envRT: THREE.WebGLRenderTarget | null = null;
+    const sampleAmbient = (environment: THREE.Scene) => {
+      void captureViewerAmbient(gl, environment).then((sh) => {
+        if (!disposed) onProbe({ kind: 'ready', sh });
+      }).catch(() => {
+        if (!disposed) onProbe({ kind: 'fallback' });
+      });
+    };
     if (studio) {
       // Dark studio walls leave room for bright softbox highlights on glass and
       // metal instead of covering the surface with a broad gray reflection.
@@ -623,9 +635,11 @@ function Environment({ intensity, studio }: { intensity: number; studio: boolean
       envRT = pmrem.fromScene(room, 0.04);
       // eslint-disable-next-line react-hooks/immutability -- R3F owns this mutable Three.js scene.
       scene.environment = envRT.texture;
+      sampleAmbient(room);
       room.dispose();
       pmrem.dispose();
       return () => {
+        disposed = true;
         scene.environment = null;
         envRT?.dispose();
       };
@@ -640,7 +654,13 @@ function Environment({ intensity, studio }: { intensity: number; studio: boolean
         }
         envRT = pmrem.fromCubemap(cube);
         scene.environment = envRT.texture;
+        const sky = new THREE.Scene();
+        sky.background = cube;
+        sampleAmbient(sky);
         cube.dispose();
+        pmrem.dispose();
+      }, undefined, () => {
+        if (!disposed) onProbe({ kind: 'fallback' });
         pmrem.dispose();
       });
     return () => {
@@ -648,7 +668,7 @@ function Environment({ intensity, studio }: { intensity: number; studio: boolean
       scene.environment = null;
       envRT?.dispose();
     };
-  }, [gl, scene, studio]);
+  }, [gl, scene, studio, onProbe]);
   return null;
 }
 
@@ -766,6 +786,8 @@ function NprMaterials({
   unified,
   source2Active,
   celV2,
+  ambientCube,
+  ambientTarget,
 }: {
   scene: THREE.Object3D;
   enabled: boolean;
@@ -777,6 +799,8 @@ function NprMaterials({
   /** Forces legacy wraps to rebuild after the mutating Source2 hint pass changes. */
   source2Active: boolean;
   celV2: boolean;
+  ambientCube: NprAmbientCube | null;
+  ambientTarget: number;
 }) {
   // Live handle to the builds so the tint effect + uTime ticker can poke uniforms
   // without a rebuild. Both paths expose { material, uniforms } so the per-frame /
@@ -918,6 +942,15 @@ function NprMaterials({
     });
   }, [celV2, enabled]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    buildsRef.current.forEach(({ uniforms }) => {
+      uniforms.uNprAmbientCubeOn.value = ambientCube ? 1 : 0;
+      if (ambientCube) uniforms.uNprAmbientCube.value = ambientCube.map((value) => value.clone());
+      uniforms.uNprExposure.value.set(ambientTarget * Math.PI, 0.15);
+    });
+  }, [ambientCube, ambientTarget, enabled, scene, unified, source2Active]);
+
   return null;
 }
 
@@ -1000,6 +1033,9 @@ export default function HeroPoseViewer({
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
   const [viewerScene, setViewerScene] = useState<HeroViewerScene>('midtown');
+  const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
+  const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
+    ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1) : null, [ambientProbe, viewerScene]);
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
   const backdrop = useViewerBackdrop();
@@ -1281,6 +1317,7 @@ export default function HeroPoseViewer({
 
   return (
     <div ref={viewerRef}
+      data-lighting-probe={ambientProbe.kind}
       data-particle-availability={effectUnavailable ? 'unavailable' : partialEffect ? 'partial' : effect ? 'ready' : 'pending'}
       data-animation-availability={scene ? rigged ? 'ready' : 'unavailable' : 'pending'}
       data-cloth-availability={scene ? clothModel ? 'ready' : 'unavailable' : 'pending'}
@@ -1302,8 +1339,8 @@ export default function HeroPoseViewer({
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
-        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio />
-        <hemisphereLight args={[new THREE.Color(96 / 255, 135 / 255, 183 / 255), new THREE.Color(0.32, 0.25, 0.2), 1.5]} />
+        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} onProbe={setAmbientProbe} />
+        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, VIEWER_HEMISPHERE_INTENSITY]} />
         <directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
@@ -1349,6 +1386,8 @@ export default function HeroPoseViewer({
             unified={features.unifiedEnabled}
             source2Active={features.source2ShaderHintsEnabled}
             celV2={features.celV2Enabled}
+            ambientCube={ambientCube}
+            ambientTarget={viewerScene === 'midtown' ? 0.55 : 0.5}
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
