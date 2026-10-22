@@ -32,6 +32,7 @@ import { compileScalarExpr, peakScalar } from './dynamicScalar';
 import { source2TintPlan } from './source2ColorCorrection';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
+import { nprLightingUniforms } from './source2NprLighting';
 
 /**
  * Unified Deadlock NPR material builder (the Phase 0/1 single build pass).
@@ -456,6 +457,7 @@ export function buildDeadlockMaterial(
   const hasJitter = flag(morphic, 'F_JITTER_VERTICES');
 
   const uniforms: Record<string, THREE.IUniform> = {
+    ...nprLightingUniforms({ enabled: isNpr && !glass && !alphaBlend && !unlit }),
     uKeyDir: { value: tuning.keyDir.clone() },
     uBands: { value: tuning.bands },
     uStepSharpness: { value: tuning.stepSharpness },
