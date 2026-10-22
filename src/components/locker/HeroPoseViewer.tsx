@@ -44,7 +44,7 @@ import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPatterns } from './SkinPartPatterns';
-import type { HideoutSceneInfo, SkinPartEdit } from '../../types/skinEditor';
+import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
 import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
@@ -954,7 +954,7 @@ function NprMaterials({
       const previousMatrix = matrix.clone();
       const previousOffset = offset.clone();
       const color = new THREE.Color(edit.tint);
-      const mode = 1;
+      const mode = edit.colorize === false ? 0 : 1;
       matrix.copy(source2TintMatrix(color, mode));
       const vector = new THREE.Vector3(color.r, color.g, color.b);
       offset.copy(mode === 1 ? vector.clone().sub(vector.clone().applyMatrix3(matrix)) : new THREE.Vector3());
@@ -1041,6 +1041,7 @@ export default function HeroPoseViewer({
   partEdits = [],
   highlightedPart = null,
   onPartColors,
+  onPartTextures,
   onPartPick,
 }: {
   heroName: string;
@@ -1054,6 +1055,7 @@ export default function HeroPoseViewer({
   partEdits?: SkinPartEdit[];
   highlightedPart?: string | null;
   onPartColors?: (colors: Record<string, string>) => void;
+  onPartTextures?: (textures: Record<string, SkinPartTexture>) => void;
   onPartPick?: (material: string) => void;
 }) {
   const { t } = useTranslation();
@@ -1439,7 +1441,7 @@ export default function HeroPoseViewer({
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
-        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} />
+        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />
         <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} />
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (

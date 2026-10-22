@@ -6,6 +6,7 @@ import { withHeroSkinSource } from './heroPoseModels';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
+import { hasColorAdjustments, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
 
@@ -46,6 +47,14 @@ async function inspect(vpk: string, base: string, entry: string): Promise<SkinPa
                 part.tintable = material.m_shaderName === 'pbr.vfx' && material.m_vectorParams.some((param) => param.m_name === 'g_vColorTint1')
                     && !material.m_dynamicParams.some((param) => param.m_name === 'g_vColorTint1');
                 part.patternable = material.m_shaderName === 'pbr.vfx' && material.m_textureParams.some((param) => ['g_tColor', 'g_tColorA', 'g_tBaseColor', 'g_tAlbedo'].includes(param.m_name));
+                const colorTexture = ['g_tColor', 'g_tColorA', 'g_tBaseColor', 'g_tAlbedo'].map((slot) => material.m_textureParams.find((param) => param.m_name === slot)).find(Boolean);
+                if (colorTexture) {
+                    try {
+                        part.textureSize = z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).parse(JSON.parse(await runVpkmergeStdout([
+                            'texture-info', '--vpk', vpk, '--base', base, '--entry', colorTexture.m_pValue,
+                        ])));
+                    } catch { /* A missing texture must not disable the other part controls. */ }
+                }
                 break;
             } catch { /* Try the base material before disabling its tint control. */ }
         }
@@ -72,7 +81,7 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
         if (edit.tint !== null && !info.parts.some((part) => part.material === edit.material && part.tintable)) {
             throw new Error('This material does not expose a supported static color tint.');
         }
-        if (edit.pattern && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support pattern paint.');
+        if ((edit.pattern || hasColorAdjustments(edit.adjustments)) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
         if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
             throw new Error('This material name also selects another part. Hiding it cannot be exported safely.');
         }
@@ -101,13 +110,14 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             }
             if (modelVpk !== source.vpk) layers.push(modelVpk);
             const patternLayers = new Map<string, string>();
-            for (const edit of request.edits.filter((item) => item.pattern && !item.hidden)) {
-                if (!edit.pattern) continue;
+            for (const edit of request.edits.filter((item) => (item.pattern || hasColorAdjustments(item.adjustments)) && !item.hidden)) {
                 const pattern = edit.pattern;
+                const color = edit.adjustments ?? ORIGINAL_SKIN_COLOR;
                 const layer = join(dir, `pattern-${layers.length}_dir.vpk`);
                 await runVpkmerge(['trippy-skin', '--hero', request.heroName, '--vpk', source.vpk, '--base', source.base,
-                    '--material', edit.material, '--style', pattern.style, '--intensity', String(pattern.intensity),
-                    '--phase', String(pattern.phase), '--scroll', String(pattern.scroll), '--encode-vpk', layer]);
+                    '--material', edit.material, '--style', pattern?.style ?? 'confetti', '--intensity', String(pattern?.intensity ?? 0),
+                    '--phase', String(pattern?.phase ?? 0), '--scroll', String(pattern?.scroll ?? 0),
+                    '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness), '--encode-vpk', layer]);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);
@@ -118,7 +128,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const layer = join(dir, `tint-${layers.length}_dir.vpk`);
                 await runVpkmerge(['vmat', '--vpk', tintSource, '--base', source.base,
                     '--entry', edit.material.endsWith('_c') ? edit.material : `${edit.material}_c`,
-                    '--set-vec', `g_vColorTint1=${skinTintVector(edit.tint).join(',')},0`, '--set-int', 'g_nTextureColorTintMode1=1', '--encode-vpk', layer]);
+                    '--set-vec', `g_vColorTint1=${skinTintVector(edit.tint).join(',')},0`, '--set-int', `g_nTextureColorTintMode1=${edit.colorize === false ? 0 : 1}`, '--encode-vpk', layer]);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
             }

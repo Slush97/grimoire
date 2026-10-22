@@ -21,5 +21,13 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
         hidden: z.boolean(),
         tint: z.string().regex(/^#[a-f0-9]{6}$/i).nullable(),
         pattern: skinPartPatternSchema.nullable().optional(),
+        adjustments: z.object({
+            hue: z.number().finite().min(-180).max(180),
+            saturation: z.number().finite().min(0).max(2),
+            brightness: z.number().finite().min(0).max(2),
+        }).strict().optional(),
+        colorize: z.boolean().optional(),
     }).strict()).max(256),
 }).strict();
+
+export const skinEditSaveSchema = skinEditExportSchema.extend({ name: z.string().trim().min(1).max(120) }).strict();

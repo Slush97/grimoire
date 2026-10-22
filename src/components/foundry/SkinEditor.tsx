@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, RotateCcw, Download } from 'lucide-react';
-import { HexColorPicker } from 'react-colorful';
-import { Button, IconButton, SegmentedControl, Toggle } from '../common/ui';
+import { Button, IconButton, SegmentedControl } from '../common/ui';
 import { Input, Select } from '../common/forms';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { SkinPatternPicker } from './SkinPatternPicker';
+import { SkinColorControls } from './SkinColorControls';
+import { adjustSkinPixels, hasSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
 import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import type { HeroPoseSkinSource } from '../../types/portrait';
-import type { SkinEditInfo, SkinPart, SkinPartEdit } from '../../types/skinEditor';
+import type { SkinEditInfo, SkinPart, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
@@ -44,12 +45,15 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
   const [comparison, setComparison] = useState<'original' | 'edited'>('edited');
   const [search, setSearch] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
-  const [highlight, setHighlight] = useState(true);
+  const [hoveredMaterial, setHoveredMaterial] = useState<string | null>(null);
+  const [focusedMaterial, setFocusedMaterial] = useState<string | null>(null);
   const [colors, setColors] = useState<Record<string, string>>({});
+  const [textures, setTextures] = useState<Record<string, SkinPartTexture>>({});
+  const [name, setName] = useState(() => t('foundry.skin.customName', { hero: heroName }));
   const [tool, setTool] = useState<'color' | 'pattern'>('color');
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<'exported' | 'enabled' | null>(null);
   useEffect(() => {
     let cancelled = false;
     window.electronAPI.getSkinEditInfo({ heroName, skinSources: sources }).then((value) => { if (!cancelled) setInfo(value); })
@@ -61,7 +65,14 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
   const selected = info?.parts.find((part) => part.material === selectedMaterial)
     ?? info?.parts.find((part) => /\b(coat|body|shape)$/.test(part.label) && !part.label.includes('lower')) ?? info?.parts[0];
   const selectedEdit = edits.find((edit) => edit.material === selected?.material);
-  const colorOf = (part: SkinPart) => edits.find((edit) => edit.material === part.material)?.tint ?? colors[materialBasename(part.material)] ?? '#ffffff';
+  const colorOf = (part: SkinPart) => {
+    const edit = edits.find((edit) => edit.material === part.material);
+    if (edit?.tint) return edit.tint;
+    const source = colors[materialBasename(part.material)] ?? '#ffffff';
+    const pixel = new Uint8Array([Number.parseInt(source.slice(1, 3), 16), Number.parseInt(source.slice(3, 5), 16), Number.parseInt(source.slice(5, 7), 16), 255]);
+    adjustSkinPixels(pixel, edit?.adjustments ?? ORIGINAL_SKIN_COLOR);
+    return `#${[...pixel.slice(0, 3)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+  };
   const nameOf = (part: SkinPart) => {
     const prefix = `${heroName.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
     let label = part.label.startsWith(prefix) ? part.label.slice(prefix.length) : part.label;
@@ -71,20 +82,32 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
   };
   const ambiguous = (part: SkinPart) => info?.parts.filter((item) => materialBasename(item.material) === materialBasename(part.material)).length !== 1;
   const visibleParts = info?.parts.filter((part) => nameOf(part).toLowerCase().includes(search.toLowerCase())) ?? [];
-  const update = (material: string, patch: Partial<Pick<SkinPartEdit, 'hidden' | 'tint' | 'pattern'>>) => {
-    setSaved(false); setComparison('edited');
+  const update = (material: string, patch: Partial<SkinPartEdit>) => {
+    setSaved(null); setComparison('edited');
     setEdits((current) => {
       const next = { ...(current.find((edit) => edit.material === material) ?? { material, hidden: false, tint: null, pattern: null }), ...patch };
-      return [...current.filter((edit) => edit.material !== material), next].filter((edit) => edit.hidden || edit.tint !== null || edit.pattern !== null && edit.pattern !== undefined);
+      return [...current.filter((edit) => edit.material !== material), next].filter(hasSkinPartEdit);
     });
   };
   const exportVpk = async () => {
     if (!info) return;
     setExporting(true); setError(null);
-    try { setSaved((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: info.fingerprint, edits })).exported); }
+    try { if ((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: info.fingerprint, edits })).exported) setSaved('exported'); }
     catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
   };
+  const saveAndEnable = async () => {
+    if (!info || !name.trim()) return;
+    setExporting(true); setError(null);
+    try {
+      await window.electronAPI.saveSkinEdits({ heroName, skinSources: sources, fingerprint: info.fingerprint, edits, name: name.trim() });
+      setSaved('enabled');
+      await useAppStore.getState().loadMods({ silent: true, force: true });
+    } catch (reason) { setError(String(reason)); }
+    finally { setExporting(false); }
+  };
+  const highlight = hoveredMaterial ?? focusedMaterial;
+  const highlightedPart = info?.parts.find((part) => part.material === highlight);
   return <section className="@container space-y-3" aria-label={t('foundry.skin.title')}>
     <div className="flex flex-wrap items-center gap-3">
       {sourceControl}
@@ -92,8 +115,13 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
       {count > 0 && <span className="text-xs tabular-nums text-text-secondary">{t('foundry.skin.changed', { count })}</span>}
       <SegmentedControl label={t('foundry.skin.compare')} value={comparison} onChange={setComparison}
         options={[{ value: 'original', label: t('foundry.skin.original') }, { value: 'edited', label: t('foundry.skin.edited') }]} />
-      <IconButton icon={RotateCcw} label={t('foundry.skin.reset')} disabled={!count || exporting} onClick={() => { setEdits([]); setSaved(false); setComparison('edited'); }} />
-      <Button size="sm" icon={Download} disabled={!info || !count} isLoading={exporting} onClick={() => { void exportVpk(); }}>{t('foundry.skin.export')}</Button>
+      <IconButton icon={RotateCcw} label={t('foundry.skin.reset')} disabled={!count || exporting} onClick={() => { setEdits([]); setSaved(null); setComparison('edited'); }} />
+      <Button size="sm" icon={Download} disabled={!info || !count} variant="secondary" isLoading={exporting} onClick={() => { void exportVpk(); }}>{t('foundry.skin.export')}</Button>
+      <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void saveAndEnable(); }}>
+        <Input inputSize="sm" className="w-40" aria-label={t('foundry.skin.skinName')} value={name} maxLength={120} disabled={exporting}
+          onChange={(event) => { setName(event.target.value); setSaved(null); }} />
+        <Button type="submit" size="sm" disabled={!info || !count || !name.trim()} isLoading={exporting}>{t('foundry.skin.saveEnable')}</Button>
+      </form>
     </div>
     <div className="flex flex-wrap items-center gap-2">
         {(info?.parts.length ?? 0) > 10 && <Input inputSize="sm" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('foundry.skin.search')} aria-label={t('foundry.skin.search')} />}
@@ -103,61 +131,55 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
           {visibleParts.map((part) => {
             const edit = edits.find((edit) => edit.material === part.material);
             const active = selected?.material === part.material;
-            return <div key={part.material} className={`flex min-w-28 shrink-0 items-center gap-1 rounded-sm border ${active ? 'border-accent bg-accent/10' : 'border-transparent hover:bg-hl/5'}`}>
+            return <div key={part.material} onPointerEnter={() => setHoveredMaterial(part.material)} onPointerLeave={() => setHoveredMaterial(null)}
+              onPointerDown={() => setFocusedMaterial(null)}
+              onFocusCapture={(event) => { if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) setFocusedMaterial(part.material); }}
+              onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusedMaterial(null); }}
+              className={`flex min-w-28 shrink-0 items-center gap-1 rounded-sm border ${active ? 'border-accent bg-accent/10' : 'border-transparent hover:bg-hl/5'}`}>
               <IconButton size="sm" icon={edit?.hidden ? EyeOff : Eye} disabled={ambiguous(part) || exporting || !edit?.hidden && (info?.parts.length ?? 0) - hiddenCount <= 1}
                 label={t(edit?.hidden ? 'foundry.skin.showPart' : 'foundry.skin.hidePart', { part: nameOf(part) })} aria-pressed={!edit?.hidden}
                 onClick={() => { setSelectedMaterial(part.material); update(part.material, { hidden: !edit?.hidden }); }} />
               <button type="button" aria-pressed={active} onClick={() => setSelectedMaterial(part.material)}
                 className="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-2 text-left text-xs">
                 <span className={`min-w-0 flex-1 whitespace-nowrap ${edit?.hidden ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>{nameOf(part)}</span>
-                <span className="h-4 w-4 shrink-0 rounded-sm border border-border" style={{ backgroundColor: colorOf(part) }} />
+                {textures[materialBasename(part.material)] ? <img src={textures[materialBasename(part.material)].thumbnail} alt="" className="h-7 w-7 shrink-0 rounded-sm border border-border object-cover" />
+                  : <span className="h-5 w-5 shrink-0 rounded-sm border border-border" style={{ backgroundColor: colorOf(part) }} />}
               </button>
             </div>;
           })}
         </div>
         {hiddenCount > 0 && <Button size="sm" variant="ghost" icon={Eye} disabled={exporting} onClick={() => {
-          setEdits((current) => current.map((edit) => ({ ...edit, hidden: false })).filter((edit) => edit.tint !== null || edit.pattern)); setSaved(false); setComparison('edited');
+          setEdits((current) => current.map((edit) => ({ ...edit, hidden: false })).filter(hasSkinPartEdit)); setSaved(null); setComparison('edited');
         }}>{t('foundry.skin.showAll')}</Button>}
     </div>
     <div className="grid items-start gap-3 @min-[640px]:grid-cols-[minmax(0,1fr)_288px]">
       <div className="relative min-h-96 overflow-hidden rounded-sm border border-border bg-bg-sunken" style={{ height: 'min(62vh, 720px)' }}>
         <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}>
           <HeroPoseViewer heroName={heroName} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits}
-            highlightedPart={highlight && selected && !ambiguous(selected) && !selectedEdit?.hidden ? selected.material : null}
-            onPartColors={setColors} onPartPick={(name) => { const part = info?.parts.find((part) => materialBasename(part.material) === materialBasename(name)); if (part) setSelectedMaterial(part.material); }} />
+            highlightedPart={highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
+            onPartColors={setColors} onPartTextures={setTextures} onPartPick={(name) => { const part = info?.parts.find((part) => materialBasename(part.material) === materialBasename(name)); if (part) setSelectedMaterial(part.material); }} />
         </Suspense></ErrorBoundary>
       </div>
       <aside className="space-y-3 rounded-sm border border-border bg-bg-secondary p-3">
         {selected && <div className="space-y-2">
-          <div className="flex items-start justify-between gap-2"><h4 className="text-sm font-semibold">{nameOf(selected)}</h4>
+          <div className="flex items-start gap-2">
+            {textures[materialBasename(selected.material)] && <img src={textures[materialBasename(selected.material)].thumbnail} alt="" className="h-10 w-10 shrink-0 rounded-sm border border-border object-cover" />}
+            <div className="min-w-0 flex-1"><h4 className="truncate text-sm font-semibold">{nameOf(selected)}</h4>
+              {selected.textureSize && <p className="text-2xs tabular-nums text-text-secondary">{selected.textureSize.width} × {selected.textureSize.height}</p>}
+            </div>
             <IconButton size="sm" icon={RotateCcw} disabled={!selectedEdit || exporting} label={t('foundry.skin.resetPart', { part: nameOf(selected) })}
-              onClick={() => update(selected.material, { hidden: false, tint: null, pattern: null })} />
+              onClick={() => update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined })} />
           </div>
-          <Toggle label={t('foundry.skin.highlight')} checked={highlight} onChange={setHighlight} />
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
           <SegmentedControl value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }]} />
-          {tool === 'color' ? <div className="space-y-2">
-            {selected.tintable && <div inert={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
-              className={`[&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm ${selectedEdit?.hidden || exporting ? 'opacity-40' : ''}`}>
-              <HexColorPicker color={colorOf(selected)} onChange={(tint) => update(selected.material, { tint })}
-                aria-label={t('foundry.skin.color')} style={{ width: '100%', height: 160 }} />
-            </div>}
-            <label className="flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary p-3">
-              <input type="color" value={colorOf(selected)} disabled={ambiguous(selected) || !selected.tintable || selectedEdit?.hidden || exporting}
-                aria-label={t('foundry.skin.tintPart', { part: nameOf(selected) })} className="h-10 w-12 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent disabled:opacity-40"
-                onChange={(event) => update(selected.material, { tint: event.target.value })} />
-              <span className="text-sm tabular-nums text-text-primary">{colorOf(selected).toUpperCase()}</span>
-            </label>
-            {!selected.tintable && <p className="text-xs text-text-secondary">{t('foundry.skin.tintUnsupported')}</p>}
-          </div> : selected.patternable ? <SkinPatternPicker value={selectedEdit?.pattern ?? null} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
+          {tool === 'color' ? <SkinColorControls key={selected.material} color={colorOf(selected)} edit={selectedEdit}
+            tintable={selected.tintable} adjustable={selected.patternable} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
+            onChange={(patch) => update(selected.material, patch)} /> : selected.patternable ? <SkinPatternPicker value={selectedEdit?.pattern ?? null} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
             onChange={(pattern) => update(selected.material, { pattern })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
         </div>}
       </aside>
     </div>
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
-      <p>{t(sources.length ? 'foundry.skin.overlayDependency' : 'foundry.skin.overlayVanilla')}</p>
-      {saved && <p role="status" className="text-state-success">{t('foundry.skin.saved')}</p>}
-    </div>
+    {saved && <p role="status" className="text-xs text-state-success">{t(saved === 'enabled' ? 'foundry.skin.enabled' : 'foundry.skin.saved')}</p>}
     {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
   </section>;
 }

@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import * as THREE from 'three';
-import { applySkinPartEdits, highlightSkinPart, skinPartColors } from '../../lib/skinPartPreview';
-import type { SkinPartEdit } from '../../types/skinEditor';
+import { applySkinPartEdits, highlightSkinPart, skinPartColors, skinPartTextures } from '../../lib/skinPartPreview';
+import type { SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 
-export function SkinPartPreview({ scene, edits, wireframe, highlight, onColors }: {
+export function SkinPartPreview({ scene, edits, wireframe, highlight, onColors, onTextures }: {
   scene: THREE.Object3D; edits: SkinPartEdit[]; wireframe: boolean; highlight: string | null;
   onColors?: (colors: Record<string, string>) => void;
+  onTextures?: (textures: Record<string, SkinPartTexture>) => void;
 }) {
   useEffect(() => applySkinPartEdits(scene, edits, wireframe), [scene, edits, wireframe]);
   useEffect(() => {
@@ -18,5 +19,6 @@ export function SkinPartPreview({ scene, edits, wireframe, highlight, onColors }
   useEffect(() => {
     if (onColors) onColors(skinPartColors(scene));
   }, [scene, onColors]);
+  useEffect(() => { if (onTextures) onTextures(skinPartTextures(scene)); }, [scene, onTextures]);
   return null;
 }

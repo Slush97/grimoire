@@ -1,4 +1,5 @@
 import type { SkinPartEdit } from '../types/skinEditor';
+import { hasSkinPartEdit } from './skinColorAdjustments';
 
 export function materialBasename(path: string): string {
   return path.replace(/\\/g, '/').split('/').at(-1)?.replace(/\.vmat(?:_c)?$/i, '').toLowerCase() ?? '';
@@ -9,7 +10,7 @@ export function skinPartLabel(path: string): string {
 }
 
 export function editedPartCount(edits: SkinPartEdit[]): number {
-  return edits.filter((edit) => edit.hidden || edit.tint !== null || (edit.pattern?.intensity ?? 0) > 0).length;
+  return edits.filter(hasSkinPartEdit).length;
 }
 
 export function skinTintVector(hex: string): [number, number, number] {

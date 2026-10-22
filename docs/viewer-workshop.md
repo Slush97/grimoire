@@ -1,5 +1,57 @@
 # Viewer and appearance workspace
 
+## Color adjustment and save flow
+
+Keep the V2 horizontal part strip and selected-part inspector. A stack of full
+texture cards repeats every control and makes identifying a small accessory take
+too much scrolling. Thumbnails belong in the strip and inspector header; source
+dimensions come from the installed VTEX header, rather than the reduced preview.
+
+Use the existing surface tokens #0f0f0f, #1a1a1a, #242424 and border #2d2d2d.
+Keep Radiance for controls, Reaver for the hero title and the runtime accent for
+selection. The only fixed palette colors are selectable paint swatches.
+
+```text
+  Skin [Default]      Original | Edited   Reset   Export   [Skin name] Save & enable
+  eye Book [texture]  eye Coat [texture]  eye Gun [texture] ...
+  +--------------------------------------+ +--------------------------+
+  |                                      | | [texture] Coat    Reset   |
+  |                                      | | 2048 x 2048               |
+  |           live model                 | | Color | Pattern           |
+  |                                      | | Hue          slider value |
+  |                                      | | Saturation   slider value |
+  |                                      | | Brightness   slider value |
+  |                                      | | Tint             Colorize |
+  |                                      | | swatches / picker / hex   |
+  |      camera / playback / capture      | |                           |
+  +--------------------------------------+ +--------------------------+
+```
+
+The part list highlights on hover and visible keyboard focus. Mouse selection
+does not pin the highlight. Editing controls leave the model's colors visible.
+The inspector header and model hover do not activate highlights. Model clicks
+still select a part.
+
+Hue is a relative rotation, saturation and brightness are multipliers. They
+operate on the color texture in sRGB HSV, preserving alpha. The renderer and
+exporter use the same transform; texture paths remain isolated per material.
+Colorize selects the material's colorize or multiply tint mode. Original resets
+the preview without discarding edits; reset clears the selected part or all edits.
+
+Save & enable creates a named local skin, enables required source skins and puts
+the overlay after other base-folder mods, preserving their relative order. It
+uses the serialized mutation path, VPK safety inspection and hashed metadata.
+It requires a free base add-ons slot. A full base folder reports an error instead
+of silently putting the overlay below its source in an overflow folder. Export
+still writes only to the user's chosen file. Tests install into a task-local
+game directory; the user's real mod folders are not used for these checks.
+
+Validation includes original texture-header dimensions, preview hover/focus pixel
+comparisons, exported archive CRCs, an independent HSV calculation on source
+pixels and a packaged save test with a pre-existing overlay and a slot gap.
+Exported entries, rather than whole archive byte order, are compared across builds.
+No in-game validation or hosted CI is claimed.
+
 ## V2 editor
 
 The first inspector repeated color/reset controls in every row and kept selected

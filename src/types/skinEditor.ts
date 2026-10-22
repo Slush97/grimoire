@@ -13,6 +13,7 @@ export interface SkinPart {
   vertices: number;
   tintable: boolean;
   patternable: boolean;
+  textureSize?: { width: number; height: number };
 }
 
 export interface SkinEditInfo {
@@ -26,6 +27,20 @@ export interface SkinPartEdit {
   hidden: boolean;
   tint: string | null;
   pattern?: SkinPartPattern | null;
+  adjustments?: SkinColorAdjustments;
+  colorize?: boolean;
+}
+
+export interface SkinColorAdjustments {
+  hue: number;
+  saturation: number;
+  brightness: number;
+}
+
+export interface SkinPartTexture {
+  thumbnail: string;
+  width: number;
+  height: number;
 }
 
 export interface SkinPartPattern {
@@ -38,6 +53,10 @@ export interface SkinPartPattern {
 export interface SkinEditExport extends SkinEditSource {
   fingerprint: string;
   edits: SkinPartEdit[];
+}
+
+export interface SkinEditSave extends SkinEditExport {
+  name: string;
 }
 
 export interface HideoutInstance {

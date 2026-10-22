@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { editForMaterial, materialBasename } from './skinParts';
 import { getMorphic } from './source2NprMaterial';
-import type { SkinPartEdit } from '../types/skinEditor';
+import type { SkinPartEdit, SkinPartTexture } from '../types/skinEditor';
 
 export function isSkinSurface(material: THREE.Material): material is THREE.Material & Pick<THREE.MeshStandardMaterial, 'map' | 'color'> {
   return 'map' in material && (material.map === null || material.map instanceof THREE.Texture)
@@ -135,4 +135,27 @@ export function skinPartColors(scene: THREE.Object3D): Record<string, string> {
     }
   });
   return colors;
+}
+
+export function skinPartTextures(scene: THREE.Object3D): Record<string, SkinPartTexture> {
+  const result: Record<string, SkinPartTexture> = {};
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const context = canvas.getContext('2d');
+  if (!context) return result;
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      const name = materialBasename(material.name);
+      if (result[name]) continue;
+      const morphic = getMorphic(material);
+      const source = morphic?.resolvedTextures?.g_tColor ?? (isSkinSurface(material) ? material.map : null);
+      const image: unknown = source?.image;
+      if (!(image instanceof HTMLImageElement || image instanceof ImageBitmap || image instanceof HTMLCanvasElement)) continue;
+      context.clearRect(0, 0, 64, 64);
+      context.drawImage(image, 0, 0, 64, 64);
+      result[name] = { thumbnail: canvas.toDataURL('image/png'), width: image.width, height: image.height };
+    }
+  });
+  return result;
 }
