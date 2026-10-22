@@ -43,7 +43,7 @@ vi.mock('./autoexec', () => ({
   writeAutoexec: () => {},
 }));
 
-import { retargetProfileModSha, updateProfile } from './profiles';
+import { retargetProfileModSha, updateProfile, createProfile, loadProfiles } from './profiles';
 import type { Profile } from '../../../src/types/electron';
 
 const SHA_A = 'a'.repeat(64);
@@ -175,5 +175,19 @@ describe('retargetProfileModSha', () => {
     // and must not be rolled back over profile bookkeeping.
     writeFileSync(profilesPath(), 'not json at all', 'utf-8');
     expect(() => retargetProfileModSha(SHA_A, SHA_B)).not.toThrow();
+  });
+});
+
+
+describe('local profile shuffle snapshots', () => {
+  it('saves separate pools through create and update without changing other profiles', async () => {
+    const first = { onLaunch: true, included: ['gamebanana:1'], variants: [] };
+    const second = { onLaunch: false, included: ['gamebanana:2'], variants: [] };
+    const a = await createProfile('/unused', 'First', undefined, first);
+    const b = await createProfile('/unused', 'Second', undefined, second);
+    expect(loadProfiles().map((p) => p.shuffle)).toEqual([first, second]);
+    await updateProfile('/unused', a.id, undefined, { onLaunch: false, included: [], variants: [] });
+    expect(loadProfiles().find((p) => p.id === a.id)?.shuffle?.included).toEqual([]);
+    expect(loadProfiles().find((p) => p.id === b.id)?.shuffle).toEqual(second);
   });
 });

@@ -1,3 +1,4 @@
+import { profileShuffleSchema } from '../../../src/lib/profileShuffle';
 import { ipcMain } from 'electron';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
@@ -31,12 +32,12 @@ ipcMain.handle('get-profiles', (): Profile[] => {
 });
 
 // create-profile
-ipcMain.handle('create-profile', async (_, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> => {
+ipcMain.handle('create-profile', async (_, name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: unknown): Promise<Profile> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    const profile = await createProfile(deadlockPath, name, crosshairSettings);
+    const profile = await createProfile(deadlockPath, name, crosshairSettings, profileShuffleSchema.optional().parse(shuffle));
 
     // Set as active profile
     const settings = loadSettings();
@@ -63,12 +64,12 @@ ipcMain.handle(
 );
 
 // update-profile
-ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> => {
+ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: unknown): Promise<Profile> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return await updateProfile(deadlockPath, profileId, crosshairSettings);
+    return await updateProfile(deadlockPath, profileId, crosshairSettings, profileShuffleSchema.optional().parse(shuffle));
 });
 
 // apply-profile

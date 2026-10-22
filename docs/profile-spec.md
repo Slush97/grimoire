@@ -225,3 +225,14 @@ A reader claims conformance to schema version 1.x if it:
 ## Reference implementation
 
 Grimoire's exporter and importer live in `electron/main/services/portableProfile.ts`. The format is also documented inline as TypeScript types in `src/types/portableProfile.ts`.
+
+## Local shuffle settings
+
+Local profiles in `profiles.json` save the Locker launch-shuffle switch, pool
+keys, and variant choices when created or updated. Applying a profile restores
+that snapshot. Older profiles leave the current shuffle settings alone. Update
+a profile after editing its pool to keep the changes. The pool viewer lists
+entries even while shuffle is off and lets you remove missing mods.
+
+Shuffle keys refer to this installation. They are not included in portable
+exports, share codes, or published loadouts.

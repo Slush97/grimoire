@@ -1,3 +1,4 @@
+import { profileShuffleSchema, type ProfileShuffle } from '../lib/profileShuffle';
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, DeleteModEntry, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
@@ -449,6 +450,8 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  captureProfileShuffle: () => ProfileShuffle;
+  restoreProfileShuffle: (shuffle: unknown) => void;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
   /** Add or remove many shuffle keys at once (bulk category action). */
@@ -975,6 +978,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods({ force: true });
     }
+  },
+
+  captureProfileShuffle: () => ({
+    onLaunch: get().shuffleOnLaunch,
+    included: [...get().shuffleIncluded],
+    variants: [...get().shuffleVariants],
+  }),
+
+  restoreProfileShuffle: (value) => {
+    const result = profileShuffleSchema.safeParse(value);
+    if (!result.success) return;
+    const shuffle = result.data;
+    const included = new Set(shuffle.included);
+    const variants = new Map(shuffle.variants);
+    try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, String(shuffle.onLaunch)); } catch { /* ignore */ }
+    writeStoredShuffleIncluded(included);
+    writeStoredShuffleVariants(variants);
+    set({ shuffleOnLaunch: shuffle.onLaunch, shuffleIncluded: included, shuffleVariants: variants });
   },
 
   setShuffleOnLaunch: (enabled: boolean) => {
