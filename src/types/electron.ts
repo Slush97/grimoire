@@ -980,6 +980,9 @@ export interface ElectronAPI {
     /** `entry` selects which model entry to export (soul container vs urn);
      *  defaults to the soul-container model when omitted. */
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
+    getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
+    exportSkinEdits: (request: import('./skinEditor').SkinEditExport) => Promise<import('./foundry').VpkExportResult>;
+    loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]

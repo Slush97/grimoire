@@ -41,6 +41,11 @@ import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
+import { HideoutScene } from './HideoutScene';
+import { SkinPartPreview } from './SkinPartPreview';
+import type { HideoutSceneInfo, SkinPartEdit } from '../../types/skinEditor';
+import { editForMaterial } from '../../lib/skinParts';
+import { source2TintMatrix } from '../../lib/source2ColorCorrection';
 import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
 import { ViewerBackdrop, ViewerBackdropControls } from './ViewerBackdrop';
 import { useViewerBackdrop } from '../../lib/useViewerBackdrop';
@@ -788,6 +793,7 @@ function NprMaterials({
   celV2,
   ambientCube,
   ambientTarget,
+  partEdits,
 }: {
   scene: THREE.Object3D;
   enabled: boolean;
@@ -801,6 +807,7 @@ function NprMaterials({
   celV2: boolean;
   ambientCube: NprAmbientCube | null;
   ambientTarget: number;
+  partEdits: SkinPartEdit[];
 }) {
   // Live handle to the builds so the tint effect + uTime ticker can poke uniforms
   // without a rebuild. Both paths expose { material, uniforms } so the per-frame /
@@ -936,6 +943,27 @@ function NprMaterials({
   }, [tint, enabled]);
 
   useEffect(() => {
+    const restore: Array<() => void> = [];
+    buildsRef.current.forEach((build, original) => {
+      const edit = editForMaterial(original.name, partEdits);
+      const morphic = getMorphic(original);
+      const matrix = build.uniforms.uSource2ColorTint?.value;
+      const offset = build.uniforms.uSource2ColorTintOffset?.value;
+      if (!edit?.tint || !morphic || !(matrix instanceof THREE.Matrix3) || !(offset instanceof THREE.Vector3)) return;
+      const previousMatrix = matrix.clone();
+      const previousOffset = offset.clone();
+      const color = new THREE.Color(edit.tint);
+      const modeValue = morphic.ints?.g_nTextureColorTintMode1;
+      const mode = Array.isArray(modeValue) ? modeValue[0] : modeValue ?? 0;
+      matrix.copy(source2TintMatrix(color, mode));
+      const vector = new THREE.Vector3(color.r, color.g, color.b);
+      offset.copy(mode === 1 ? vector.clone().sub(vector.clone().applyMatrix3(matrix)) : new THREE.Vector3());
+      restore.push(() => { matrix.copy(previousMatrix); offset.copy(previousOffset); });
+    });
+    return () => restore.forEach((reset) => reset());
+  }, [partEdits, scene, enabled, unified, source2Active]);
+
+  useEffect(() => {
     if (!enabled) return;
     buildsRef.current.forEach((b) => {
       if (b.uniforms.uCelV2) b.uniforms.uCelV2.value = celV2 ? 1.0 : 0.0;
@@ -1010,6 +1038,7 @@ export default function HeroPoseViewer({
   skinSources = [],
   fallbackSkinMetaKey,
   trippyPreview,
+  partEdits = [],
 }: {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
@@ -1019,6 +1048,7 @@ export default function HeroPoseViewer({
   /** Live Body + Gun trippy params to paint on the body in real time, or
    *  undefined for the plain skin. */
   trippyPreview?: TrippyPreview;
+  partEdits?: SkinPartEdit[];
 }) {
   const { t } = useTranslation();
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
@@ -1033,6 +1063,8 @@ export default function HeroPoseViewer({
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
   const [viewerScene, setViewerScene] = useState<HeroViewerScene>('midtown');
+  const [wireframe, setWireframe] = useState(false);
+  const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
     ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1) : null, [ambientProbe, viewerScene]);
@@ -1295,6 +1327,7 @@ export default function HeroPoseViewer({
       onCloth={(v) => setDevFlag('cloth', 'grimoire.preview.cloth', v)}
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
+      wireframe={wireframe} onWireframe={setWireframe}
       onScene={setViewerScene} onReset={() => setResetView((v) => v + 1)}
       onScreenshot={() => {
         const canvas = canvasRef.current;
@@ -1335,7 +1368,7 @@ export default function HeroPoseViewer({
           preserveDrawingBuffer: true,
         }}
       >
-        <ViewerBackdrop texture={viewerScene === 'transparent' ? null : backdrop.texture} />
+        <ViewerBackdrop texture={viewerScene === 'transparent' || viewerScene === 'hideout' ? null : backdrop.texture} />
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
@@ -1345,7 +1378,7 @@ export default function HeroPoseViewer({
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
         <directionalLight position={[3, 2, -3]} intensity={1.2} color={new THREE.Color(0.65, 0.78, 1)} />
-        {viewerScene !== 'transparent' && (
+        {viewerScene !== 'transparent' && viewerScene !== 'hideout' && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.02, 0]} receiveShadow>
             <planeGeometry args={[20, 20]} />
             <shadowMaterial transparent opacity={0.25} />
@@ -1388,9 +1421,12 @@ export default function HeroPoseViewer({
             celV2={features.celV2Enabled}
             ambientCube={ambientCube}
             ambientTarget={viewerScene === 'midtown' ? 0.55 : 0.5}
+            partEdits={partEdits}
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
+        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} />
+        {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} />}
         {scene && (
           <BloomEffect
             deadlockExposure={viewerScene === 'midtown' ? 1.6 : 1.3}
@@ -1402,6 +1438,13 @@ export default function HeroPoseViewer({
         <Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} />
       </Canvas>}
       {toolbar}
+      {viewerScene === 'hideout' && (
+        <div role="status" className="pointer-events-none absolute left-3 top-3 max-w-80 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
+          {hideoutStatus.kind === 'loading' ? t('locker.pose.hideoutLoading') : hideoutStatus.kind === 'failed'
+            ? t('locker.pose.hideoutFailed') : <>{t('locker.pose.hideoutApproximation')}
+              {hideoutStatus.info.failures.length + hideoutStatus.failedLoads > 0 && <> {t('locker.pose.hideoutMissing', { count: hideoutStatus.info.failures.length + hideoutStatus.failedLoads })}</>}</>}
+        </div>
+      )}
       {import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer-debug') && (
         <DevViewerControls
           devFlags={devFlags}

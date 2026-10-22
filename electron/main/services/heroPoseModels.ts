@@ -37,6 +37,8 @@ import { readHeroAnimationMetadata } from './heroAnimationMetadata';
 import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
+import { parseVpkDirectoryCached } from './vpk';
+import { hideoutCacheFile } from './hideoutScene';
 
 export const HERO_POSE_SCHEME = 'grimoire-hero';
 
@@ -789,6 +791,34 @@ async function resolvePoseSource(
     }
 }
 
+export async function withHeroSkinSource<T>(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[],
+    action: (source: { vpk: string; base: string; entry: string; fingerprint: string }) => Promise<T>
+): Promise<T> {
+    const base = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    const normalized = normalizeSkinSources(skinSources);
+    const resolved = await resolveSources(deadlockPath, normalized);
+    if (resolved.length !== normalized.length) throw new Error('A selected skin is no longer installed. Select the source again.');
+    const source = await resolvePoseSource(deadlockPath, base, normalized);
+    try {
+        const paths = [...(parseVpkDirectoryCached(source.vpk) ?? []), ...(parseVpkDirectoryCached(base) ?? [])];
+        let entry: string | undefined;
+        for (const [kind, value] of modelSelectorsForHero(heroName)) {
+            entry = kind === '--entry' ? paths.find((path) => path === value)
+                : paths.find((path) => /^models\/heroes[^/]*\//i.test(path) && path.endsWith(`/${value}.vmdl_c`));
+            if (entry) break;
+        }
+        if (!entry) throw new Error('The selected hero model could not be found.');
+        const game = await fs.stat(base);
+        const fingerprint = createHash('sha256').update(`${entry}:${source.fingerprint}:${game.size}:${game.mtimeMs}`).digest('hex');
+        return await action({ vpk: source.vpk, base, entry, fingerprint });
+    } finally {
+        if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+    }
+}
+
 export interface HeroPoseInfo {
     hasModel: boolean;
     /** mtime of the stored GLB, used to cache-bust the renderer URL on re-export. */
@@ -1224,6 +1254,10 @@ export function registerHeroPoseProtocol(): void {
             const url = new URL(request.url);
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
+            if (url.hostname === 's') {
+                const sceneFile = hideoutCacheFile(key, parts[1] ?? '');
+                return sceneFile ? net.fetch(pathToFileURL(sceneFile).toString()) : new Response(null, { status: 404 });
+            }
             // The trailing segment(s) name what's served: the static `model.glb`
             // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the
             // ambient FX descriptor `effect.json`, or a bundled effect texture

@@ -8,7 +8,7 @@ import { ViewerFullscreenButton } from './ViewerFullscreenButton';
 import type { ViewerGifControls } from '../../lib/useViewerGif';
 import { clampAnimationTime, groupHeroClips, heroClipLabel, type HeroPlaybackProgress } from '../../lib/heroViewerPlayback';
 
-export type HeroViewerScene = 'midtown' | 'studio' | 'transparent';
+export type HeroViewerScene = 'midtown' | 'studio' | 'transparent' | 'hideout';
 
 interface Props {
   heroName?: string;
@@ -24,6 +24,8 @@ interface Props {
   bloom: boolean;
   particles: boolean;
   scene: HeroViewerScene;
+  wireframe: boolean;
+  onWireframe: (value: boolean) => void;
   status: string | null;
   backdropControls?: ReactNode;
   onAnimated: (value: boolean) => void;
@@ -110,10 +112,14 @@ export function HeroViewerToolbar(p: Props) {
             </label>
             <label className="block space-y-1 text-xs text-text-secondary">
               <span>{t('locker.pose.scene')}</span>
-              <Select inputSize="sm" value={p.scene} onChange={(e) => p.onScene(e.target.value as HeroViewerScene)}>
+              <Select inputSize="sm" value={p.scene} onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'midtown' || value === 'studio' || value === 'transparent' || value === 'hideout') p.onScene(value);
+              }}>
                 <option value="midtown">{t('locker.pose.midtown')}</option>
                 <option value="studio">{t('locker.pose.studio')}</option>
                 <option value="transparent">{t('locker.pose.transparent')}</option>
+                <option value="hideout">{t('locker.pose.hideout')}</option>
               </Select>
             </label>
             {p.backdropControls}
@@ -121,6 +127,7 @@ export function HeroViewerToolbar(p: Props) {
             <Toggle label={t('locker.pose.physics')} checked={p.cloth} onChange={p.onCloth} />
             <Toggle label={t('locker.pose.bloom')} checked={p.bloom} onChange={p.onBloom} />
             <Toggle label={t('locker.pose.particles')} checked={p.particles} onChange={p.onParticles} />
+            <Toggle label={t('locker.pose.wireframe')} checked={p.wireframe} onChange={p.onWireframe} />
           </div>
         </div>
       )}

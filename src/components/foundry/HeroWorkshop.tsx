@@ -19,12 +19,16 @@ import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
 import LibraryBrowse from './LibraryBrowse';
 import Tx from '../translation/Tx';
+import SkinEditor from './SkinEditor';
+import { SegmentedControl } from '../common/ui';
+import type { HeroPoseSkinSource } from '../../types/portrait';
 
 interface HeroWorkshopProps {
   hero: HeroInfo;
   /** Full roster codename -> display name map (for the reused browse panels). */
   heroNames: Map<string, string>;
   onBack: () => void;
+  skinSources?: HeroPoseSkinSource[];
 }
 
 type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
@@ -44,11 +48,12 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  * uses): there is no separate compose-and-forge step. The per-section apply paths
  * run through the existing Locker engines (e.g. sound via `applyHeroSound`).
  */
-export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopProps) {
+export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: HeroWorkshopProps) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SectionId>('appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [appearanceTool, setAppearanceTool] = useState<'parts' | 'effects'>('parts');
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -158,7 +163,12 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
       <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass">
         <div className="space-y-4 p-6">
           {section === 'appearance' ? (
-            <HeroEffectsPanel key={hero.name} heroName={hero.name} />
+            <div className="space-y-4">
+              <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}
+                options={[{ value: 'parts', label: t('foundry.skin.title') }, { value: 'effects', label: t('foundry.skin.effects') }]} />
+              {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} />
+                : <HeroEffectsPanel key={hero.name} heroName={hero.name} />}
+            </div>
           ) : section === 'abilities' ? (
             <div className="space-y-6">
               {/* Each ability card lists its gameplay sounds with play + Swap (drop

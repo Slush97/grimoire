@@ -293,6 +293,33 @@
       "sound": "Save preview as MP3",
       "saved": "Asset saved.",
       "failed": "Could not save asset: {{error}}"
+    },
+    "skin": {
+      "title": "Skin parts",
+      "effects": "Effects and patterns",
+      "source": "Source",
+      "originalGame": "Original game model",
+      "equipped": "Equipped skin stack",
+      "loading": "Loading skin parts...",
+      "compare": "Compare skin",
+      "original": "Original",
+      "edited": "Edited",
+      "parts": "Parts",
+      "changed_one": "{{count}} change",
+      "changed_other": "{{count}} changes",
+      "search": "Find a part",
+      "materialGroups": "Parts follow the model's material groups. A shared material changes every mesh that uses it.",
+      "showPart": "Show {{part}}",
+      "hidePart": "Hide {{part}}",
+      "tintPart": "Tint {{part}}",
+      "resetPart": "Reset {{part}}",
+      "reset": "Reset changes",
+      "export": "Export overlay VPK",
+      "overlayDependency": "Keep the selected skin installed. Load this overlay after it.",
+      "overlayVanilla": "Exports only your changes. Import the VPK in Installed to use it in game.",
+      "saved": "Overlay VPK saved.",
+      "editInWorkshop": "Edit skin in Door Stuck",
+      "tintUnsupported": "This material does not expose a supported static color tint."
     }
   },
   "autoexec": {
@@ -2278,7 +2305,14 @@
         "heroPose": "Hero pose",
         "running": "Run",
         "reload": "Reload"
-      }
+      },
+      "hideout": "Hideout",
+      "wireframe": "Wireframe",
+      "hideoutLoading": "Loading hideout from the installed game. The first load may take a few minutes.",
+      "hideoutFailed": "Hideout could not load. Choose another scene to continue.",
+      "hideoutApproximation": "Hideout preview. Lighting and layered materials are approximate.",
+      "hideoutMissing_one": "{{count}} asset unavailable.",
+      "hideoutMissing_other": "{{count}} assets unavailable."
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"

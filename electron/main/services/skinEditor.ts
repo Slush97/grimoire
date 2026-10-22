@@ -1,0 +1,123 @@
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { z } from 'zod';
+import { withHeroSkinSource } from './heroPoseModels';
+import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
+import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
+import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
+import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinPart } from '../../../src/types/skinEditor';
+import type { VpkExportResult } from '../../../src/types/foundry';
+
+export { skinEditSourceSchema, skinEditExportSchema } from '../../../src/lib/skinEditSchema';
+import { skinEditSourceSchema, skinEditExportSchema } from '../../../src/lib/skinEditSchema';
+
+const drawCallsSchema = z.object({ draw_calls: z.array(z.object({
+    material: z.string().min(1), vertex_count: z.number().int().nonnegative(),
+})) });
+
+export function partsFromDrawCalls(value: unknown): SkinPart[] {
+    const calls = drawCallsSchema.parse(value).draw_calls;
+    const parts = new Map<string, SkinPart>();
+    for (const call of calls) {
+        const part = parts.get(call.material) ?? { material: call.material, label: skinPartLabel(call.material), drawCalls: 0, vertices: 0, tintable: false };
+        part.drawCalls++;
+        part.vertices += call.vertex_count;
+        parts.set(call.material, part);
+    }
+    return [...parts.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+async function inspect(vpk: string, base: string, entry: string): Promise<SkinPart[]> {
+    const parts = partsFromDrawCalls(JSON.parse(await runVpkmergeStdout([
+        'model', 'edit', '--vpk', vpk, '--base', base, '--entry', entry, '--list-drawcalls', '--json',
+    ])));
+    const materialSchema = z.object({ m_shaderName: z.string(),
+        m_vectorParams: z.array(z.object({ m_name: z.string() })),
+        m_dynamicParams: z.array(z.object({ m_name: z.string() })).default([]),
+    });
+    for (const part of parts) {
+        for (const pak of new Set([vpk, base])) {
+            try {
+                const path = part.material.endsWith('_c') ? part.material : `${part.material}_c`;
+                const material = materialSchema.parse(JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', pak])));
+                part.tintable = material.m_shaderName === 'pbr.vfx' && material.m_vectorParams.some((param) => param.m_name === 'g_vColorTint1')
+                    && !material.m_dynamicParams.some((param) => param.m_name === 'g_vColorTint1');
+                break;
+            } catch { /* Try the base material before disabling its tint control. */ }
+        }
+    }
+    return parts;
+}
+
+export async function getSkinEditInfo(deadlockPath: string, input: SkinEditSource): Promise<SkinEditInfo> {
+    const request = skinEditSourceSchema.parse(input);
+    return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => ({
+        fingerprint: source.fingerprint, entry: source.entry,
+        parts: await inspect(source.vpk, source.base, source.entry),
+    }));
+}
+
+export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): void {
+    if (info.fingerprint !== request.fingerprint) throw new Error('The source skin or game changed. Reload the editor before exporting.');
+    if (editedPartCount(request.edits) === 0) throw new Error('No skin changes to export.');
+    const materials = new Set(info.parts.map((part) => part.material));
+    const seen = new Set<string>();
+    for (const edit of request.edits) {
+        if (!materials.has(edit.material) || seen.has(edit.material)) throw new Error('Unknown or repeated skin part.');
+        seen.add(edit.material);
+        if (edit.tint !== null && !info.parts.some((part) => part.material === edit.material && part.tintable)) {
+            throw new Error('This material does not expose a supported static color tint.');
+        }
+        if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
+            throw new Error('This material name also selects another part. Hiding it cannot be exported safely.');
+        }
+    }
+    if (info.parts.every((part) => request.edits.some((edit) => edit.material === part.material && edit.hidden))) {
+        throw new Error('Keep at least one skin part visible.');
+    }
+}
+
+export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExport, out: string): Promise<void> {
+    const request = skinEditExportSchema.parse(input);
+    await withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
+        const parts = await inspect(source.vpk, source.base, source.entry);
+        validateSkinEdits({ ...source, parts }, request);
+        const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-edit-'));
+        try {
+            const layers: string[] = [];
+            let modelVpk = source.vpk;
+            let hiddenIndex = 0;
+            for (const edit of request.edits.filter((item) => item.hidden)) {
+                const layer = join(dir, `hidden-${hiddenIndex++}_dir.vpk`);
+                await runVpkmerge(['model', 'edit', '--vpk', modelVpk, '--base', source.base, '--entry', source.entry,
+                    '--remove-material', edit.material, '--encode-vpk', layer]);
+                await verifyVpkOutput(layer);
+                modelVpk = layer;
+            }
+            if (modelVpk !== source.vpk) layers.push(modelVpk);
+            for (const edit of request.edits.filter((item) => item.tint !== null && !item.hidden)) {
+                if (edit.tint === null) continue;
+                const layer = join(dir, `tint-${layers.length}_dir.vpk`);
+                await runVpkmerge(['vmat', '--vpk', source.vpk, '--base', source.base,
+                    '--entry', edit.material.endsWith('_c') ? edit.material : `${edit.material}_c`,
+                    '--set-vec', `g_vColorTint1=${skinTintVector(edit.tint).join(',')},0`, '--encode-vpk', layer]);
+                await verifyVpkOutput(layer);
+                layers.push(layer);
+            }
+            if (layers.length === 1) await fs.copyFile(layers[0], out);
+            else await runVpkmerge([out, ...layers]);
+            await verifyVpkOutput(out);
+        } finally { await fs.rm(dir, { recursive: true, force: true }); }
+    });
+}
+
+export async function exportSkinEdits(deadlockPath: string, input: unknown): Promise<VpkExportResult> {
+    const request = skinEditExportSchema.parse(input);
+    const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-export-'));
+    try {
+        const out = join(dir, 'skin_dir.vpk');
+        await buildSkinEditVpk(deadlockPath, request, out);
+        return await exportVpkViaDialog(out, exportVpkFileName(`${request.heroName}_skin_overlay`));
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+}

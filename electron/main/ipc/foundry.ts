@@ -19,6 +19,8 @@ import {
 import { buildHeroEffectVpkForExport } from '../services/heroColors';
 import { exportVpkViaDialog } from '../services/foundryExport';
 import { exportFoundryAsset } from '../services/foundryAssetExport';
+import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
+import { loadHideoutScene } from '../services/hideoutScene';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -40,6 +42,11 @@ function requireDeadlockPath(): string {
     }
     return deadlockPath;
 }
+
+ipcMain.handle('foundry:skinEditInfo', (_event, input: unknown) =>
+    getSkinEditInfo(requireDeadlockPath(), skinEditSourceSchema.parse(input)));
+ipcMain.handle('foundry:exportSkinEdits', (_event, input: unknown) => exportSkinEdits(requireDeadlockPath(), input));
+ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
 
 ipcMain.handle('foundry:exportAsset', async (_e, request: unknown): Promise<VpkExportResult> => {
     return exportFoundryAsset(requireDeadlockPath(), request);

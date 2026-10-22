@@ -1,0 +1,71 @@
+# Viewer and appearance workspace
+
+Door Stuck owns skin editing and VPK export. Locker selects installed skins and
+links to the editor with the current skin stack. Both use the same model viewer.
+
+## Placement research
+
+Locker selects installed cosmetics and previews the enabled skin stack.
+`LockerHero.tsx` already passes that stack to the shared `HeroPoseViewer`.
+Door Stuck creates assets. Its `HeroWorkshop.tsx` Appearance section currently
+contains `HeroEffectsPanel`, also reused by Locker and the catalog's Recolor tool.
+That panel edits ability effects and procedural body paint, not arbitrary skin parts.
+
+| Direction | Benefit | Cost |
+| --- | --- | --- |
+| Edit inside Locker | Current skin is already selected | Mixes equipping with creating and exporting a new mod |
+| Door Stuck Appearance workspace | Creation, source selection and export have one home | Needs a route from Locker and a shared live viewer |
+| Separate editor dialog | Large canvas | Adds another navigation level and hides the existing tools |
+
+Choose Door Stuck. Locker gets an Edit skin action carrying its current source stack.
+The viewer owns scene/camera presentation; Appearance owns edits and exports.
+
+```text
+Door Stuck / hero / Appearance
+  Source skin                     [Original] [Edited]
+  +-----------------------------+ +------------------+
+  |                             | | Parts     Search |
+  |          live hero          | | eye name   tint   |
+  |                             | | eye name   tint   |
+  | scene / playback / capture  | | Reset   Export VPK|
+  +-----------------------------+ +------------------+
+  Existing ability and procedural-paint controls
+```
+
+On narrow windows the inspector sits below the canvas. Keep the hero as the visual
+focus. The signature interaction is immediate visibility and tint changes beside the
+same animated skin, with a single Original/Edited switch for comparison.
+
+Use existing tokens: bg-primary #0f0f0f, bg-secondary #1a1a1a, bg-tertiary #242424,
+text-primary and border from index.css. Accent remains user-selected. Radiance labels,
+Reaver page titles, monospace only for source paths. Reuse Select, Input, Button,
+IconButton and SegmentedControl. No new decorative colors or fonts.
+
+## Technical boundaries
+
+Read the installed game and selected VPKs. Write generated previews to the app cache,
+and exports only to a destination selected by the user. Do not alter source VPKs.
+The pinned v0.24.0 vpkmerge help confirms generic KV3 JSON decoding via
+soundevents, textured model export, draw-call inspection, material removal and VMAT
+vector edits. Hideout support additionally needs the local `fix/map-viewer-uvs`
+exporter branch: auxiliary vertex formats and streams, environment vertex paint,
+and first-layer environment texture slots.
+The local build bundles that patched executable. A vpkmerge release and a real
+version/hash pin update are required before publishing this Grimoire change.
+
+The hideout is real geometry from maps/dl_hideout.vpk, loaded on demand. Map lighting,
+animation, particles and aggregate instance streams have separate support limits;
+report omissions rather than inventing assets. Preview lighting remains approximate.
+Generated game assets stay in the local cache.
+
+Parts are authored material groups. Shared materials affect all matching meshes.
+Tint controls require a static PBR color-tint parameter; expression-driven and
+unsupported shaders keep visibility controls but disable tinting.
+Exports must re-resolve the same skin stack, reject stale sources and unknown parts,
+and retain selected original skins as dependencies. Export is separate from installing.
+
+The hideout loader reads the map's player spawn and facing, world-node transforms,
+aggregate primitive transforms and tints. It checks generated GLB header lengths,
+reports missing exports and omits unresolved materials. Scene files participate in
+the existing preview-cache size and clear controls. Lighting, material blending,
+dynamic props and map effects remain approximate or unsupported.
