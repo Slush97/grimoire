@@ -1048,6 +1048,20 @@ export async function resetPerformanceConfigOverrides(
   return window.electronAPI.resetPerformanceConfigOverrides(presetId, optIns, version, videoVariant);
 }
 
+export async function setPerformanceConvarOverride(
+  key: string,
+  value: string | null
+): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.setPerformanceConvarOverride(key, value);
+}
+
+export async function setPerformanceConvarOverrideEnabled(
+  key: string,
+  enabled: boolean
+): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.setPerformanceConvarOverrideEnabled(key, enabled);
+}
+
 export async function reapplyWipedPerformanceConfig(): Promise<PerformanceConfigStatus> {
   return window.electronAPI.reapplyWipedPerformanceConfig();
 }

@@ -158,6 +158,15 @@ export interface PerformanceOptIn {
     group: 'visibility' | 'camera' | 'devtools';
 }
 
+/** A user-pinned convar value, shared by every preset. Disabling a pin keeps
+ *  its value for later but leaves the preset's own value in the file. */
+export interface PerformanceConvarPin {
+    value: string;
+    enabled: boolean;
+}
+
+export type PerformanceConvarPins = Record<string, PerformanceConvarPin>;
+
 /** One bundled upstream release of a preset. Users can roll back to an older
  *  release when a newer one runs worse on their machine, so every release we
  *  ship is described here rather than fetched on demand. */
@@ -249,6 +258,9 @@ export interface PerformanceConfigStatus {
     /** ConVars values banked as overrides for the applied preset. A disabled
      *  opt-in with one here comes back at this value when re-enabled. */
     savedConvarValues?: Record<string, string>;
+    /** User-pinned convar values, shared by every preset. A disabled pin keeps
+     *  its value but is not written into gameinfo.gi. */
+    pinnedConvars?: PerformanceConvarPins;
     /** Applied, but the file no longer matches what Grimoire wrote (hand edits). */
     handEdited?: boolean;
     /** Applied from another upstream commit of that release, or under older
@@ -1218,6 +1230,8 @@ export interface ElectronAPI {
         version?: string | null,
         videoVariant?: string | null
     ) => Promise<PerformanceConfigStatus>;
+    setPerformanceConvarOverride: (key: string, value: string | null) => Promise<PerformanceConfigStatus>;
+    setPerformanceConvarOverrideEnabled: (key: string, enabled: boolean) => Promise<PerformanceConfigStatus>;
     reapplyWipedPerformanceConfig: () => Promise<PerformanceConfigStatus>;
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
     getPerformanceLatestInfo: (presetId: string) => Promise<PerformanceLatestInfo>;

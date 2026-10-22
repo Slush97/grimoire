@@ -11,6 +11,8 @@ import {
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
     restorePerformanceConfigBackup,
+    setPerformanceConvarOverride,
+    setPerformanceConvarOverrideEnabled,
 } from '../services/performanceConfig';
 // Importing the service also registers its preset resolver with
 // performanceConfig, so markers written by a track-latest apply resolve.
@@ -100,6 +102,24 @@ ipcMain.handle(
             getActiveDeadlockPath(),
             selection(presetId, optIns, version, videoVariant)
         );
+    }
+);
+
+// set-performance-convar-override (pin one convar to a value for the applied
+// preset, or clear the pin with null; applies immediately)
+ipcMain.handle(
+    'set-performance-convar-override',
+    (_event, key: string, value: string | null): PerformanceConfigStatus => {
+        return setPerformanceConvarOverride(getActiveDeadlockPath(), String(key), value === null ? null : String(value));
+    }
+);
+
+// set-performance-convar-override-enabled (switch a global pin on or off while
+// keeping its value)
+ipcMain.handle(
+    'set-performance-convar-override-enabled',
+    (_event, key: string, enabled: boolean): PerformanceConfigStatus => {
+        return setPerformanceConvarOverrideEnabled(getActiveDeadlockPath(), String(key), enabled === true);
     }
 );
 

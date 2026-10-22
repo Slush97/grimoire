@@ -30,6 +30,7 @@ import { getGameinfoPath } from './deadlock';
 import { applyVideo, getVideoPath, revertVideo, videoApplied, type VideoState } from './performanceVideo';
 import type {
     PerformanceConfigStatus,
+    PerformanceConvarPins,
     PerformancePresetSummary,
 } from '../../../src/types/electron';
 import { keyExcluded } from './performancePresetGen';
@@ -108,6 +109,13 @@ const STATE_FILENAME = 'grimoire-performance.json';
 type OverrideEntry = { value?: string; omit?: boolean };
 type Overrides = Record<string, OverrideEntry>;
 
+/** One change to the global pin map: set/replace a value, remove the pin with
+ *  `value: null`, or toggle it while keeping its value. */
+interface ConvarPinUpdate {
+    value?: string | null;
+    enabled?: boolean;
+}
+
 /** Options for one apply. `presetId` picks which bundled preset to write;
  *  `optIns` are the gameplay/visibility convar keys to include (anything not
  *  listed stays out of the file). Undefined uses the creator defaults:
@@ -124,6 +132,8 @@ export interface ApplyOptions {
     /** Write the preset's video values over ones changed in game since. */
     restoreVideo?: boolean;
     videoVariant?: string | null;
+    /** One-shot edits to the global pin map, shared by every preset. */
+    pinnedUpdates?: Record<string, ConvarPinUpdate>;
 }
 
 /** The video.txt variant to write: the requested one when the release ships
@@ -608,33 +618,71 @@ export function applyPerformanceConfig(
             const appliedOptIns = sidecar?.optIns ?? [];
             // A toggled-off opt-in has no line in the file, so the harvest
             // cannot see its banked value. Hold it so toggling back on restores it.
+            // A key an enabled pin wrote shows the pin's value, not the user's
+            // per-preset one, so hold that too and never bank the pin's value.
             const offKeys = new Set(
                 appliedPreset.optIn
                     .map((control) => control.key)
                     .filter((key) => !appliedOptIns.includes(key))
             );
-            const held = Object.fromEntries(
-                Object.entries(saved[appliedPreset.id] ?? {}).filter(
-                    ([okey]) => okey.startsWith('ConVars/') && offKeys.has(okey.slice('ConVars/'.length))
-                )
+            const pinnedKeys = new Set(
+                Object.entries(sidecar?.pinnedConvars ?? {})
+                    .filter(([, pin]) => pin.enabled)
+                    .map(([key]) => key)
             );
-            saved[appliedPreset.id] = {
-                ...held,
-                ...harvestOverrides(
-                    content,
-                    appliedPreset,
-                    effectiveConvars(appliedPreset, appliedOptIns),
-                    readMarker(applied),
-                    // No sidecar keeps the old marker-only reading.
-                    sidecar !== null && sidecar.classification !== CLASSIFICATION_HASH
-                ),
-            };
+            const held = Object.fromEntries(
+                Object.entries(saved[appliedPreset.id] ?? {}).filter(([okey]) => {
+                    if (!okey.startsWith('ConVars/')) return false;
+                    const key = okey.slice('ConVars/'.length);
+                    return offKeys.has(key) || pinnedKeys.has(key);
+                })
+            );
+            const harvested = Object.fromEntries(
+                Object.entries(
+                    harvestOverrides(
+                        content,
+                        appliedPreset,
+                        effectiveConvars(appliedPreset, appliedOptIns),
+                        readMarker(applied),
+                        // No sidecar keeps the old marker-only reading.
+                        sidecar !== null && sidecar.classification !== CLASSIFICATION_HASH
+                    )
+                ).filter(([okey]) => !(okey.startsWith('ConVars/') && pinnedKeys.has(okey.slice('ConVars/'.length))))
+            );
+            saved[appliedPreset.id] = { ...held, ...harvested };
         }
-        let overrides: Overrides = {};
+        // Per-preset hand edits, then the enabled global pins on top. An off
+        // pin writes nothing, so the per-preset value or the preset's own
+        // value shows through.
+        let perPresetOverrides: Overrides = {};
         if (!opts?.resetOverrides) {
-            overrides = saved[preset.id] ?? {};
+            perPresetOverrides = saved[preset.id] ?? {};
         } else {
             delete saved[preset.id];
+        }
+
+        const pins: PerformanceConvarPins = { ...(sidecar?.pinnedConvars ?? {}) };
+        if (opts?.pinnedUpdates) {
+            for (const [key, update] of Object.entries(opts.pinnedUpdates)) {
+                const current = pins[key];
+                if (update.value === null) {
+                    delete pins[key];
+                    continue;
+                }
+                const value = update.value ?? current?.value;
+                if (value === undefined) continue;
+                pins[key] = {
+                    value,
+                    enabled: update.enabled ?? current?.enabled ?? true,
+                };
+            }
+        }
+
+        // A pin on a key a newer build excludes stays in the sidecar but is
+        // never written.
+        const overrides: Overrides = { ...perPresetOverrides };
+        for (const [key, pin] of Object.entries(pins)) {
+            if (pin.enabled && !keyExcluded(key, CLASSIFICATION)) overrides[`ConVars/${key}`] = { value: pin.value };
         }
 
         // Reapplying or switching starts from a clean base, so the file always
@@ -750,7 +798,7 @@ export function applyPerformanceConfig(
 
         const finalText = crlf ? content.split('\n').join('\r\n') : content;
         writeFileSync(gameinfoPath, finalText, 'utf-8');
-        saved[preset.id] = overrides;
+        saved[preset.id] = perPresetOverrides;
         const videoVariant = pickVideoVariant(preset, opts?.videoVariant);
         // A different config, or the other video.txt of this one, is a new
         // look: all of its values go in, over ones changed in game under the
@@ -779,11 +827,12 @@ export function applyPerformanceConfig(
             contentHash: sha256(finalText),
             optIns,
             overridesByPreset: saved,
+            pinnedConvars: pins,
             video: video.state,
             videoVariant: videoVariant?.id ?? null,
         });
 
-        const kept = Object.keys(overrides).length;
+        const kept = Object.keys(perPresetOverrides).length;
         const keptNote = kept ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.` : '';
         const switchNote = switching ? ` Replaced ${appliedPreset.name}.` : '';
         const note = skipped.length
@@ -807,6 +856,139 @@ export function resetPerformanceConfigOverrides(
     opts?: Omit<ApplyOptions, 'resetOverrides'>
 ): PerformanceConfigStatus {
     return applyPerformanceConfig(deadlockPath, { ...opts, resetOverrides: true });
+}
+
+/**
+ * Pin one convar for every preset, or remove it with `value === null`.
+ * Reapplies immediately; the pin follows later applies and preset switches.
+ *
+ * Uses the file's own preset/version/opt-ins, so pinning cannot move the
+ * user to a newer release.
+ */
+export function setPerformanceConvarOverride(
+    deadlockPath: string | null,
+    key: string,
+    value: string | null
+): PerformanceConfigStatus {
+    const current = getPerformanceConfigStatus(deadlockPath);
+    if (current.state !== 'applied' || !current.appliedPresetId) {
+        return status('error', 'Apply a performance config before pinning a value.');
+    }
+    const base = reapplyOptions(deadlockPath!, current);
+    if (typeof base === 'string') return status('error', base);
+
+    // Convar names are case-insensitive in game, and every ConVars key in
+    // gameinfo.gi is lowercase, so a pin is too. Otherwise `Fps_Max` would sit
+    // next to the preset's `fps_max` as a duplicate line.
+    const normalized = key.trim().replace(/^ConVars\//, '').toLowerCase();
+    if (!/^[a-z_][\w.]*$/.test(normalized) || normalized === '__proto__') {
+        return status('error', 'Enter a convar name using letters, numbers, underscores or dots.');
+    }
+    if (keyExcluded(normalized, CLASSIFICATION)) {
+        return status('error', `${normalized} is a convar Grimoire never writes and cannot be pinned.`);
+    }
+    if (value !== null && nestedConvarNames(readFileSync(getGameinfoPath(deadlockPath!), 'utf-8')).has(normalized)) {
+        return status('error', `${normalized} is a block in gameinfo.gi or sits inside one, so it cannot be pinned.`);
+    }
+
+    const preset = resolvePreset(current.appliedPresetId, current.appliedVersion);
+    const isOptIn = preset.optIn.some((control) => control.key === normalized);
+    if (value !== null && isOptIn && !base.optIns.includes(normalized)) {
+        return status(
+            'error',
+            `Turn on ${normalized} under the author's gameplay settings before pinning its value.`
+        );
+    }
+
+    const raw = value === null ? null : value.trim();
+    const pinned =
+        raw !== null && raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')
+            ? raw.slice(1, -1)
+            : raw;
+    if (pinned !== null && (!pinned || pinned.includes('//') || INVALID_PIN_VALUE.test(pinned))) {
+        return status('error', 'Enter a value without quotes, backslashes, braces, // or line breaks.');
+    }
+
+    return applyPerformanceConfig(deadlockPath, {
+        ...base,
+        pinnedUpdates: { [normalized]: pinned === null ? { value: null } : { value: pinned, enabled: true } },
+    });
+}
+
+/** Switch a global pin on or off without losing its value. Turning it off
+ *  brings back the per-preset value, or the preset's own one. */
+export function setPerformanceConvarOverrideEnabled(
+    deadlockPath: string | null,
+    key: string,
+    enabled: boolean
+): PerformanceConfigStatus {
+    const current = getPerformanceConfigStatus(deadlockPath);
+    if (current.state !== 'applied' || !current.appliedPresetId) {
+        return status('error', 'Apply a performance config before changing a pin.');
+    }
+    const base = reapplyOptions(deadlockPath!, current);
+    if (typeof base === 'string') return status('error', base);
+
+    const normalized = key.trim().replace(/^ConVars\//, '').toLowerCase();
+    if (!Object.hasOwn(current.pinnedConvars ?? {}, normalized)) {
+        return status('error', `${normalized} is not pinned.`);
+    }
+
+    return applyPerformanceConfig(deadlockPath, { ...base, pinnedUpdates: { [normalized]: { enabled } } });
+}
+
+// Control characters, backslashes and braces would break the quoted value or
+// the file's block structure.
+// eslint-disable-next-line no-control-regex
+const INVALID_PIN_VALUE = /["\\{}\u0000-\u001f\u007f\u2028\u2029]/;
+
+/** What a pin change reapplies with: exactly the preset, release, opt-ins and
+ *  video.txt variant already in the file. A string is the reason it can't. */
+function reapplyOptions(
+    deadlockPath: string,
+    current: PerformanceConfigStatus
+): Required<Pick<ApplyOptions, 'presetId' | 'version' | 'optIns' | 'videoVariant'>> | string {
+    const presetId = current.appliedPresetId!;
+    const version = current.appliedVersion!;
+    const preset = resolvePreset(presetId, version);
+    // A track-latest release drops out of the cache once a newer one is
+    // fetched, and resolving it then falls back to a bundled release.
+    if (preset.version !== version) {
+        return `${preset.name} v${version} is no longer available. Apply the config again, then change the pin.`;
+    }
+    const gameinfoPath = getGameinfoPath(deadlockPath);
+    const sidecar = readAppliedState(gameinfoPath);
+    // Without a sidecar the file is the only record of which opt-ins are on.
+    const managed = sidecar ? null : managedConvarValues(readFileSync(gameinfoPath, 'utf-8').replace(/\r\n/g, '\n'));
+    const optIns = sidecar
+        ? (sidecar.optIns ?? [])
+        : preset.optIn.map((control) => control.key).filter((key) => managed![key] !== undefined);
+    return { presetId, version, optIns, videoVariant: current.appliedVideoVariant ?? null };
+}
+
+/** Names inside ConVars that are not plain top-level values: nested blocks
+ *  like `rate { min max }` and the keys inside them. Pinning one would inject
+ *  a stray line or rewrite every nested `max`. */
+function nestedConvarNames(text: string): Set<string> {
+    const content = text.replace(/\r\n/g, '\n');
+    const range = findSectionByPath(content, ['ConVars']);
+    const names = new Set<string>();
+    if (!range) return names;
+    let depth = 0;
+    for (const raw of content.slice(range.bodyStart, range.bodyEnd).split('\n')) {
+        const line = stripComment(raw);
+        const bare = /^[ \t]*"?([A-Za-z_][\w.]*)"?[ \t]*\{?[ \t]*$/.exec(line);
+        if (depth === 0 && bare) names.add(bare[1].toLowerCase());
+        if (depth > 0) {
+            const key = entryKey(line);
+            if (key) names.add(key.toLowerCase());
+        }
+        for (const ch of line) {
+            if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+        }
+    }
+    return names;
 }
 
 function braceCount(content: string): number {
@@ -857,6 +1039,33 @@ function removeMarkers(content: string): string {
     return out.join('\n');
 }
 
+/** Keep global pins when the config is removed: the sidecar stays, flagged
+ *  as an intentional removal, so turning it back on restores them. No pins
+ *  keeps the old clear-the-sidecar behavior used for wipe detection. */
+function rememberPinsAfterRemove(gameinfoPath: string): void {
+    const state = readAppliedState(gameinfoPath);
+    const pins = state?.pinnedConvars;
+    if (!state || !pins || !Object.keys(pins).length) {
+        clearAppliedState(gameinfoPath);
+        return;
+    }
+    try {
+        writeFileSync(
+            statePath(gameinfoPath),
+            JSON.stringify({
+                presetId: state.presetId,
+                version: state.version,
+                removed: true,
+                pinnedConvars: pins,
+            }),
+            'utf-8'
+        );
+    } catch {
+        // Best-effort, as with every other sidecar write.
+        clearAppliedState(gameinfoPath);
+    }
+}
+
 export function removePerformanceConfig(deadlockPath: string | null): PerformanceConfigStatus {
     if (!deadlockPath) return status('error', 'Deadlock path not configured.');
     const gameinfoPath = getGameinfoPath(deadlockPath);
@@ -869,13 +1078,16 @@ export function removePerformanceConfig(deadlockPath: string | null): Performanc
         revertVideoFile(readAppliedState(gameinfoPath)?.video);
         const content = readFileSync(gameinfoPath, 'utf-8');
         if (!content.includes(MARKER)) {
-            clearAppliedState(gameinfoPath);
+            if (readAppliedState(gameinfoPath)?.removed) {
+                return status('not-applied', 'Performance config is already removed.');
+            }
+            rememberPinsAfterRemove(gameinfoPath);
             return status('not-applied', 'No performance config to remove.');
         }
         const crlf = content.includes('\r\n');
         const restored = removeMarkers(crlf ? content.split('\r\n').join('\n') : content);
         writeFileSync(gameinfoPath, crlf ? restored.split('\n').join('\r\n') : restored, 'utf-8');
-        clearAppliedState(gameinfoPath);
+        rememberPinsAfterRemove(gameinfoPath);
         return status('not-applied', 'Performance config removed; stock values restored.');
     } catch (err) {
         return status('error', `Failed to remove performance config: ${err}`);
@@ -1058,6 +1270,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 ...(sidecar?.videoVariant ? { appliedVideoVariant: sidecar.videoVariant } : {}),
                 managedConvarValues: managedConvarValues(content),
                 savedConvarValues,
+                pinnedConvars: sidecar?.pinnedConvars ?? {},
                 handEdited,
                 ...(outdated ? { outdated } : {}),
                 overrideCount,
@@ -1075,6 +1288,14 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
         // and we hold a backup, point at the restore path rather than a
         // Reapply that will only error.
         const wipedSidecar = readAppliedState(gameinfoPath);
+        // Removed on purpose, not wiped by a game update: the pins stay so
+        // turning the config back on does not require retyping them.
+        if (wipedSidecar?.removed) {
+            return {
+                ...status('not-applied', 'Performance config removed.'),
+                ...(wipedSidecar.pinnedConvars ? { pinnedConvars: wipedSidecar.pinnedConvars } : {}),
+            };
+        }
         if (wipedSidecar) {
             const wipedId = wipedSidecar.presetId ?? DEFAULT_PRESET_ID;
             const savedOverrides = Object.keys(allOverrides(wipedSidecar)[wipedId] ?? {}).length;
@@ -1145,6 +1366,14 @@ interface AppliedState {
     /** Pre-multi-preset sidecars stored a single flat map. Read-only: migrated
      *  by `allOverrides` and never written again. */
     overrides?: Overrides;
+    /** User-pinned convar values shared by every preset, and by every apply
+     *  after a preset switch. Kept here (not in the per-preset map) so a value
+     *  entered once follows the user across presets. */
+    pinnedConvars?: PerformanceConvarPins;
+    /** Set when the user removed the performance config but still has pins to
+     *  keep. Presence of a sidecar normally means "wiped by a game update";
+     *  this flag distinguishes an intentional removal. */
+    removed?: boolean;
     /** Which video.txt the last apply wrote, what it wrote and what it replaced. Absent
      *  when it wrote nothing there (a preset without one, or no video.txt yet). */
     video?: VideoRecord;
@@ -1189,6 +1418,7 @@ function writeAppliedState(
         contentHash: string;
         optIns: string[];
         overridesByPreset: Record<string, Overrides>;
+        pinnedConvars: PerformanceConvarPins;
         video: VideoRecord | null;
         videoVariant: string | null;
     }
@@ -1207,6 +1437,7 @@ function writeAppliedState(
             ([, map]) => Object.keys(map).length > 0
         );
         if (kept.length) trimmed.overridesByPreset = Object.fromEntries(kept);
+        if (Object.keys(state.pinnedConvars).length) trimmed.pinnedConvars = state.pinnedConvars;
         if (state.video) trimmed.video = state.video;
         if (state.videoVariant) trimmed.videoVariant = state.videoVariant;
         writeFileSync(statePath(gameinfoPath), JSON.stringify(trimmed), 'utf-8');

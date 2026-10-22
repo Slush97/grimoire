@@ -491,6 +491,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         version?: string | null,
         videoVariant?: string | null
     ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version, videoVariant),
+    setPerformanceConvarOverride: (key: string, value: string | null) =>
+        ipcRenderer.invoke('set-performance-convar-override', key, value),
+    setPerformanceConvarOverrideEnabled: (key: string, enabled: boolean) =>
+        ipcRenderer.invoke('set-performance-convar-override-enabled', key, enabled),
     reapplyWipedPerformanceConfig: () => ipcRenderer.invoke('reapply-wiped-performance-config'),
     restorePerformanceConfigBackup: () => ipcRenderer.invoke('restore-performance-config-backup'),
     getPerformanceLatestInfo: (presetId: string) =>

@@ -23,6 +23,9 @@ import {
     reapplyWipedPerformanceConfig,
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
+    setExtraPresetResolver,
+    setPerformanceConvarOverride,
+    setPerformanceConvarOverrideEnabled,
 } from './performanceConfig';
 import { CLASSIFICATION, getFamily, getPreset } from './performanceConfigData';
 import { pathExcluded } from './performancePresetGen';
@@ -1244,5 +1247,212 @@ describe('video.txt settings', () => {
             expect(readVideo()).toBe(VIDEO);
             expect(readFileSync(userdata, 'utf-8')).toBe(applied);
         });
+    });
+});
+
+describe('global convar pins', () => {
+    const PRESET = 'sqooky-default';
+    const OTHER = 'optilock-fps';
+    const OUTSIDE = 'grimoire_test_pin';
+    // A key the preset injects, so its line carries the preset's value.
+    const presetKey = () => getPreset(PRESET).convars.find(([key]) => !activeHas(STOCK, key))!;
+    const pin = (key: string, value: string | null) => setPerformanceConvarOverride(gameRoot, key, value);
+    const toggle = (key: string, on: boolean) => setPerformanceConvarOverrideEnabled(gameRoot, key, on);
+    const valueIn = (text: string, key: string) =>
+        new RegExp(`^\\s*${key}\\s+"([^"]*)"`, 'm').exec(text)?.[1];
+    const banked = (presetId: string) => sidecar()?.overridesByPreset?.[presetId] ?? {};
+
+    beforeEach(() => {
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+    });
+
+    it('writes a key outside the preset once, drops it when off or removed, and Remove restores the file', () => {
+        expect(pin(OUTSIDE, '3').state).toBe('applied');
+        expect(valueIn(read(), OUTSIDE)).toBe('3');
+        expect(topLevelConvarCounts(read()).get(OUTSIDE)).toBe(1);
+
+        toggle(OUTSIDE, false);
+        expect(activeHas(read(), OUTSIDE)).toBe(false);
+        expect(sidecar().pinnedConvars[OUTSIDE]).toEqual({ value: '3', enabled: false });
+
+        toggle(OUTSIDE, true);
+        pin(OUTSIDE, null);
+        expect(activeHas(read(), OUTSIDE)).toBe(false);
+        expect(sidecar().pinnedConvars).toBeUndefined();
+        expect(banked(PRESET)).toEqual({});
+
+        pin(OUTSIDE, '3');
+        removePerformanceConfig(gameRoot);
+        expect(read()).toBe(STOCK);
+    });
+
+    it('wins over a preset value, and turning it off brings the preset value back', () => {
+        const [key, presetValue] = presetKey();
+        pin(key, '7');
+        expect(valueIn(read(), key)).toBe('7');
+        expect(topLevelConvarCounts(read()).get(key)).toBe(1);
+        toggle(key, false);
+        expect(valueIn(read(), key)).toBe(presetValue);
+    });
+
+    it('never banks its own value as a per-preset edit', () => {
+        const [key] = presetKey();
+        pin(key, '7');
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        expect(banked(PRESET)).toEqual({});
+        pin(key, null);
+        expect(banked(PRESET)).toEqual({});
+    });
+
+    it('keeps a banked per-preset edit underneath, so it comes back when the pin goes', () => {
+        const [key, presetValue] = presetKey();
+        write(read().replace(new RegExp(`^(\\s*${key}\\s+)"[^"]*"`, 'm'), '$1"99999"'));
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        expect(banked(PRESET)[`ConVars/${key}`]).toEqual({ value: '99999' });
+
+        pin(key, '7');
+        expect(valueIn(read(), key)).toBe('7');
+        expect(banked(PRESET)[`ConVars/${key}`]).toEqual({ value: '99999' });
+
+        toggle(key, false);
+        expect(valueIn(read(), key)).toBe('99999');
+        pin(key, null);
+        expect(valueIn(read(), key)).toBe('99999');
+
+        resetPerformanceConfigOverrides(gameRoot, { presetId: PRESET });
+        expect(valueIn(read(), key)).toBe(presetValue);
+    });
+
+    it('keeps a hand edit made while the pin is off', () => {
+        const [key] = presetKey();
+        pin(key, '7');
+        toggle(key, false);
+        write(read().replace(new RegExp(`^(\\s*${key}\\s+)"[^"]*"`, 'm'), '$1"42"'));
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        expect(banked(PRESET)[`ConVars/${key}`]).toEqual({ value: '42' });
+        expect(valueIn(read(), key)).toBe('42');
+    });
+
+    it('follows a preset switch, a game-update wipe and a Remove', () => {
+        pin(OUTSIDE, '3');
+        applyPerformanceConfig(gameRoot, { presetId: OTHER });
+        expect(valueIn(read(), OUTSIDE)).toBe('3');
+
+        write(STOCK);
+        expect(reapplyWipedPerformanceConfig(gameRoot).state).toBe('applied');
+        expect(valueIn(read(), OUTSIDE)).toBe('3');
+
+        removePerformanceConfig(gameRoot);
+        expect(read()).toBe(STOCK);
+        expect(getPerformanceConfigStatus(gameRoot).pinnedConvars).toEqual({ [OUTSIDE]: { value: '3', enabled: true } });
+        expect(removePerformanceConfig(gameRoot).state).toBe('not-applied');
+
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        expect(valueIn(read(), OUTSIDE)).toBe('3');
+    });
+
+    it('round-trips a CRLF file byte for byte', () => {
+        write(STOCK_CRLF);
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        pin(OUTSIDE, '3');
+        pin(presetKey()[0], '7');
+        expect(read()).toContain('\r\n');
+        removePerformanceConfig(gameRoot);
+        expect(read()).toBe(STOCK_CRLF);
+    });
+
+    it('stores keys in lowercase, so a case variant replaces the pin instead of adding a line', () => {
+        const [key] = presetKey();
+        pin(key.toUpperCase(), '7');
+        pin(key[0].toUpperCase() + key.slice(1), '8');
+        expect(Object.keys(sidecar().pinnedConvars)).toEqual([key]);
+        expect(topLevelConvarCounts(read()).get(key)).toBe(1);
+        expect(valueIn(read(), key)).toBe('8');
+    });
+
+    it('refuses excluded keys in any case, and skips one a newer build excluded', () => {
+        const before = read();
+        for (const key of ['r_lightmap_size', 'R_LIGHTMAP_SIZE', 'sv_cheats', 'Host_Timescale']) {
+            expect(pin(key, '1').state).toBe('error');
+        }
+        expect(read()).toBe(before);
+
+        writeFileSync(
+            sidecarPath,
+            JSON.stringify({ ...sidecar(), pinnedConvars: { r_lightmap_size: { value: '0', enabled: true } } }),
+            'utf-8'
+        );
+        applyPerformanceConfig(gameRoot, { presetId: PRESET });
+        expect(activeHas(read(), 'r_lightmap_size')).toBe(false);
+    });
+
+    it('refuses block names and the keys nested inside them', () => {
+        const before = read();
+        for (const key of ['rate', 'max', 'min', 'default', 'speaker_config', 'voice_always_sample_mic', 'version']) {
+            expect(pin(key, '5').state).toBe('error');
+        }
+        expect(read()).toBe(before);
+    });
+
+    it('refuses values that would break the line or the file', () => {
+        const before = read();
+        for (const value of ['', 'a\\', '{', '}', 'a"b', 'a // b', 'a\nb', 'a\tb', 'a\0b', 'a b']) {
+            expect(pin(OUTSIDE, value).state).toBe('error');
+        }
+        expect(read()).toBe(before);
+        expect(pin(OUTSIDE, '"0.5"').state).toBe('applied');
+        expect(valueIn(read(), OUTSIDE)).toBe('0.5');
+    });
+
+    it('turns a pin back on when it is pinned again', () => {
+        pin(OUTSIDE, '3');
+        toggle(OUTSIDE, false);
+        pin(OUTSIDE, '4');
+        expect(sidecar().pinnedConvars[OUTSIDE]).toEqual({ value: '4', enabled: true });
+        expect(valueIn(read(), OUTSIDE)).toBe('4');
+    });
+
+    it('does not treat object built-ins as pins', () => {
+        expect(toggle('constructor', true).state).toBe('error');
+        expect(pin('__proto__', '1').state).toBe('error');
+    });
+
+    it('needs an opt-in turned on before pinning it', () => {
+        const preset = PRESETS.find((p) => p.optIn.some((control) => control.group !== 'devtools'))!;
+        const key = preset.optIn.find((control) => control.group !== 'devtools')!.key;
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+        expect(pin(key, '1').state).toBe('error');
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [key] });
+        expect(pin(key, '1').state).toBe('applied');
+        expect(valueIn(read(), key)).toBe('1');
+    });
+
+    it('keeps the opt-ins in the file when the sidecar is gone', () => {
+        const preset = PRESETS.find((p) => p.optIn.some((control) => control.group !== 'devtools'))!;
+        applyPerformanceConfig(gameRoot, { presetId: preset.id });
+        const on = getPerformanceConfigStatus(gameRoot).appliedOptIns!;
+        expect(on.length).toBeGreaterThan(0);
+        rmSync(sidecarPath);
+
+        expect(pin(OUTSIDE, '3').state).toBe('applied');
+        for (const key of on) expect(activeHas(read(), key)).toBe(true);
+        expect(getPerformanceConfigStatus(gameRoot).appliedOptIns).toEqual(on);
+    });
+
+    it('refuses to move a track-latest release that has left the cache', () => {
+        const tracked = { ...getPreset(PRESET), version: '9.9-tracked' };
+        try {
+            setExtraPresetResolver((id, version) => (id === PRESET && version === tracked.version ? tracked : null));
+            applyPerformanceConfig(gameRoot, { presetId: PRESET, version: tracked.version });
+            expect(read()).toContain(`v${tracked.version}`);
+
+            setExtraPresetResolver(null);
+            const before = read();
+            expect(pin(OUTSIDE, '3').state).toBe('error');
+            expect(read()).toBe(before);
+        } finally {
+            setExtraPresetResolver(null);
+        }
     });
 });
