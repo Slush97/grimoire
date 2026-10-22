@@ -9,7 +9,7 @@ export function skinPartLabel(path: string): string {
 }
 
 export function editedPartCount(edits: SkinPartEdit[]): number {
-  return edits.filter((edit) => edit.hidden || edit.tint !== null).length;
+  return edits.filter((edit) => edit.hidden || edit.tint !== null || (edit.pattern?.intensity ?? 0) > 0).length;
 }
 
 export function skinTintVector(hex: string): [number, number, number] {

@@ -1,5 +1,43 @@
 # Viewer and appearance workspace
 
+## V2 editor
+
+The first inspector repeated color/reset controls in every row and kept selected
+parts tied to a hover event. That made it hard to tell which part was being edited.
+V2 puts the parts in a strip above the viewer and the selected part's controls
+beside the model. Keeping the list inside the inspector pushed patterns below
+the fold in the first packaged check, so that layout was discarded.
+The other option was inline expanding rows. That makes a long list jump when the
+selection changes, so the selected-part inspector is the better fit.
+
+```text
+  All heroes   Abrams        Appearance | Abilities | Voice | Icons
+  Skin [Default]                        Original | Edited    Export VPK
+  eye Book   eye Coat   eye Gun   eye Head   eye Lower body   eye Teeth
+  +--------------------------------------+ +--------------------------+
+  |                                      | | Coat              Reset   |
+  |             live model               | | Highlight part            |
+  |                                      | |                           |
+  |    click a piece to select it         | |                           |
+  |                                      | | Color | Pattern           |
+  |                                      | | picker + hex / style grid  |
+  |    camera / scene / capture           | | Reset part                |
+  +--------------------------------------+ +--------------------------+
+```
+
+Use bg-primary #0f0f0f, bg-secondary #1a1a1a, bg-tertiary #242424,
+border #2d2d2d and text-secondary #a1a1aa. Keep the user's accent for selection
+and the model highlight. Radiance controls, Reaver hero title. Keep paths and
+implementation notes out of the editor. Color swatches start with the dominant
+opaque albedo color rather than an invented white default. A textured part can
+contain several colors; the starting swatch represents its dominant color.
+
+The signature interaction is selecting the same part from the list or directly
+on the model, with a persistent visible highlight and immediate hide/show feedback.
+Patterns and recoloring apply to that part and export in the same overlay VPK.
+Pattern textures are isolated per material so shared source textures do not repaint
+other parts. Existing global Body + Gun tools remain available separately.
+
 Door Stuck owns skin editing and VPK export. Locker selects installed skins and
 links to the editor with the current skin stack. Both use the same model viewer.
 
@@ -41,7 +79,7 @@ text-primary and border from index.css. Accent remains user-selected. Radiance l
 Reaver page titles, monospace only for source paths. Reuse Select, Input, Button,
 IconButton and SegmentedControl. No new decorative colors or fonts.
 
-## Design refinement
+## V1 design (superseded by V2)
 
 The viewer is for players adjusting a skin, with the model and its parts visible
 together. Two layouts were considered: selecting a part to open a separate settings

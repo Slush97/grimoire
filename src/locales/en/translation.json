@@ -296,7 +296,7 @@
     },
     "skin": {
       "title": "Skin parts",
-      "effects": "Effects and patterns",
+      "effects": "Global effects",
       "source": "Skin",
       "originalGame": "Default skin",
       "equipped": "Equipped skins",
@@ -308,12 +308,9 @@
       "changed_one": "{{count}} change",
       "changed_other": "{{count}} changes",
       "search": "Find a part",
-      "materialGroups": "Parts that share a material change together. Keep at least one part visible.",
-      "details": "Model details",
       "showAll": "Show all parts",
       "noResults": "No matching parts.",
       "hidden": "Hidden",
-      "recolored": "Recolored",
       "showPart": "Show {{part}}",
       "hidePart": "Hide {{part}}",
       "tintPart": "Tint {{part}}",
@@ -324,7 +321,17 @@
       "overlayVanilla": "Import the VPK in Installed to use these changes.",
       "saved": "VPK exported.",
       "editInWorkshop": "Edit skin in Door Stuck",
-      "tintUnsupported": "This part cannot be recolored."
+      "tintUnsupported": "This part cannot be recolored.",
+      "body": "Body",
+      "highlight": "Highlight part",
+      "color": "Color",
+      "pattern": "Pattern",
+      "noPattern": "Original",
+      "patternUnsupported": "This part cannot use patterns.",
+      "intensity": "Amount",
+      "phase": "Variation",
+      "scroll": "Speed",
+      "patternPreviewFailed": "Could not preview the pattern. Select it again to retry."
     }
   },
   "autoexec": {

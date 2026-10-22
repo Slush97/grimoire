@@ -54,6 +54,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [appearanceTool, setAppearanceTool] = useState<'parts' | 'effects'>('parts');
+  const editingSkin = section === 'appearance' && appearanceTool === 'parts';
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -74,9 +75,9 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
         : '';
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div className={`relative flex h-full overflow-hidden ${editingSkin ? 'flex-col bg-bg-primary' : ''}`}>
       {/* Hero render backdrop, anchored right, behind the frosted rail. */}
-      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
+      <div className={editingSkin ? 'hidden' : 'hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden'}>
         {renderSrc ? (
           <img
             src={renderSrc}
@@ -92,7 +93,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
           through to clear on the right. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
+        className={editingSkin ? 'hidden' : 'pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]'}
       >
         <div
           className="absolute inset-0"
@@ -113,7 +114,8 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
       </div>
 
       {/* Left rail: hero identity + section nav + build tray. */}
-      <div className="relative z-10 flex w-[280px] flex-shrink-0 flex-col gap-5 overflow-y-auto scrollbar-glass bg-bg-secondary p-5 animate-slide-in-left lg:bg-transparent xl:w-[320px]">
+      <div className={editingSkin ? 'relative z-10 flex shrink-0 flex-wrap items-center gap-4 border-b border-border bg-bg-secondary px-4 py-3'
+        : 'relative z-10 flex w-[280px] flex-shrink-0 flex-col gap-5 overflow-y-auto scrollbar-glass bg-bg-secondary p-5 animate-slide-in-left lg:bg-transparent xl:w-[320px]'}>
         <button
           type="button"
           onClick={onBack}
@@ -131,12 +133,12 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
           <img
             src={getHeroNamePath(hero.name)}
             alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
+            className={editingSkin ? 'h-6 w-auto object-contain' : 'h-8 w-auto self-start object-contain'}
             onError={() => setNameFailed(true)}
           />
         )}
 
-        <nav aria-label={t('foundry.workshop.sections', 'Workshop sections')} className="flex flex-col gap-1.5">
+        <nav aria-label={t('foundry.workshop.sections', 'Workshop sections')} className={`flex gap-1 ${editingSkin ? 'ml-auto flex-wrap' : 'flex-col'}`}>
           {sections.map(({ id, label, icon: Icon }) => {
             const isActive = section === id;
             return (
@@ -145,14 +147,14 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
                 type="button"
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => setSection(id)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                className={`flex items-center gap-2 rounded-sm border px-3 py-2 text-left transition-colors cursor-pointer ${
                   isActive
                     ? 'border-accent/60 bg-accent/15'
                     : 'border-transparent hover:bg-hl/10'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
-                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
+                <Icon className="h-4 w-4 flex-shrink-0 text-text-secondary" />
+                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
               </button>
             );
           })}
@@ -161,7 +163,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, skinSources }: H
 
       {/* Content pane: the active section. */}
       <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass">
-        <div className="space-y-4 p-6">
+        <div className={`space-y-4 ${editingSkin ? 'p-4' : 'p-6'}`}>
           {section === 'appearance' ? (
             <div className="space-y-4">
               <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}

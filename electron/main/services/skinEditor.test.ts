@@ -15,6 +15,9 @@ describe('skin overlay export', () => {
   it('groups all draw calls sharing a material', () => {
     expect(parts[0]).toMatchObject({ material: 'coat.vmat', drawCalls: 2, vertices: 30 });
   });
+  it('omits parts already removed by the source skin', () => {
+    expect(partsFromDrawCalls({ draw_calls: [{ material: 'removed.vmat', vertex_count: 100, index_count: 0 }] })).toEqual([]);
+  });
   it('rejects changed sources, unknown parts, duplicate parts and an invisible model', () => {
     expect(() => validateSkinEdits(info, { ...source, fingerprint: 'b'.repeat(64), edits: [] })).toThrow('changed');
     expect(() => validateSkinEdits(info, { ...source, edits: [{ material: 'other.vmat', hidden: true, tint: null }] })).toThrow('Unknown');

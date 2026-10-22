@@ -43,6 +43,7 @@ import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
+import { SkinPartPatterns } from './SkinPartPatterns';
 import type { HideoutSceneInfo, SkinPartEdit } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
@@ -953,8 +954,7 @@ function NprMaterials({
       const previousMatrix = matrix.clone();
       const previousOffset = offset.clone();
       const color = new THREE.Color(edit.tint);
-      const modeValue = morphic.ints?.g_nTextureColorTintMode1;
-      const mode = Array.isArray(modeValue) ? modeValue[0] : modeValue ?? 0;
+      const mode = 1;
       matrix.copy(source2TintMatrix(color, mode));
       const vector = new THREE.Vector3(color.r, color.g, color.b);
       offset.copy(mode === 1 ? vector.clone().sub(vector.clone().applyMatrix3(matrix)) : new THREE.Vector3());
@@ -1040,6 +1040,8 @@ export default function HeroPoseViewer({
   trippyPreview,
   partEdits = [],
   highlightedPart = null,
+  onPartColors,
+  onPartPick,
 }: {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
@@ -1051,6 +1053,8 @@ export default function HeroPoseViewer({
   trippyPreview?: TrippyPreview;
   partEdits?: SkinPartEdit[];
   highlightedPart?: string | null;
+  onPartColors?: (colors: Record<string, string>) => void;
+  onPartPick?: (material: string) => void;
 }) {
   const { t } = useTranslation();
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
@@ -1072,6 +1076,7 @@ export default function HeroPoseViewer({
     ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1, viewerScene !== 'hideout') : null, [ambientProbe, viewerScene]);
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
+  const partPatternFailed = useCallback(() => setViewerError(t('foundry.skin.patternPreviewFailed')), [t]);
   const backdrop = useViewerBackdrop();
   const backdropError = backdrop.errorKey === 'locker.pose.backgroundTooLarge'
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
@@ -1386,6 +1391,12 @@ export default function HeroPoseViewer({
             <shadowMaterial transparent opacity={0.25} />
           </mesh>
         )}
+        <group onClick={(event) => {
+          if (!onPartPick || event.delta > 4 || !(event.object instanceof THREE.Mesh)) return;
+          const materials = event.object.material;
+          const material = Array.isArray(materials) ? materials[event.face?.materialIndex ?? 0] : materials;
+          if (material) { event.stopPropagation(); onPartPick(material.name); }
+        }}>
         {rigged ? (
           <RiggedModel
             heroName={heroName}
@@ -1404,6 +1415,7 @@ export default function HeroPoseViewer({
         ) : (
           <PosedModel reset={resetView} scene={scene} interaction={interaction} />
         )}
+        </group>
         {scene && <Source2DrawState scene={scene} debug={features.nprDebugEnabled} />}
         {features.source2ShaderHintsEnabled && scene && (
           <Source2MaterialHints
@@ -1427,7 +1439,8 @@ export default function HeroPoseViewer({
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
-        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} />
+        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} />
+        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} />
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect

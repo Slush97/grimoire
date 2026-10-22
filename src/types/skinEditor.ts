@@ -1,4 +1,5 @@
 import type { HeroPoseSkinSource } from './portrait';
+import type { TrippyStyleName } from './mod';
 
 export interface SkinEditSource {
   heroName: string;
@@ -11,6 +12,7 @@ export interface SkinPart {
   drawCalls: number;
   vertices: number;
   tintable: boolean;
+  patternable: boolean;
 }
 
 export interface SkinEditInfo {
@@ -23,6 +25,14 @@ export interface SkinPartEdit {
   material: string;
   hidden: boolean;
   tint: string | null;
+  pattern?: SkinPartPattern | null;
+}
+
+export interface SkinPartPattern {
+  style: TrippyStyleName;
+  intensity: number;
+  phase: number;
+  scroll: number;
 }
 
 export interface SkinEditExport extends SkinEditSource {

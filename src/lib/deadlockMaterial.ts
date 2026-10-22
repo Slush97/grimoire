@@ -520,6 +520,8 @@ export function buildDeadlockMaterial(
     uJitterAmpYB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesYB1 ?? morphic.vectors?.g_vJitterAmplitudesYB) },
     uJitterAmpZA: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZA1 ?? morphic.vectors?.g_vJitterAmplitudesZA) },
     uJitterAmpZB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZB1 ?? morphic.vectors?.g_vJitterAmplitudesZB) },
+    uEditorSelected: { value: 0.0 },
+    uEditorSelectedColor: { value: new THREE.Color() },
     uHasHighlight: { value: highlight?.has ?? 0.0 },
     uHighlightTint: { value: highlight?.tint ?? new THREE.Color(0, 0, 0) },
     uHighlightCoverage: { value: highlight?.coverage ?? 0.0 },
@@ -540,6 +542,7 @@ export function buildDeadlockMaterial(
     patchMap: NPR_PATCH_MAP,
   });
   configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
+  csm.name = base.name;
 
   const dispose = () => {
     // CSM.dispose does NOT free its base material, so dispose the owned clone

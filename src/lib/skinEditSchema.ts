@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import { TRIPPY_STYLES } from '../types/mod';
+
+export const skinPartPatternSchema = z.object({
+    style: z.enum(TRIPPY_STYLES), intensity: z.number().finite().min(0).max(1),
+    phase: z.number().finite().min(0).max(1), scroll: z.number().finite().min(0).max(4),
+}).strict();
 
 export const skinEditSourceSchema = z.object({
     heroName: z.string().min(1).max(100),
@@ -14,5 +20,6 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
         material: z.string().min(1).max(512),
         hidden: z.boolean(),
         tint: z.string().regex(/^#[a-f0-9]{6}$/i).nullable(),
+        pattern: skinPartPatternSchema.nullable().optional(),
     }).strict()).max(256),
 }).strict();
