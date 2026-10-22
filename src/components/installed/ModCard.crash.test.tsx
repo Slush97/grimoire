@@ -42,6 +42,19 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 describe('crash badges on installed cards', () => {
+  it.each(['grid', 'compact', 'list'] as const)('opens merge updates without toggling the mod in %s', async view => {
+    const input = props(0, false, view);
+    input.mod.merged = { id: 'merge', createdAt: '', shareCode: '', sources: [] };
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={1} />));
+    const action = [...host.querySelectorAll('button')].find(button => button.textContent === 'mergedContents.updateSources');
+    expect(action).toBeDefined();
+    await act(async () => action?.click());
+    expect(onOpenDetails).toHaveBeenCalledOnce();
+    expect(onToggle).not.toHaveBeenCalled();
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={0} />));
+    expect(host.textContent).not.toContain('mergedContents.updateSources');
+  });
+
   it('skips ordinary hover renders and preserves Shift preview over a stationary pointer', async () => {
     const onRender = vi.fn();
     const input = { ...props(0, true, 'grid'), onSelectToggle };
