@@ -1039,6 +1039,7 @@ export default function HeroPoseViewer({
   fallbackSkinMetaKey,
   trippyPreview,
   partEdits = [],
+  highlightedPart = null,
 }: {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
@@ -1049,6 +1050,7 @@ export default function HeroPoseViewer({
    *  undefined for the plain skin. */
   trippyPreview?: TrippyPreview;
   partEdits?: SkinPartEdit[];
+  highlightedPart?: string | null;
 }) {
   const { t } = useTranslation();
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
@@ -1067,7 +1069,7 @@ export default function HeroPoseViewer({
   const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
-    ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1) : null, [ambientProbe, viewerScene]);
+    ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1, viewerScene !== 'hideout') : null, [ambientProbe, viewerScene]);
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
   const backdrop = useViewerBackdrop();
@@ -1372,12 +1374,12 @@ export default function HeroPoseViewer({
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. */}
-        <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} onProbe={setAmbientProbe} />
-        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, VIEWER_HEMISPHERE_INTENSITY]} />
-        <directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
+        {viewerScene !== 'hideout' && <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} onProbe={setAmbientProbe} />}
+        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY]} />
+        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
-        <directionalLight position={[3, 2, -3]} intensity={1.2} color={new THREE.Color(0.65, 0.78, 1)} />
+        <directionalLight position={[3, 2, -3]} intensity={1.2} color={new THREE.Color(0.65, 0.78, 1)} /></>}
         {viewerScene !== 'transparent' && viewerScene !== 'hideout' && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.02, 0]} receiveShadow>
             <planeGeometry args={[20, 20]} />
@@ -1425,8 +1427,8 @@ export default function HeroPoseViewer({
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
-        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} />
-        {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} />}
+        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} />
+        {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect
             deadlockExposure={viewerScene === 'midtown' ? 1.6 : 1.3}
@@ -1439,10 +1441,12 @@ export default function HeroPoseViewer({
       </Canvas>}
       {toolbar}
       {viewerScene === 'hideout' && (
-        <div role="status" className="pointer-events-none absolute left-3 top-3 max-w-80 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
-          {hideoutStatus.kind === 'loading' ? t('locker.pose.hideoutLoading') : hideoutStatus.kind === 'failed'
-            ? t('locker.pose.hideoutFailed') : <>{t('locker.pose.hideoutApproximation')}
-              {hideoutStatus.info.failures.length + hideoutStatus.failedLoads > 0 && <> {t('locker.pose.hideoutMissing', { count: hideoutStatus.info.failures.length + hideoutStatus.failedLoads })}</>}</>}
+        <div className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
+          {hideoutStatus.kind === 'ready' ? <details>
+            <summary className="cursor-pointer">{t('locker.pose.hideoutPreview')}</summary>
+            <p className="mt-2">{t('locker.pose.hideoutApproximation')}
+              {hideoutStatus.info.failures.length + hideoutStatus.failedLoads > 0 && <> {t('locker.pose.hideoutMissing', { count: hideoutStatus.info.failures.length + hideoutStatus.failedLoads })}</>}</p>
+          </details> : <p role="status">{t(hideoutStatus.kind === 'loading' ? 'locker.pose.hideoutLoading' : 'locker.pose.hideoutFailed')}</p>}
         </div>
       )}
       {import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer-debug') && (

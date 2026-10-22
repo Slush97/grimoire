@@ -46,6 +46,7 @@ export function SkinEditorSession({ heroName, sources }: { heroName: string; sou
   const [edits, setEdits] = useState<SkinPartEdit[]>([]);
   const [comparison, setComparison] = useState<'original' | 'edited'>('edited');
   const [search, setSearch] = useState('');
+  const [highlightedPart, setHighlightedPart] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -57,6 +58,8 @@ export function SkinEditorSession({ heroName, sources }: { heroName: string; sou
     return () => { cancelled = true; };
   }, [heroName, sources]);
   const count = editedPartCount(edits);
+  const hiddenCount = edits.filter((edit) => edit.hidden).length;
+  const visibleParts = info?.parts.filter((part) => part.label.toLowerCase().includes(search.toLowerCase()) || part.material.toLowerCase().includes(search.toLowerCase())) ?? [];
   const update = (material: string, patch: Partial<Pick<SkinPartEdit, 'hidden' | 'tint'>>) => {
     setSaved(false);
     setComparison('edited');
@@ -78,13 +81,13 @@ export function SkinEditorSession({ heroName, sources }: { heroName: string; sou
   return (
     <div className="@container space-y-3">
       <div className="grid gap-4 @min-[640px]:grid-cols-[minmax(0,1fr)_240px]">
-        <div className="relative min-h-96 overflow-hidden rounded-sm border border-border bg-bg-sunken" style={{ height: 'min(64vh, 720px)' }}>
+        <div className="min-w-0 space-y-2">
+          <SegmentedControl label={t('foundry.skin.compare')} value={comparison} onChange={setComparison}
+            options={[{ value: 'original', label: t('foundry.skin.original') }, { value: 'edited', label: t('foundry.skin.edited') }]} />
+          <div className="relative min-h-96 overflow-hidden rounded-sm border border-border bg-bg-sunken" style={{ height: 'min(64vh, 720px)' }}>
           <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}>
-            <HeroPoseViewer heroName={heroName} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits} />
+            <HeroPoseViewer heroName={heroName} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits} highlightedPart={highlightedPart} />
           </Suspense></ErrorBoundary>
-          <div className="absolute right-3 top-3">
-            <SegmentedControl label={t('foundry.skin.compare')} value={comparison} onChange={setComparison}
-              options={[{ value: 'original', label: t('foundry.skin.original') }, { value: 'edited', label: t('foundry.skin.edited') }]} />
           </div>
         </div>
         <div className="flex min-h-0 flex-col gap-3 rounded-sm border border-border bg-bg-secondary p-4">
@@ -93,18 +96,28 @@ export function SkinEditorSession({ heroName, sources }: { heroName: string; sou
             <span className="text-xs tabular-nums text-text-secondary">{t('foundry.skin.changed', { count })}</span>
           </div>
           <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('foundry.skin.search')} aria-label={t('foundry.skin.search')} />
-          <p className="text-xs text-text-secondary">{t('foundry.skin.materialGroups')}</p>
-          <div className="max-h-80 flex-1 space-y-1 overflow-y-auto">
+          {hiddenCount > 0 && <Button size="sm" variant="ghost" icon={Eye} disabled={exporting} onClick={() => {
+            setEdits((current) => current.filter((edit) => edit.tint !== null).map((edit) => ({ ...edit, hidden: false })));
+            setSaved(false); setComparison('edited');
+          }}>{t('foundry.skin.showAll')}</Button>}
+          <div className="max-h-96 flex-1 space-y-1 overflow-y-auto" onMouseLeave={() => setHighlightedPart(null)}>
             {!info && !error && <p role="status" className="text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}
-            {info?.parts.filter((part) => part.label.includes(search.toLowerCase()) || part.material.toLowerCase().includes(search.toLowerCase())).map((part) => {
+            {info && visibleParts.length === 0 && <p className="py-4 text-sm text-text-secondary">{t('foundry.skin.noResults')}</p>}
+            {visibleParts.map((part) => {
               const edit = edits.find((item) => item.material === part.material);
-              const ambiguous = info.parts.filter((item) => materialBasename(item.material) === materialBasename(part.material)).length > 1;
+              const ambiguous = info?.parts.filter((item) => materialBasename(item.material) === materialBasename(part.material)).length !== 1;
+              const lastVisible = !edit?.hidden && (info?.parts.length ?? 0) - hiddenCount <= 1;
               return (
-                <div key={part.material} className="flex items-center gap-2 rounded-sm bg-bg-tertiary p-2" title={part.material}>
-                  <IconButton size="sm" icon={edit?.hidden ? EyeOff : Eye} disabled={ambiguous || exporting}
+                <div key={part.material} className={`flex items-center gap-2 rounded-sm border p-2 transition-colors ${highlightedPart === part.material ? 'border-accent bg-hl/5' : 'border-transparent bg-bg-tertiary'}`} title={part.material}
+                  onMouseEnter={() => setHighlightedPart(ambiguous ? null : part.material)}
+                  onFocusCapture={() => setHighlightedPart(ambiguous ? null : part.material)}
+                  onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHighlightedPart(null); }}>
+                  <IconButton size="sm" icon={edit?.hidden ? EyeOff : Eye} disabled={ambiguous || exporting || lastVisible}
                     label={t(edit?.hidden ? 'foundry.skin.showPart' : 'foundry.skin.hidePart', { part: part.label })}
                     aria-pressed={!edit?.hidden} onClick={() => update(part.material, { hidden: !edit?.hidden })} />
-                  <span className={`min-w-0 flex-1 break-words text-xs ${edit?.hidden ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>{part.label}</span>
+                  <span className={`min-w-0 flex-1 break-words text-xs ${edit?.hidden ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>{part.label}
+                    {edit && <span className="mt-1 block text-2xs text-text-secondary">{t(edit.hidden ? 'foundry.skin.hidden' : 'foundry.skin.recolored')}</span>}
+                  </span>
                   <input type="color" value={edit?.tint ?? '#ffffff'} disabled={ambiguous || !part.tintable || edit?.hidden || exporting}
                     title={part.tintable ? undefined : t('foundry.skin.tintUnsupported')}
                     aria-label={t('foundry.skin.tintPart', { part: part.label })} className="h-7 w-7 shrink-0 cursor-pointer rounded-sm border border-border bg-transparent disabled:opacity-40"
@@ -115,14 +128,18 @@ export function SkinEditorSession({ heroName, sources }: { heroName: string; sou
               );
             })}
           </div>
-          <Button variant="secondary" icon={RotateCcw} disabled={count === 0 || exporting} onClick={() => { setEdits([]); setSaved(false); }}>{t('foundry.skin.reset')}</Button>
+          <Button variant="ghost" icon={RotateCcw} disabled={count === 0 || exporting} onClick={() => { setEdits([]); setSaved(false); setComparison('edited'); }}>{t('foundry.skin.reset')}</Button>
           <Button icon={Download} disabled={!info || count === 0} isLoading={exporting} onClick={() => { void exportVpk(); }}>{t('foundry.skin.export')}</Button>
           <p className="text-xs text-text-secondary">{t(sources.length ? 'foundry.skin.overlayDependency' : 'foundry.skin.overlayVanilla')}</p>
+          {saved && <p role="status" className="text-xs text-state-success">{t('foundry.skin.saved')}</p>}
+          <details className="border-t border-border pt-3 text-xs text-text-secondary">
+            <summary className="cursor-pointer">{t('foundry.skin.details')}</summary>
+            <p className="mt-2">{t('foundry.skin.materialGroups')}</p>
+            {info && <p className="mt-2 break-all font-mono text-2xs text-text-tertiary">{info.entry}</p>}
+          </details>
         </div>
       </div>
-      {info && <p className="break-all font-mono text-2xs text-text-tertiary">{info.entry}</p>}
       {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
-      {saved && <p role="status" className="text-sm text-text-secondary">{t('foundry.skin.saved')}</p>}
     </div>
   );
 }

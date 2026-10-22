@@ -41,6 +41,35 @@ text-primary and border from index.css. Accent remains user-selected. Radiance l
 Reaver page titles, monospace only for source paths. Reuse Select, Input, Button,
 IconButton and SegmentedControl. No new decorative colors or fonts.
 
+## Design refinement
+
+The viewer is for players adjusting a skin, with the model and its parts visible
+together. Two layouts were considered: selecting a part to open a separate settings
+card, or keeping visibility and color directly on each row. The second keeps simple
+edits to one click and avoids a mostly empty details card for two-part skins.
+
+```text
+  Original | Edited                  Parts     2 changes
+  +----------------------------+     Search parts
+  |                            |     eye  part name  tint reset
+  |        live model          |     eye  part name  tint reset
+  |                            |
+  | scene / playback / capture |     Reset all      Export VPK
+  +----------------------------+     export instructions
+```
+
+Use bg-primary #0f0f0f, bg-secondary #1a1a1a, bg-tertiary #242424,
+border #2d2d2d, and text-secondary #a1a1aa from the existing tokens. Use Radiance
+for controls and Reaver for the existing hero title. Accent stays user-selected.
+The signature is a model part outlined while its row is hovered or focused.
+Keep comparison above the model so it cannot overlap scene status. Changed rows
+and hidden rows need distinct states. Put material details behind a disclosure.
+
+The initial idea of separate Colors and Parts tabs was rejected: both act on the
+same groups, and switching tabs makes a small edit take longer. The same applies
+to adding another inspector card. Keep the controls together and remove prose
+that repeats what they do.
+
 ## Technical boundaries
 
 Read the installed game and selected VPKs. Write generated previews to the app cache,
@@ -49,7 +78,8 @@ The pinned v0.24.0 vpkmerge help confirms generic KV3 JSON decoding via
 soundevents, textured model export, draw-call inspection, material removal and VMAT
 vector edits. Hideout support additionally needs the local `fix/map-viewer-uvs`
 exporter branch: auxiliary vertex formats and streams, environment vertex paint,
-and first-layer environment texture slots.
+and first-layer environment texture slots. The refinement also adds a read-only
+texture-hdr command for linear HDR texture export with a size limit.
 The local build bundles that patched executable. A vpkmerge release and a real
 version/hash pin update are required before publishing this Grimoire change.
 
@@ -67,5 +97,16 @@ and retain selected original skins as dependencies. Export is separate from inst
 The hideout loader reads the map's player spawn and facing, world-node transforms,
 aggregate primitive transforms and tints. It checks generated GLB header lengths,
 reports missing exports and omits unresolved materials. Scene files participate in
-the existing preview-cache size and clear controls. Lighting, material blending,
-dynamic props and map effects remain approximate or unsupported.
+the existing preview-cache size and clear controls.
+
+Hideout lighting uses the installed map's DC irradiance atlas and TEXCOORD_3,
+including the world UV scale. HDR values survive export; the atlas is reduced to
+2048 pixels on its longer side. Baked surfaces exclude studio ambient lighting.
+The nearest contributing map lamps supply position, color, intensity and range,
+with a maximum of twelve lights. They currently use point-light proxies, so barn,
+rectangular and cone shapes, cookies and color-temperature modes are approximate.
+Shadows update for the two strongest lights; other room shadows are cached.
+The hero receives ambient light and reflections captured inside the loaded room.
+Directional SH lightmap terms, stationary shadow masks, exact lamp shapes,
+layer blending, dynamic props and map effects are still unsupported. This is an
+improved local preview, not matching proof against an in-game capture.

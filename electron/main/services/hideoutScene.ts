@@ -13,6 +13,10 @@ const matrix = z.tuple([row, row, row]);
 const worldSchema = z.object({
     m_worldNodes: z.array(z.object({ m_worldNodePrefix: z.string() })).max(256),
     m_entityLumps: z.array(z.string()).max(256),
+    m_worldLightingInfo: z.object({
+        m_bHasLightmaps: z.boolean(), m_lightMaps: z.array(z.string()),
+        m_vLightmapUvScale: z.tuple([z.number().positive().finite(), z.number().positive().finite()]),
+    }).optional(),
 });
 const objectSchema = z.object({
     m_renderableModel: z.string(), m_vTransform: matrix.optional(),
@@ -31,12 +35,20 @@ const entitySchema = z.object({
     m_entityKeyValues: z.array(z.object({ keyValues3Data: z.object({ values: z.object({
         classname: z.string().optional(), targetname: z.string().optional(), model: z.string().optional(),
         origin: vec3.optional(), angles: vec3.optional(),
+        enabled: z.boolean().optional(), color: vec3.optional(), range: z.coerce.number().nonnegative().finite().optional(),
+        brightness_candelas: z.coerce.number().nonnegative().finite().optional(), brightness_lumens: z.coerce.number().nonnegative().finite().optional(),
+        brightnessscale: z.coerce.number().nonnegative().finite().optional(), lightcookie: z.string().optional(),
     }) }).optional() })),
 });
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const cacheSchema = z.object({ key: z.string(), anchor: vec3, heading: z.number().finite(),
     instances: z.array(z.object({ model: z.string(), primitive: z.number().int().nonnegative().nullable(), matrix: z.array(z.number()).length(16), tint: vec3 })),
     failures: z.array(z.string()), omissions: z.array(z.string()),
+    lighting: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('baked'), file: z.literal('irradiance.hdr'), uvScale: z.tuple([z.number().positive().finite(), z.number().positive().finite()]) }),
+        z.object({ kind: z.literal('unavailable') }),
+    ]),
+    lights: z.array(z.object({ position: vec3, color: vec3, candela: z.number().nonnegative().finite(), range: z.number().nonnegative().finite() })),
 });
 
 export function compiledMapEntry(path: string): string {
@@ -52,7 +64,7 @@ export function sourceMatrix(rows: z.infer<typeof matrix> | undefined): number[]
 }
 
 export function hideoutCacheFile(key: string, name: string): string | null {
-    if (!/^[a-f0-9]{24}$/.test(key) || !/^[a-f0-9]{24}\.glb$/.test(name)) return null;
+    if (!/^[a-f0-9]{24}$/.test(key) || !(name === 'irradiance.hdr' || /^[a-f0-9]{24}\.glb$/.test(name))) return null;
     return join(app.getPath('userData'), 'viewer-scenes', key, name);
 }
 
@@ -93,11 +105,23 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
     try {
         const cached = cacheSchema.parse(JSON.parse(await fs.readFile(join(dir, 'scene.json'), 'utf8')));
         await Promise.all(cached.instances.map((instance) => fs.access(join(dir, instance.model))));
+        if (cached.lighting.kind === 'baked') await fs.access(join(dir, cached.lighting.file));
         return cached;
     } catch { /* Missing or interrupted cache: rebuild from the installed map. */ }
     await fs.mkdir(dir, { recursive: true });
     const world = worldSchema.parse(await decode(map, 'maps/dl_hideout/world.vwrld'));
-    const result: HideoutSceneInfo = { key, anchor: [0, 0, 0], heading: 0, instances: [], failures: [], omissions: ['mapLighting', 'layerBlending', 'mapEffects', 'dynamicProps'] };
+    const result: HideoutSceneInfo = { key, anchor: [0, 0, 0], heading: 0, instances: [], failures: [],
+        omissions: ['directionalLightmaps', 'areaLightShapes', 'lightCookies', 'layerBlending', 'mapEffects', 'dynamicProps'], lighting: { kind: 'unavailable' }, lights: [] };
+    const lighting = world.m_worldLightingInfo;
+    const irradiance = lighting?.m_lightMaps.find((entry) => entry.endsWith('/directional_irradiance_sh2_dc.vtex'));
+    if (lighting?.m_bHasLightmaps && irradiance) {
+        try {
+            await runVpkmerge(['texture-hdr', compiledMapEntry(irradiance), '--from-vpk', map,
+                '--out', join(dir, 'irradiance.hdr'), '--max-size', '2048']);
+            result.lighting = { kind: 'baked', file: 'irradiance.hdr', uvScale: lighting.m_vLightmapUvScale };
+        } catch { result.failures.push(irradiance); }
+    }
+    if (result.lighting.kind === 'unavailable') result.omissions.push('mapLighting');
     let spawnFound = false;
     const lumps = [...world.m_entityLumps];
     const visited = new Set<string>();
@@ -113,6 +137,12 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
                 result.anchor = entity.origin;
                 result.heading = entity.angles?.[1] ?? 0;
                 spawnFound = true;
+            }
+            if (entity?.classname && ['light_omni2', 'light_barn', 'light_rect'].includes(entity.classname)
+                && entity.enabled !== false && entity.origin && entity.color && entity.range) {
+                result.lights.push({ position: entity.origin, color: entity.color,
+                    candela: (entity.brightness_candelas ?? (entity.brightness_lumens ?? 0) / (4 * Math.PI)) * (entity.brightnessscale ?? 1),
+                    range: entity.range });
             }
         }
     }

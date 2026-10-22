@@ -3,6 +3,15 @@ import * as THREE from 'three';
 import { viewerAmbientCube, VIEWER_GROUND_COLOR, VIEWER_SKY_COLOR, VIEWER_HEMISPHERE_INTENSITY } from './viewerAmbientLight';
 
 describe('viewer diffuse environment', () => {
+  it('does not add an outdoor hemisphere to the captured hideout lighting', () => {
+    expect(viewerAmbientCube(new THREE.SphericalHarmonics3(), 1, false).every((face) => face.length() === 0)).toBe(true);
+    const sh = new THREE.SphericalHarmonics3();
+    sh.coefficients[0].set(0.2, 0.1, 0.05);
+    const indoor = viewerAmbientCube(sh, 1, false);
+    const outdoor = viewerAmbientCube(sh, 1);
+    expect(indoor[2].y).toBeLessThan(outdoor[2].y);
+    expect(indoor[0].x).toBeGreaterThan(indoor[0].y);
+  });
   it('keeps sky, floor and side irradiance in world-axis order', () => {
     const cube = viewerAmbientCube(new THREE.SphericalHarmonics3(), 1);
     VIEWER_SKY_COLOR.toArray().forEach((v, i) => expect(cube[2].getComponent(i)).toBeCloseTo(v * VIEWER_HEMISPHERE_INTENSITY, 12));

@@ -9,12 +9,12 @@ export const VIEWER_GROUND_COLOR = new THREE.Color(0.32, 0.25, 0.2);
 export const VIEWER_HEMISPHERE_INTENSITY = 1.5;
 
 /** Diffuse irradiance in world-space +X, -X, +Y, -Y, +Z, -Z order. */
-export function viewerAmbientCube(sh: THREE.SphericalHarmonics3, intensity: number): NprAmbientCube {
+export function viewerAmbientCube(sh: THREE.SphericalHarmonics3, intensity: number, includeHemisphere = true): NprAmbientCube {
   const sample = (x: number, y: number, z: number) => {
     const direction = new THREE.Vector3(x, y, z);
     const irradiance = sh.getIrradianceAt(direction, new THREE.Vector3()).multiplyScalar(intensity);
     const hemisphere = VIEWER_GROUND_COLOR.clone().lerp(VIEWER_SKY_COLOR, y * 0.5 + 0.5);
-    irradiance.add(new THREE.Vector3(hemisphere.r, hemisphere.g, hemisphere.b).multiplyScalar(VIEWER_HEMISPHERE_INTENSITY));
+    if (includeHemisphere) irradiance.add(new THREE.Vector3(hemisphere.r, hemisphere.g, hemisphere.b).multiplyScalar(VIEWER_HEMISPHERE_INTENSITY));
     return irradiance.max(new THREE.Vector3());
   };
   return [sample(1, 0, 0), sample(-1, 0, 0), sample(0, 1, 0), sample(0, -1, 0), sample(0, 0, 1), sample(0, 0, -1)];

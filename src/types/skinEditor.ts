@@ -44,4 +44,13 @@ export interface HideoutSceneInfo {
   instances: HideoutInstance[];
   failures: string[];
   omissions: string[];
+  lighting: { kind: 'baked'; file: 'irradiance.hdr'; uvScale: [number, number] } | { kind: 'unavailable' };
+  lights: HideoutLight[];
+}
+
+export interface HideoutLight {
+  position: [number, number, number];
+  color: [number, number, number];
+  candela: number;
+  range: number;
 }
