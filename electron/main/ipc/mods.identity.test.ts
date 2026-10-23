@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
     path: '/normal', devMode: false, locked: false,
     lockGate: null as Promise<void> | null,
     metadata: new Map<string, ModMetadata>(),
+    ignoredConflicts: [] as string[],
+    reorder: vi.fn(), priority: vi.fn(), swap: vi.fn(), migrateConflicts: vi.fn(), saveSettings: vi.fn(),
     scan: vi.fn(), heal: vi.fn(), enterLock: vi.fn(), write: vi.fn(), refresh: vi.fn(), download: vi.fn(), remove: vi.fn(), enable: vi.fn(),
 }));
 vi.mock('electron', () => ({
@@ -14,8 +16,9 @@ vi.mock('electron', () => ({
 }));
 vi.mock('../index', () => ({ getMainWindow: () => null }));
 vi.mock('../services/settings', () => ({
-    loadSettings: () => ({ devMode: h.devMode }),
+    loadSettings: () => ({ devMode: h.devMode, ignoredConflicts: h.ignoredConflicts }),
     getActiveDeadlockPath: () => h.path,
+    saveSettings: h.saveSettings,
 }));
 vi.mock('../services/mods', () => ({
     scanMods: h.scan,
@@ -30,6 +33,9 @@ vi.mock('../services/mods', () => ({
     },
     deleteModsUnlocked: h.remove,
     enableModUnlocked: h.enable,
+    reorderMods: h.reorder,
+    setModPriority: h.priority,
+    swapModPriority: h.swap,
 }));
 vi.mock('../services/metadata', () => ({
     getModMetadata: (key: string) => h.metadata.get(key),
@@ -45,7 +51,7 @@ vi.mock('../services/importDisabledVpk', () => ({}));
 vi.mock('../services/deadlock', () => ({}));
 vi.mock('../services/abilitySounds', () => ({}));
 vi.mock('../services/modChangeObservation', () => ({}));
-vi.mock('../services/conflicts', () => ({}));
+vi.mock('../services/conflicts', () => ({ migrateIgnoredConflictKeysForMods: h.migrateConflicts }));
 vi.mock('../services/lockerVpk', () => ({}));
 vi.mock('../services/profiles', () => ({}));
 vi.mock('../services/unknownModDetection', () => ({}));
@@ -86,6 +92,11 @@ beforeEach(() => {
     h.devMode = false;
     h.locked = false;
     h.lockGate = null;
+    h.ignoredConflicts = [];
+    h.reorder.mockResolvedValue(undefined);
+    h.priority.mockResolvedValue(source);
+    h.swap.mockResolvedValue(undefined);
+    h.migrateConflicts.mockImplementation(keys => keys);
     h.metadata.clear();
     h.metadata.set(source.metaKey, { globalType: null, globalTypeClassifierVersion: 4, abilitySounds: null });
     h.metadata.set(replacement.metaKey, { modName: 'Matched mod', globalType: null, globalTypeClassifierVersion: 4, abilitySounds: null });
@@ -104,6 +115,42 @@ beforeEach(() => {
     h.enable.mockImplementation(async () => {
         expect(h.locked).toBe(true);
         return { ...replacement, enabled: true };
+    });
+});
+
+describe('rename conflict migration inventories', () => {
+    beforeEach(() => {
+        h.metadata.set(source.metaKey, { ...h.metadata.get(source.metaKey), lockerHeroVpkChecked: true });
+    });
+
+    it.each([
+        ['reorder-mods', 1],
+        ['set-mod-priority', 0],
+        ['swap-mod-priority', 1],
+    ] as const)('%s skips the migration scan without ignored conflicts', async (channel, responseScans) => {
+        await h.handlers.get(channel)!({}, source.id, 2);
+
+        expect(h.scan).toHaveBeenCalledTimes(responseScans);
+        expect(h.migrateConflicts).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['reorder-mods', h.reorder, 2],
+        ['set-mod-priority', h.priority, 1],
+        ['swap-mod-priority', h.swap, 2],
+    ] as const)('%s migrates existing ignored conflicts before renaming', async (channel, mutation, scans) => {
+        h.ignoredConflicts = ['legacy conflict'];
+        h.migrateConflicts.mockReturnValue(['stable conflict']);
+        mutation.mockImplementation(async () => {
+            expect(h.migrateConflicts).toHaveBeenCalledWith(['legacy conflict'], [source]);
+            expect(h.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ ignoredConflicts: ['stable conflict'] }));
+            return source;
+        });
+
+        await h.handlers.get(channel)!({}, source.id, 2);
+
+        expect(h.scan).toHaveBeenCalledTimes(scans);
+        expect(mutation).toHaveBeenCalledOnce();
     });
 });
 

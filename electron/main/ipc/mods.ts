@@ -308,7 +308,11 @@ function sameKeys(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((key, index) => key === b[index]);
 }
 
-function migrateIgnoredConflictKeysBeforeRenames(mods: Mod[]): void {
+async function migrateIgnoredConflictKeysBeforeRenames(deadlockPath: string): Promise<void> {
+    // Most libraries have nothing to migrate. Avoid a full inventory read in
+    // that case, but reload settings after the scan before saving any changes.
+    if (!loadSettings().ignoredConflicts?.length) return;
+    const mods = await scanMods(deadlockPath);
     const settings = loadSettings();
     const current = settings.ignoredConflicts ?? [];
     if (current.length === 0) return;
@@ -1028,7 +1032,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
+        await migrateIgnoredConflictKeysBeforeRenames(deadlockPath);
         const mod = await setModPriority(deadlockPath, modId, priority);
         return enrichMod(mod);
     }
@@ -1042,7 +1046,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
+        await migrateIgnoredConflictKeysBeforeRenames(deadlockPath);
         await reorderMods(deadlockPath, orderedIds);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
@@ -1076,7 +1080,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
+        await migrateIgnoredConflictKeysBeforeRenames(deadlockPath);
         await swapModPriority(deadlockPath, modIdA, modIdB);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
