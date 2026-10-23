@@ -8,7 +8,8 @@ interface InstalledSectionProps {
   collapsed: boolean;
   onToggle: () => void;
   actions?: ReactNode;
-  children: ReactNode;
+  /** Avoid constructing the card tree until the section is expanded. */
+  children: () => ReactNode;
 }
 
 export function InstalledSection({
@@ -34,7 +35,7 @@ export function InstalledSection({
         {actions}
       </div>
       <div id={contentId} hidden={collapsed}>
-        {children}
+        {!collapsed && children()}
       </div>
     </section>
   );

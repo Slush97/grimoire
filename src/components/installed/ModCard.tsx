@@ -32,6 +32,12 @@ import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
 
+// Radix only mounts content when its menu opens. A component boundary also
+// defers constructing the item tree, including the full locker-tag roster.
+function DeferredMenuItems({ children }: { children: () => ReactNode }) {
+  return children();
+}
+
 interface ModCardProps {
   mod: {
     safety?: Mod['safety'];
@@ -1076,17 +1082,17 @@ export function ModCard({
     ? t('installed.card.unfavorite')
     : t('installed.card.favorite');
 
-  // One canonical list of card actions, mounted twice: once under the
-  // right-click (context) root wrapping the whole card, once under the
-  // dropdown root on the three-dot button. Only one of the two is open at a
-  // time, so this renders once in practice.
+  // One canonical list of card actions, shared by the right-click (context)
+  // root wrapping the card and dropdown root on the three-dot button.
+  // Construct it only when Radix mounts the open menu, rather than on every
+  // closed card's render.
   const hasTopActions =
     !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
-  const cardMenuItems = (
+  const renderCardMenuItems = () => (
     <>
       {onEditLocal && (
         <MenuItem icon={Pencil} onSelect={onEditLocal}>
@@ -1185,49 +1191,53 @@ export function ModCard({
           {/* Cap the height: the hero list is the full roster and would
               otherwise run taller than the window. */}
           <MenuSubContent className="max-h-72 overflow-y-auto">
-            <MenuItem
-              disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
-              onSelect={() => void clearLockerTag()}
-            >
-              {t('installed.tag.clearLockerTag')}
-            </MenuItem>
-            <MenuSeparator />
-            {/* Global type and hero are independent axes (setModGlobalType does
-                not clear lockerHero), so they are two radio groups rather than
-                one. "Clear locker tag" above resets both. */}
-            {onTagGlobal && (
+            <DeferredMenuItems>{() => (
               <>
-                <MenuLabel>{t('installed.tag.global')}</MenuLabel>
-                <MenuRadioGroup
-                  value={mod.globalType ?? ''}
-                  onValueChange={(value) => void applyGlobalTag(value as GlobalModType)}
+                <MenuItem
+                  disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
+                  onSelect={() => void clearLockerTag()}
                 >
-                  {GLOBAL_MOD_TYPE_ORDER.map((type) => (
-                    <MenuRadioItem key={type} value={type} disabled={menuBusy}>
-                      {globalModTypeLabel(type, t)}
+                  {t('installed.tag.clearLockerTag')}
+                </MenuItem>
+                <MenuSeparator />
+                {/* Global type and hero are independent axes (setModGlobalType does
+                    not clear lockerHero), so they are two radio groups rather than
+                    one. "Clear locker tag" above resets both. */}
+                {onTagGlobal && (
+                  <>
+                    <MenuLabel>{t('installed.tag.global')}</MenuLabel>
+                    <MenuRadioGroup
+                      value={mod.globalType ?? ''}
+                      onValueChange={(value) => void applyGlobalTag(value as GlobalModType)}
+                    >
+                      {GLOBAL_MOD_TYPE_ORDER.map((type) => (
+                        <MenuRadioItem key={type} value={type} disabled={menuBusy}>
+                          {globalModTypeLabel(type, t)}
+                        </MenuRadioItem>
+                      ))}
+                    </MenuRadioGroup>
+                    <MenuSeparator />
+                  </>
+                )}
+                <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
+                <MenuRadioGroup
+                  value={canonicalHeroName(mod.lockerHero) ?? ''}
+                  onValueChange={(value) => void applyLockerTag(value)}
+                >
+                  {HERO_NAMES_SORTED.map((heroName) => (
+                    <MenuRadioItem
+                      key={heroName}
+                      value={heroName}
+                      disabled={menuBusy}
+                      // Inferred tags read as informational, manual ones as chosen.
+                      tone={mod.lockerHeroSource === 'manual' ? 'accent' : 'info'}
+                    >
+                      <HeroTagLabel heroName={heroName} />
                     </MenuRadioItem>
                   ))}
                 </MenuRadioGroup>
-                <MenuSeparator />
               </>
-            )}
-            <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
-            <MenuRadioGroup
-              value={canonicalHeroName(mod.lockerHero) ?? ''}
-              onValueChange={(value) => void applyLockerTag(value)}
-            >
-              {HERO_NAMES_SORTED.map((heroName) => (
-                <MenuRadioItem
-                  key={heroName}
-                  value={heroName}
-                  disabled={menuBusy}
-                  // Inferred tags read as informational, manual ones as chosen.
-                  tone={mod.lockerHeroSource === 'manual' ? 'accent' : 'info'}
-                >
-                  <HeroTagLabel heroName={heroName} />
-                </MenuRadioItem>
-              ))}
-            </MenuRadioGroup>
+            )}</DeferredMenuItems>
           </MenuSubContent>
         </MenuSub>
       )}
@@ -1317,7 +1327,7 @@ export function ModCard({
             </button>
           </MenuTrigger>
           <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
-            {cardMenuItems}
+            <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
           </MenuContent>
         </MenuRoot>
       </div>
@@ -1613,7 +1623,7 @@ export function ModCard({
     </div>
       </MenuTrigger>
       <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
-        {cardMenuItems}
+        <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
       </MenuContent>
     </MenuRoot>
   );

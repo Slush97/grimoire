@@ -4232,7 +4232,7 @@ export default function Installed() {
             onToggle={() => setEnabledCollapsed((collapsed) => !collapsed)}
             actions={<InstalledProfilesMenu onApplied={handleProfileApplied} />}
           >
-            {visibleEnabled.length > 0 && renderSortableSection('enabled')}
+            {() => visibleEnabled.length > 0 && renderSortableSection('enabled')}
           </InstalledSection>
         </div>
       )}
@@ -4264,7 +4264,7 @@ export default function Installed() {
             </button>
           }
         >
-          {renderSortableSection('disabled')}
+          {() => renderSortableSection('disabled')}
         </InstalledSection>
       )}
 
