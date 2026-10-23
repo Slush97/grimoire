@@ -5,7 +5,7 @@ import { metaKeyFor } from './deadlock';
 import { listInstalledUserVpks } from './modLibrary';
 import { resolveVpkIdentity } from './vpkIdentity';
 import { getMetadataPath as metadataPathForMode } from '../utils/paths';
-import { loadSettings } from './settings';
+import { isDevModeEnabled } from './settings';
 
 export interface ModMetadata {
     modName?: string;      // The human-readable mod name from GameBanana
@@ -181,7 +181,7 @@ interface MetadataCacheEntry {
 let metadataCache: MetadataCacheEntry | null = null;
 
 function getMetadataPath(): string {
-    return metadataPathForMode(loadSettings().devMode);
+    return metadataPathForMode(isDevModeEnabled());
 }
 
 export function metadataBackupDirectory(path = getMetadataPath()): string {
