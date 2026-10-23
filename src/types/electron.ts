@@ -538,6 +538,8 @@ export interface VanillaRestoreResult {
 
 export interface GameRunningStatus {
     running: boolean;
+    /** Mods loaded at launch. Remains populated during the launch grace period. */
+    lockedModIds: string[];
 }
 
 export interface StopGameResult {

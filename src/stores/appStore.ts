@@ -5,6 +5,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
+import { isGameRunningModLockError } from '../lib/modLocks';
 import { showToast } from './toastStore';
 import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
@@ -322,6 +323,7 @@ interface AppState {
 
   // Mods
   mods: Mod[];
+  loadedGameModIds: ReadonlySet<string>;
   modsLoaded: boolean;
   modsLoading: boolean;
   modsError: string | null;
@@ -438,6 +440,7 @@ interface AppState {
    *  in-flight scan cannot be reused. Use `{ afterCurrent: true }` for queued
    *  writes to wait for the current scan and share one fresh follow-up. */
   loadMods: (opts?: { silent?: boolean; force?: boolean; afterCurrent?: boolean }) => Promise<void>;
+  setLoadedGameModIds: (ids: readonly string[]) => void;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
   toggleMod: (modId: string) => Promise<boolean>;
@@ -538,17 +541,13 @@ interface AppState {
 const ENABLE_CAP_NOTICE =
   'You can have at most 990 mods enabled at once. Disable one to make room.';
 const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
-const GAME_RUNNING_NOTICE = 'Game is running';
-const VANILLA_WINDOW_NOTICE = 'Vanilla launch in progress';
-const isGameRunningModLockError = (err: unknown): boolean =>
-  String(err).includes(GAME_RUNNING_NOTICE) || String(err).includes(VANILLA_WINDOW_NOTICE);
-
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   settings: null,
   settingsLoading: false,
   settingsError: null,
   mods: [],
+  loadedGameModIds: new Set(),
   modsLoaded: false,
   modsLoading: false,
   modsError: null,
@@ -575,6 +574,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   lockerModThumbnails: {},
   lockerThumbHideHeroName: {},
   appearanceImages: {},
+
+  setLoadedGameModIds: (ids) => {
+    const next = new Set(ids);
+    const previous = get().loadedGameModIds;
+    if (next.size !== previous.size || [...next].some((id) => !previous.has(id))) {
+      set({ loadedGameModIds: next });
+    }
+  },
 
   // Load settings from backend
   loadSettings: async () => {

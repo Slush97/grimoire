@@ -307,15 +307,15 @@ export default function Sidebar() {
   }, []);
 
   const refreshGameStatus = useCallback(async () => {
-    let next: boolean;
     try {
-      next = (await getGameRunningStatus()).running;
-    } catch {
-      next = false;
+      const status = await getGameRunningStatus();
+      useAppStore.getState().setLoadedGameModIds(status.lockedModIds);
+      if (gameRunningRef.current === status.running) return;
+      gameRunningRef.current = status.running;
+      setGameRunning(status.running);
+    } catch (error) {
+      console.warn('[launch] Failed to refresh game status:', error);
     }
-    if (gameRunningRef.current === next) return;
-    gameRunningRef.current = next;
-    setGameRunning(next);
   }, []);
 
   useEffect(() => {

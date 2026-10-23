@@ -1,5 +1,6 @@
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -239,7 +240,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
   const shell = entryCardShell(cardProps.viewMode === 'list');
   const style: CSSProperties = {
     ...shell.style,
-    transform: CSS.Transform.toString(transform),
+    transform: sortableDisabled ? undefined : CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
     zIndex: isDragging ? 1 : undefined,
@@ -600,6 +601,7 @@ export default function Installed() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
   const {
     settings,
     mods,
@@ -2456,6 +2458,9 @@ export default function Installed() {
     }
   };
 
+  const isEntryOrderLocked = (entry: ModEntry) =>
+    flattenEntries([entry]).some((mod) => isModLoadedInGame(mod, loadedGameModIds));
+
   /**
    * Reorder a variant relative to one of its picker-siblings. Used by both
    * the chevron up/down buttons and the picker's drag-and-drop. Returns
@@ -3386,6 +3391,10 @@ export default function Installed() {
 
     const sourceEntry = entries[oldIndex];
     const targetEntry = entries[newIndex];
+    if (isReorderBlocked(entries, oldIndex, newIndex, isEntryOrderLocked)) {
+      resetDragState();
+      return;
+    }
     const draftKeys = arrayMove(entries.map((entry) => entry.key), oldIndex, newIndex);
     setDragDraftOrder({ section, keys: draftKeys });
     dropCommitPendingRef.current = true;
@@ -3514,7 +3523,7 @@ export default function Installed() {
     onTagGlobal: tagEntryGlobal,
     onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
-    onCommitPriority: listsView ? undefined : commitEntryPriority,
+    onCommitPriority: listsView || isEntryOrderLocked(entry) ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
     occurrenceKey,
@@ -3542,7 +3551,7 @@ export default function Installed() {
     const sectionSortable =
       sortableEnabled && !(section === 'disabled' && disabledAlphabetical);
     const activeEntry = draggingSection === section
-      ? entries.find((entry) => entry.key === draggingKey)
+      ? entries.find((entry) => entry.key === draggingKey && !isEntryOrderLocked(entry))
       : undefined;
     return (
       <DndContext
@@ -3562,7 +3571,7 @@ export default function Installed() {
             {(gridWarm ? entries : entries.slice(0, INITIAL_MOUNT_COUNT)).map((entry) => (
               <SortableEntryCard
                 key={entry.key}
-                sortableDisabled={!sectionSortable}
+                sortableDisabled={!sectionSortable || isEntryOrderLocked(entry)}
                 {...cardPropsFor(entry)}
               />
             ))}

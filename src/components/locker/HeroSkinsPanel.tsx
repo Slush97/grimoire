@@ -22,6 +22,7 @@ import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
 import { shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
 import { shakeElement } from '../../lib/shakeElement';
+import { isModLoadedInGame, isReorderBlocked } from '../../lib/modLocks';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
@@ -202,12 +203,14 @@ interface HeroSkinsPanelProps {
  *  and name for an enabled skin group. */
 function LoadOrderRow({
   group,
+  disabled,
   position,
   hideNsfwPreviews,
   useHeroPortraitThumbnails,
   heroName,
 }: {
   group: SkinGroup;
+  disabled: boolean;
   position: number;
   hideNsfwPreviews: boolean;
   useHeroPortraitThumbnails: boolean;
@@ -216,6 +219,7 @@ function LoadOrderRow({
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.key,
+    disabled,
   });
   const primary = group.primary;
   const enabledCount = groupEnabledVariants(group).length;
@@ -225,16 +229,17 @@ function LoadOrderRow({
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      role="button"
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
+      role={disabled ? undefined : 'button'}
+      aria-disabled={disabled}
       aria-label={t('locker.skins.dragToReorder')}
-      title={t('locker.skins.dragToReorder')}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      title={t(disabled ? 'common.gameRunningWarning' : 'locker.skins.dragToReorder')}
+      style={{ transform: disabled ? undefined : CSS.Transform.toString(transform), transition }}
       className={`flex touch-none items-center gap-2.5 rounded-md border px-2 py-1.5 transition-colors ${
         isDragging
           ? 'z-10 cursor-grabbing border-accent/40 bg-bg-secondary opacity-95 shadow-lg shadow-black/40'
-          : 'cursor-grab border-hl/[0.08] bg-bg-secondary/60 hover:border-hl/[0.18] hover:bg-bg-secondary/80'
+          : `${disabled ? 'cursor-default' : 'cursor-grab'} border-hl/[0.08] bg-bg-secondary/60 hover:border-hl/[0.18] hover:bg-bg-secondary/80`
       }`}
     >
       <GripVertical className="h-4 w-4 flex-shrink-0 text-white/40" aria-hidden />
@@ -291,11 +296,11 @@ export function SkinLoadOrderStrip({
   heroName?: string;
 }) {
   const { t } = useTranslation();
+  const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
   const groups = useMemo(() => activeSkinGroups(mods), [mods]);
   // Local draft order so the list reflects a drop instantly instead of snapping
   // back while the rename round-trips through the main process. Re-synced from
-  // props (the post-rescan order) only when the enabled SET changes (a skin was
-  // enabled/disabled) — a pure reorder keeps the same set, so we keep our draft.
+  // props after the operation settles, including when the backend blocks a move.
   // Adjusting state during render (vs an effect) is React's recommended pattern
   // for deriving state from props and avoids a cascading re-render.
   const propKeys = useMemo(() => groups.map((g) => g.key), [groups]);
@@ -303,15 +308,15 @@ export function SkinLoadOrderStrip({
   const [prevPropKeys, setPrevPropKeys] = useState<string[]>(propKeys);
   if (propKeys !== prevPropKeys) {
     setPrevPropKeys(propKeys);
-    const sameSet =
-      orderedKeys.length === propKeys.length && orderedKeys.every((k) => propKeys.includes(k));
-    if (!sameSet) setOrderedKeys(propKeys);
+    setOrderedKeys(propKeys);
   }
 
   const byKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
   const orderedGroups = orderedKeys
     .map((k) => byKey.get(k))
     .filter((g): g is SkinGroup => Boolean(g));
+  const isOrderLocked = (group: SkinGroup) =>
+    group.variants.some((mod) => isModLoadedInGame(mod, loadedGameModIds));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -323,6 +328,7 @@ export function SkinLoadOrderStrip({
     const oldIndex = orderedKeys.indexOf(String(active.id));
     const newIndex = orderedKeys.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
+    if (isReorderBlocked(orderedGroups, oldIndex, newIndex, isOrderLocked)) return;
     const nextKeys = arrayMove(orderedKeys, oldIndex, newIndex);
     setOrderedKeys(nextKeys);
     const flatIds = nextKeys.flatMap((k) =>
@@ -349,6 +355,7 @@ export function SkinLoadOrderStrip({
               <LoadOrderRow
                 key={group.key}
                 group={group}
+                disabled={isOrderLocked(group)}
                 position={i + 1}
                 hideNsfwPreviews={hideNsfwPreviews}
                 useHeroPortraitThumbnails={useHeroPortraitThumbnails}

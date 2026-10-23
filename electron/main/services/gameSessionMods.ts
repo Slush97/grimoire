@@ -1,7 +1,8 @@
 import { isDeadlockRunning } from './launch';
 import type { Mod } from './mods';
+import { GAME_RUNNING_MOD_LOCK_MESSAGE } from '../../../src/lib/modLocks';
 
-export const GAME_RUNNING_MOD_LOCK_MESSAGE = 'Game is running';
+export { GAME_RUNNING_MOD_LOCK_MESSAGE };
 
 interface RunningGameSnapshot {
     lockedModIds: Set<string>;
@@ -31,10 +32,7 @@ export function captureLoadedGameMods(mods: Mod[]): void {
 }
 
 export function captureEmptyGameMods(): void {
-    snapshot = {
-        lockedModIds: new Set(),
-        lockedMetaKeys: new Set(),
-    };
+    captureLoadedGameMods([]);
 }
 
 export function clearLoadedGameMods(): void {
@@ -44,6 +42,10 @@ export function clearLoadedGameMods(): void {
 
 export function hasRunningGameModSnapshot(): boolean {
     return snapshot !== null;
+}
+
+export function getLoadedGameModIds(): string[] {
+    return snapshot ? [...snapshot.lockedModIds] : [];
 }
 
 export function isLoadedGameModLocked(mod: Pick<Mod, 'id' | 'metaKey' | 'enabled'>): boolean {
@@ -82,27 +84,19 @@ export function markLaunchGrace(ms = 60_000): void {
     launchGraceUntil = Date.now() + ms;
 }
 
-export async function syncRunningGameModSnapshotFromMods(mods: Mod[]): Promise<{ running: boolean }> {
+export async function syncRunningGameModSnapshotFromMods(mods: Mod[]): Promise<void> {
     const running = lockScopedRunning ?? (await isDeadlockRunning());
-    return syncKnownRunningGameModSnapshot(running, mods);
+    syncKnownRunningGameModSnapshot(running, mods);
 }
 
-export function syncKnownRunningGameModSnapshot(running: boolean, mods: Mod[]): { running: boolean } {
-    if (!running) {
-        // Keep the beforeLaunch snapshot during the launch grace window: the
-        // game isn't visible to pgrep/tasklist yet, but its loaded mods are
-        // already locked in.
-        if (snapshot && Date.now() < launchGraceUntil) {
-            return { running: false };
+export function syncKnownRunningGameModSnapshot(running: boolean, mods: Mod[]): void {
+    if (running) {
+        launchGraceUntil = 0;
+        if (!snapshot) {
+            captureLoadedGameMods(mods);
         }
+    } else if (!snapshot || Date.now() >= launchGraceUntil) {
+        // Keep the launch snapshot until the process appears or the grace expires.
         clearLoadedGameMods();
-        return { running: false };
     }
-
-    launchGraceUntil = 0;
-    if (!snapshot) {
-        captureLoadedGameMods(mods);
-    }
-
-    return { running: true };
 }

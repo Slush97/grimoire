@@ -40,6 +40,8 @@ import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
 import { shakeElement } from '../lib/shakeElement';
+import { useAppStore } from '../stores/appStore';
+import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 
 type DropPosition = 'before' | 'after';
 type VariantSection = 'enabled' | 'disabled';
@@ -106,7 +108,7 @@ function SortableVariantRow({
     } = useSortable({ id, disabled });
 
     const style: CSSProperties = {
-        transform: CSS.Transform.toString(transform),
+        transform: disabled ? undefined : CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.32 : undefined,
         position: 'relative',
@@ -150,6 +152,8 @@ export default function VariantPickerModal({
     onClose,
 }: Props) {
     const { t } = useTranslation();
+    const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
+    const isOrderLocked = (mod?: Mod) => isModLoadedInGame(mod, loadedGameModIds);
     const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
@@ -249,7 +253,7 @@ export default function VariantPickerModal({
     };
 
     const move = async (variant: Mod, direction: 'up' | 'down') => {
-        if (pending) return;
+        if (pending || isOrderLocked(variant)) return;
         setPending(`move:${variant.id}:${direction}`);
         try {
             await onMoveVariant(variant, direction);
@@ -275,6 +279,10 @@ export default function VariantPickerModal({
         const oldIndex = sectionVariants.findIndex((variant) => variant.id === activeId);
         const newIndex = sectionVariants.findIndex((variant) => variant.id === overId);
         if (oldIndex === -1 || newIndex === -1) {
+            resetDrag();
+            return;
+        }
+        if (isReorderBlocked(sectionVariants, oldIndex, newIndex, isOrderLocked)) {
             resetDrag();
             return;
         }
@@ -304,13 +312,14 @@ export default function VariantPickerModal({
         overlay = false
     ) => {
         const isActive = v.enabled;
-        const isPending = pending === v.id;
         const isDeletePending = pending === `delete:${v.id}`;
         const isDetachPending = pending === `detach:${v.id}`;
         const isEditing = !overlay && editing?.id === v.id;
         const isRenamePending = pending === `rename:${v.id}`;
-        const canMoveUp = idx > 0;
-        const canMoveDown = idx < sectionVariants.length - 1;
+        const upLocked = isOrderLocked(v) || isOrderLocked(sectionVariants[idx - 1]);
+        const downLocked = isOrderLocked(v) || isOrderLocked(sectionVariants[idx + 1]);
+        const canMoveUp = idx > 0 && !upLocked;
+        const canMoveDown = idx < sectionVariants.length - 1 && !downLocked;
         const showReorder = sectionVariants.length > 1;
         const isMoveUpPending = pending === `move:${v.id}:up`;
         const isMoveDownPending = pending === `move:${v.id}:down`;
@@ -449,7 +458,7 @@ export default function VariantPickerModal({
                                     onClick={() => move(v, 'up')}
                                     disabled={overlay || !!pending || !canMoveUp}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                    title={canMoveUp ? 'Move up' : 'Already first in load order'}
+                                    title={upLocked ? t('common.gameRunningWarning') : canMoveUp ? 'Move up' : 'Already first in load order'}
                                     aria-label={t('variantPicker.moveFileUp')}
                                 >
                                     {isMoveUpPending ? (
@@ -463,7 +472,7 @@ export default function VariantPickerModal({
                                     onClick={() => move(v, 'down')}
                                     disabled={overlay || !!pending || !canMoveDown}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                    title={canMoveDown ? 'Move down' : 'Already last in load order'}
+                                    title={downLocked ? t('common.gameRunningWarning') : canMoveDown ? 'Move down' : 'Already last in load order'}
                                     aria-label={t('variantPicker.moveFileDown')}
                                 >
                                     {isMoveDownPending ? (
@@ -516,9 +525,6 @@ export default function VariantPickerModal({
                         </button>
                     </>
                 )}
-                {isPending && (
-                    <span className="text-xs text-accent">{t('variantPicker.saving')}</span>
-                )}
             </div>
         );
     };
@@ -528,7 +534,7 @@ export default function VariantPickerModal({
         if (sectionVariants.length === 0) return null;
 
         const activeVariant = draggingSection === section
-            ? sectionVariants.find((variant) => variant.id === draggingId)
+            ? sectionVariants.find((variant) => variant.id === draggingId && !isOrderLocked(variant))
             : undefined;
         const activeIndex = activeVariant
             ? sectionVariants.findIndex((variant) => variant.id === activeVariant.id)
@@ -554,7 +560,7 @@ export default function VariantPickerModal({
                             <SortableVariantRow
                                 key={variant.id}
                                 id={variant.id}
-                                disabled={!sectionCanReorder}
+                                disabled={!sectionCanReorder || isOrderLocked(variant)}
                             >
                                 {renderVariantRow(variant, idx, sectionVariants)}
                             </SortableVariantRow>

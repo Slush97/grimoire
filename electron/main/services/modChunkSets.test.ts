@@ -9,9 +9,9 @@ vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 vi.mock('./launch', () => ({ isDeadlockRunning: async () => h.running, readStash: async () => null }));
 vi.mock('./modSafety', () => ({ assertVpkSafety: h.assertVpkSafety, moveSafetySnapshot: vi.fn(), forgetSafetySnapshot: vi.fn() }));
 
-import { deleteMods, enableMod, healModFolders, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
+import { deleteMods, disableMod, enableMod, healModFolders, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
 import { getModMetadata, saveMetadata, setModMetadata, type ModMetadata } from './metadata';
-import { clearLoadedGameMods } from './gameSessionMods';
+import { captureEmptyGameMods, captureLoadedGameMods, clearLoadedGameMods, getLoadedGameModIds, markLaunchGrace, syncKnownRunningGameModSnapshot } from './gameSessionMods';
 import { copyModBackupTo, listModBackups } from './modBackups';
 import { restoreModBackup } from './modBackupRestore';
 import type { DeleteModsProgress } from '../../../src/types/mod';
@@ -47,6 +47,78 @@ const idAt = async (path: string) => (await scanMods(root)).find((m) => m.path =
 const entryAt = async (path: string) => (await scanMods(root)).find((m) => m.path === path)!;
 
 describe('chunked mods move and delete as one set', () => {
+    it('rejects direct and indirect moves of loaded mods without changing files', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0' });
+        const mods = await scanMods(root);
+        captureLoadedGameMods(mods);
+        h.running = true;
+        const [a, b] = mods.sort((a, b) => a.priority - b.priority);
+        const before = await contents(addons);
+
+        await expect(reorderMods(root, [b.id, a.id])).rejects.toThrow('Game is running');
+        await expect(setModPriority(root, a.id, 3)).rejects.toThrow('Game is running');
+        await expect(swapModPriority(root, a.id, b.id)).rejects.toThrow('Game is running');
+        expect(await contents(addons)).toEqual(before);
+    });
+
+    it('allows reordering newly enabled mods while leaving loaded mods in place', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        h.running = true;
+        await put(addons, { 'pak02_dir.vpk': 'b', 'pak03_dir.vpk': 'c' });
+        const b = await idAt(join(addons, 'pak02_dir.vpk'));
+        const c = await idAt(join(addons, 'pak03_dir.vpk'));
+
+        await reorderMods(root, [loaded.id, c, b]);
+
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'loaded', 'pak02_dir.vpk': 'c', 'pak03_dir.vpk': 'b' });
+        expect(getLoadedGameModIds()).toEqual([loaded.id]);
+    });
+
+    it('reports locks through launch grace and releases them after the game exits', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+        syncKnownRunningGameModSnapshot(false, []);
+        expect(getLoadedGameModIds()).toEqual([loaded.id]);
+
+        syncKnownRunningGameModSnapshot(true, []);
+        syncKnownRunningGameModSnapshot(false, []);
+        expect(getLoadedGameModIds()).toEqual([]);
+    });
+
+    it('blocks disabling throughout launch grace but unlocks if the game never starts', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+
+        await expect(disableMod(root, loaded.id)).rejects.toThrow('Game is running');
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'loaded' });
+
+        markLaunchGrace(0);
+        expect((await disableMod(root, loaded.id)).enabled).toBe(false);
+        expect(getLoadedGameModIds()).toEqual([]);
+    });
+
+    it.each([false, true])('allows disabling later-enabled mods in a running session (vanilla: %s)', async (vanilla) => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        await put(disabled, { 'later_dir.vpk': 'later' });
+        const [loaded] = (await scanMods(root)).filter((mod) => mod.enabled);
+        if (vanilla) captureEmptyGameMods();
+        else captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+        syncKnownRunningGameModSnapshot(false, []);
+        h.running = true;
+
+        const later = await enableMod(root, await idAt(join(disabled, 'later_dir.vpk')));
+        expect((await disableMod(root, later.id)).enabled).toBe(false);
+        expect(getLoadedGameModIds()).toEqual(vanilla ? [] : [loaded.id]);
+        if (!vanilla) await expect(disableMod(root, loaded.id)).rejects.toThrow('Game is running');
+    });
+
     it('reorder swaps a chunked mod with a single-file one', async () => {
         await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0', 'pak02_001.vpk': 'b1' });
         const a = await idAt(join(addons, 'pak01_dir.vpk'));
