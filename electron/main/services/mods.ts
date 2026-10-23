@@ -411,21 +411,25 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
         return mods;
     }
 
-    const entries = await fs.readdir(folder);
     const trace = modTraceEnabled();
+    const entries = (await fs.readdir(folder)).filter((entry) =>
+        // Chunks and unrelated files never produce mods. Diagnostics and trace
+        // still inspect them so unreadable files and stale artifacts stay visible.
+        diagnostics || trace || isDeadlockModVpk(entry)
+    );
 
-    for (const entry of entries) {
+    const scanEntry = async (entry: string): Promise<Mod | undefined> => {
         const fullPath = join(folder, entry);
 
         // Reserved priority slots (pak01-pak04 in citadel/grimoire) are the
         // Locker's own managed VPKs. They are keyed by synthetic metadata keys
         // (locker:cards and friends), so surfacing them here would invent
         // phantom user mods for artifacts the user never installed.
-        if (!diagnostics && isReservedPriorityVpkPath(fullPath)) continue;
+        if (!diagnostics && isReservedPriorityVpkPath(fullPath)) return;
 
         try {
             const stats = await fs.stat(fullPath);
-            if (!stats.isFile()) continue;
+            if (!stats.isFile()) return;
 
             if (!isDeadlockModVpk(entry)) {
                 // A .vpk that doesn't end in _dir.vpk is on disk but invisible to
@@ -442,13 +446,13 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
                         modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
                     }
                 }
-                continue;
+                return;
             }
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
             const metaKey = metaKeyFor(fullPath);
 
-            mods.push({
+            return {
                 id: generateModId(metaKey),
                 name: extractModName(entry),
                 fileName: entry,
@@ -458,12 +462,24 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
                 priority,
                 size: stats.size,
                 installedAt: stats.mtime.toISOString(),
-            });
+            };
         } catch (err) {
             if (diagnostics) throw err;
             // Skip files we can't read (surfaced under trace: an unreadable VPK
             // is another way a mod silently drops out of the list).
             if (trace) modTrace(`scanFolder ${basename(folder)}: unreadable "${entry}": ${String(err)}`);
+        }
+    };
+
+    // Bound filesystem work per folder rather than issuing one request per mod
+    // at once. Consume each batch in directory order even if stats finish out of
+    // order, including the first failure reported by a diagnostic scan.
+    const batchSize = 8;
+    for (let start = 0; start < entries.length; start += batchSize) {
+        const results = await Promise.allSettled(entries.slice(start, start + batchSize).map(scanEntry));
+        for (const result of results) {
+            if (result.status === 'rejected') throw result.reason;
+            if (result.value) mods.push(result.value);
         }
     }
 
