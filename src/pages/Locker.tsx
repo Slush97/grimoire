@@ -1345,7 +1345,7 @@ export default function Locker() {
             .join(' • ')}
         </div>
         <div className="flex items-center gap-3">
-          <ShufflePool />
+          {(hasShuffleableMods || shuffleIncluded.size > 0) && <ShufflePool />}
           {hasShuffleableMods && (
             <button
               type="button"

@@ -186,8 +186,18 @@ describe('local profile shuffle snapshots', () => {
     const a = await createProfile('/unused', 'First', undefined, first);
     const b = await createProfile('/unused', 'Second', undefined, second);
     expect(loadProfiles().map((p) => p.shuffle)).toEqual([first, second]);
-    await updateProfile('/unused', a.id, undefined, { onLaunch: false, included: [], variants: [] });
-    expect(loadProfiles().find((p) => p.id === a.id)?.shuffle?.included).toEqual([]);
+    const third = { onLaunch: false, included: ['gamebanana:3'], variants: [] };
+    await updateProfile('/unused', a.id, undefined, third);
+    expect(loadProfiles().find((p) => p.id === a.id)?.shuffle).toEqual(third);
     expect(loadProfiles().find((p) => p.id === b.id)?.shuffle).toEqual(second);
+  });
+
+  it('clears the stored snapshot when update is given none', async () => {
+    const snapshot = { onLaunch: true, included: ['gamebanana:1'], variants: [] };
+    const a = await createProfile('/unused', 'First', undefined, snapshot);
+    const b = await createProfile('/unused', 'Second', undefined, snapshot);
+    await updateProfile('/unused', a.id, undefined, undefined);
+    expect(loadProfiles().find((p) => p.id === a.id)?.shuffle).toBeUndefined();
+    expect(loadProfiles().find((p) => p.id === b.id)?.shuffle).toEqual(snapshot);
   });
 });

@@ -230,9 +230,12 @@ Grimoire's exporter and importer live in `electron/main/services/portableProfile
 
 Local profiles in `profiles.json` save the Locker launch-shuffle switch, pool
 keys, and variant choices when created or updated. Applying a profile restores
-that snapshot. Older profiles leave the current shuffle settings alone. Update
-a profile after editing its pool to keep the changes. The pool viewer lists
-entries even while shuffle is off and lets you remove missing mods.
+that snapshot, minus keys of mods that are pinned Global at that point. Older
+profiles leave the current shuffle settings alone. Nothing is saved while
+shuffle is off and the pool is empty, so such a profile also leaves the current
+settings alone, and updating a profile in that state clears its stored
+snapshot. Update a profile after editing its pool to keep the changes. The pool
+viewer lists entries even while shuffle is off and lets you remove missing mods.
 
 Shuffle keys refer to this installation. They are not included in portable
 exports, share codes, or published loadouts.
