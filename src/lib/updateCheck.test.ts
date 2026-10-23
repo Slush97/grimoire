@@ -96,6 +96,18 @@ describe('computeUpdateFlags', () => {
     );
   });
 
+  it('reports only the stale merge sources that have a file to download as updatable', () => {
+    const merged = mergedMod([
+      mergeSource('top_bar_dir.vpk', TOP_BAR, 1769092),
+      mergeSource('main_dir.vpk', QOL, 1832204),
+    ]);
+
+    // main_dir.vpk needs a manual pick, so it is flagged but cannot be updated.
+    expect(computeUpdateFlags([merged], rows).updatableMergeSources).toEqual(
+      new Map([['merged', new Set(['top_bar_dir.vpk'])]]),
+    );
+  });
+
   it('does not report a merge source whose successor is installed standalone', () => {
     const merged = mergedMod([mergeSource('top_bar_dir.vpk', TOP_BAR, 1769092)]);
     const standaloneV5 = mod('v5', TOP_BAR, 1834013);

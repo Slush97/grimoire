@@ -4,7 +4,7 @@ import { Layers, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, P
 import type { Mod, MergedModSource } from '../types/mod';
 import type { MergeSourceUpdateOutcome, MergeSourceUpdateSkip } from '../lib/mergeSourceUpdate';
 import ModThumbnail from './ModThumbnail';
-import { Button, ModalHeader, Tag } from './common/ui';
+import { Button, ModalHeader, ProgressBar, Tag } from './common/ui';
 import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import { Input } from './common/forms';
 import { formatRelativeDate } from '../lib/dates';
@@ -19,7 +19,10 @@ interface Props {
   onExtractSource?: (source: MergedModSource) => Promise<void>;
   /** fileNames of sources whose GameBanana file is no longer live. */
   staleSourceFileNames?: Set<string>;
-  /** Download the current file for every outdated source and rebuild the merge
+  /** fileNames of the outdated sources `onUpdateSources` can replace. The rest
+   *  can only be extracted or unmerged by hand. */
+  updatableSourceFileNames?: Set<string>;
+  /** Download the current file for every updatable source and rebuild the merge
    *  around them. Omitted to leave the outdated markers read-only. */
   onUpdateSources?: () => Promise<MergeSourceUpdateOutcome>;
   /** Standalone installed mods that are not already represented by this merge. */
@@ -40,6 +43,7 @@ export default function MergedContentsModal({
   onUnmerge,
   onExtractSource,
   staleSourceFileNames,
+  updatableSourceFileNames,
   onUpdateSources,
   eligibleMods = [],
   onAddSources,
@@ -74,9 +78,16 @@ export default function MergedContentsModal({
       || eligible.fileName.toLowerCase().includes(addQuery))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
 
+  // The result lines belong to the update run that produced them.
+  const beginAction = () => {
+    setActionError(null);
+    setUpdateSkips([]);
+    setUpdatedCount(0);
+  };
+
   const handleExtract = async (src: MergedModSource) => {
     if (!onExtractSource || actionBusy) return;
-    setActionError(null);
+    beginAction();
     setBusyFileName(src.fileName);
     try {
       // The parent runs the IPC, refreshes mods, and then either re-syncs this
@@ -92,9 +103,7 @@ export default function MergedContentsModal({
 
   const handleUpdateSources = async () => {
     if (!onUpdateSources || actionBusy) return;
-    setActionError(null);
-    setUpdateSkips([]);
-    setUpdatedCount(0);
+    beginAction();
     setUpdatingSources(true);
     try {
       // The parent downloads the replacements, rebuilds the merge, and re-syncs
@@ -120,7 +129,7 @@ export default function MergedContentsModal({
 
   const handleAddSources = async () => {
     if (!onAddSources || selectedAddIds.size === 0 || actionBusy) return;
-    setActionError(null);
+    beginAction();
     setAddingSources(true);
     try {
       await onAddSources([...selectedAddIds], strict);
@@ -159,6 +168,8 @@ export default function MergedContentsModal({
   const staleCount = staleSourceFileNames
     ? merged.sources.filter((s) => staleSourceFileNames.has(s.fileName)).length
     : 0;
+  const updatable = onUpdateSources ? updatableSourceFileNames : undefined;
+  const updatableCount = updatable ? merged.sources.filter((s) => updatable.has(s.fileName)).length : 0;
 
   return (
     <Modal onClose={onClose} labelledBy={titleId} size="lg" dismissable={!actionBusy}>
@@ -198,21 +209,26 @@ export default function MergedContentsModal({
               {staleCount > 0 && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <p className="text-state-update/90 text-xs leading-relaxed flex-1 min-w-[16rem]">
-                    {onUpdateSources
-                      ? t('mergedContents.staleSourcesUpdatable', { count: staleCount })
+                    {updatableCount > 0
+                      ? t('mergedContents.staleSourcesUpdatable', { count: updatableCount })
                       : t('mergedContents.staleSourcesNote', { count: staleCount })}
                   </p>
-                  {onUpdateSources && (
+                  {updatableCount > 0 && (
                     <Button
                       variant="update"
                       size="sm"
                       onClick={() => void handleUpdateSources()}
-                      isLoading={updatingSources}
-                      disabled={busyFileName !== null || addingSources}
+                      disabled={actionBusy}
                     >
-                      {t('mergedContents.updateSources', { count: staleCount })}
+                      {t('mergedContents.updateSources', { count: updatableCount })}
                     </Button>
                   )}
+                </div>
+              )}
+              {updatingSources && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-xs text-text-secondary">{t('mergedContents.updating')}</p>
+                  <ProgressBar indeterminate value={0} max={1} label={t('mergedContents.updating')} />
                 </div>
               )}
               {updateSkips.length > 0 && (
@@ -287,7 +303,9 @@ export default function MergedContentsModal({
                         <Tag
                           tone="update"
                           className="uppercase tracking-wide"
-                          title={t('mergedContents.sourceOutdatedTitle')}
+                          title={updatable?.has(src.fileName)
+                            ? t('mergedContents.sourceUpdatableTitle')
+                            : t('mergedContents.sourceOutdatedTitle')}
                         >
                           {t('mergedContents.sourceOutdated')}
                         </Tag>

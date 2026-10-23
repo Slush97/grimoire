@@ -1,6 +1,7 @@
 import type { MergedModSource } from '../types/mod';
 import {
   classifyModFiles,
+  isDownloadableUpdate,
   isUpdateFlagged,
   type InstalledUpdateEntry,
   type UpdateFileRow,
@@ -16,6 +17,9 @@ export interface UpdateFlags {
   updatesAvailable: Set<string>;
   /** Merged mod id -> fileNames of absorbed sources in the same state. */
   staleMergeSources: Map<string, Set<string>>;
+  /** The subset of `staleMergeSources` an update can resolve to a file to
+   *  download. The rest need a manual extract or unmerge. */
+  updatableMergeSources: Map<string, Set<string>>;
 }
 
 /** GameBanana file ids absorbed into any merge. Classifying standalone files
@@ -61,9 +65,11 @@ export function computeUpdateFlags(
   }
 
   const staleMergeSources = new Map<string, Set<string>>();
+  const updatableMergeSources = new Map<string, Set<string>>();
   for (const mod of mods) {
     if (!mod.merged || mod.ignoreUpdates) continue;
     const stale = new Set<string>();
+    const updatable = new Set<string>();
     for (const [gameBananaId, sources] of mergeSourcesByModId(mod.merged.sources)) {
       const rows = rowsByModId.get(gameBananaId);
       if (!rows) continue;
@@ -75,13 +81,16 @@ export function computeUpdateFlags(
         autoMatchRemainingFiles,
       );
       for (const source of sources) {
-        if (isUpdateFlagged(states.get(source.fileId))) stale.add(source.fileName);
+        const state = states.get(source.fileId);
+        if (isUpdateFlagged(state)) stale.add(source.fileName);
+        if (isDownloadableUpdate(state)) updatable.add(source.fileName);
       }
     }
     if (stale.size > 0) staleMergeSources.set(mod.id, stale);
+    if (updatable.size > 0) updatableMergeSources.set(mod.id, updatable);
   }
 
-  return { updatesAvailable, staleMergeSources };
+  return { updatesAvailable, staleMergeSources, updatableMergeSources };
 }
 
 /** Sources with GameBanana provenance, grouped by mod id. */

@@ -283,6 +283,7 @@ interface InstalledEntryCardProps {
   conflicts: ModConflict[];
   updateAvailable: boolean;
   staleSourceCount: number;
+  updatableSourceCount: number;
   fixingUnknown: boolean;
   loadPosition: number | undefined;
   loadCount: number;
@@ -348,6 +349,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   conflicts,
   updateAvailable,
   staleSourceCount,
+  updatableSourceCount,
   fixingUnknown,
   loadPosition,
   loadCount,
@@ -393,6 +395,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         soundVolume={soundVolume}
         updateAvailable={updateAvailable}
         staleSourceCount={staleSourceCount}
+        updatableSourceCount={updatableSourceCount}
         entryKey={entry.key}
         onOpenDetails={
           mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
@@ -1238,6 +1241,7 @@ export default function Installed() {
   const detailsRequestIdRef = useRef(0);
   const updatesAvailable = useModUpdateCheckStore(state => state.updatesAvailable);
   const mergedSourceUpdates = useModUpdateCheckStore(state => state.staleMergeSources);
+  const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
   const finishing = usePendingDownloadCompletions();
@@ -2330,10 +2334,9 @@ export default function Installed() {
   const handleUpdateMergeSources = async (): Promise<MergeSourceUpdateOutcome> => {
     const targetId = mergedContentsMod?.id;
     const staleFileNames = targetId ? mergedSourceUpdates.get(targetId) : undefined;
-    const stale = (mergedContentsMod?.merged?.sources ?? []).filter((source) =>
-      staleFileNames?.has(source.fileName),
-    );
-    if (!targetId || stale.length === 0) return { updated: 0, skipped: [] };
+    const sources = mergedContentsMod?.merged?.sources ?? [];
+    const stale = sources.filter((source) => staleFileNames?.has(source.fileName));
+    if (!targetId || !staleFileNames || stale.length === 0) return { updated: 0, skipped: [] };
 
     const filesByModId = new Map<number, GameBananaFile[]>();
     const categoryByModId = new Map<number, number>();
@@ -2355,7 +2358,7 @@ export default function Installed() {
       claimed.add(mod.gameBananaFileId);
     }
 
-    const plan = planMergeSourceUpdates(stale, filesByModId, claimed, autoMatchRemainingFiles);
+    const plan = planMergeSourceUpdates(sources, staleFileNames, filesByModId, claimed, autoMatchRemainingFiles);
     const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
       modName: entry.source.modName,
       reason: entry.reason,
@@ -3491,6 +3494,8 @@ export default function Installed() {
         : entry.variants.some((v) => updatesAvailable.has(v.id)),
     staleSourceCount:
       entry.kind === 'single' ? (mergedSourceUpdates.get(entry.mod.id)?.size ?? 0) : 0,
+    updatableSourceCount:
+      entry.kind === 'single' ? (updatableMergeSources.get(entry.mod.id)?.size ?? 0) : 0,
     fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
     loadCount: isEntryEnabled(entry) ? enabledModCount : 0,
@@ -4577,6 +4582,7 @@ export default function Installed() {
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
           staleSourceFileNames={mergedSourceUpdates.get(mergedContentsMod.id)}
+          updatableSourceFileNames={updatableMergeSources.get(mergedContentsMod.id)}
           onUpdateSources={handleUpdateMergeSources}
           eligibleMods={eligibleMergeAdditions}
           onAddSources={handleAddMergeSources}

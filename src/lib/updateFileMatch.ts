@@ -61,6 +61,14 @@ export function isUpdateFlagged(state: FileUpdateState | undefined): boolean {
   return state?.kind === 'update' || state?.kind === 'needs-pick';
 }
 
+/** An update whose successor still has to be downloaded. A promotion's
+ *  successor is already installed, and a pick-only file has no successor. */
+export function isDownloadableUpdate(
+  state: FileUpdateState | undefined,
+): state is Extract<FileUpdateState, { kind: 'update' }> {
+  return state?.kind === 'update' && !state.promote;
+}
+
 interface StaleFile {
   fileId: number;
   row: UpdateFileRow | undefined;
