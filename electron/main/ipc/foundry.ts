@@ -21,7 +21,7 @@ import { exportVpkViaDialog } from '../services/foundryExport';
 import { exportFoundryAsset } from '../services/foundryAssetExport';
 import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
 import { loadHideoutScene } from '../services/hideoutScene';
-import { saveSkinEdits } from '../services/saveSkinEdits';
+import { resumeSkinEdit, saveSkinEdits } from '../services/saveSkinEdits';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -46,6 +46,8 @@ function requireDeadlockPath(): string {
 
 ipcMain.handle('foundry:skinEditInfo', (_event, input: unknown) =>
     getSkinEditInfo(requireDeadlockPath(), skinEditSourceSchema.parse(input)));
+ipcMain.handle('foundry:resumeSkinEdit', (_event, input: unknown) =>
+    resumeSkinEdit(requireDeadlockPath(), skinEditSourceSchema.parse(input)));
 ipcMain.handle('foundry:exportSkinEdits', (_event, input: unknown) => exportSkinEdits(requireDeadlockPath(), input));
 ipcMain.handle('foundry:saveSkinEdits', (_event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));

@@ -3,7 +3,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { buildSkinEditVpk } from './skinEditor';
 import { heroSkinSourceFingerprint } from './heroPoseModels';
-import { skinEditSaveSchema } from '../../../src/lib/skinEditSchema';
+import { skinEditSaveSchema, skinEditSourceSchema } from '../../../src/lib/skinEditSchema';
 import { allocateEnabledVpkPath, deleteModsUnlocked, enableModUnlocked, reorderModsUnlocked, runExclusiveModMutation, scanMods, type Mod } from './mods';
 import { assertVpkSafety } from './modSafety';
 import { assertCanMoveLoadedGameMods, syncRunningGameModSnapshotFromMods } from './gameSessionMods';
@@ -11,32 +11,60 @@ import { metaKeyFor, isPriorityFolderPath } from './deadlock';
 import { getModMetadata, setModMetadataWithHash, removeModMetadata } from './metadata';
 import { resolveVpkIdentity } from './vpkIdentity';
 import { notifyModChanges } from './modChangeObservation';
-import { sameSkinEditTarget, skinEditTarget, skinOverlayLoadOrder } from './skinOverlay';
-import type { SkinEditSaveResult } from '../../../src/types/skinEditor';
+import { resolveSkinEditSources, sameSkinEditTarget, skinEditTarget, skinOverlayLoadOrder, type ResolvedSkinEditSources } from './skinOverlay';
+import type { SkinEditResume, SkinEditSaveResult, SkinEditSource } from '../../../src/types/skinEditor';
 import type { HeroPoseSkinSource } from '../../../src/types/portrait';
+
+/** Swaps any skin-editor overlay in `requested` for the installed skins it was made from. Global skins never match. */
+async function resolveInstalledSkinEditSources(mods: Mod[], requested: HeroPoseSkinSource[]): Promise<ResolvedSkinEditSources> {
+    const candidates = mods.filter((mod) => !isPriorityFolderPath(mod.path)).map((mod) => {
+        const metadata = getModMetadata(mod.metaKey);
+        return { mod, metaKey: mod.metaKey, priority: mod.priority, enabled: mod.enabled, sha256: metadata?.sha256, skinEdit: metadata?.skinEdit };
+    });
+    const resolved = resolveSkinEditSources(requested, candidates);
+    if (!resolved.missing.length) return resolved;
+    // Only a mod without a stored hash can still match. Hash those before calling a source missing.
+    for (const candidate of candidates) {
+        candidate.sha256 ??= await resolveVpkIdentity(candidate.mod.path).then((identity) => identity.sha256, () => undefined);
+    }
+    return resolveSkinEditSources(requested, candidates);
+}
+
+export async function resumeSkinEdit(deadlockPath: string, input: SkinEditSource): Promise<SkinEditResume> {
+    const request = skinEditSourceSchema.parse(input);
+    const { skinSources, overlay, edits, missing } = await resolveInstalledSkinEditSources(await scanMods(deadlockPath), request.skinSources);
+    return {
+        skinSources, edits, missing: missing.length,
+        overlay: overlay && { metaKey: overlay.metaKey, priority: overlay.priority },
+        name: overlay && getModMetadata(overlay.metaKey)?.modName,
+    };
+}
 
 export async function saveSkinEdits(deadlockPath: string, input: unknown): Promise<SkinEditSaveResult> {
     const request = skinEditSaveSchema.parse(input);
     const { name, ...editRequest } = request;
+    // An overlay named as a source is resumed: build from its own sources and replace it.
+    const resolved = await resolveInstalledSkinEditSources(await scanMods(deadlockPath), request.skinSources);
     const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-save-'));
     try {
         const out = join(dir, 'skin_dir.vpk');
-        const entry = await buildSkinEditVpk(deadlockPath, editRequest, out);
+        const entry = await buildSkinEditVpk(deadlockPath, { ...editRequest, skinSources: resolved.skinSources }, out);
         await assertVpkSafety(out, { context: 'installation', name });
         const renamed = await runExclusiveModMutation(async () => {
             const before = await scanMods(deadlockPath);
             await syncRunningGameModSnapshotFromMods(before);
-            const sources = request.skinSources.map((source) => {
+            const sources = resolved.skinSources.map((source) => {
                 const mod = before.find((item) => item.metaKey === source.metaKey);
                 if (!mod) throw new Error('The source skin changed. Reload the editor before saving.');
                 return mod;
             });
-            if (await heroSkinSourceFingerprint(deadlockPath, request.skinSources, entry) !== request.fingerprint) {
+            if (await heroSkinSourceFingerprint(deadlockPath, resolved.skinSources, entry) !== request.fingerprint) {
                 throw new Error('The source skin or game changed. Reload the editor before saving.');
             }
             const target = skinEditTarget(request.heroName, await Promise.all(sources.map(async (mod) =>
                 getModMetadata(mod.metaKey)?.sha256 ?? (await resolveVpkIdentity(mod.path)).sha256)));
-            const replaced = before.filter((mod) => !sources.includes(mod) && sameSkinEditTarget(getModMetadata(mod.metaKey)?.skinEdit, target));
+            const resumed = (mod: Mod) => mod.metaKey === resolved.overlay?.metaKey && sameSkinEditTarget(getModMetadata(mod.metaKey)?.skinEdit, resolved.overlay.skinEdit);
+            const replaced = before.filter((mod) => !sources.includes(mod) && (resumed(mod) || sameSkinEditTarget(getModMetadata(mod.metaKey)?.skinEdit, target)));
             assertCanMoveLoadedGameMods(replaced);
             const enabledSources: Mod[] = [];
             for (const mod of sources) enabledSources.push(mod.enabled ? mod : await enableModUnlocked(deadlockPath, mod.id));
@@ -47,7 +75,7 @@ export async function saveSkinEdits(deadlockPath: string, input: unknown): Promi
             try {
                 removeModMetadata(key);
                 await setModMetadataWithHash(key, {
-                    modName: request.name, sourceSection: 'SkinEdit', categoryName: 'Skins', skinEdit: target,
+                    modName: request.name, sourceSection: 'SkinEdit', categoryName: 'Skins', skinEdit: { ...target, edits: request.edits },
                     lockerHero: request.heroName, lockerHeroSource: 'manual', lockerHeroVpkChecked: true,
                 }, destination);
                 const enabled = (await scanMods(deadlockPath)).filter((mod) => mod.enabled && !isPriorityFolderPath(mod.path));

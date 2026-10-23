@@ -64,6 +64,29 @@ export interface SkinEditSaveResult {
   renamed: Record<string, HeroPoseSkinSource>;
 }
 
+/** Recorded on a skin-editor overlay so saving the same edit target again replaces it. */
+export interface SkinEditTarget {
+  hero: string;
+  /** Canonical sha256 of each source VPK, sorted. Empty when editing the default skin. */
+  sources: string[];
+}
+
+export interface SkinEditRecord extends SkinEditTarget {
+  /** The saved edit set. Missing on overlays saved before edits were recorded. */
+  edits?: SkinPartEdit[];
+}
+
+/** An editor source stack with any skin-editor overlay swapped for the skins it was made from. */
+export interface SkinEditResume {
+  skinSources: HeroPoseSkinSource[];
+  /** The overlay this session continues. Saving replaces it. */
+  overlay?: HeroPoseSkinSource;
+  name?: string;
+  edits: SkinPartEdit[];
+  /** How many of the overlay's sources are no longer installed. */
+  missing: number;
+}
+
 export interface HideoutInstance {
   model: string;
   primitive: number | null;

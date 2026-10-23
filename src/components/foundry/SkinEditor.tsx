@@ -12,7 +12,7 @@ import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../..
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource } from '../../lib/skinEditSchema';
 import type { HeroPoseSkinSource } from '../../types/portrait';
-import type { SkinEditInfo, SkinPart, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
+import type { SkinEditInfo, SkinEditResume, SkinPart, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
@@ -23,27 +23,48 @@ export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES, 
 }) {
   const { t } = useTranslation();
   const mods = useAppStore((state) => state.mods);
-  const available = useMemo(() => mods.filter((mod) => isLockerManagedMod(mod) && !isGlobalSkinSource(mod)
+  // A saved overlay is never a source: choosing Equipped edits the skins it was made from.
+  const available = useMemo(() => mods.filter((mod) => isLockerManagedMod(mod) && !isGlobalSkinSource(mod) && !mod.skinEdit
     && canonicalHeroName(mod.lockerHero ?? inferHeroFromTitle(mod.name) ?? '') === canonicalHeroName(heroName)), [mods, heroName]);
   const equippedGlobal = initialSkinSources.some(isGlobalSkinSource);
   const equippedEditable = initialSkinSources.length > 0 && !equippedGlobal;
   // Sources live in state, so a mods-store refresh does not reload every part.
   const [selection, setSelection] = useState(() => ({
     value: equippedEditable ? 'equipped' : 'vanilla', equipped: initialSkinSources,
-    sources: equippedEditable ? initialSkinSources : NO_SOURCES, session: 0,
+    sources: equippedEditable ? initialSkinSources : NO_SOURCES, session: 0, resume: null as SkinEditResume | null,
+    // Checked once: a save can put the new overlay in a slot the stack still names.
+    resuming: equippedEditable && initialSkinSources.some((source) => mods.some((mod) => mod.metaKey === source.metaKey && mod.skinEdit)),
   }));
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selection.resuming) return;
+    let cancelled = false;
+    window.electronAPI.resumeSkinEdit({ heroName, skinSources: initialSkinSources }).then((resume) => {
+      if (!cancelled) setSelection((current) => ({ ...current, resuming: false, resume, equipped: resume.skinSources, sources: resume.skinSources, session: current.session + 1 }));
+    }).catch((reason: unknown) => { if (!cancelled) setResumeError(String(reason)); });
+    return () => { cancelled = true; };
+  }, [selection.resuming, heroName, initialSkinSources]);
   const select = (value: string) => setSelection((current) => ({ ...current, value, session: current.session + 1,
     sources: value === 'equipped' ? current.equipped : value === 'vanilla' ? NO_SOURCES
       : [{ metaKey: value, priority: available.find((mod) => mod.metaKey === value)?.priority ?? 0 }] }));
   // Saving can enable and repack mods; follow them so the session stays on the same skin.
-  const followRenames = (renamed: Record<string, HeroPoseSkinSource>) => setSelection((current) => {
+  const followSave = (renamed: Record<string, HeroPoseSkinSource>, edits: SkinPartEdit[], name: string) => setSelection((current) => {
     const remap = (sources: HeroPoseSkinSource[]) => sources.some((source) => renamed[source.metaKey])
       ? sources.map((source) => renamed[source.metaKey] ?? source) : sources;
-    return { ...current, value: renamed[current.value]?.metaKey ?? current.value, equipped: remap(current.equipped), sources: remap(current.sources) };
+    // The save replaced the resumed overlay, so Equipped now starts from this save.
+    const resume = current.value === 'equipped' && current.resume ? { ...current.resume, overlay: undefined, edits, name, missing: 0 } : current.resume;
+    return { ...current, value: renamed[current.value]?.metaKey ?? current.value, equipped: remap(current.equipped), sources: remap(current.sources), resume };
   });
+  const resumed = selection.value === 'equipped' ? selection.resume : null;
+  if (selection.resuming) {
+    return resumeError ? <p role="alert" className="text-sm text-state-danger">{resumeError}</p>
+      : <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.loading')}</p>;
+  }
   return <>
     {equippedGlobal && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.globalUnsupported')}</p>}
-    <SkinEditorSession key={selection.session} heroName={heroName} sources={selection.sources} onSaved={followRenames} onDirtyChange={onDirtyChange} sourceControl={
+    {!!resumed?.missing && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.sourceMissing', { count: resumed.missing })}</p>}
+    <SkinEditorSession key={selection.session} heroName={heroName} sources={selection.sources} initialEdits={resumed?.edits} initialName={resumed?.name}
+      replaces={resumed?.overlay} onSaved={followSave} onDirtyChange={onDirtyChange} sourceControl={
       <label className="flex min-w-0 max-w-sm items-center gap-2 text-xs text-text-secondary">
         <span>{t('foundry.skin.source')}</span>
         <Select inputSize="sm" value={selection.value} onChange={(event) => select(event.target.value)}>
@@ -56,17 +77,27 @@ export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES, 
   </>;
 }
 
-export function SkinEditorSession({ heroName, sources, sourceControl, onSaved, onDirtyChange }: {
-  heroName: string; sources: HeroPoseSkinSource[]; sourceControl?: ReactNode;
-  onSaved?: (renamed: Record<string, HeroPoseSkinSource>) => void; onDirtyChange?: (dirty: boolean) => void;
+/** `replaces` is a saved overlay this session resumes; `sources` never include one. */
+export function SkinEditorSession({ heroName, sources, initialEdits = NO_EDITS, initialName, replaces, sourceControl, onSaved, onDirtyChange }: {
+  heroName: string; sources: HeroPoseSkinSource[]; initialEdits?: SkinPartEdit[]; initialName?: string; replaces?: HeroPoseSkinSource;
+  sourceControl?: ReactNode; onSaved?: (renamed: Record<string, HeroPoseSkinSource>, edits: SkinPartEdit[], name: string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [loaded, setLoaded] = useState<{ sources: HeroPoseSkinSource[]; info: SkinEditInfo } | null>(null);
   const info = loaded?.info ?? null;
   // After a save renames the sources, the old info stays on screen but cannot be saved against.
   const current = loaded?.sources === sources ? loaded.info : null;
-  const [edits, setEdits] = useState<SkinPartEdit[]>([]);
+  const [edits, setEdits] = useState(initialEdits);
   const [savedEdits, setSavedEdits] = useState(edits);
+  // Saved edits can name parts the source no longer has, which a save would reject.
+  const keepKnownEdits = useEffectEvent((parts: SkinPart[]) => {
+    const known = (edit: SkinPartEdit) => parts.some((part) => part.material === edit.material);
+    if (edits.every(known)) return;
+    const kept = edits.filter(known);
+    setEdits(kept);
+    if (edits === savedEdits) setSavedEdits(kept);
+  });
   const [comparison, setComparison] = useState<'original' | 'edited'>('edited');
   const [search, setSearch] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
@@ -74,15 +105,16 @@ export function SkinEditorSession({ heroName, sources, sourceControl, onSaved, o
   const [focusedMaterial, setFocusedMaterial] = useState<string | null>(null);
   const [colors, setColors] = useState<Record<string, string>>({});
   const [textures, setTextures] = useState<Record<string, SkinPartTexture>>({});
-  const [name, setName] = useState(() => t('foundry.skin.customName', { hero: heroName }));
+  const [name, setName] = useState(() => initialName ?? t('foundry.skin.customName', { hero: heroName }));
   const [tool, setTool] = useState<'color' | 'pattern'>('color');
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [saved, setSaved] = useState<'exported' | 'enabled' | null>(null);
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.getSkinEditInfo({ heroName, skinSources: sources }).then((value) => { if (!cancelled) setLoaded({ sources, info: value }); })
-      .catch((reason: unknown) => { if (!cancelled) setError(String(reason)); });
+    window.electronAPI.getSkinEditInfo({ heroName, skinSources: sources }).then((value) => {
+      if (!cancelled) { setLoaded({ sources, info: value }); keepKnownEdits(value.parts); }
+    }).catch((reason: unknown) => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; };
   }, [heroName, sources]);
   const count = editedPartCount(edits);
@@ -137,9 +169,10 @@ export function SkinEditorSession({ heroName, sources, sourceControl, onSaved, o
     const saving = edits;
     setExporting(true); setError(null);
     try {
-      const { renamed } = await window.electronAPI.saveSkinEdits({ heroName, skinSources: sources, fingerprint: current.fingerprint, edits: saving, name: name.trim() });
+      const { renamed } = await window.electronAPI.saveSkinEdits({ heroName, skinSources: replaces ? [replaces, ...sources] : sources,
+        fingerprint: current.fingerprint, edits: saving, name: name.trim() });
       setSaved('enabled'); setSavedEdits(saving);
-      onSaved?.(renamed);
+      onSaved?.(renamed, saving, name.trim());
       await useAppStore.getState().loadMods({ silent: true, force: true });
     } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }

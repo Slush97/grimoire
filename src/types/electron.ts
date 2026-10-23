@@ -981,6 +981,8 @@ export interface ElectronAPI {
      *  defaults to the soul-container model when omitted. */
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
+    /** Swaps a saved skin-editor overlay in the stack for its own sources and returns its edits. */
+    resumeSkinEdit: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditResume>;
     exportSkinEdits: (request: import('./skinEditor').SkinEditExport) => Promise<import('./foundry').VpkExportResult>;
     saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;

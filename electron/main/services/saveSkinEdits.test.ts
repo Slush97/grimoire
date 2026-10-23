@@ -22,7 +22,7 @@ vi.mock('./skinEditor', async () => {
   };
 });
 
-import { saveSkinEdits } from './saveSkinEdits';
+import { resumeSkinEdit, saveSkinEdits } from './saveSkinEdits';
 import { scanMods } from './mods';
 import { getModMetadata } from './metadata';
 
@@ -34,8 +34,9 @@ function vpkBytes(marker: number): Buffer {
   return bytes;
 }
 
-const save = (dl: string, heroName: string, skinSources: Array<{ metaKey: string; priority: number }>, name: string) =>
-  saveSkinEdits(dl, { heroName, skinSources, fingerprint: 'f'.repeat(64), edits: [], name });
+type Edit = { material: string; hidden: boolean; tint: string | null };
+const save = (dl: string, heroName: string, skinSources: Array<{ metaKey: string; priority: number }>, name: string, edits: Edit[] = []) =>
+  saveSkinEdits(dl, { heroName, skinSources, fingerprint: 'f'.repeat(64), edits, name });
 
 describe('saveSkinEdits', () => {
   let dl: string;
@@ -77,6 +78,30 @@ describe('saveSkinEdits', () => {
     const { renamed } = await save(dl, 'Bebop', [{ metaKey: 'Parked_dir.vpk', priority: 50 }], 'Bebop edit');
     expect(renamed['Parked_dir.vpk']).toEqual({ metaKey: 'pak07_dir.vpk', priority: 7 });
     expect((await order()).slice(-2)).toEqual(['Bebop edit', 'pak07_dir.vpk']);
+  });
+
+  it('resumes an overlay named as a source instead of stacking another', async () => {
+    const located = async (name: string) => {
+      const mod = (await scanMods(dl)).find((item) => getModMetadata(item.metaKey)?.modName === name);
+      if (!mod) throw new Error(`${name} is not installed`);
+      return { metaKey: mod.metaKey, priority: mod.priority };
+    };
+    let source = { metaKey: 'pak07_dir.vpk', priority: 7 };
+    const first = [{ material: 'materials/bebop/body.vmat', hidden: true, tint: null }];
+    // Locker's stack: the earlier overlay plus its source.
+    source = (await save(dl, 'Bebop', [await located('Bebop edit'), source], 'Bebop tinted', first)).renamed[source.metaKey] ?? source;
+    expect((await order()).slice(-2)).toEqual(['Bebop tinted', source.metaKey]);
+
+    const overlay = await located('Bebop tinted');
+    const resumed = await resumeSkinEdit(dl, { heroName: 'Bebop', skinSources: [overlay, source] });
+    expect(resumed).toMatchObject({ skinSources: [source], overlay, name: 'Bebop tinted', edits: first, missing: 0 });
+
+    const second = [...first, { material: 'materials/bebop/arm.vmat', hidden: false, tint: '#ff0000' }];
+    source = (await save(dl, 'Bebop', [overlay, source], 'Bebop tinted', second)).renamed[source.metaKey] ?? source;
+    const enabled = await order();
+    expect(enabled.filter((name) => name.startsWith('Bebop'))).toEqual(['Bebop tinted']);
+    expect(enabled.slice(-2)).toEqual(['Bebop tinted', source.metaKey]);
+    expect(getModMetadata((await located('Bebop tinted')).metaKey)?.skinEdit?.edits).toEqual(second);
   });
 
   it('refuses before touching any file while the game has the old overlay loaded', async () => {

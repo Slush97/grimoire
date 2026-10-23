@@ -340,7 +340,9 @@
       "saveEnable": "Save & enable",
       "enabled": "Skin saved and enabled.",
       "customName": "{{hero}} custom",
-      "globalUnsupported": "Global skins can't be edited: they load above any skin saved here, so your changes would not show in game. Remove the skin from Global in the Locker to edit it."
+      "globalUnsupported": "Global skins can't be edited: they load above any skin saved here, so your changes would not show in game. Remove the skin from Global in the Locker to edit it.",
+      "sourceMissing_one": "A skin this edit was made from is missing. You're editing without it, and saving replaces the earlier edit.",
+      "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit."
     }
   },
   "autoexec": {

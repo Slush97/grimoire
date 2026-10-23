@@ -241,6 +241,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     getSkinEditInfo: (source) => ipcRenderer.invoke('foundry:skinEditInfo', source),
+    resumeSkinEdit: (source) => ipcRenderer.invoke('foundry:resumeSkinEdit', source),
     exportSkinEdits: (request) => ipcRenderer.invoke('foundry:exportSkinEdits', request),
     saveSkinEdits: (request) => ipcRenderer.invoke('foundry:saveSkinEdits', request),
     loadHideoutScene: () => ipcRenderer.invoke('viewer:hideout'),

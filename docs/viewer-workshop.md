@@ -51,6 +51,17 @@ safety inspection. Enabling and reordering can rename the sources, so the save
 returns their new metaKeys and the editor carries on with the same skin and its
 edits.
 
+An overlay is never an edit source. `skinEdit` also stores the saved edits, so
+when Locker links a stack that contains an overlay, the editor swaps it for the
+installed skins whose sha256 it recorded (the default skin when it recorded
+none), starts from those edits and replaces that overlay on save. An overlay
+saved from another overlay before this rule resolves through to the original
+source. Overlays saved before edits were stored start with no edits. If a
+recorded source is no longer installed, the editor says so and edits the
+remaining sources, keeping the saved edits that still match a part; saving
+still replaces the old overlay instead of adding a second one. The Skin list
+leaves overlays out.
+
 Global skins cannot be a source. They load from the priority root, above every
 add-ons folder, so an overlay would never show in game. The source list leaves
 them out, and a Locker link whose equipped stack includes one opens the hero on
