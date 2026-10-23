@@ -1368,7 +1368,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float nprNdotL = max(dot(geometryNormal, directLight.direction), 0.0);
             vec3 nprContribution = reflectedLight.directDiffuse - nprBefore;
             reflectedLight.directDiffuse = nprBefore + nprContribution *
-              (nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4));
+              mix(1.0, nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4), uNprStrength);
           }
         }`
       ),
@@ -1395,7 +1395,7 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         vec3 rawAmbient = irradiance + iblIrradiance;
         vec3 ambient = nprAmbientIrradiance(normal, rawAmbient) * mix(0.55, 1.0, ambientBand);
         // Preserve Three's material energy split and both specular accumulators.
-        reflectedLight.indirectDiffuse *= ambient / max(rawAmbient, vec3(1e-5));
+        reflectedLight.indirectDiffuse *= mix(vec3(1.0), ambient / max(rawAmbient, vec3(1e-5)), uNprStrength);
       }
     `,
     },
