@@ -6,13 +6,25 @@ export const skinPartPatternSchema = z.object({
     phase: z.number().finite().min(0).max(1), scroll: z.number().finite().min(0).max(4),
 }).strict();
 
+const skinSourcesSchema = (metaKey: RegExp) => z.array(z.object({
+    metaKey: z.string().min(1).max(240).regex(metaKey).refine((key) => !key.includes('..')),
+    priority: z.number().finite(),
+}).strict()).max(64);
+
 export const skinEditSourceSchema = z.object({
     heroName: z.string().min(1).max(100),
-    skinSources: z.array(z.object({
-        metaKey: z.string().min(1).max(240).regex(/^(?:addons\d*\/)?[^/\\:]+\.vpk$/i).refine((key) => !key.includes('..')),
-        priority: z.number().finite(),
-    }).strict()).max(64),
+    skinSources: skinSourcesSchema(/^(?:addons\d*\/)?[^/\\:]+\.vpk$/i),
 }).strict();
+
+/** A Locker link may name Global skins. The editor reports those instead of editing them. */
+export const skinEditLinkSchema = skinEditSourceSchema.extend({
+    skinSources: skinSourcesSchema(/^(?:addons\d*\/|grimoire\/)?[^/\\:]+\.vpk$/i),
+}).strict();
+
+/** Global skins load from the priority root, above any overlay the editor can save. */
+export function isGlobalSkinSource(source: { metaKey: string; priorityMod?: boolean }): boolean {
+    return !!source.priorityMod || source.metaKey.startsWith('grimoire/');
+}
 
 export const skinEditExportSchema = skinEditSourceSchema.extend({
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),

@@ -105,6 +105,9 @@ export interface ModMetadata {
      *  MP3 onto a hero sound event). Labels the mod and records what was swapped;
      *  presence marks the slot as a local sound swap. */
     soundSwap?: import('../../../src/types/mod').SoundSwapInfo;
+    /** Set on a Door Stuck skin-editor overlay. Saving the same hero and
+     *  sources again replaces the overlay that carries a matching target. */
+    skinEdit?: import('./skinOverlay').SkinEditTarget;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable

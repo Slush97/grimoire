@@ -791,6 +791,23 @@ async function resolvePoseSource(
     }
 }
 
+async function resolveAllSkinSources(deadlockPath: string, normalized: HeroPoseSkinSource[]): Promise<ResolvedSource[]> {
+    const resolved = await resolveSources(deadlockPath, normalized);
+    if (resolved.length !== normalized.length) throw new Error('A selected skin is no longer installed. Select the source again.');
+    return resolved;
+}
+
+async function skinEditFingerprint(base: string, entry: string, sourceFingerprint: string): Promise<string> {
+    const game = await fs.stat(base);
+    return createHash('sha256').update(`${entry}:${sourceFingerprint}:${game.size}:${game.mtimeMs}`).digest('hex');
+}
+
+/** withHeroSkinSource's fingerprint for an already-resolved model entry, without merging the stack. */
+export async function heroSkinSourceFingerprint(deadlockPath: string, skinSources: HeroPoseSkinSource[], entry: string): Promise<string> {
+    const resolved = await resolveAllSkinSources(deadlockPath, normalizeSkinSources(skinSources));
+    return skinEditFingerprint(join(getCitadelPath(deadlockPath), 'pak01_dir.vpk'), entry, await fingerprintResolved(resolved));
+}
+
 export async function withHeroSkinSource<T>(
     deadlockPath: string,
     heroName: string,
@@ -799,8 +816,7 @@ export async function withHeroSkinSource<T>(
 ): Promise<T> {
     const base = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
     const normalized = normalizeSkinSources(skinSources);
-    const resolved = await resolveSources(deadlockPath, normalized);
-    if (resolved.length !== normalized.length) throw new Error('A selected skin is no longer installed. Select the source again.');
+    await resolveAllSkinSources(deadlockPath, normalized);
     const source = await resolvePoseSource(deadlockPath, base, normalized);
     try {
         const paths = [...(parseVpkDirectoryCached(source.vpk) ?? []), ...(parseVpkDirectoryCached(base) ?? [])];
@@ -811,9 +827,7 @@ export async function withHeroSkinSource<T>(
             if (entry) break;
         }
         if (!entry) throw new Error('The selected hero model could not be found.');
-        const game = await fs.stat(base);
-        const fingerprint = createHash('sha256').update(`${entry}:${source.fingerprint}:${game.size}:${game.mtimeMs}`).digest('hex');
-        return await action({ vpk: source.vpk, base, entry, fingerprint });
+        return await action({ vpk: source.vpk, base, entry, fingerprint: await skinEditFingerprint(base, entry, source.fingerprint) });
     } finally {
         if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
     }

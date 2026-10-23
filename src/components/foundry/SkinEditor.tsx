@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, RotateCcw, Download } from 'lucide-react';
 import { Button, IconButton, SegmentedControl } from '../common/ui';
@@ -10,6 +10,7 @@ import { adjustSkinPixels, hasSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../li
 import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
+import { isGlobalSkinSource } from '../../lib/skinEditSchema';
 import type { HeroPoseSkinSource } from '../../types/portrait';
 import type { SkinEditInfo, SkinPart, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 
@@ -17,31 +18,55 @@ const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
 const NO_EDITS: SkinPartEdit[] = [];
 
-export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES }: { heroName: string; initialSkinSources?: HeroPoseSkinSource[] }) {
+export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES, onDirtyChange }: {
+  heroName: string; initialSkinSources?: HeroPoseSkinSource[]; onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { t } = useTranslation();
   const mods = useAppStore((state) => state.mods);
-  const available = useMemo(() => mods.filter((mod) => isLockerManagedMod(mod)
+  const available = useMemo(() => mods.filter((mod) => isLockerManagedMod(mod) && !isGlobalSkinSource(mod)
     && canonicalHeroName(mod.lockerHero ?? inferHeroFromTitle(mod.name) ?? '') === canonicalHeroName(heroName)), [mods, heroName]);
-  const [selection, setSelection] = useState(initialSkinSources.length ? 'equipped' : 'vanilla');
-  const sources = useMemo(() => selection === 'equipped' ? initialSkinSources : selection === 'vanilla' ? NO_SOURCES
-    : [{ metaKey: selection, priority: available.find((mod) => mod.metaKey === selection)?.priority ?? 0 }], [selection, initialSkinSources, available]);
-  const sourceKey = sources.map((source) => `${source.metaKey}:${source.priority}`).join('|');
-  return <SkinEditorSession key={`${heroName}:${sourceKey}`} heroName={heroName} sources={sources} sourceControl={
-    <label className="flex min-w-0 max-w-sm items-center gap-2 text-xs text-text-secondary">
-      <span>{t('foundry.skin.source')}</span>
-      <Select inputSize="sm" value={selection} onChange={(event) => setSelection(event.target.value)}>
-        <option value="vanilla">{t('foundry.skin.originalGame')}</option>
-        {initialSkinSources.length > 0 && <option value="equipped">{t('foundry.skin.equipped')}</option>}
-        {available.map((mod) => <option key={mod.metaKey} value={mod.metaKey}>{mod.name}</option>)}
-      </Select>
-    </label>
-  } />;
+  const equippedGlobal = initialSkinSources.some(isGlobalSkinSource);
+  const equippedEditable = initialSkinSources.length > 0 && !equippedGlobal;
+  // Sources live in state, so a mods-store refresh does not reload every part.
+  const [selection, setSelection] = useState(() => ({
+    value: equippedEditable ? 'equipped' : 'vanilla', equipped: initialSkinSources,
+    sources: equippedEditable ? initialSkinSources : NO_SOURCES, session: 0,
+  }));
+  const select = (value: string) => setSelection((current) => ({ ...current, value, session: current.session + 1,
+    sources: value === 'equipped' ? current.equipped : value === 'vanilla' ? NO_SOURCES
+      : [{ metaKey: value, priority: available.find((mod) => mod.metaKey === value)?.priority ?? 0 }] }));
+  // Saving can enable and repack mods; follow them so the session stays on the same skin.
+  const followRenames = (renamed: Record<string, HeroPoseSkinSource>) => setSelection((current) => {
+    const remap = (sources: HeroPoseSkinSource[]) => sources.some((source) => renamed[source.metaKey])
+      ? sources.map((source) => renamed[source.metaKey] ?? source) : sources;
+    return { ...current, value: renamed[current.value]?.metaKey ?? current.value, equipped: remap(current.equipped), sources: remap(current.sources) };
+  });
+  return <>
+    {equippedGlobal && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.globalUnsupported')}</p>}
+    <SkinEditorSession key={selection.session} heroName={heroName} sources={selection.sources} onSaved={followRenames} onDirtyChange={onDirtyChange} sourceControl={
+      <label className="flex min-w-0 max-w-sm items-center gap-2 text-xs text-text-secondary">
+        <span>{t('foundry.skin.source')}</span>
+        <Select inputSize="sm" value={selection.value} onChange={(event) => select(event.target.value)}>
+          <option value="vanilla">{t('foundry.skin.originalGame')}</option>
+          {equippedEditable && <option value="equipped">{t('foundry.skin.equipped')}</option>}
+          {available.map((mod) => <option key={mod.metaKey} value={mod.metaKey}>{mod.name}</option>)}
+        </Select>
+      </label>
+    } />
+  </>;
 }
 
-export function SkinEditorSession({ heroName, sources, sourceControl }: { heroName: string; sources: HeroPoseSkinSource[]; sourceControl?: ReactNode }) {
+export function SkinEditorSession({ heroName, sources, sourceControl, onSaved, onDirtyChange }: {
+  heroName: string; sources: HeroPoseSkinSource[]; sourceControl?: ReactNode;
+  onSaved?: (renamed: Record<string, HeroPoseSkinSource>) => void; onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { t } = useTranslation();
-  const [info, setInfo] = useState<SkinEditInfo | null>(null);
+  const [loaded, setLoaded] = useState<{ sources: HeroPoseSkinSource[]; info: SkinEditInfo } | null>(null);
+  const info = loaded?.info ?? null;
+  // After a save renames the sources, the old info stays on screen but cannot be saved against.
+  const current = loaded?.sources === sources ? loaded.info : null;
   const [edits, setEdits] = useState<SkinPartEdit[]>([]);
+  const [savedEdits, setSavedEdits] = useState(edits);
   const [comparison, setComparison] = useState<'original' | 'edited'>('edited');
   const [search, setSearch] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
@@ -56,11 +81,18 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
   const [saved, setSaved] = useState<'exported' | 'enabled' | null>(null);
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.getSkinEditInfo({ heroName, skinSources: sources }).then((value) => { if (!cancelled) setInfo(value); })
+    window.electronAPI.getSkinEditInfo({ heroName, skinSources: sources }).then((value) => { if (!cancelled) setLoaded({ sources, info: value }); })
       .catch((reason: unknown) => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; };
   }, [heroName, sources]);
   const count = editedPartCount(edits);
+  const dirty = count > 0 && edits !== savedEdits;
+  const reportDirty = useEffectEvent((value: boolean) => onDirtyChange?.(value));
+  useEffect(() => {
+    if (!dirty) return;
+    reportDirty(true);
+    return () => reportDirty(false);
+  }, [dirty]);
   const hiddenCount = edits.filter((edit) => edit.hidden).length;
   const selected = info?.parts.find((part) => part.material === selectedMaterial)
     ?? info?.parts.find((part) => /\b(coat|body|shape)$/.test(part.label) && !part.label.includes('lower')) ?? info?.parts[0];
@@ -90,18 +122,24 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
     });
   };
   const exportVpk = async () => {
-    if (!info) return;
+    if (!current) return;
+    const exported = edits;
     setExporting(true); setError(null);
-    try { if ((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: info.fingerprint, edits })).exported) setSaved('exported'); }
-    catch (reason) { setError(String(reason)); }
+    try {
+      if ((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: current.fingerprint, edits: exported })).exported) {
+        setSaved('exported'); setSavedEdits(exported);
+      }
+    } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
   };
   const saveAndEnable = async () => {
-    if (!info || !name.trim()) return;
+    if (!current || !name.trim()) return;
+    const saving = edits;
     setExporting(true); setError(null);
     try {
-      await window.electronAPI.saveSkinEdits({ heroName, skinSources: sources, fingerprint: info.fingerprint, edits, name: name.trim() });
-      setSaved('enabled');
+      const { renamed } = await window.electronAPI.saveSkinEdits({ heroName, skinSources: sources, fingerprint: current.fingerprint, edits: saving, name: name.trim() });
+      setSaved('enabled'); setSavedEdits(saving);
+      onSaved?.(renamed);
       await useAppStore.getState().loadMods({ silent: true, force: true });
     } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
@@ -116,11 +154,11 @@ export function SkinEditorSession({ heroName, sources, sourceControl }: { heroNa
       <SegmentedControl label={t('foundry.skin.compare')} value={comparison} onChange={setComparison}
         options={[{ value: 'original', label: t('foundry.skin.original') }, { value: 'edited', label: t('foundry.skin.edited') }]} />
       <IconButton icon={RotateCcw} label={t('foundry.skin.reset')} disabled={!count || exporting} onClick={() => { setEdits([]); setSaved(null); setComparison('edited'); }} />
-      <Button size="sm" icon={Download} disabled={!info || !count} variant="secondary" isLoading={exporting} onClick={() => { void exportVpk(); }}>{t('foundry.skin.export')}</Button>
+      <Button size="sm" icon={Download} disabled={!current || !count} variant="secondary" isLoading={exporting} onClick={() => { void exportVpk(); }}>{t('foundry.skin.export')}</Button>
       <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void saveAndEnable(); }}>
         <Input inputSize="sm" className="w-40" aria-label={t('foundry.skin.skinName')} value={name} maxLength={120} disabled={exporting}
           onChange={(event) => { setName(event.target.value); setSaved(null); }} />
-        <Button type="submit" size="sm" disabled={!info || !count || !name.trim()} isLoading={exporting}>{t('foundry.skin.saveEnable')}</Button>
+        <Button type="submit" size="sm" disabled={!current || !count || !name.trim()} isLoading={exporting}>{t('foundry.skin.saveEnable')}</Button>
       </form>
     </div>
     <div className="flex flex-wrap items-center gap-2">

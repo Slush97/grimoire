@@ -59,6 +59,11 @@ export interface SkinEditSave extends SkinEditExport {
   name: string;
 }
 
+export interface SkinEditSaveResult {
+  /** Where each mod the save enabled or moved now lives, keyed by its metaKey before the save. */
+  renamed: Record<string, HeroPoseSkinSource>;
+}
+
 export interface HideoutInstance {
   model: string;
   primitive: number | null;

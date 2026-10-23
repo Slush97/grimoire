@@ -38,13 +38,25 @@ exporter use the same transform; texture paths remain isolated per material.
 Colorize selects the material's colorize or multiply tint mode. Original resets
 the preview without discarding edits; reset clears the selected part or all edits.
 
-Save & enable creates a named local skin, enables required source skins and puts
-the overlay after other base-folder mods, preserving their relative order. It
-uses the serialized mutation path, VPK safety inspection and hashed metadata.
-It requires a free base add-ons slot. A full base folder reports an error instead
-of silently putting the overlay below its source in an overflow folder. Export
-still writes only to the user's chosen file. Tests install into a task-local
-game directory; the user's real mod folders are not used for these checks.
+Save & enable creates a named local skin and enables any disabled source skins.
+A lower pakNN wins, so the overlay goes directly ahead of its highest-priority
+source in the enabled load order, or first when it edits the default skin. Other
+mods keep their relative order, and the reorder spills into overflow folders like
+any other. The overlay's metadata records `skinEdit`: the hero and the canonical
+sha256 of each source. Saving again for the same hero and sources replaces that
+overlay instead of adding another card; the old file goes through the normal
+delete path (and mod backups, when they are on). The source check, slot
+allocation, reorder and replacement run as one serialized mutation after VPK
+safety inspection. Enabling and reordering can rename the sources, so the save
+returns their new metaKeys and the editor carries on with the same skin and its
+edits.
+
+Global skins cannot be a source. They load from the priority root, above every
+add-ons folder, so an overlay would never show in game. The source list leaves
+them out, and a Locker link whose equipped stack includes one opens the hero on
+the default skin with a message saying so. Export still writes only to the
+user's chosen file. Tests install into a task-local game directory; the user's
+real mod folders are not used for these checks.
 
 Validation includes original texture-header dimensions, preview hover/focus pixel
 comparisons, exported archive CRCs, an independent HSV calculation on source

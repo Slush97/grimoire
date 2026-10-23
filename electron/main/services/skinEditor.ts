@@ -91,9 +91,10 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
     }
 }
 
-export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExport, out: string): Promise<void> {
+/** Resolves to the model entry the overlay was built against. */
+export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExport, out: string): Promise<string> {
     const request = skinEditExportSchema.parse(input);
-    await withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
+    return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
         const parts = await inspect(source.vpk, source.base, source.entry);
         validateSkinEdits({ ...source, parts }, request);
         const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-edit-'));
@@ -135,6 +136,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             if (layers.length === 1) await fs.copyFile(layers[0], out);
             else await runVpkmerge([out, ...layers]);
             await verifyVpkOutput(out);
+            return source.entry;
         } finally { await fs.rm(dir, { recursive: true, force: true }); }
     });
 }

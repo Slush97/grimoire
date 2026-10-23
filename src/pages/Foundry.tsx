@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { skinEditSourceSchema } from '../lib/skinEditSchema';
+import { skinEditLinkSchema } from '../lib/skinEditSchema';
 import {
   Hammer,
   Library,
@@ -40,7 +40,7 @@ export default function Foundry() {
   const location = useLocation();
   const navigate = useNavigate();
   const input: unknown = location.state;
-  const source = skinEditSourceSchema.safeParse(input);
+  const source = skinEditLinkSchema.safeParse(input);
   const settings = useAppStore((s) => s.settings);
   const hasGamePath = Boolean(settings?.deadlockPath || (settings?.devMode && settings?.devDeadlockPath));
 

@@ -982,7 +982,7 @@ export interface ElectronAPI {
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
     exportSkinEdits: (request: import('./skinEditor').SkinEditExport) => Promise<import('./foundry').VpkExportResult>;
-    saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<void>;
+    saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
     getHeroPoseInfo: (
         heroName: string,

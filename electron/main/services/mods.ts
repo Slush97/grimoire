@@ -1183,8 +1183,9 @@ export function disableModUnlocked(deadlockPath: string, modId: string): Promise
     return disableModImpl(deadlockPath, modId);
 }
 
-/** Unlocked reorder, for use only inside a runExclusiveModMutation batch. */
-export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]): Promise<void> {
+/** Unlocked reorder, for use only inside a runExclusiveModMutation batch.
+ *  Resolves to the new metaKey of every mod it moved, keyed by the old one. */
+export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]): Promise<Map<string, string>> {
     return reorderModsImpl(deadlockPath, orderedIds);
 }
 
@@ -1525,12 +1526,12 @@ async function setModPriorityImpl(
  * cross-folder moves and slot swaps collision-free; metadata migrates with each.
  */
 export function reorderMods(deadlockPath: string, orderedIds: string[]): Promise<void> {
-    return withModMutationLock(() => reorderModsImpl(deadlockPath, orderedIds), { healPath: deadlockPath });
+    return withModMutationLock(async () => { await reorderModsImpl(deadlockPath, orderedIds); }, { healPath: deadlockPath });
 }
 
 // Unlocked: callers that already hold the mutation queue (swapModPriority) call
 // this directly; the exported reorderMods wraps it in the lock.
-async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<void> {
+async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<Map<string, string>> {
     const allMods = await scanMods(deadlockPath);
     await syncRunningGameModSnapshotFromMods(allMods);
     const modById = new Map(allMods.map((m) => [m.id, m]));
@@ -1546,7 +1547,7 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
         // throw.
         if (mod.enabled && !isPriorityFolderPath(mod.path)) targets.push(mod);
     }
-    if (targets.length === 0) return;
+    if (targets.length === 0) return new Map();
 
     // Reserve slots held by files NOT being reordered, per folder index. That
     // includes chunks whose _dir.vpk is gone: a set moved onto them would
@@ -1616,14 +1617,14 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
         const toPath = join(toFolder, `pak${String(toSlot).padStart(2, '0')}_dir.vpk`);
         if (mod.path !== toPath) assignments.push({ mod, toPath });
     }
-    if (assignments.length === 0) return;
+    if (assignments.length === 0) return new Map();
     assertCanMoveLoadedGameMods(assignments.map(({ mod }) => mod));
 
     await renameVpkSetsViaTemp(assignments.map(({ mod, toPath }) => ({ from: mod.path, to: toPath })));
 
-    migrateModMetadata(
-        assignments.map(({ mod, toPath }) => ({ from: mod.metaKey, to: metaKeyFor(toPath) }))
-    );
+    const migrations = assignments.map(({ mod, toPath }) => ({ from: mod.metaKey, to: metaKeyFor(toPath) }));
+    migrateModMetadata(migrations);
+    return new Map(migrations.map(({ from, to }) => [from, to]));
 }
 
 /**
