@@ -106,34 +106,37 @@ interface Proposal extends Winner {
  *   at least 0.6 and leads the runner-up by 0.2.
  * If description and filename point at different files, neither is trusted.
  * A successor among `installed` is a promotion; one installed elsewhere
- * (`otherInstalledFileIds`) is never proposed. All stale
- * files are matched before any claim is settled, so input order never changes
- * the outcome: when two stale files want the same successor the stronger match
- * wins and a tie leaves both unresolved.
+ * (`otherInstalls`) is never proposed. All stale files are matched before any
+ * claim is settled, so input order never changes the outcome: when two stale
+ * files want the same successor the stronger match wins and a tie leaves both
+ * unresolved.
  *
  * With `autoMatchRemainingFiles`, a single unmatched install and a single
  * unclaimed current upload are paired after the normal matches. Upload-session
  * and installed-file exclusions still apply. Otherwise even a sole upload
  * must satisfy the name or description rules.
  *
- * @param otherInstalledFileIds file ids installed outside `installed` (inside
- *  a merge, or standalone when classifying merge sources), which are never
- *  proposed as successors
+ * `otherInstalls` take part in the matching as rivals: a stale file there
+ * claims successors and counts as unmatched like the ones in `installed`, but
+ * only `installed` gets a state. Whoever asks (a standalone card or a merge)
+ * the whole mod is matched the same way, so one upload is never handed to two
+ * installs that each looked alone.
+ *
+ * @param otherInstalls installs outside `installed` (inside a merge, or
+ *  standalone when classifying merge sources). Their files are never proposed
+ *  as successors.
  */
 export function classifyModFiles(
   gameBananaId: number,
   files: readonly UpdateFileRow[],
   installed: readonly InstalledUpdateEntry[],
-  otherInstalledFileIds?: ReadonlySet<number>,
+  otherInstalls: readonly InstalledUpdateEntry[] = [],
   autoMatchRemainingFiles = false,
 ): ModUpdateClassification {
-  const groups = new Map<number, InstalledUpdateEntry[]>();
-  for (const entry of installed) {
-    const fileId = entry.gameBananaFileId;
-    if (entry.gameBananaId !== gameBananaId || typeof fileId !== 'number' || fileId <= 0) continue;
-    const group = groups.get(fileId) ?? [];
-    group.push(entry);
-    groups.set(fileId, group);
+  const groups = groupByFileId(gameBananaId, installed);
+  const otherFileIds = new Set<number>();
+  for (const entry of otherInstalls) {
+    if (typeof entry.gameBananaFileId === 'number') otherFileIds.add(entry.gameBananaFileId);
   }
 
   const states = new Map<number, FileUpdateState>();
@@ -154,22 +157,26 @@ export function classifyModFiles(
     } else if (currentRows.length === 0) {
       states.set(fileId, row ? { kind: 'archived' } : { kind: 'unknown' });
     } else {
-      stale.push({
-        fileId,
-        row,
-        description: entries.find((entry) => entry.fileDescription)?.fileDescription ?? row?.description ?? '',
-        fileName: entries.find((entry) => entry.sourceFileName)?.sourceFileName ?? row?.fileName ?? '',
-      });
+      stale.push(staleFileOf(fileId, entries, files));
     }
   }
 
-  const installedElsewhere = (fileId: number) => !groups.has(fileId) && !!otherInstalledFileIds?.has(fileId);
+  const rivals: StaleFile[] = [];
+  for (const [fileId, entries] of groupByFileId(gameBananaId, otherInstalls)) {
+    if (groups.has(fileId) || files.length === 0 || currentFileIds.has(fileId) || currentRows.length === 0) continue;
+    if (entries.every((entry) => entry.ignoreUpdates)) continue;
+    rivals.push(staleFileOf(fileId, entries, files));
+  }
+  const rivalFileIds = new Set(rivals.map((file) => file.fileId));
+
+  const installedElsewhere = (fileId: number) => !groups.has(fileId) && otherFileIds.has(fileId);
   const matchedElsewhere = new Set<number>();
   const proposalsByTarget = new Map<number, Proposal[]>();
-  for (const file of stale) {
+  for (const file of [...stale, ...rivals]) {
     const proposal = proposeSuccessor(file, files, currentRows, groups);
     if (!proposal) continue;
-    if (installedElsewhere(proposal.target.id)) {
+    // A rival whose successor is already installed anywhere takes no upload.
+    if (installedElsewhere(proposal.target.id) || (rivalFileIds.has(file.fileId) && groups.has(proposal.target.id))) {
       matchedElsewhere.add(file.fileId);
       continue;
     }
@@ -188,7 +195,9 @@ export function classifyModFiles(
 
   if (autoMatchRemainingFiles) {
     // A known successor installed elsewhere must not redirect to another variant.
-    const unmatched = stale.filter((file) => !winners.has(file.fileId) && !matchedElsewhere.has(file.fileId));
+    const unmatched = [...stale, ...rivals].filter(
+      (file) => !winners.has(file.fileId) && !matchedElsewhere.has(file.fileId),
+    );
     const claimed = new Set([...winners.values()].map((winner) => winner.target.id));
     const remaining = currentRows.filter(
       (row) => !claimed.has(row.id) && !groups.has(row.id) && !installedElsewhere(row.id),
@@ -211,6 +220,35 @@ export function classifyModFiles(
   }
 
   return { states, sourceIds, currentFileIds };
+}
+
+function groupByFileId(
+  gameBananaId: number,
+  entries: readonly InstalledUpdateEntry[],
+): Map<number, InstalledUpdateEntry[]> {
+  const groups = new Map<number, InstalledUpdateEntry[]>();
+  for (const entry of entries) {
+    const fileId = entry.gameBananaFileId;
+    if (entry.gameBananaId !== gameBananaId || typeof fileId !== 'number' || fileId <= 0) continue;
+    const group = groups.get(fileId) ?? [];
+    group.push(entry);
+    groups.set(fileId, group);
+  }
+  return groups;
+}
+
+function staleFileOf(
+  fileId: number,
+  entries: readonly InstalledUpdateEntry[],
+  files: readonly UpdateFileRow[],
+): StaleFile {
+  const row = files.find((file) => file.id === fileId);
+  return {
+    fileId,
+    row,
+    description: entries.find((entry) => entry.fileDescription)?.fileDescription ?? row?.description ?? '',
+    fileName: entries.find((entry) => entry.sourceFileName)?.sourceFileName ?? row?.fileName ?? '',
+  };
 }
 
 /** Current rows uploaded after the stale row's upload session. A file uploaded

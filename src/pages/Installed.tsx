@@ -102,7 +102,7 @@ import {
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload, usePendingDownloadCompletions } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
-import { mergeSourceFileIds } from '../lib/updateCheck';
+import { installsOutsideMerge, mergeSourceInstalls } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
@@ -1283,14 +1283,14 @@ export default function Installed() {
     return { detailsInstalledFileIds: installedFileIds, detailsActiveFileIds: activeFileIds };
   }, [detailsInstalledMods]);
   // Files the user has inside a merge are never proposed as successors.
-  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
+  const mergedInstalls = useMemo(() => mergeSourceInstalls(visibleMods), [visibleMods]);
   const autoMatchRemainingFiles = settings?.autoMatchRemainingFiles ?? true;
 
   // The mod page shows every installed file's update or manual replacement.
   // Each download still replaces only its matched or explicitly chosen file.
   const detailsUpdate = useMemo(() => {
     const files = detailsMod?.files ?? [];
-    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedFileIds, autoMatchRemainingFiles);
+    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedInstalls, autoMatchRemainingFiles);
     const source = detailsSourceModId ? mods.find((mod) => mod.id === detailsSourceModId) : undefined;
     const summary = summarizeUpdateScope(classification);
     // The offline fallback has no file rows; keep the card's verdict for the badge.
@@ -1302,7 +1302,7 @@ export default function Installed() {
       updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, detailsInstalledMods),
     };
-  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
+  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedInstalls, updatesAvailable, autoMatchRemainingFiles]);
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
@@ -2350,15 +2350,11 @@ export default function Installed() {
       }
     }
 
-    // Don't re-download a file already installed standalone or inside a merge.
-    const claimed = mergeSourceFileIds(visibleMods);
-    for (const mod of mods) {
-      if (typeof mod.gameBananaFileId !== 'number') continue;
-      if (!filesByModId.has(mod.gameBananaId ?? -1)) continue;
-      claimed.add(mod.gameBananaFileId);
-    }
-
-    const plan = planMergeSourceUpdates(sources, staleFileNames, filesByModId, claimed, autoMatchRemainingFiles);
+    // Files installed standalone or inside another merge are never re-downloaded,
+    // and those installs compete with this merge's sources for the same uploads.
+    const plan = planMergeSourceUpdates(
+      sources, staleFileNames, filesByModId, installsOutsideMerge(visibleMods, targetId), autoMatchRemainingFiles,
+    );
     const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
       modName: entry.source.modName,
       reason: entry.reason,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mergeSourceModIds, planMergeSourceUpdates } from './mergeSourceUpdate';
-import { computeUpdateFlags, mergeSourceFileIds } from './updateCheck';
+import { computeUpdateFlags, installsOutsideMerge, type UpdateCheckMod } from './updateCheck';
+import type { InstalledUpdateEntry } from './updateFileMatch';
 import type { GameBananaFile } from '../types/gamebanana';
 import type { MergedModSource } from '../types/mod';
 
@@ -35,15 +36,20 @@ const source = (over: Partial<MergedModSource> = {}): MergedModSource => ({
 const planStale = (
   sources: readonly MergedModSource[],
   files: ReadonlyMap<number, readonly GameBananaFile[]>,
-  claimed?: ReadonlySet<number>,
+  otherInstalls?: readonly InstalledUpdateEntry[],
   autoMatch?: boolean,
-) => planMergeSourceUpdates(sources, new Set(sources.map((entry) => entry.fileName)), files, claimed, autoMatch);
+) => planMergeSourceUpdates(sources, new Set(sources.map((entry) => entry.fileName)), files, otherInstalls, autoMatch);
+
+/** A standalone install of the mod the sources come from. */
+const standalone = (fileId: number, over: Partial<UpdateCheckMod> = {}): UpdateCheckMod => ({
+  id: `mod-${fileId}`, gameBananaId: 700, gameBananaFileId: fileId, ...over,
+});
 
 describe('planMergeSourceUpdates', () => {
   it('excludes current files already used by a merge from the remaining-file count', () => {
     const stale = source();
     const files = new Map([[700, [file(2000, 'kept_variant.zip'), file(3000, 'renamed.zip')]]]);
-    const plan = planStale([stale], files, new Set([1000, 2000]), true);
+    const plan = planStale([stale], files, [standalone(2000)], true);
     expect(plan.resolved.map((entry) => entry.fileId)).toEqual([3000]);
   });
 
@@ -147,7 +153,7 @@ describe('planMergeSourceUpdates', () => {
     const plan = planStale(
       [source()],
       new Map([[700, files]]),
-      new Set([1500]),
+      [standalone(1500)],
     );
 
     expect(plan.resolved).toEqual([]);
@@ -250,6 +256,20 @@ describe('planMergeSourceUpdates', () => {
     expect(planStale([blue], files, undefined, true).resolved.map((entry) => entry.fileId)).toEqual([1502]);
   });
 
+  it('does not pair a merged source with an upload a standalone install is also waiting for', () => {
+    // Archived `red` sits in the merge and deleted `blue` is installed on its own.
+    // Each would be the single unmatched install if it were classified alone.
+    const red = source({ fileName: 'skin_red_dir.vpk', gameBananaFileId: 1000 });
+    const files = new Map([[700, [file(1000, 'skin_red.zip', true), file(1502, 'voicelines_pack.zip')]]]);
+    const blue = standalone(1001);
+
+    const plan = planMergeSourceUpdates([red], new Set([red.fileName]), files, [blue], true);
+
+    expect(plan.resolved).toEqual([]);
+    expect(plan.unresolved).toEqual([{ source: red, reason: 'no-match' }]);
+    expect(planStale([red], files, [], true).resolved.map((entry) => entry.fileId)).toEqual([1502]);
+  });
+
   it('acts only on the flagged sources', () => {
     const files = new Map([[700, [file(1000, 'skin_v1.zip', true), file(1500, 'skin_v2.zip')]]]);
     const stale = source({ fileName: 'a_dir.vpk', gameBananaFileId: 1000 });
@@ -272,7 +292,11 @@ describe('planMergeSourceUpdates', () => {
   });
 
   it('resolves exactly the sources the update check calls updatable', () => {
-    const cases = {
+    const cases: Record<string, {
+      files: GameBananaFile[];
+      sources: MergedModSource[];
+      standalones?: UpdateCheckMod[];
+    }> = {
       renamed: {
         files: [file(1000, 'skin_red_v1.zip', true), file(1500, 'skin_red_v2.zip')],
         sources: [source({ fileName: 'a_dir.vpk', gameBananaFileId: 1000 })],
@@ -302,14 +326,30 @@ describe('planMergeSourceUpdates', () => {
           source({ fileName: 'b_dir.vpk', gameBananaFileId: 1001 }),
         ],
       },
+      standaloneCompetes: {
+        files: [file(1000, 'skin_red.zip', true), file(1502, 'voicelines_pack.zip')],
+        sources: [source({ fileName: 'a_dir.vpk', gameBananaFileId: 1000 })],
+        standalones: [standalone(1001)],
+      },
+      mergedDeletedStandaloneArchived: {
+        files: [file(1000, 'skin_red.zip', true), file(1502, 'voicelines_pack.zip')],
+        sources: [source({ fileName: 'a_dir.vpk', gameBananaFileId: 1001 })],
+        standalones: [standalone(1000)],
+      },
+      standaloneHasItsOwnMatch: {
+        files: [file(1000, 'skin_red.zip', true), file(1500, 'extras_v2.zip'), file(1502, 'voicelines_pack.zip')],
+        sources: [source({ fileName: 'a_dir.vpk', gameBananaFileId: 1001 })],
+        standalones: [standalone(1002, { sourceFileName: 'extras_v1' })],
+      },
     };
     for (const autoMatch of [true, false]) {
-      for (const [name, { files, sources }] of Object.entries(cases)) {
-        const merge = { id: 'merge', merged: { sources } };
-        const flags = computeUpdateFlags([merge], new Map([[700, files]]), autoMatch);
+      for (const [name, { files, sources, standalones = [] }] of Object.entries(cases)) {
+        const merge: UpdateCheckMod = { id: 'merge', merged: { sources } };
+        const mods = [merge, ...standalones];
+        const flags = computeUpdateFlags(mods, new Map([[700, files]]), autoMatch);
         const stale = flags.staleMergeSources.get('merge') ?? new Set<string>();
         const plan = planMergeSourceUpdates(
-          sources, stale, new Map([[700, files]]), mergeSourceFileIds([merge]), autoMatch,
+          sources, stale, new Map([[700, files]]), installsOutsideMerge(mods, 'merge'), autoMatch,
         );
         const resolved = new Set(plan.resolved.flatMap((entry) => entry.sources.map((entry) => entry.fileName)));
         expect([name, autoMatch, resolved]).toEqual([name, autoMatch, flags.updatableMergeSources.get('merge') ?? new Set()]);

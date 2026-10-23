@@ -22,9 +22,30 @@ export interface UpdateFlags {
   updatableMergeSources: Map<string, Set<string>>;
 }
 
-/** GameBanana file ids absorbed into any merge. Classifying standalone files
- *  passes these as `otherInstalledFileIds`, so a file the user already has
- *  inside a merge is never proposed as a successor to download again. */
+/** The GameBanana installs absorbed into every merge, as classifier entries.
+ *  Classifying standalone files passes these as `otherInstalls`, so a file the
+ *  user already has inside a merge is never proposed as a successor to download
+ *  again, and the merge's stale sources compete with the standalone ones for
+ *  the same uploads. */
+export function mergeSourceInstalls(mods: readonly UpdateCheckMod[]): InstalledUpdateEntry[] {
+  return mods.flatMap((mod) =>
+    (mod.merged?.sources ?? []).map((source) => ({
+      id: source.fileName,
+      gameBananaId: source.gameBananaId,
+      gameBananaFileId: source.gameBananaFileId,
+      ignoreUpdates: mod.ignoreUpdates,
+    })),
+  );
+}
+
+/** Every install a merge's sources compete with: the standalone mods and the
+ *  sources of every other merge. */
+export function installsOutsideMerge(mods: readonly UpdateCheckMod[], mergeId: string): InstalledUpdateEntry[] {
+  const others = mods.filter((mod) => mod.id !== mergeId);
+  return [...others.filter((mod) => !mod.merged), ...mergeSourceInstalls(others)];
+}
+
+/** GameBanana file ids absorbed into any merge. */
 export function mergeSourceFileIds(mods: readonly UpdateCheckMod[]): Set<number> {
   const ids = new Set<number>();
   for (const mod of mods) {
@@ -48,7 +69,7 @@ export function computeUpdateFlags(
   rowsByModId: ReadonlyMap<number, readonly UpdateFileRow[]>,
   autoMatchRemainingFiles = false,
 ): UpdateFlags {
-  const merged = mergeSourceFileIds(mods);
+  const mergedInstalls = mergeSourceInstalls(mods);
   const updatesAvailable = new Set<string>();
   const gameBananaIds = new Set<number>();
   for (const mod of mods) {
@@ -57,7 +78,7 @@ export function computeUpdateFlags(
   for (const gameBananaId of gameBananaIds) {
     const rows = rowsByModId.get(gameBananaId);
     if (!rows) continue;
-    const { states, sourceIds } = classifyModFiles(gameBananaId, rows, mods, merged, autoMatchRemainingFiles);
+    const { states, sourceIds } = classifyModFiles(gameBananaId, rows, mods, mergedInstalls, autoMatchRemainingFiles);
     for (const [fileId, state] of states) {
       if (!isUpdateFlagged(state)) continue;
       for (const id of sourceIds.get(fileId) ?? []) updatesAvailable.add(id);
@@ -70,6 +91,7 @@ export function computeUpdateFlags(
     if (!mod.merged || mod.ignoreUpdates) continue;
     const stale = new Set<string>();
     const updatable = new Set<string>();
+    const outside = installsOutsideMerge(mods, mod.id);
     for (const [gameBananaId, sources] of mergeSourcesByModId(mod.merged.sources)) {
       const rows = rowsByModId.get(gameBananaId);
       if (!rows) continue;
@@ -77,7 +99,7 @@ export function computeUpdateFlags(
         gameBananaId,
         rows,
         sources.map((source) => ({ id: source.fileName, gameBananaId, gameBananaFileId: source.fileId })),
-        installedFileIdsOf(gameBananaId, mods),
+        outside,
         autoMatchRemainingFiles,
       );
       for (const source of sources) {
@@ -106,18 +128,4 @@ function mergeSourcesByModId(
     grouped.set(gameBananaId, group);
   }
   return grouped;
-}
-
-/** File ids of `gameBananaId` installed standalone or inside any merge. */
-function installedFileIdsOf(gameBananaId: number, mods: readonly UpdateCheckMod[]): Set<number> {
-  const ids = new Set<number>();
-  for (const mod of mods) {
-    if (mod.gameBananaId === gameBananaId && typeof mod.gameBananaFileId === 'number') ids.add(mod.gameBananaFileId);
-    for (const source of mod.merged?.sources ?? []) {
-      if (source.gameBananaId === gameBananaId && typeof source.gameBananaFileId === 'number') {
-        ids.add(source.gameBananaFileId);
-      }
-    }
-  }
-  return ids;
 }
