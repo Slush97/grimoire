@@ -702,7 +702,9 @@ export default function Sidebar() {
     try {
       const result = await stopGame();
       const restoreResult = result.restoreResult;
-      if (restoreResult?.failed.length) {
+      if (result.wasRunning && !result.stopped) {
+        setToast({ kind: 'error', text: t('sidebar.toast.stopUnconfirmed') });
+      } else if (restoreResult?.failed.length) {
         setToast({
           kind: 'error',
           text: t('sidebar.toast.stoppedRestoreFailed', { count: restoreResult.failed.length }),
