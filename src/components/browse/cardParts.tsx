@@ -62,32 +62,47 @@ export function BrowseReadableUpdatedLine({
 export function BrowseArtParallaxCard({
   children,
   disabled = false,
+  suppressHoverIntentRef,
 }: {
   children: React.ReactNode;
   disabled?: boolean;
+  suppressHoverIntentRef?: React.RefObject<boolean>;
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const effectDisabled = disabled || prefersReducedMotion;
 
+  const cancelFrame = useCallback(() => {
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+    pointerRef.current = null;
+  }, []);
+
   const resetParallax = useCallback(() => {
+    cancelFrame();
     const element = cardRef.current;
     if (!element) return;
 
     element.style.setProperty('--browse-art-x', '0px');
     element.style.setProperty('--browse-art-y', '0px');
     element.style.setProperty('--browse-art-rotate', '0deg');
-  }, []);
+  }, [cancelFrame]);
 
-  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (effectDisabled || event.pointerType !== 'mouse') return;
+  const updateParallax = useCallback(() => {
+    frameRef.current = null;
+    const pointer = pointerRef.current;
+    if (effectDisabled || suppressHoverIntentRef?.current || !pointer) return;
 
     const element = cardRef.current;
     if (!element) return;
 
     const rect = element.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
-    const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+    const x = (pointer.x - rect.left) / Math.max(rect.width, 1);
+    const y = (pointer.y - rect.top) / Math.max(rect.height, 1);
     const moveX = (0.5 - x) * 4;
     const moveY = (0.5 - y) * 4;
     const rotate = (x - 0.5) * 0.2;
@@ -95,7 +110,20 @@ export function BrowseArtParallaxCard({
     element.style.setProperty('--browse-art-x', `${moveX.toFixed(2)}px`);
     element.style.setProperty('--browse-art-y', `${moveY.toFixed(2)}px`);
     element.style.setProperty('--browse-art-rotate', `${rotate.toFixed(2)}deg`);
-  }, [effectDisabled]);
+  }, [effectDisabled, suppressHoverIntentRef]);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (effectDisabled || suppressHoverIntentRef?.current || event.pointerType !== 'mouse') return;
+    pointerRef.current = { x: event.clientX, y: event.clientY };
+    // High-rate mice can deliver several events between paints. Read geometry
+    // and update the image only once, using the latest pointer position.
+    if (frameRef.current === null) {
+      frameRef.current = window.requestAnimationFrame(updateParallax);
+    }
+  }, [effectDisabled, suppressHoverIntentRef, updateParallax]);
+
+  // A queued frame belongs to the current effect settings and scroll ref.
+  useEffect(() => cancelFrame, [cancelFrame, updateParallax]);
 
   useEffect(() => {
     if (effectDisabled) resetParallax();

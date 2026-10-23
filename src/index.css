@@ -693,10 +693,6 @@ body {
   animation: browseSoundWaveWake 680ms ease-out both;
 }
 
-.browse-result-card {
-  animation: browseResultSettle 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 .browse-card-hover-surface {
   transition:
     border-color 190ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -713,7 +709,6 @@ body {
 .browse-card-media-zoom {
   transform-origin: center;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -833,18 +828,6 @@ body {
   0% { transform: scaleY(0.82); }
   46% { transform: scaleY(1.16); }
   100% { transform: scaleY(1); }
-}
-
-@keyframes browseResultSettle {
-  0% {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* Docked details sidebar entrance. The aside reserves its width in one snap
@@ -1762,7 +1745,6 @@ body {
   .group:focus-within .browse-sound-wave-bar,
   .sidebar-active-backdrop,
   .sidebar-active-backdrop__image,
-  .browse-result-card,
   .browse-details-dock-panel {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;

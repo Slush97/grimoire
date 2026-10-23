@@ -1352,6 +1352,7 @@ export function ModCard({
         </button>
     </div>
   );
+  // Isolate the negative-z backdrop without forcing a GPU surface per card.
   return (
     <MenuRoot onOpenChange={(open) => { if (!open) setPointerImageSrc(null); }}>
       {/* Disabled in select mode so right-click doesn't fight the full-card
@@ -1378,7 +1379,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {(selectMode || selectionPreview) && (
