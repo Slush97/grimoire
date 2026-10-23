@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Sparkles,
@@ -14,6 +14,7 @@ import {
   getHeroNamePath,
   getHeroWikiUrl,
 } from '../../lib/lockerUtils';
+import { withDirtySource } from '../../lib/dirtySources';
 import { HeroNavigation } from '../locker/HeroNavigation';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
@@ -32,6 +33,8 @@ interface HeroWorkshopProps {
 }
 
 type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
+
+const NO_DIRTY_SOURCES: ReadonlySet<string> = new Set();
 
 /**
  * The per-hero Foundry workshop: pick a hero, edit everything about them. Mirrors
@@ -54,11 +57,20 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [currentHero, setCurrentHero] = useState(hero.codename);
+  // Children holding unsaved work report in here, which freezes hero switching
+  // so a remount doesn't throw the draft away.
+  const [dirtySources, setDirtySources] = useState(NO_DIRTY_SOURCES);
+  const navLocked = dirtySources.size > 0;
   if (currentHero !== hero.codename) {
     setCurrentHero(hero.codename);
     setRenderStep(0);
     setNameFailed(false);
+    setDirtySources(NO_DIRTY_SOURCES);
   }
+  const setSourceDirty = useCallback((source: string, dirty: boolean) => {
+    setDirtySources((sources) => withDirtySource(sources, source, dirty));
+  }, []);
+  const onSoundDirtyChange = useCallback((dirty: boolean) => setSourceDirty('sound', dirty), [setSourceDirty]);
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -128,7 +140,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
           {t('foundry.workshop.back', 'All heroes')}
         </button>
 
-        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled>
+        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled={!navLocked}>
           {nameFailed ? (
             <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
               {hero.name}
@@ -176,11 +188,11 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
               {/* Each ability card lists its gameplay sounds with play + Swap (drop
                   your own MP3), forged through the soundswap engine. The ability
                   axis lives here (not under Voice); Voice is VO only. */}
-              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
+              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" onDirtyChange={onSoundDirtyChange} />
               <AbilitiesComingNote />
             </div>
           ) : section === 'voice' ? (
-            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
+            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" onDirtyChange={onSoundDirtyChange} />
           ) : section === 'icons' ? (
             <div className="space-y-8">
               <TextureBrowse heroes={scopedRoster} heroNames={heroNames} heroCodename={hero.codename} />
