@@ -199,7 +199,9 @@ and retain selected original skins as dependencies. Export is separate from inst
 The hideout loader reads the map's player spawn and facing, world-node transforms,
 aggregate primitive transforms and tints. It checks generated GLB header lengths,
 reports missing exports and omits unresolved materials. Scene files participate in
-the existing preview-cache size and clear controls.
+the existing preview-cache size and clear controls. The cache key covers the map,
+the base pak and the vpkmerge version. A build with a failed export is returned
+but not saved, so the next load retries that export and reuses the GLBs that worked.
 
 Hideout lighting uses the installed map's DC irradiance atlas and TEXCOORD_3,
 including the world UV scale. HDR values survive export; the atlas is reduced to

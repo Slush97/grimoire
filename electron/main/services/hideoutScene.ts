@@ -86,13 +86,22 @@ async function validGlb(path: string): Promise<boolean> {
 }
 
 const inFlight = new Map<string, Promise<HideoutSceneInfo>>();
+let exporterVersion: Promise<string> | null = null;
+
+function vpkmergeVersion(): Promise<string> {
+    exporterVersion ??= runVpkmergeStdout(['--version']).then((out) => out.trim(), (error: unknown) => {
+        exporterVersion = null;
+        throw error;
+    });
+    return exporterVersion;
+}
 
 export async function loadHideoutScene(deadlockPath: string): Promise<HideoutSceneInfo> {
     const citadel = getCitadelPath(deadlockPath);
     const map = join(citadel, 'maps', 'dl_hideout.vpk');
     const base = join(citadel, 'pak01_dir.vpk');
-    const [mapStat, baseStat] = await Promise.all([fs.stat(map), fs.stat(base)]);
-    const key = createHash('sha256').update(`hideout-v6:${map}:${mapStat.size}:${mapStat.mtimeMs}:${baseStat.size}:${baseStat.mtimeMs}`).digest('hex').slice(0, 24);
+    const [mapStat, baseStat, version] = await Promise.all([fs.stat(map), fs.stat(base), vpkmergeVersion()]);
+    const key = createHash('sha256').update(`hideout-v6:${version}:${map}:${mapStat.size}:${mapStat.mtimeMs}:${baseStat.size}:${baseStat.mtimeMs}`).digest('hex').slice(0, 24);
     const pending = inFlight.get(key);
     if (pending) return pending;
     const work = build(map, base, key);
@@ -112,6 +121,7 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
     const world = worldSchema.parse(await decode(map, 'maps/dl_hideout/world.vwrld'));
     const result: HideoutSceneInfo = { key, anchor: [0, 0, 0], heading: 0, instances: [], failures: [],
         omissions: ['directionalLightmaps', 'areaLightShapes', 'lightCookies', 'layerBlending', 'mapEffects', 'dynamicProps'], lighting: { kind: 'unavailable' }, lights: [] };
+    let exportFailed = false;
     const lighting = world.m_worldLightingInfo;
     const irradiance = lighting?.m_lightMaps.find((entry) => entry.endsWith('/directional_irradiance_sh2_dc.vtex'));
     if (lighting?.m_bHasLightmaps && irradiance) {
@@ -119,7 +129,10 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
             await runVpkmerge(['texture-hdr', compiledMapEntry(irradiance), '--from-vpk', map,
                 '--out', join(dir, 'irradiance.hdr'), '--max-size', '2048']);
             result.lighting = { kind: 'baked', file: 'irradiance.hdr', uvScale: lighting.m_vLightmapUvScale };
-        } catch { result.failures.push(irradiance); }
+        } catch {
+            result.failures.push(irradiance);
+            exportFailed = true;
+        }
     }
     if (result.lighting.kind === 'unavailable') result.omissions.push('mapLighting');
     let spawnFound = false;
@@ -168,6 +181,7 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
                 } catch {
                     model = null;
                     result.failures.push(entry);
+                    exportFailed = true;
                 }
                 models.set(entry, model);
             }
@@ -193,6 +207,8 @@ async function build(map: string, base: string, key: string): Promise<HideoutSce
     }
     if (!result.instances.length) throw new Error('No hideout geometry could be exported.');
     result.omissions = [...new Set(result.omissions)];
-    await fs.writeFile(join(dir, 'scene.json'), JSON.stringify(result));
+    // Unsaved, the next load retries a failed export and reuses the GLBs that did export.
+    if (exportFailed) await fs.rm(join(dir, 'scene.json'), { force: true });
+    else await fs.writeFile(join(dir, 'scene.json'), JSON.stringify(result));
     return result;
 }
