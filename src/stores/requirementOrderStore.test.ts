@@ -6,7 +6,7 @@ import { useRequirementsStore } from './requirementsStore';
 
 const api = vi.hoisted(() => ({ getMods: vi.fn(), listUnknownModFiles: vi.fn(), reorderMods: vi.fn(), setState: vi.fn() }));
 vi.mock('../lib/api', () => api);
-vi.mock('./appStore', () => ({ useAppStore: { setState: api.setState } }));
+vi.mock('./appStore', () => ({ useAppStore: { setState: api.setState, getState: () => ({ mods }) } }));
 const makeMod = (id: string, gameBananaId: number, priority: number): Mod => ({ id, gameBananaId, priority, metaKey: `${id}.vpk`, path: `/addons/${id}.vpk`, fileName: `${id}.vpk`, name: id, enabled: true, size: 100, installedAt: '', sha256: id });
 const overlay = makeMod('recolor', 711434, 3);
 const base = makeMod('base', 704252, 1);
@@ -69,5 +69,10 @@ describe('requirement order fix', () => {
     release(mods);
     await first;
     expect(api.reorderMods).toHaveBeenCalledTimes(1);
+  });
+  it('reuses unchanged inventory objects after fixing the order', async () => {
+    api.reorderMods.mockResolvedValue([{ ...overlay, priority: 1 }, { ...base, priority: 2 }, { ...middle }]);
+    await useRequirementOrderStore.getState().fix(issue);
+    expect(api.setState.mock.calls[0][0].mods[2]).toBe(middle);
   });
 });

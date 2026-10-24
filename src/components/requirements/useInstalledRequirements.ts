@@ -9,7 +9,7 @@ export function useInstalledRequirements(mods: readonly Mod[]) {
   const snapshots = useRequirementsStore(state => state.snapshots);
   const candidates = useMemo(() => requirementOrderCandidates(mods, snapshots), [mods, snapshots]);
   useEffect(() => { void useRequirementOrderStore.getState().load(candidates); }, [candidates]);
-  const key = JSON.stringify([...new Map(mods.flatMap(modRequirementRefs).map(t => [requirementKey(t), t])).values()]);
+  const key = useMemo(() => JSON.stringify([...new Map(mods.flatMap(modRequirementRefs).map(t => [requirementKey(t), t])).values()]), [mods]);
   useEffect(() => {
     const targets: ReturnType<typeof modRequirementRefs> = JSON.parse(key);
     void useRequirementsStore.getState().load(targets);

@@ -12,6 +12,7 @@ import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
+import { reconcileMods } from '../lib/reconcileMods';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
   planLaunchShuffle,
@@ -73,27 +74,6 @@ function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
     () => undefined
   );
   return run;
-}
-
-// Reuse existing Mod object (and array) identities when a rescan returns
-// unchanged data. Silent refreshes fire on every Installed mount and on
-// window focus; without this each one replaced the whole list, and every
-// downstream effect keyed on `mods` re-fired, re-rendering the full card
-// grid several times per navigation. Items are compared by JSON since both
-// sides come through the same IPC serializer (stable shape and key order).
-function reconcileMods(prev: Mod[], next: Mod[]): Mod[] {
-  const prevById = new Map(prev.map((m) => [m.id, m]));
-  let unchanged = prev.length === next.length;
-  const merged = next.map((m, i) => {
-    const old = prevById.get(m.id);
-    if (old && JSON.stringify(old) === JSON.stringify(m)) {
-      if (unchanged && prev[i] !== old) unchanged = false;
-      return old;
-    }
-    unchanged = false;
-    return m;
-  });
-  return unchanged ? prev : merged;
 }
 
 function formerStandalonePreferenceKey(mod: Mod): string[] {
@@ -963,7 +943,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   swapModPriority: async (modIdA: string, modIdB: string) => {
     try {
       const updated = await api.swapModPriority(modIdA, modIdB);
-      set({ mods: updated });
+      set((state) => {
+        const mods = reconcileMods(state.mods, updated);
+        return mods === state.mods ? state : { mods };
+      });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
       if (isGameRunningModLockError(err)) return;
@@ -976,7 +959,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   reorderMods: async (orderedIds: string[]) => {
     try {
       const updated = await api.reorderMods(orderedIds);
-      set({ mods: updated });
+      set((state) => {
+        const mods = reconcileMods(state.mods, updated);
+        return mods === state.mods ? state : { mods };
+      });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
@@ -1058,7 +1044,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
       try {
         const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);
-        set({ mods: updated });
+        set((state) => {
+          const mods = reconcileMods(state.mods, updated);
+          return mods === state.mods ? state : { mods };
+        });
         return { failures: failures.length };
       } catch (err) {
         if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
@@ -1084,7 +1073,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const keys = get().soloRestore?.keys ?? mods.filter((m) => m.enabled).map(modRestoreKey);
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
-      set({ mods: updated, soloRestore: { keys, label } });
+      set((state) => ({ mods: reconcileMods(state.mods, updated), soloRestore: { keys, label } }));
       // Only enables pass the safety gate, so any safety failure is a target.
       if (failures.some((failure) => failure.includes('MOD_SAFETY_'))) {
         return { applied: true, failures: failures.length, reason: 'safety' };
@@ -1116,7 +1105,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
-      set({ mods: updated, soloRestore: failures.length === 0 ? null : snap });
+      set((state) => ({
+        mods: reconcileMods(state.mods, updated),
+        soloRestore: failures.length === 0 ? null : snap,
+      }));
       return { failures: failures.length };
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
