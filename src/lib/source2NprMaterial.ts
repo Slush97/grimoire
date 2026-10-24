@@ -1179,6 +1179,8 @@ uniform vec3  uJitterAmpYB;
 uniform vec3  uJitterAmpZA;
 uniform vec3  uJitterAmpZB;
 uniform float uHasHighlight;
+uniform float uEditorSelected;
+uniform vec3 uEditorSelectedColor;
 uniform vec3  uHighlightTint;
 uniform float uHighlightCoverage;
 uniform float uHighlightHardness;
@@ -1557,6 +1559,8 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         }
 
         gl_FragColor.rgb = mix(gl_FragColor.rgb, nprOut, uNprStrength);
+        float editorRim = pow(1.0 - abs(dot(nprN, nprV)), 2.0);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 0.8 + uEditorSelectedColor * (0.12 + editorRim * 1.2), uEditorSelected);
       }
     `,
   },
@@ -1713,6 +1717,8 @@ export function wrapMaterialWithNpr(
     uJitterAmpYB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesYB1 ?? morphic.vectors?.g_vJitterAmplitudesYB) },
     uJitterAmpZA: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZA1 ?? morphic.vectors?.g_vJitterAmplitudesZA) },
     uJitterAmpZB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZB1 ?? morphic.vectors?.g_vJitterAmplitudesZB) },
+    uEditorSelected: { value: 0.0 },
+    uEditorSelectedColor: { value: new THREE.Color() },
     uHasHighlight: { value: 0.0 },
     uHighlightTint: { value: new THREE.Color(0, 0, 0) },
     uHighlightCoverage: { value: 0.0 },
@@ -1723,6 +1729,7 @@ export function wrapMaterialWithNpr(
     uHighlightRadius: { value: 0.0 },
   };
 
+  const sourceName = base.name;
   const csm = new CustomShaderMaterial({
     baseMaterial: base as THREE.MeshPhysicalMaterial,
     vertexShader: NPR_VERTEX,
@@ -1731,6 +1738,8 @@ export function wrapMaterialWithNpr(
     patchMap: NPR_PATCH_MAP,
   });
   configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
+  csm.name = sourceName;
+  base.name = sourceName;
 
   // These clones are the only GPU resources this wrap created (the base material
   // and its standard maps are owned by disposeScene). Fallback samplers point at

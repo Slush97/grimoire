@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { skinEditLinkSchema } from '../lib/skinEditSchema';
 import {
   Hammer,
   Library,
@@ -36,6 +38,10 @@ type SubtoolId = (typeof SUBTOOLS)[number]['id'];
 type Mode = 'heroes' | 'catalog';
 
 export default function Foundry() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const input: unknown = location.state;
+  const source = skinEditLinkSchema.safeParse(input);
   const settings = useAppStore((s) => s.settings);
   const hasGamePath = Boolean(settings?.deadlockPath || (settings?.devMode && settings?.devDeadlockPath));
 
@@ -70,9 +76,11 @@ export default function Foundry() {
     for (const h of heroes) map.set(h.codename, h.name);
     return map;
   }, [heroes]);
+  const linkedHero = source.success ? heroes.find((hero) => hero.name === source.data.heroName) : undefined;
+  const workshopHero = selectedHero ?? linkedHero;
 
   const orderedHeroes = useMemo(() => orderFoundryHeroes(heroes, heroQuery), [heroes, heroQuery]);
-  const neighbors = getFoundryHeroNeighbors(orderedHeroes, selectedHero?.codename ?? '');
+  const neighbors = getFoundryHeroNeighbors(orderedHeroes, workshopHero?.codename ?? '');
 
   // No game path: same gate regardless of mode.
   if (!hasGamePath) {
@@ -102,15 +110,16 @@ export default function Foundry() {
   }
 
   // Hero workshop: full-bleed, no page chrome (mirrors the Locker hero view).
-  if (mode === 'heroes' && selectedHero) {
+  if (mode === 'heroes' && workshopHero) {
     return (
       <HeroWorkshop
-        hero={selectedHero}
+        hero={workshopHero}
         previous={neighbors.previous}
         next={neighbors.next}
         onNavigate={setSelectedHero}
         heroNames={heroNames}
-        onBack={() => setSelectedHero(null)}
+        skinSources={source.success && source.data.heroName === workshopHero.name ? source.data.skinSources : undefined}
+        onBack={() => { setSelectedHero(null); if (linkedHero) navigate('/foundry', { replace: true, state: null }); }}
       />
     );
   }

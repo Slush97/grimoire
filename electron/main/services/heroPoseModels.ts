@@ -37,6 +37,8 @@ import { readHeroAnimationMetadata } from './heroAnimationMetadata';
 import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
+import { parseVpkDirectoryCached } from './vpk';
+import { hideoutCacheFile } from './hideoutScene';
 
 export const HERO_POSE_SCHEME = 'grimoire-hero';
 
@@ -789,6 +791,48 @@ async function resolvePoseSource(
     }
 }
 
+async function resolveAllSkinSources(deadlockPath: string, normalized: HeroPoseSkinSource[]): Promise<ResolvedSource[]> {
+    const resolved = await resolveSources(deadlockPath, normalized);
+    if (resolved.length !== normalized.length) throw new Error('A selected skin is no longer installed. Select the source again.');
+    return resolved;
+}
+
+async function skinEditFingerprint(base: string, entry: string, sourceFingerprint: string): Promise<string> {
+    const game = await fs.stat(base);
+    return createHash('sha256').update(`${entry}:${sourceFingerprint}:${game.size}:${game.mtimeMs}`).digest('hex');
+}
+
+/** withHeroSkinSource's fingerprint for an already-resolved model entry, without merging the stack. */
+export async function heroSkinSourceFingerprint(deadlockPath: string, skinSources: HeroPoseSkinSource[], entry: string): Promise<string> {
+    const resolved = await resolveAllSkinSources(deadlockPath, normalizeSkinSources(skinSources));
+    return skinEditFingerprint(join(getCitadelPath(deadlockPath), 'pak01_dir.vpk'), entry, await fingerprintResolved(resolved));
+}
+
+export async function withHeroSkinSource<T>(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[],
+    action: (source: { vpk: string; base: string; entry: string; fingerprint: string }) => Promise<T>
+): Promise<T> {
+    const base = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    const normalized = normalizeSkinSources(skinSources);
+    await resolveAllSkinSources(deadlockPath, normalized);
+    const source = await resolvePoseSource(deadlockPath, base, normalized);
+    try {
+        const paths = [...(parseVpkDirectoryCached(source.vpk) ?? []), ...(parseVpkDirectoryCached(base) ?? [])];
+        let entry: string | undefined;
+        for (const [kind, value] of modelSelectorsForHero(heroName)) {
+            entry = kind === '--entry' ? paths.find((path) => path === value)
+                : paths.find((path) => /^models\/heroes[^/]*\//i.test(path) && path.endsWith(`/${value}.vmdl_c`));
+            if (entry) break;
+        }
+        if (!entry) throw new Error('The selected hero model could not be found.');
+        return await action({ vpk: source.vpk, base, entry, fingerprint: await skinEditFingerprint(base, entry, source.fingerprint) });
+    } finally {
+        if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+    }
+}
+
 export interface HeroPoseInfo {
     hasModel: boolean;
     /** mtime of the stored GLB, used to cache-bust the renderer URL on re-export. */
@@ -1224,6 +1268,10 @@ export function registerHeroPoseProtocol(): void {
             const url = new URL(request.url);
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
+            if (url.hostname === 's') {
+                const sceneFile = hideoutCacheFile(key, parts[1] ?? '');
+                return sceneFile ? net.fetch(pathToFileURL(sceneFile).toString()) : new Response(null, { status: 404 });
+            }
             // The trailing segment(s) name what's served: the static `model.glb`
             // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the
             // ambient FX descriptor `effect.json`, or a bundled effect texture
