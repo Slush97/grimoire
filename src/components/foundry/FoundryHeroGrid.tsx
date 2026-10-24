@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { orderFoundryHeroes } from '../../lib/foundryHeroNavigation';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HeroInfo } from '../../types/foundry';
@@ -9,6 +10,8 @@ interface FoundryHeroGridProps {
   heroes: HeroInfo[];
   /** Open the per-hero workshop for the picked hero. */
   onPick: (hero: HeroInfo) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
 }
 
 /**
@@ -17,21 +20,9 @@ interface FoundryHeroGridProps {
  * hero-first entry, but lands in the creation workflow rather than installed
  * mods. Selectable heroes lead; in-development heroes follow, dimmed.
  */
-export default function FoundryHeroGrid({ heroes, onPick }: FoundryHeroGridProps) {
+export default function FoundryHeroGrid({ heroes, onPick, query, onQueryChange }: FoundryHeroGridProps) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState('');
-
-  const ordered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return heroes
-      .filter((h) => !h.disabled)
-      .filter((h) => (q ? h.name.toLowerCase().includes(q) || h.codename.includes(q) : true))
-      // Selectable first, then in-development; alphabetical within each group.
-      .sort((a, b) => {
-        if (a.selectable !== b.selectable) return a.selectable ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [heroes, query]);
+  const ordered = useMemo(() => orderFoundryHeroes(heroes, query), [heroes, query]);
 
   return (
     <div className="space-y-5">
@@ -40,7 +31,7 @@ export default function FoundryHeroGrid({ heroes, onPick }: FoundryHeroGridProps
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onQueryChange(e.target.value)}
           placeholder={t('foundry.heroes.search', 'Search heroes')}
           className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none"
         />

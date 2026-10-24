@@ -19,6 +19,7 @@ import SoundBrowse from '../components/foundry/SoundBrowse';
 import TextureBrowse from '../components/foundry/TextureBrowse';
 import RecolorTool from '../components/foundry/RecolorTool';
 import FoundryHeroGrid from '../components/foundry/FoundryHeroGrid';
+import { getFoundryHeroNeighbors, orderFoundryHeroes } from '../lib/foundryHeroNavigation';
 import HeroWorkshop from '../components/foundry/HeroWorkshop';
 
 // Sub-tools shown in the left rail of the Catalog (tool-first) mode. Library /
@@ -43,6 +44,7 @@ export default function Foundry() {
   const [mode, setMode] = useState<Mode>('heroes');
   const [selectedHero, setSelectedHero] = useState<HeroInfo | null>(null);
   const [active, setActive] = useState<SubtoolId>('library');
+  const [heroQuery, setHeroQuery] = useState('');
   const [heroes, setHeroes] = useState<HeroInfo[]>([]);
 
   // Roster (codename -> name) loads once; warm the catalog cache opportunistically
@@ -68,6 +70,9 @@ export default function Foundry() {
     for (const h of heroes) map.set(h.codename, h.name);
     return map;
   }, [heroes]);
+
+  const orderedHeroes = useMemo(() => orderFoundryHeroes(heroes, heroQuery), [heroes, heroQuery]);
+  const neighbors = getFoundryHeroNeighbors(orderedHeroes, selectedHero?.codename ?? '');
 
   // No game path: same gate regardless of mode.
   if (!hasGamePath) {
@@ -101,6 +106,9 @@ export default function Foundry() {
     return (
       <HeroWorkshop
         hero={selectedHero}
+        previous={neighbors.previous}
+        next={neighbors.next}
+        onNavigate={setSelectedHero}
         heroNames={heroNames}
         onBack={() => setSelectedHero(null)}
       />
@@ -125,7 +133,7 @@ export default function Foundry() {
             </Button>
           }
         />
-        <FoundryHeroGrid heroes={heroes} onPick={setSelectedHero} />
+        <FoundryHeroGrid heroes={heroes} onPick={setSelectedHero} query={heroQuery} onQueryChange={setHeroQuery} />
       </PageLayout>
     );
   }
