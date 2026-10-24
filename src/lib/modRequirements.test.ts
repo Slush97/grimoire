@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, type RequirementMod } from './modRequirements';
+import { hasInstalledRequirementIssues, hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, type RequirementMod } from './modRequirements';
 import { installedRequirementOrder } from './requirementLoadOrder';
 import type { MergedModInfo, Mod } from '../types/mod';
 import type { ModRequirement } from '../types/gamebanana';
@@ -101,5 +101,12 @@ describe('installed requirement state', () => {
     expect(hasRequirementIssues(undefined, [])).toBe(false);
     expect(hasRequirementIssues({ status: 'unavailable', checkedAt: 100 }, [])).toBe(false);
     expect(hasRequirementIssues({ status: 'loaded', checkedAt: 100, items: [] }, [])).toBe(false);
+  });
+  it('ignores the requirements of an installed mod that is off', () => {
+    const snapshot = { status: 'loaded' as const, checkedAt: 100, items: [requirement] };
+    const mods = [{ ...base(false), id: 'base' }] as Mod[];
+    expect(hasInstalledRequirementIssues({ enabled: true }, snapshot, mods)).toBe(true);
+    expect(hasInstalledRequirementIssues({ enabled: false }, snapshot, mods)).toBe(false);
+    expect(hasInstalledRequirementIssues({ enabled: false }, snapshot, [])).toBe(false);
   });
 });
