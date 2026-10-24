@@ -332,10 +332,10 @@ const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
   'killsounds',
   'in-game music',
   'music',
-  'announcer',
-  'ui',
-  'ui sounds',
-  'misc',
+  'gameplay events',
+  'item sounds',
+  'sound packs',
+  'movement',
 ]);
 
 /**
