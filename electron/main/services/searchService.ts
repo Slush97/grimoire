@@ -95,10 +95,11 @@ function applyContentFilters(
  * an empty grid rather than a failure.
  *
  * `category_name` is stored, so the renderer resolves the picked category to its
- * root name and we match on that instead. A root-level pick is exact; a
- * subcategory pick widens to its root rather than returning nothing, which is
- * the best the cached columns allow. The id comparison stays as a last resort
- * for the day rows carry real ids.
+ * root name and we match on that instead. A root-level pick is exact. A
+ * subcategory pick (`categoryIds`, the pick and its descendants) matches the
+ * stored `sub_category_id` instead: widening it to its root returned the whole
+ * root for Model Replacement > Hideout. The id comparison stays as a last
+ * resort for the day rows carry real ids.
  *
  * Heroes are the exception. The list endpoint also returns `_aSubCategory`, whose
  * profile URL carries the id, so `sub_category_id` is real and a hero (a Skins
@@ -111,7 +112,8 @@ export function applyCategoryFilter(
     categoryId: SearchOptions['categoryId'],
     categoryName: SearchOptions['categoryName'],
     heroName: SearchOptions['heroName'],
-    heroCategoryIds: SearchOptions['heroCategoryIds']
+    heroCategoryIds: SearchOptions['heroCategoryIds'],
+    categoryIds?: SearchOptions['categoryIds']
 ): void {
     if (heroCategoryIds?.length) {
         const placeholders = heroCategoryIds.map((id, index) => {
@@ -130,6 +132,16 @@ export function applyCategoryFilter(
     }
 
     if (categoryId === undefined) return;
+
+    if (categoryIds?.length) {
+        const placeholders = categoryIds.map((id, index) => {
+            const key = `category_${index}`;
+            params[key] = id;
+            return `@${key}`;
+        });
+        conditions.push(`mods.sub_category_id IN (${placeholders.join(', ')})`);
+        return;
+    }
 
     if (categoryName) {
         params.categoryName = categoryName;
@@ -193,7 +205,7 @@ export function applyBrowseScope(
         const modMatch = modConditions[0] ?? 'hero_name_match(mods.name, @heroName)';
         conditions.push(`((mods.section = 'Mod' AND ${modMatch}) OR (mods.section <> 'Mod' AND hero_name_match(mods.name, @heroName)))`);
     } else {
-        applyCategoryFilter(conditions, params, options.categoryId, options.categoryName, options.heroName, options.heroCategoryIds);
+        applyCategoryFilter(conditions, params, options.categoryId, options.categoryName, options.heroName, options.heroCategoryIds, options.categoryIds);
     }
 }
 
