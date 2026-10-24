@@ -38,6 +38,7 @@ interface Suggestion {
   fileId?: number;
   thumbnailUrl?: string;
   nsfw?: boolean;
+  categoryId?: number;
   categoryName?: string;
   section?: 'Mod' | 'Sound';
 }
@@ -195,6 +196,7 @@ export default function ImportWizardModal({
               fileId: match.fileId,
               thumbnailUrl: match.thumbnailUrl,
               nsfw: match.nsfw,
+              categoryId: match.categoryId,
               categoryName: match.categoryName,
               section: match.section,
             },
@@ -219,6 +221,7 @@ export default function ImportWizardModal({
         gameBananaFileId: target.fileId,
         thumbnailUrl: target.thumbnailUrl,
         nsfw: target.nsfw,
+        categoryId: target.categoryId,
         categoryName: target.categoryName,
         sourceSection: target.section,
       });
@@ -245,6 +248,7 @@ export default function ImportWizardModal({
         modName: details.name,
         thumbnailUrl: getModThumbnail(details) ?? undefined,
         nsfw: details.nsfw,
+        categoryId: details.category?.id,
         categoryName: details.category?.name,
         section: reference.section,
       });

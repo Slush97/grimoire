@@ -11,6 +11,7 @@ export interface UnknownCrcFileInput {
     modId: number;
     modName: string;
     section: string;
+    categoryId: number | null;
     categoryName: string | null;
     thumbnailUrl: string | null;
     nsfw: boolean;
@@ -35,6 +36,7 @@ export interface UnknownCrcLookupMatch {
     modId: number;
     modName: string;
     section: string;
+    categoryId: number | null;
     categoryName: string | null;
     thumbnailUrl: string | null;
     nsfw: boolean;
@@ -69,6 +71,7 @@ const LOOKUP_CRC_SQL = `
         files.mod_id,
         files.mod_name,
         files.section,
+        files.category_id,
         files.category_name,
         files.thumbnail_url,
         files.nsfw,
@@ -113,6 +116,7 @@ function initUnknownCrcDb(): Database.Database {
             mod_id INTEGER NOT NULL,
             mod_name TEXT NOT NULL,
             section TEXT NOT NULL,
+            category_id INTEGER,
             category_name TEXT,
             thumbnail_url TEXT,
             nsfw INTEGER DEFAULT 0,
@@ -195,6 +199,12 @@ function ensureCrcEntrySourceColumns(database: Database.Database): void {
     if (!fileColumns.has('parser_version')) {
         database.exec('ALTER TABLE crc_files ADD COLUMN parser_version INTEGER DEFAULT 0');
     }
+    if (!fileColumns.has('category_id')) {
+        database.exec('ALTER TABLE crc_files ADD COLUMN category_id INTEGER');
+        // Rows before this column stored the search bucket's label ("Skins/Mina",
+        // "Gameplay", "Sounds"), not the mod's own category.
+        database.exec('UPDATE crc_files SET category_name = NULL');
+    }
 }
 
 function rowToFile(row: Record<string, unknown>): UnknownCrcFile {
@@ -203,6 +213,7 @@ function rowToFile(row: Record<string, unknown>): UnknownCrcFile {
         modId: row.mod_id as number,
         modName: row.mod_name as string,
         section: row.section as string,
+        categoryId: row.category_id as number | null,
         categoryName: row.category_name as string | null,
         thumbnailUrl: row.thumbnail_url as string | null,
         nsfw: row.nsfw === 1,
@@ -254,6 +265,7 @@ function rowToLookupMatch(row: Record<string, unknown>): UnknownCrcLookupMatch {
         modId: row.mod_id as number,
         modName: row.mod_name as string,
         section: row.section as string,
+        categoryId: row.category_id as number | null,
         categoryName: row.category_name as string | null,
         thumbnailUrl: row.thumbnail_url as string | null,
         nsfw: row.nsfw === 1,
@@ -275,11 +287,11 @@ export function upsertUnknownCrcFiles(files: UnknownCrcFileInput[]): UnknownCrcF
     const existingStmt = database.prepare('SELECT * FROM crc_files WHERE file_id = ?');
     const upsertStmt = database.prepare(`
         INSERT INTO crc_files (
-            file_id, mod_id, mod_name, section, category_name, thumbnail_url,
+            file_id, mod_id, mod_name, section, category_id, category_name, thumbnail_url,
             nsfw, date_modified, file_name, file_size, download_url, is_archived,
             md5, archive_type, status, error, bytes_fetched, checked_at, parser_version, cached_at
         ) VALUES (
-            @fileId, @modId, @modName, @section, @categoryName, @thumbnailUrl,
+            @fileId, @modId, @modName, @section, @categoryId, @categoryName, @thumbnailUrl,
             @nsfw, @dateModified, @fileName, @fileSize, @downloadUrl, @isArchived,
             @md5, @archiveType, @status, @error, @bytesFetched, @checkedAt, @parserVersion, @cachedAt
         )
@@ -287,6 +299,7 @@ export function upsertUnknownCrcFiles(files: UnknownCrcFileInput[]): UnknownCrcF
             mod_id = excluded.mod_id,
             mod_name = excluded.mod_name,
             section = excluded.section,
+            category_id = excluded.category_id,
             category_name = excluded.category_name,
             thumbnail_url = excluded.thumbnail_url,
             nsfw = excluded.nsfw,

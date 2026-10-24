@@ -1306,7 +1306,7 @@ export default function Browse() {
         likeCount: m.likeCount,
         viewCount: m.viewCount,
         nsfw: m.isNsfw,
-        rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
+        rootCategory: m.categoryName ? { id: m.categoryId ?? undefined, name: m.categoryName } : undefined,
         submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
         previewMedia: (() => {
           let images: { baseUrl: string; file: string; file530: string }[] | undefined;

@@ -867,6 +867,8 @@ export interface UnknownModCrcMatchResult {
   fileId?: number;
   fileName?: string;
   section?: 'Mod' | 'Sound';
+  /** The matched mod's own deepest category (a hero, for a skin). */
+  categoryId?: number;
   categoryName?: string;
   confidence?: 'exact';
   reason?: string;
@@ -916,6 +918,10 @@ export interface AssociateUnknownModArgs {
   gameBananaFileId?: number;
   thumbnailUrl?: string;
   nsfw?: boolean;
+  /** The mod's own deepest category id (a hero, for a skin). The main process
+   *  names it from the cached category tree, so categoryName is only the
+   *  fallback when that tree has no such id. */
+  categoryId?: number;
   categoryName?: string;
   sourceSection?: 'Mod' | 'Sound';
 }
