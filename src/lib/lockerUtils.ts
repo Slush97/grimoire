@@ -12,6 +12,7 @@ export type HeroCategory = {
   id: number;
   name: string;
   iconUrl?: string;
+  descendantCategoryIds?: readonly number[];
 };
 
 export const FAVORITE_HEROES_KEY = 'lockerFavorites';
@@ -250,10 +251,13 @@ export function findCategoryByName(
 export function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategory[] {
   const skins = findCategoryByName(categories, 'Skins');
   if (!skins?.children) return [];
+  const descendantIds = (nodes: GameBananaCategoryNode[]): number[] =>
+    nodes.flatMap((node) => [node.id, ...descendantIds(node.children ?? [])]);
   return skins.children.map((child) => ({
     id: child.id,
     name: canonicalHeroName(child.name),
     iconUrl: child.iconUrl,
+    descendantCategoryIds: descendantIds(child.children ?? []),
   }));
 }
 
@@ -565,15 +569,20 @@ export function countGlobalMods(mods: Mod[]): number {
   return mods.reduce((n, mod) => (getEffectiveGlobalType(mod) ? n + 1 : n), 0);
 }
 
-export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {
+export function groupModsByCategory(mods: Mod[], heroList?: readonly HeroCategory[]) {
   const map = new Map<number, Mod[]>();
   const unassigned: Mod[] = [];
 
   // Build a lookup for hero names to IDs
   const heroNameToId = new Map<string, number>();
+  const categoryToHeroId = new Map<number, number>();
   if (heroList) {
     for (const hero of heroList) {
       heroNameToId.set(hero.name.toLowerCase(), hero.id);
+      categoryToHeroId.set(hero.id, hero.id);
+      for (const id of hero.descendantCategoryIds ?? []) {
+        categoryToHeroId.set(id, hero.id);
+      }
     }
   }
 
@@ -586,11 +595,11 @@ export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: 
       categoryId = heroNameToId.get(mod.lockerHero.toLowerCase());
     }
 
-    // 2. Author-supplied categoryId is the next best signal, but skip it when
-    //    the category is "Skins" itself (the generic parent), since that
-    //    points at a virtual node, not a hero.
+    // 2. Resolve the author's category to its hero, including skin subcategories.
+    //    Unknown categories fall through to the title or Unassigned so a stale
+    //    tree cannot hide a mod in a bucket with no hero tile.
     if (!categoryId && mod.categoryId && mod.categoryName?.toLowerCase() !== 'skins') {
-      categoryId = mod.categoryId;
+      categoryId = heroList?.length ? categoryToHeroId.get(mod.categoryId) : mod.categoryId;
     }
 
     // 3. Fall back to fuzzy match on the mod's display name. Same logic the

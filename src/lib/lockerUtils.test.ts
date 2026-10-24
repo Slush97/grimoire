@@ -1,6 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { countLockerSkins, groupLockerSkins, modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import type { GameBananaCategoryNode } from '../types/gamebanana';
+
+const skinCategories: GameBananaCategoryNode[] = [{
+  id: 33295, name: 'Skins', itemCount: 0,
+  children: [
+    {
+      id: 33325, name: 'Viscous', itemCount: 0,
+      children: [
+        { id: 50570, name: 'Faithful/Vanilla+', itemCount: 0 },
+        { id: 50571, name: 'Ports', itemCount: 0, children: [
+          { id: 60000, name: 'Nested port category', itemCount: 0 },
+        ] },
+      ],
+    },
+    { id: 33301, name: 'Haze', itemCount: 0 },
+  ],
+}];
 
 function mod(over: Partial<Mod> & { id: string; metaKey: string; priority: number }): Mod {
   return {
@@ -80,6 +97,38 @@ describe('buildHeroList', () => {
     expect(heroListMissesRoster(full)).toBe(false);
     expect(heroListMissesRoster(full.filter((hero) => hero.name !== 'Violet'))).toBe(true);
     expect(heroListMissesRoster([])).toBe(false);
+  });
+});
+
+describe('groupModsByCategory', () => {
+  const heroes = buildHeroList(skinCategories);
+
+  it.each([33325, 50570, 50571, 60000])('files skin category %i under its hero', (categoryId) => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      name: 'A remodel without a hero in its title', categoryId });
+    const grouped = groupModsByCategory([skin], heroes);
+    expect([...grouped.map.entries()]).toEqual([[33325, [skin]]]);
+    expect(grouped.unassigned).toEqual([]);
+  });
+
+  it('keeps a manual hero assignment ahead of category ancestry', () => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      categoryId: 50570, lockerHero: 'Haze' });
+    expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33301, [skin]]]);
+  });
+
+  it('uses the title when a cached tree does not know the new category', () => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      name: 'Viscous Redesign', categoryId: 99999, categoryName: 'Faithful/Vanilla+' });
+    expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33325, [skin]]]);
+  });
+
+  it('keeps an unknown category visible in Unassigned when no hero matches', () => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      name: 'Unknown remodel', categoryId: 99999 });
+    const grouped = groupModsByCategory([skin], heroes);
+    expect(grouped.map.size).toBe(0);
+    expect(grouped.unassigned).toEqual([skin]);
   });
 });
 
