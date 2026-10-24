@@ -8,7 +8,7 @@ import { foundryDraftKey, readFoundryDraft, writeFoundryDraft } from './foundryD
 let reportedStorageFailure = false;
 
 /** Persist committed input before a subsequent click can unmount the editor. */
-export function useFoundryDraft<T>(key: string, schema: z.ZodType<T>, initial: T): [T, Dispatch<SetStateAction<T>>] {
+export function useFoundryDraft<T>(key: string, schema: z.ZodType<T>, initial: T): [T, Dispatch<SetStateAction<T>>, (value: T) => void] {
   const { t } = useTranslation();
   const scope = useAppStore((state) => state.settings?.devMode && state.settings.devDeadlockPath
     ? state.settings.devDeadlockPath : state.settings?.deadlockPath ?? '');
@@ -19,16 +19,19 @@ export function useFoundryDraft<T>(key: string, schema: z.ZodType<T>, initial: T
   };
   const [state, setState] = useState(() => ({ key: storageKey, value: read(), changed: false }));
   if (state.key !== storageKey) setState({ key: storageKey, value: read(), changed: false });
-  useLayoutEffect(() => {
-    if (state.key !== storageKey || !state.changed) return;
+  // Imperative camera movement does not need to rerender the model to save it.
+  const persist = useCallback((value: T) => {
     let saved = false;
-    try { saved = writeFoundryDraft(localStorage, storageKey, state.value); } catch { /* Storage may be unavailable. */ }
+    try { saved = writeFoundryDraft(localStorage, storageKey, value); } catch { /* Storage may be unavailable. */ }
     if (!saved && !reportedStorageFailure) {
       reportedStorageFailure = true;
       showToast(t('foundry.draft.failed'), { tone: 'error' });
     }
-  }, [state, storageKey, t]);
+  }, [storageKey, t]);
+  useLayoutEffect(() => {
+    if (state.key === storageKey && state.changed) persist(state.value);
+  }, [state, storageKey, persist]);
   const update: Dispatch<SetStateAction<T>> = useCallback((next) => setState((current) => ({ key: storageKey, changed: true,
     value: typeof next === 'function' ? (next as (value: T) => T)(current.value) : next })), [storageKey]);
-  return [state.value, update];
+  return [state.value, update, persist];
 }

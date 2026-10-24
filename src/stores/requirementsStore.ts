@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import { hasRequirementIssues, requirementKey } from '../lib/modRequirements';
+import { hasRequirementIssues, requirementKey, type RequirementSource } from '../lib/modRequirements';
 import type { GameBananaItemRef, ModRequirementSnapshot, ModRequirementSource } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 
-type Review = { kind: 'inspect'; source: ModRequirementSource }
+type Review = { kind: 'inspect'; source: RequirementSource }
   | { kind: 'install'; source: ModRequirementSource; resolve: (accepted: boolean) => void };
 interface RequirementsStore {
   snapshots: Record<string, ModRequirementSnapshot>;
@@ -11,7 +11,7 @@ interface RequirementsStore {
   targets: GameBananaItemRef[];
   remember: (target: GameBananaItemRef, snapshot: ModRequirementSnapshot) => void;
   load: (targets: GameBananaItemRef[], refresh?: boolean) => Promise<void>;
-  inspect: (source: ModRequirementSource) => void;
+  inspect: (source: RequirementSource) => void;
   openTarget: (target: GameBananaItemRef) => void;
   back: () => void;
   finish: (accepted: boolean) => void;

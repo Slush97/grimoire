@@ -81,7 +81,7 @@ import { RequirementsControl } from '../components/requirements/RequirementsCont
 import { useRequirementOrderStore } from '../stores/requirementOrderStore';
 import { requirementOrderIssues } from '../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../stores/requirementsStore';
-import { hasRequirementIssues, modRequirementRefs, requirementKey } from '../lib/modRequirements';
+import { hasRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -387,9 +387,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onCreateList,
 }: InstalledEntryCardProps) {
   const navigate = useNavigate();
+  const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
   const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
   const skinTarget = installedSkinTarget(previewMod);
-  const openDoorStuck = skinTarget ? () => navigate('/foundry', { state: skinTarget }) : undefined;
+  const openDoorStuck = doorStuckEnabled && skinTarget ? () => navigate('/foundry', { state: skinTarget }) : undefined;
   if (entry.kind === 'single') {
     const mod = entry.mod;
     return (
@@ -719,8 +720,11 @@ export default function Installed() {
   const requirementSnapshots = useRequirementsStore(state => state.snapshots);
   const requirementFiles = useRequirementOrderStore(state => state.files);
   const [requirementsOnly, setRequirementsOnly] = useState(false);
-  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => modRequirementRefs(mod)
-    .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id))).map(mod => mod.id)),
+  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => {
+    const local = skinRequirementSource(mod, mods);
+    return (local && (hasRequirementIssues(local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
+      .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
+  }).map(mod => mod.id)),
   [visibleMods, mods, requirementSnapshots, requirementFiles]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR

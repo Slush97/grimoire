@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
+import { deferredCommit } from '../../lib/deferredCommit';
 import { viewerCameraSchema, type ViewerCameraDraft } from '../../lib/viewerDraftSchema';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls as DreiOrbitControls } from '@react-three/drei';
@@ -297,7 +298,7 @@ function useTurntable(
   useFrame((_, delta) => {
     const g = groupRef.current;
     if (!g || interaction.current.dragging || interaction.current.paused) return;
-    g.rotation.y += delta * SPIN_SPEED;
+    g.rotation.y += Math.min(delta, 0.1) * SPIN_SPEED;
   });
 }
 
@@ -500,10 +501,21 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   const controlsRef = useRef<ComponentRef<typeof DreiOrbitControls> | null>(null);
   const pendingFit = useRef(true);
   const restoreView = useRef(savedView);
+  const cameraCommit = useMemo(() => deferredCommit<ViewerCameraDraft>(view => onViewChange?.(view)), [onViewChange]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return () => cameraCommit.flush();
+    window.addEventListener('pagehide', cameraCommit.flush);
+    window.addEventListener('blur', cameraCommit.flush);
+    return () => {
+      cameraCommit.flush();
+      window.removeEventListener('pagehide', cameraCommit.flush);
+      window.removeEventListener('blur', cameraCommit.flush);
+    };
+  }, [cameraCommit]);
   const saveView = useCallback(() => {
     const controls = controlsRef.current;
-    if (controls) onViewChange?.({ position: camera.position.toArray(), target: controls.target.toArray() });
-  }, [camera, onViewChange]);
+    if (controls) cameraCommit.update({ position: camera.position.toArray(), target: controls.target.toArray() });
+  }, [camera, cameraCommit]);
   useEffect(() => {
     pendingFit.current = true;
   }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height]);
@@ -586,7 +598,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
       e.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
       const dist = THREE.MathUtils.clamp(
-        offset.length() * (e.deltaY > 0 ? 1.1 : 1 / 1.1),
+        offset.length() * Math.exp(THREE.MathUtils.clamp(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? gl.domElement.clientHeight : 1), -240, 240) * 0.001),
         controls.minDistance,
         controls.maxDistance
       );
@@ -1072,6 +1084,7 @@ export default function HeroPoseViewer({
   onPartPick,
   onPreviewCapture,
   compact = false,
+  active = true,
   workspaceKey,
 }: {
   heroName: string;
@@ -1089,6 +1102,7 @@ export default function HeroPoseViewer({
   onPartPick?: (material: string) => void;
   onPreviewCapture?: (capture: (() => Promise<string>) | null) => void;
   compact?: boolean;
+  active?: boolean;
   workspaceKey?: string;
 }) {
   const { t } = useTranslation();
@@ -1098,8 +1112,8 @@ export default function HeroPoseViewer({
   const [rigged, setRigged] = useState(false);
   const [clothModel, setClothModel] = useState<ClothModel | null>(null);
   const [generating, setGenerating] = useState(false);
-  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: !initialHeroPreviewFlags().autoRotate });
-  const [spinPaused, setSpinPaused] = useState(() => !initialHeroPreviewFlags().autoRotate);
+  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
+  const [spinPaused, setSpinPaused] = useState(() => compact ? false : !initialHeroPreviewFlags().autoRotate);
   const [playback, setPlayback] = useFoundryDraft(`${viewKey}:playback`, z.object({ paused: z.boolean(), speed: z.number().finite().min(0.1).max(4) }), { paused: false, speed: 1 });
   const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
@@ -1108,7 +1122,7 @@ export default function HeroPoseViewer({
   const viewerScene = compact ? 'studio' : storedScene;
   const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
   const [wireframe, setWireframe] = useState(false);
-  const [cameraView, setCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
+  const [cameraView, , saveCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
   const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
@@ -1122,7 +1136,7 @@ export default function HeroPoseViewer({
     if (pending) { pendingTextures.current.add(material); textureFailed.current = false; }
     else pendingTextures.current.delete(material);
   }, []);
-  const backdrop = useViewerBackdrop();
+  const backdrop = useViewerBackdrop(!compact);
   const backdropError = backdrop.errorKey === 'locker.pose.backgroundTooLarge'
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -1406,7 +1420,7 @@ export default function HeroPoseViewer({
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
       wireframe={wireframe} onWireframe={setWireframe}
-      onScene={setViewerScene} onReset={() => { setCameraView(null); setResetView((v) => v + 1); }}
+      onScene={setViewerScene} onReset={() => { saveCameraView(null); setResetView((v) => v + 1); }}
       onScreenshot={() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -1436,6 +1450,7 @@ export default function HeroPoseViewer({
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
         <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
       ) : <Canvas
+        frameloop={compact && !active ? 'never' : 'always'}
         shadows={{ type: THREE.PCFShadowMap }}
         onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
         camera={PREVIEW_CAMERA}
@@ -1446,19 +1461,19 @@ export default function HeroPoseViewer({
           preserveDrawingBuffer: true,
         }}
       >
-        <ViewerBackdrop texture={viewerScene === 'transparent' || viewerScene === 'hideout' ? null : backdrop.texture} />
+        <ViewerBackdrop texture={compact || viewerScene === 'transparent' || viewerScene === 'hideout' ? null : backdrop.texture} />
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
             that just shapes the form on top of the environment. Every preset
             except the hideout (which brings its own map lighting), Midtown
             included, reflects the dark studio room, and the NPR ambient probe
             samples that same room so diffuse and reflections agree. */}
-        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting]} studio onProbe={setAmbientProbe} />}
+        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting]} studio={!compact} onProbe={setAmbientProbe} />}
         <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY]} />
-        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
+        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={compact || viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
-        <directionalLight position={[3, 2, -3]} intensity={1.2} color={new THREE.Color(0.65, 0.78, 1)} /></>}
+        <directionalLight position={compact ? [3, 2, 3] : [3, 2, -3]} intensity={compact ? 1.8 : 1.2} color={compact ? new THREE.Color(1, 1, 1) : new THREE.Color(0.65, 0.78, 1)} /></>}
         {viewerScene !== 'transparent' && viewerScene !== 'hideout' && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.02, 0]} receiveShadow>
             <planeGeometry args={[20, 20]} />
@@ -1508,7 +1523,7 @@ export default function HeroPoseViewer({
             source2Active={features.source2ShaderHintsEnabled}
             celV2={features.celV2Enabled}
             ambientCube={ambientCube}
-            ambientTarget={NPR_AMBIENT_TARGET[lighting]}
+            ambientTarget={compact ? 0.7 : NPR_AMBIENT_TARGET[lighting]}
             partEdits={partEdits}
           />
         )}
@@ -1518,14 +1533,14 @@ export default function HeroPoseViewer({
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect
-            deadlockExposure={viewerScene === 'midtown' ? 1.6 : 1.3}
+            deadlockExposure={compact || viewerScene === 'midtown' ? 1.6 : 1.3}
             intensity={features.bloomEnabled ? bloomParams.intensity : 0}
             radius={import.meta.env.DEV ? bloomParams.radius : BLOOM_RADIUS}
             threshold={import.meta.env.DEV ? bloomParams.threshold : BLOOM_THRESHOLD}
           />
         )}
         <Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName}
-          savedView={compact ? null : cameraView} onViewChange={compact ? undefined : setCameraView} />
+          savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView} />
       </Canvas>}
       {!compact && toolbar}
       {viewerScene === 'hideout' && (

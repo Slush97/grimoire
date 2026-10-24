@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
@@ -1124,14 +1124,13 @@ export function ModCard({
   // dropdown root on the three-dot button. Only one of the two is open at a
   // time, so this renders once in practice.
   const hasTopActions =
-    !!onOpenDoorStuck || !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
+    !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const cardMenuItems = (
     <>
-      {onOpenDoorStuck && <MenuItem icon={Wrench} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {onEditLocal && (
         <MenuItem icon={Pencil} onSelect={onEditLocal}>
           {t('installed.card.edit')}
@@ -1208,6 +1207,7 @@ export function ModCard({
           {t('installed.imprintDetails.menuEntry')}
         </MenuItem>
       )}
+      {onOpenDoorStuck && <MenuItem icon={Hammer} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {hasSecondaryActions && <MenuSeparator />}
       {onSoloLaunch && (
         <MenuItem icon={Beaker} disabled={soloBusy} onSelect={onSoloLaunch}>

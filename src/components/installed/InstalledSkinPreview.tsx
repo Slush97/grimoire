@@ -1,19 +1,32 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
-import { installedSkinTarget } from '../../lib/installedSkinTarget';
+import { installedSkinPreviewTarget } from '../../lib/installedSkinTarget';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import type { SkinEditSource } from '../../types/skinEditor';
 
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
-type Preview = { name: string; target: SkinEditSource; left: number; top: number; width: number; height: number };
+type Preview = { key: string; name: string; target: SkinEditSource; left: number; top: number; width: number; height: number };
 
-/** One transient WebGL viewer for the whole Installed page. */
+/** Three warm viewers at most. Only the hovered viewer renders frames. */
 export default function InstalledSkinPreview({ hideNsfw }: { hideNsfw: boolean }) {
+  const settings = useAppStore(state => state.settings);
+  const mods = useAppStore(state => state.mods);
+  if (!settings?.experimentalFoundry) return null;
+  // Replacements, reorder and profile changes must never reuse a stale stack.
+  const revision = JSON.stringify([settings.devMode ? settings.devDeadlockPath : settings.deadlockPath,
+    hideNsfw, mods.map(mod => [mod.metaKey, mod.sha256, mod.size, mod.installedAt, mod.priority, mod.skinEdit, mod.nsfw])]);
+  return <PreviewCache key={revision} hideNsfw={hideNsfw} />;
+}
+
+function PreviewCache({ hideNsfw }: { hideNsfw: boolean }) {
   const { t } = useTranslation();
   const mods = useAppStore((state) => state.mods);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [cached, setCached] = useState<Preview[]>([]);
+  const cachedKeys = useRef(new Set<string>());
+  useEffect(() => { cachedKeys.current = new Set(cached.map(item => item.key)); }, [cached]);
   useEffect(() => {
     let anchor: HTMLElement | null = null;
     let alt = false;
@@ -25,13 +38,17 @@ export default function InstalledSkinPreview({ hideNsfw }: { hideNsfw: boolean }
       if (!alt || !anchor || dismissed) return;
       const mod = mods.find((item) => item.metaKey === anchor?.dataset.modPreviewKey);
       if (!mod || (hideNsfw && mod.nsfw)) return;
-      const target = installedSkinTarget(mod);
+      const target = installedSkinPreviewTarget(mod, mods);
       if (!target) return;
       const rect = anchor.getBoundingClientRect();
       const width = Math.min(320, window.innerWidth - 24), height = Math.min(360, window.innerHeight - 24);
       const left = rect.right + width + 12 <= window.innerWidth ? rect.right + 8 : Math.max(12, rect.left - width - 8);
       const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
-      timer = setTimeout(() => setPreview({ target, name: mod.name, left, top, width, height }), 180);
+      const next = { key: JSON.stringify(target), target, name: mod.name, left, top, width, height };
+      timer = setTimeout(() => {
+        setCached(current => [...current.filter(item => item.key !== next.key), next].slice(-3));
+        setPreview(next);
+      }, cachedKeys.current.has(next.key) ? 0 : 120);
     };
     const over = (event: PointerEvent) => {
       const next = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-mod-preview-key]') : null;
@@ -66,15 +83,15 @@ export default function InstalledSkinPreview({ hideNsfw }: { hideNsfw: boolean }
       window.removeEventListener('contextmenu', close);
     };
   }, [mods, hideNsfw]);
-  if (!preview) return null;
-  return createPortal(<aside aria-label={t('installed.card.preview3d', { name: preview.name })}
+  return createPortal(<>{cached.map(item => <aside key={item.key} hidden={item.key !== preview?.key}
+    aria-label={t('installed.card.preview3d', { name: item.name })}
     className="pointer-events-none fixed z-50 overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-xl"
-    style={{ left: preview.left, top: preview.top, width: preview.width, height: preview.height }}>
+    style={{ left: item.left, top: item.top, width: item.width, height: item.height }}>
     <div className="relative h-full">
-      <ErrorBoundary key={preview.target.skinSources[0]?.metaKey}><Suspense fallback={<p role="status" className="p-4 text-xs text-text-secondary">{t('foundry.skin.loading')}</p>}>
-        <HeroPoseViewer key={JSON.stringify(preview.target)} {...preview.target} compact />
+      <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-xs text-text-secondary">{t('foundry.skin.loading')}</p>}>
+        <HeroPoseViewer {...item.target} compact active={item.key === preview?.key} />
       </Suspense></ErrorBoundary>
-      <p className="absolute inset-x-0 bottom-0 truncate border-t border-border bg-bg-secondary/95 px-3 py-2 text-xs">{preview.name}</p>
+      <p className="absolute inset-x-0 bottom-0 truncate border-t border-border bg-bg-secondary/95 px-3 py-2 text-xs">{item.name}</p>
     </div>
-  </aside>, document.body);
+  </aside>)}</>, document.body);
 }
