@@ -49,6 +49,24 @@ describe('getInstalledCardTaxonomy', () => {
     });
   });
 
+  it('resolves a hero subcategory to its hero and keeps the subcategory label', () => {
+    const heroByCategoryId = new Map([[33325, 'Viscous'], [50570, 'Viscous']]);
+    expect(getInstalledCardTaxonomy({
+      sourceSection: 'Mod',
+      categoryId: 50570,
+      categoryName: 'Faithful/Vanilla+',
+    }, heroByCategoryId)).toEqual({
+      heroName: 'Viscous',
+      globalType: undefined,
+      categoryLabel: 'Faithful/Vanilla+',
+    });
+    expect(getInstalledCardTaxonomy({
+      sourceSection: 'Sound',
+      categoryId: 50570,
+      categoryName: 'Abilities',
+    }, heroByCategoryId).heroName).toBeUndefined();
+  });
+
   it('returns a trimmed non-hero category as the sole text label', () => {
     expect(getInstalledCardTaxonomy({ categoryName: '  Quality of Life  ' })).toEqual({
       heroName: undefined,

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
+import { categorySubtreeIds } from './heroFilter';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -259,6 +260,30 @@ export function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategor
     iconUrl: child.iconUrl,
     descendantCategoryIds: descendantIds(child.children ?? []),
   }));
+}
+
+/**
+ * Every Skins category id (a hero and all of its subcategories) mapped to the
+ * hero's canonical name. A skin filed under Viscous > Faithful/Vanilla+ records
+ * the subcategory as its categoryId and categoryName, so neither names the hero.
+ */
+export function buildHeroByCategoryId(categories: GameBananaCategoryNode[]): Map<number, string> {
+  const heroes = new Map<number, string>();
+  for (const hero of findCategoryByName(categories, 'Skins')?.children ?? []) {
+    const name = canonicalHeroName(hero.name);
+    for (const id of categorySubtreeIds(hero)) heroes.set(id, name);
+  }
+  return heroes;
+}
+
+/** Hero of a Mod-section skin by its category id. Sound and Wip category ids
+ *  come from other trees and may collide with a Skins id. */
+export function skinCategoryHero(
+  mod: Pick<Mod, 'sourceSection' | 'categoryId'>,
+  heroByCategoryId: ReadonlyMap<number, string> | undefined
+): string | undefined {
+  if (mod.sourceSection !== 'Mod' || mod.categoryId === undefined) return undefined;
+  return heroByCategoryId?.get(mod.categoryId);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -129,6 +129,27 @@ describe('groupModsByCategory', () => {
     const grouped = groupModsByCategory([skin], heroes);
     expect(grouped.map.size).toBe(0);
     expect(grouped.unassigned).toEqual([skin]);
+  });
+});
+
+describe('buildHeroByCategoryId', () => {
+  it('maps a hero category and every nested subcategory to the hero', () => {
+    const tree = [
+      { id: 31713, name: 'HUD', itemCount: 0, children: [{ id: 1, name: 'Crosshairs', itemCount: 0 }] },
+      {
+        id: 33295, name: 'Skins', itemCount: 0,
+        children: [
+          {
+            id: 33325, name: 'Viscous', itemCount: 0,
+            children: [{ id: 50571, name: 'Ports', itemCount: 0, children: [{ id: 60000, name: 'Nested', itemCount: 0 }] }],
+          },
+          { id: 49629, name: 'RatKing', itemCount: 0 },
+        ],
+      },
+    ];
+    expect([...buildHeroByCategoryId(tree)]).toEqual([
+      [33325, 'Viscous'], [50571, 'Viscous'], [60000, 'Viscous'], [49629, 'Rat King'],
+    ]);
   });
 });
 
