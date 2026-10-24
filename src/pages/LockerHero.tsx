@@ -41,7 +41,7 @@ import type { VariantChoice } from '../lib/lockerRandomizer';
 
 interface LockerHeroViewProps {
   hero: HeroCategory;
-  navigation: Omit<ComponentProps<typeof HeroNavigation>, 'children'>;
+  navigation: Omit<ComponentProps<typeof HeroNavigation<HeroCategory>>, 'children'>;
   skinList: Mod[];
   /** Sound-section mods mapped to this hero. Optional because the gallery
    *  view in `Locker.tsx` keeps the same prop surface and may not split sounds

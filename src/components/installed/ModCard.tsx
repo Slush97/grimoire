@@ -72,9 +72,11 @@ interface ModCardProps {
   conflicts: ModConflict[];
   soundVolume: number;
   updateAvailable?: boolean;
-  /** Absorbed merge sources whose GameBanana file is gone. Informational only:
-   *  a merged VPK has no file of its own to re-download. */
+  /** Absorbed merge sources whose GameBanana file was replaced or removed. */
   staleSourceCount?: number;
+  /** The part of `staleSourceCount` the merged-contents dialog can update.
+   *  The rest need a manual extract or unmerge. */
+  updatableSourceCount?: number;
   onOpenDetails?: () => void;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
@@ -324,6 +326,8 @@ interface ModListRowContentProps {
   hideNsfwPreviews: boolean;
   soundVolume: number;
   onOpenDetails?: () => void;
+  staleSourceCount: number;
+  updatableSourceCount: number;
   onRenameLocal?: (newName: string) => Promise<void>;
   onCommitPriority?: (newPosition: number) => Promise<void>;
   loadPosition?: number;
@@ -566,12 +570,43 @@ function StaleModelTag({ models, variant }: { models?: Mod['staleModels']; varia
   );
 }
 
+function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
+  staleCount: number;
+  updatableCount: number;
+  onOpen?: () => void;
+  variant: 'overlay' | 'inline';
+}) {
+  const { t } = useTranslation();
+  if (onOpen && updatableCount > 0) {
+    return (
+      <button type="button" data-card-action="true" onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }} className="rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-2 focus-visible:outline-accent">
+        <Tag tone="update" variant={variant} icon={Download}
+          title={t('mergedContents.staleSourcesUpdatable', { count: updatableCount })}>
+          {t('mergedContents.updateSources', { count: updatableCount })}
+        </Tag>
+      </button>
+    );
+  }
+  if (staleCount === 0) return null;
+  return (
+    <Tag tone="update" variant={variant} icon={Download}
+      title={t('installed.card.staleSourcesTitle', { count: staleCount })}>
+      {t('installed.card.staleSourcesBadge', { count: staleCount })}
+    </Tag>
+  );
+}
+
 function ModListRowContent({
   mod,
   taxonomy,
   hideNsfwPreviews,
   soundVolume,
   onOpenDetails,
+  staleSourceCount,
+  updatableSourceCount,
   onRenameLocal,
   onCommitPriority,
   loadPosition,
@@ -679,6 +714,8 @@ function ModListRowContent({
           <RequirementWarning mod={mod} />
           <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
           <StaleModelTag models={mod.staleModels} variant="inline" />
+          <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
+            onOpen={onOpenDetails} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
@@ -765,6 +802,7 @@ export function ModCard({
   soundVolume,
   updateAvailable,
   staleSourceCount = 0,
+  updatableSourceCount = 0,
   onOpenDetails,
   onViewAuthor,
   onToggle,
@@ -1108,6 +1146,11 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
+      {mod.merged && updatableSourceCount > 0 && onOpenDetails && (
+        <MenuItem icon={Download} onSelect={onOpenDetails}>
+          {t('mergedContents.updateSources', { count: updatableSourceCount })}
+        </MenuItem>
+      )}
       {onViewAuthor && (
         <MenuItem icon={Banana} onSelect={onViewAuthor}>
           {t('installed.card.viewAuthorPage')}
@@ -1402,6 +1445,8 @@ export function ModCard({
             hideNsfwPreviews={hideNsfwPreviews}
             soundVolume={soundVolume}
             onOpenDetails={onOpenDetails}
+            staleSourceCount={staleSourceCount}
+            updatableSourceCount={updatableSourceCount}
             onRenameLocal={onRenameLocal}
             onCommitPriority={onCommitPriority}
             loadPosition={loadPosition}
@@ -1530,16 +1575,8 @@ export function ModCard({
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
               )}
-              {staleSourceCount > 0 && (
-                <Tag
-                  tone="update"
-                  variant="overlay"
-                  icon={Download}
-                  title={t('installed.card.staleSourcesTitle', { count: staleSourceCount })}
-                >
-                  {t('installed.card.staleSourcesBadge', { count: staleSourceCount })}
-                </Tag>
-              )}
+              <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
+                onOpen={onOpenDetails} variant="overlay" />
               {group && group.variantCount > 1 && (
                 <Tag
                   variant="overlay"

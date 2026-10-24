@@ -1884,7 +1884,20 @@
       "inPool": "In shuffle",
       "variantChoiceFor": "Choose the shuffle variant for {{name}}",
       "defaultVariant": "Keep current files",
-      "anyVariant": "Any variant"
+      "anyVariant": "Any variant",
+      "pool": {
+        "open": "Shuffle pool ({{count}})",
+        "title": "Shuffle pool",
+        "profileHint": "Create or update a mod profile to save this pool, the launch switch, and variant choices. Apply that profile to restore them.",
+        "search": "Search shuffle pool",
+        "empty": "Your shuffle pool is empty. Use the shuffle button on a mod to add it.",
+        "noMatch": "No mods match your search.",
+        "unavailable": "Unavailable mod",
+        "missing": "This mod is no longer installed.",
+        "randomVariant": "Random variant",
+        "pinnedVariant": "Selected variant",
+        "currentVariant": "Keep loaded variants"
+      }
     },
     "modImage": {
       "set": "Set Locker image for {{name}}",
@@ -2823,12 +2836,16 @@
     "sources": "Sources ({{count}})",
     "sourceOutdated": "outdated",
     "sourceOutdatedTitle": "This source's file was replaced on GameBanana. Extract or unmerge it to install the new version.",
+    "sourceUpdatableTitle": "This source has an update on GameBanana. Use Update sources to download it and rebuild this merge.",
     "staleSourcesNote_one": "{{count}} source has a newer version on GameBanana. Extract or unmerge it to update, then merge again.",
     "staleSourcesNote_other": "{{count}} sources have newer versions on GameBanana. Extract or unmerge them to update, then merge again.",
     "staleSourcesUpdatable_one": "{{count}} source has a newer version on GameBanana. Updating downloads it and rebuilds this merge in place.",
     "staleSourcesUpdatable_other": "{{count}} sources have newer versions on GameBanana. Updating downloads them and rebuilds this merge in place.",
     "updateSources_one": "Update {{count}} source",
     "updateSources_other": "Update {{count}} sources",
+    "updating": "Downloading updates and rebuilding this merge...",
+    "updateComplete_one": "Updated {{count}} source and rebuilt this merge.",
+    "updateComplete_other": "Updated {{count}} sources and rebuilt this merge.",
     "skipReason": {
       "no-provenance": "{{modName}}: skipped, no GameBanana file recorded for this source.",
       "files-unavailable": "{{modName}}: skipped, could not reach GameBanana.",

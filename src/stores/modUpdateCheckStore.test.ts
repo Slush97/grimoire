@@ -36,7 +36,7 @@ describe('app-wide mod update checks', () => {
     vi.clearAllMocks();
     updateCheckCache.invalidate(Array.from({ length: 12 }, (_, i) => i + 1));
     useAppStore.setState({ settings: settings(), mods: [mod('old')] });
-    useModUpdateCheckStore.setState({ updatesAvailable: new Set(), staleMergeSources: new Map() });
+    useModUpdateCheckStore.setState({ updatesAvailable: new Set(), staleMergeSources: new Map(), updatableMergeSources: new Map() });
     mocks.files.mockReset().mockResolvedValue({ files: rows() });
   });
   afterEach(() => { stop(); vi.useRealTimers(); });

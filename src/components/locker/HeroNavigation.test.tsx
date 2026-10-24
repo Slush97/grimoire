@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
 const previous = { id: 1, name: 'Ivy' };
 const next = { id: 3, name: 'Shiv' };
 
-describe('Locker hero arrow controls', () => {
+describe.each(['data-locker-hero-view', 'data-foundry-hero-view'])('%s arrow controls', (viewAttribute) => {
   let host: HTMLDivElement;
   let root: Root;
   const onNavigate = vi.fn();
@@ -22,7 +22,7 @@ describe('Locker hero arrow controls', () => {
     return event;
   };
   const render = (enabled = true) => act(() => root.render(
-    <div data-locker-hero-view>
+    <div {...{ [viewAttribute]: true }}>
       <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled={enabled} />
       <input />
       <input type="range" />

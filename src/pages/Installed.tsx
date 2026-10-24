@@ -102,7 +102,7 @@ import {
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload, usePendingDownloadCompletions } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
-import { mergeSourceFileIds } from '../lib/updateCheck';
+import { installsOutsideMerge, mergeSourceInstalls } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
@@ -283,6 +283,7 @@ interface InstalledEntryCardProps {
   conflicts: ModConflict[];
   updateAvailable: boolean;
   staleSourceCount: number;
+  updatableSourceCount: number;
   fixingUnknown: boolean;
   loadPosition: number | undefined;
   loadCount: number;
@@ -348,6 +349,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   conflicts,
   updateAvailable,
   staleSourceCount,
+  updatableSourceCount,
   fixingUnknown,
   loadPosition,
   loadCount,
@@ -393,6 +395,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         soundVolume={soundVolume}
         updateAvailable={updateAvailable}
         staleSourceCount={staleSourceCount}
+        updatableSourceCount={updatableSourceCount}
         entryKey={entry.key}
         onOpenDetails={
           mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
@@ -1238,6 +1241,7 @@ export default function Installed() {
   const detailsRequestIdRef = useRef(0);
   const updatesAvailable = useModUpdateCheckStore(state => state.updatesAvailable);
   const mergedSourceUpdates = useModUpdateCheckStore(state => state.staleMergeSources);
+  const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
   const finishing = usePendingDownloadCompletions();
@@ -1279,14 +1283,14 @@ export default function Installed() {
     return { detailsInstalledFileIds: installedFileIds, detailsActiveFileIds: activeFileIds };
   }, [detailsInstalledMods]);
   // Files the user has inside a merge are never proposed as successors.
-  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
+  const mergedInstalls = useMemo(() => mergeSourceInstalls(visibleMods), [visibleMods]);
   const autoMatchRemainingFiles = settings?.autoMatchRemainingFiles ?? true;
 
   // The mod page shows every installed file's update or manual replacement.
   // Each download still replaces only its matched or explicitly chosen file.
   const detailsUpdate = useMemo(() => {
     const files = detailsMod?.files ?? [];
-    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedFileIds, autoMatchRemainingFiles);
+    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedInstalls, autoMatchRemainingFiles);
     const source = detailsSourceModId ? mods.find((mod) => mod.id === detailsSourceModId) : undefined;
     const summary = summarizeUpdateScope(classification);
     // The offline fallback has no file rows; keep the card's verdict for the badge.
@@ -1298,7 +1302,7 @@ export default function Installed() {
       updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, detailsInstalledMods),
     };
-  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
+  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedInstalls, updatesAvailable, autoMatchRemainingFiles]);
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
@@ -2330,10 +2334,9 @@ export default function Installed() {
   const handleUpdateMergeSources = async (): Promise<MergeSourceUpdateOutcome> => {
     const targetId = mergedContentsMod?.id;
     const staleFileNames = targetId ? mergedSourceUpdates.get(targetId) : undefined;
-    const stale = (mergedContentsMod?.merged?.sources ?? []).filter((source) =>
-      staleFileNames?.has(source.fileName),
-    );
-    if (!targetId || stale.length === 0) return { updated: 0, skipped: [] };
+    const sources = mergedContentsMod?.merged?.sources ?? [];
+    const stale = sources.filter((source) => staleFileNames?.has(source.fileName));
+    if (!targetId || !staleFileNames || stale.length === 0) return { updated: 0, skipped: [] };
 
     const filesByModId = new Map<number, GameBananaFile[]>();
     const categoryByModId = new Map<number, number>();
@@ -2347,15 +2350,11 @@ export default function Installed() {
       }
     }
 
-    // Don't re-download a file already installed standalone or inside a merge.
-    const claimed = mergeSourceFileIds(visibleMods);
-    for (const mod of mods) {
-      if (typeof mod.gameBananaFileId !== 'number') continue;
-      if (!filesByModId.has(mod.gameBananaId ?? -1)) continue;
-      claimed.add(mod.gameBananaFileId);
-    }
-
-    const plan = planMergeSourceUpdates(stale, filesByModId, claimed, autoMatchRemainingFiles);
+    // Files installed standalone or inside another merge are never re-downloaded,
+    // and those installs compete with this merge's sources for the same uploads.
+    const plan = planMergeSourceUpdates(
+      sources, staleFileNames, filesByModId, installsOutsideMerge(visibleMods, targetId), autoMatchRemainingFiles,
+    );
     const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
       modName: entry.source.modName,
       reason: entry.reason,
@@ -3491,6 +3490,8 @@ export default function Installed() {
         : entry.variants.some((v) => updatesAvailable.has(v.id)),
     staleSourceCount:
       entry.kind === 'single' ? (mergedSourceUpdates.get(entry.mod.id)?.size ?? 0) : 0,
+    updatableSourceCount:
+      entry.kind === 'single' ? (updatableMergeSources.get(entry.mod.id)?.size ?? 0) : 0,
     fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
     loadCount: isEntryEnabled(entry) ? enabledModCount : 0,
@@ -4577,6 +4578,7 @@ export default function Installed() {
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
           staleSourceFileNames={mergedSourceUpdates.get(mergedContentsMod.id)}
+          updatableSourceFileNames={updatableMergeSources.get(mergedContentsMod.id)}
           onUpdateSources={handleUpdateMergeSources}
           eligibleMods={eligibleMergeAdditions}
           onAddSources={handleAddMergeSources}

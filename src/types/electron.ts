@@ -1,3 +1,4 @@
+import type { ProfileShuffle } from '../lib/profileShuffle';
 import type { ModSafetyPrompt, InstalledModSafety } from './modSafety';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from './modUpdates';
 import type {
@@ -1324,9 +1325,9 @@ export interface ElectronAPI {
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
-    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle) => Promise<Profile>;
     createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
-    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle) => Promise<Profile>;
     applyProfile: (profileId: string) => Promise<ApplyProfileResult>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
@@ -1640,6 +1641,7 @@ export interface Profile {
     mods: ProfileMod[];
     crosshair?: ProfileCrosshairSettings;
     autoexecCommands?: string[];
+    shuffle?: ProfileShuffle;
     createdAt: string;
     updatedAt: string;
 }

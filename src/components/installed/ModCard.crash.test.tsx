@@ -9,7 +9,10 @@ import type { CrashAdvisory } from '../../types/crashAdvisory';
 
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: () => {} },
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
+  useTranslation: () => ({
+    t: (key: string, options?: { count?: number }) => (options?.count === undefined ? key : `${key}:${options.count}`),
+    i18n: { language: 'en' },
+  }),
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,6 +45,51 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 describe('crash badges on installed cards', () => {
+  const mergedCard = (view: Props['viewMode']) => {
+    const input = props(0, false, view);
+    input.mod.merged = { id: 'merge', createdAt: '', shareCode: '', sources: [] };
+    return input;
+  };
+  const updateAction = () => [...host.querySelectorAll('button')]
+    .find(button => button.textContent?.startsWith('mergedContents.updateSources'));
+  const openMenu = async () => {
+    await act(async () => host.querySelector('div')
+      ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
+    return document.body.textContent ?? '';
+  };
+
+  it.each(['grid', 'compact', 'list'] as const)('opens merge updates without toggling the mod in %s', async view => {
+    const input = mergedCard(view);
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={3} updatableSourceCount={2} />));
+    expect(updateAction()?.textContent).toBe('mergedContents.updateSources:2');
+    await act(async () => updateAction()?.click());
+    expect(onOpenDetails).toHaveBeenCalledOnce();
+    expect(onToggle).not.toHaveBeenCalled();
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={0} updatableSourceCount={0} />));
+    expect(host.textContent).not.toContain('mergedContents.updateSources');
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('offers no update action for outdated sources that cannot resolve in %s', async view => {
+    const input = mergedCard(view);
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={2} updatableSourceCount={0} />));
+    expect(updateAction()).toBeUndefined();
+    const badge = [...host.querySelectorAll('span, div')].find(node => node.textContent === 'installed.card.staleSourcesBadge:2');
+    expect(badge).toBeDefined();
+    expect(badge?.closest('button')?.textContent ?? '').not.toContain('installed.card.staleSourcesBadge');
+    expect(badge?.closest('[title]')?.getAttribute('title')).toBe('installed.card.staleSourcesTitle:2');
+  });
+
+  it('lists Update sources in the card menu only when a source can resolve', async () => {
+    const input = mergedCard('grid');
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={2} updatableSourceCount={0} />));
+    const unresolvable = await openMenu();
+    expect(unresolvable).toContain('installed.card.viewDetails');
+    expect(unresolvable).not.toContain('mergedContents.updateSources');
+    await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await act(async () => root.render(<ModCard {...input} staleSourceCount={2} updatableSourceCount={1} />));
+    expect(await openMenu()).toContain('mergedContents.updateSources:1');
+  });
+
   it('skips ordinary hover renders and preserves Shift preview over a stationary pointer', async () => {
     const onRender = vi.fn();
     const input = { ...props(0, true, 'grid'), onSelectToggle };

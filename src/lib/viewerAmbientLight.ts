@@ -7,6 +7,8 @@ export type ViewerAmbientProbe = { kind: 'pending' } | { kind: 'fallback' } | { 
 export const VIEWER_SKY_COLOR = new THREE.Color(96 / 255, 135 / 255, 183 / 255);
 export const VIEWER_GROUND_COLOR = new THREE.Color(0.32, 0.25, 0.2);
 export const VIEWER_HEMISPHERE_INTENSITY = 1.5;
+/** `scene.environmentIntensity` per lighting preset; the ambient cube scales its probe to match. */
+export const VIEWER_ENVIRONMENT_INTENSITY = { midtown: 1.6, studio: 1.1 } as const;
 
 /** Diffuse irradiance in world-space +X, -X, +Y, -Y, +Z, -Z order. */
 export function viewerAmbientCube(sh: THREE.SphericalHarmonics3, intensity: number, includeHemisphere = true): NprAmbientCube {

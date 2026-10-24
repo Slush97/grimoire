@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 
+/** Ambient irradiance target per viewer lighting preset, before the Lambert PI. */
+export const NPR_AMBIENT_TARGET = { midtown: 0.55, studio: 0.5 } as const;
+/** Share of the original scene brightness the ambient and rim exposure retains. */
+export const NPR_EXPOSURE_RETAINED = 0.15;
+
 /** Preview lighting coefficients. Scene irradiance still comes from Three's lights and IBL. */
 export function nprLightingUniforms({ enabled }: { enabled: boolean }): Record<string, THREE.IUniform> {
   return {
@@ -14,7 +19,7 @@ export function nprLightingUniforms({ enabled }: { enabled: boolean }): Record<s
     uNprAmbientCubeOn: { value: 0 },
     uNprAmbientCube: { value: Array.from({ length: 6 }, () => new THREE.Vector3()) },
     // Irradiance target and the share of the original scene brightness retained.
-    uNprExposure: { value: new THREE.Vector2(0.55 * Math.PI, 0.15) },
+    uNprExposure: { value: new THREE.Vector2(NPR_AMBIENT_TARGET.midtown * Math.PI, NPR_EXPOSURE_RETAINED) },
   };
 }
 

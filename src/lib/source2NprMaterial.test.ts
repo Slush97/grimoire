@@ -124,6 +124,13 @@ describe('Preview diffuse lighting bands', () => {
     expect(patch.value).not.toContain('reflectedLight.directSpecular =');
     expect(patch.value).not.toContain('nprAlbedoLum');
   });
+
+  it('scales the direct and ambient shaping by the NPR strength', () => {
+    const begin = NPR_PATCH_MAP['*']['#include <lights_fragment_begin>'] as { value: string };
+    const end = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+    expect(begin.value).toContain('mix(1.0, nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4), uNprStrength)');
+    expect(end.value).toContain('mix(vec3(1.0), ambient / max(rawAmbient, vec3(1e-5)), uNprStrength)');
+  });
 });
 
 describe('Citadel near-black specular rule', () => {

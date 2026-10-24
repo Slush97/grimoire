@@ -17,7 +17,8 @@ import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { captureViewerAmbient, viewerAmbientCube, VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR,
-  VIEWER_HEMISPHERE_INTENSITY, type NprAmbientCube, type ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
+  VIEWER_HEMISPHERE_INTENSITY, VIEWER_ENVIRONMENT_INTENSITY, type NprAmbientCube, type ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
+import { NPR_AMBIENT_TARGET, NPR_EXPOSURE_RETAINED } from '../../lib/source2NprLighting';
 import { FULL_EFFECTS_PREVIEW_DEFAULTS, heroPresentationStorageKey, initialHeroPreviewFlags } from './heroViewerDefaults';
 import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
 import { Loader2 } from 'lucide-react';
@@ -628,7 +629,7 @@ function Environment({ intensity, studio, onProbe }: {
         if (!disposed) onProbe({ kind: 'fallback' });
       });
     };
-    if (studio) {
+    const applyStudioRoom = () => {
       // Dark studio walls leave room for bright softbox highlights on glass and
       // metal instead of covering the surface with a broad gray reflection.
       const room = new RoomEnvironment();
@@ -644,12 +645,16 @@ function Environment({ intensity, studio, onProbe }: {
       sampleAmbient(room);
       room.dispose();
       pmrem.dispose();
+    };
+    if (studio) {
+      applyStudioRoom();
       return () => {
         disposed = true;
         scene.environment = null;
         envRT?.dispose();
       };
     }
+    let fellBack = false;
     new HDRCubeTextureLoader()
       .setDataType(THREE.HalfFloatType)
       .load(IBL_FACES, (cube) => {
@@ -666,8 +671,11 @@ function Environment({ intensity, studio, onProbe }: {
         cube.dispose();
         pmrem.dispose();
       }, undefined, () => {
-        if (!disposed) onProbe({ kind: 'fallback' });
-        pmrem.dispose();
+        // The loader reports each failed face separately.
+        if (fellBack) return;
+        fellBack = true;
+        if (disposed) pmrem.dispose();
+        else applyStudioRoom();
       });
     return () => {
       disposed = true;
@@ -975,7 +983,7 @@ function NprMaterials({
     buildsRef.current.forEach(({ uniforms }) => {
       uniforms.uNprAmbientCubeOn.value = ambientCube ? 1 : 0;
       if (ambientCube) uniforms.uNprAmbientCube.value = ambientCube.map((value) => value.clone());
-      uniforms.uNprExposure.value.set(ambientTarget * Math.PI, 0.15);
+      uniforms.uNprExposure.value.set(ambientTarget * Math.PI, NPR_EXPOSURE_RETAINED);
     });
   }, [ambientCube, ambientTarget, enabled, scene, unified, source2Active]);
 
@@ -1071,11 +1079,12 @@ export default function HeroPoseViewer({
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
   const [viewerScene, setViewerScene] = useState<HeroViewerScene>('midtown');
+  const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
   const [wireframe, setWireframe] = useState(false);
   const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
-    ? viewerAmbientCube(ambientProbe.sh, viewerScene === 'midtown' ? 1.6 : 1.1, viewerScene !== 'hideout') : null, [ambientProbe, viewerScene]);
+    ? viewerAmbientCube(ambientProbe.sh, VIEWER_ENVIRONMENT_INTENSITY[lighting], viewerScene !== 'hideout') : null, [ambientProbe, lighting, viewerScene]);
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
   const partPatternFailed = useCallback(() => setViewerError(t('foundry.skin.patternPreviewFailed')), [t]);
@@ -1380,8 +1389,11 @@ export default function HeroPoseViewer({
         <ViewerBackdrop texture={viewerScene === 'transparent' || viewerScene === 'hideout' ? null : backdrop.texture} />
         {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
             is gone and the directionals are softened to a warm key + cool fill
-            that just shapes the form on top of the environment. */}
-        {viewerScene !== 'hideout' && <Environment intensity={viewerScene === 'midtown' ? 1.6 : 1.1} studio={viewerScene !== 'midtown'} onProbe={setAmbientProbe} />}
+            that just shapes the form on top of the environment. Every preset
+            except the hideout (which brings its own map lighting), Midtown
+            included, reflects the dark studio room, and the NPR ambient probe
+            samples that same room so diffuse and reflections agree. */}
+        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting]} studio onProbe={setAmbientProbe} />}
         <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY]} />
         {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={viewerScene === 'midtown' ? 2.2 : 1.4}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
@@ -1436,7 +1448,7 @@ export default function HeroPoseViewer({
             source2Active={features.source2ShaderHintsEnabled}
             celV2={features.celV2Enabled}
             ambientCube={ambientCube}
-            ambientTarget={viewerScene === 'midtown' ? 0.55 : 0.5}
+            ambientTarget={NPR_AMBIENT_TARGET[lighting]}
             partEdits={partEdits}
           />
         )}
