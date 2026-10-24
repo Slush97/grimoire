@@ -2890,7 +2890,6 @@
       "andMore": " and {{count}} more",
       "stopped": "Stopped Deadlock.",
       "notRunning": "Deadlock was not running.",
-      "stopUnconfirmed": "Couldn't confirm Deadlock closed. Check whether it is still running.",
       "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
       "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
