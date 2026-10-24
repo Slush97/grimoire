@@ -122,6 +122,7 @@ import './ipc/modInterchange';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
+import { syncCrosshairWithSettings } from './services/crosshairPresets';
 import './ipc/modSafety';
 import { loadSettings, saveSettings, type AppSettings } from './services/settings';
 import {
@@ -614,6 +615,8 @@ if (!gotTheLock) {
         // we're on Linux without a real secret store: ADR-011). Its check
         // calls the Social server, so it waits until Social is turned on.
         if (loadSettings().experimentalSocial) void hydrateSocialSession();
+
+        syncCrosshairWithSettings();
 
         // Resume the opt-in match-salt contributor across restarts.
         if (loadSettings().contributeMatchSalts) {

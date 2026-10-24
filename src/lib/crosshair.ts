@@ -150,7 +150,7 @@ export function generateCrosshairCommands(raw: Partial<CrosshairSettings>): stri
 }
 
 /** Convar -> settings field, used to import the player's live in-game
- *  crosshair from game/citadel/cfg/machine_convars.vcfg. */
+ *  crosshair from the files the game persists it in. */
 const CONVAR_FIELDS: Array<[string, keyof CrosshairSettings, 'number' | 'boolean']> = [
     ['citadel_crosshair_pip_gap', 'pipGap', 'number'],
     ['citadel_crosshair_pip_gap_static', 'pipGapStatic', 'boolean'],
@@ -281,15 +281,35 @@ export function crosshairReach(raw: Partial<CrosshairSettings>): number {
 
 /**
  * Extract crosshair convars from machine_convars.vcfg content (the KV file
- * where the game persists in-game settings). Returns only the fields actually
- * present so callers can tell "file had no crosshair data" from defaults.
+ * where older game builds persisted in-game settings). Returns only the fields
+ * actually present so callers can tell "file had no crosshair data" from
+ * defaults.
  */
 export function parseMachineConvarsCrosshair(content: string): Partial<CrosshairSettings> {
     const values = new Map<string, string>();
     for (const m of content.matchAll(/"(citadel_crosshair_[a-z_]+)"\s*"([^"]*)"/g)) {
         values.set(m[1], m[2]);
     }
+    return crosshairFieldsFromConvars(values);
+}
 
+/**
+ * Extract the crosshair from citadel_hero_settings.lst, where the game keeps it
+ * since crosshairs became per hero (machine_convars.vcfg no longer has it).
+ * Only the `base` block is read; per-hero overrides live under `heroes`. Keys
+ * are the convar names without `citadel_`. `crosshair_themed` has no convar
+ * twin, so it is skipped.
+ */
+export function parseHeroSettingsCrosshair(content: string): Partial<CrosshairSettings> {
+    const base = /\bbase\s*=\s*\{([^}]*)\}/.exec(content)?.[1] ?? '';
+    const values = new Map<string, string>();
+    for (const m of base.matchAll(/\b(crosshair_[a-z_]+)\s*=\s*"([^"]*)"/g)) {
+        values.set(`citadel_${m[1]}`, m[2]);
+    }
+    return crosshairFieldsFromConvars(values);
+}
+
+function crosshairFieldsFromConvars(values: Map<string, string>): Partial<CrosshairSettings> {
     const out: Partial<CrosshairSettings> = {};
     const target = out as Record<string, number | boolean>;
     for (const [convar, field, kind] of CONVAR_FIELDS) {

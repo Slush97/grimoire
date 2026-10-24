@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { generateCrosshairCommands } from '../../../src/lib/crosshair';
 
 // Section markers for autoexec
 export const CROSSHAIR_START = '// === CROSSHAIR SETTINGS (Mod Manager) ===';
@@ -100,7 +101,7 @@ export function buildAutoexec(data: AutoexecData): string {
     } else {
         parts.push('// Deadlock autoexec.cfg');
         parts.push('// Managed by Deadlock Mod Manager');
-        parts.push('// Add +exec autoexec to Steam launch options');
+        parts.push('// Deadlock runs this file at every launch');
     }
 
     // Commands section
@@ -140,6 +141,31 @@ export function readAutoexec(gamePath: string): AutoexecData {
     }
     const content = fs.readFileSync(autoexecPath, 'utf-8');
     return parseAutoexec(content);
+}
+
+const DESIGNER_CONVARS = generateCrosshairCommands({}).split('\n').map(line => line.split(' ')[0]).join('\n');
+
+// The designer writes "// Preset: <name>" above the convars it generates, and
+// applying a profile writes the generated convars alone. A crosshair typed into
+// autoexec.cfg by hand also lands in the section (parseAutoexec rescues loose
+// citadel_crosshair_ lines) but matches neither.
+function isDesignerCrosshair(crosshair: string): boolean {
+    const lines = crosshair.split('\n').map(line => line.trim()).filter(Boolean);
+    if (lines.some(line => line.startsWith('// Preset:'))) return true;
+    return lines.map(line => line.split(/\s+/)[0]).join('\n') === DESIGNER_CONVARS;
+}
+
+/**
+ * Remove a crosshair section Grimoire wrote. Deadlock runs autoexec.cfg at every
+ * launch, so it would keep overriding the crosshair set in game. Returns
+ * whether the file changed.
+ */
+export function clearDesignerCrosshair(gamePath: string): boolean {
+    const data = readAutoexec(gamePath);
+    if (!data.crosshair || !isDesignerCrosshair(data.crosshair)) return false;
+    data.crosshair = null;
+    writeAutoexec(gamePath, data);
+    return true;
 }
 
 /**
