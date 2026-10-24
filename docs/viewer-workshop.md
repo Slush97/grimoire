@@ -187,14 +187,14 @@ that repeats what they do.
 
 Read the installed game and selected VPKs. Write generated previews to the app cache,
 and exports only to a destination selected by the user. Do not alter source VPKs.
-The pinned v0.24.0 vpkmerge help confirms generic KV3 JSON decoding via
-soundevents, textured model export, draw-call inspection, material removal and VMAT
-vector edits. Hideout support additionally needs the local `fix/map-viewer-uvs`
-exporter branch: auxiliary vertex formats and streams, environment vertex paint,
-and first-layer environment texture slots. The refinement also adds a read-only
-texture-hdr command for linear HDR texture export with a size limit.
-The local build bundles that patched executable. A vpkmerge release and a real
-version/hash pin update are required before publishing this Grimoire change.
+Requires vpkmerge v0.25.1 or later. v0.24.0 already covers generic KV3 JSON decoding
+via soundevents, textured model export, draw-call inspection, material removal and
+VMAT vector edits. Hideout support needs v0.25.0 (Slush97/vpkmerge#69): auxiliary
+vertex formats and streams, environment vertex paint, first-layer environment
+texture slots, and the read-only texture-hdr command for linear HDR texture export
+with a size limit. Saved part edits need v0.25.1, which keeps the source texture's
+block-compressed format and mip chain (earlier builds wrote textures that render
+black in game).
 
 The hideout is real geometry from maps/dl_hideout.vpk, loaded on demand. Map lighting,
 animation, particles and aggregate instance streams have separate support limits;
