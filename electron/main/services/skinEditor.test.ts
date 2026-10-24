@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('./heroPoseModels', () => ({ withHeroSkinSource: vi.fn() }));
 vi.mock('./modMerger', () => ({ runVpkmerge: vi.fn(), runVpkmergeStdout: vi.fn(), verifyVpkOutput: vi.fn() }));
 vi.mock('./foundryExport', () => ({ exportVpkFileName: vi.fn(), exportVpkViaDialog: vi.fn() }));
-import { partsFromDrawCalls, validateSkinEdits } from './skinEditor';
+import { getSkinEditInfo, partsFromDrawCalls, validateSkinEdits } from './skinEditor';
+import { withHeroSkinSource } from './heroPoseModels';
+import { runVpkmergeStdout } from './modMerger';
 
 const fingerprint = 'a'.repeat(64);
 const source = { heroName: 'Seven', skinSources: [], fingerprint };
@@ -33,5 +35,23 @@ describe('skin overlay export', () => {
     const request = { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: '#4080ff' }] };
     expect(() => validateSkinEdits(info, request)).toThrow('static color tint');
     expect(() => validateSkinEdits({ ...info, parts: parts.map((part) => ({ ...part, tintable: true })) }, request)).not.toThrow();
+  });
+});
+
+describe('skin inspection cache', () => {
+  it('reuses inspection until the source/game fingerprint changes and retries a failure', async () => {
+    let version = 'c'.repeat(64);
+    vi.mocked(withHeroSkinSource).mockImplementation(async (_path, _hero, _sources, action) => action({
+      vpk: 'skin.vpk', base: 'game.vpk', entry: 'model.vmdl_c', fingerprint: version,
+    }));
+    vi.mocked(runVpkmergeStdout).mockResolvedValue('{"draw_calls":[]}');
+    const get = () => getSkinEditInfo('game', { heroName: 'Mina', skinSources: [] });
+    await Promise.all([get(), get()]);
+    expect(runVpkmergeStdout).toHaveBeenCalledTimes(1);
+    await get(); expect(runVpkmergeStdout).toHaveBeenCalledTimes(1);
+    version = 'd'.repeat(64);
+    vi.mocked(runVpkmergeStdout).mockRejectedValueOnce(new Error('unavailable'));
+    await expect(get()).rejects.toThrow('unavailable');
+    await get(); expect(runVpkmergeStdout).toHaveBeenCalledTimes(3);
   });
 });

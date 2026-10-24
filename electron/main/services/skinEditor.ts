@@ -62,12 +62,23 @@ async function inspect(vpk: string, base: string, entry: string): Promise<SkinPa
     return parts;
 }
 
+const skinInfoCache = new Map<string, Promise<SkinEditInfo>>();
+
 export async function getSkinEditInfo(deadlockPath: string, input: SkinEditSource): Promise<SkinEditInfo> {
     const request = skinEditSourceSchema.parse(input);
-    return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => ({
-        fingerprint: source.fingerprint, entry: source.entry,
-        parts: await inspect(source.vpk, source.base, source.entry),
-    }));
+    return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
+        const key = JSON.stringify([source.base, source.entry, source.fingerprint]);
+        const cached = skinInfoCache.get(key);
+        if (cached) { skinInfoCache.delete(key); skinInfoCache.set(key, cached); return cached; }
+        const pending = inspect(source.vpk, source.base, source.entry).then((parts) => ({ fingerprint: source.fingerprint, entry: source.entry, parts }));
+        skinInfoCache.set(key, pending);
+        while (skinInfoCache.size > 12) {
+            const oldest = skinInfoCache.keys().next().value;
+            if (oldest !== undefined) skinInfoCache.delete(oldest);
+        }
+        try { return await pending; }
+        catch (error) { if (skinInfoCache.get(key) === pending) skinInfoCache.delete(key); throw error; }
+    });
 }
 
 export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): void {

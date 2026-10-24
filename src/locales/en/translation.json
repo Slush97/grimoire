@@ -342,7 +342,15 @@
       "customName": "{{hero}} custom",
       "globalUnsupported": "Global skins can't be edited: they load above any skin saved here, so your changes would not show in game. Remove the skin from Global in the Locker to edit it.",
       "sourceMissing_one": "A skin this edit was made from is missing. You're editing without it, and saving replaces the earlier edit.",
-      "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit."
+      "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit.",
+      "thumbnailFailed": "Skin saved, but its preview image could not be generated."
+    },
+    "draft": {
+      "kept": "Draft kept automatically on this device.",
+      "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",
+      "failed": "Could not keep your draft on this device. Save your work before leaving Door Stuck.",
+      "unknownParts": "Some edited parts are no longer in this model. Your draft is kept.",
+      "keepAvailable": "Keep available parts"
     }
   },
   "autoexec": {
@@ -1741,7 +1749,10 @@
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
       "revealInFolder": "Reveal in folder",
-      "soloLaunch": "Start with only this enabled"
+      "soloLaunch": "Start with only this enabled",
+      "openDoorStuck": "Open in Door Stuck",
+      "preview3d": "3D preview of {{name}}",
+      "previewHint": "Hold Alt to preview in 3D"
     },
     "solo": {
       "banner": "Testing {{name}} solo: every other mod is disabled.",

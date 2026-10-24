@@ -42,6 +42,7 @@ interface ModCardProps {
     outdatedVdataEnabled?: boolean;
     staleModels?: Mod['staleModels'];
     id: string;
+    metaKey?: string;
     name: string;
     fileName: string;
     enabled: boolean;
@@ -78,6 +79,8 @@ interface ModCardProps {
    *  The rest need a manual extract or unmerge. */
   updatableSourceCount?: number;
   onOpenDetails?: () => void;
+  onOpenDoorStuck?: () => void;
+  previewMetaKey?: string;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
@@ -804,6 +807,8 @@ export function ModCard({
   staleSourceCount = 0,
   updatableSourceCount = 0,
   onOpenDetails,
+  onOpenDoorStuck,
+  previewMetaKey,
   onViewAuthor,
   onToggle,
   onSoloLaunch,
@@ -1119,13 +1124,14 @@ export function ModCard({
   // dropdown root on the three-dot button. Only one of the two is open at a
   // time, so this renders once in practice.
   const hasTopActions =
-    !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
+    !!onOpenDoorStuck || !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
   const cardMenuItems = (
     <>
+      {onOpenDoorStuck && <MenuItem icon={Wrench} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {onEditLocal && (
         <MenuItem icon={Pencil} onSelect={onEditLocal}>
           {t('installed.card.edit')}
@@ -1395,6 +1401,8 @@ export function ModCard({
     <div
       ref={cardRef}
       data-mod-entry-key={entryKey}
+      data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
       onPointerEnter={() => {
         pointerInside.current = true;
         if (shiftHeld && !selectMode) setHovered(true);

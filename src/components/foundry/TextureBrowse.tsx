@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { ImageIcon, Search, Loader2, AlertTriangle, Users, Box, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
@@ -37,15 +39,17 @@ const LIMIT = 400;
  */
 export default function TextureBrowse({ heroes, heroNames, heroCodename }: TextureBrowseProps) {
   const { t } = useTranslation();
-  const [category, setCategory] = useState<TextureCategory>('hero-model');
-  const [pickedHero, setPickedHero] = useState('');
+  const draftKey = `textures:${heroCodename ?? 'catalog'}`;
+  const [category, setCategory] = useFoundryDraft<TextureCategory>(`${draftKey}:category`, z.enum(['hero-model', 'ability-vfx']), 'hero-model');
+  const [pickedHero, setPickedHero] = useFoundryDraft(`${draftKey}:hero`, z.string().max(100), '');
   const heroFilter = heroCodename ?? pickedHero;
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useFoundryDraft(`${draftKey}:search`, z.string().max(512), '');
   const [items, setItems] = useState<TextureEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [lightbox, setLightbox] = useState<TextureGridItem | null>(null);
+  const requestRevision = useRef(0);
 
   // Hero dropdown: every roster hero, by display name. Texture entries key on the
   // codename, which is what we send as the filter.
@@ -63,6 +67,7 @@ export default function TextureBrowse({ heroes, heroNames, heroCodename }: Textu
 
   const load = useCallback(
     async (cat: TextureCategory, hero: string, term: string) => {
+      const revision = ++requestRevision.current;
       setLoading(true);
       setError(null);
       try {
@@ -72,14 +77,16 @@ export default function TextureBrowse({ heroes, heroNames, heroCodename }: Textu
           search: term.trim() || undefined,
           limit: LIMIT,
         });
+        if (revision !== requestRevision.current) return;
         setItems(rows);
         setTruncated(rows.length >= LIMIT);
       } catch (e) {
+        if (revision !== requestRevision.current) return;
         setError(e instanceof Error ? e.message : String(e));
         setItems([]);
         setTruncated(false);
       } finally {
-        setLoading(false);
+        if (revision === requestRevision.current) setLoading(false);
       }
     },
     [],
@@ -94,7 +101,7 @@ export default function TextureBrowse({ heroes, heroNames, heroCodename }: Textu
       return;
     }
     const handle = setTimeout(() => void load(category, heroFilter, search), 250);
-    return () => clearTimeout(handle);
+    return () => { clearTimeout(handle); requestRevision.current += 1; };
   }, [category, heroFilter, search, ready, load]);
 
   return (

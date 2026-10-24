@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Loader2, AlertCircle, Zap, Shirt } from 'lucide-react';
 import { getHeroColorSupport } from '../../lib/api';
@@ -23,7 +25,7 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
   const { t } = useTranslation();
   const [supported, setSupported] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [surface, setSurface] = useState<'abilities' | 'skin'>('abilities');
+  const [surface, setSurface] = useFoundryDraft(`effects:${heroName}:surface`, z.enum(['abilities', 'skin']), 'abilities');
   // Applied dots on the surface toggle, reported up by each child panel.
   const [abilitiesApplied, setAbilitiesApplied] = useState(false);
   const [skinApplied, setSkinApplied] = useState(false);

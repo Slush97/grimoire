@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { Library, Search, Loader2, AlertTriangle, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
@@ -31,32 +33,37 @@ const CATEGORIES: { value: TextureCategory; labelKey: string; fallback: string }
  */
 export default function LibraryBrowse({ heroNames, initialCategory = 'ability-icon', heroCodename }: LibraryBrowseProps) {
   const { t } = useTranslation();
-  const [category, setCategory] = useState<TextureCategory>(initialCategory);
+  const draftKey = `library:${heroCodename ?? 'catalog'}:${initialCategory}`;
+  const [category, setCategory] = useFoundryDraft<TextureCategory>(`${draftKey}:category`, z.enum(['ability-icon', 'item-icon', 'hero-image']), initialCategory);
   const [items, setItems] = useState<TextureGridItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [pickedHero, setPickedHero] = useState('all');
+  const [search, setSearch] = useFoundryDraft(`${draftKey}:search`, z.string().max(512), '');
+  const [pickedHero, setPickedHero] = useFoundryDraft(`${draftKey}:hero`, z.string().max(100), 'all');
   const heroFilter = category === 'item-icon' ? 'all' : heroCodename ?? pickedHero;
   const [lightbox, setLightbox] = useState<TextureGridItem | null>(null);
+  const requestRevision = useRef(0);
 
   const loadCategory = useCallback(async (cat: TextureCategory) => {
+    const revision = ++requestRevision.current;
     setLoading(true);
     setError(null);
     try {
       const grid = await foundryThumbnails(cat);
+      if (revision !== requestRevision.current) return;
       setItems(grid);
     } catch (e) {
+      if (revision !== requestRevision.current) return;
       setError(e instanceof Error ? e.message : String(e));
       setItems([]);
     } finally {
-      setLoading(false);
+      if (revision === requestRevision.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    setPickedHero('all');
     void loadCategory(category);
+    return () => { requestRevision.current += 1; };
   }, [category, loadCategory]);
 
   // Hero dropdown is scoped to the codenames actually present in this category.

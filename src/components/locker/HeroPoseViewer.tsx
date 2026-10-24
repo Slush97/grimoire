@@ -10,6 +10,9 @@ import {
   type SetStateAction,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
+import { viewerCameraSchema, type ViewerCameraDraft } from '../../lib/viewerDraftSchema';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls as DreiOrbitControls } from '@react-three/drei';
 import { Leva, folder, useControls } from 'leva';
@@ -489,10 +492,18 @@ export function RiggedModel({
 
 /** Mouse orbit + zoom, damped. Auto-rotation lives on the model group so the
  *  controls don't fight it; dragging just reorients the camera. */
-export function Controls({ interaction, reset, label, model, fitKey }: { interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string }) {
+export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange }: {
+  interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
+  savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
+}) {
   const { camera, gl, size: viewportSize } = useThree();
   const controlsRef = useRef<ComponentRef<typeof DreiOrbitControls> | null>(null);
   const pendingFit = useRef(true);
+  const restoreView = useRef(savedView);
+  const saveView = useCallback(() => {
+    const controls = controlsRef.current;
+    if (controls) onViewChange?.({ position: camera.position.toArray(), target: controls.target.toArray() });
+  }, [camera, onViewChange]);
   useEffect(() => {
     pendingFit.current = true;
   }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height]);
@@ -519,6 +530,11 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
     controls.target.copy(center);
     controls.maxDistance = Math.max(6, distance * 2);
     Object.assign(camera.userData, { previewHome: { position: camera.position.toArray(), target: center.toArray() } });
+    if (reset === 0 && restoreView.current) {
+      camera.position.fromArray(restoreView.current.position);
+      controls.target.fromArray(restoreView.current.target);
+    }
+    restoreView.current = null;
     controls.update();
     pendingFit.current = false;
   });
@@ -556,11 +572,12 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
         }
       }
       controls.update();
+      saveView();
     };
     canvas.addEventListener('pointerdown', focus);
     canvas.addEventListener('keydown', keydown);
     return () => { canvas.removeEventListener('pointerdown', focus); canvas.removeEventListener('keydown', keydown); };
-  }, [camera, gl, label]);
+  }, [camera, gl, label, saveView]);
   useEffect(() => {
     // Dolly toward/away from the target in any state, clamped to min/max distance.
     const onWheel = (e: WheelEvent) => {
@@ -574,12 +591,13 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
         controls.maxDistance
       );
       camera.position.copy(controls.target).add(offset.setLength(dist));
+      controls.update(); saveView();
     };
     gl.domElement.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       gl.domElement.removeEventListener('wheel', onWheel);
     };
-  }, [camera, gl]);
+  }, [camera, gl, saveView]);
 
   return (
     <DreiOrbitControls
@@ -596,6 +614,7 @@ export function Controls({ interaction, reset, label, model, fitKey }: { interac
       onEnd={() => {
         // eslint-disable-next-line react-hooks/immutability -- ref.current mutation is the sanctioned React pattern; `interaction` is a RefObject, not immutable hook state
         interaction.current.dragging = false;
+        saveView();
       }}
     />
   );
@@ -1051,6 +1070,9 @@ export default function HeroPoseViewer({
   onPartColors,
   onPartTextures,
   onPartPick,
+  onPreviewCapture,
+  compact = false,
+  workspaceKey,
 }: {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
@@ -1065,8 +1087,12 @@ export default function HeroPoseViewer({
   onPartColors?: (colors: Record<string, string>) => void;
   onPartTextures?: (textures: Record<string, SkinPartTexture>) => void;
   onPartPick?: (material: string) => void;
+  onPreviewCapture?: (capture: (() => Promise<string>) | null) => void;
+  compact?: boolean;
+  workspaceKey?: string;
 }) {
   const { t } = useTranslation();
+  const viewKey = `${workspaceKey ?? `viewer:${heroName}`}:view`;
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
   const [rigged, setRigged] = useState(false);
@@ -1074,25 +1100,58 @@ export default function HeroPoseViewer({
   const [generating, setGenerating] = useState(false);
   const interaction = useRef<TurntableInteraction>({ dragging: false, paused: !initialHeroPreviewFlags().autoRotate });
   const [spinPaused, setSpinPaused] = useState(() => !initialHeroPreviewFlags().autoRotate);
-  const [playback, setPlayback] = useState({ paused: false, speed: 1 });
-  const [clipName, setClipName] = useState('');
+  const [playback, setPlayback] = useFoundryDraft(`${viewKey}:playback`, z.object({ paused: z.boolean(), speed: z.number().finite().min(0.1).max(4) }), { paused: false, speed: 1 });
+  const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
-  const [viewerScene, setViewerScene] = useState<HeroViewerScene>('midtown');
+  const [storedScene, setViewerScene] = useFoundryDraft<HeroViewerScene>(`${viewKey}:scene`, z.enum(['midtown', 'studio', 'transparent', 'hideout']), 'midtown');
+  const viewerScene = compact ? 'studio' : storedScene;
   const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
   const [wireframe, setWireframe] = useState(false);
+  const [cameraView, setCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
   const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
     ? viewerAmbientCube(ambientProbe.sh, VIEWER_ENVIRONMENT_INTENSITY[lighting], viewerScene !== 'hideout') : null, [ambientProbe, lighting, viewerScene]);
   const [resetView, setResetView] = useState(0);
   const [viewerError, setViewerError] = useState<string | null>(null);
-  const partPatternFailed = useCallback(() => setViewerError(t('foundry.skin.patternPreviewFailed')), [t]);
+  const pendingTextures = useRef(new Set<string>());
+  const textureFailed = useRef(false);
+  const partPatternFailed = useCallback(() => { textureFailed.current = true; setViewerError(t('foundry.skin.patternPreviewFailed')); }, [t]);
+  const partTexturePending = useCallback((material: string, pending: boolean) => {
+    if (pending) { pendingTextures.current.add(material); textureFailed.current = false; }
+    else pendingTextures.current.delete(material);
+  }, []);
   const backdrop = useViewerBackdrop();
   const backdropError = backdrop.errorKey === 'locker.pose.backgroundTooLarge'
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!scene || !onPreviewCapture) return;
+    let active = true;
+    onPreviewCapture(async () => {
+      const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await frame(); await frame();
+      const deadline = performance.now() + 10_000;
+      const pending = () => pendingTextures.current.size > 0 || viewerRef.current?.dataset.lightingProbe === 'pending';
+      while (active && pending() && performance.now() < deadline) await frame();
+      await frame();
+      const source = canvasRef.current;
+      if (!active || !source || !source.width || !source.height || pending() || textureFailed.current) throw new Error('Preview is not ready');
+      const image = document.createElement('canvas');
+      image.width = 640;
+      image.height = 400;
+      const context = image.getContext('2d');
+      if (!context) throw new Error('No preview image context');
+      const cropWidth = Math.min(source.width, source.height * image.width / image.height);
+      const width = cropWidth / source.height * image.height;
+      context.drawImage(source, (source.width - cropWidth) / 2, 0, cropWidth, source.height,
+        (image.width - width) / 2, 0, width, image.height);
+      return image.toDataURL('image/webp', 0.85);
+    });
+    return () => { active = false; onPreviewCapture(null); };
+  }, [scene, onPreviewCapture]);
   const [failed, setFailed] = useState(false);
   const [effect, setEffect] = useState<EffectMount | null>(null);
   const [effectUnavailable, setEffectUnavailable] = useState(false);
@@ -1117,8 +1176,9 @@ export default function HeroPoseViewer({
     cloth: devFlags.cloth,
     animated: devFlags.animated,
     bloom: devFlags.bloom,
+    ...(compact ? { animated: false, cloth: false, effects: false, bloom: false } : {}),
   };
-  const effectPreviewEnabled = devFlags.effects;
+  const effectPreviewEnabled = !compact && devFlags.effects;
 
   // The pose GLB has no weapon mesh, so a weapons-only paint has nothing to show
   // here, and intensity 0 is "no paint". Otherwise fetch the pattern as an
@@ -1346,7 +1406,7 @@ export default function HeroPoseViewer({
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
       wireframe={wireframe} onWireframe={setWireframe}
-      onScene={setViewerScene} onReset={() => setResetView((v) => v + 1)}
+      onScene={setViewerScene} onReset={() => { setCameraView(null); setResetView((v) => v + 1); }}
       onScreenshot={() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -1379,7 +1439,7 @@ export default function HeroPoseViewer({
         shadows={{ type: THREE.PCFShadowMap }}
         onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
         camera={PREVIEW_CAMERA}
-        dpr={[1, 2]}
+        dpr={compact ? 1 : [1, 2]}
         gl={{
           alpha: true,
           toneMapping: THREE.NoToneMapping,
@@ -1454,7 +1514,7 @@ export default function HeroPoseViewer({
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
         <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />
-        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} />
+        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} />
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect
@@ -1464,9 +1524,10 @@ export default function HeroPoseViewer({
             threshold={import.meta.env.DEV ? bloomParams.threshold : BLOOM_THRESHOLD}
           />
         )}
-        <Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} />
+        <Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName}
+          savedView={compact ? null : cameraView} onViewChange={compact ? undefined : setCameraView} />
       </Canvas>}
-      {toolbar}
+      {!compact && toolbar}
       {viewerScene === 'hideout' && (
         <div className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
           {hideoutStatus.kind === 'ready' ? <details>

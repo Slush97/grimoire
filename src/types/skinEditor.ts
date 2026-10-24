@@ -57,11 +57,13 @@ export interface SkinEditExport extends SkinEditSource {
 
 export interface SkinEditSave extends SkinEditExport {
   name: string;
+  thumbnailDataUrl?: string;
 }
 
 export interface SkinEditSaveResult {
   /** Where each mod the save enabled or moved now lives, keyed by its metaKey before the save. */
   renamed: Record<string, HeroPoseSkinSource>;
+  overlay: HeroPoseSkinSource;
 }
 
 /** Recorded on a skin-editor overlay so saving the same edit target again replaces it. */

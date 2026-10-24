@@ -4,7 +4,7 @@
  * so the real mod service runs and only the vpkmerge build is faked.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -25,6 +25,7 @@ vi.mock('./skinEditor', async () => {
 import { resumeSkinEdit, saveSkinEdits } from './saveSkinEdits';
 import { scanMods } from './mods';
 import { getModMetadata } from './metadata';
+import { resolveVpkIdentity } from './vpkIdentity';
 
 function vpkBytes(marker: number): Buffer {
   const bytes = Buffer.alloc(4096);
@@ -35,8 +36,9 @@ function vpkBytes(marker: number): Buffer {
 }
 
 type Edit = { material: string; hidden: boolean; tint: string | null };
-const save = (dl: string, heroName: string, skinSources: Array<{ metaKey: string; priority: number }>, name: string, edits: Edit[] = []) =>
-  saveSkinEdits(dl, { heroName, skinSources, fingerprint: 'f'.repeat(64), edits, name });
+const save = (dl: string, heroName: string, skinSources: Array<{ metaKey: string; priority: number }>, name: string, edits: Edit[] = [], thumbnailDataUrl?: string) =>
+  saveSkinEdits(dl, { heroName, skinSources, fingerprint: 'f'.repeat(64), edits, name, thumbnailDataUrl });
+const thumbnail = 'data:image/webp;base64,UklGRg==';
 
 describe('saveSkinEdits', () => {
   let dl: string;
@@ -57,16 +59,18 @@ describe('saveSkinEdits', () => {
   });
 
   it('loads the overlay directly ahead of its source and reports where the source went', async () => {
-    const { renamed } = await save(dl, 'Abrams', [{ metaKey: 'pak02_dir.vpk', priority: 2 }], 'First');
+    const { renamed, overlay } = await save(dl, 'Abrams', [{ metaKey: 'pak02_dir.vpk', priority: 2 }], 'First', [], thumbnail);
     expect(await order()).toEqual(['pak01_dir.vpk', 'First', 'pak03_dir.vpk', 'pak04_dir.vpk']);
     expect(renamed['pak02_dir.vpk']).toEqual({ metaKey: 'pak03_dir.vpk', priority: 3 });
+    expect(getModMetadata(overlay.metaKey)?.thumbnailUrl).toBe(thumbnail);
   });
 
   it('replaces the earlier overlay when the same source is saved again', async () => {
-    const { renamed } = await save(dl, 'Abrams', [{ metaKey: 'pak03_dir.vpk', priority: 3 }], 'Second');
+    const { renamed, overlay } = await save(dl, 'Abrams', [{ metaKey: 'pak03_dir.vpk', priority: 3 }], 'Second');
     // The old overlay held pak02 through the reorder and was then deleted.
     expect(await order()).toEqual(['pak01_dir.vpk', 'Second', 'pak04_dir.vpk', 'pak05_dir.vpk']);
     expect(renamed['pak03_dir.vpk']).toEqual({ metaKey: 'pak04_dir.vpk', priority: 4 });
+    expect(getModMetadata(overlay.metaKey)?.thumbnailUrl).toBe(thumbnail);
   });
 
   it('keeps an overlay made from another source', async () => {
@@ -111,5 +115,19 @@ describe('saveSkinEdits', () => {
       await expect(save(dl, 'Abrams', [], 'Blocked')).rejects.toThrow('Game is running');
     } finally { h.gameRunning = false; }
     expect((await scanMods(dl)).map((mod) => mod.metaKey)).toEqual(before.map((mod) => mod.metaKey));
+  });
+  it('keeps the saved overlay when one of its source skins is missing', async () => {
+    const mods = await scanMods(dl);
+    const overlay = mods.find((mod) => getModMetadata(mod.metaKey)?.modName === 'Bebop tinted');
+    if (!overlay) throw new Error('Saved test skin missing');
+    const hash = getModMetadata(overlay.metaKey)?.skinEdit?.sources[0];
+    const identities = await Promise.all(mods.map(async (mod) => ({ mod, hash: (await resolveVpkIdentity(mod.path)).sha256 })));
+    const source = identities.find((item) => item.hash === hash)?.mod;
+    if (!source) throw new Error('Test source missing');
+    unlinkSync(source.path);
+    const builds = h.builds;
+    await expect(save(dl, 'Bebop', [{ metaKey: overlay.metaKey, priority: overlay.priority }], 'Incomplete')).rejects.toThrow('source skins');
+    expect(h.builds).toBe(builds);
+    expect(getModMetadata(overlay.metaKey)?.modName).toBe('Bebop tinted');
   });
 });

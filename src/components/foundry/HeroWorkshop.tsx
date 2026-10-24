@@ -1,4 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import {
   ArrowLeft,
   Sparkles,
@@ -14,7 +16,6 @@ import {
   getHeroNamePath,
   getHeroWikiUrl,
 } from '../../lib/lockerUtils';
-import { withDirtySource } from '../../lib/dirtySources';
 import { HeroNavigation } from '../locker/HeroNavigation';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
@@ -38,7 +39,6 @@ interface HeroWorkshopProps {
 
 type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
 
-const NO_DIRTY_SOURCES: ReadonlySet<string> = new Set();
 
 /**
  * The per-hero Foundry workshop: pick a hero, edit everything about them. Mirrors
@@ -57,26 +57,20 @@ const NO_DIRTY_SOURCES: ReadonlySet<string> = new Set();
  */
 export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, onNavigate, skinSources }: HeroWorkshopProps) {
   const { t } = useTranslation();
-  const [section, setSection] = useState<SectionId>('appearance');
+  const [section, setSection] = useFoundryDraft<SectionId>(`workshop:${hero.codename}:section`, z.enum(['appearance', 'abilities', 'voice', 'icons']), 'appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [currentHero, setCurrentHero] = useState(hero.codename);
-  // Children holding unsaved work report in here, which freezes hero switching
-  // so a remount doesn't throw the draft away.
-  const [dirtySources, setDirtySources] = useState(NO_DIRTY_SOURCES);
-  const navLocked = dirtySources.size > 0;
   if (currentHero !== hero.codename) {
     setCurrentHero(hero.codename);
     setRenderStep(0);
     setNameFailed(false);
-    setDirtySources(NO_DIRTY_SOURCES);
   }
-  const setSourceDirty = useCallback((source: string, dirty: boolean) => {
-    setDirtySources((sources) => withDirtySource(sources, source, dirty));
-  }, []);
-  const onSoundDirtyChange = useCallback((dirty: boolean) => setSourceDirty('sound', dirty), [setSourceDirty]);
-  const onSkinDirtyChange = useCallback((dirty: boolean) => setSourceDirty('skin', dirty), [setSourceDirty]);
-  const [appearanceTool, setAppearanceTool] = useState<'parts' | 'effects'>('parts');
+  const [appearanceTool, setAppearanceTool] = useFoundryDraft(`workshop:${hero.codename}:appearance`, z.enum(['parts', 'effects']), 'parts');
+  const linkedSkin = !!skinSources?.length;
+  useEffect(() => {
+    if (linkedSkin) { setSection('appearance'); setAppearanceTool('parts'); }
+  }, [linkedSkin, setSection, setAppearanceTool]);
   const editingSkin = section === 'appearance' && appearanceTool === 'parts';
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
@@ -148,7 +142,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
           {t('foundry.workshop.back', 'All heroes')}
         </button>
 
-        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled={!navLocked}>
+        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled>
           {nameFailed ? (
             <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
               {hero.name}
@@ -193,7 +187,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
             <div className="space-y-4">
               <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}
                 options={[{ value: 'parts', label: t('foundry.skin.title') }, { value: 'effects', label: t('foundry.skin.effects') }]} />
-              {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} onDirtyChange={onSkinDirtyChange} />
+              {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} />
                 : <HeroEffectsPanel key={hero.name} heroName={hero.name} />}
             </div>
           ) : section === 'abilities' ? (
@@ -201,11 +195,11 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
               {/* Each ability card lists its gameplay sounds with play + Swap (drop
                   your own MP3), forged through the soundswap engine. The ability
                   axis lives here (not under Voice); Voice is VO only. */}
-              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" onDirtyChange={onSoundDirtyChange} />
+              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
               <AbilitiesComingNote />
             </div>
           ) : section === 'voice' ? (
-            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" onDirtyChange={onSoundDirtyChange} />
+            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
           ) : section === 'icons' ? (
             <div className="space-y-8">
               <TextureBrowse heroes={scopedRoster} heroNames={heroNames} heroCodename={hero.codename} />

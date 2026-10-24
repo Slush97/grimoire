@@ -2,6 +2,8 @@ import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo
 import { useShallow } from 'zustand/react/shallow';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
+import { installedSkinTarget } from '../lib/installedSkinTarget';
 import {
   DndContext,
   DragOverlay,
@@ -384,11 +386,16 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onToggleList,
   onCreateList,
 }: InstalledEntryCardProps) {
+  const navigate = useNavigate();
+  const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
+  const skinTarget = installedSkinTarget(previewMod);
+  const openDoorStuck = skinTarget ? () => navigate('/foundry', { state: skinTarget }) : undefined;
   if (entry.kind === 'single') {
     const mod = entry.mod;
     return (
       <ModCard
         mod={mod}
+        onOpenDoorStuck={openDoorStuck}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
         conflicts={conflicts}
@@ -457,6 +464,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const outdatedVariant = entry.enabledVariants.find(v => v.outdatedVdata) ?? entry.variants.find(v => v.outdatedVdata);
   return (
     <ModCard
+      onOpenDoorStuck={openDoorStuck}
+      previewMetaKey={previewMod.metaKey}
       mod={{
         ...entry.primary,
         safetyTarget,
@@ -3754,6 +3763,7 @@ export default function Installed() {
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
+      <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
       <div
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent

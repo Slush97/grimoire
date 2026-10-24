@@ -42,15 +42,16 @@ export async function resumeSkinEdit(deadlockPath: string, input: SkinEditSource
 
 export async function saveSkinEdits(deadlockPath: string, input: unknown): Promise<SkinEditSaveResult> {
     const request = skinEditSaveSchema.parse(input);
-    const { name, ...editRequest } = request;
+    const { name, thumbnailDataUrl, ...editRequest } = request;
     // An overlay named as a source is resumed: build from its own sources and replace it.
     const resolved = await resolveInstalledSkinEditSources(await scanMods(deadlockPath), request.skinSources);
+    if (resolved.missing.length) throw new Error('Some source skins are no longer installed. Restore them before saving.');
     const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-save-'));
     try {
         const out = join(dir, 'skin_dir.vpk');
         const entry = await buildSkinEditVpk(deadlockPath, { ...editRequest, skinSources: resolved.skinSources }, out);
         await assertVpkSafety(out, { context: 'installation', name });
-        const renamed = await runExclusiveModMutation(async () => {
+        const saved = await runExclusiveModMutation(async () => {
             const before = await scanMods(deadlockPath);
             await syncRunningGameModSnapshotFromMods(before);
             const sources = resolved.skinSources.map((source) => {
@@ -76,6 +77,7 @@ export async function saveSkinEdits(deadlockPath: string, input: unknown): Promi
                 removeModMetadata(key);
                 await setModMetadataWithHash(key, {
                     modName: request.name, sourceSection: 'SkinEdit', categoryName: 'Skins', skinEdit: { ...target, edits: request.edits },
+                    thumbnailUrl: thumbnailDataUrl ?? replaced.map((mod) => getModMetadata(mod.metaKey)?.thumbnailUrl).find(Boolean),
                     lockerHero: request.heroName, lockerHeroSource: 'manual', lockerHeroVpkChecked: true,
                 }, destination);
                 const enabled = (await scanMods(deadlockPath)).filter((mod) => mod.enabled && !isPriorityFolderPath(mod.path));
@@ -98,9 +100,9 @@ export async function saveSkinEdits(deadlockPath: string, input: unknown): Promi
                 const metaKey = moved.get(enabledSources[index].metaKey) ?? enabledSources[index].metaKey;
                 if (metaKey !== mod.metaKey) result[mod.metaKey] = located(metaKey);
             });
-            return result;
+            return { renamed: result, overlay: located(moved.get(key) ?? key) };
         }, { healPath: deadlockPath });
         notifyModChanges();
-        return { renamed };
+        return saved;
     } finally { await fs.rm(dir, { recursive: true, force: true }); }
 }
