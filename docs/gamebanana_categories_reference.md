@@ -1,281 +1,158 @@
 # GameBanana Categories Reference for Deadlock
 
 > **Game ID**: `20948` (Deadlock)
-> **Last Verified**: 2024-12-31
-> **Total Items Scanned**: 1,579
+> **Last Verified**: 2026-10-24, against the live `Util/{Model}/NestedStructure` endpoints and the app's cached trees (`category_cache` in `mods-cache.db`). Item counts are `_nItemCount` from the cached trees (fetched 2026-10-16 to 2026-10-24) and drift daily.
 
 ---
 
 ## Overview
 
-GameBanana uses a **flat category system** for Deadlock. There are NO sub-categories or hierarchical structures. 
+GameBanana's Deadlock categories are a **tree**, not a flat list. Each submission type has its own category model, and a category id is only unique within its model: "Other/Misc" exists in Mod, Sound, Wip and Tool, and `2855` is Maps in WipCategory.
 
-> [!CAUTION]
-> **There are NO hero-specific categories.**
-> 
-> You will NOT find categories like \"Abrams Skins\" or \"Yamato Mods\". ALL hero content is dumped into generic buckets like \"Skins\" (33295) or \"Model Replacement\" (33154).
-> 
-> **To filter by hero, you MUST use:**
-> 1. The Search API with the hero name
-> 2. Client-side tag/title parsing after fetching
-
-### Category Types
-Categories are typed based on their parent submission type:
-
-| Category Type | API Item Type | URL Pattern | Used For |
+| Item type | Category model | URL pattern | Fetched by the app |
 | :--- | :--- | :--- | :--- |
-| **ModCategory** | `ModCategory` | `/mods/cats/{id}` | Visual mods, gameplay, HUD |
-| **SoundCategory** | `SoundCategory` | `/sounds/cats/{id}` | Audio, music, sound effects |
-| **ToolCategory** | `ToolCategory` | `/tools/cats/{id}` | Modding utilities |
-| **TutorialCategory** | `TutorialCategory` | `/tuts/cats/{id}` | How-to guides |
+| `Mod` | `ModCategory` | `/mods/cats/{id}` | yes |
+| `Sound` | `SoundCategory` | `/sounds/cats/{id}` | yes |
+| `Wip` | `WipCategory` | `/wips/cats/{id}` | yes |
+| `Tool` | `ToolCategory` | `/tools/cats/{id}` | no |
 
----
+`GET /Game/20948/CategoryTree` lists every section and its category model. The tree itself comes from:
 
-## Complete Category Listing
-
-### ModCategory (Visual Mods)
-
-| ID | Name | Count | Description | Profile URL |
-| ---: | :--- | ---: | :--- | :--- |
-| `33295` | **Skins** | 454 | Primary hero skins category. Most character model replacements. | `gamebanana.com/mods/cats/33295` |
-| `33154` | **Model Replacement** | 95 | Full model swaps (not just textures). | `gamebanana.com/mods/cats/33154` |
-| `31713` | **HUD** | 98 | UI modifications, reticles, crosshairs, health bars. | `gamebanana.com/mods/cats/31713` |
-| `31710` | **Other/Misc** | 71 | Generic mods that don't fit other categories. | `gamebanana.com/mods/cats/31710` |
-| `3366` | **Other/Misc** | 57 | Legacy miscellaneous category (shared across games). | `gamebanana.com/mods/cats/3366` |
-| `3807` | **Skins** | 41 | Secondary skins category (legacy/shared). | `gamebanana.com/mods/cats/3807` |
-| `2114` | **Other/Misc** | 22 | Legacy misc category. | `gamebanana.com/mods/cats/2114` |
-| `33331` | **Gameplay Modifications** | 6 | Scripts affecting gameplay mechanics. | `gamebanana.com/mods/cats/33331` |
-| `37225` | **Maps** | 4 | Level/map modifications. | `gamebanana.com/mods/cats/37225` |
-| `2957` | **Other/Misc** | 2 | Legacy misc. | `gamebanana.com/mods/cats/2957` |
-| `3616` | **Other/Misc** | 2 | Legacy misc. | `gamebanana.com/mods/cats/3616` |
-| `2855` | **Maps** | 1 | Secondary maps category (legacy). | `gamebanana.com/mods/cats/2855` |
-| `804` | **Other/Misc** | 1 | Very old legacy category. | `gamebanana.com/mods/cats/804` |
-| `1922` | **Other/Misc** | 1 | Legacy misc. | `gamebanana.com/mods/cats/1922` |
-
-**ModCategory Subtotal**: 855 items
-
----
-
-### SoundCategory (Audio)
-
-| ID | Name | Count | Description | Profile URL |
-| ---: | :--- | ---: | :--- | :--- |
-| `5815` | **Other/Misc** | 468 | **LARGEST CATEGORY**. Generic audio files, voice lines, misc SFX. | `gamebanana.com/sounds/cats/5815` |
-| `5842` | **Music** | 226 | Background music replacements, menu themes. | `gamebanana.com/sounds/cats/5842` |
-| `5843` | **Killsounds** | 14 | Audio that plays on kill. | `gamebanana.com/sounds/cats/5843` |
-| `5895` | **Killstreak Music** | 9 | Audio that plays during killstreaks. | `gamebanana.com/sounds/cats/5895` |
-| `5546` | **Other/Misc** | 3 | Legacy misc audio. | `gamebanana.com/sounds/cats/5546` |
-| `5262` | **Other/Misc** | 1 | Legacy misc audio. | `gamebanana.com/sounds/cats/5262` |
-
-**SoundCategory Subtotal**: 721 items
-
----
-
-### ToolCategory (Utilities)
-
-| ID | Name | Count | Description | Profile URL |
-| ---: | :--- | ---: | :--- | :--- |
-| `1932` | **Modding** | 3 | Modding tools, extractors, packers. | `gamebanana.com/tools/cats/1932` |
-
-**ToolCategory Subtotal**: 3 items
-
----
-
-## Category ID Quick Reference
-
-For easy copy-paste into code:
-
-```javascript
-const DEADLOCK_CATEGORIES = {
-  // ModCategory (Visuals)
-  SKINS_PRIMARY: 33295,
-  SKINS_LEGACY: 3807,
-  MODEL_REPLACEMENT: 33154,
-  HUD: 31713,
-  GAMEPLAY_MODS: 33331,
-  MAPS_PRIMARY: 37225,
-  MAPS_LEGACY: 2855,
-  MOD_MISC_1: 31710,
-  MOD_MISC_2: 3366,
-  MOD_MISC_3: 2114,
-  MOD_MISC_4: 2957,
-  MOD_MISC_5: 3616,
-  MOD_MISC_6: 804,
-  MOD_MISC_7: 1922,
-  
-  // SoundCategory (Audio)
-  SOUND_MISC: 5815,  // LARGEST - 468 items
-  MUSIC: 5842,
-  KILLSOUNDS: 5843,
-  KILLSTREAK_MUSIC: 5895,
-  SOUND_MISC_2: 5546,
-  SOUND_MISC_3: 5262,
-  
-  // ToolCategory
-  MODDING_TOOLS: 1932,
-};
-
-// Groupings for UI
-const VISUAL_CATEGORIES = [33295, 3807, 33154, 31713, 33331, 37225, 2855, 31710, 3366, 2114, 2957, 3616, 804, 1922];
-const AUDIO_CATEGORIES = [5815, 5842, 5843, 5895, 5546, 5262];
-const TOOL_CATEGORIES = [1932];
+```http
+GET https://gamebanana.com/apiv11/Util/ModCategory/NestedStructure?_idGameRow=20948
 ```
 
----
+Each node has `_idRow`, `_sName`, `_sProfileUrl`, `_nItemCount`, `_sIconUrl`, `_idParentRow` (children only) and `_aChildren` (when it has any). The app reads these through `fetchCategoryTreeCached` (`electron/main/services/gamebanana.ts`), refreshes a cached tree after a day, and stores it in `category_cache`.
 
-## Understanding "Other/Misc" Duplicates
+### Ids on submissions
 
-GameBanana has **multiple categories with the same display name** ("Other/Misc") but different IDs. This is because:
-
-1. **Legacy Categories**: Old categories from before Deadlock was added, shared across multiple games.
-2. **Type-Specific**: Each item type (Mod, Sound) has its own "Other/Misc" bucket.
-3. **Game-Specific vs Global**: Some IDs are Deadlock-specific (e.g., `31710`), others are global (e.g., `3366`).
-
-### Disambiguation Table
-
-| ID | Item Type | Specificity | Recommended Use |
-| ---: | :--- | :--- | :--- |
-| `31710` | Mod | Deadlock-Specific | Primary "Misc Mods" bucket |
-| `3366` | Mod | Global (Legacy) | Fallback misc mods |
-| `2114` | Mod | Global (Legacy) | Rare/old content |
-| `5815` | Sound | Deadlock-Specific | Primary "Misc Audio" bucket |
-| `5546` | Sound | Global (Legacy) | Rare audio |
+- **List endpoints** (`/{Model}/Index`, `/Util/Search/Results`): `_aRootCategory` is the tree root and carries only `_sName`, `_sProfileUrl` and `_sIconUrl`, **no `_idRow`**. `_aSubCategory` has the same shape and is the submission's own category when that is not the root (a hero, or a nested child such as Faithful/Vanilla+); it is `null` for a submission filed directly under its root. The id exists only inside the URL (`.../mods/cats/{id}`); see `categoryIdFromProfileUrl` in `src/lib/heroFilter.ts`.
+- **Detail endpoint** (`/{Model}/{id}`): `_aCategory` is the submission's own category with `_idRow` (for a hero skin, the hero or its nested child, not the Skins root).
+- **Local catalog** (`mods` table): `category_id` is NULL on every row, `category_name` is the root name, and `sub_category_id` is the real subcategory id (set on 4,437 of 5,427 Mod rows and 60 of 4,676 Sound rows in the 2026-10-24 mirror, none of the Wip rows). See the comments in `electron/main/services/searchService.ts` and `modDatabase.ts`.
+- The category filter `_aFilters[Generic_Category]` is relied on to include descendants (`categorySubtreeIds` in `src/lib/heroFilter.ts`).
 
 ---
 
-## Hero Identification
+## ModCategory
 
-Deadlock does **NOT** use sub-categories for heroes. Instead, hero-specific mods are tagged.
+Eight roots. Hero skins are subcategories of Skins; Sound and Wip have no hero categories.
 
-### Tag Extraction
-Parse the `_aTags` array from mod records:
+| ID | Name | Items | Children |
+| ---: | :--- | ---: | :--- |
+| `33295` | **Skins** | 3478 | 44 heroes, see below |
+| `31713` | **HUD** | 722 | Character HUD `44745`, Cursors `49794`, Gameplay `44748`, Items HUD `44746` |
+| `33154` | **Model Replacement** | 575 | Active Items `44699`, Breakables `41651`, Hideout `44206`, NPCs `44691`, Rejuvenator `45979`, Sinner's Sacrifice `44391`, Soul Container `41868`, Spirit Urn `41656` |
+| `46154` | **Quality of Life/Fixes** | 155 | Accessibility `44749` |
+| `31710` | **Other/Misc** | 140 | none |
+| `33331` | **Gameplay Modifications** | 31 | none |
+| `37225` | **Maps** | 41 | none |
+| `47611` | **Animations** | 23 | none |
 
-```javascript
-// Example tag structures seen in API responses:
-"_aTags": ["character: lash", "deadlock", "skin"]
-"_aTags": ["yamato", "ult: replacement"]
-"_aTags": ["mo & krill", "sound"]
-```
+Model Replacement > NPCs has seven children of its own: Guardian `44688`, Haunts `44690`, Midboss `44686`, Patrons `45181`, Sandbox Dummy `46849`, Troopers `44687`, Walker `44458`. The deepest paths are three levels, root included (Model Replacement > NPCs > Troopers, Skins > hero > Faithful/Vanilla+).
 
-### Known Hero Tags (All 32 Heroes)
+### Skins: heroes
 
-| Hero | Tag Variations |
-| :--- | :--- |
-| **Abrams** | `abrams` |
-| **Bebop** | `bebop`, `bebop: beam` |
-| **Billy** | `billy` |
-| **Calico** | `calico` |
-| **Doorman** | `doorman`, `the doorman` |
-| **Drifter** | `drifter`, `character: drifter` |
-| **Dynamo** | `dynamo` |
-| **Grey Talon** | `grey talon`, `greytalon`, `gray talon` |
-| **Haze** | `haze` |
-| **Holliday** | `holliday` |
-| **Infernus** | `infernus` |
-| **Ivy** | `ivy`, `deadlock skin: ivy` |
-| **Kelvin** | `kelvin` |
-| **Lady Geist** | `geist`, `lady geist` |
-| **Lash** | `lash`, `character: lash` |
-| **McGinnis** | `mcginnis`, `mcginnis: 1` |
-| **Mina** | `mina` |
-| **Mirage** | `mirage` |
-| **Mo & Krill** | `mo & krill`, `mo and krill`, `mo&krill`, `hero: mo & krill` |
-| **Paige** | `paige` |
-| **Paradox** | `paradox` |
-| **Pocket** | `pocket`, `memes: pocket` |
-| **Seven** | `seven` |
-| **Shiv** | `shiv` |
-| **Sinclair** | `sinclair`, `the magnificent sinclair` |
-| **Victor** | `victor` |
-| **Vindicta** | `vindicta` |
-| **Viscous** | `viscous` |
-| **Vyper** | `vyper` |
-| **Warden** | `warden` |
-| **Wraith** | `wraith` |
-| **Yamato** | `yamato`, `yamato: ult`, `dragon install: yamato` |
+44 hero categories sit directly under Skins (`33295`). Every hero has a "Faithful/Vanilla+" child. Rat King also has `RatKing Flag` (`49852`).
 
-### Implementation: Hero Filter
+Eight heroes carry a misspelled child, **"Faithul/Vanilla+"**: Abrams, Venator, Victor, Vindicta, Vyper, Warden, Wraith, Yamato. The other 36 spell it "Faithful/Vanilla+". Match on id, never on the child's name.
 
-```javascript
-const HERO_TAGS = {
-  // All 32 Deadlock heroes
-  'abrams': 'Abrams',
-  'bebop': 'Bebop',
-  'billy': 'Billy',
-  'calico': 'Calico',
-  'doorman': 'Doorman',
-  'the doorman': 'Doorman',
-  'drifter': 'Drifter',
-  'dynamo': 'Dynamo',
-  'grey talon': 'Grey Talon',
-  'greytalon': 'Grey Talon',
-  'gray talon': 'Grey Talon',
-  'haze': 'Haze',
-  'holliday': 'Holliday',
-  'infernus': 'Infernus',
-  'ivy': 'Ivy',
-  'kelvin': 'Kelvin',
-  'geist': 'Lady Geist',
-  'lady geist': 'Lady Geist',
-  'lash': 'Lash',
-  'mcginnis': 'McGinnis',
-  'mina': 'Mina',
-  'mirage': 'Mirage',
-  'mo & krill': 'Mo & Krill',
-  'mo and krill': 'Mo & Krill',
-  'mo&krill': 'Mo & Krill',
-  'paige': 'Paige',
-  'paradox': 'Paradox',
-  'pocket': 'Pocket',
-  'seven': 'Seven',
-  'shiv': 'Shiv',
-  'sinclair': 'Sinclair',
-  'the magnificent sinclair': 'Sinclair',
-  'victor': 'Victor',
-  'vindicta': 'Vindicta',
-  'viscous': 'Viscous',
-  'vyper': 'Vyper',
-  'warden': 'Warden',
-  'wraith': 'Wraith',
-  'yamato': 'Yamato',
-};
+A submission filed in a child records the child as its category, so neither its category id nor its category name identifies the hero. Resolve the hero by walking the tree (`buildHeroByCategoryId` in `src/lib/lockerUtils.ts`, `heroCategoryStore`). Rat King's category is named `Rat King` in the current tree; `canonicalHeroName` still maps the older `RatKing` spelling.
 
-function extractHeroes(tags) {
-  const heroes = new Set();
-  for (const tag of tags) {
-    const normalized = tag.toLowerCase().replace('character: ', '').replace('hero: ', '');
-    if (HERO_TAGS[normalized]) {
-      heroes.add(HERO_TAGS[normalized]);
-    }
-  }
-  return Array.from(heroes);
-}
-```
+| Hero | Category id | Child ids |
+| :--- | ---: | :--- |
+| Abrams | `33306` | `50565` |
+| Apollo | `42673` | `50629` |
+| Baba | `49632` | `50628` |
+| Bebop | `33307` | `50627` |
+| Billy | `41491` | `50626` |
+| Calico | `41649` | `50625` |
+| Celeste | `42672` | `50624` |
+| Deadman Danny | `49630` | `50623` |
+| Doorman | `40060` | `50622` |
+| Drifter | `41492` | `50621` |
+| Dynamo | `33308` | `50620` |
+| Graves | `42674` | `50619` |
+| Grey Talon | `33310` | `50618` |
+| Haze | `33311` | `50617` |
+| Holliday | `36472` | `50616` |
+| Infernus | `33312` | `50615` |
+| Ivy | `33313` | `50614` |
+| Kelvin | `33314` | `50604` |
+| Lady Geist | `33315` | `50606` |
+| Lash | `33316` | `50603` |
+| McGinnis | `33317` | `50602` |
+| Mina | `41313` | `50601` |
+| Mirage | `33318` | `50600` |
+| Mo & Krill | `33319` | `50599` |
+| Nurse Harrow | `49633` | `50598` |
+| Paige | `39672` | `50597` |
+| Paradox | `33320` | `50596` |
+| Pocket | `33321` | `50595` |
+| Rat King | `49629` | `50594`, `49852` |
+| Rem | `42675` | `50593` |
+| Seven | `33322` | `50592` |
+| Shiv | `33323` | `50591` |
+| Silver | `42671` | `50587` |
+| Sinclair | `36529` | `50586` |
+| Solomon | `49634` | `50575` |
+| Venator | `42676` | `50574` |
+| Victor | `39980` | `50573` |
+| Vindicta | `33324` | `50572` |
+| Violet | `49631` | `50571` |
+| Viscous | `33325` | `50570` |
+| Vyper | `33330` | `50569` |
+| Warden | `33326` | `50568` |
+| Wraith | `33327` | `50567` |
+| Yamato | `33328` | `50566` |
 
 ---
 
-## API Verification
+## SoundCategory
 
-Each category ID can be verified via the Core API:
+Eleven roots. None of them is a hero; hero association for sounds comes from the title (`inferHeroFromTitle`, `nameMentionsHero`).
+
+| ID | Name | Items | Children |
+| ---: | :--- | ---: | :--- |
+| `6270` | **Abilities** | 1961 | none |
+| `6310` | **Gameplay Events** | 86 | none |
+| `5842` | **In-Game Music** | 795 | none |
+| `6309` | **Item Sounds** | 105 | none |
+| `5843` | **Killsounds** | 56 | none |
+| `5895` | **Killstreak Music** | 23 | none |
+| `6368` | **Movement** | 8 | none |
+| `5815` | **Other/Misc** | 798 | none |
+| `6308` | **Sound Packs** | 80 | none |
+| `6282` | **VOs** | 318 | none |
+| `6271` | **Weapons** | 94 | Melee Sounds `6306` |
+
+## WipCategory
+
+| ID | Name | Items |
+| ---: | :--- | ---: |
+| `3047` | **Audio** | 6 |
+| `2855` | **Maps** | 1 |
+| `2535` | **Other/Misc** | 7 |
+| `2976` | **Skins** | 82 |
+
+## ToolCategory
+
+Not cached by the app. Live on 2026-10-24: Modding `1932`, Other/Misc `1922`, both without children.
+
+---
+
+## Changes since the 2024 scan
+
+The 2024 version of this page described a flat schema and is wrong in these ways:
+
+- Skins now has hero subcategories, so there **are** hero-specific categories for Mod skins. HUD, Model Replacement and Quality of Life/Fixes also have subcategories.
+- The legacy ids `3366`, `3807`, `2114`, `2957`, `3616`, `804` and `1922` (Mod), and `5546` and `5262` (Sound), are not in the current trees. `1922` is now a ToolCategory Other/Misc and `2855` a WipCategory Maps.
+- Sound "Music" (`5842`) is now **In-Game Music**, and the Sound tree grew from Other/Misc, Music, Killsounds and Killstreak Music to eleven roots.
+- New Mod roots: Animations `47611` and Quality of Life/Fixes `46154`.
+- The roster is 44 heroes, not 32. Tag-based hero detection (`_aTags`) is not used by the app.
+
+## Verification
 
 ```http
 GET https://api.gamebanana.com/Core/Item/Data?itemtype=ModCategory&itemid=33295&fields=name,Game().name
 Response: ["Skins", "Deadlock"]
-
-GET https://api.gamebanana.com/Core/Item/Data?itemtype=SoundCategory&itemid=5815&fields=name,Game().name
-Response: ["Other/Misc", "Deadlock"]
 ```
-
----
-
-## Summary Statistics
-
-| Metric | Value |
-| :--- | ---: |
-| **Total Submissions** | 1,579 |
-| **Unique Root Categories** | 21 |
-| **ModCategory IDs** | 14 |
-| **SoundCategory IDs** | 6 |
-| **ToolCategory IDs** | 1 |
-| **Unique Tags** | 131 |
-| **Identified Heroes** | 32 |
