@@ -4,11 +4,20 @@ import {
   canonicalHeroName,
   getEffectiveGlobalType,
   skinCategoryHero,
+  skinTitleHero,
 } from './lockerUtils';
 
 export type InstalledCardTaxonomyInput = Pick<
   Mod,
-  'categoryId' | 'categoryName' | 'globalType' | 'lockerHero' | 'sourceSection'
+  | 'categoryId'
+  | 'categoryName'
+  | 'fileName'
+  | 'globalType'
+  | 'lockerCosmetics'
+  | 'lockerHero'
+  | 'lockerSounds'
+  | 'name'
+  | 'sourceSection'
 >;
 
 export interface InstalledCardTaxonomy {
@@ -32,7 +41,8 @@ function heroFromCategory(categoryName?: string): string | undefined {
  * list cards. Display size must only affect presentation, never which metadata
  * survives. The persisted Locker global classification wins over a GameBanana
  * category; otherwise a hero category becomes the hero identity, and a
- * non-hero category remains a text label.
+ * non-hero category remains a text label. A skin filed under a category that
+ * names no hero gets one from its title, as the Locker does.
  */
 export function getInstalledCardTaxonomy(
   mod: InstalledCardTaxonomyInput,
@@ -43,7 +53,7 @@ export function getInstalledCardTaxonomy(
   const categoryHero = globalType ? undefined : heroFromCategory(mod.categoryName);
   // A hero subcategory (Faithful/Vanilla+) gets the hero and keeps its label.
   const subcategoryHero = globalType ? undefined : skinCategoryHero(mod, heroByCategoryId);
-  const heroName = explicitHero ?? categoryHero ?? subcategoryHero;
+  const heroName = explicitHero ?? categoryHero ?? subcategoryHero ?? skinTitleHero(mod, heroByCategoryId);
   const categoryLabel = !globalType && !categoryHero
     ? mod.categoryName?.trim() || undefined
     : undefined;

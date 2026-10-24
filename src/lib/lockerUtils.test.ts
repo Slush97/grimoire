@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -129,6 +129,26 @@ describe('groupModsByCategory', () => {
     const grouped = groupModsByCategory([skin], heroes);
     expect(grouped.map.size).toBe(0);
     expect(grouped.unassigned).toEqual([skin]);
+  });
+});
+
+describe('isLockerManagedSound', () => {
+  const sound = (categoryName: string, over: Partial<Mod> = {}) =>
+    mod({ id: 'snd', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Sound', categoryName, ...over });
+
+  it.each(['Killsounds', 'In-Game Music', 'Gameplay Events', 'Item Sounds', 'Sound Packs', 'Movement'])(
+    'keeps %s off the per-hero axis',
+    (categoryName) => {
+      expect(isLockerManagedSound(sound(categoryName))).toBe(false);
+    }
+  );
+
+  it.each(['Abilities', 'VOs', 'Weapons', 'Other/Misc'])('keeps %s assignable to a hero', (categoryName) => {
+    expect(isLockerManagedSound(sound(categoryName))).toBe(true);
+  });
+
+  it('keeps a hero-tagged sound whatever its category', () => {
+    expect(isLockerManagedSound(sound('Item Sounds', { lockerHero: 'Seven' }))).toBe(true);
   });
 });
 

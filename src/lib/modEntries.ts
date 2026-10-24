@@ -1,5 +1,5 @@
 import type { Mod, GlobalModType } from '../types/mod';
-import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero } from './lockerUtils';
+import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero, skinTitleHero } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { heroNameForLabel } from './heroNames';
@@ -201,7 +201,7 @@ function modHeroName(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): 
     const inferred = inferHeroFromTitle(mod.name);
     return inferred ? canonicalHeroName(inferred) : null;
   }
-  return null;
+  return skinTitleHero(mod, heroByCategoryId) ?? null;
 }
 
 export function entryHeroNames(entry: ModEntry, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
