@@ -72,7 +72,7 @@ import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, findCategoryByName } from '../lib/lockerUtils';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
-import { mergeSourceFileIds } from '../lib/updateCheck';
+import { mergeSourceInstalls } from '../lib/updateCheck';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { showToast } from '../stores/toastStore';
 import { useCursorPackStore } from '../stores/cursorPackStore';
@@ -391,7 +391,7 @@ export default function Browse() {
   // Absorbed merge sources and Locker artifacts are not installs of their own:
   // update state and replacements run over the same visible set as Installed.
   const visibleMods = useMemo(() => visibleInstalledMods(installedMods), [installedMods]);
-  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
+  const mergedInstalls = useMemo(() => mergeSourceInstalls(visibleMods), [visibleMods]);
   const soundVolume = useAppStore((s) => s.soundVolume);
   const setSoundVolume = useAppStore((s) => s.setSoundVolume);
   const browseUi = useAppStore((s) => s.browseUi);
@@ -1842,7 +1842,7 @@ export default function Browse() {
       selectedMod?.id ?? -1,
       selectedMod?.files ?? [],
       visibleMods,
-      mergedFileIds,
+      mergedInstalls,
       settings?.autoMatchRemainingFiles ?? true,
     );
     const summary = summarizeUpdateScope(classification);
@@ -1853,7 +1853,7 @@ export default function Browse() {
       updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, visibleMods),
     };
-  }, [selectedMod, visibleMods, mergedFileIds, settings?.autoMatchRemainingFiles]);
+  }, [selectedMod, visibleMods, mergedInstalls, settings?.autoMatchRemainingFiles]);
 
   // Stable identity (useStableCallback) so the memoized ModDetailsModal does
   // not re-render every time this large component does (e.g. on every

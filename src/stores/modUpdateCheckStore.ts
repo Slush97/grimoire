@@ -9,6 +9,7 @@ import { useAppStore } from './appStore';
 export const useModUpdateCheckStore = create<UpdateFlags>(() => ({
   updatesAvailable: new Set(),
   staleMergeSources: new Map(),
+  updatableMergeSources: new Map(),
 }));
 
 /** One app-wide checker; page subscriptions only read its results. */

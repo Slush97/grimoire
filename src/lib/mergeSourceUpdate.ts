@@ -1,5 +1,11 @@
 import type { MergedModSource } from '../types/mod';
-import { classifyModFiles, type FileUpdateState, type UpdateFileRow } from './updateFileMatch';
+import {
+  classifyModFiles,
+  isDownloadableUpdate,
+  type FileUpdateState,
+  type InstalledUpdateEntry,
+  type UpdateFileRow,
+} from './updateFileMatch';
 
 /** Merge sources that can be swapped for a specific current GameBanana file. */
 export interface ResolvedMergeSourceUpdate {
@@ -64,31 +70,42 @@ export interface MergeSourceUpdateOutcome {
  * over the FULL file list, archived rows included, because the archived row
  * for the retired file is the best source of its old name and description.
  * Name/description matches and the optional remaining-file fallback resolve.
- * Anything else becomes `unresolved`. Each successor is claimed by at most one
- * stale file, and sources from one file share a single replacement download.
+ * Anything else becomes `unresolved`, including a successor the merge already
+ * holds (nothing to download). Each successor is claimed by at most one stale
+ * file, and sources from one file share a single replacement download.
  *
- * @param staleSources merge sources whose recorded file id is no longer live
+ * Every source of the merge is classified, and every other install of the same
+ * mods competes with them, exactly as in the update check. Only the stale
+ * sources are acted on. Leaving the rest out would let the remaining-file
+ * fallback pair a deleted source with an unrelated upload that another install
+ * is already competing for.
+ *
+ * @param sources every source of the merge
+ * @param staleFileNames fileNames of the sources the update check flagged
  * @param filesByModId full file lists keyed by GameBanana mod id, archived
  *  entries included. A missing key means the fetch failed.
- * @param alreadyClaimedFileIds file ids spoken for outside this plan (e.g.
- *  already installed as a standalone mod), so they are never re-downloaded
+ * @param otherInstalls every install outside this merge (standalone mods and
+ *  the sources of other merges): they compete for uploads and are never
+ *  re-downloaded
  */
 export function planMergeSourceUpdates(
-  staleSources: readonly MergedModSource[],
+  sources: readonly MergedModSource[],
+  staleFileNames: ReadonlySet<string>,
   filesByModId: ReadonlyMap<number, readonly UpdateFileRow[]>,
-  alreadyClaimedFileIds?: ReadonlySet<number>,
+  otherInstalls: readonly InstalledUpdateEntry[] = [],
   autoMatchRemainingFiles = false,
 ): MergeSourceUpdatePlan {
   const resolvedByFileId = new Map<number, ResolvedMergeSourceUpdate>();
   const unresolved: UnresolvedMergeSource[] = [];
   const statesByModId = new Map<number, Map<number, FileUpdateState>>();
-  const entries = staleSources.map((source) => ({
+  const entries = sources.map((source) => ({
     id: source.fileName,
     gameBananaId: source.gameBananaId,
     gameBananaFileId: source.gameBananaFileId,
   }));
 
-  for (const source of staleSources) {
+  for (const source of sources) {
+    if (!staleFileNames.has(source.fileName)) continue;
     const gameBananaId = source.gameBananaId;
     const installedFileId = source.gameBananaFileId;
     if (typeof gameBananaId !== 'number' || typeof installedFileId !== 'number' || installedFileId <= 0) {
@@ -104,11 +121,11 @@ export function planMergeSourceUpdates(
 
     let states = statesByModId.get(gameBananaId);
     if (!states) {
-      states = classifyModFiles(gameBananaId, files, entries, alreadyClaimedFileIds, autoMatchRemainingFiles).states;
+      states = classifyModFiles(gameBananaId, files, entries, otherInstalls, autoMatchRemainingFiles).states;
       statesByModId.set(gameBananaId, states);
     }
     const state = states.get(installedFileId);
-    if (state?.kind !== 'update') {
+    if (!isDownloadableUpdate(state)) {
       unresolved.push({ source, reason: 'no-match' });
       continue;
     }

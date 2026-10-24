@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { computeUpdateFlags, type UpdateCheckMod } from './updateCheck';
-import type { UpdateFileRow } from './updateFileMatch';
+import { computeUpdateFlags, mergeSourceInstalls, type UpdateCheckMod } from './updateCheck';
+import { summarizeUpdateScope } from './updateActions';
+import { classifyModFiles, type UpdateFileRow } from './updateFileMatch';
 import type { MergedModSource } from '../types/mod';
 import snapshot from './__fixtures__/gamebanana/files-2026-10-02.json';
 
@@ -96,6 +97,18 @@ describe('computeUpdateFlags', () => {
     );
   });
 
+  it('reports only the stale merge sources that have a file to download as updatable', () => {
+    const merged = mergedMod([
+      mergeSource('top_bar_dir.vpk', TOP_BAR, 1769092),
+      mergeSource('main_dir.vpk', QOL, 1832204),
+    ]);
+
+    // main_dir.vpk needs a manual pick, so it is flagged but cannot be updated.
+    expect(computeUpdateFlags([merged], rows).updatableMergeSources).toEqual(
+      new Map([['merged', new Set(['top_bar_dir.vpk'])]]),
+    );
+  });
+
   it('does not report a merge source whose successor is installed standalone', () => {
     const merged = mergedMod([mergeSource('top_bar_dir.vpk', TOP_BAR, 1769092)]);
     const standaloneV5 = mod('v5', TOP_BAR, 1834013);
@@ -114,6 +127,44 @@ describe('computeUpdateFlags', () => {
     ];
 
     expect(computeUpdateFlags(mods, rows).updatesAvailable.has('v40d')).toBe(false);
+  });
+
+  it('does not hand one upload to both a merged source and a standalone install', () => {
+    // Author archived `red` and deleted `blue`; the only current upload is unrelated.
+    // `red` lives in a merge and `blue` is installed on its own. Each looks like the
+    // single unmatched install of the mod when classified apart.
+    const files: UpdateFileRow[] = [
+      { id: 1, fileName: 'skin_red.zip', isArchived: true },
+      { id: 3, fileName: 'voicelines_pack.zip', isArchived: false },
+    ];
+    const rows = new Map([[QOL, files]]);
+    const merged = mergedMod([mergeSource('red_dir.vpk', QOL, 1)]);
+    const blue = mod('blue', QOL, 2);
+    const mods = [merged, blue];
+
+    for (const autoMatch of [true, false]) {
+      const flags = computeUpdateFlags(mods, rows, autoMatch);
+      expect(flags.updatableMergeSources.size).toBe(0);
+      expect(flags.staleMergeSources.size).toBe(0);
+      const standalone = classifyModFiles(QOL, files, [blue], mergeSourceInstalls(mods), autoMatch);
+      expect(standalone.states.get(2)).toEqual({ kind: 'needs-pick' });
+      expect(summarizeUpdateScope(standalone).targets.size).toBe(0);
+    }
+    // On its own the deleted install is paired with the sole upload.
+    const alone = classifyModFiles(QOL, files, [blue], [], true);
+    expect(summarizeUpdateScope(alone).targets.has(3)).toBe(true);
+  });
+
+  it('does not let a merge with updates turned off compete for an upload', () => {
+    const files: UpdateFileRow[] = [
+      { id: 1, fileName: 'skin_red.zip', isArchived: true },
+      { id: 3, fileName: 'voicelines_pack.zip', isArchived: false },
+    ];
+    const mods = [mergedMod([mergeSource('red_dir.vpk', QOL, 1)], { ignoreUpdates: true }), mod('blue', QOL, 2)];
+
+    expect(computeUpdateFlags(mods, new Map([[QOL, files]]), true).updatesAvailable).toEqual(new Set(['blue']));
+    const standalone = classifyModFiles(QOL, files, [mods[1]], mergeSourceInstalls(mods), true);
+    expect(summarizeUpdateScope(standalone).targets.has(3)).toBe(true);
   });
 
   it('honours ignoreUpdates on a merged mod', () => {
