@@ -1,7 +1,8 @@
-import { promises as fs, existsSync } from 'fs';
-import { join, basename, dirname } from 'path';
+import { promises as fs, existsSync, realpathSync } from 'fs';
+import { join, basename, dirname, win32 } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
+import { z } from 'zod';
 import { inspectVpkSafety, isModSafetyTrusted, moveSafetySnapshot } from './modSafety';
 import { moveVdataSnapshot } from './vdataCheck';
 import { assertActiveModsSafety, moveToDisabledLibrary } from './modSafetyAudit';
@@ -18,7 +19,7 @@ import {
     metaKeyFor,
     PRIORITY_FOLDER_NAME,
 } from './deadlock';
-import { loadSettings } from './settings';
+import { getActiveDeadlockPath, loadSettings } from './settings';
 import { writeLaunchOptions, readLaunchOptions, isSteamRunning, resolveLaunchOptionsWrite } from './launchOptions';
 import { findBottleForPath } from './steamRoots';
 import { launchAppInBottle } from './bottleLaunch';
@@ -143,23 +144,90 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Check whether Deadlock is currently running. On Linux/Proton the kernel
- * comm name is truncated to 15 chars and Proton renames its main thread, so
- * exact-comm matching (pgrep -x) misses the game. Match against the full
- * cmdline (pgrep -f) instead, which finds both the game and its Proton
- * wrapper chain.
- */
-export async function isDeadlockRunning(): Promise<boolean> {
+const windowsProcessSchema = z.array(z.object({
+    ProcessId: z.number().int().positive().safe(),
+    ExecutablePath: z.string().nullable(),
+}));
+
+function canonicalWindowsPath(path: string): string {
     try {
-        if (process.platform === 'win32') {
-            const result = await runCommand('tasklist.exe', [
-                '/FI',
-                `IMAGENAME eq ${DEADLOCK_PROCESS_NAME}`,
-                '/NH',
-            ]);
-            return /deadlock\.exe/i.test(result.stdout);
+        return realpathSync.native(path).toLowerCase();
+    } catch {
+        return win32.resolve(path).toLowerCase();
+    }
+}
+
+// A live PID never changes its image path, so each deadlock.exe costs one
+// PowerShell query for as long as tasklist keeps listing it.
+const windowsExePaths = new Map<number, string>();
+
+async function queryWindowsExePaths(pids: number[]): Promise<void> {
+    const filter = `Name = '${DEADLOCK_PROCESS_NAME}' AND (${pids.map((pid) => `ProcessId = ${pid}`).join(' OR ')})`;
+    const result = await runCommand('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " +
+        "$ErrorActionPreference = 'Stop'; " +
+        `ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Filter "${filter}" | ` +
+        'Select-Object ProcessId, ExecutablePath)',
+    ]);
+    if (result.code !== 0) throw new Error(result.stderr || 'Could not inspect Deadlock processes.');
+    const processes = windowsProcessSchema.parse(JSON.parse(result.stdout.replace(/^\uFEFF/, '')));
+    for (const proc of processes) {
+        if (proc.ExecutablePath) windowsExePaths.set(proc.ProcessId, canonicalWindowsPath(proc.ExecutablePath));
+    }
+}
+
+interface WindowsDeadlockProcesses {
+    /** Every deadlock.exe, including CSDK's. */
+    listed: number[];
+    /** The ones running from the configured install, or null when their paths couldn't be read. */
+    game: number[] | null;
+}
+
+async function inspectWindowsDeadlock(): Promise<WindowsDeadlockProcesses> {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) return { listed: [], game: [] };
+
+    // Cheap name check first so an idle poll never starts PowerShell.
+    const names = await runCommand('tasklist.exe', ['/FI', `IMAGENAME eq ${DEADLOCK_PROCESS_NAME}`, '/FO', 'CSV', '/NH']);
+    if (names.code !== 0) throw new Error(names.stderr || 'Could not list Deadlock processes.');
+    const listed = [...names.stdout.matchAll(/^"deadlock\.exe","(\d+)"/gim)].map((match) => Number(match[1]));
+    for (const pid of windowsExePaths.keys()) {
+        if (!listed.includes(pid)) windowsExePaths.delete(pid);
+    }
+
+    // CSDK launches a different deadlock.exe, so a same-named process is only
+    // the game once its path matches the configured install.
+    const unclassified = listed.filter((pid) => !windowsExePaths.has(pid));
+    if (unclassified.length > 0) {
+        try {
+            await queryWindowsExePaths(unclassified);
+        } catch {
+            return { listed, game: null };
         }
+    }
+    const expectedPath = canonicalWindowsPath(win32.join(deadlockPath, 'game', 'bin', 'win64', DEADLOCK_PROCESS_NAME));
+    return { listed, game: listed.filter((pid) => windowsExePaths.get(pid) === expectedPath) };
+}
+
+/**
+ * Check whether Deadlock is running, or null when that can't be read. On
+ * Linux/Proton the kernel comm name is truncated to 15 chars and Proton
+ * renames its main thread, so exact-comm matching (pgrep -x) misses the game.
+ * Match against the full cmdline (pgrep -f) instead, which finds both the game
+ * and its Proton wrapper chain.
+ */
+async function probeDeadlockRunning(): Promise<boolean | null> {
+    if (process.platform === 'win32') {
+        try {
+            const { listed, game } = await inspectWindowsDeadlock();
+            // With paths unreadable (PowerShell or WMI blocked, timeout) match by
+            // image name alone: a CSDK false positive beats losing the game.
+            return (game ?? listed).length > 0;
+        } catch {
+            return null;
+        }
+    }
+    try {
         // macOS behaves like Linux here: the game runs as a Windows process
         // under a translation layer (Wine/CrossOver rather than Proton), so the
         // host only ever sees it via the full cmdline.
@@ -171,6 +239,10 @@ export async function isDeadlockRunning(): Promise<boolean> {
         return false;
     }
     return false;
+}
+
+export async function isDeadlockRunning(): Promise<boolean> {
+    return (await probeDeadlockRunning()) ?? false;
 }
 
 export interface StopDeadlockResult {
@@ -186,13 +258,14 @@ interface CommandResult {
 
 function runCommand(command: string, args: string[]): Promise<CommandResult> {
     return new Promise<CommandResult>((resolve, reject) => {
-        const proc = spawn(command, args, { windowsHide: true });
+        const proc = spawn(command, args, { windowsHide: true, timeout: 10_000 });
         let stdout = '';
         let stderr = '';
         proc.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
         proc.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
+        // A null code means a signal killed it (the timeout); never read that as success.
         proc.on('close', (code) => {
-            resolve({ code: code ?? 0, stdout, stderr });
+            resolve({ code: code ?? -1, stdout, stderr });
         });
         proc.on('error', reject);
     });
@@ -200,12 +273,21 @@ function runCommand(command: string, args: string[]): Promise<CommandResult> {
 
 async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
     if (process.platform === 'win32') {
-        return runCommand(
-            'taskkill.exe',
-            force
-                ? ['/F', '/IM', DEADLOCK_PROCESS_NAME, '/T']
-                : ['/IM', DEADLOCK_PROCESS_NAME, '/T']
-        );
+        let pids: number[] | null;
+        try {
+            pids = (await inspectWindowsDeadlock()).game;
+        } catch {
+            pids = null;
+        }
+        if (!pids) {
+            return { code: 1, stdout: '', stderr: 'Could not tell which Deadlock process is the game, so nothing was stopped.' };
+        }
+        if (pids.length === 0) return { code: 0, stdout: '', stderr: '' };
+        return runCommand('taskkill.exe', [
+            ...(force ? ['/F'] : []),
+            ...pids.flatMap((pid) => ['/PID', String(pid)]),
+            '/T',
+        ]);
     }
     if (process.platform === 'linux' || process.platform === 'darwin') {
         return runCommand('pkill', [force ? '-KILL' : '-TERM', '-f', DEADLOCK_PROCESS_NAME]);
@@ -221,19 +303,19 @@ export async function stopDeadlockGame(): Promise<StopDeadlockResult> {
 
     const result = await requestDeadlockStop(false);
     await sleep(750);
-    if (!(await isDeadlockRunning())) {
+    if ((await probeDeadlockRunning()) === false) {
         return { wasRunning: true, stopped: true };
     }
 
     const forceResult = await requestDeadlockStop(true);
-    if (forceResult.code !== 0 && await isDeadlockRunning()) {
+    if (forceResult.code !== 0 && (await probeDeadlockRunning()) !== false) {
         throw new Error(
             (forceResult.stderr || forceResult.stdout || result.stderr || result.stdout || 'Could not stop Deadlock.').trim()
         );
     }
 
     await sleep(750);
-    return { wasRunning: true, stopped: !(await isDeadlockRunning()) };
+    return { wasRunning: true, stopped: (await probeDeadlockRunning()) === false };
 }
 
 /**

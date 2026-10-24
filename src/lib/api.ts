@@ -1249,7 +1249,8 @@ export async function getProfiles(): Promise<Profile[]> {
 }
 
 export async function createProfile(name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
-  return window.electronAPI.createProfile(name, crosshairSettings);
+  const { useAppStore } = await import('../stores/appStore');
+  return window.electronAPI.createProfile(name, crosshairSettings, useAppStore.getState().captureProfileShuffle());
 }
 
 export async function createProfileFromGameBananaIds(
@@ -1260,11 +1261,15 @@ export async function createProfileFromGameBananaIds(
 }
 
 export async function updateProfile(profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
-  return window.electronAPI.updateProfile(profileId, crosshairSettings);
+  const { useAppStore } = await import('../stores/appStore');
+  return window.electronAPI.updateProfile(profileId, crosshairSettings, useAppStore.getState().captureProfileShuffle());
 }
 
 export async function applyProfile(profileId: string): Promise<ApplyProfileResult> {
-  return withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
+  const result = await withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
+  const { useAppStore } = await import('../stores/appStore');
+  useAppStore.getState().restoreProfileShuffle(result.profile.shuffle);
+  return result;
 }
 
 export async function deleteProfile(profileId: string): Promise<void> {

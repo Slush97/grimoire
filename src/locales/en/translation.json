@@ -1834,7 +1834,20 @@
       "inPool": "In shuffle",
       "variantChoiceFor": "Choose the shuffle variant for {{name}}",
       "defaultVariant": "Keep current files",
-      "anyVariant": "Any variant"
+      "anyVariant": "Any variant",
+      "pool": {
+        "open": "Shuffle pool ({{count}})",
+        "title": "Shuffle pool",
+        "profileHint": "Create or update a mod profile to save this pool, the launch switch, and variant choices. Apply that profile to restore them.",
+        "search": "Search shuffle pool",
+        "empty": "Your shuffle pool is empty. Use the shuffle button on a mod to add it.",
+        "noMatch": "No mods match your search.",
+        "unavailable": "Unavailable mod",
+        "missing": "This mod is no longer installed.",
+        "randomVariant": "Random variant",
+        "pinnedVariant": "Selected variant",
+        "currentVariant": "Keep loaded variants"
+      }
     },
     "modImage": {
       "set": "Set Locker image for {{name}}",
