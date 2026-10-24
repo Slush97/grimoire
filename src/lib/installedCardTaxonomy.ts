@@ -3,11 +3,12 @@ import {
   HERO_NAMES,
   canonicalHeroName,
   getEffectiveGlobalType,
+  skinCategoryHero,
 } from './lockerUtils';
 
 export type InstalledCardTaxonomyInput = Pick<
   Mod,
-  'categoryName' | 'globalType' | 'lockerHero' | 'sourceSection'
+  'categoryId' | 'categoryName' | 'globalType' | 'lockerHero' | 'sourceSection'
 >;
 
 export interface InstalledCardTaxonomy {
@@ -35,11 +36,14 @@ function heroFromCategory(categoryName?: string): string | undefined {
  */
 export function getInstalledCardTaxonomy(
   mod: InstalledCardTaxonomyInput,
+  heroByCategoryId?: ReadonlyMap<number, string>,
 ): InstalledCardTaxonomy {
   const globalType = getEffectiveGlobalType(mod);
   const explicitHero = canonicalHeroName(mod.lockerHero) || undefined;
   const categoryHero = globalType ? undefined : heroFromCategory(mod.categoryName);
-  const heroName = explicitHero ?? categoryHero;
+  // A hero subcategory (Faithful/Vanilla+) gets the hero and keeps its label.
+  const subcategoryHero = globalType ? undefined : skinCategoryHero(mod, heroByCategoryId);
+  const heroName = explicitHero ?? categoryHero ?? subcategoryHero;
   const categoryLabel = !globalType && !categoryHero
     ? mod.categoryName?.trim() || undefined
     : undefined;

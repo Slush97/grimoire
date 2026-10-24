@@ -7,7 +7,7 @@ import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { showToast } from './toastStore';
-import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey, type HeroCategory } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
@@ -1066,7 +1066,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   runLaunchShuffle: async (): Promise<{ failures: number }> => {
     const { shuffleOnLaunch, shuffleIncluded } = get();
     if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
-    let heroList: { id: number; name: string }[] = [];
+    let heroList: HeroCategory[] = [];
     try {
       heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
     } catch {

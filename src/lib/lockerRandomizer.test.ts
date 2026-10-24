@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { GlobalModType, Mod } from '../types/mod';
+import { buildHeroList } from './lockerUtils';
 import {
   planRandomization,
   planLaunchShuffle,
@@ -40,6 +41,25 @@ const sequenceRng = (...values: number[]) => {
   let index = 0;
   return () => values[Math.min(index++, values.length - 1)] ?? 0;
 };
+
+it('shuffles direct and descendant skin categories together under their hero', () => {
+  const heroList = buildHeroList([{
+    id: 33295, name: 'Skins', itemCount: 0,
+    children: [{ id: 33325, name: 'Viscous', itemCount: 0,
+      children: [{ id: 50570, name: 'Faithful/Vanilla+', itemCount: 0 }],
+    }],
+  }]);
+  const direct = mod({ id: 'direct', sourceSection: 'Mod', categoryId: 33325, enabled: true });
+  const child = mod({ id: 'child', sourceSection: 'Mod', categoryId: 50570 });
+  const plan = planLaunchShuffle({
+    mods: [direct, child], heroList,
+    included: new Set([shufflePoolKey(direct), shufflePoolKey(child)]),
+    rng: fixedRng(0.99),
+  });
+  expect(plan.enableIds).toEqual(['child']);
+  expect(plan.disableIds).toEqual(['direct']);
+  expect(plan.changedHeroes).toEqual([33325]);
+});
 
 describe('shuffleSkinKey', () => {
   it('prefers gameBananaId, then sha256, then mod id', () => {

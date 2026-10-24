@@ -1,5 +1,5 @@
 import type { Mod, GlobalModType } from '../types/mod';
-import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from './lockerUtils';
+import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { heroNameForLabel } from './heroNames';
@@ -191,10 +191,10 @@ function heroNameFromTag(label?: string): string | null {
   return null;
 }
 
-function modHeroName(mod: Mod): string | null {
+function modHeroName(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): string | null {
   const tagged = canonicalHeroName(mod.lockerHero);
   if (tagged) return tagged;
-  const categoryHero = heroNameFromTag(mod.categoryName);
+  const categoryHero = heroNameFromTag(mod.categoryName) ?? skinCategoryHero(mod, heroByCategoryId);
   if (categoryHero) return categoryHero;
   const section = (mod.sourceSection ?? '').toLowerCase();
   if (section.includes('sound')) {
@@ -204,9 +204,11 @@ function modHeroName(mod: Mod): string | null {
   return null;
 }
 
-export function entryHeroNames(entry: ModEntry): string[] {
+export function entryHeroNames(entry: ModEntry, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
   const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
-  return Array.from(new Set(mods.map(modHeroName).filter((name): name is string => !!name)));
+  return Array.from(new Set(
+    mods.map((mod) => modHeroName(mod, heroByCategoryId)).filter((name): name is string => !!name)
+  ));
 }
 
 export function tagKeyLabel(key: string): string {
