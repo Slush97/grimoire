@@ -108,6 +108,7 @@ import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
 import { entryCardShell } from '../components/installed/entryCardShell';
+import { useInstalledScrollActivity } from '../components/installed/useInstalledScrollActivity';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -1327,6 +1328,7 @@ export default function Installed() {
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   useElasticOverscroll(installedScrollRef);
+  useInstalledScrollActivity(installedScrollRef);
   const latestInstalledScrollTopRef = useRef(
     installedPageScrollTop || useAppStore.getState().installedScrollTop
   );

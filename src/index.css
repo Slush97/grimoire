@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Installed hover decorates cards only while their scroller is at rest. */
+@custom-variant installed-hover {
+  @media (hover: hover) {
+    &:hover:not(:where(.installed-is-scrolling *)) {
+      @slot;
+    }
+  }
+}
+
 /* Z-index scale. New surfaces pick from this ladder instead of inventing
    values (no more z-[9999]):
      z-30  page-level overlays inside the content area (Locker hero/global panels)
@@ -1639,7 +1648,7 @@ body {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.premium-glass-card:hover {
+.premium-glass-card:hover:not(:where(.installed-is-scrolling *)) {
   background: linear-gradient(
     135deg,
     rgba(25, 25, 25, 0.55) 0%,
@@ -1660,7 +1669,7 @@ body {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.premium-card-glow:hover {
+.premium-card-glow:hover:not(:where(.installed-is-scrolling *)) {
   /* No scale() here either, see .premium-glass-card:hover. */
   transform: translateY(-3px);
   box-shadow:
@@ -1668,7 +1677,7 @@ body {
 }
 
 /* Accent Glow for Enabled cards */
-.premium-card-glow-active:hover {
+.premium-card-glow-active:hover:not(:where(.installed-is-scrolling *)) {
   box-shadow: 
     0 0 25px color-mix(in srgb, var(--color-accent) 12%, transparent),
     0 12px 30px rgba(0, 0, 0, 0.55);
@@ -1676,11 +1685,38 @@ body {
 }
 
 /* Warning Glow for Conflict cards */
-.premium-card-glow-warning:hover {
+.premium-card-glow-warning:hover:not(:where(.installed-is-scrolling *)) {
   box-shadow: 
     0 0 25px rgba(250, 204, 21, 0.12),
     0 12px 30px rgba(0, 0, 0, 0.55);
   border-color: rgba(250, 204, 21, 0.45);
+}
+
+.installed-entry-shell {
+  content-visibility: auto;
+}
+
+.installed-entry-shell-grid:hover:not(:where(.installed-is-scrolling *)) {
+  content-visibility: visible;
+  z-index: 10;
+}
+
+/* Menu content is portaled, so inspect the trigger's open state on the card. */
+.installed-entry-shell:focus-within,
+.installed-entry-shell:has([data-state='open']) {
+  content-visibility: visible;
+  z-index: 20;
+}
+
+/* Stop the return from hover immediately; keep state opacity and image reveals. */
+.installed-is-scrolling .installed-card {
+  transition-property: opacity;
+}
+
+.installed-is-scrolling .installed-card-media-zoom,
+.installed-is-scrolling .installed-card-media-overlay,
+.installed-is-scrolling .installed-card-hover-action {
+  transition-property: none;
 }
 
 /* Glassmorphic Overlay Badges */

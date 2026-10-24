@@ -232,7 +232,7 @@ function ModMediaPreview({
       hideNsfw={hideNsfwPreviews}
       className="w-full h-full"
       enableImageContextMenu={false}
-      imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      imageClassName="installed-card-media-zoom origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
       forgeInstalled={!!mod.forgeInstall}
     />
@@ -242,7 +242,7 @@ function ModMediaPreview({
       src={soundHeroRenderUrl}
       alt={soundHeroName ?? mod.name}
       draggable={false}
-      className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      className="installed-card-media-zoom block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
       style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
     />
   ) : (
@@ -269,7 +269,7 @@ function ModMediaPreview({
       >
         <div className={`h-full w-full ${mediaDisabledClass}`}>{image}</div>
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/20" />
         )}
       </button>
       {overlayBadges}
@@ -297,7 +297,7 @@ function ModMediaPreview({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-bg-primary/80 via-bg-primary/25 to-transparent" />
         )}
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/15" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/15" />
         )}
       </button>
       {overlayBadges}
@@ -648,7 +648,7 @@ function ModListRowContent({
             src={listHeroRenderUrl}
             alt={listHeroName ?? mod.name}
             draggable={false}
-            className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            className="installed-card-media-zoom block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
             style={{ objectPosition: `${listHeroFacePosX}% 25%` }}
           />
         ) : isSound && !mod.thumbnailUrl ? (
@@ -661,7 +661,7 @@ function ModListRowContent({
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
             enableImageContextMenu={false}
-            imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            imageClassName="installed-card-media-zoom origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
             forgeInstalled={!!mod.forgeInstall}
             width={56}
@@ -669,7 +669,7 @@ function ModListRowContent({
           />
         )}
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/20" />
         )}
       </button>
 
@@ -959,8 +959,8 @@ export function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-bg-tertiary border-hl/[0.08] hover:border-hl/[0.14] hover:bg-bg-secondary'
-      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 hover:border-hl/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-hl/[0.08] installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary installed-hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
@@ -1006,7 +1006,7 @@ export function ModCard({
   // is a mis-click straight into a real action (delete, or a persisted
   // favorite). pointer-events does not gate keyboard focus, so tab-then-Enter
   // still reaches the button, and the focus: pair keeps it visible once there.
-  const hoverRevealClasses = 'opacity-0 pointer-events-none group-hover/card:opacity-90 group-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
+  const hoverRevealClasses = 'installed-card-hover-action opacity-0 pointer-events-none group-installed-hover/card:opacity-90 group-installed-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
   const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
   // A set star stays permanently visible in both sections, so there is always an
   // affordance to unpin. An unset star is hover-only like its delete / overflow
@@ -1379,7 +1379,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {(selectMode || selectionPreview) && (
