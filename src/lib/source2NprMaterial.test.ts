@@ -116,31 +116,20 @@ describe('NPR_FRAGMENT vertex colors', () => {
 });
 
 describe('Preview diffuse lighting bands', () => {
-  const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
-  const light = patch.value.match(/float nprLightLum = ([^;]+);/)![1];
-  const quantized = patch.value.match(/float nprDirectQ = ([^;]+);/)![1];
-  const scale = patch.value.match(/nprDirectLum > 1e-4 \? ([^\n]+) : 1.0/)![1];
-  const evaluate = new Function('nprDirectLum', 'nprAlbedoLum', 'max', 'clamp', 'celQuantize', `
-    const uBands = 4, uStepSharpness = 0.08;
-    const nprLightLum = ${light};
-    const nprDirectQ = ${quantized};
-    return nprDirectLum > 1e-4 ? ${scale} : 1;
-  `);
-  const factor = (albedo: number, illumination: number) => evaluate(
-    albedo * illumination, albedo, Math.max,
-    (value: number, low: number, high: number) => Math.min(high, Math.max(low, value)),
-    (value: number, bands: number) => Math.round(value * bands) / bands,
-  ) as number;
-
-  it('gives dark and pale diffuse surfaces the same band under equal lighting', () => {
-    expect(factor(0.02, 0.22)).toBeCloseTo(factor(0.8, 0.22));
-    expect(factor(0.02, 0.22)).toBeCloseTo(0.25 / 0.22);
+  it('shapes the shadowed key contribution before accumulation and retains the fill', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <lights_fragment_begin>'] as { value: string };
+    expect(patch.value).toContain('vec3 nprBefore = reflectedLight.directDiffuse;');
+    expect(patch.value).toContain('dot(directLight.direction, nprKey) > 0.99');
+    expect(patch.value).toContain('nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4)');
+    expect(patch.value).not.toContain('reflectedLight.directSpecular =');
+    expect(patch.value).not.toContain('nprAlbedoLum');
   });
 
-  it('keeps black and unlit surfaces finite without adding diffuse light', () => {
-    expect(factor(0, 0.22)).toBe(1);
-    expect(factor(0.8, 0)).toBe(1);
-    expect(factor(1e-8, 0.22)).toBe(1);
+  it('scales the direct and ambient shaping by the NPR strength', () => {
+    const begin = NPR_PATCH_MAP['*']['#include <lights_fragment_begin>'] as { value: string };
+    const end = NPR_PATCH_MAP['*']['#include <lights_fragment_end>'] as { value: string };
+    expect(begin.value).toContain('mix(1.0, nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4), uNprStrength)');
+    expect(end.value).toContain('mix(vec3(1.0), ambient / max(rawAmbient, vec3(1e-5)), uNprStrength)');
   });
 });
 
@@ -668,16 +657,16 @@ describe('NPR rim mask (F8)', () => {
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('nprMask.g : uRimMaskDefault');
-      expect(patch).toContain('nprRimTint * nprRim');
+    expect(patch).toContain('nprRimTint * nprRim');
   });
 
-    it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
+  it('keeps transmitted scene color out of cel and uses lit surface color for the independent glass rim', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
     expect(patch).toContain('#ifdef USE_TRANSMISSION');
     expect(patch).toContain('1.0 - clamp(material.transmission, 0.0, 1.0)');
     expect(patch).toContain('mix(nprLit, nprLit *');
-      expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
-      expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
+    expect(patch).not.toContain('uRimStrength * nprSurfaceWeight');
+    expect(patch).toContain('reflectedLight.directDiffuse + reflectedLight.indirectDiffuse');
   });
 });
 
