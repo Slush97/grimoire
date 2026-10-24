@@ -33,7 +33,7 @@ import {
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { browseRemoteFilters } from '../lib/browseFilters';
-import { categorySubtreeIds } from '../lib/heroFilter';
+import { categorySubtreeIds, subcategorySubtreeIds } from '../lib/heroFilter';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
@@ -797,6 +797,15 @@ export default function Browse() {
   const effectiveCategoryName =
     effectiveCategoryId === undefined ? undefined : rootCategoryNameById.get(effectiveCategoryId);
 
+  // A subcategory pick (Model Replacement > Hideout) narrows by the stored
+  // sub-category id. Matching it on the root name alone returned the whole root.
+  const effectiveCategoryIds = useMemo(
+    () => effectiveCategoryId === undefined || categoriesSection !== section
+      ? undefined
+      : subcategorySubtreeIds(categories, effectiveCategoryId),
+    [categories, categoriesSection, section, effectiveCategoryId]
+  );
+
   // Hero options always come from the Mod category tree, even while browsing
   // Sound or Wip. Resolve this outside searchLocal so the asynchronously loaded
   // name can participate in the request identity below.
@@ -1280,6 +1289,7 @@ export default function Browse() {
         // The cached rows have no category id, only a root category name; see
         // rootCategoryNameById. Ignored when a hero is selected.
         categoryName: effectiveCategoryName,
+        categoryIds: effectiveCategoryIds,
         // Mod skins match the hero's category. Sound and Wip have no hero
         // categories, so they can only match the title.
         heroCategoryIds: combinedFeed || section === 'Mod' ? selectedHeroCategoryIds : undefined,
@@ -1371,7 +1381,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, effectiveCategoryIds, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually

@@ -15,6 +15,24 @@ export function categorySubtreeIds(node: GameBananaCategoryNode): number[] {
   return [node.id, ...(node.children ?? []).flatMap(categorySubtreeIds)];
 }
 
+/** A category's own id plus every descendant, for a category below the roots of
+ *  `tree`. Undefined for a root (the catalog scopes those by name) and for an id
+ *  the tree does not hold. */
+export function subcategorySubtreeIds(
+  tree: GameBananaCategoryNode[],
+  categoryId: number,
+): number[] | undefined {
+  const find = (nodes: GameBananaCategoryNode[], isRoot: boolean): number[] | undefined => {
+    for (const node of nodes) {
+      if (node.id === categoryId) return isRoot ? undefined : categorySubtreeIds(node);
+      const inChild = find(node.children ?? [], false);
+      if (inChild) return inChild;
+    }
+    return undefined;
+  };
+  return find(tree, true);
+}
+
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

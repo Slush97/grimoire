@@ -8,11 +8,12 @@ function filter(
   categoryId: number | undefined,
   categoryName: string | undefined,
   heroName: string | undefined,
-  heroCategoryIds: number[] | undefined
+  heroCategoryIds: number[] | undefined,
+  categoryIds?: number[]
 ) {
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
-  applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds);
+  applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, heroCategoryIds, categoryIds);
   return { conditions, params };
 }
 
@@ -51,5 +52,16 @@ describe('applyCategoryFilter hero scoping', () => {
     expect(named.conditions).toEqual(['mods.category_name = @categoryName COLLATE NOCASE']);
     expect(named.params).toEqual({ categoryName: 'Model Replacement' });
     expect(filter(undefined, undefined, undefined, undefined).conditions).toEqual([]);
+  });
+
+  it('narrows a subcategory pick by its ids instead of widening to the root name', () => {
+    const { conditions, params } = filter(44691, 'Model Replacement', undefined, undefined, [44691, 44687]);
+    expect(conditions).toEqual(['mods.sub_category_id IN (@category_0, @category_1)']);
+    expect(params).toEqual({ category_0: 44691, category_1: 44687 });
+  });
+
+  it('lets a hero scope win over a subcategory pick', () => {
+    const { conditions } = filter(33306, 'Skins', undefined, [33306], [33306]);
+    expect(conditions).toEqual(['mods.sub_category_id IN (@hero_category_0)']);
   });
 });
