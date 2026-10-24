@@ -56,6 +56,7 @@ describe('Door Stuck skin recovery', () => {
   });
   it('keeps edits across a skin switch and a full unmount', async () => {
     await mount();
+    await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click(); });
     await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="foundry.skin.hidePart"]')!.click(); });
     const pending = previewEdits(); expect(pending).toHaveLength(1);
     await choose('other.vpk'); expect(previewEdits()).toEqual([]);
@@ -65,6 +66,7 @@ describe('Door Stuck skin recovery', () => {
   });
   it('remembers a linked skin and follows its content identity after its slot changes', async () => {
     await act(async () => root.render(<SkinEditor heroName="Mina" initialSkinSources={[{ metaKey: 'other.vpk', priority: 1 }]} />));
+    await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click(); });
     await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="foundry.skin.hidePart"]')!.click(); });
     const pending = previewEdits();
     act(() => root.unmount()); root = createRoot(host);

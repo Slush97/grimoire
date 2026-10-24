@@ -3,7 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
-import { installedSkinTarget } from '../lib/installedSkinTarget';
+import { installedDoorStuckTarget } from '../lib/installedSkinTarget';
+import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
   DragOverlay,
@@ -387,10 +388,21 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onCreateList,
 }: InstalledEntryCardProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
   const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
-  const skinTarget = installedSkinTarget(previewMod);
-  const openDoorStuck = doorStuckEnabled && skinTarget ? () => navigate('/foundry', { state: skinTarget }) : undefined;
+  const target = installedDoorStuckTarget(previewMod);
+  const openDoorStuck = doorStuckEnabled && target ? () => {
+    if ('kind' in target && target.kind === 'movement') {
+      const settings = useAppStore.getState().settings;
+      const scope = settings?.devMode && settings.devDeadlockPath ? settings.devDeadlockPath : settings?.deadlockPath ?? '';
+      if (!restoreMovementFxDraft(localStorage, scope, target.choice)) {
+        showToast(t('foundry.draft.failed'), { tone: 'error' });
+        return;
+      }
+    }
+    navigate('/foundry', { state: target });
+  } : undefined;
   if (entry.kind === 'single') {
     const mod = entry.mod;
     return (

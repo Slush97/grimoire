@@ -270,6 +270,7 @@ function enrichMod(mod: Mod): WireMod {
             soulImport: metadata.soulImport,
             urnImport: metadata.urnImport,
             skinEdit: metadata.skinEdit,
+            movementFx: metadata.movementFx,
             ignoreUpdates: metadata.ignoreUpdates,
             priorityMod: metadata.priorityMod,
             imprinted: metadata.imprinted,

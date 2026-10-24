@@ -37,11 +37,11 @@ async function loadBackdrop(file: File, signal: AbortSignal): Promise<THREE.Text
   } finally { URL.revokeObjectURL(url); }
 }
 
-export function useViewerBackdrop(enabled = true) {
+export function useViewerBackdrop(enabled = true, initialPreset: ViewerBackground = 'broadway') {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [preset, setPreset] = useState<ViewerBackground>('broadway');
+  const [preset, setPreset] = useState<ViewerBackground>(initialPreset);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => () => texture?.dispose(), [texture]);

@@ -47,6 +47,7 @@ async function inspect(vpk: string, base: string, entry: string): Promise<SkinPa
                 part.tintable = material.m_shaderName === 'pbr.vfx' && material.m_vectorParams.some((param) => param.m_name === 'g_vColorTint1')
                     && !material.m_dynamicParams.some((param) => param.m_name === 'g_vColorTint1');
                 part.patternable = material.m_shaderName === 'pbr.vfx' && material.m_textureParams.some((param) => ['g_tColor', 'g_tColorA', 'g_tBaseColor', 'g_tAlbedo'].includes(param.m_name));
+                part.finishable = material.m_shaderName === 'pbr.vfx' && !material.m_dynamicParams.some((param) => /Roughness|Metalness/.test(param.m_name));
                 const colorTexture = ['g_tColor', 'g_tColorA', 'g_tBaseColor', 'g_tAlbedo'].map((slot) => material.m_textureParams.find((param) => param.m_name === slot)).find(Boolean);
                 if (colorTexture) {
                     try {
@@ -89,6 +90,7 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
     for (const edit of request.edits) {
         if (!materials.has(edit.material) || seen.has(edit.material)) throw new Error('Unknown or repeated skin part.');
         seen.add(edit.material);
+        if (edit.finish && !info.parts.some((part) => part.material === edit.material && part.finishable)) throw new Error('This part does not support static material finishes.');
         if (edit.tint !== null && !info.parts.some((part) => part.material === edit.material && part.tintable)) {
             throw new Error('This material does not expose a supported static color tint.');
         }
@@ -141,6 +143,16 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 await runVpkmerge(['vmat', '--vpk', tintSource, '--base', source.base,
                     '--entry', edit.material.endsWith('_c') ? edit.material : `${edit.material}_c`,
                     '--set-vec', `g_vColorTint1=${skinTintVector(edit.tint).join(',')},0`, '--set-int', `g_nTextureColorTintMode1=${edit.colorize === false ? 0 : 1}`, '--encode-vpk', layer]);
+                await verifyVpkOutput(layer);
+                layers.push(layer);
+                patternLayers.set(edit.material, layer);
+            }
+            for (const edit of request.edits.filter((item) => item.finish && !item.hidden)) {
+                if (!edit.finish) continue;
+                const layer = join(dir, `finish-${layers.length}_dir.vpk`);
+                const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
+                await runVpkmerge(['workshop', 'finish', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material,
+                    '--roughness', String(edit.finish.roughness), '--metalness', String(edit.finish.metalness), '--encode-vpk', layer]);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
             }

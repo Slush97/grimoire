@@ -14,7 +14,7 @@ export interface HeroAnimationInfo {
   standalone?: boolean;
 }
 
-export type HeroAnimationAction = 'idle' | 'relaxedIdle' | 'heroPose' | 'running' | 'reload';
+export type HeroAnimationAction = 'idle' | 'relaxedIdle' | 'heroPose' | 'running' | 'reload' | 'dash' | 'heavyMelee';
 export interface HeroAnimationRecipe {
   names: readonly string[];
   action: HeroAnimationAction;
@@ -27,6 +27,8 @@ const recipe = (action: HeroAnimationAction, names: readonly string[], playback:
  * These are whole actions, not a reconstruction of gameplay graph layers.
  * See docs/hero-animation-selection.md for source and render limitations. */
 export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimationRecipe[]>> = {
+  // Exported from the installed Lash model and rendered as complete full-body actions.
+  Lash: [recipe('idle', ['primary_stand_idle']), recipe('dash', ['primary_airdash']), recipe('heavyMelee', ['melee_hit'])],
   Dynamo: [recipe('idle', ['primary_stand_idle']), recipe('heroPose', ['hero_pose'], 'hold'), recipe('reload', ['primary_stand_reload'], 'hold')],
   Wraith: [recipe('idle', ['ui_shop_idle', 'primary_stand_idle']), recipe('heroPose', ['ui_hero_select'], 'hold'), recipe('running', ['item_run_n']), recipe('reload', ['primary_stand_reload'], 'hold')],
   Mirage: [recipe('relaxedIdle', ['primary_ooc_stand_idle']), recipe('heroPose', ['ui_main_menu'], 'hold')],
@@ -53,7 +55,6 @@ export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimat
   'Shiv': [recipe('idle', ['primary_stand_idle'])],
   'Ivy': [recipe('idle', ['primary_stand_idle'])],
   'Warden': [recipe('idle', ['primary_stand_idle']), recipe('running', ['item_run_n'])],
-  'Lash': [recipe('idle', ['primary_stand_idle'])],
   'Pocket': [recipe('idle', ['primary_stand_idle'])],
   'Vyper': [recipe('idle', ['primary_stand_idle']), recipe('running', ['primary_run_n'])],
   'Sinclair': [recipe('idle', ['primary_stand_idle'])],

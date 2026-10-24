@@ -14,6 +14,11 @@ const parts = partsFromDrawCalls({ draw_calls: [
 const info = { fingerprint, entry: 'models/hero.vmdl_c', parts };
 
 describe('skin overlay export', () => {
+  it('counts finish-only edits and rejects materials with unsupported finish bindings', () => {
+    const request = { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, finish: { roughness: 0.2, metalness: 1 } }] };
+    expect(() => validateSkinEdits(info, request)).toThrow('static material finishes');
+    expect(() => validateSkinEdits({ ...info, parts: parts.map((part) => ({ ...part, finishable: true })) }, request)).not.toThrow();
+  });
   it('groups all draw calls sharing a material', () => {
     expect(parts[0]).toMatchObject({ material: 'coat.vmat', drawCalls: 2, vertices: 30 });
   });

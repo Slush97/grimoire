@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CLOTH_TIMESTEP } from '../../lib/useClothSim';
 import { parseFeModel } from '../../lib/feModel';
+import { MovementClock } from '../../lib/movementClock';
+import type { MovementViewerPreview } from './MovementFxStage';
 import { RiggedModel, type TurntableInteraction } from './HeroPoseViewer';
 
 beforeAll(() => {
@@ -57,6 +59,87 @@ function makeRig() {
 }
 
 describe('rigged preview motion lifecycle', () => {
+  it.each([false, true])('reapplies root orientation when an emoji changes while paused=%s', async (paused) => {
+    const { scene, model } = makeRig();
+    const anchor = scene.getObjectByName('anchor')!;
+    anchor.rotation.z = Math.PI / 2;
+    scene.updateWorldMatrix(true, true);
+    scene.traverse(object => { if (object instanceof THREE.SkinnedMesh) object.bind(object.skeleton); });
+    const clips = [new THREE.AnimationClip('movement_standing', 3, [
+      new THREE.QuaternionKeyframeTrack('anchor.quaternion', [0, 3], [0, 0, 0, 1, 0, 0, 0, 1]),
+    ])];
+    const clock = { current: .1 };
+    const render = (key: string, revision = 0) => <MovementClock.Provider value={clock}>
+      <RiggedModel scene={scene} clips={clips} clipName="movement_standing" reset={0}
+        interaction={{ current: { dragging: false, paused: true } }}
+        movementPreview={{ kind: 'dash', key, revision, loop: true, textureBaseUrl: '',
+          descriptor: { name: 'empty', controlPoints: [], emitters: [], initializers: [], operators: [], renderers: [], children: [] } }}
+        playback={{ paused, speed: 1 }} clothEnabled clothModel={model} />
+    </MovementClock.Provider>;
+    const renderer = await ReactThreeTestRenderer.create(render('skull'));
+    expect(anchor.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(0);
+    await renderer.update(render('devil'));
+    await renderer.advanceFrames(1, 1 / 30);
+    expect(anchor.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(0);
+    await renderer.update(render('devil', 1));
+    expect(anchor.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(0);
+    await renderer.unmount();
+  });
+
+  it('reverses the hero own dash for the return when its rig has no backward clip', async () => {
+    const { scene, tip } = makeRig();
+    const clips = [
+      new THREE.AnimationClip('movement_standing', 3, [new THREE.VectorKeyframeTrack('tip.position', [0, 3], [1, 0, 0, 1, 0, 0])]),
+      new THREE.AnimationClip('movement_dash', 1, [new THREE.VectorKeyframeTrack('tip.position', [0, 1], [1, 0, 0, 1, 1, 0])]),
+    ];
+    const clock = { current: 0 };
+    const renderer = await ReactThreeTestRenderer.create(<MovementClock.Provider value={clock}>
+      <RiggedModel scene={scene} clips={clips} clipName="movement_standing" reset={0}
+        interaction={{ current: { dragging: false, paused: true } }}
+        movementPreview={{ kind: 'dash', key: 'test', revision: 0, loop: true, textureBaseUrl: '',
+          descriptor: { name: 'empty', controlPoints: [], emitters: [], initializers: [], operators: [], renderers: [], children: [] } }}
+        playback={{ paused: false, speed: 1 }} clothEnabled={false} clothModel={null} />
+    </MovementClock.Provider>);
+    for (let i = 0; i < 24; i++) { clock.current += .1; await renderer.advanceFrames(1, .1); }
+    expect(tip.position.y).toBeCloseTo(.7);
+    await renderer.unmount();
+  });
+
+  it('simulates cloth during movement blends, freezes on pause and resets on replay', async () => {
+    const { scene, tip, model } = makeRig();
+    const clips = [new THREE.AnimationClip('movement_standing', 3, [
+      new THREE.VectorKeyframeTrack('anchor.position', [0, 3], [0, 0, 0, 3, 0, 0]),
+    ])];
+    const clock = { current: 0 };
+    const preview: MovementViewerPreview = { kind: 'heavy-melee', key: 'test', revision: 0, loop: true,
+      textureBaseUrl: '', descriptor: { name: 'empty', controlPoints: [], emitters: [], initializers: [], operators: [], renderers: [], children: [] } };
+    const render = (paused: boolean, revision = 0) => <MovementClock.Provider value={clock}>
+      <RiggedModel scene={scene} clips={clips} clipName="movement_standing" reset={0}
+        interaction={{ current: { dragging: false, paused: true } }}
+        movementPreview={{ ...preview, revision }} playback={{ paused, speed: 1 }} clothEnabled clothModel={model} />
+    </MovementClock.Provider>;
+    const renderer = await ReactThreeTestRenderer.create(render(false));
+    for (let i = 0; i < 12; i++) {
+      clock.current += CLOTH_TIMESTEP;
+      await renderer.advanceFrames(1, CLOTH_TIMESTEP);
+    }
+    expect(scene.getObjectByName('anchor')!.position.x).toBeCloseTo(clock.current);
+    expect(tip.position.y).toBeLessThan(0);
+    await renderer.update(render(true));
+    const paused = tip.position.clone();
+    await renderer.advanceFrames(3, CLOTH_TIMESTEP);
+    expect(tip.position.toArray()).toEqual(paused.toArray());
+    clock.current = 0;
+    await renderer.update(render(true, 1));
+    expect(tip.position.toArray()).toEqual([1, 0, 0]);
+    await renderer.update(render(false, 1));
+    clock.current = CLOTH_TIMESTEP;
+    await renderer.advanceFrames(1, CLOTH_TIMESTEP);
+    expect(scene.getObjectByName('anchor')!.position.x).toBeCloseTo(CLOTH_TIMESTEP);
+    expect(tip.position.y).toBeLessThan(0);
+    await renderer.unmount();
+  });
+
   it('chooses Rem showcase before a standing fallback and holds its last pose', async () => {
     const { scene, tip, clips } = makeRig();
     clips[0].name = 'ui_shop';

@@ -39,6 +39,10 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
             brightness: z.number().finite().min(0).max(2),
         }).strict().optional(),
         colorize: z.boolean().optional(),
+        finish: z.object({
+            roughness: z.number().finite().min(0).max(1),
+            metalness: z.number().finite().min(0).max(1),
+        }).strict().optional(),
     }).strict()).max(256),
 }).strict();
 

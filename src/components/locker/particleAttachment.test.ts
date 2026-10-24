@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { particleAttachmentIssues, resolveParticleAttachment } from './particleAttachment';
+import { particleAttachmentIssues, particleAttachmentToWorld, resolveParticleAttachment, resolveParticleControlPoint } from './particleAttachment';
 import type { FxDescriptor } from './fxDescriptor';
 
 const descriptor: FxDescriptor = {
@@ -10,6 +10,34 @@ const descriptor: FxDescriptor = {
 };
 
 describe('particle attachment resolution', () => {
+  it('places ordered ring vertices around the animated hand rather than the skeleton origin', () => {
+    const model = new THREE.Group(), hand = new THREE.Bone(); model.add(hand); model.scale.setScalar(.0254);
+    hand.position.set(10, 30, 50);
+    const attachment: import('./particleAttachment').ParticleAttachmentResolution = { object: hand,
+      frame: { name: 'palm_R', bone: 'hand_R', position: [2, 0, 0], rotation: [0, 0, 0, 1] }, kind: 'exact' };
+    const point = particleAttachmentToWorld(attachment, new THREE.Vector3(4, 0, 0));
+    expect(point.toArray()).toEqual([16 * .0254, 30 * .0254, 50 * .0254]);
+    hand.position.y += 10;
+    expect(particleAttachmentToWorld(attachment, new THREE.Vector3()).y).toBeCloseTo(40 * .0254);
+  });
+  it('matches the gameplay palm_r binding to the model palm_R frame', () => {
+    const model = new THREE.Group(), right = new THREE.Bone(); right.name = 'hand_R'; model.add(right);
+    const frame = { name: 'palm_R', bone: 'hand_R', position: [2, 0, 0], rotation: [0, 0, 0, 1] };
+    model.userData.grimoireAttachments = [frame];
+    expect(resolveParticleAttachment(model, 'palm_r')).toEqual({ object: right, frame, kind: 'exact' });
+  });
+  it('anchors absolute-origin particles at the actor root without requiring a bone', () => {
+    const model = new THREE.Group();
+    const spine = new THREE.Bone(); spine.name = 'spine_2'; model.add(spine);
+    expect(resolveParticleControlPoint(model, { cp: 0, entity: 'self', attachType: 'PATTACH_ABSORIGIN_FOLLOW', attachment: null }, null))
+      .toEqual({ object: model, kind: 'exact' });
+  });
+  it('uses the selected hero palm frame before a generic particle preview model frame', () => {
+    const model = new THREE.Group(), bone = new THREE.Bone(); bone.name = 'hand_R'; model.add(bone);
+    const frame: import('../../types/modelAttachment').ModelAttachment = { name: 'palm_R', bone: 'hand_R', position: [2, 0, 0], rotation: [0, 0, 0, 1] };
+    model.userData.grimoireAttachments = [frame];
+    expect(resolveParticleAttachment(model, 'palm_R', [{ ...frame, position: [20, 0, 0] }]).frame).toBe(frame);
+  });
   it('uses authored bone-local frames without guessing the hand or mutating the skeleton', () => {
     const model = new THREE.Group();
     const left = new THREE.Bone(); left.name = 'hand_L';

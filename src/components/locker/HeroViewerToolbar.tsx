@@ -13,6 +13,7 @@ export type HeroViewerScene = 'midtown' | 'studio' | 'transparent' | 'hideout';
 interface Props {
   heroName?: string;
   animated: boolean;
+  actionPreview?: boolean;
   clips: string[];
   clip: string;
   paused: boolean;
@@ -91,8 +92,8 @@ export function HeroViewerToolbar(p: Props) {
       {open && (
         <div id={panelId} className="pointer-events-auto max-h-80 w-64 max-w-full overflow-y-auto rounded-sm border border-hl/10 bg-bg-secondary/95 p-3 shadow-lg backdrop-blur-sm">
           <div className="space-y-3">
-            <Toggle label={t('locker.pose.animated')} checked={p.animated} onChange={p.onAnimated} />
-            {p.clips.length > 0 && (
+            {!p.actionPreview && <Toggle label={t('locker.pose.animated')} checked={p.animated} onChange={p.onAnimated} />}
+            {!p.actionPreview && p.clips.length > 0 && (
               <label className="block space-y-1 text-xs text-text-secondary">
                 <span>{t('locker.pose.animation')}</span>
                 <Select inputSize="sm" value={p.clip} onChange={(e) => p.onClip(e.target.value)}>
@@ -134,7 +135,7 @@ export function HeroViewerToolbar(p: Props) {
       {p.gif.capture && <ViewerGifReview gif={p.gif} />}
       {p.status && <p role="status" className="pointer-events-auto max-w-64 rounded-sm bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">{p.status}</p>}
       <div className="pointer-events-auto w-80 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 backdrop-blur-sm">
-        {p.animated && p.clips.length > 0 && (
+        {p.animated && !p.actionPreview && p.clips.length > 0 && (
           <div className="px-2 pt-1">
             <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
           </div>
@@ -146,7 +147,7 @@ export function HeroViewerToolbar(p: Props) {
         <IconButton size="sm" icon={RotateCcw} label={t('locker.pose.resetView')} onClick={p.onReset} />
         <IconButton size="sm" icon={Camera} label={t('locker.pose.screenshot')} onClick={p.onScreenshot} />
         <IconButton size="sm" icon={p.gif.recording ? Square : Film} label={p.gif.recording ? t('locker.pose.stopGif') : t('locker.pose.recordGif')} aria-pressed={p.gif.recording} disabled={!p.gifAvailable || p.gif.status === 'encoding' || p.gif.status === 'review'} className="aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-accent" onClick={p.onGif} />
-        <IconButton size="sm" icon={X} label={t('locker.pose.cancelGif')} disabled={p.gif.status === 'idle'} onClick={p.gif.cancel} />
+        {p.gif.status !== 'idle' && <IconButton size="sm" icon={X} label={t('locker.pose.cancelGif')} onClick={p.gif.cancel} />}
         <ViewerFullscreenButton onRequest={p.onFullscreen} />
         </div>
       </div>

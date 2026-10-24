@@ -8,7 +8,7 @@ import { foundryDraftKey, readFoundryDraft, writeFoundryDraft } from './foundryD
 let reportedStorageFailure = false;
 
 /** Persist committed input before a subsequent click can unmount the editor. */
-export function useFoundryDraft<T>(key: string, schema: z.ZodType<T>, initial: T): [T, Dispatch<SetStateAction<T>>, (value: T) => void] {
+export function useFoundryDraft<T>(key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, initial: T): [T, Dispatch<SetStateAction<T>>, (value: T) => void] {
   const { t } = useTranslation();
   const scope = useAppStore((state) => state.settings?.devMode && state.settings.devDeadlockPath
     ? state.settings.devDeadlockPath : state.settings?.deadlockPath ?? '');

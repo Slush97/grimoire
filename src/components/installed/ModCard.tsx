@@ -50,6 +50,7 @@ interface ModCardProps {
     size: number;
     installedAt: string;
     thumbnailUrl?: string;
+    movementFx?: Mod['movementFx'];
     audioUrl?: string;
     sourceSection?: string;
     categoryName?: string;
@@ -226,6 +227,7 @@ function ModMediaPreview({
   const image = (
     <ModThumbnail
       src={mod.thumbnailUrl}
+      movementFx={mod.movementFx}
       alt={mod.name}
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
@@ -688,6 +690,7 @@ function ModListRowContent({
         ) : (
           <ModThumbnail
             src={mod.thumbnailUrl}
+            movementFx={mod.movementFx}
             alt={mod.name}
             nsfw={mod.nsfw}
             hideNsfw={hideNsfwPreviews}

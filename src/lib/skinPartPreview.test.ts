@@ -5,6 +5,20 @@ import { wrapMaterialWithNpr } from './source2NprMaterial';
 import { applySkinPartEdits, dominantSkinColor, highlightSkinPart, isSkinSurface, isEditorMaterial } from './skinPartPreview';
 
 describe('skin editor with real shader wrappers', () => {
+  it('overrides finish maps on one part and restores them when comparing the original', () => {
+    const source = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.2 }); source.name = 'gun.vmat';
+    source.roughnessMap = new THREE.Texture(); source.metalnessMap = new THREE.Texture();
+    source.userData.morphic = { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } };
+    const built = buildDeadlockMaterial(source);
+    const coat = new THREE.MeshStandardMaterial({ roughness: 0.9 }); coat.name = 'coat.vmat';
+    const scene = new THREE.Group(); scene.add(new THREE.Mesh(new THREE.BoxGeometry(), built.material), new THREE.Mesh(new THREE.BoxGeometry(), coat));
+    const restore = applySkinPartEdits(scene, [{ material: 'gun.vmat', hidden: false, tint: null, finish: { roughness: 0.12, metalness: 1 } }], false);
+    expect(built.material).toMatchObject({ roughness: 0.12, metalness: 1, roughnessMap: null, metalnessMap: null });
+    expect(coat.roughness).toBe(0.9);
+    restore();
+    expect(built.material).toMatchObject({ roughness: 0.8, metalness: 0.2, roughnessMap: source.roughnessMap, metalnessMap: source.metalnessMap });
+    built.material.dispose(); source.dispose(); coat.dispose();
+  });
   it.each(['unified', 'legacy'])('keeps %s material identity and hides only the selected part', (path) => {
     const body = new THREE.MeshStandardMaterial();
     body.name = 'abrams_body.vmat';

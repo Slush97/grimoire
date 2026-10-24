@@ -4,6 +4,8 @@ import { useFrame, useThree, type RootState } from '@react-three/fiber';
 import * as THREE from 'three';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { Controls } from './HeroPoseViewer';
+import { MovementClock } from '../../lib/movementClock';
+import { movementFrame, MOVEMENT_DISTANCE } from '../../lib/movementMotion';
 
 vi.mock('@react-three/drei', async () => {
   const { forwardRef, useImperativeHandle, useMemo } = await import('react');
@@ -26,6 +28,39 @@ beforeAll(() => {
 });
 
 describe('hero preview camera fitting', () => {
+  it('fits the whole dash path when reset at either end, including in a narrow preview', async () => {
+    const model = new THREE.Mesh(new THREE.BoxGeometry(1, 2, .5), new THREE.MeshStandardMaterial());
+    const clock = { current: 0 };
+    let state!: RootState;
+    function Figure({ reset }: { reset: number }) {
+      const current = useThree();
+      useLayoutEffect(() => { state = current; Object.assign(current.gl.domElement, { setAttribute: vi.fn() }); }, [current]);
+      const frame = movementFrame('dash', clock.current, true);
+      return <MovementClock.Provider value={clock}>
+        <group position={[frame.distance - MOVEMENT_DISTANCE / 2, 0, 0]}><primitive object={model} /></group>
+        <Controls interaction={{ current: { dragging: false, paused: true } }} reset={reset} label="camera" model={model} fitKey="dash"
+          movement={{ kind: 'dash', loop: true }} />
+      </MovementClock.Provider>;
+    }
+    const renderer = await ReactThreeTestRenderer.create(<Figure reset={0} />, { width: 600, height: 700 });
+    for (const [reset, time] of [0, .9, 2.4].entries()) {
+      clock.current = time;
+      await renderer.update(<Figure reset={reset} />);
+      await renderer.advanceFrames(1, 1 / 60);
+      const home = state.camera.userData.previewHome as { target: number[] };
+      expect(home.target[0]).toBeCloseTo(0);
+      state.camera.updateMatrixWorld();
+      for (const x of [-MOVEMENT_DISTANCE / 2 - .5, MOVEMENT_DISTANCE / 2 + .5]) {
+        for (const y of [-1, 1]) {
+          const projected = new THREE.Vector3(x, y, .25).project(state.camera);
+          expect(Math.abs(projected.x)).toBeLessThan(.95);
+          expect(Math.abs(projected.y)).toBeLessThan(.95);
+        }
+      }
+    }
+    await renderer.unmount();
+  });
+
   it('restores a saved camera and still refits after Reset view', async () => {
     const model = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial());
     let state!: RootState;

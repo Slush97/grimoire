@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { useFoundryDraft } from '../lib/useFoundryDraft';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { skinEditLinkSchema } from '../lib/skinEditSchema';
+import { movementFxLinkSchema } from '../lib/movementFx';
 import {
   Hammer,
   Library,
@@ -44,6 +45,7 @@ export default function Foundry() {
   const navigate = useNavigate();
   const input: unknown = location.state;
   const source = skinEditLinkSchema.safeParse(input);
+  const movementSource = movementFxLinkSchema.safeParse(input);
   const settings = useAppStore((s) => s.settings);
   const hasGamePath = Boolean(settings?.deadlockPath || (settings?.devMode && settings?.devDeadlockPath));
 
@@ -79,10 +81,10 @@ export default function Foundry() {
     return map;
   }, [heroes]);
   const linkedHero = source.success ? heroes.find((hero) => hero.name === source.data.heroName) : undefined;
-  const workshopHero = linkedHero ?? heroes.find((hero) => hero.codename === selectedCode);
+  const workshopHero = linkedHero ?? heroes.find((hero) => hero.codename === selectedCode) ?? (movementSource.success ? heroes[0] : undefined);
   const pickHero = (hero: HeroInfo) => {
     setSelectedCode(hero.codename);
-    if (source.success) navigate('/foundry', { replace: true, state: null });
+    if (source.success || movementSource.success) navigate('/foundry', { replace: true, state: null });
   };
 
   const orderedHeroes = useMemo(() => orderFoundryHeroes(heroes, heroQuery), [heroes, heroQuery]);
@@ -116,17 +118,17 @@ export default function Foundry() {
   }
 
   // Hero workshop: full-bleed, no page chrome (mirrors the Locker hero view).
-  if ((mode === 'heroes' || linkedHero) && workshopHero) {
+  if ((mode === 'heroes' || linkedHero || movementSource.success) && workshopHero) {
     return (
       <HeroWorkshop
-        key={`${workshopHero.codename}:${source.success ? location.key : ''}`}
+        key={`${workshopHero.codename}:${source.success || movementSource.success ? location.key : ''}`}
         hero={workshopHero}
         previous={neighbors.previous}
         next={neighbors.next}
         onNavigate={pickHero}
         heroNames={heroNames}
         skinSources={source.success && source.data.heroName === workshopHero.name ? source.data.skinSources : undefined}
-        onBack={() => { setSelectedCode(null); setMode('heroes'); if (linkedHero) navigate('/foundry', { replace: true, state: null }); }}
+        onBack={() => { setSelectedCode(null); setMode('heroes'); if (linkedHero || movementSource.success) navigate('/foundry', { replace: true, state: null }); }}
       />
     );
   }

@@ -89,7 +89,7 @@ beforeEach(async () => {
   await fs.mkdir(container, { recursive: true });
   h.userData = await fs.mkdtemp(join(container, 'run-'));
   h.run.mockImplementation(async (args) => {
-    const out = args[0] === 'model' ? argument(args, '--out') : args[0];
+    const out = args.includes('--out') ? argument(args, '--out') : args[0];
     await fs.writeFile(out, 'synthetic model');
   });
   h.stdout.mockImplementation(async (args) => args[1] === 'clips' ? clips : JSON.stringify({
@@ -117,7 +117,7 @@ describe('rigged preview physics bundle', () => {
     expect(info.hasModel).toBe(true);
     const cloth = JSON.parse(await fs.readFile(join(cacheDir(info.key), 'cloth-rigged.json'), 'utf8'));
     expect(cloth.selector).toBe('models/heroes_staging/gigawatt_prisoner/gigawatt_prisoner.vmdl_c');
-    const meshArgs = h.run.mock.calls.at(-1)![0];
+    const meshArgs = h.run.mock.calls.findLast(([args]) => args[0] === 'model' && args[1] === 'export')![0];
     const clothArgs = h.stdout.mock.calls.filter(([args]) => args[1] === 'femodel');
     expect(clothArgs).toHaveLength(1);
     expect(cloth.source).toBe(argument(meshArgs, '--vpk'));

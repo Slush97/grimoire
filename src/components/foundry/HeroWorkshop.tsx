@@ -21,7 +21,7 @@ import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
 import LibraryBrowse from './LibraryBrowse';
-import Tx from '../translation/Tx';
+import MovementFxEditor from './MovementFxEditor';
 import SkinEditor from './SkinEditor';
 import { SegmentedControl } from '../common/ui';
 import type { HeroPoseSkinSource } from '../../types/portrait';
@@ -36,7 +36,6 @@ interface HeroWorkshopProps {
   onBack: () => void;
   skinSources?: HeroPoseSkinSource[];
 }
-
 type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
 
 
@@ -57,7 +56,7 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  */
 export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, onNavigate, skinSources }: HeroWorkshopProps) {
   const { t } = useTranslation();
-  const [section, setSection] = useFoundryDraft<SectionId>(`workshop:${hero.codename}:section`, z.enum(['appearance', 'abilities', 'voice', 'icons']), 'appearance');
+  const [section, setSection] = useFoundryDraft<SectionId>('workshop:section', z.enum(['appearance', 'abilities', 'voice', 'icons']), 'appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [currentHero, setCurrentHero] = useState(hero.codename);
@@ -66,12 +65,13 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
     setRenderStep(0);
     setNameFailed(false);
   }
-  const [appearanceTool, setAppearanceTool] = useFoundryDraft(`workshop:${hero.codename}:appearance`, z.enum(['parts', 'effects']), 'parts');
+  const [appearanceTool, setAppearanceTool] = useFoundryDraft('workshop:appearance', z.enum(['parts', 'effects']), 'parts');
+  const [abilityTool, setAbilityTool] = useFoundryDraft('workshop:ability', z.enum(['movement', 'sounds']), 'movement');
   const linkedSkin = !!skinSources?.length;
   useEffect(() => {
     if (linkedSkin) { setSection('appearance'); setAppearanceTool('parts'); }
   }, [linkedSkin, setSection, setAppearanceTool]);
-  const editingSkin = section === 'appearance' && appearanceTool === 'parts';
+  const editingSkin = section === 'appearance' || (section === 'abilities' && abilityTool === 'movement');
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -188,15 +188,15 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
               <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}
                 options={[{ value: 'parts', label: t('foundry.skin.title') }, { value: 'effects', label: t('foundry.skin.effects') }]} />
               {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} />
-                : <HeroEffectsPanel key={hero.name} heroName={hero.name} />}
+                : <div className="max-w-3xl rounded-sm border border-border bg-bg-secondary p-4"><HeroEffectsPanel key={hero.name} heroName={hero.name} /></div>}
             </div>
           ) : section === 'abilities' ? (
-            <div className="space-y-6">
-              {/* Each ability card lists its gameplay sounds with play + Swap (drop
-                  your own MP3), forged through the soundswap engine. The ability
-                  axis lives here (not under Voice); Voice is VO only. */}
-              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
-              <AbilitiesComingNote />
+            <div className="space-y-3">
+              <SegmentedControl value={abilityTool} onChange={setAbilityTool} options={[
+                { value: 'movement', label: t('foundry.movement.title') }, { value: 'sounds', label: t('foundry.movement.sounds') },
+              ]} />
+              {abilityTool === 'movement' ? <MovementFxEditor heroName={hero.name} skinSources={skinSources} />
+                : <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />}
             </div>
           ) : section === 'voice' ? (
             <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
@@ -213,20 +213,6 @@ export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, 
           ) : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function AbilitiesComingNote() {
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-bg-secondary/50 p-4 text-sm leading-relaxed text-text-secondary">
-      <p className="mb-1 font-medium text-text-primary">
-        <Tx k="foundry.workshop.abilitiesSoon.title" fallback="More per-ability editing coming" />
-      </p>
-      <Tx
-        k="foundry.workshop.abilitiesSoon.body"
-        fallback="Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."
-      />
     </div>
   );
 }

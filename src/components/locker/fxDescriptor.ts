@@ -14,7 +14,7 @@ export type FxParam = number | {
 };
 export interface FxNode { class: string; params: Record<string, unknown> }
 export interface FxRenderer extends FxNode { mode: string; blendMode: string | null; textures: string[] }
-export interface FxControlPoint { cp: number | null; attachType: string | null; attachment: string | null; entity: string | null }
+export interface FxControlPoint { cp: number | null; attachType: string | null; attachment: string | null; entity: string | null; freeze?: boolean }
 export interface FxSheet { sequences: Array<{ id: number; clamp: boolean; uv: [number, number, number, number] }> }
 export interface FxDescriptor {
   snapshot?: { points: Array<{ position: [number, number, number]; joints: string[]; weights: number[] }> };
@@ -44,8 +44,14 @@ export function paramScalar(p: unknown, fallback: number): number {
   return (lo + hi) / 2;
 }
 type Vec3 = [number, number, number];
-const vector = (v: unknown, fallback: Vec3): Vec3 => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(finite)
-  ? v.slice(0, 3).map((n: number) => Math.max(-4096, Math.min(4096, n))) as Vec3 : fallback;
+const vector = (v: unknown, fallback: Vec3): Vec3 => {
+  if (v && typeof v === 'object' && 'm_nType' in v && v.m_nType === 'PVEC_TYPE_FLOAT_COMPONENTS') {
+    const p = v as Record<string, unknown>;
+    return [paramScalar(p.m_FloatComponentX, fallback[0]), paramScalar(p.m_FloatComponentY, fallback[1]), paramScalar(p.m_FloatComponentZ, fallback[2])];
+  }
+  return Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(finite)
+    ? v.slice(0, 3).map((n: number) => Math.max(-4096, Math.min(4096, n))) as Vec3 : fallback;
+};
 const boundedRange = (p: unknown, fallback: [number, number], lo: number, hi: number): [number, number] =>
   paramRange(p, fallback).map((v) => Math.max(lo, Math.min(hi, v))) as [number, number];
 const color = (v: unknown, fallback: Vec3): Vec3 => {
@@ -61,6 +67,8 @@ const fieldInit = (d: FxDescriptor, field: number) => {
   return node ? node.params.m_InputValue ?? 0 : undefined;
 };
 export interface SpriteSimParams {
+  sourceSystem: FxDescriptor;
+  trail?: { lengthScale: number; min: number; max: number };
   snapshot?: { points: NonNullable<FxDescriptor['snapshot']>['points']; random: boolean };
   systemId?: string; parentSystemId?: string; publishesSpawnEvents?: boolean;
   parentSpawnEvents?: boolean; spawnAtParent?: boolean;
@@ -72,6 +80,7 @@ export interface SpriteSimParams {
   scale: number; sheet: FxSheet | undefined; sequence: [number, number]; persistent: boolean; radiusInput: unknown; radiusScale: number;
   spawnBias: Vec3; offsets: Array<{ min: Vec3; max: Vec3; local: boolean; proportional: boolean }>;
   attachment: string | null; texture: string | null; additive: boolean; maxParticles: number;
+  controlPoint?: FxControlPoint;
   attachments?: ModelAttachment[]; spritecard?: FxRenderer;
   emitRate: number; emitFirst: boolean; lifetime: [number, number]; radius: [number, number];
   colorMin: Vec3; colorMax: Vec3; colorFade: Vec3 | null; colorFadeTime: [number, number]; colorEase: boolean;
@@ -136,13 +145,15 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
   const scalar = (v: unknown, fallback: number, max = 30) => Math.max(0, Math.min(max, paramScalar(v, fallback)));
   const emissionRate = (v: unknown) => v === undefined ? 100 : scalar(v, 0, 256);
   const cp = box ? paramScalar(box.params.m_nControlPointNumber, 0)
-    : (sphere?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
+    : ((sphere ?? ring)?.params.m_TransformInput as { m_nControlPoint?: number } | undefined)?.m_nControlPoint;
+  const controlPoint = d.controlPoints.find((point) => point.cp === (cp ?? 0));
   const curve = (field: number) => d.operators.find((n) => n.class === 'C_OP_SetFloat'
     && paramScalar(n.params.m_nOutputField, 3) === field
     && n.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE')?.params.m_InputValue;
   const radians = (p: unknown): [number, number] => boundedRange(p, [0, 0], -3600, 3600)
     .map((v) => v * Math.PI / 180) as [number, number];
   return {
+    sourceSystem: d,
     snapshot: skinSnapshot && d.snapshot ? { points: d.snapshot.points, random: snapshotInit?.params.m_bRandom === true } : undefined,
     parentSpawnEvents: parentEmitters.length > 0,
     parentSpawnWindow: parentEmitters.length ? {
@@ -171,8 +182,10 @@ export function spriteParamsFor(d: FxDescriptor, renderer = d.renderers.find((r)
     persistent: d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState === 'PARTICLE_ENDCAP_ENDCAP_ON')
       && !d.operators.some((n) => n.class === 'C_OP_Decay' && n.params.m_nOpEndCapState !== 'PARTICLE_ENDCAP_ENDCAP_ON'),
     radiusInput: fieldInit(d, 3), radiusScale: Math.max(0, Math.min(16, paramScalar(renderer.params.m_flRadiusScale, 1))),
-    attachment: d.controlPoints.find((point) => point.cp === cp && point.attachment)?.attachment
-      ?? d.controlPoints.find((point) => point.attachment)?.attachment ?? null,
+    controlPoint,
+    trail: renderer.mode === 'trail' ? { lengthScale: Math.max(0, paramScalar(fieldInit(d, 10), 0.1)) * Math.max(0, paramScalar(renderer.params.m_flLengthScale, 1)),
+      min: Math.max(0, paramScalar(renderer.params.m_flMinLength, 0)), max: Math.max(0.01, paramScalar(renderer.params.m_flMaxLength, 100)) } : undefined,
+    attachment: controlPoint?.attachment ?? (controlPoint ? null : d.controlPoints.find((point) => point.attachment)?.attachment ?? null),
     texture,
     additive: (renderer.blendMode ?? '').includes('ADD'),
     maxParticles: Math.floor(Math.max(1, Math.min(256, paramScalar(d.maxParticles, 64)))),
@@ -283,18 +296,24 @@ export function spriteFadeValue(fade: SpriteFade | null, age: number): number {
 
 /** Authored color-gradient stops are linear color bytes, unlike texture pixels.
  * This subset evaluates only normalized particle age and literal gradients. */
-export function spriteGradientColor(input: unknown, age: number, scalarField?: number): Vec3 | null {
+export function spriteGradientColor(input: unknown, age: number, scalarField?: number, collectionAge = 0): Vec3 | null {
   if (!input || typeof input !== 'object') return null;
   const r = input as Record<string, unknown>;
   if (r.m_nType !== 'PVEC_TYPE_FLOAT_INTERP_GRADIENT'
-    || !((r.m_FloatInterp as { pf?: string } | undefined)?.pf === 'PF_TYPE_PARTICLE_AGE_NORMALIZED'
+    || !(['PF_TYPE_COLLECTION_AGE', 'PF_TYPE_PARTICLE_AGE_NORMALIZED'].includes((r.m_FloatInterp as { pf?: string } | undefined)?.pf ?? '')
       || (scalarField !== undefined && (r.m_FloatInterp as { pf?: string } | undefined)?.pf === 'PF_TYPE_PARTICLE_FLOAT'))) return null;
   const raw = (r.m_Gradient as { m_Stops?: unknown[] } | undefined)?.m_Stops;
   if (!Array.isArray(raw) || !raw.length || raw.length > 32) return null;
   const stops = raw.map((v) => v as { m_flPosition?: number; m_Color?: number[] });
   if (stops.some((s) => !finite(s?.m_flPosition) || !Array.isArray(s.m_Color) || s.m_Color.length < 3 || !s.m_Color.slice(0, 3).every(finite))) return null;
   const sorted = [...stops].sort((a, b) => a.m_flPosition! - b.m_flPosition!);
-  const t = normalizedWindow(scalarField ?? age, [paramScalar(r.m_flInterpInput0, 0), paramScalar(r.m_flInterpInput1, 1)]);
+  const interp = r.m_FloatInterp as { pf?: string; in0?: number; in1?: number; mode?: string };
+  const clock = interp.pf === 'PF_TYPE_COLLECTION_AGE' ? collectionAge : scalarField ?? age;
+  const start = paramScalar(interp.in0, 0), end = paramScalar(interp.in1, 1);
+  const period = Math.max(.001, end - start);
+  const sample = interp.mode === 'PF_INPUT_MODE_LOOPED' ? start + ((clock - start) % period + period) % period : clock;
+  const value = normalizedWindow(sample, [start, end]);
+  const t = normalizedWindow(value, [paramScalar(r.m_flInterpInput0, 0), paramScalar(r.m_flInterpInput1, 1)]);
   const next = sorted.findIndex((s) => s.m_flPosition! >= t);
   const b = sorted[next < 0 ? sorted.length - 1 : next];
   const a = sorted[Math.max(0, next < 0 ? sorted.length - 1 : next - 1)];
@@ -352,7 +371,7 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
     'C_OP_ContinuousEmitter', 'C_OP_InstantaneousEmitter', 'C_INIT_InitFloat', 'C_INIT_RandomSequence',
     'C_INIT_CreateWithinSphere', 'C_INIT_CreateWithinSphereTransform', 'C_INIT_CreateWithinBox', 'C_INIT_PositionOffset',
     'C_INIT_RandomColor', 'C_OP_BasicMovement', 'C_OP_PositionLock', 'C_OP_SpinUpdate',
-    'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_SetVec', 'C_OP_OscillateVector', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites', 'C_OP_MovementRotateParticleAroundAxis',
+    'C_OP_ColorInterpolate', 'C_OP_SetFloat', 'C_OP_SetVec', 'C_OP_OscillateVector', 'C_OP_Decay', 'C_OP_FadeAndKill', 'C_OP_RenderSprites', 'C_OP_RenderTrails', 'C_OP_MovementRotateParticleAroundAxis',
   ]);
   const issues: FxPreviewIssue[] = [];
   let visited = 0;
@@ -396,7 +415,8 @@ export function fxPreviewIssues(root: FxDescriptor): FxPreviewIssue[] {
       const checkParam = (value: unknown, depth = 0) => {
         if (!value || typeof value !== 'object' || depth > 8) return;
         const r = value as Record<string, unknown>;
-        if (typeof r.pf === 'string' && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM', 'PF_TYPE_RANDOM_BIASED', 'PF_TYPE_PARTICLE_AGE_NORMALIZED'].includes(r.pf)) report(n.class, 'unsupported-input');
+        if (typeof r.pf === 'string' && !['PF_TYPE_LITERAL', 'PF_TYPE_RANDOM_UNIFORM', 'PF_TYPE_RANDOM_BIASED', 'PF_TYPE_PARTICLE_AGE_NORMALIZED'].includes(r.pf)
+          && !(n.class === 'C_OP_SetVec' && r.pf === 'PF_TYPE_COLLECTION_AGE')) report(n.class, 'unsupported-input');
         if (typeof r.m_nType === 'string' && r.m_nType.startsWith('PVEC_') && r.m_nType !== 'PVEC_TYPE_LITERAL'
           && !(n.class === 'C_OP_SetVec' && spriteGradientColor(r, 0))) report(n.class, 'unsupported-vector-input');
         for (const child of Object.values(r)) checkParam(child, depth + 1);
@@ -446,7 +466,7 @@ export function allSpriteLayers(d: FxDescriptor): SpriteSimParams[] {
     const delay = parentDelay + Math.max(0, Math.min(30, paramScalar(system.startDelay, 0)));
     let publishesSpawnEvents = false;
     for (const renderer of system.renderers) {
-      if (renderer.mode !== 'sprite' || layers.length >= 16 || remaining <= 0) continue;
+      if (!['sprite', 'trail'].includes(renderer.mode) || layers.length >= 16 || remaining <= 0) continue;
       const layer = spriteParamsFor({ ...system, sheets: d.sheets }, renderer);
       if (!layer) continue;
       if (layer.parentSpawnEvents && !parentSystemId) continue;

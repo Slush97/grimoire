@@ -10,22 +10,25 @@ export function particleControlPointInputs(previewDefaults: Readonly<Record<numb
 }
 
 /** Initial values are applied in authored order, including transparent alpha. */
-export function particleInitialScalars(system: FxDescriptor, inputs: Readonly<Record<number, number>> = {}) {
-  const values = { life: paramScalar(system.constantLifespan, 1), radius: paramScalar(system.constantRadius, 1), alpha: paramScalar(system.constantAlpha, 1) };
+export function particleInitialScalars(system: FxDescriptor, inputs: Readonly<Record<number, number>> = {}, particleNumber = 0) {
+  const values = { life: paramScalar(system.constantLifespan, 1), radius: paramScalar(system.constantRadius, 5), alpha: paramScalar(system.constantAlpha, 1) };
   for (const node of system.initializers.slice(0, 32)) if (node.class === 'C_INIT_InitFloat') {
     const field = paramScalar(node.params.m_nOutputField, 3), key = field === 1 ? 'life' : field === 3 ? 'radius' : field === 7 ? 'alpha' : null;
     if (!key) continue;
-    const value = particleScalarInput(node.params.m_InputValue, inputs, values[key]);
-    values[key] = node.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE' ? values[key]*value : value;
+    const value = particleScalarInput(node.params.m_InputValue, inputs, values[key], Math.random, particleNumber);
+    values[key] = node.params.m_nSetMethod === 'PARTICLE_SET_SCALE_INITIAL_VALUE' ? values[key]*value
+      : node.params.m_nSetMethod === 'PARTICLE_SET_ADD_TO_INITIAL_VALUE' ? values[key] + value : value;
   }
   return { life: Math.max(.01, Math.min(30, values.life)), radius: Math.max(0, Math.min(128, values.radius)), alpha: Math.max(0, Math.min(1, values.alpha)) };
 }
 
 /** Offline particle CPs have zero components unless supplied. Runtime gameplay
  * inputs are not replaced with invented full-strength values. */
-export function particleScalarInput(input: unknown, cpComponents: Readonly<Record<number, number>> = {}, fallback = 0, random = Math.random): number {
+export function particleScalarInput(input: unknown, cpComponents: Readonly<Record<number, number>> = {}, fallback = 0, random = Math.random, particleNumber = 0): number {
   if (!input || typeof input !== 'object') return paramScalar(input, fallback);
   const p = input as Record<string, unknown>;
+  if (p.pf === 'PF_TYPE_PARTICLE_NUMBER') return p.map === 'PF_MAP_TYPE_CURVE'
+    ? ageCurveValue({ ...p, pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' }, particleNumber, fallback) : particleNumber;
   if (p.pf === 'PF_TYPE_CONTROL_POINT_COMPONENT') {
     const value = cpComponents[paramScalar(p.cp, 0)] ?? 0;
     if (p.map === 'PF_MAP_TYPE_CURVE') return ageCurveValue({ ...p, pf: 'PF_TYPE_PARTICLE_AGE_NORMALIZED' }, value, fallback);
@@ -40,6 +43,10 @@ export function particleScalarInput(input: unknown, cpComponents: Readonly<Recor
     if (p.pf === 'PF_TYPE_RANDOM_BIASED' && p.biasType === 'PF_BIAS_TYPE_STANDARD') {
       const bias = Math.max(.001, Math.min(.999, (paramScalar(p.bias, 0)+1)/2));
       t = t/((1/bias-2)*(1-t)+1);
+    }
+    if (p.pf === 'PF_TYPE_RANDOM_BIASED' && p.biasType === 'PF_BIAS_TYPE_EXPONENTIAL') {
+      const bias = Math.max(-1, Math.min(1, paramScalar(p.bias, 0)));
+      t = Math.pow(t, bias < 0 ? 1 - 19 * bias : 1 - bias);
     }
     return paramScalar(p.min, fallback)+(paramScalar(p.max, fallback)-paramScalar(p.min, fallback))*t;
   }

@@ -25,6 +25,18 @@ The exporter already carries metallic/roughness data, emissive strength and clot
 
 One specific compatibility gap: the unified builder only upgrades to a physical material for glass, or preserves sheen when the imported material already has the physical sheen lobe. An inspector should report the effective supported features, rather than presenting every slider for every part. The authored highlight layer is also deliberately disabled in `deadlockMaterial.ts`; it should not be enabled globally as a speculative reflection fix.
 
+## Implemented and verified on 2026-10-24
+
+A controlled close-up of Gawden's Mina gun produced matching reflections with the raw glTF PBR material and our unified viewer material. Both had metalness 1 and roughness 0. The room used for reflections had been darkened to RGB 0.05, including its diffuse reflection surfaces. Restoring the authored RoomEnvironment surfaces makes the broad gold reflections visible without changing Gawden's material. This is an environment fix, not an added metallic shader trick.
+
+The new Focus part control computes bounds from each selected indexed draw call. Shared vertex buffers previously pulled in unused vertices belonging to the rest of the hero. Focusing pauses auto-rotation, lowers the camera's near plane, and retains the full model as context.
+
+Surface now offers Original, Matte, Satin, Polished and Metal, with roughness and metalness controls after choosing an override. Original uses the original maps and values. Compatible static `pbr.vfx` materials can export their finish: the native workshop command patches constants and clones bound roughness/metalness masks under a material-specific path. Packed normal/roughness textures retain their red/green normal channels and alpha. Tint, pattern, color adjustments and finish layers compose in that order. Finishes use the existing draft, saved-edit and dependency records.
+
+Tests cover selected-part bounds, shader-wrapper restoration, unsupported finish bindings, and an actual packed material whose normal map is cloned and rebound while the input VPK remains byte-identical. A finish was also saved and enabled in the isolated Gawden test profile. No in-game visual parity claim is made.
+
+The native additions are developed against Slush97/vpkmerge's actual v0.25.1 baseline. A local preview package can bundle this helper; publishing the Grimoire change still requires the normal native release and three-platform hash-pin update.
+
 ## Additions that make sense
 
 | Addition | What it gives the user | Save into the game? | Priority |

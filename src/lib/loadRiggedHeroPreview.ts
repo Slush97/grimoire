@@ -28,7 +28,7 @@ async function loadClothSidecar(url: string): Promise<ClothModel | null> {
   }
 }
 
-export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean) {
+export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean, movement = false) {
   const base = `grimoire-hero://m/${encodeURIComponent(info.key)}`;
   const version = info.mtimeMs ?? 0;
   // Resolve both before mounting the mixer: cloth calibration needs the bind
@@ -39,5 +39,9 @@ export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean
     loadAttachments(`${base}/attachments.json?v=${version}`),
   ]);
   gltf.scene.userData.grimoireAttachments = attachments;
+  if (movement && info.hasMovement) {
+    const motions = await loadGltfPreview(`${base}/movement.glb?v=${version}`);
+    gltf.animations.push(...motions.animations);
+  }
   return { gltf, clothModel };
 }

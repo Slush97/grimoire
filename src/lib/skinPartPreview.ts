@@ -30,6 +30,17 @@ export function applySkinPartEdits(scene: THREE.Object3D, edits: SkinPartEdit[],
       const visible = material.visible;
       material.visible = visible && !edit?.hidden;
       restore.push(() => { material.visible = visible; });
+      if (edit?.finish && 'roughness' in material && 'metalness' in material
+        && 'roughnessMap' in material && 'metalnessMap' in material) {
+        const previous = { roughness: material.roughness, metalness: material.metalness,
+          roughnessMap: material.roughnessMap, metalnessMap: material.metalnessMap };
+        material.roughness = edit.finish.roughness;
+        material.metalness = edit.finish.metalness;
+        material.roughnessMap = null;
+        material.metalnessMap = null;
+        if (previous.roughnessMap || previous.metalnessMap) material.needsUpdate = true;
+        restore.push(() => { Object.assign(material, previous); if (previous.roughnessMap || previous.metalnessMap) material.needsUpdate = true; });
+      }
       if ('wireframe' in material && typeof material.wireframe === 'boolean') {
         const previous = material.wireframe;
         material.wireframe = wireframe;

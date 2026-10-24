@@ -13,6 +13,7 @@ export interface SkinPart {
   vertices: number;
   tintable: boolean;
   patternable: boolean;
+  finishable?: boolean;
   textureSize?: { width: number; height: number };
 }
 
@@ -29,6 +30,12 @@ export interface SkinPartEdit {
   pattern?: SkinPartPattern | null;
   adjustments?: SkinColorAdjustments;
   colorize?: boolean;
+  finish?: SkinPartFinish;
+}
+
+export interface SkinPartFinish {
+  roughness: number;
+  metalness: number;
 }
 
 export interface SkinColorAdjustments {

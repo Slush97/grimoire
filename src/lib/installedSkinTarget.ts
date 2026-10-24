@@ -1,6 +1,11 @@
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from './lockerUtils';
 import type { Mod } from '../types/mod';
 import type { SkinEditSource } from '../types/skinEditor';
+import type { MovementFxLink } from './movementFx';
+
+export function installedDoorStuckTarget(mod: Mod): SkinEditSource | MovementFxLink | null {
+  return mod.movementFx ? { kind: 'movement', choice: mod.movementFx } : installedSkinTarget(mod);
+}
 
 export function installedSkinTarget(mod: Mod): SkinEditSource | null {
   if (!isLockerManagedMod(mod)) return null;
