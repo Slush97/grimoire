@@ -1,3 +1,4 @@
+import type { ProfileShuffle } from '../../src/lib/profileShuffle';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from '../../src/types/modUpdates';
 import type {
@@ -651,10 +652,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),
-    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('create-profile', name, crosshairSettings),
+    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle) => ipcRenderer.invoke('create-profile', name, crosshairSettings, shuffle),
     createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) =>
         ipcRenderer.invoke('create-profile-from-gamebanana-ids', args),
-    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('update-profile', profileId, crosshairSettings),
+    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle) => ipcRenderer.invoke('update-profile', profileId, crosshairSettings, shuffle),
     applyProfile: (profileId: string) => ipcRenderer.invoke('apply-profile', profileId),
     deleteProfile: (profileId: string) => ipcRenderer.invoke('delete-profile', profileId),
     renameProfile: (profileId: string, newName: string) => ipcRenderer.invoke('rename-profile', profileId, newName),
