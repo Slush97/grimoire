@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
@@ -6,7 +6,7 @@ import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRo
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
-import { useHeroCategoryStore } from '../../stores/heroCategoryStore';
+import { useCategoryStore } from '../../stores/categoryStore';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
@@ -28,7 +28,6 @@ import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
 import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
-import { heroNameForLabel } from '../../lib/heroNames';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -60,6 +59,7 @@ interface ModCardProps {
     movementFx?: Mod['movementFx'];
     audioUrl?: string;
     sourceSection?: string;
+    categoryId?: number;
     categoryName?: string;
     nsfw?: boolean;
     gameBananaId?: number;
@@ -370,38 +370,6 @@ function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
     default:
       return 'Inferred by Grimoire';
   }
-}
-
-function CategoryChip({
-  label,
-  className,
-  iconClassName = 'h-4 w-4',
-  iconOnly = false,
-}: {
-  label: string;
-  className: string;
-  iconClassName?: string;
-  /** When the category is a hero, collapse to the bare face icon (no frame, no
-   *  truncated name) to match the locker-hero chip in cards. */
-  iconOnly?: boolean;
-}) {
-  const heroName = heroNameForLabel(label);
-  if (heroName && iconOnly) {
-    return (
-      <span className="inline-flex flex-shrink-0 items-center" title={label}>
-        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} iconOnly />
-      </span>
-    );
-  }
-  return (
-    <span className={className} title={label}>
-      {heroName ? (
-        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} />
-      ) : (
-        <ChipText>{label}</ChipText>
-      )}
-    </span>
-  );
 }
 
 function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
@@ -747,11 +715,9 @@ function ModListRowContent({
                 iconClassName={tagIconClassName}
               />
             ) : (
-              <CategoryChip
-                label={taxonomy.heroName}
-                className={metaChipClasses}
-                iconClassName={tagIconClassName}
-              />
+              <span className={metaChipClasses} title={taxonomy.heroName}>
+                <HeroTagLabel heroName={taxonomy.heroName} iconClassName={tagIconClassName} />
+              </span>
             )
           )}
           {taxonomyLabel && (
@@ -860,7 +826,11 @@ export function ModCard({
   const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
   const [backupBusy, setBackupBusy] = useState(false);
   const setBackupToDelete = useModBackupsStore((state) => state.setDeleteTarget);
-  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
+  const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
+  const heroNames = useCategoryStore((state) => state.heroNames);
+  const pathsByModel = useCategoryStore((state) => state.pathsByModel);
+  const taxonomyContext = useMemo(() => ({ heroByCategoryId, heroNames, pathsByModel }), [heroByCategoryId, heroNames, pathsByModel]);
+  const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
     setBackupBusy(true);
@@ -1038,10 +1008,8 @@ export function ModCard({
         : 'h-7 rounded-lg px-2.5 text-[12px]';
   const tagIconClassName =
     viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
-  // A compact text chip must retain enough width to show actual content; zero
-  // was technically valid to flexbox and produced the orphaned border seen on
-  // the smallest cards.
-  const chipMinClass = viewMode === 'compact' ? 'min-w-9' : 'min-w-0';
+  // List hero icons need the same minimum room as compact-card labels.
+  const chipMinClass = viewMode === 'grid' ? 'min-w-0' : 'min-w-9';
   const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
@@ -1100,7 +1068,7 @@ export function ModCard({
   // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
   // manual or auto global tag is visible here, not just in the Locker. A global
   // mod has no hero, so the two chips never both show.
-  const cardTaxonomy = getInstalledCardTaxonomy(mod, heroByCategoryId);
+  const cardTaxonomy = getInstalledCardTaxonomy(mod, taxonomyContext);
   const cardGlobalLabel = cardTaxonomy.globalType
     ? globalModTypeLabel(cardTaxonomy.globalType, t)
     : undefined;
@@ -1278,7 +1246,7 @@ export function ModCard({
                   value={canonicalHeroName(mod.lockerHero) ?? ''}
                   onValueChange={(value) => void applyLockerTag(value)}
                 >
-                  {HERO_NAMES_SORTED.map((heroName) => (
+                  {tagHeroNames.map((heroName) => (
                     <MenuRadioItem
                       key={heroName}
                       value={heroName}

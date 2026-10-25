@@ -3,17 +3,23 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../types/mod';
-import type { GameBananaModDetails } from '../types/gamebanana';
+import type { GameBananaCategory, GameBananaModDetails } from '../types/gamebanana';
 import ModDetailsModal from './ModDetailsModal';
 import PreferencesSection from './settings/sections/PreferencesSection';
 import { useRequirementsStore } from '../stores/requirementsStore';
 
 const mocks = vi.hoisted(() => ({
-  store: { settings: {} as AppSettings, soundVolume: 1, saveSettings: vi.fn() },
+  store: { settings: {} as AppSettings, mods: [], soundVolume: 1, saveSettings: vi.fn() },
   replace: vi.fn(), download: vi.fn(), translate: (key: string) => key,
   filePhase: 'idle' as 'idle' | 'queued' | 'finishing',
+  categoryState: {
+    pathsByModel: {} as Record<string, ReadonlyMap<number, readonly GameBananaCategory[]>>,
+    heroNames: ['Violet'],
+    load: vi.fn(async () => []),
+  },
 }));
 vi.mock('../stores/appStore', () => ({ useAppStore: (selector: (state: typeof mocks.store) => unknown) => selector(mocks.store) }));
+vi.mock('../stores/categoryStore', () => ({ useCategoryStore: (selector: (state: typeof mocks.categoryState) => unknown) => selector(mocks.categoryState) }));
 vi.mock('../lib/api', () => ({ getModComments: vi.fn(), getModUpdates: vi.fn() }));
 vi.mock('../lib/downloadActivity', () => ({
   useDownloadActivity: () => ({ current: null, queue: [], requested: [], progress: null, extracting: false }),
@@ -54,6 +60,8 @@ describe('mod details', () => {
     vi.clearAllMocks();
     mocks.filePhase = 'idle';
     mocks.store.settings = {} as AppSettings;
+    mocks.categoryState.pathsByModel = {};
+    mocks.categoryState.load.mockResolvedValue([]);
     mocks.store.saveSettings.mockImplementation(async (settings: AppSettings) => { mocks.store.settings = settings; });
     previousApi = window.electronAPI;
     window.electronAPI = { getForgeBridgeStatus: async () => null } as unknown as typeof window.electronAPI;
@@ -66,6 +74,72 @@ describe('mod details', () => {
     useRequirementsStore.getState().finish(false);
     host.remove();
     window.electronAPI = previousApi;
+  });
+
+  it('rereads the shared category cache when navigating without remounting', async () => {
+    await render();
+    expect(mocks.categoryState.load).toHaveBeenCalledExactlyOnceWith('ModCategory');
+    await render(false, { mod: { ...mod, id: 11 } });
+    expect(mocks.categoryState.load).toHaveBeenCalledTimes(2);
+    await render(false, { mod: { ...mod, id: 11 }, installed: false });
+    expect(mocks.categoryState.load).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['modal', 'sidebar'] as const)('shows category tags above requirements and files in the %s', async (variant) => {
+    mocks.categoryState.pathsByModel.ModCategory = new Map([[3, [
+      { id: 1, name: 'Skins' }, { id: 2, name: 'Violet' }, { id: 3, name: 'Faithful/Vanilla+' },
+    ]]]);
+    await render(false, { variant, mod: {
+      ...mod,
+      category: { id: 3, name: 'Faithful/Vanilla+' },
+      requirements: { status: 'loaded', checkedAt: 1, items: [
+        { name: 'Dependency', url: 'https://example.com', importance: 'required', state: 'on' },
+      ] },
+    } });
+    const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
+    expect(hero.querySelector('img')?.getAttribute('src')).toContain('/heroes/chip-icons/violet.png');
+    expect(hero.parentElement?.textContent).toBe('SkinsVioletFaithful/Vanilla+');
+    const tags = hero.parentElement!;
+    const requirements = document.querySelector('[aria-label="requirements.title"]')!;
+    const fileTitle = [...document.querySelectorAll('h3')].find(item => item.textContent?.includes('modDetails.sections.files'))!;
+    expect(tags.nextElementSibling).toBe(requirements);
+    expect(requirements.nextElementSibling).toBe(fileTitle.parentElement);
+    expect(tags.parentElement).toBe(fileTitle.parentElement?.parentElement);
+    expect(tags.classList.contains('flex-wrap')).toBe(true);
+    expect(mocks.categoryState.load).toHaveBeenCalledWith('ModCategory');
+  });
+
+  it('leaves no empty badge group before the title when no status is visible', async () => {
+    await render(false, { variant: 'modal', installed: false, mod: { ...mod, category: { name: 'Skins' } } });
+    const title = document.querySelector('h2')!;
+    expect(title.parentElement?.firstElementChild).toBe(title);
+    expect(title.parentElement?.textContent).not.toContain('Skins');
+    await render(false, { variant: 'modal', installed: false, ignoreUpdates: true, onToggleIgnoreUpdates: vi.fn() });
+    expect(title.parentElement?.firstElementChild).toBe(title);
+  });
+
+  it.each([
+    { installed: true },
+    { installed: false, updateAvailable: true },
+    { installed: false, archivedByAuthor: true },
+    { installed: false, dateModified: 1 },
+  ])('retains the badge group for a visible status: %j', async (status) => {
+    await render(false, { variant: 'modal', ...status });
+    const title = document.querySelector('h2')!;
+    expect(title.previousElementSibling?.textContent?.trim()).toBeTruthy();
+  });
+
+  it('resolves category ids within the viewed section and keeps supplied names offline', async () => {
+    mocks.categoryState.pathsByModel.SoundCategory = new Map([[3, [
+      { id: 1, name: 'Music' }, { id: 3, name: 'Menu music' },
+    ]]]);
+    await render(false, { section: 'Sound', mod: { ...mod, category: { id: 3, name: 'Menu music' } } });
+    expect(host.textContent).toContain('MusicMenu music');
+    expect(mocks.categoryState.load).toHaveBeenCalledWith('SoundCategory');
+    expect(mocks.categoryState.load).toHaveBeenCalledWith('ModCategory');
+    mocks.categoryState.load.mockRejectedValueOnce(new Error('Offline'));
+    await render(false, { mod: { ...mod, category: { id: 4, name: 'Accessibility' } } });
+    expect(host.textContent).toContain('Accessibility');
   });
 
   it('removes the original backdrop while navigating requirements and restores the same details tree', async () => {

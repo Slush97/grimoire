@@ -55,6 +55,10 @@ import type { ReplaceableFile } from '../lib/updateActions';
 import { RequirementsPanel } from './requirements/RequirementsPanel';
 import { useRequirementsStore } from '../stores/requirementsStore';
 import { hasRequirementIssues } from '../lib/modRequirements';
+import { categoryModelForSection, resolveCategoryPath } from '../lib/categoryPaths';
+import { heroNameForLabel } from '../lib/heroNames';
+import { useCategoryStore } from '../stores/categoryStore';
+import { HeroTagLabel } from './installed/chips';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -184,6 +188,17 @@ function ModDetailsModal({
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  const categoryModel = categoryModelForSection(section);
+  const categoryPaths = useCategoryStore(state => state.pathsByModel[categoryModel]);
+  const heroNames = useCategoryStore(state => state.heroNames);
+  const loadCategories = useCategoryStore(state => state.load);
+  const categories = resolveCategoryPath(categoryPaths, mod.category, mod.rootCategory);
+  useEffect(() => {
+    const models = categoryModel === 'ModCategory' ? [categoryModel] : [categoryModel, 'ModCategory'];
+    void Promise.all(models.map(model => loadCategories(model))).catch(() => {
+      // Supplied category names remain usable when no cached tree is available.
+    });
+  }, [mod.id, categoryModel, loadCategories]);
   const requirementMods = useAppStore(state => state.mods);
   const requirementSnapshot = useRequirementsStore(state => state.snapshots[`${section}:${mod.id}`]) ?? mod.requirements;
   const requirementIssues = hasRequirementIssues(requirementSnapshot, requirementMods);
@@ -1078,70 +1093,67 @@ function ModDetailsModal({
               </button>
             </div>
           )}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-state-update/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-update border border-state-update/40">
-                <Download className="w-2.5 h-2.5" />
-                {t('profiles.actions.update')}
-              </span>
-            )}
-            {installed && !updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
-                <CheckCircle2 className="w-2.5 h-2.5" />
-                {t('modDetails.status.installed')}
-              </span>
-            )}
-            {archivedByAuthor && (
-              <Tag icon={Archive} title={t('modDetails.status.archivedByAuthorTitle')}>
-                {t('modDetails.status.archivedByAuthor')}
-              </Tag>
-            )}
-            {/* Only surface the ignore-updates pill in the installed-mod
-                context (handler provided) and when it's actually relevant:
-                either there's an update available now, or the user already
-                opted out and might want to re-enable detection. */}
-            {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
-              <button
-                type="button"
-                onClick={onToggleIgnoreUpdates}
-                disabled={ignoreUpdatesPending}
-                aria-busy={ignoreUpdatesPending}
-                className={
-                  ignoreUpdates
-                    ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
-                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
-                }
-                title={
-                  ignoreUpdates
-                    ? 'Currently ignoring updates for this mod. Click to resume detection.'
-                    : 'Stop flagging updates for this mod (you can re-enable later).'
-                }
-              >
-                {ignoreUpdates ? (
-                  <>
-                    <BellOff className="w-2.5 h-2.5" />
-                    {t('modDetails.status.updatesIgnored')}
-                  </>
-                ) : (
-                  <>
-                    <Bell className="w-2.5 h-2.5" />
-                    {t('modDetails.actions.ignoreUpdates')}
-                  </>
-                )}
-              </button>
-            )}
-            {outdated && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                {t('modDetails.status.outdated')}
-              </span>
-            )}
-            {mod.category?.name && (
-              <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border">
-                {mod.category.name}
-              </span>
-            )}
-          </div>
+          {(updateAvailable || installed || archivedByAuthor || outdated) && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {updateAvailable && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-state-update/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-update border border-state-update/40">
+                  <Download className="w-2.5 h-2.5" />
+                  {t('profiles.actions.update')}
+                </span>
+              )}
+              {installed && !updateAvailable && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  {t('modDetails.status.installed')}
+                </span>
+              )}
+              {archivedByAuthor && (
+                <Tag icon={Archive} title={t('modDetails.status.archivedByAuthorTitle')}>
+                  {t('modDetails.status.archivedByAuthor')}
+                </Tag>
+              )}
+              {/* Only surface the ignore-updates pill in the installed-mod
+                  context (handler provided) and when it's actually relevant:
+                  either there's an update available now, or the user already
+                  opted out and might want to re-enable detection. */}
+              {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
+                <button
+                  type="button"
+                  onClick={onToggleIgnoreUpdates}
+                  disabled={ignoreUpdatesPending}
+                  aria-busy={ignoreUpdatesPending}
+                  className={
+                    ignoreUpdates
+                      ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
+                      : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                  }
+                  title={
+                    ignoreUpdates
+                      ? 'Currently ignoring updates for this mod. Click to resume detection.'
+                      : 'Stop flagging updates for this mod (you can re-enable later).'
+                  }
+                >
+                  {ignoreUpdates ? (
+                    <>
+                      <BellOff className="w-2.5 h-2.5" />
+                      {t('modDetails.status.updatesIgnored')}
+                    </>
+                  ) : (
+                    <>
+                      <Bell className="w-2.5 h-2.5" />
+                      {t('modDetails.actions.ignoreUpdates')}
+                    </>
+                  )}
+                </button>
+              )}
+              {outdated && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                  {t('modDetails.status.outdated')}
+                </span>
+              )}
+            </div>
+          )}
           {/* Sidebar moves the title down into the body to keep this header from
               cramming, so here it's just a spacer that pushes the action buttons
               to the right edge. */}
@@ -1607,6 +1619,20 @@ function ModDetailsModal({
                 </div>
               )}
 
+              {categories.length > 0 && (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {categories.map(category => {
+                    const hero = heroNameForLabel(category.name, heroNames);
+                    return hero ? (
+                      <span key={category.id ?? category.name} className="inline-flex items-center" title={category.name}>
+                        <HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly />
+                      </span>
+                    ) : (
+                      <Tag key={category.id ?? category.name}>{category.name}</Tag>
+                    );
+                  })}
+                </div>
+              )}
               <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
               {filesSection}
 

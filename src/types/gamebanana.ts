@@ -16,8 +16,7 @@ export interface GameBananaMod {
   submitter?: GameBananaSubmitter;
   previewMedia?: GameBananaPreviewMedia;
   rootCategory?: GameBananaCategory;
-  /** Deepest category the mod is filed under (a hero, under Skins). Absent when
-   *  it sits directly in a root category. */
+  /** Deepest assigned category, which can be several levels below the root. */
   subCategory?: GameBananaCategory;
 }
 
@@ -109,6 +108,8 @@ export interface GameBananaModDetails {
   gameId?: number;
   gameName?: string;
   category?: GameBananaCategory;
+  /** Root fallback retained when offline catalog details only know the leaf ID. */
+  rootCategory?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
   submitter?: GameBananaSubmitter;
@@ -213,6 +214,7 @@ export interface GameBananaCollectionItem {
   submitter?: GameBananaSubmitter;
   previewMedia?: GameBananaPreviewMedia;
   rootCategory?: GameBananaCategory;
+  subCategory?: GameBananaCategory;
 }
 
 export interface GameBananaCollectionItemsResponse {

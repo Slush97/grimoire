@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModCard } from './ModCard';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
+import { useCategoryStore } from '../../stores/categoryStore';
+import { buildCategoryPaths } from '../../lib/categoryPaths';
 
 const translate = vi.hoisted(() => vi.fn((key: string) => key));
 vi.mock('react-i18next', () => ({
@@ -20,6 +22,7 @@ describe('installed card menu mounting', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useCategoryStore.setState({ heroByCategoryId: new Map(), heroNames: [], pathsByModel: {} });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
@@ -87,5 +90,33 @@ describe('installed card menu mounting', () => {
     await act(async () => heroChoices[1].click());
     expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith(HERO_NAMES_SORTED[1]);
     expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('shows a dynamic hero once in %s cards', async viewMode => {
+    useCategoryStore.setState({
+      heroByCategoryId: new Map([[2, 'Solomon']]), heroNames: ['Solomon'],
+      pathsByModel: { ModCategory: buildCategoryPaths([{
+        id: 1, name: 'Skins', itemCount: 1,
+        children: [{ id: 2, name: 'Solomon', itemCount: 1 }],
+      }]) },
+    });
+    input = { ...input, viewMode, mod: { ...input.mod, sourceSection: 'Mod', categoryId: 2, categoryName: 'Solomon' } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelectorAll('img[src*="solomon.png"]')).toHaveLength(1);
+    const visibleLabels = [...host.querySelectorAll('span')].filter(node =>
+      node.childElementCount === 0 && node.textContent === 'Solomon' && !node.classList.contains('sr-only'));
+    expect(visibleLabels).toHaveLength(viewMode === 'list' ? 1 : 0);
+  });
+
+  it('offers current category-tree heroes when retagging', async () => {
+    useCategoryStore.setState({ heroNames: ['Baba', 'Solomon'] });
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('dropdown');
+    await openLockerTags();
+    const choices = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+      .filter(item => item.querySelector('img'));
+    expect(choices.map(item => item.textContent)).toEqual(['Baba', 'Solomon']);
+    await act(async () => choices[1].click());
+    expect(input.onTagLocker).toHaveBeenCalledExactlyOnceWith('Solomon');
   });
 });

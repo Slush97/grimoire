@@ -31,7 +31,6 @@ import {
   getSubmitterLinks,
   downloadMod,
   getGamebananaSections,
-  getGamebananaCategories,
   backfillGameBananaFileId,
   isGameRunningModLockError,
 } from '../lib/api';
@@ -39,6 +38,8 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
 import { browseNsfwFilter, browseRemoteFilters, type BrowseContentMode } from '../lib/browseFilters';
 import { categorySubtreeIds } from '../lib/heroFilter';
+import { categoryModelForSection } from '../lib/categoryPaths';
+import { useCategoryStore } from '../stores/categoryStore';
 import {
   isModDownloadPending,
   getVisibleDownloadQueue,
@@ -97,6 +98,7 @@ import { usePrefersReducedMotion } from '../components/browse/cardUtils';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 const DEFAULT_PER_PAGE = 36;
+const EMPTY_CATEGORIES: GameBananaCategoryNode[] = [];
 // Row count below which the local catalog mirror is treated as unusable. A
 // part-synced catalog returns misleadingly thin results, so the filters that
 // depend on it stay disabled until it is worth querying.
@@ -481,12 +483,12 @@ export default function Browse() {
   const [_totalCount, setTotalCount] = useState(() => initialCache?.totalCount ?? 0);
   const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
   const [sections, setSections] = useState<GameBananaSection[]>([]);
-  const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
-  const [categoriesSection, setCategoriesSection] = useState<string | null>(null);
-  // Hero list comes from the Mod section's category tree (Mod -> Skins -> heroes).
-  // Cached separately so hero filtering still works on the Sound tab, where the
-  // current section's category tree has no Skins parent.
-  const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
+  const categoryTrees = useCategoryStore((state) => state.treesByModel);
+  const loadCategoryTree = useCategoryStore((state) => state.load);
+  const categoryModel = categoryModelForSection(section);
+  const categories = categoryTrees[categoryModel] ?? EMPTY_CATEGORIES;
+  const categoriesSection = categoryTrees[categoryModel] ? section : null;
+  const modCategories = categoryTrees.ModCategory ?? EMPTY_CATEGORIES;
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
   // Section of the open details item. Usually matches the browse tab, but
   // description/changelog links can jump to a Sound/Wip/Mod from another tab;
@@ -1320,7 +1322,10 @@ export default function Browse() {
         likeCount: m.likeCount,
         viewCount: m.viewCount,
         nsfw: m.isNsfw,
-        rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
+        rootCategory: m.categoryId || m.categoryName
+          ? { id: m.categoryId ?? undefined, name: m.categoryName ?? '' }
+          : undefined,
+        subCategory: m.subCategoryId ? { id: m.subCategoryId, name: '' } : undefined,
         submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
         previewMedia: (() => {
           let images: { baseUrl: string; file: string; file530: string }[] | undefined;
@@ -1443,18 +1448,13 @@ export default function Browse() {
   }, [cacheCurrentBrowseResults, fetchFilterStamp, page]);
 
   useEffect(() => {
-    let active = true;
-    getGamebananaCategories('ModCategory')
-      .then((data) => {
-        if (active) setModCategories(data);
-      })
-      .catch(() => {
-        // Hero filter just won't be available; not fatal.
+    const models = new Set(['ModCategory', ...sectionStamp.split(',').map(categoryModelForSection)]);
+    for (const model of models) {
+      void loadCategoryTree(model).catch(() => {
+        // Offline without a cached tree: retain the supplied category labels.
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+    }
+  }, [sectionStamp, loadCategoryTree]);
 
   useEffect(() => {
     let active = true;
@@ -1489,39 +1489,6 @@ export default function Browse() {
     // unnecessarily). setSection is stable from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // The store switches filters with the section. Category loading must never
-  // reset them, including a selection made while this request is in flight.
-  useEffect(() => {
-    let active = true;
-    const selected = sections.find((entry) => entry.modelName === section);
-    if (!selected) {
-      setCategories([]);
-      setCategoriesSection(null);
-      return () => {
-        active = false;
-      };
-    }
-
-    const loadCategories = async () => {
-      try {
-        const data = await getGamebananaCategories(selected.categoryModelName);
-        if (!active) return;
-        setCategories(data);
-        setCategoriesSection(section);
-      } catch (err) {
-        if (active) {
-          setError(String(err));
-        }
-      }
-    };
-
-    loadCategories();
-
-    return () => {
-      active = false;
-    };
-  }, [sections, section]);
 
   // fetchMods and searchLocal share `lastFetchedStampRef`, and its key
   // (`page` + fetchFilterStamp) describes the FILTERS only, not which backend

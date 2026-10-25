@@ -1,17 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const categoryCache = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
+
 vi.mock('electron', () => ({
     BrowserWindow: class BrowserWindow {
         static getAllWindows() { return []; }
     },
 }));
 vi.mock('./modDatabase', () => ({
-    getCachedCategoryTree: vi.fn(),
-    saveCachedCategoryTree: vi.fn(),
+    getCachedCategoryTree: categoryCache.get,
+    saveCachedCategoryTree: categoryCache.save,
 }));
 vi.mock('./modRequirementCache', () => ({ cacheRequirements: vi.fn() }));
+vi.mock('./rateLimiter', () => ({ gamebananaRateLimiter: { acquire: async () => {} } }));
 
-import { fetchCollectionItems, fetchModDetails, fetchSubmissions } from './gamebanana';
+import { fetchCategoryTreeCached, fetchCollectionItems, fetchModDetails, fetchSubmissions } from './gamebanana';
 
 // Trimmed from the live Mod/Index list response on 2026-10-16. The list
 // endpoint gives both categories as name + profile URL and no _idRow, and sends
@@ -62,9 +65,74 @@ describe('fetchSubmissions sub-category', () => {
         const { records } = await fetchSubmissions('Mod', 1, 50);
 
         expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('_aSubCategory');
-        expect(records[0].rootCategory?.name).toBe('Skins');
+        expect(records[0].rootCategory).toMatchObject({ id: 33295, name: 'Skins' });
         expect(records[0].subCategory).toMatchObject({ id: 42674, name: 'Graves' });
         expect(records[1].subCategory).toBeUndefined();
+    });
+
+    it('normalizes detail categories without a numeric ID and retains collection leaf categories', async () => {
+        const record = {
+            ...payload._aRecords[0],
+            _aCategory: payload._aRecords[0]._aSubCategory,
+        };
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(
+            url.includes('/Collection/') ? { ...payload, _aRecords: [record] } : record,
+        )));
+
+        expect((await fetchModDetails(record._idRow)).category).toMatchObject({ id: 42674, name: 'Graves' });
+        const collection = (await fetchCollectionItems(1)).records[0];
+        expect(collection.rootCategory).toMatchObject({ id: 33295, name: 'Skins' });
+        expect(collection.subCategory).toMatchObject({ id: 42674, name: 'Graves' });
+    });
+});
+
+describe('cached GameBanana category trees', () => {
+    afterEach(() => {
+        categoryCache.get.mockReset();
+        categoryCache.save.mockReset();
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it('shares an initial request and retains parent IDs from the live tree shape', async () => {
+        const fetch = vi.fn(async () => Response.json([{
+            _idRow: 33295,
+            _sName: 'Skins',
+            _nItemCount: 10,
+            _aChildren: [{ _idRow: 49629, _sName: 'Rat King', _nItemCount: 2, _idParentRow: 33295 }],
+        }]));
+        vi.stubGlobal('fetch', fetch);
+
+        const [first, second] = await Promise.all([
+            fetchCategoryTreeCached('ModCategory'),
+            fetchCategoryTreeCached('ModCategory'),
+        ]);
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(first).toBe(second);
+        expect(first[0].children?.[0]).toMatchObject({ id: 49629, parentId: 33295 });
+        expect(categoryCache.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('serves fresh stored trees without another request', async () => {
+        const nodes = [{ id: 33295, name: 'Skins', itemCount: 10 }];
+        categoryCache.get.mockReturnValue({ fetchedAt: Date.now(), payload: JSON.stringify(nodes) });
+        const fetch = vi.fn();
+        vi.stubGlobal('fetch', fetch);
+
+        expect(await fetchCategoryTreeCached('ModCategory')).toEqual(nodes);
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('preserves network failures on cold loads but falls back when revalidating a stored tree', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const failure = new Error('offline');
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(failure));
+        await expect(fetchCategoryTreeCached('ModCategory')).rejects.toBe(failure);
+
+        const nodes = [{ id: 33295, name: 'Skins', itemCount: 10 }];
+        categoryCache.get.mockReturnValue({ fetchedAt: 0, payload: JSON.stringify(nodes) });
+        expect(await fetchCategoryTreeCached('ModCategory', true)).toEqual(nodes);
     });
 });
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUpToLine } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
@@ -28,16 +28,22 @@ export function ChipText({ children }: { children: ReactNode }) {
 }
 
 export function HeroTagLabel({ heroName, iconClassName = 'h-4 w-4', iconOnly = false }: { heroName: string; iconClassName?: string; iconOnly?: boolean }) {
+  const src = getHeroChipIconPath(heroName);
+  const [failedSrc, setFailedSrc] = useState<string>();
+  const showIcon = failedSrc !== src;
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle leading-none">
-      <img
-        src={getHeroChipIconPath(heroName)}
-        alt=""
-        aria-hidden="true"
-        className={`${iconClassName} block flex-shrink-0 rounded-full object-cover`}
-        loading="lazy"
-      />
-      {iconOnly ? <span className="sr-only">{heroName}</span> : <ChipText>{heroName}</ChipText>}
+      {showIcon && (
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          className={`${iconClassName} block flex-shrink-0 rounded-full object-cover`}
+          loading="lazy"
+          onError={() => setFailedSrc(src)}
+        />
+      )}
+      {iconOnly && showIcon ? <span className="sr-only">{heroName}</span> : <ChipText>{heroName}</ChipText>}
     </span>
   );
 }

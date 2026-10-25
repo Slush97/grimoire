@@ -1,8 +1,8 @@
-import type { Mod, GlobalModType } from '../types/mod';
-import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero } from './lockerUtils';
+import type { Mod } from '../types/mod';
+import { GLOBAL_MOD_TYPE_LABELS, modLoadOrder } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
-import { heroNameForLabel } from './heroNames';
+import { getInstalledCardTaxonomy, normalizeInstalledTagLabel, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 
 /**
  * Rows on the Installed page are either standalone mods or grouped files that
@@ -178,78 +178,38 @@ export function entryIsLocal(entry: ModEntry): boolean {
     : entry.groupKey.startsWith('local:');
 }
 
-export const OTHER_TAG_KEY = 'other';
-
-function heroNameFromTag(label?: string): string | null {
-  if (!label) return null;
-  const direct = heroNameForLabel(label);
-  if (direct) return canonicalHeroName(direct);
-  for (const part of label.split(/[/>]/).map((p) => p.trim()).filter(Boolean).reverse()) {
-    const match = heroNameForLabel(part);
-    if (match) return canonicalHeroName(match);
-  }
-  return null;
-}
-
-function modHeroName(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): string | null {
-  const tagged = canonicalHeroName(mod.lockerHero);
-  if (tagged) return tagged;
-  const categoryHero = heroNameFromTag(mod.categoryName) ?? skinCategoryHero(mod, heroByCategoryId);
-  if (categoryHero) return categoryHero;
-  const section = (mod.sourceSection ?? '').toLowerCase();
-  if (section.includes('sound')) {
-    const inferred = inferHeroFromTitle(mod.name);
-    return inferred ? canonicalHeroName(inferred) : null;
-  }
-  return null;
-}
-
-export function entryHeroNames(entry: ModEntry, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
+export function entryHeroNames(entry: ModEntry, context?: InstalledTaxonomyContext): string[] {
   const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
   return Array.from(new Set(
-    mods.map((mod) => modHeroName(mod, heroByCategoryId)).filter((name): name is string => !!name)
+    mods.map((mod) => getInstalledCardTaxonomy(mod, context).heroName).filter((name): name is string => !!name)
   ));
 }
 
-export function tagKeyLabel(key: string): string {
-  if (key === OTHER_TAG_KEY) return 'Other';
-  if (key === 'section:sound') return 'Sounds';
-  if (key.startsWith('global:')) {
-    const gt = key.slice('global:'.length) as GlobalModType;
-    return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
-  }
-  if (key.startsWith('cat:')) return key.slice('cat:'.length);
-  if (key.startsWith('section:')) return key.slice('section:'.length);
-  return key;
+export interface InstalledTag {
+  key: string;
+  label: string;
 }
 
-function modTagKeys(mod: Mod): string[] {
-  const keys: string[] = [];
-  const labels = new Set<string>();
-  const add = (key: string) => {
-    const labelKey = tagKeyLabel(key).trim().toLowerCase();
-    if (!labelKey || labels.has(labelKey)) return;
-    labels.add(labelKey);
-    keys.push(key);
+function modTags(mod: Mod, context?: InstalledTaxonomyContext): InstalledTag[] {
+  const taxonomy = getInstalledCardTaxonomy(mod, context);
+  const tags = new Map<string, InstalledTag>();
+  const add = (rawLabel: string) => {
+    const label = normalizeInstalledTagLabel(rawLabel);
+    if (!label) return;
+    const key = `tag:${label.toLowerCase()}`;
+    if (!tags.has(key)) tags.set(key, { key, label });
   };
 
-  const global = getEffectiveGlobalType(mod);
-  if (global) add(`global:${global}`);
-
-  const section = (mod.sourceSection ?? '').trim();
-  if (section.toLowerCase().includes('sound')) add('section:sound');
-
-  const category = mod.categoryName?.trim();
-  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
-
-  if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
-  if (keys.length === 0) add(OTHER_TAG_KEY);
-  return keys;
+  if (taxonomy.globalType) add(GLOBAL_MOD_TYPE_LABELS[taxonomy.globalType]);
+  if (taxonomy.categoryLabel) add(taxonomy.categoryLabel);
+  if (mod.sourceSection === 'Sound') add('Sounds');
+  else if (mod.sourceSection === 'Wip') add('Wip');
+  return [...tags.values()];
 }
 
-export function entryTagKeys(entry: ModEntry): string[] {
+export function entryTags(entry: ModEntry, context?: InstalledTaxonomyContext): InstalledTag[] {
   const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
-  return Array.from(new Set(mods.flatMap(modTagKeys)));
+  return [...new Map(mods.flatMap(mod => modTags(mod, context)).map(tag => [tag.key, tag])).values()];
 }
 
 export function flattenEntries(entries: ModEntry[]): Mod[] {

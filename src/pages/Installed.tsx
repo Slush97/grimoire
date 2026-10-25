@@ -64,7 +64,9 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
-import { useHeroCategoryStore } from '../stores/heroCategoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
+import { categoryModelForSection } from '../lib/categoryPaths';
+import type { InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
@@ -172,7 +174,7 @@ import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/inst
 import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
 import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 import { InstalledSkeleton } from '../components/installed/InstalledSkeleton';
-import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+import { type ModEntry, type InstalledTag, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entryIsLocal, entryHeroNames, entryTags, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -1275,11 +1277,24 @@ export default function Installed() {
   const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
-  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
-  const loadHeroCategories = useHeroCategoryStore((state) => state.load);
+  const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
+  const heroNames = useCategoryStore((state) => state.heroNames);
+  const pathsByModel = useCategoryStore((state) => state.pathsByModel);
+  const loadCategoryTree = useCategoryStore((state) => state.load);
+  const taxonomyContext = useMemo<InstalledTaxonomyContext>(
+    () => ({ heroByCategoryId, heroNames, pathsByModel }),
+    [heroByCategoryId, heroNames, pathsByModel],
+  );
+  const lockerHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
+  const categoryModelStamp = useMemo(() => [...new Set([
+    'ModCategory', ...visibleMods.map(mod => categoryModelForSection(mod.sourceSection)),
+  ])].sort().join(','), [visibleMods]);
   useEffect(() => {
-    void loadHeroCategories();
-  }, [loadHeroCategories]);
+    for (const model of categoryModelStamp.split(',')) {
+      // Offline with no cached tree: supplied category names remain usable.
+      void loadCategoryTree(model).catch(() => {});
+    }
+  }, [categoryModelStamp, loadCategoryTree]);
   const finishing = usePendingDownloadCompletions();
   const unavailableUpdateIds = useMemo(() => new Set([
     ...updatingModIds, ...submittingModIds,
@@ -2613,23 +2628,23 @@ export default function Installed() {
     [allEntries]
   );
 
-  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
-  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTags
+  // do real work per mod (category ancestry, canonical hero names,
   // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
   // hit them for every entry on every render - including drag-start renders that
-  // only flip draggingKey. Caching them here (rebuilt only when allEntries
-  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // only flip draggingKey. Rebuilding only for library or taxonomy changes
+  // keeps those passes to cheap Map lookups, so a drag pickup paints the
   // overlay without rescanning the whole library. Mirrors entryConflicts.
   const entryFacetMeta = useMemo(() => {
-    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    const byKey = new Map<string, { heroNames: string[]; tags: InstalledTag[] }>();
     for (const entry of allEntries) {
-      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry) });
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry, taxonomyContext), tags: entryTags(entry, taxonomyContext) });
     }
     return byKey;
-  }, [allEntries, heroByCategoryId]);
+  }, [allEntries, taxonomyContext]);
 
   // List membership, deliberately kept OUT of entryFacetMeta: that cache is
-  // rebuilt only when allEntries changes, so folding list ids into it would
+  // independent of list assignments, so folding list ids into it would
   // either show stale membership after an assignment or force the whole facet
   // cache to be thrown away on every click. A separate index keyed the same way
   // stays correct and costs one Map lookup.
@@ -3047,32 +3062,28 @@ export default function Installed() {
   // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
   // compute if an entry somehow isn't in the cache.
   const heroNamesOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId);
-  const tagKeysOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, taxonomyContext);
+  const tagsOf = (entry: ModEntry): InstalledTag[] =>
+    entryFacetMeta.get(entry.key)?.tags ?? entryTags(entry, taxonomyContext);
 
   // Hero and tag buckets are built from allEntries (not the filtered view) so
   // the option lists stay stable as selections change.
   const heroOptionMap = new Map<string, number>();
-  const tagOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, { label: string; count: number }>();
   for (const entry of allEntries) {
     for (const heroName of heroNamesOf(entry)) {
       heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
     }
-    for (const key of tagKeysOf(entry)) {
-      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    for (const tag of tagsOf(entry)) {
+      const previous = tagOptionMap.get(tag.key);
+      tagOptionMap.set(tag.key, { label: previous?.label ?? tag.label, count: (previous?.count ?? 0) + 1 });
     }
   }
-  const heroOptions = HERO_NAMES_SORTED
-    .filter((name) => heroOptionMap.has(name))
-    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const heroOptions = Array.from(heroOptionMap, ([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const tagOptions = Array.from(tagOptionMap.entries())
-    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
-    .sort((a, b) => {
-      if (a.key === OTHER_TAG_KEY) return 1;
-      if (b.key === OTHER_TAG_KEY) return -1;
-      return a.label.localeCompare(b.label);
-    });
+    .map(([key, { label, count }]) => ({ key, label, count }))
+    .sort((a, b) => a.label.localeCompare(b.label));
   const localCount = allEntries.filter(entryIsLocal).length;
   const gbCount = allEntries.length - localCount;
   const enabledCount = enabledEntries.length;
@@ -3156,9 +3167,9 @@ export default function Installed() {
     const matchesSourceEntry = (entry: ModEntry) =>
       entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
     const matchesHeroEntry = (entry: ModEntry) =>
-      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId)).includes(heroFilter);
+      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, taxonomyContext)).includes(heroFilter);
     const matchesTagEntry = (entry: ModEntry) =>
-      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
+      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tags ?? entryTags(entry, taxonomyContext)).some(tag => tagFilter.includes(tag.key));
     // Selecting several lists unions them (same as tags), but the list axis as a
     // whole ANDs with the others.
     const matchesListEntry = (entry: ModEntry) =>
@@ -3205,7 +3216,7 @@ export default function Installed() {
         }))
       : [];
     return { visibleEnabled, visibleDisabled };
-  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
+  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, taxonomyContext, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
   const activeCollapsedLists = searchNeedle
@@ -3978,7 +3989,7 @@ export default function Installed() {
                     </div>
                   )}
 
-                  {tagOptions.length > 1 && (
+                  {tagOptions.length > 0 && (
                     <FilterCheckList
                       label={t('installed.filters.tags')}
                       options={tagOptions}
@@ -4832,7 +4843,7 @@ export default function Installed() {
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       {t('installed.tag.hero')}
                     </div>
-                    {HERO_NAMES_SORTED.map((name) => (
+                    {lockerHeroNames.map((name) => (
                       <button
                         key={name}
                         type="button"

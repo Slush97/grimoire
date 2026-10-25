@@ -12,7 +12,9 @@ import { RevealImage } from '../common/RevealImage';
 import { SkeletonModCard } from '../common/Skeleton';
 import { IconText } from '../common/IconText';
 import { HeroTagLabel } from '../installed/chips';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
+import { getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
+import { categoryModelForSection } from '../../lib/categoryPaths';
+import { useCategoryStore } from '../../stores/categoryStore';
 import {
   BROWSE_READABLE_CARD_GOLDEN,
   getReadableCardTargetWidth,
@@ -30,7 +32,7 @@ import {
   BrowseSoundPlaceholder,
   BrowseStatItem,
 } from './cardParts';
-import { formatCount, getReadableCardChips } from './cardUtils';
+import { formatCount, getBrowseCardTaxonomy } from './cardUtils';
 
 // Treat Enter/Space as a click on role="button" divs (keyboard navigation).
 function handleCardKeyDown(e: React.KeyboardEvent, onClick: () => void): void {
@@ -65,13 +67,14 @@ function ReadableBrowseModCard({
   onQuickDownload,
   onEnable,
   priority,
-}: ModCardProps) {
+  taxonomy,
+}: ModCardProps & { taxonomy: ReturnType<typeof getBrowseCardTaxonomy> }) {
   const { t } = useTranslation();
   const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
-  const inferredHero = inferHeroFromTitle(mod.name);
+  const { heroName: inferredHero, chips } = taxonomy;
   const heroIconSpace = inferredHero ? BROWSE_READABLE_HERO_ICON_SPACE : 0;
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
@@ -79,8 +82,6 @@ function ReadableBrowseModCard({
   const readableDensity = getReadableDensity(readableCardWidth);
   const readableScale = readableCardWidth / BROWSE_READABLE_CARD_GOLDEN;
   const chipRowWidth = Math.round(readableCardWidth - 24 * readableScale);
-  const chips = getReadableCardChips(mod, section);
-  const showChips = readableDensity !== 'micro';
   const showAuthor = readableDensity !== 'micro';
   // "Last updated" sits in the stats row when the card is wide enough; on
   // narrower cards it drops to its own line under the author so it can't
@@ -171,7 +172,7 @@ function ReadableBrowseModCard({
     >
       <div className="browse-readable-card-media relative aspect-video shrink-0 overflow-hidden rounded-t-xl bg-bg-tertiary">
         {media}
-        {showChips && chips.length > 0 && (
+        {chips.length > 0 && (
           <div className={`browse-readable-card-chips pointer-events-none absolute inset-x-0 z-10 flex items-end px-2 py-2 ${audioPreview ? 'top-0' : 'bottom-0'}`}>
             <div className="pointer-events-auto min-w-0">
               <BrowseReadableChipRow
@@ -218,11 +219,11 @@ function ReadableBrowseModCard({
 
         <div className={`mt-auto flex shrink-0 items-center justify-between gap-2 ${isMicro ? 'h-6' : 'h-7'}`}>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            {showChips && inferredHero && (
-              <span className="inline-flex flex-shrink-0 items-center" title={inferredHero}>
+            {inferredHero && (
+              <span className="inline-flex max-w-6 flex-shrink-0 items-center" title={inferredHero}>
                 <HeroTagLabel
                   heroName={inferredHero}
-                  iconClassName={readableDensity === 'full' ? 'h-[22px] w-[22px]' : 'h-5 w-5'}
+                  iconClassName={isMicro ? 'h-4 w-4' : readableDensity === 'full' ? 'h-[22px] w-[22px]' : 'h-5 w-5'}
                   iconOnly
                 />
               </span>
@@ -306,6 +307,9 @@ const LIST_THUMB_HEIGHT = 80;
 
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
   const { t } = useTranslation();
+  const paths = useCategoryStore((state) => state.pathsByModel[categoryModelForSection(section)]);
+  const heroNames = useCategoryStore((state) => state.heroNames);
+  const taxonomy = getBrowseCardTaxonomy(mod, section, paths, heroNames);
   const thumbnail = getModThumbnail(mod);
   // Classic grid cards are aspect-[3/2], taller than a screenshot.
   const thumbWidth = viewMode === 'list' ? LIST_THUMB_WIDTH : (cardWidth ?? cardSize);
@@ -320,10 +324,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
-  // Sound mods don't carry hero info in the API, so guess from the title.
-  // Used to swap in the locker hero portrait as the card backdrop.
-  const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
-  const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
+  const inferredHero = taxonomy.heroName;
+  const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const [audioControlsActive, setAudioControlsActive] = useState(false);
 
@@ -411,10 +413,15 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </button>
             )}
           </div>
+          {taxonomy.chips.length > 0 && (
+            <div className="mt-1">
+              <BrowseReadableChipRow chips={taxonomy.chips} availableWidth={Math.max(80, thumbWidth * 2)} />
+            </div>
+          )}
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+            {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
-            {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
@@ -493,12 +500,15 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           onQuickDownload={onQuickDownload}
           onEnable={onEnable}
           priority={priority}
+          taxonomy={taxonomy}
         />
       </BrowseArtParallaxCard>
     );
   }
 
   const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
+  // Classic cards already show the content warning in their state-tag stack.
+  const categoryChips = taxonomy.chips.filter(chip => chip.label !== '18+');
   return (
     <BrowseArtParallaxCard suppressHoverIntentRef={suppressHoverIntentRef}>
       <div
@@ -612,6 +622,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           variant because the title is anchored at top:0 instead of bottom:0. */}
       {isSoundSection && hasAudioPreview ? (
         <div className="absolute top-0 left-0 right-0 pointer-events-none p-3 pr-12">
+          {categoryChips.length > 0 && (
+            <div className="browse-readable-card-chips pointer-events-auto mb-1.5">
+              <BrowseReadableChipRow chips={categoryChips} availableWidth={Math.max(48, thumbWidth - 72)} maxVisible={2} onImage />
+            </div>
+          )}
           {(mod.nsfw || installed || isOutdated) && (
             <div className="flex flex-wrap items-center gap-1 mb-1.5">
               {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
@@ -635,6 +650,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           )}
           <h3 className="font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-base">{mod.name}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-xs">
+            {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -642,6 +658,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         </div>
       ) : (
         <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : 'p-3'}`}>
+          {categoryChips.length > 0 && (
+            <div className="browse-readable-card-chips mb-1.5">
+              <BrowseReadableChipRow chips={categoryChips} availableWidth={Math.max(48, thumbWidth - 24)} maxVisible={2} onImage />
+            </div>
+          )}
           <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           {/* Stats / author / outdated. On minimal cards this group is collapsed
               to zero height at rest and slides up on hover or keyboard focus. */}
@@ -653,6 +674,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             }
           >
             <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-sm">
+              {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
               <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
               <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
               {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}

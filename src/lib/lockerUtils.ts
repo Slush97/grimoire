@@ -142,14 +142,15 @@ export const HERO_ALIASES = SHARED_HERO_ALIASES;
  * all see the roster name.
  */
 const HERO_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
-  'The Doorman': 'Doorman',
-  RatKing: 'Rat King',
+  'the doorman': 'Doorman',
+  ratking: 'Rat King',
 };
 
 /** Canonical display name for a hero, collapsing roster duplicates (see above). */
 export function canonicalHeroName(name: string | undefined | null): string {
   if (!name) return '';
-  return HERO_DISPLAY_ALIASES[name] ?? name;
+  const label = name.replace(/\s+/g, ' ').trim();
+  return HERO_DISPLAY_ALIASES[label.toLowerCase()] ?? label;
 }
 
 /**
@@ -226,7 +227,7 @@ export function getHeroNamePath(name: string): string {
 }
 
 export function getHeroChipIconPath(name: string): string {
-  return getAssetPath(`/heroes/chip-icons/${heroIconAssetName(name)}.png`);
+  return getAssetPath(`/heroes/chip-icons/${heroIconAssetName(canonicalHeroName(name))}.png`);
 }
 
 export function getHeroWikiUrl(name: string): string {

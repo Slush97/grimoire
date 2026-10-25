@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnchoredPopover } from '../common/AnchoredPopover';
 import type { BrowseReadableChip, BrowseReadableChipTone } from './cardUtils';
 
 export const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
@@ -33,17 +35,79 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
-function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadableChip; onImage?: boolean }) {
+function BrowseReadableChipBadge({ chip, onImage = false, wrap = false }: { chip: BrowseReadableChip; onImage?: boolean; wrap?: boolean }) {
   return (
     <span
       title={chip.label}
-      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-2xs font-medium leading-none ${readableChipTone(
+      className={`inline-flex min-h-6 shrink-0 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${wrap ? 'max-w-full whitespace-normal break-words py-1' : 'h-6 whitespace-nowrap'} ${readableChipTone(
         chip.tone,
         onImage
       )}`}
     >
       {chip.label}
     </span>
+  );
+}
+
+function BrowseReadableChipOverflow({ chips, onImage }: { chips: BrowseReadableChip[]; onImage: boolean }) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cancelClose = useCallback(() => clearTimeout(closeTimer.current), []);
+  const close = useCallback(() => {
+    cancelClose();
+    setOpen(false);
+  }, [cancelClose]);
+  const show = () => {
+    cancelClose();
+    setOpen(true);
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    if (document.activeElement !== anchorRef.current) closeTimer.current = setTimeout(close, 120);
+  };
+  useEffect(() => cancelClose, [cancelClose]);
+  const labels = chips.map(chip => chip.label).join(', ');
+
+  return (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        title={labels}
+        aria-label={labels}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onMouseEnter={show}
+        onMouseLeave={scheduleClose}
+        onFocus={show}
+        onBlur={scheduleClose}
+        onClick={event => { event.stopPropagation(); show(); }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            close();
+          }
+        }}
+        className={`inline-flex h-6 shrink-0 items-center rounded-sm border px-2 text-2xs font-medium leading-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+          onImage
+            ? 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm'
+            : 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary'
+        }`}
+      >
+        +{chips.length}
+      </button>
+      <AnchoredPopover open={open} onClose={close} anchorRef={anchorRef} width={180} align="start" ariaLabel={labels}>
+        <div
+          className="flex flex-wrap gap-1 p-2"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+          onClick={event => event.stopPropagation()}
+        >
+          {chips.map((chip, index) => <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} wrap />)}
+        </div>
+      </AnchoredPopover>
+    </>
   );
 }
 
@@ -87,23 +151,7 @@ export function BrowseReadableChipRow({
         <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} onImage={onImage} />
       ))}
       {hiddenChips.length > 0 && (
-        <div className="group/hidden relative shrink-0">
-          <span
-            title={`${hiddenChips.length} more`}
-            className={`inline-flex h-6 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${
-              onImage
-                ? 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm'
-                : 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary'
-            }`}
-          >
-            +{hiddenChips.length}
-          </span>
-          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-hl/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
-            {hiddenChips.map((chip, index) => (
-              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} onImage={onImage} />
-            ))}
-          </div>
-        </div>
+        <BrowseReadableChipOverflow chips={hiddenChips} onImage={onImage} />
       )}
     </div>
   );

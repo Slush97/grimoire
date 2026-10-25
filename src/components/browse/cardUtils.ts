@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { GameBananaMod } from '../../types/gamebanana';
+import type { GameBananaCategory, GameBananaMod } from '../../types/gamebanana';
+import { resolveCategoryPath } from '../../lib/categoryPaths';
+import { heroNameForLabel } from '../../lib/heroNames';
+import { inferHeroFromTitle } from '../../lib/lockerUtils';
 
 // Abbreviate counts (1234 -> 1.2k, 98765 -> 99k). Falsy/non-finite inputs
 // render as "0" — without this, undefined slips past every `<` check
@@ -21,40 +24,38 @@ export type BrowseReadableChip = {
   tone?: BrowseReadableChipTone;
 };
 
-function normalizeReadableChipLabel(label: string | undefined): string | null {
-  const cleaned = label?.replace(/\s+/g, ' ').trim();
-  if (!cleaned) return null;
-
-  const lower = cleaned.toLowerCase();
-  if (lower === 'skins') return 'Skin';
-  if (lower === 'sounds') return 'Sound';
-  if (lower === 'mods') return 'Mod';
-  if (lower === 'hud' || lower === 'huds') return 'HUD';
-  if (lower === 'ui') return 'UI';
-  return cleaned;
-}
-
 function addReadableChip(chips: BrowseReadableChip[], label: string | undefined, tone?: BrowseReadableChipTone) {
-  const normalized = normalizeReadableChipLabel(label);
+  const normalized = label?.replace(/\s+/g, ' ').trim();
   if (!normalized) return;
 
   const exists = chips.some((chip) => chip.label.toLowerCase() === normalized.toLowerCase());
   if (!exists) chips.push({ label: normalized, tone });
 }
 
-export function getReadableCardChips(mod: GameBananaMod, section: string): BrowseReadableChip[] {
+export function getBrowseCardTaxonomy(
+  mod: GameBananaMod,
+  section: string,
+  paths?: ReadonlyMap<number, readonly GameBananaCategory[]>,
+  heroNames?: readonly string[],
+): { heroName: string | null; chips: BrowseReadableChip[] } {
+  const categories = resolveCategoryPath(paths, mod.subCategory, mod.rootCategory);
   const chips: BrowseReadableChip[] = [];
   const isSoundSection = section === 'Sound';
-  const categoryLabel = mod.rootCategory?.name ?? section;
+  let categoryHero: string | null = null;
 
-  addReadableChip(chips, categoryLabel, isSoundSection ? 'accent' : 'neutral');
+  for (const category of categories) {
+    const hero = heroNameForLabel(category.name, heroNames);
+    if (hero) categoryHero ??= hero;
+    else addReadableChip(chips, category.name, isSoundSection ? 'accent' : 'neutral');
+  }
+  if (categories.length === 0) addReadableChip(chips, section, isSoundSection ? 'accent' : 'neutral');
   if (mod.nsfw) addReadableChip(chips, '18+', 'danger');
 
   // Keep the NSFW flag ahead of category labels.
   const rank = (chip: BrowseReadableChip) => (chip.label === '18+' ? 0 : 1);
   chips.sort((a, b) => rank(a) - rank(b));
 
-  return chips;
+  return { heroName: categoryHero ?? inferHeroFromTitle(mod.name), chips };
 }
 
 export function usePrefersReducedMotion() {
