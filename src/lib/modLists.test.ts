@@ -9,10 +9,12 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  reorderList,
   setListIcon,
   toggleListMembership,
   writeStoredModLists,
 } from './modLists';
+import { buildInstalledListGroups } from './installedListGroups';
 
 const installLocalStorage = (values: Record<string, string> = {}) => {
   const storage = new Map(Object.entries(values));
@@ -35,6 +37,41 @@ describe('storage key', () => {
     // Renaming this orphans every list already saved by a shipped build.
     // Treat the string as a wire format.
     expect(MOD_LISTS_KEY).toBe('installedModLists');
+  });
+});
+
+describe('reorderList', () => {
+  const lists: ModList[] = [
+    { ...list('skins', 'Skins', ['gamebanana:1']), icon: 'shirt' },
+    list('sounds', 'Sounds', ['gamebanana:2', 'gamebanana:1']),
+    list('empty', 'Empty'),
+  ];
+
+  it('moves a list in either direction without changing its identity or contents', () => {
+    const moved = reorderList(lists, 'skins', 'empty');
+    expect(moved).toEqual([lists[1], lists[2], lists[0]]);
+    expect(reorderList(moved, 'skins', 'sounds')).toEqual(lists);
+    expect(moved[2]).toBe(lists[0]);
+    expect(lists.map((item) => item.id)).toEqual(['skins', 'sounds', 'empty']);
+  });
+
+  it('keeps the order for cancelled, stale, and empty moves', () => {
+    expect(reorderList(lists, 'skins', 'skins')).toEqual(lists);
+    expect(reorderList(lists, 'missing', 'sounds')).toEqual(lists);
+    expect(reorderList(lists, 'skins', 'missing')).toEqual(lists);
+    expect(reorderList([], 'skins', 'sounds')).toEqual([]);
+  });
+
+  it('restores the saved order and uses it for list groups', () => {
+    installLocalStorage();
+    const moved = reorderList(lists, 'empty', 'skins');
+    writeStoredModLists(moved);
+    const restored = readStoredModLists();
+    expect(restored).toEqual(moved);
+    expect(buildInstalledListGroups([], restored).map((group) => group.id))
+      .toEqual(['empty', 'skins', 'sounds']);
+    expect(createList(restored, 'New').lists.map((item) => item.id))
+      .toEqual(['empty', 'skins', 'sounds', 'new']);
   });
 });
 

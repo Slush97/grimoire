@@ -180,6 +180,17 @@ export function deleteList(lists: readonly ModList[], id: string): ModList[] {
   return lists.filter((list) => list.id !== id);
 }
 
+/** Move a list to another list's position without changing its contents. */
+export function reorderList(lists: readonly ModList[], id: string, overId: string): ModList[] {
+  const from = lists.findIndex((list) => list.id === id);
+  const to = lists.findIndex((list) => list.id === overId);
+  const next = [...lists];
+  if (from < 0 || to < 0 || from === to) return next;
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
 export function setListIcon(lists: readonly ModList[], id: string, icon: ModListIcon): ModList[] {
   return lists.map((list) => list.id === id ? { ...list, icon } : list);
 }

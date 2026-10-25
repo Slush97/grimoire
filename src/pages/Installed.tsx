@@ -131,6 +131,7 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  reorderList,
   setListIcon,
   toggleListMembership,
   writeStoredModLists,
@@ -4352,6 +4353,7 @@ export default function Installed() {
             if (!bulkProgress) setManagingLists(false);
           }}
           onRename={renameModList}
+          onReorder={(id, overId) => commitModLists(reorderList(modLists, id, overId))}
           onIcon={(id, icon) => commitModLists(setListIcon(modLists, id, icon))}
           onDelete={deleteModList}
           onSetEnabled={setModListEnabled}

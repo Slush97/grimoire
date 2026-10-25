@@ -432,7 +432,7 @@ export function Button({
 // buttons need an accessible name) and doubles as the hover tooltip.
 // ============================================================================
 
-interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
+interface IconButtonProps extends Omit<React.ComponentPropsWithRef<'button'>, 'aria-label'> {
     icon: LucideIcon;
     /** Accessible name + hover tooltip (icon-only, so this is mandatory). */
     label: string;
