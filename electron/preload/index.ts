@@ -91,6 +91,7 @@ import type {
     PublishRequest,
     ReportRequest,
     UpdateProfileRequest,
+    UpdateProfileContentsRequest,
 } from '@grimoire/social-types';
 
 // Expose the API to the renderer process
@@ -773,6 +774,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         publish: (body: PublishRequest) => ipcRenderer.invoke('social:publish', body),
         updateProfile: (id: string, body: UpdateProfileRequest) =>
             ipcRenderer.invoke('social:updateProfile', { id, body }),
+        updateProfileContents: (id: string, body: UpdateProfileContentsRequest) =>
+            ipcRenderer.invoke('social:updateProfileContents', { id, body }),
         like: (id: string) => ipcRenderer.invoke('social:like', id),
         unlike: (id: string) => ipcRenderer.invoke('social:unlike', id),
         report: (id: string, body: ReportRequest) =>

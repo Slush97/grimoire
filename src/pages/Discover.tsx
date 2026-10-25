@@ -395,7 +395,7 @@ export default function Discover() {
           }}
           onUpdated={(updated) => {
             // Keep the browse-list cache in sync so switching back to Top/New
-            // doesn't show a stale title.
+            // doesn't show stale contents or metadata.
             setData((prev) =>
               prev
                 ? {
@@ -404,9 +404,8 @@ export default function Discover() {
                       p.id === updated.id
                         ? {
                             ...p,
-                            title: updated.title,
-                            description: updated.description,
-                            updated_at: updated.updated_at,
+                            ...updated,
+                            viewer_has_liked: updated.viewer_has_liked ?? p.viewer_has_liked,
                           }
                         : p
                     ),
