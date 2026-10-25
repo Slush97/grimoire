@@ -4,7 +4,7 @@ import type { Mod } from '../../../src/types/mod';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState } from '../../../src/types/modUpdates';
 import { classifyModFiles } from '../../../src/lib/updateFileMatch';
 import { resolveUpdateRun } from '../../../src/lib/updateActions';
-import { mergeSourceFileIds } from '../../../src/lib/updateCheck';
+import { mergeSourceFileIds, mergeSourceInstalls } from '../../../src/lib/updateCheck';
 import { visibleInstalledMods } from '../../../src/lib/visibleMods';
 
 export interface ModUpdateContext {
@@ -191,7 +191,7 @@ export function createModUpdateController(deps: Dependencies) {
                         selectedMods.forEach(mod => group.expected.set(mod.id, { ...mod }));
                         groups.set(group.id, group);
                         const scope = installed.filter(mod => (mod.sourceSection ?? 'Mod') === section);
-                        const classification = classifyModFiles(modId, details.files ?? [], scope, mergeSourceFileIds(scope), autoMatch);
+                        const classification = classifyModFiles(modId, details.files ?? [], scope, mergeSourceInstalls(scope), autoMatch);
                         const destinations = new Map<number, { sources: string[]; promote: boolean }>();
                         for (const step of resolveUpdateRun(classification, selectedMods)) {
                             if (step.kind === 'needs-pick') {

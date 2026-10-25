@@ -1,3 +1,4 @@
+import ShufflePool from '../components/locker/ShufflePool';
 import { lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -1336,6 +1337,7 @@ export default function Locker() {
             .join(' • ')}
         </div>
         <div className="flex items-center gap-3">
+          {(hasShuffleableMods || shuffleIncluded.size > 0) && <ShufflePool />}
           {hasShuffleableMods && (
             <button
               type="button"

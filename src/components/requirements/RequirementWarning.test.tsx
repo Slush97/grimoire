@@ -29,6 +29,19 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 describe('Installed requirement warning reuse', () => {
+  it('opens local skin dependencies without requiring a GameBanana snapshot', () => {
+    const base = { ...makeMod(999), sha256: 'a'.repeat(64) };
+    const mod = { ...makeMod(1), gameBananaId: undefined, skinEdit: { hero: 'Mina', sources: [base.sha256] } };
+    useAppStore.setState({ mods: [mod, base] });
+    act(() => root.render(<RequirementWarning mod={mod} />));
+    expect(host.textContent).toBe('requirements.title');
+    act(() => host.querySelector('button')!.click());
+    expect(useRequirementsStore.getState().review?.source).toMatchObject({
+      localModId: mod.id, name: mod.name, requirements: { status: 'loaded', items: [{ sha256: base.sha256 }] },
+    });
+    expect(useRequirementsStore.getState().snapshots).toEqual({});
+  });
+
   it('opens the current snapshot and name after requirement and metadata refreshes', () => {
     const mod = makeMod(1);
     const target = { id: 1, section: 'Mod' };

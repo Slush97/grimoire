@@ -4,14 +4,15 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
 import { decodedAlbedoAverage, source2TintPlan, sourceAlbedoAverage, SOURCE2_SATURATION_WEIGHTS } from './source2ColorCorrection';
+import { NPR_LIGHTING_GLSL, nprLightingUniforms } from './source2NprLighting';
 
 /**
  * Source 2 NPR (cel / rim / tint) restyle for the Locker hero preview.
  *
  * React-free. Owns reading the `morphic` extras vpkmerge emits, resolving the
  * Source 2 preview texture indices, and building the CSM that layers the
- * Deadlock toon look ON TOP of the existing PMREM IBL + ACES tonemap output (it
- * is additive on the lit result, never a replacement pass).
+ * Deadlock diffuse-light shaping into the existing PBR pipeline. Specular,
+ * transmission and emissive rendering retain their separate paths.
  *
  * Data contract (mirror of vpkmerge morphic/src/model/glb.rs `morphic_extras`):
  *   material.userData.morphic = {
@@ -1178,6 +1179,8 @@ uniform vec3  uJitterAmpYB;
 uniform vec3  uJitterAmpZA;
 uniform vec3  uJitterAmpZB;
 uniform float uHasHighlight;
+uniform float uEditorSelected;
+uniform vec3 uEditorSelectedColor;
 uniform vec3  uHighlightTint;
 uniform float uHighlightCoverage;
 uniform float uHighlightHardness;
@@ -1188,6 +1191,8 @@ uniform float uHighlightRadius;
 varying vec2 vNprUv;
 varying vec2 vNprUv2;
 varying vec3 vNprSourcePosition;
+
+${NPR_LIGHTING_GLSL}
 
 // Soft-quantize a 0..1 value into uBands steps, softening only the riser so band
 // terminators do not alias at preview resolution.
@@ -1353,6 +1358,23 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
       // becoming white specks on glass; direct highlights remain independent.
       'getIBLRadiance( geometryViewDir, geometryNormal, uCitadelGlass > 0.5 ? max(material.roughness, 0.45) : material.roughness )'
     ),
+    '#include <lights_fragment_begin>': {
+      type: 'fs',
+      value: THREE.ShaderChunk.lights_fragment_begin.replaceAll(
+        'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+        /* glsl */ `{
+          vec3 nprBefore = reflectedLight.directDiffuse;
+          RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+          vec3 nprKey = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
+          if (useNprLighting() && dot(directLight.direction, nprKey) > 0.99) {
+            float nprNdotL = max(dot(geometryNormal, directLight.direction), 0.0);
+            vec3 nprContribution = reflectedLight.directDiffuse - nprBefore;
+            reflectedLight.directDiffuse = nprBefore + nprContribution *
+              mix(1.0, nprDirectResponse(nprNdotL) / max(nprNdotL, 1e-4), uNprStrength);
+          }
+        }`
+      ),
+    },
     '#include <lights_fragment_end>': {
       type: 'fs',
       value: /* glsl */ `
@@ -1369,18 +1391,13 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         reflectedLight.directSpecular = vec3(0.0);
         reflectedLight.indirectSpecular = vec3(0.0);
       }
-      if (uNprCel > 0.5 && uCelV2 > 0.5) {
-        vec3 nprDirect = reflectedLight.directDiffuse;
-        float nprDirectLum = dot(nprDirect, vec3(0.2126, 0.7152, 0.0722));
-        // Band the lighting factor, then restore albedo. Quantizing the lit
-        // color itself makes a dark material lose light under the same lamp.
-        float nprAlbedoLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        float nprLightLum = nprDirectLum / max(nprAlbedoLum, 1e-4);
-        float nprDirectQ = celQuantize(clamp(nprLightLum, 0.0, 1.0), uBands, uStepSharpness) * nprAlbedoLum;
-        vec3 nprDirectCel = nprDirect * (
-          nprDirectLum > 1e-4 ? clamp(nprDirectQ / nprDirectLum, 0.0, 4.0) : 1.0
-        );
-        reflectedLight.directDiffuse = mix(nprDirect, nprDirectCel, uNprStrength);
+      if (useNprLighting()) {
+        vec3 nprKey = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
+        float ambientBand = nprAmbientBand(normal, geometryViewDir, nprKey);
+        vec3 rawAmbient = irradiance + iblIrradiance;
+        vec3 ambient = nprAmbientIrradiance(normal, rawAmbient) * mix(0.55, 1.0, ambientBand);
+        // Preserve Three's material energy split and both specular accumulators.
+        reflectedLight.indirectDiffuse *= mix(vec3(1.0), ambient / max(rawAmbient, vec3(1e-5)), uNprStrength);
       }
     `,
     },
@@ -1434,9 +1451,6 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             float nprQ = celQuantize(clamp(nprLum, 0.0, 1.0), uBands, uStepSharpness);
             nprCel = mix(nprLit, nprLit * (nprLum > 1e-4 ? clamp(nprQ / nprLum, 0.0, 4.0) : 1.0), nprSurfaceWeight);
           }
-          // The preview uses an opaque key-light gate, rim mask G and AO R.
-          // A broad view-Fresnel lobe bleaches front-facing vertical cloth.
-          // Scene light/up-ramp constants remain a preview approximation.
           float nprRimMaskG = uHasTintMask > 0.5 ? nprMask.g : uRimMaskDefault;
           // Rim lighting is a separate additive lobe in Citadel glass. Coverage
           // removes diffuse, not this lobe; use lit albedo rather than tinting
@@ -1458,9 +1472,26 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           #endif
           // Retain the verified glass path independently of opaque AO changes.
           nprRim = lightRim * upRamp * nprRimMaskG * uRimStrength * (uCitadelGlass > 0.5 ? 1.0 : opaqueRimAo);
+          if (useNprLighting()) {
+            float width = 1.0 + uNprRim.x;
+            float viewRim = clamp((uNprRim.x - max(dot(nprN, nprV), 0.0)) / (width * width), 0.0, 1.0);
+            float rimUp = step(uNprRim.w, dot(nprN, worldUpView));
+            nprRim = pow(viewRim, uNprRim.y) * rimUp * uNprRim.z * nprRimMaskG * opaqueRimAo;
+          }
         }
 
         vec3 nprRimTint = mix(uRimColor, reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, 1.0 - nprSurfaceWeight);
+        if (useNprLighting()) {
+          vec3 rimIncident = nprAmbientIrradiance(nprN, irradiance + iblIrradiance);
+          #if NUM_DIR_LIGHTS > 0
+            for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+              if (dot(directionalLights[i].direction, nprL) > 0.99) {
+                rimIncident += directionalLights[i].color * nprDirectResponse(max(dot(nprN, nprL), 0.0));
+              }
+            }
+          #endif
+          nprRimTint = (reflectedLight.directDiffuse + reflectedLight.indirectDiffuse) * nprRimExposure(rimIncident);
+        }
         vec3 nprOut = nprCel + nprRimTint * nprRim;
 
         if (uHasTransmissive > 0.5) {
@@ -1468,7 +1499,14 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
           float backWrap = clamp(0.5 - 0.5 * dot(nprN, nprL), 0.0, 1.0);
           float graze = pow(clamp(1.0 - abs(dot(nprN, nprV)), 0.0, 1.0), uTransPower);
           float backLight = backWrap * graze * uTransStrength;
-          nprOut += trans * backLight;
+          if (useNprLighting()) {
+            float band = nprAmbientBand(nprN, nprV, nprL);
+            float direct = nprDirectResponse(max(dot(nprN, nprL), 0.0));
+            vec3 ambient = nprAmbientIrradiance(nprN, irradiance + iblIrradiance) * RECIPROCAL_PI;
+            nprOut += trans * ambient * (1.0 - band) * (1.0 - direct) * uTransStrength;
+          } else {
+            nprOut += trans * backLight;
+          }
         }
 
         if (uHasHighlight > 0.5) {
@@ -1521,6 +1559,8 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
         }
 
         gl_FragColor.rgb = mix(gl_FragColor.rgb, nprOut, uNprStrength);
+        float editorRim = pow(1.0 - abs(dot(nprN, nprV)), 2.0);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 0.8 + uEditorSelectedColor * (0.12 + editorRim * 1.2), uEditorSelected);
       }
     `,
   },
@@ -1610,6 +1650,8 @@ export function wrapMaterialWithNpr(
   }
 
   const uniforms: Record<string, THREE.IUniform> = {
+    ...nprLightingUniforms({ enabled: isNprMaterial(base) && !flag(morphic, 'F_UNLIT') && !isTrueGlassMaterial(morphic, base)
+      && resolveBlendMode(morphic) === 'opaque' }),
     uKeyDir: { value: tuning.keyDir.clone() },
     uBands: { value: tuning.bands },
     uStepSharpness: { value: tuning.stepSharpness },
@@ -1675,6 +1717,8 @@ export function wrapMaterialWithNpr(
     uJitterAmpYB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesYB1 ?? morphic.vectors?.g_vJitterAmplitudesYB) },
     uJitterAmpZA: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZA1 ?? morphic.vectors?.g_vJitterAmplitudesZA) },
     uJitterAmpZB: { value: vector3(morphic.vectors?.g_vJitterAmplitudesZB1 ?? morphic.vectors?.g_vJitterAmplitudesZB) },
+    uEditorSelected: { value: 0.0 },
+    uEditorSelectedColor: { value: new THREE.Color() },
     uHasHighlight: { value: 0.0 },
     uHighlightTint: { value: new THREE.Color(0, 0, 0) },
     uHighlightCoverage: { value: 0.0 },
@@ -1685,6 +1729,7 @@ export function wrapMaterialWithNpr(
     uHighlightRadius: { value: 0.0 },
   };
 
+  const sourceName = base.name;
   const csm = new CustomShaderMaterial({
     baseMaterial: base as THREE.MeshPhysicalMaterial,
     vertexShader: NPR_VERTEX,
@@ -1693,6 +1738,8 @@ export function wrapMaterialWithNpr(
     patchMap: NPR_PATCH_MAP,
   });
   configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
+  csm.name = sourceName;
+  base.name = sourceName;
 
   // These clones are the only GPU resources this wrap created (the base material
   // and its standard maps are owned by disposeScene). Fallback samplers point at

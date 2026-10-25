@@ -13,6 +13,36 @@ const required: ModRequirement = { name: 'Base', url: 'https://gamebanana.com/mo
 const snapshot = (items = [required], checkedAt = 1): ModRequirementSnapshot => ({ status: 'loaded', checkedAt, items });
 
 describe('cached Installed requirement warnings', () => {
+  it('keeps disabled source requirements neutral and warns again when enabled', () => {
+    const select = createRequirementWarningCache();
+    const disabled = { ...overlay, enabled: false };
+    const snapshots = { 'Mod:100': snapshot() };
+    expect(select(disabled, [disabled], snapshots, {})).toMatchObject({ label: 'title', warning: false });
+    expect(select(overlay, [overlay], snapshots, {})).toMatchObject({ label: 'missing', warning: true });
+  });
+
+  it('assesses exact local skin dependencies and reuses their cached results', () => {
+    const select = createRequirementWarningCache();
+    const localBase = { ...base, sha256: 'a'.repeat(64) };
+    const local = { ...overlay, gameBananaId: undefined, skinEdit: { hero: 'Mina', sources: [localBase.sha256] } };
+    expect(select(local, [local], {}, {})).toMatchObject({ source: { localModId: local.id }, label: 'missing', warning: true });
+    expect(select(local, [local, { ...localBase, enabled: false }], {}, {})).toMatchObject({ label: 'disabled', warning: true });
+    expect(select(local, [local, { ...localBase, sha256: 'b'.repeat(64) }], {}, {})).toMatchObject({ label: 'missing', warning: true });
+    const read = vi.fn();
+    const mods = [local, new Proxy(localBase, { get(target, property, receiver) { read(); return Reflect.get(target, property, receiver); } })];
+    const snapshots = {};
+    const files = {};
+    const first = select(local, mods, snapshots, files);
+    expect(first).toMatchObject({ label: 'title', warning: false });
+    read.mockClear();
+    expect(select(local, mods, snapshots, files)).toBe(first);
+    expect(select({ ...local }, mods, snapshots, files)).toEqual(first);
+    expect(read).not.toHaveBeenCalled();
+    expect(select(local, [local, localBase], {}, {
+      [requirementFileKey(local)]: ['a.vtex_c'], [requirementFileKey(localBase)]: ['a.vtex_c', 'a.vmdl_c'],
+    })).toMatchObject({ label: 'orderWarning', warning: true });
+  });
+
   it('reuses source calculations across remounted cards and keeps results stable after unrelated updates', () => {
     const select = createRequirementWarningCache();
     const read = vi.fn();

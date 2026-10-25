@@ -7,7 +7,7 @@ import { shouldBlurNsfw } from '../../lib/appSettings';
 import { visibleInstalledMods } from '../../lib/visibleMods';
 import { decideFileDownload, replaceableFilesFor, summarizeUpdateScope } from '../../lib/updateActions';
 import { classifyModFiles } from '../../lib/updateFileMatch';
-import { mergeSourceFileIds } from '../../lib/updateCheck';
+import { mergeSourceInstalls } from '../../lib/updateCheck';
 import { useAppStore } from '../../stores/appStore';
 import { useModUpdatesStore } from '../../stores/modUpdatesStore';
 import { showToast } from '../../stores/toastStore';
@@ -78,7 +78,7 @@ export function ModUpdateReplacementHost() {
   }
   const visible = visibleInstalledMods(mods);
   const installed = visible.filter((mod) => mod.gameBananaId === request.modId && (mod.sourceSection ?? 'Mod') === request.section);
-  const classification = classifyModFiles(request.modId, loaded.details.files ?? [], installed, mergeSourceFileIds(visible), settings?.autoMatchRemainingFiles ?? true);
+  const classification = classifyModFiles(request.modId, loaded.details.files ?? [], installed, mergeSourceInstalls(visible), settings?.autoMatchRemainingFiles ?? true);
   const summary = summarizeUpdateScope(classification);
   const installedFileIds = new Set(installed.flatMap((mod) => mod.gameBananaFileId === undefined ? [] : [mod.gameBananaFileId]));
   const activeFileIds = new Set(installed.flatMap((mod) => !mod.enabled || mod.gameBananaFileId === undefined ? [] : [mod.gameBananaFileId]));

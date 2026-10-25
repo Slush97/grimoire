@@ -1,14 +1,14 @@
-import type { GameBananaItemRef, ModRequirement, ModRequirementSnapshot } from '../types/gamebanana';
+import type { ModRequirement, ModRequirementSnapshot } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { modLoadOrder } from './lockerUtils';
-import { matchRequirement, modRequirementRefs, requirementKey } from './modRequirements';
+import { matchRequirement, modRequirementRefs, requirementKey, requirementOwners, skinRequirementSource, type RequirementRef } from './modRequirements';
 
-export function installedRequirementOrder(source: GameBananaItemRef, item: ModRequirement, mods: readonly Mod[]): Mod[] {
+export function installedRequirementOrder(source: RequirementRef, item: ModRequirement, mods: readonly Mod[]): Mod[] {
   if (item.importance !== 'required' || item.state !== 'on') return [];
   const match = matchRequirement(item, mods);
   if (match.state !== 'enabled') return [];
   const enabled = mods.filter(mod => mod.enabled).sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
-  const owner = enabled.find(mod => modRequirementRefs(mod).some(ref => requirementKey(ref) === requirementKey(source)));
+  const owner = requirementOwners(source, enabled)[0];
   const required = enabled.find(mod => match.matches.some(hit => hit.modId === mod.id));
   if (!owner || !required || owner.id === required.id) return [];
   return [owner, required].sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
@@ -17,7 +17,7 @@ export function installedRequirementOrder(source: GameBananaItemRef, item: ModRe
 export const requirementFileKey = (mod: Mod): string => JSON.stringify([mod.path, mod.size, mod.sha256, mod.installedAt]);
 export type RequirementFileLists = Readonly<Record<string, readonly string[] | null>>;
 export interface RequirementOrderIssue {
-  source: GameBananaItemRef;
+  source: RequirementRef;
   overlay: Mod;
   base: Mod;
   fixable: boolean;
@@ -27,6 +27,15 @@ export function requirementOrderCandidates(mods: readonly Mod[], snapshots: Read
   const candidates = new Map<string, Mod>();
   for (const mod of mods) {
     if (!mod.enabled) continue;
+    const local = skinRequirementSource(mod, mods);
+    if (local?.requirements.status === 'loaded') {
+      for (const item of local.requirements.items) {
+        for (const hit of matchRequirement(item, mods).matches) {
+          const base = mods.find(candidate => candidate.id === hit.modId && candidate.enabled && candidate.id !== mod.id);
+          if (base) { candidates.set(mod.id, mod); candidates.set(base.id, base); }
+        }
+      }
+    }
     for (const source of modRequirementRefs(mod)) {
       const snapshot = snapshots[requirementKey(source)];
       if (snapshot?.status !== 'loaded') continue;
@@ -51,11 +60,11 @@ export function isTextureOverlay(overlay: readonly string[], base: readonly stri
     [...basePaths].some(path => path.endsWith('.vmdl_c'));
 }
 
-export function requirementOrderIssues(source: GameBananaItemRef, snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[], files: RequirementFileLists): RequirementOrderIssue[] {
+export function requirementOrderIssues(source: RequirementRef, snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[], files: RequirementFileLists): RequirementOrderIssue[] {
   if (snapshot?.status !== 'loaded') return [];
   if (!snapshot.items.some(item => item.importance === 'required' && item.state !== 'off')) return [];
   const issues: RequirementOrderIssue[] = [];
-  const owners = mods.filter(mod => mod.enabled && modRequirementRefs(mod).some(ref => requirementKey(ref) === requirementKey(source)));
+  const owners = requirementOwners(source, mods).filter(mod => mod.enabled);
   for (const item of snapshot.items) {
     if (item.importance !== 'required' || item.state === 'off') continue;
     const matches = matchRequirement(item, mods).matches;

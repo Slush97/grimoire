@@ -1,3 +1,4 @@
+import { profileShuffleSchema, type ProfileShuffle } from '../lib/profileShuffle';
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, DeleteModEntry, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
@@ -7,7 +8,7 @@ import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { isGameRunningModLockError } from '../lib/modLocks';
 import { showToast } from './toastStore';
-import { buildHeroList, getLockerSkinKey } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey, type HeroCategory } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
@@ -438,6 +439,8 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  captureProfileShuffle: () => ProfileShuffle | undefined;
+  restoreProfileShuffle: (shuffle: unknown) => void;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
   /** Add or remove many shuffle keys at once (bulk category action). */
@@ -982,6 +985,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // An empty pool with shuffle off is "never used shuffle", not a choice worth
+  // saving: applying that snapshot later would wipe a pool built since, with no
+  // undo. Returning undefined stores nothing, so the profile acts like a legacy
+  // one and leaves the live pool alone.
+  captureProfileShuffle: () => {
+    const { shuffleOnLaunch, shuffleIncluded, shuffleVariants } = get();
+    if (!shuffleOnLaunch && shuffleIncluded.size === 0) return undefined;
+    return {
+      onLaunch: shuffleOnLaunch,
+      included: [...shuffleIncluded],
+      variants: [...shuffleVariants],
+    };
+  },
+
+  restoreProfileShuffle: (value) => {
+    const result = profileShuffleSchema.safeParse(value);
+    if (!result.success) return;
+    const shuffle = result.data;
+    // A snapshot can predate a mod being pinned Global. Same rule as
+    // setModPriorityFolder: a pinned mod has no opt-in, so its key must not
+    // come back through here.
+    const { mods } = get();
+    let included = new Set(shuffle.included);
+    for (const mod of mods) {
+      if (mod.priorityMod) included = prunePoolKeysForMod(included, mod, mods) ?? included;
+    }
+    const variants = new Map(shuffle.variants);
+    try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, String(shuffle.onLaunch)); } catch { /* ignore */ }
+    writeStoredShuffleIncluded(included);
+    writeStoredShuffleVariants(variants);
+    set({ shuffleOnLaunch: shuffle.onLaunch, shuffleIncluded: included, shuffleVariants: variants });
+  },
+
   setShuffleOnLaunch: (enabled: boolean) => {
     try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, enabled ? 'true' : 'false'); } catch { /* ignore */ }
     set({ shuffleOnLaunch: enabled });
@@ -1035,7 +1071,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   runLaunchShuffle: async (): Promise<{ failures: number }> => {
     const { shuffleOnLaunch, shuffleIncluded } = get();
     if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
-    let heroList: { id: number; name: string }[] = [];
+    let heroList: HeroCategory[] = [];
     try {
       heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
     } catch {

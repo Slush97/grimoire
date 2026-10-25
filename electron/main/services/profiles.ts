@@ -1,3 +1,4 @@
+import type { ProfileShuffle } from '../../../src/lib/profileShuffle';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
@@ -212,7 +213,7 @@ function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; 
 /**
  * Create a new profile from current mod state and provided crosshair settings
  */
-export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
+export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle): Promise<Profile> {
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -234,6 +235,7 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
         mods: enabledMods.map((mod, index) => toProfileMod({ ...mod, priority: index + 1 }, true, inferredVpkIndexes)),
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
+        shuffle,
         createdAt: now,
         updatedAt: now,
     };
@@ -324,7 +326,7 @@ export async function createProfileFromGameBananaIds(
  * Update an existing profile with current mod state
  * Only saves enabled mods - disabled mods are not included
  */
-export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
+export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings, shuffle?: ProfileShuffle): Promise<Profile> {
     const mods = await scanMods(deadlockPath);
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
@@ -356,6 +358,7 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
         // This allows the frontend to explicitly control whether crosshair is included based on feature toggle.
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
+        shuffle,
         updatedAt: new Date().toISOString(),
     };
 

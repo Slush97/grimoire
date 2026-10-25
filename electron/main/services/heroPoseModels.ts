@@ -37,6 +37,10 @@ import { readHeroAnimationMetadata } from './heroAnimationMetadata';
 import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
 import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
+import { parseVpkDirectoryCached } from './vpk';
+import { hideoutCacheFile } from './hideoutScene';
+import { movementCacheFile } from './movementFxPaths';
+import { selectMovementClips } from '../../../src/lib/movementMotion';
 
 export const HERO_POSE_SCHEME = 'grimoire-hero';
 
@@ -355,7 +359,7 @@ function versionFile(key: string): string {
  */
 // v14: Graves uses the complete standing weapon pose; shop parks its spectral
 // hand at the model origin. Refresh existing menus instead of reusing that pose.
-const RIGGED_PIPELINE_VERSION = '15';
+const RIGGED_PIPELINE_VERSION = '20';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -789,7 +793,50 @@ async function resolvePoseSource(
     }
 }
 
+async function resolveAllSkinSources(deadlockPath: string, normalized: HeroPoseSkinSource[]): Promise<ResolvedSource[]> {
+    const resolved = await resolveSources(deadlockPath, normalized);
+    if (resolved.length !== normalized.length) throw new Error('A selected skin is no longer installed. Select the source again.');
+    return resolved;
+}
+
+async function skinEditFingerprint(base: string, entry: string, sourceFingerprint: string): Promise<string> {
+    const game = await fs.stat(base);
+    return createHash('sha256').update(`${entry}:${sourceFingerprint}:${game.size}:${game.mtimeMs}`).digest('hex');
+}
+
+/** withHeroSkinSource's fingerprint for an already-resolved model entry, without merging the stack. */
+export async function heroSkinSourceFingerprint(deadlockPath: string, skinSources: HeroPoseSkinSource[], entry: string): Promise<string> {
+    const resolved = await resolveAllSkinSources(deadlockPath, normalizeSkinSources(skinSources));
+    return skinEditFingerprint(join(getCitadelPath(deadlockPath), 'pak01_dir.vpk'), entry, await fingerprintResolved(resolved));
+}
+
+export async function withHeroSkinSource<T>(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[],
+    action: (source: { vpk: string; base: string; entry: string; fingerprint: string }) => Promise<T>
+): Promise<T> {
+    const base = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    const normalized = normalizeSkinSources(skinSources);
+    await resolveAllSkinSources(deadlockPath, normalized);
+    const source = await resolvePoseSource(deadlockPath, base, normalized);
+    try {
+        const paths = [...(parseVpkDirectoryCached(source.vpk) ?? []), ...(parseVpkDirectoryCached(base) ?? [])];
+        let entry: string | undefined;
+        for (const [kind, value] of modelSelectorsForHero(heroName)) {
+            entry = kind === '--entry' ? paths.find((path) => path === value)
+                : paths.find((path) => /^models\/heroes[^/]*\//i.test(path) && path.endsWith(`/${value}.vmdl_c`));
+            if (entry) break;
+        }
+        if (!entry) throw new Error('The selected hero model could not be found.');
+        return await action({ vpk: source.vpk, base, entry, fingerprint: await skinEditFingerprint(base, entry, source.fingerprint) });
+    } finally {
+        if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+    }
+}
+
 export interface HeroPoseInfo {
+    hasMovement?: boolean;
     hasModel: boolean;
     /** mtime of the stored GLB, used to cache-bust the renderer URL on re-export. */
     mtimeMs: number | null;
@@ -836,7 +883,8 @@ async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
         }
         await fs.access(riggedClothFile(key));
         await fs.access(join(modelDir(key), RIGGED_ATTACHMENTS_FILENAME));
-        return { hasModel: true, mtimeMs: stat.mtimeMs, key };
+        const hasMovement = await fs.access(join(modelDir(key), 'movement.glb')).then(() => true, () => false);
+        return { hasModel: true, hasMovement, mtimeMs: stat.mtimeMs, key };
     } catch {
         return { hasModel: false, mtimeMs: null, key };
     }
@@ -1103,6 +1151,23 @@ async function runRiggedHeroExportForSources(
                 await fs.rm(riggedNoClipsFile(key), { force: true });
                 await fs.writeFile(riggedClothFile(key), JSON.stringify(await cloth));
                 await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(await attachments));
+                const modelEntry = selector[entryIndex + 1];
+                let motions = modelEntry ? selectMovementClips(parseVpkDirectoryCached(pak01) ?? [], modelEntry, modelCodenamesForHero(heroName)) : [];
+                if (modelEntry && motions.length < 5) {
+                    const embedded = parseModelClipsJson(await runVpkmergeStdout(['model', 'clips', '--vpk', source.vpk, ...selector, '--base', pak01, '--json']));
+                    motions = selectMovementClips(parseVpkDirectoryCached(pak01) ?? [], modelEntry, modelCodenamesForHero(heroName), embedded.map(clip => clip.name));
+                }
+                const motionFile = join(dir, 'movement.glb');
+                await fs.rm(motionFile, { force: true });
+                if (motions.length) {
+                    try {
+                        await runVpkmerge(['workshop', 'motions', '--vpk', source.vpk, '--vpk', pak01,
+                            '--entry', modelEntry, ...motions.flatMap(([name, path]) => ['--clip', `movement_${name}=${path}`]), '--out', motionFile]);
+                    } catch (error) {
+                        await fs.rm(motionFile, { force: true });
+                        console.warn('[heroPoseModels] standing action bundle unavailable:', heroName, error);
+                    }
+                }
                 await fs.writeFile(riggedVersionFile(key), RIGGED_CACHE_VERSION);
                 return infoForRiggedKey(key);
             } catch (err) {
@@ -1224,6 +1289,14 @@ export function registerHeroPoseProtocol(): void {
             const url = new URL(request.url);
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
+            if (url.hostname === 'f') {
+                const file = parts[1] === 'effect-tex' && parts.length === 3 ? movementCacheFile(key, parts[2]) : null;
+                return file ? net.fetch(pathToFileURL(file).toString()) : new Response(null, { status: 404 });
+            }
+            if (url.hostname === 's') {
+                const sceneFile = hideoutCacheFile(key, parts[1] ?? '');
+                return sceneFile ? net.fetch(pathToFileURL(sceneFile).toString()) : new Response(null, { status: 404 });
+            }
             // The trailing segment(s) name what's served: the static `model.glb`
             // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the
             // ambient FX descriptor `effect.json`, or a bundled effect texture
@@ -1242,6 +1315,8 @@ export function registerHeroPoseProtocol(): void {
                 file = join(effectTexDir(key), png);
             } else if (requested === RIGGED_MODEL_FILENAME) {
                 file = riggedModelFile(key);
+            } else if (requested === 'movement.glb') {
+                file = join(modelDir(key), 'movement.glb');
             } else if (requested === RIGGED_CLOTH_FILENAME) {
                 file = riggedClothFile(key);
             } else if (requested === RIGGED_ATTACHMENTS_FILENAME) {

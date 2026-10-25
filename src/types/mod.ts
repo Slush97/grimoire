@@ -709,6 +709,9 @@ export interface Mod {
    *  Carries the orientation/span transform so the build is reproducible and the
    *  UI can label it as a local urn import. */
   urnImport?: UrnImportInfo;
+  /** Set on a Door Stuck skin-editor overlay: its hero, sources and edits. */
+  skinEdit?: import('./skinEditor').SkinEditRecord;
+  movementFx?: import('../lib/movementFx').MovementFxChoice;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;

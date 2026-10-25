@@ -461,7 +461,7 @@ describe('classifyModFiles rules', () => {
       const files = [file(2, 'skin_gold_v2.zip')];
       const installed = [entry('old', 1, { sourceFileName: 'skin_gold_v1' })];
 
-      expect(classifyModFiles(gb, files, installed, new Set([2])).states.get(1)).toEqual({ kind: 'needs-pick' });
+      expect(classifyModFiles(gb, files, installed, [entry('merged', 2)]).states.get(1)).toEqual({ kind: 'needs-pick' });
     });
   });
 
@@ -761,7 +761,7 @@ describe('remaining-file update matching', () => {
     const files = [file(2, 'new_name.zip')];
     expect(classifyModFiles(gb, files, [old(1, 'old_name'), old(2, 'new_name')], undefined, true).states.get(1))
       .toEqual({ kind: 'needs-pick' });
-    expect(classifyModFiles(gb, files, [old(1, 'old_name')], new Set([2]), true).states.get(1))
+    expect(classifyModFiles(gb, files, [old(1, 'old_name')], [old(2, 'new_name')], true).states.get(1))
       .toEqual({ kind: 'needs-pick' });
   });
 
@@ -776,8 +776,54 @@ describe('remaining-file update matching', () => {
   it('does not infer a different variant when the known successor is already inside a merge', () => {
     const files = [file(2, 'red_v2.zip'), file(3, 'blue_v2.zip')];
     const installed = [old(1, 'red_v1')];
-    expect(classifyModFiles(gb, files, installed, new Set([2]), true).states.get(1))
+    expect(classifyModFiles(gb, files, installed, [old(2, 'red_v2')], true).states.get(1))
       .toEqual({ kind: 'needs-pick' });
+  });
+
+  describe('installs held elsewhere (a merge, or standalone files)', () => {
+    // File 1 is archived, file 2 was deleted, and file 3 is the only current upload.
+    const files = [file(1, 'skin_red.zip', { isArchived: true }), file(3, 'voicelines_pack.zip')];
+    const archived = old(1, 'skin_red');
+    const deleted = old(2, 'skin_blue');
+
+    it('does not hand the sole upload to either install when both look for it', () => {
+      expect(classifyModFiles(gb, files, [deleted], [archived], true).states.get(2)).toEqual({ kind: 'needs-pick' });
+      expect(classifyModFiles(gb, files, [archived], [deleted], true).states.get(1)).toEqual({ kind: 'archived' });
+      // Alone, the deleted install is the single unmatched one and takes it.
+      expect(targetOf(classifyModFiles(gb, files, [deleted], [], true).states.get(2))).toBe(3);
+    });
+
+    it('still pairs the leftover upload once the other install has a match of its own', () => {
+      const rivalFiles = [...files, file(4, 'extras_v2.zip')];
+      const rival = old(5, 'extras_v1');
+
+      expect(targetOf(classifyModFiles(gb, rivalFiles, [deleted], [rival], true).states.get(2))).toBe(3);
+    });
+
+    it('does not let a rival whose successor is already installed block the pairing', () => {
+      const rival = old(7, 'red_v1');
+      const inUse = [old(8, 'red_v2')];
+      const rivalFiles = [...files, file(8, 'red_v2.zip')];
+
+      expect(targetOf(classifyModFiles(gb, rivalFiles, [deleted], [rival, ...inUse], true).states.get(2))).toBe(3);
+    });
+
+    it('ignores a rival that has updates turned off', () => {
+      const pinned = { ...archived, ignoreUpdates: true };
+
+      expect(targetOf(classifyModFiles(gb, files, [deleted], [pinned], true).states.get(2))).toBe(3);
+    });
+
+    it('settles a successor wanted by an install elsewhere as it would among its own', () => {
+      const wanted = [file(1, 'main_v1.zip', { isArchived: true }), file(2, 'main_v1b.zip', { isArchived: true }), file(3, 'main_v2.zip')];
+      const here = old(1, 'main_v1');
+      const there = old(2, 'main_v1');
+
+      // Equal claims on file 3 leave both unresolved, whichever side is asking.
+      expect(classifyModFiles(gb, wanted, [here], [there]).states.get(1)).toEqual({ kind: 'archived' });
+      expect(classifyModFiles(gb, wanted, [there], [here]).states.get(2)).toEqual({ kind: 'archived' });
+      expect(targetOf(classifyModFiles(gb, wanted, [here], []).states.get(1))).toBe(3);
+    });
   });
 
   it('respects upload sessions when pairing an archived file', () => {

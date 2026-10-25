@@ -22,6 +22,7 @@ function parameter(v: unknown): unknown {
       in0: r.m_flInput0, in1: r.m_flInput1, out0: r.m_flOutput0, out1: r.m_flOutput1,
       curve: parameter(r.m_Curve), field: r.m_nScalarAttribute, map: r.m_nMapType, mult: r.m_flMultFactor,
       bias: r.m_flBiasParameter, biasType: r.m_nBiasType,
+      mode: r.m_nInputMode,
     };
   }
   if (r.m_nType === 'PVEC_TYPE_LITERAL') return r.m_vLiteralValue;
@@ -45,7 +46,7 @@ export function particleDescriptor(raw: unknown, name: string, configuration?: s
   const preview = row(selectedConfiguration?.m_previewState);
   const renderers: FxRenderer[] = rows(r.m_Renderers).slice(0, 16).map((renderer) => ({
     class: String(renderer._class ?? ''), params: parameter(renderer) as Row,
-    mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : renderer._class === 'C_OP_RenderRopes' ? 'rope' : 'unsupported',
+    mode: renderer._class === 'C_OP_RenderSprites' ? 'sprite' : renderer._class === 'C_OP_RenderTrails' ? 'trail' : renderer._class === 'C_OP_RenderRopes' ? 'rope' : 'unsupported',
     blendMode: typeof renderer.m_nOutputBlendMode === 'string' ? renderer.m_nOutputBlendMode : null,
     textures: [...rows(renderer.m_vecTexturesInput).map((t) => t.m_hTexture), renderer.m_hTexture]
       .filter((t): t is string => typeof t === 'string' && /^materials\/[a-zA-Z0-9_./-]+\.vtex$/.test(t) && !t.includes('..')),
@@ -104,6 +105,16 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
     // Inherit missing CPs before loading descendants, so a child's partial
     // preview configuration does not erase authored parent attachment frames.
     d.controlPoints = [...new Map([...inherited, ...d.controlPoints, ...mapFrames(Number(row(raw).m_nGroupID) || 0)].map((cp) => [cp.cp, cp])).values()];
+    for (const op of d.preEmissionOperators ?? []) {
+      if (op.class !== 'C_OP_SetSingleControlPointPosition' || !Array.isArray(op.params.m_vecCP1Pos)
+        || op.params.m_vecCP1Pos.some((value) => value !== 0)) continue;
+      const input = row(op.params.m_transformInput);
+      const source = d.controlPoints.find(cp => cp.cp === (Number(input.m_nControlPoint) || 0));
+      if (source) {
+        const mapped = { ...source, cp: Number(op.params.m_nCP1) || 0, freeze: op.params.m_bSetOnce === true };
+        d.controlPoints = [...d.controlPoints.filter(cp => cp.cp !== mapped.cp), mapped];
+      }
+    }
     for (const renderer of d.renderers) for (const texture of renderer.textures) textures.add(texture);
     if (textures.size > 24) throw new Error('Particle textures exceed preview limits.');
     const chain = new Set(ancestors).add(path);
@@ -136,15 +147,16 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
   for (const additional of [...new Set(additionalEntries)].filter((p) => p !== entry)) descriptor.children.push(await load(additional, new Set()));
   const modelResource = modelEntry ?? descriptor.preview?.model?.replace(/\.vmdl(?:_c)?$/, '.vmdl_c');
   const declaredModel = modelResource && /^models\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(modelResource) && !modelResource.includes('..') ? modelResource : undefined;
+  const modelPak = declaredModel ? [...new Set([...texturePaks, pak])].find((path) => vpkHasEntry(path, declaredModel)) ?? pak : pak;
   if (declaredModel) {
     // The selected preview model is authored data, not a bone-name guess.
     // Bundle frames with the effect so a warm --hero model cache whose older
     // sidecar is empty can resolve them without re-exporting the heavy GLB.
-    try { descriptor.attachments = await exportModelAttachments(texturePaks[0] ?? pak, pak, declaredModel); }
+    try { descriptor.attachments = await exportModelAttachments(texturePaks[0] ?? pak, modelPak, declaredModel); }
     catch (error) { console.warn('[heroParticleExport] attachment metadata unavailable:', error); }
   }
   if (declaredModel) {
-    const model = row(JSON.parse(await runVpkmergeStdout(['soundevents', declaredModel, '--from-vpk', pak])));
+    const model = row(JSON.parse(await runVpkmergeStdout(['soundevents', declaredModel, '--from-vpk', modelPak])));
     const text = row(model.m_modelInfo).m_keyValueText;
     // This optional model settings block contains scalar assignments only.
     // Do not read unrelated scale fields from the rest of the embedded KV3.

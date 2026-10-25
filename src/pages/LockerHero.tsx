@@ -1,5 +1,7 @@
 import { lazy, Suspense, useMemo, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '../components/common/ui';
 import {
   ArrowLeft,
   Star,
@@ -39,7 +41,7 @@ import type { VariantChoice } from '../lib/lockerRandomizer';
 
 interface LockerHeroViewProps {
   hero: HeroCategory;
-  navigation: Omit<ComponentProps<typeof HeroNavigation>, 'children'>;
+  navigation: Omit<ComponentProps<typeof HeroNavigation<HeroCategory>>, 'children'>;
   skinList: Mod[];
   /** Sound-section mods mapped to this hero. Optional because the gallery
    *  view in `Locker.tsx` keeps the same prop surface and may not split sounds
@@ -106,6 +108,7 @@ export function LockerHeroView({
   // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
   // the user picked one (set per skin in the skins list below).
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
+  const workshopEnabled = useAppStore((s) => s.settings?.experimentalFoundry === true);
   const lockerModBackgrounds = useAppStore((s) => s.lockerModBackgrounds);
   const lockerBgHideHeroName = useAppStore((s) => s.lockerBgHideHeroName);
   const activeSkin = useMemo(() => activeLockerSkin(skinList), [skinList]);
@@ -123,6 +126,7 @@ export function LockerHeroView({
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
+  const navigate = useNavigate();
   const [section, setSection] = useState<SectionId>('skins');
   const [poseSkinSelection, setPoseSkinSelection] = useState<{
     heroId: number;
@@ -466,6 +470,10 @@ export function LockerHeroView({
             hideNsfwPreviews={hideNsfwPreviews}
           />
         )}
+        {workshopEnabled && activeSection === 'skins' && <Button variant="secondary" size="sm"
+          onClick={() => navigate('/foundry', { state: { heroName: hero.name, skinSources: activeSkinSources } })}>
+          {t('foundry.skin.editInWorkshop')}
+        </Button>}
       </div>
 
       {/* Right pane: the active section's content. Width-capped on lg+ so the

@@ -37,16 +37,16 @@ async function loadBackdrop(file: File, signal: AbortSignal): Promise<THREE.Text
   } finally { URL.revokeObjectURL(url); }
 }
 
-export function useViewerBackdrop() {
+export function useViewerBackdrop(enabled = true, initialPreset: ViewerBackground = 'broadway') {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [preset, setPreset] = useState<ViewerBackground>('broadway');
+  const [preset, setPreset] = useState<ViewerBackground>(initialPreset);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => () => texture?.dispose(), [texture]);
   useEffect(() => {
-    if (preset === 'custom' || preset === 'none') return;
+    if (!enabled || preset === 'custom' || preset === 'none') return;
     const request = new AbortController();
     pending.current?.abort(); pending.current = request;
     setLoading(true); setErrorKey(null);
@@ -61,7 +61,7 @@ export function useViewerBackdrop() {
       } finally { if (!request.signal.aborted) setLoading(false); }
     })();
     return () => request.abort();
-  }, [preset]);
+  }, [preset, enabled]);
   const clear = () => { pending.current?.abort(); setPreset('none'); setTexture(null); setLoading(false); setErrorKey(null); };
   const choosePreset = (value: ViewerBackground) => {
     if (value === 'none') clear();

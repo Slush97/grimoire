@@ -9,6 +9,7 @@ import {
   isLockerManagedMod,
   isPropContainerType,
   type LockerSkin,
+  type HeroCategory,
 } from './lockerUtils';
 
 /** localStorage key for the set of skin keys opted INTO the launch shuffle. */
@@ -105,7 +106,7 @@ export interface ShuffleGroupOptions {
    * correctly reported as null instead of 'hero'. Pass it wherever offering a
    * dead opt-in would be a lie; omit it when the caller only needs the axis.
    */
-  heroList?: readonly { id: number; name: string }[];
+  heroList?: readonly HeroCategory[];
 }
 
 /**
@@ -116,7 +117,7 @@ export interface ShuffleGroupOptions {
  */
 function homeGroupKind(
   mod: Mod,
-  heroList?: readonly { id: number; name: string }[]
+  heroList?: readonly HeroCategory[]
 ): 'hero' | 'bucket' | null {
   if (getEffectiveGlobalType(mod)) return 'bucket';
   if (!isLockerManagedMod(mod)) return null;
@@ -124,7 +125,7 @@ function homeGroupKind(
   // Ask the real grouper rather than re-deriving the hero match: its fallback
   // chain (manual tag, author category, fuzzy name match) lives there, and a
   // second copy here is precisely the drift this helper exists to prevent.
-  return groupModsByCategory([mod], [...heroList]).map.size > 0 ? 'hero' : null;
+  return groupModsByCategory([mod], heroList).map.size > 0 ? 'hero' : null;
 }
 
 /**
@@ -539,7 +540,7 @@ export interface LaunchShufflePlanOptions {
   /** The full installed mod list (appStore `mods`). */
   mods: Mod[];
   /** Hero categories used to group skins by hero (buildHeroList output). */
-  heroList: { id: number; name: string }[];
+  heroList: readonly HeroCategory[];
   /** Pool keys (shufflePoolKey) opted into the shuffle pool. */
   included: Set<string>;
   /** Per-skin variant preferences. */

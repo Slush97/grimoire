@@ -22,6 +22,7 @@ import { app } from 'electron';
 
 const PREVIEW_CACHE_DIRS = [
     'hero-poses',
+    'viewer-scenes',
     'soul-models',
     'portrait-cache',
     'locker-card-thumbs',

@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { Palette, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
@@ -21,7 +23,7 @@ interface RecolorToolProps {
  */
 export default function RecolorTool({ heroes }: RecolorToolProps) {
   const { t } = useTranslation();
-  const [heroName, setHeroName] = useState('');
+  const [heroName, setHeroName] = useFoundryDraft('recolor:hero', z.string().max(100), '');
 
   // Selectable heroes first (the ones with a real recipe live here); de-dup by
   // display name since the panel keys on it.

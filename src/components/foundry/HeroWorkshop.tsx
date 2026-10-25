@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import {
   ArrowLeft,
   Sparkles,
@@ -14,20 +16,28 @@ import {
   getHeroNamePath,
   getHeroWikiUrl,
 } from '../../lib/lockerUtils';
+import { HeroNavigation } from '../locker/HeroNavigation';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
 import LibraryBrowse from './LibraryBrowse';
-import Tx from '../translation/Tx';
+import MovementFxEditor from './MovementFxEditor';
+import SkinEditor from './SkinEditor';
+import { SegmentedControl } from '../common/ui';
+import type { HeroPoseSkinSource } from '../../types/portrait';
 
 interface HeroWorkshopProps {
   hero: HeroInfo;
+  previous: HeroInfo | undefined;
+  next: HeroInfo | undefined;
+  onNavigate: (hero: HeroInfo) => void;
   /** Full roster codename -> display name map (for the reused browse panels). */
   heroNames: Map<string, string>;
   onBack: () => void;
+  skinSources?: HeroPoseSkinSource[];
 }
-
 type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
+
 
 /**
  * The per-hero Foundry workshop: pick a hero, edit everything about them. Mirrors
@@ -44,11 +54,24 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  * uses): there is no separate compose-and-forge step. The per-section apply paths
  * run through the existing Locker engines (e.g. sound via `applyHeroSound`).
  */
-export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopProps) {
+export default function HeroWorkshop({ hero, heroNames, onBack, previous, next, onNavigate, skinSources }: HeroWorkshopProps) {
   const { t } = useTranslation();
-  const [section, setSection] = useState<SectionId>('appearance');
+  const [section, setSection] = useFoundryDraft<SectionId>('workshop:section', z.enum(['appearance', 'abilities', 'voice', 'icons']), 'appearance');
   const [renderStep, setRenderStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [currentHero, setCurrentHero] = useState(hero.codename);
+  if (currentHero !== hero.codename) {
+    setCurrentHero(hero.codename);
+    setRenderStep(0);
+    setNameFailed(false);
+  }
+  const [appearanceTool, setAppearanceTool] = useFoundryDraft('workshop:appearance', z.enum(['parts', 'effects']), 'parts');
+  const [abilityTool, setAbilityTool] = useFoundryDraft('workshop:ability', z.enum(['movement', 'sounds']), 'movement');
+  const linkedSkin = !!skinSources?.length;
+  useEffect(() => {
+    if (linkedSkin) { setSection('appearance'); setAppearanceTool('parts'); }
+  }, [linkedSkin, setSection, setAppearanceTool]);
+  const editingSkin = section === 'appearance' || (section === 'abilities' && abilityTool === 'movement');
 
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
@@ -69,9 +92,9 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
         : '';
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div data-foundry-hero-view className={`relative flex h-full overflow-hidden ${editingSkin ? 'flex-col bg-bg-primary' : ''}`}>
       {/* Hero render backdrop, anchored right, behind the frosted rail. */}
-      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
+      <div className={editingSkin ? 'hidden' : 'hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden'}>
         {renderSrc ? (
           <img
             src={renderSrc}
@@ -87,7 +110,7 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
           through to clear on the right. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
+        className={editingSkin ? 'hidden' : 'pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]'}
       >
         <div
           className="absolute inset-0"
@@ -108,7 +131,8 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
       </div>
 
       {/* Left rail: hero identity + section nav + build tray. */}
-      <div className="relative z-10 flex w-[280px] flex-shrink-0 flex-col gap-5 overflow-y-auto scrollbar-glass bg-bg-secondary p-5 animate-slide-in-left lg:bg-transparent xl:w-[320px]">
+      <div className={editingSkin ? 'relative z-10 flex shrink-0 flex-wrap items-center gap-4 border-b border-border bg-bg-secondary px-4 py-3'
+        : 'relative z-10 flex w-[280px] flex-shrink-0 flex-col gap-5 overflow-y-auto scrollbar-glass bg-bg-secondary p-5 animate-slide-in-left lg:bg-transparent xl:w-[320px]'}>
         <button
           type="button"
           onClick={onBack}
@@ -118,20 +142,22 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
           {t('foundry.workshop.back', 'All heroes')}
         </button>
 
-        {nameFailed ? (
-          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-            {hero.name}
-          </h2>
-        ) : (
-          <img
-            src={getHeroNamePath(hero.name)}
-            alt={hero.name}
-            className="h-8 w-auto self-start object-contain"
-            onError={() => setNameFailed(true)}
-          />
-        )}
+        <HeroNavigation previous={previous} next={next} onNavigate={onNavigate} enabled>
+          {nameFailed ? (
+            <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              {hero.name}
+            </h2>
+          ) : (
+            <img
+              src={getHeroNamePath(hero.name)}
+              alt={hero.name}
+              className={editingSkin ? 'h-6 w-auto object-contain' : 'h-8 max-w-full object-contain'}
+              onError={() => setNameFailed(true)}
+            />
+          )}
+        </HeroNavigation>
 
-        <nav aria-label={t('foundry.workshop.sections', 'Workshop sections')} className="flex flex-col gap-1.5">
+        <nav aria-label={t('foundry.workshop.sections', 'Workshop sections')} className={`flex gap-1 ${editingSkin ? 'ml-auto flex-wrap' : 'flex-col'}`}>
           {sections.map(({ id, label, icon: Icon }) => {
             const isActive = section === id;
             return (
@@ -140,14 +166,14 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
                 type="button"
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => setSection(id)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                className={`flex items-center gap-2 rounded-sm border px-3 py-2 text-left transition-colors cursor-pointer ${
                   isActive
                     ? 'border-accent/60 bg-accent/15'
                     : 'border-transparent hover:bg-hl/10'
                 }`}
               >
-                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
-                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
+                <Icon className="h-4 w-4 flex-shrink-0 text-text-secondary" />
+                <span className="flex-1 truncate text-sm font-medium text-text-primary">{label}</span>
               </button>
             );
           })}
@@ -156,16 +182,21 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
 
       {/* Content pane: the active section. */}
       <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass">
-        <div className="space-y-4 p-6">
+        <div key={hero.codename} className={`space-y-4 ${editingSkin ? 'p-4' : 'p-6'}`}>
           {section === 'appearance' ? (
-            <HeroEffectsPanel key={hero.name} heroName={hero.name} />
+            <div className="space-y-4">
+              <SegmentedControl value={appearanceTool} onChange={setAppearanceTool}
+                options={[{ value: 'parts', label: t('foundry.skin.title') }, { value: 'effects', label: t('foundry.skin.effects') }]} />
+              {appearanceTool === 'parts' ? <SkinEditor key={hero.name} heroName={hero.name} initialSkinSources={skinSources} />
+                : <div className="max-w-3xl rounded-sm border border-border bg-bg-secondary p-4"><HeroEffectsPanel key={hero.name} heroName={hero.name} /></div>}
+            </div>
           ) : section === 'abilities' ? (
-            <div className="space-y-6">
-              {/* Each ability card lists its gameplay sounds with play + Swap (drop
-                  your own MP3), forged through the soundswap engine. The ability
-                  axis lives here (not under Voice); Voice is VO only. */}
-              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
-              <AbilitiesComingNote />
+            <div className="space-y-3">
+              <SegmentedControl value={abilityTool} onChange={setAbilityTool} options={[
+                { value: 'movement', label: t('foundry.movement.title') }, { value: 'sounds', label: t('foundry.movement.sounds') },
+              ]} />
+              {abilityTool === 'movement' ? <MovementFxEditor heroName={hero.name} skinSources={skinSources} />
+                : <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />}
             </div>
           ) : section === 'voice' ? (
             <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
@@ -182,20 +213,6 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
           ) : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function AbilitiesComingNote() {
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-bg-secondary/50 p-4 text-sm leading-relaxed text-text-secondary">
-      <p className="mb-1 font-medium text-text-primary">
-        <Tx k="foundry.workshop.abilitiesSoon.title" fallback="More per-ability editing coming" />
-      </p>
-      <Tx
-        k="foundry.workshop.abilitiesSoon.body"
-        fallback="Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."
-      />
     </div>
   );
 }

@@ -1,11 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, type RequirementMod } from './modRequirements';
+import { hasInstalledRequirementIssues, hasRequirementIssues, matchRequirement, modRequirementRefs, parseRequirements, skinRequirementSource, type RequirementMod } from './modRequirements';
 import { installedRequirementOrder } from './requirementLoadOrder';
 import type { MergedModInfo, Mod } from '../types/mod';
 import type { ModRequirement } from '../types/gamebanana';
 
 const requirement: ModRequirement = { name: 'Original Model Replacement Mod', url: 'https://gamebanana.com/mods/704252', state: 'on', importance: 'required' };
 const base = (enabled: boolean): RequirementMod => ({ id: 'base', name: 'Livewire Lunatic Seven', enabled, gameBananaId: 704252, sourceSection: 'Mod' });
+
+it('shows saved skin dependencies through requirements without a catalog request', () => {
+  const original = { ...base(true), sha256: 'a'.repeat(64) };
+  const source = skinRequirementSource({ id: 'overlay', name: 'Mina custom', skinEdit: {
+    hero: 'Mina', sources: [original.sha256, original.sha256],
+  } }, [original]);
+  expect(source?.requirements.status).toBe('loaded');
+  if (source?.requirements.status !== 'loaded') throw new Error('Expected local requirements');
+  expect(source.requirements.items).toHaveLength(1);
+  const item = source.requirements.items[0];
+  expect(item.name).toBe(original.name);
+  expect(matchRequirement(item, [original]).state).toBe('enabled');
+  expect(matchRequirement(item, [{ ...original, enabled: false }]).state).toBe('disabled');
+  // A different file from the same listing is not the exact source of this overlay.
+  expect(matchRequirement(item, [{ ...original, sha256: 'b'.repeat(64) }]).state).toBe('missing');
+  expect(hasRequirementIssues(source.requirements, [])).toBe(true);
+});
 
 describe('GameBanana requirement parsing', () => {
   it('parses the live four-column response without losing the target', () => {
@@ -101,5 +118,12 @@ describe('installed requirement state', () => {
     expect(hasRequirementIssues(undefined, [])).toBe(false);
     expect(hasRequirementIssues({ status: 'unavailable', checkedAt: 100 }, [])).toBe(false);
     expect(hasRequirementIssues({ status: 'loaded', checkedAt: 100, items: [] }, [])).toBe(false);
+  });
+  it('ignores the requirements of an installed mod that is off', () => {
+    const snapshot = { status: 'loaded' as const, checkedAt: 100, items: [requirement] };
+    const mods = [{ ...base(false), id: 'base' }] as Mod[];
+    expect(hasInstalledRequirementIssues({ enabled: true }, snapshot, mods)).toBe(true);
+    expect(hasInstalledRequirementIssues({ enabled: false }, snapshot, mods)).toBe(false);
+    expect(hasInstalledRequirementIssues({ enabled: false }, snapshot, [])).toBe(false);
   });
 });

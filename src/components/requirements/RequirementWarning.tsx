@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Link2 } from 'lucide-react';
-import { requirementKey, type RequirementMod } from '../../lib/modRequirements';
+import { requirementSnapshot, type RequirementMod } from '../../lib/modRequirements';
 import { useRequirementsStore } from '../../stores/requirementsStore';
 import { useAppStore } from '../../stores/appStore';
 import { Tag } from '../common/ui';
@@ -19,7 +19,7 @@ export function RequirementWarning({ mod, variant = 'inline' }: { mod: Requireme
     : label === 'orderWarning' ? t('requirements.orderWarning') : label === 'review' ? t('requirements.review') : t('requirements.title');
   return <button type="button" data-card-action="true" className="cursor-pointer text-left rounded-sm focus-visible:outline-2 focus-visible:outline-accent" onClick={event => {
     event.stopPropagation();
-    const snapshot = useRequirementsStore.getState().snapshots[requirementKey(source)];
+    const snapshot = requirementSnapshot(source, useAppStore.getState().mods, useRequirementsStore.getState().snapshots);
     if (snapshot?.status === 'loaded') useRequirementsStore.getState().inspect({ ...source, name: mod.name, requirements: snapshot });
   }}><Tag icon={Link2} tone={warning ? 'warning' : 'neutral'} variant={variant}>{text}</Tag></button>;
 }

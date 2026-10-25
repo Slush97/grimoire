@@ -33,7 +33,7 @@ describe('requirements install review', () => {
   it('does not replace an active check when another install arrives', async () => {
     const first = checkQuickInstallRequirements(source, []);
     await expect(checkQuickInstallRequirements({ ...source, id: 2 }, [])).resolves.toBe(false);
-    expect(useRequirementsStore.getState().review?.source.id).toBe(source.id);
+    expect(useRequirementsStore.getState().review?.source).toMatchObject({ id: source.id });
     useRequirementsStore.getState().finish(false);
     await first;
   });

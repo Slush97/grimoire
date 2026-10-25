@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
+import { useHeroCategoryStore } from '../../stores/heroCategoryStore';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
@@ -48,6 +49,7 @@ interface ModCardProps {
     outdatedVdataEnabled?: boolean;
     staleModels?: Mod['staleModels'];
     id: string;
+    metaKey?: string;
     name: string;
     fileName: string;
     enabled: boolean;
@@ -55,6 +57,7 @@ interface ModCardProps {
     size: number;
     installedAt: string;
     thumbnailUrl?: string;
+    movementFx?: Mod['movementFx'];
     audioUrl?: string;
     sourceSection?: string;
     categoryName?: string;
@@ -78,10 +81,14 @@ interface ModCardProps {
   conflicts: ModConflict[];
   soundVolume: number;
   updateAvailable?: boolean;
-  /** Absorbed merge sources whose GameBanana file is gone. Informational only:
-   *  a merged VPK has no file of its own to re-download. */
+  /** Absorbed merge sources whose GameBanana file was replaced or removed. */
   staleSourceCount?: number;
+  /** The part of `staleSourceCount` the merged-contents dialog can update.
+   *  The rest need a manual extract or unmerge. */
+  updatableSourceCount?: number;
   onOpenDetails?: () => void;
+  onOpenDoorStuck?: () => void;
+  previewMetaKey?: string;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
@@ -227,6 +234,7 @@ function ModMediaPreview({
   const image = (
     <ModThumbnail
       src={mod.thumbnailUrl}
+      movementFx={mod.movementFx}
       alt={mod.name}
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
@@ -330,6 +338,8 @@ interface ModListRowContentProps {
   hideNsfwPreviews: boolean;
   soundVolume: number;
   onOpenDetails?: () => void;
+  staleSourceCount: number;
+  updatableSourceCount: number;
   onRenameLocal?: (newName: string) => Promise<void>;
   onCommitPriority?: (newPosition: number) => Promise<void>;
   loadPosition?: number;
@@ -572,12 +582,43 @@ function StaleModelTag({ models, variant }: { models?: Mod['staleModels']; varia
   );
 }
 
+function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
+  staleCount: number;
+  updatableCount: number;
+  onOpen?: () => void;
+  variant: 'overlay' | 'inline';
+}) {
+  const { t } = useTranslation();
+  if (onOpen && updatableCount > 0) {
+    return (
+      <button type="button" data-card-action="true" onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }} className="rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-2 focus-visible:outline-accent">
+        <Tag tone="update" variant={variant} icon={Download}
+          title={t('mergedContents.staleSourcesUpdatable', { count: updatableCount })}>
+          {t('mergedContents.updateSources', { count: updatableCount })}
+        </Tag>
+      </button>
+    );
+  }
+  if (staleCount === 0) return null;
+  return (
+    <Tag tone="update" variant={variant} icon={Download}
+      title={t('installed.card.staleSourcesTitle', { count: staleCount })}>
+      {t('installed.card.staleSourcesBadge', { count: staleCount })}
+    </Tag>
+  );
+}
+
 function ModListRowContent({
   mod,
   taxonomy,
   hideNsfwPreviews,
   soundVolume,
   onOpenDetails,
+  staleSourceCount,
+  updatableSourceCount,
   onRenameLocal,
   onCommitPriority,
   loadPosition,
@@ -656,6 +697,7 @@ function ModListRowContent({
         ) : (
           <ModThumbnail
             src={mod.thumbnailUrl}
+            movementFx={mod.movementFx}
             alt={mod.name}
             nsfw={mod.nsfw}
             hideNsfw={hideNsfwPreviews}
@@ -685,6 +727,8 @@ function ModListRowContent({
           <RequirementWarning mod={mod} />
           <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
           <StaleModelTag models={mod.staleModels} variant="inline" />
+          <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
+            onOpen={onOpenDetails} variant="inline" />
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
@@ -771,7 +815,10 @@ export function ModCard({
   soundVolume,
   updateAvailable,
   staleSourceCount = 0,
+  updatableSourceCount = 0,
   onOpenDetails,
+  onOpenDoorStuck,
+  previewMetaKey,
   onViewAuthor,
   onToggle,
   onSoloLaunch,
@@ -813,6 +860,7 @@ export function ModCard({
   const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
   const [backupBusy, setBackupBusy] = useState(false);
   const setBackupToDelete = useModBackupsStore((state) => state.setDeleteTarget);
+  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
     setBackupBusy(true);
@@ -1052,7 +1100,7 @@ export function ModCard({
   // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
   // manual or auto global tag is visible here, not just in the Locker. A global
   // mod has no hero, so the two chips never both show.
-  const cardTaxonomy = getInstalledCardTaxonomy(mod);
+  const cardTaxonomy = getInstalledCardTaxonomy(mod, heroByCategoryId);
   const cardGlobalLabel = cardTaxonomy.globalType
     ? globalModTypeLabel(cardTaxonomy.globalType, t)
     : undefined;
@@ -1114,6 +1162,11 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
+      {mod.merged && updatableSourceCount > 0 && onOpenDetails && (
+        <MenuItem icon={Download} onSelect={onOpenDetails}>
+          {t('mergedContents.updateSources', { count: updatableSourceCount })}
+        </MenuItem>
+      )}
       {onViewAuthor && (
         <MenuItem icon={Banana} onSelect={onViewAuthor}>
           {t('installed.card.viewAuthorPage')}
@@ -1165,6 +1218,7 @@ export function ModCard({
           {t('installed.imprintDetails.menuEntry')}
         </MenuItem>
       )}
+      {onOpenDoorStuck && <MenuItem icon={Hammer} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {hasSecondaryActions && <MenuSeparator />}
       {onSoloLaunch && (
         <MenuItem icon={Beaker} disabled={soloBusy} onSelect={onSoloLaunch}>
@@ -1363,6 +1417,8 @@ export function ModCard({
     <div
       ref={cardRef}
       data-mod-entry-key={entryKey}
+      data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
       onPointerEnter={() => {
         pointerInside.current = true;
         if (shiftHeld && !selectMode) setHovered(true);
@@ -1413,6 +1469,8 @@ export function ModCard({
             hideNsfwPreviews={hideNsfwPreviews}
             soundVolume={soundVolume}
             onOpenDetails={onOpenDetails}
+            staleSourceCount={staleSourceCount}
+            updatableSourceCount={updatableSourceCount}
             onRenameLocal={onRenameLocal}
             onCommitPriority={onCommitPriority}
             loadPosition={loadPosition}
@@ -1541,16 +1599,8 @@ export function ModCard({
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
               )}
-              {staleSourceCount > 0 && (
-                <Tag
-                  tone="update"
-                  variant="overlay"
-                  icon={Download}
-                  title={t('installed.card.staleSourcesTitle', { count: staleSourceCount })}
-                >
-                  {t('installed.card.staleSourcesBadge', { count: staleSourceCount })}
-                </Tag>
-              )}
+              <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
+                onOpen={onOpenDetails} variant="overlay" />
               {group && group.variantCount > 1 && (
                 <Tag
                   variant="overlay"

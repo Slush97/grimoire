@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import {
     Search,
     Loader2,
@@ -31,6 +33,7 @@ import {
 import { showToast } from '../../stores/toastStore';
 import { SaveAssetButton } from './SaveAssetButton';
 import { useAppStore } from '../../stores/appStore';
+import { withDirtySource } from '../../lib/dirtySources';
 import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../types/foundry';
 import type { HeroAbilitySlot } from '../../types/mod';
 
@@ -39,6 +42,7 @@ import type { HeroAbilitySlot } from '../../types/mod';
 interface SwapContext {
     hero: string;
     heroName: string;
+    onDirtyChange?: (event: string, dirty: boolean) => void;
 }
 
 interface SoundBrowseProps {
@@ -49,6 +53,8 @@ interface SoundBrowseProps {
      *  catalog tool-first rail). The hero-first workshop splits them across its
      *  Abilities (gameplay) and Voice (VO) sections. */
     only?: 'gameplay' | 'voice';
+    /** True while any open swap panel holds a picked audio file (unsaved draft). */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 // Cap on rendered VO rows: a hero has ~1600 voice-line events, so the
@@ -84,7 +90,7 @@ const CATEGORY_ICON: Record<HeroSoundCategory, typeof Sparkles> = {
  * demand (cached), and a single shared <audio> element plays at most one clip at
  * a time. The same extractor backs both gameplay clips and voice lines.
  */
-export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProps) {
+export default function SoundBrowse({ heroes, heroNames, only, onDirtyChange }: SoundBrowseProps) {
     const { t } = useTranslation();
     const showGameplay = only !== 'voice';
     const showVoice = only !== 'gameplay';
@@ -99,11 +105,27 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
 
     // `hero` is '' until the user picks; the effective hero derives the first
     // option so the tab opens with content (no synchronous default-set effect).
-    const [picked, setPicked] = useState('');
-    const [search, setSearch] = useState('');
+    const browseKey = `sounds:${only ?? 'all'}:${heroes.length === 1 ? heroes[0].codename : 'catalog'}`;
+    const [picked, setPicked] = useFoundryDraft(`${browseKey}:hero`, z.string().max(100), '');
+    const [search, setSearch] = useFoundryDraft(`${browseKey}:search`, z.string().max(512), '');
     const hero = picked || heroOptions[0]?.code || '';
     const heroName = heroOptions.find((h) => h.code === hero)?.name ?? hero;
-    const swapContext = useMemo<SwapContext>(() => ({ hero, heroName }), [hero, heroName]);
+    // Several rows can have a swap panel open at once; report dirty only on the
+    // first row to pick audio and the last to drop it.
+    const dirtyRows = useRef<ReadonlySet<string>>(new Set());
+    const setRowDirty = useCallback(
+        (event: string, dirty: boolean) => {
+            const wasDirty = dirtyRows.current.size > 0;
+            dirtyRows.current = withDirtySource(dirtyRows.current, event, dirty);
+            const isDirty = dirtyRows.current.size > 0;
+            if (wasDirty !== isDirty) onDirtyChange?.(isDirty);
+        },
+        [onDirtyChange]
+    );
+    const swapContext = useMemo<SwapContext>(
+        () => ({ hero, heroName, onDirtyChange: setRowDirty }),
+        [hero, heroName, setRowDirty]
+    );
 
     // Gameplay-sound fetch, tagged with the hero it belongs to so loading/error
     // derive from whether it matches the current hero (the effect only sets state
@@ -586,7 +608,12 @@ interface SoundRowProps {
 
 function SoundRow({ label, event, clips, duration, state, onToggle, swap, targetClip, clipPaths }: SoundRowProps) {
     const { t } = useTranslation();
-    const [swapOpen, setSwapOpen] = useState(false);
+    const [swapOpen, setSwapOpen] = useFoundryDraft(`sound:${swap?.hero ?? ''}:${event}:open`, z.boolean(), false);
+    const setRowDirty = swap?.onDirtyChange;
+    const onSwapDirtyChange = useCallback(
+        (dirty: boolean) => setRowDirty?.(event, dirty),
+        [setRowDirty, event]
+    );
     const seconds = duration && duration > 0 ? `${duration.toFixed(1)}s` : null;
     return (
         <div style={{ contentVisibility: 'auto', containIntrinsicSize: '0 44px' }}>
@@ -646,6 +673,7 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                     clips={clips}
                     targetClip={targetClip}
                     onClose={() => setSwapOpen(false)}
+                    onDirtyChange={onSwapDirtyChange}
                 />
             )}
         </div>
@@ -670,6 +698,7 @@ function SwapPanel({
     clips,
     targetClip,
     onClose,
+    onDirtyChange,
 }: {
     hero: string;
     heroName: string;
@@ -683,17 +712,31 @@ function SwapPanel({
      *  target in the import editor. */
     targetClip?: string;
     onClose: () => void;
+    /** True while a picked audio file (and the trims, name and loop built around
+     *  it) would be lost by leaving; false again once cleared or unmounted. */
+    onDirtyChange?: (dirty: boolean) => void;
 }) {
     const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const [audioPath, setAudioPath] = useState<string | null>(null);
-    const [audioName, setAudioName] = useState('');
+    const draftKey = `sound:${hero}:${event}`;
+    const [audioPath, setAudioPath] = useFoundryDraft(`${draftKey}:path`, z.string().max(4096).nullable(), null);
+    const [audioName, setAudioName] = useFoundryDraft(`${draftKey}:fileName`, z.string().max(512), '');
     const [audioFile, setAudioFile] = useState<File | null>(null);
-    const [edits, setEdits] = useState<SoundImportEdits>({});
-    const [name, setName] = useState(`${heroName} ${label}`.trim());
-    const [loop, setLoop] = useState<'auto' | 'on' | 'off'>('auto');
+    const [edits, setEdits] = useFoundryDraft<SoundImportEdits>(`${draftKey}:edits`, z.object({
+        trimStartMs: z.number().finite().nonnegative().optional(), trimEndMs: z.number().finite().positive().optional(),
+        gainDb: z.number().finite().min(-18).max(18).optional(),
+    }).strict(), {});
+    const [name, setName] = useFoundryDraft(`${draftKey}:name`, z.string().max(512), `${heroName} ${label}`.trim());
+    const [loop, setLoop] = useFoundryDraft(`${draftKey}:loop`, z.enum(['auto', 'on', 'off']), 'auto');
     const [busy, setBusy] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+
+    const hasDraft = audioPath !== null;
+    useEffect(() => {
+        if (!hasDraft) return;
+        onDirtyChange?.(true);
+        return () => onDirtyChange?.(false);
+    }, [hasDraft, onDirtyChange]);
 
     const accept = useCallback(
         (file: File | undefined | null) => {
@@ -708,9 +751,9 @@ function SwapPanel({
             setAudioPath(path);
             setAudioName(file.name);
             setAudioFile(file);
-            setEdits({});
+            if (path !== audioPath) setEdits({});
         },
-        [t]
+        [t, audioPath, setAudioPath, setAudioName, setEdits]
     );
 
     const forge = useCallback(async () => {
@@ -730,6 +773,7 @@ function SwapPanel({
                 trimEndMs: edits.trimEndMs,
                 gainDb: edits.gainDb,
             });
+            setAudioPath(null); setAudioName(''); setEdits({});
             await useAppStore.getState().loadMods({ silent: true });
             showToast(
                 t('foundry.sound.swap.done', 'Installed and enabled "{{name}}". Find it under Installed.', {
@@ -743,10 +787,11 @@ function SwapPanel({
         } finally {
             setBusy(false);
         }
-    }, [audioPath, busy, name, heroName, label, hero, event, clipPaths, loop, edits, t, onClose]);
+    }, [audioPath, busy, name, heroName, label, hero, event, clipPaths, loop, edits, t, onClose, setAudioPath, setAudioName, setEdits]);
 
     return (
         <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">
+            {audioPath && !audioFile && <p role="status" className="mb-2 text-xs text-text-secondary">{t('foundry.draft.audioRestored')}</p>}
             <div className="mb-2 flex items-center justify-between">
                 <p className="text-2xs font-medium uppercase tracking-wide text-accent">
                     <Tx k="foundry.sound.swap.title" fallback="Swap with your own audio" />
@@ -804,7 +849,9 @@ function SwapPanel({
             {/* Trim + normalize the imported clip before forging */}
             {audioFile && (
                 <SoundImportEditor
+                    key={`${audioPath}:${audioFile.lastModified}`}
                     file={audioFile}
+                    initialEdits={edits}
                     targetClipPath={targetClip}
                     onChange={setEdits}
                 />
@@ -916,6 +963,9 @@ function useClipPlayer(): ClipPlayer {
                 srcCache.current.set(path, src);
                 setLoadingKey((k) => (k === key ? null : k));
             }
+            // The unmount cleanup nulls the ref; bail so a clip that finished
+            // loading after the hero/section switch never starts playing.
+            if (audioRef.current !== audio) return;
             if (!src) return; // not auditionable (missing entry / unsupported codec)
 
             audio.src = src;

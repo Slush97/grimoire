@@ -115,6 +115,8 @@ export interface GameBananaModDetails {
 
 export interface ModRequirement {
   name: string;
+  /** Exact installed source required by a locally generated skin overlay. */
+  sha256?: string;
   url?: string;
   importance: 'required' | 'optional' | 'unknown';
   state: 'on' | 'off' | 'unknown';

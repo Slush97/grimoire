@@ -34,6 +34,14 @@ function dynamicExpr(source = '1.0'): MorphicDynamicExpr {
 }
 
 describe('buildDeadlockMaterial vertex colors', () => {
+  it('preserves the source material name for part selection after shader wrapping', () => {
+    const base = materialWithMorphic({ shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } });
+    base.name = 'abrams_body.vmat';
+    const result = buildDeadlockMaterial(base);
+    expect(result.material.name).toBe('abrams_body.vmat');
+    expect(base.name).toBe('abrams_body.vmat');
+    result.dispose();
+  });
   it.each([0, 1])('honors authored vertex-color placement, mask and strength beforeCsb=%s', (before) => {
     const base = materialWithMorphic({ shader: 'pbr.vfx',
       ints: { F_USE_NPR_LIGHTING: 1, F_VERTEX_COLOR: 1, g_bApplyTintToVertexColors: before, g_bMaskVertexColorTint1: 1 },

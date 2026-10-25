@@ -16,7 +16,7 @@ const scalarAt = (v: unknown, index: number, fallback: number) => {
 export function orderedRopePoints(system: FxDescriptor) {
   const ring = system.initializers.find(n => n.class === 'C_INIT_RingWave');
   const burst = system.emitters.find(n => n.class === 'C_OP_InstantaneousEmitter');
-  if (!ring || ring.params.m_bEvenDistribution !== true || !burst || paramScalar(ring.params.m_nControlPointNumber, 0) !== 0) return null;
+  if (!ring || ring.params.m_bEvenDistribution !== true || !burst) return null;
   const count = Math.floor(Math.min(128, paramScalar(system.maxParticles, 64), paramScalar(burst.params.m_nParticlesToEmit, 0)));
   if (count < 2) return null;
   const perOrbit = Math.max(1, paramScalar(ring.params.m_flParticlesPerOrbit, count));

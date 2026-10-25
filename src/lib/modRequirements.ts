@@ -1,7 +1,30 @@
-import { parseGameBananaItemUrl, type GameBananaItemRef, type ModRequirement, type ModRequirementSnapshot } from '../types/gamebanana';
+import { parseGameBananaItemUrl, type GameBananaItemRef, type ModRequirement, type ModRequirementSnapshot, type ModRequirementSource } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 
-export const requirementKey = (item: GameBananaItemRef): string => `${item.section}:${item.id}`;
+export type RequirementSource = ModRequirementSource | { localModId: string; name: string; requirements: ModRequirementSnapshot };
+export type RequirementRef = GameBananaItemRef | Pick<Extract<RequirementSource, { localModId: string }>, 'localModId'>;
+export const requirementKey = (item: RequirementRef): string => 'localModId' in item ? `local:${item.localModId}` : `${item.section}:${item.id}`;
+
+export function skinRequirementSource(mod: Pick<Mod, 'id' | 'name' | 'skinEdit'>, mods: readonly RequirementMod[]): RequirementSource | null {
+  if (!mod.skinEdit?.sources.length) return null;
+  return { localModId: mod.id, name: mod.name, requirements: { status: 'loaded', checkedAt: 0,
+    items: [...new Set(mod.skinEdit.sources)].map(sha256 => {
+      const base = mods.find(candidate => candidate.sha256 === sha256);
+      return { name: base?.name ?? sha256.slice(0, 12), sha256, importance: 'required', state: 'on',
+        url: base?.gameBananaId ? `https://gamebanana.com/${base.sourceSection === 'Sound' ? 'sounds' : base.sourceSection === 'Wip' ? 'wips' : 'mods'}/${base.gameBananaId}` : undefined };
+    }) } };
+}
+
+export function requirementSnapshot(source: RequirementRef, mods: readonly Mod[], snapshots: Readonly<Record<string, ModRequirementSnapshot>>): ModRequirementSnapshot | undefined {
+  if (!('localModId' in source)) return snapshots[requirementKey(source)];
+  const mod = mods.find(candidate => candidate.id === source.localModId);
+  return mod ? skinRequirementSource(mod, mods)?.requirements : undefined;
+}
+
+export function requirementOwners(source: RequirementRef, mods: readonly Mod[]): Mod[] {
+  return mods.filter(mod => 'localModId' in source ? mod.id === source.localModId
+    : modRequirementRefs(mod).some(ref => requirementKey(ref) === requirementKey(source)));
+}
 
 export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequirementSnapshot {
   if (raw === null) return { status: 'loaded', checkedAt, items: [] };
@@ -36,19 +59,19 @@ export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequ
 }
 
 export interface RequirementMatch { modId: string; name: string; enabled: boolean }
-export type RequirementMod = Pick<Mod, 'id' | 'name' | 'enabled' | 'gameBananaId' | 'sourceSection' | 'merged'>;
+export type RequirementMod = Pick<Mod, 'id' | 'name' | 'enabled' | 'gameBananaId' | 'sourceSection' | 'merged' | 'sha256' | 'skinEdit'>;
 export type RequirementState = 'enabled' | 'disabled' | 'missing' | 'met' | 'manual' | 'optional';
 export function matchRequirement(item: ModRequirement, mods: readonly RequirementMod[]): { state: RequirementState; matches: RequirementMatch[] } {
   // Authors fill requirements with credits, notes and off-site tools, so only a
   // GameBanana item marked Required is checked. An unrecognised state label is
   // read as On, the usual meaning for a required mod.
   const target = item.importance === 'required' && item.url ? parseGameBananaItemUrl(item.url) : null;
-  if (!target) return { state: 'optional', matches: [] };
+  if (!target && !item.sha256) return { state: 'optional', matches: [] };
   const matches: RequirementMatch[] = [];
   for (const mod of mods) {
     const identities = [{ id: mod.gameBananaId, section: mod.sourceSection ?? 'Mod' },
       ...(mod.merged?.sources ?? []).map(s => ({ id: s.gameBananaId, section: s.section ?? 'Mod' }))];
-    if (identities.some(s => s.id === target.id && s.section === target.section)) {
+    if (item.sha256 ? mod.sha256 === item.sha256 : target && identities.some(s => s.id === target.id && s.section === target.section)) {
       matches.push({ modId: mod.id, name: mod.name, enabled: mod.enabled });
     }
   }
@@ -61,6 +84,13 @@ export function hasRequirementIssues(snapshot: ModRequirementSnapshot | undefine
   if (!snapshot) return false;
   if (snapshot.status === 'unavailable') return false;
   return snapshot.items.some(item => ['disabled', 'missing', 'manual'].includes(matchRequirement(item, mods).state));
+}
+
+/** Issues for a mod that is already installed. One that is off can't be broken
+ *  by what it needs, the same rule requirementOrderIssues follows. Installs use
+ *  hasRequirementIssues, since the new mod arrives enabled. */
+export function hasInstalledRequirementIssues(mod: Pick<Mod, 'enabled'>, snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[]): boolean {
+  return mod.enabled && hasRequirementIssues(snapshot, mods);
 }
 
 export function modRequirementRefs(mod: Pick<Mod, 'gameBananaId' | 'sourceSection' | 'merged'>): GameBananaItemRef[] {

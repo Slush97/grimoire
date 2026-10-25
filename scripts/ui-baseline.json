@@ -3,7 +3,7 @@
     "em-dash": 2
   },
   "src/components/DownloadQueueIndicator.tsx": {
-    "raw-palette": 4
+    "raw-palette": 2
   },
   "src/components/ImportCollectionModal.tsx": {
     "raw-palette": 2,
@@ -119,7 +119,7 @@
   },
   "src/components/profiles/ImportProfileDialog.tsx": {
     "raw-palette": 16,
-    "em-dash": 3
+    "em-dash": 2
   },
   "src/components/servers/ConnectServerDialog.tsx": {
     "raw-palette": 2
@@ -175,7 +175,7 @@
     "raw-palette": 3
   },
   "src/index.css": {
-    "em-dash": 2
+    "em-dash": 1
   },
   "src/lib/accentColor.ts": {
     "em-dash": 1

@@ -3,6 +3,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
+import { installedDoorStuckTarget } from '../lib/installedSkinTarget';
+import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
   DragOverlay,
@@ -60,6 +63,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
+import { useHeroCategoryStore } from '../stores/heroCategoryStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
@@ -80,7 +84,7 @@ import { RequirementsControl } from '../components/requirements/RequirementsCont
 import { useRequirementOrderStore } from '../stores/requirementOrderStore';
 import { requirementOrderIssues } from '../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../stores/requirementsStore';
-import { hasRequirementIssues, modRequirementRefs, requirementKey } from '../lib/modRequirements';
+import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -103,7 +107,7 @@ import {
 import { isDownloadRequestPending, releaseDownloadRequest, requestDownload, usePendingDownloadCompletions } from '../lib/downloadActivity';
 import { classifyModFiles } from '../lib/updateFileMatch';
 import { decideFileDownload, groupModUpdates, modUpdateGroup, replaceableFilesFor, summarizeUpdateScope } from '../lib/updateActions';
-import { mergeSourceFileIds } from '../lib/updateCheck';
+import { installsOutsideMerge, mergeSourceInstalls } from '../lib/updateCheck';
 import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
@@ -286,6 +290,7 @@ interface InstalledEntryCardProps {
   conflicts: ModConflict[];
   updateAvailable: boolean;
   staleSourceCount: number;
+  updatableSourceCount: number;
   fixingUnknown: boolean;
   loadPosition: number | undefined;
   loadCount: number;
@@ -351,6 +356,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   conflicts,
   updateAvailable,
   staleSourceCount,
+  updatableSourceCount,
   fixingUnknown,
   loadPosition,
   loadCount,
@@ -385,17 +391,35 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onToggleList,
   onCreateList,
 }: InstalledEntryCardProps) {
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
+  const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
+  const target = installedDoorStuckTarget(previewMod);
+  const openDoorStuck = doorStuckEnabled && target ? () => {
+    if ('kind' in target && target.kind === 'movement') {
+      const settings = useAppStore.getState().settings;
+      const scope = settings?.devMode && settings.devDeadlockPath ? settings.devDeadlockPath : settings?.deadlockPath ?? '';
+      if (!restoreMovementFxDraft(localStorage, scope, target.choice)) {
+        showToast(t('foundry.draft.failed'), { tone: 'error' });
+        return;
+      }
+    }
+    navigate('/foundry', { state: target });
+  } : undefined;
   if (entry.kind === 'single') {
     const mod = entry.mod;
     return (
       <ModCard
         mod={mod}
+        onOpenDoorStuck={openDoorStuck}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
         conflicts={conflicts}
         soundVolume={soundVolume}
         updateAvailable={updateAvailable}
         staleSourceCount={staleSourceCount}
+        updatableSourceCount={updatableSourceCount}
         entryKey={entry.key}
         onOpenDetails={
           mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
@@ -457,6 +481,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const outdatedVariant = entry.enabledVariants.find(v => v.outdatedVdata) ?? entry.variants.find(v => v.outdatedVdata);
   return (
     <ModCard
+      onOpenDoorStuck={openDoorStuck}
+      previewMetaKey={previewMod.metaKey}
       mod={{
         ...entry.primary,
         safetyTarget,
@@ -711,8 +737,11 @@ export default function Installed() {
   const requirementSnapshots = useRequirementsStore(state => state.snapshots);
   const requirementFiles = useRequirementOrderStore(state => state.files);
   const [requirementsOnly, setRequirementsOnly] = useState(false);
-  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => modRequirementRefs(mod)
-    .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id))).map(mod => mod.id)),
+  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => {
+    const local = skinRequirementSource(mod, mods);
+    return (local && (hasInstalledRequirementIssues(mod, local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
+      .some(target => hasInstalledRequirementIssues(mod, requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
+  }).map(mod => mod.id)),
   [visibleMods, mods, requirementSnapshots, requirementFiles]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
@@ -1242,8 +1271,14 @@ export default function Installed() {
   const detailsRequestIdRef = useRef(0);
   const updatesAvailable = useModUpdateCheckStore(state => state.updatesAvailable);
   const mergedSourceUpdates = useModUpdateCheckStore(state => state.staleMergeSources);
+  const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
+  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
+  const loadHeroCategories = useHeroCategoryStore((state) => state.load);
+  useEffect(() => {
+    void loadHeroCategories();
+  }, [loadHeroCategories]);
   const finishing = usePendingDownloadCompletions();
   const unavailableUpdateIds = useMemo(() => new Set([
     ...updatingModIds, ...submittingModIds,
@@ -1283,14 +1318,14 @@ export default function Installed() {
     return { detailsInstalledFileIds: installedFileIds, detailsActiveFileIds: activeFileIds };
   }, [detailsInstalledMods]);
   // Files the user has inside a merge are never proposed as successors.
-  const mergedFileIds = useMemo(() => mergeSourceFileIds(visibleMods), [visibleMods]);
+  const mergedInstalls = useMemo(() => mergeSourceInstalls(visibleMods), [visibleMods]);
   const autoMatchRemainingFiles = settings?.autoMatchRemainingFiles ?? true;
 
   // The mod page shows every installed file's update or manual replacement.
   // Each download still replaces only its matched or explicitly chosen file.
   const detailsUpdate = useMemo(() => {
     const files = detailsMod?.files ?? [];
-    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedFileIds, autoMatchRemainingFiles);
+    const classification = classifyModFiles(detailsMod?.id ?? -1, files, detailsInstalledMods, mergedInstalls, autoMatchRemainingFiles);
     const source = detailsSourceModId ? mods.find((mod) => mod.id === detailsSourceModId) : undefined;
     const summary = summarizeUpdateScope(classification);
     // The offline fallback has no file rows; keep the card's verdict for the badge.
@@ -1302,7 +1337,7 @@ export default function Installed() {
       updateFileIds: new Set(summary.targets.keys()),
       replaceableFiles: replaceableFilesFor(summary.needsPick, detailsInstalledMods),
     };
-  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedFileIds, updatesAvailable, autoMatchRemainingFiles]);
+  }, [detailsMod, detailsSourceModId, mods, detailsInstalledMods, mergedInstalls, updatesAvailable, autoMatchRemainingFiles]);
 
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateMenuTargetId, setUpdateMenuTargetId] = useState<string | null>(null);
@@ -2294,10 +2329,9 @@ export default function Installed() {
   const handleUpdateMergeSources = async (): Promise<MergeSourceUpdateOutcome> => {
     const targetId = mergedContentsMod?.id;
     const staleFileNames = targetId ? mergedSourceUpdates.get(targetId) : undefined;
-    const stale = (mergedContentsMod?.merged?.sources ?? []).filter((source) =>
-      staleFileNames?.has(source.fileName),
-    );
-    if (!targetId || stale.length === 0) return { updated: 0, skipped: [] };
+    const sources = mergedContentsMod?.merged?.sources ?? [];
+    const stale = sources.filter((source) => staleFileNames?.has(source.fileName));
+    if (!targetId || !staleFileNames || stale.length === 0) return { updated: 0, skipped: [] };
 
     const filesByModId = new Map<number, GameBananaFile[]>();
     const categoryByModId = new Map<number, number>();
@@ -2311,15 +2345,11 @@ export default function Installed() {
       }
     }
 
-    // Don't re-download a file already installed standalone or inside a merge.
-    const claimed = mergeSourceFileIds(visibleMods);
-    for (const mod of mods) {
-      if (typeof mod.gameBananaFileId !== 'number') continue;
-      if (!filesByModId.has(mod.gameBananaId ?? -1)) continue;
-      claimed.add(mod.gameBananaFileId);
-    }
-
-    const plan = planMergeSourceUpdates(stale, filesByModId, claimed, autoMatchRemainingFiles);
+    // Files installed standalone or inside another merge are never re-downloaded,
+    // and those installs compete with this merge's sources for the same uploads.
+    const plan = planMergeSourceUpdates(
+      sources, staleFileNames, filesByModId, installsOutsideMerge(visibleMods, targetId), autoMatchRemainingFiles,
+    );
     const skipped: MergeSourceUpdateSkip[] = plan.unresolved.map((entry) => ({
       modName: entry.source.modName,
       reason: entry.reason,
@@ -2592,10 +2622,10 @@ export default function Installed() {
   const entryFacetMeta = useMemo(() => {
     const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
     for (const entry of allEntries) {
-      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry) });
     }
     return byKey;
-  }, [allEntries]);
+  }, [allEntries, heroByCategoryId]);
 
   // List membership, deliberately kept OUT of entryFacetMeta: that cache is
   // rebuilt only when allEntries changes, so folding list ids into it would
@@ -3016,7 +3046,7 @@ export default function Installed() {
   // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
   // compute if an entry somehow isn't in the cache.
   const heroNamesOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId);
   const tagKeysOf = (entry: ModEntry): string[] =>
     entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
 
@@ -3125,7 +3155,7 @@ export default function Installed() {
     const matchesSourceEntry = (entry: ModEntry) =>
       entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
     const matchesHeroEntry = (entry: ModEntry) =>
-      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry)).includes(heroFilter);
+      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId)).includes(heroFilter);
     const matchesTagEntry = (entry: ModEntry) =>
       tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
     // Selecting several lists unions them (same as tags), but the list axis as a
@@ -3174,7 +3204,7 @@ export default function Installed() {
         }))
       : [];
     return { visibleEnabled, visibleDisabled };
-  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
+  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
   const activeCollapsedLists = searchNeedle
@@ -3459,6 +3489,8 @@ export default function Installed() {
         : entry.variants.some((v) => updatesAvailable.has(v.id)),
     staleSourceCount:
       entry.kind === 'single' ? (mergedSourceUpdates.get(entry.mod.id)?.size ?? 0) : 0,
+    updatableSourceCount:
+      entry.kind === 'single' ? (updatableMergeSources.get(entry.mod.id)?.size ?? 0) : 0,
     fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
     loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
     loadCount: isEntryEnabled(entry) ? enabledModCount : 0,
@@ -3730,6 +3762,7 @@ export default function Installed() {
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
+      <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
       <div
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent
@@ -4556,6 +4589,7 @@ export default function Installed() {
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
           staleSourceFileNames={mergedSourceUpdates.get(mergedContentsMod.id)}
+          updatableSourceFileNames={updatableMergeSources.get(mergedContentsMod.id)}
           onUpdateSources={handleUpdateMergeSources}
           eligibleMods={eligibleMergeAdditions}
           onAddSources={handleAddMergeSources}

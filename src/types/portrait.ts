@@ -66,6 +66,7 @@ export interface HeroPoseSkinSource {
  * to a vanilla pose, which changes it.
  */
 export interface HeroPoseInfo {
+  hasMovement?: boolean;
   hasModel: boolean;
   mtimeMs: number | null;
   key: string;
