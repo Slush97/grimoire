@@ -123,6 +123,7 @@ export interface DropdownSelectOption {
     label: string;
     icon?: ReactNode;
     muted?: boolean;
+    disabled?: boolean;
 }
 
 export interface DropdownSelectSearchConfig {
@@ -139,7 +140,10 @@ export interface DropdownSelectProps {
     ariaLabel: string;
     placeholder?: string;
     className?: string;
-    size?: 'sm' | 'md';
+    size?: 'sm' | 'md' | 'lg';
+    /** Keep a toolbar select's content width and secondary surface. */
+    variant?: 'default' | 'toolbar';
+    icon?: LucideIcon;
     search?: DropdownSelectSearchConfig;
     disabled?: boolean;
 }
@@ -158,9 +162,12 @@ export function DropdownSelect({
     placeholder = ariaLabel,
     className = '',
     size = 'md',
+    variant = 'default',
+    icon: Icon,
     search,
     disabled = false,
 }: DropdownSelectProps) {
+    const toolbar = variant === 'toolbar';
     const [open, setOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const rootRef = useRef<HTMLDivElement | null>(null);
@@ -183,10 +190,10 @@ export function DropdownSelect({
             option.label.toLocaleLowerCase().includes(normalizedSearchQuery)
         );
     }, [normalizedSearchQuery, options, search]);
-    const selectedIndex = useMemo(
-        () => Math.max(0, visibleOptions.findIndex((option) => option.value === value)),
-        [value, visibleOptions]
-    );
+    const selectedIndex = useMemo(() => {
+        const index = visibleOptions.findIndex((option) => option.value === value && !option.disabled);
+        return index >= 0 ? index : visibleOptions.findIndex((option) => !option.disabled);
+    }, [value, visibleOptions]);
     const searchEnabled = search !== undefined;
     const closeSelect = useCallback(() => {
         setOpen(false);
@@ -227,8 +234,11 @@ export function DropdownSelect({
         const spaceAbove = rect.top - LISTBOX_GAP - VIEWPORT_PADDING;
         const flipUp = spaceBelow < MIN_DOWNWARD_SPACE && spaceAbove > spaceBelow;
 
-        listbox.style.left = `${rect.left}px`;
-        listbox.style.width = `${rect.width}px`;
+        listbox.style.width = toolbar ? 'max-content' : `${rect.width}px`;
+        listbox.style.minWidth = toolbar ? `${rect.width}px` : '';
+        listbox.style.maxWidth = toolbar ? `${window.innerWidth - VIEWPORT_PADDING * 2}px` : '';
+        const width = toolbar ? listbox.getBoundingClientRect().width : rect.width;
+        listbox.style.left = `${Math.max(VIEWPORT_PADDING, Math.min(rect.left, window.innerWidth - width - VIEWPORT_PADDING))}px`;
         if (flipUp) {
             listbox.style.top = 'auto';
             listbox.style.bottom = `${window.innerHeight - rect.top + LISTBOX_GAP}px`;
@@ -238,7 +248,7 @@ export function DropdownSelect({
         }
         const available = Math.max(0, flipUp ? spaceAbove : spaceBelow);
         listbox.style.maxHeight = `${Math.min(available, MAX_LISTBOX_HEIGHT)}px`;
-    }, []);
+    }, [toolbar]);
 
     /**
      * The listbox renders in a portal rather than as an absolutely-positioned
@@ -286,15 +296,21 @@ export function DropdownSelect({
     }, []);
 
     const selectOption = (optionValue: string) => {
+        if (options.find((option) => option.value === optionValue)?.disabled) return;
         onChange(optionValue);
         closeSelect();
         window.requestAnimationFrame(() => buttonRef.current?.focus());
     };
 
-    const focusOption = (index: number) => {
-        if (visibleOptions.length === 0) return;
-        const nextIndex = (index + visibleOptions.length) % visibleOptions.length;
-        optionRefs.current[nextIndex]?.focus();
+    const focusOption = (index: number, direction = 1) => {
+        const count = visibleOptions.length;
+        for (let offset = 0; offset < count; offset++) {
+            const nextIndex = (index + offset * direction + count) % count;
+            if (!visibleOptions[nextIndex].disabled) {
+                optionRefs.current[nextIndex]?.focus();
+                return;
+            }
+        }
     };
 
     const scheduleTypeaheadReset = () => {
@@ -310,7 +326,7 @@ export function DropdownSelect({
     const findOptionByPrefix = (query: string) => {
         const normalized = query.trim().toLowerCase();
         if (!normalized) return -1;
-        return options.findIndex((option) => option.label.toLowerCase().startsWith(normalized));
+        return options.findIndex((option) => !option.disabled && option.label.toLowerCase().startsWith(normalized));
     };
 
     const isTypeaheadKey = (event: React.KeyboardEvent) =>
@@ -384,7 +400,7 @@ export function DropdownSelect({
                 break;
             case 'ArrowUp':
                 event.preventDefault();
-                focusOption(index - 1);
+                focusOption(index - 1, -1);
                 break;
             case 'Home':
                 event.preventDefault();
@@ -392,7 +408,7 @@ export function DropdownSelect({
                 break;
             case 'End':
                 event.preventDefault();
-                focusOption(visibleOptions.length - 1);
+                focusOption(visibleOptions.length - 1, -1);
                 break;
             case 'Enter':
             case ' ':
@@ -410,7 +426,7 @@ export function DropdownSelect({
                 break;
             case 'ArrowUp':
                 event.preventDefault();
-                focusOption(visibleOptions.length - 1);
+                focusOption(visibleOptions.length - 1, -1);
                 break;
         }
     };
@@ -438,10 +454,10 @@ export function DropdownSelect({
         window.requestAnimationFrame(() => searchInputRef.current?.focus());
     };
 
-    const heightClass = size === 'sm' ? 'h-8 text-xs' : 'h-10 text-sm';
+    const heightClass = size === 'sm' ? 'h-8 text-xs' : size === 'lg' ? 'h-10 text-sm' : 'h-9 text-xs';
 
     return (
-        <div ref={rootRef} className={`relative ${className}`}>
+        <div ref={rootRef} className={`relative ${toolbar ? 'inline-flex flex-shrink-0' : ''} ${className}`}>
             <button
                 ref={buttonRef}
                 type="button"
@@ -454,15 +470,15 @@ export function DropdownSelect({
                     else setOpen(true);
                 }}
                 onKeyDown={handleButtonKeyDown}
-                className={`w-full ${heightClass} px-2.5 bg-bg-tertiary border border-border rounded-md text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent hover:border-accent/60 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border flex items-center gap-2`}
+                className={`${heightClass} border border-border text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${toolbar ? 'px-3 bg-bg-secondary rounded-lg hover:bg-bg-tertiary transition-colors' : 'w-full px-2.5 bg-bg-tertiary rounded-md hover:border-accent/60 disabled:hover:border-border'}`}
             >
                 <span className="flex min-w-0 flex-1 items-center gap-2">
-                    {selected?.icon}
+                    {Icon ? <Icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" /> : selected?.icon}
                     <span className={`min-w-0 flex-1 text-left truncate ${selected?.muted ? 'text-text-secondary' : ''}`}>
                         {selected?.label ?? placeholder}
                     </span>
                 </span>
-                <ChevronDown className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                <ChevronDown className={`flex-shrink-0 ${toolbar ? 'h-3.5 w-3.5' : 'h-4 w-4 text-text-secondary'}`} aria-hidden="true" />
             </button>
 
             {open && createPortal(
@@ -516,7 +532,7 @@ export function DropdownSelect({
                     <div
                         role="listbox"
                         aria-label={ariaLabel}
-                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1"
+                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                     >
                         {visibleOptions.map((option, index) => {
                             const active = option.value === value;
@@ -529,13 +545,14 @@ export function DropdownSelect({
                                     type="button"
                                     role="option"
                                     aria-selected={active}
+                                    disabled={option.disabled}
                                     onClick={() => {
                                         selectOption(option.value);
                                     }}
                                     onKeyDown={(event) => handleOptionKeyDown(event, option.value, index)}
-                                    className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
+                                    className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
                                         active
-                                            ? 'bg-accent text-bg-primary'
+                                            ? 'bg-accent/15 text-text-primary'
                                             : option.muted
                                                 ? 'text-text-secondary hover:bg-bg-tertiary'
                                                 : 'text-text-primary hover:bg-bg-tertiary'

@@ -289,4 +289,37 @@ describe('DropdownSelect and hero selectors', () => {
     render(false);
     expect(host.querySelector('button')!.getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('skips unavailable sort options for mouse, arrow keys and typeahead', () => {
+    const change = vi.fn();
+    act(() => root.render(<DropdownSelect
+      ariaLabel="Sort" variant="toolbar" value="default" onChange={change}
+      options={[
+        { value: 'name', label: 'A-Z', disabled: true },
+        { value: 'default', label: 'Default' },
+        { value: 'updated', label: 'Updated' },
+        { value: 'views', label: 'Views', disabled: true },
+      ]}
+    />));
+    act(() => host.querySelector('button')!.click());
+    expect(document.activeElement?.textContent).toBe('Default');
+    const press = (key: string) => act(() => {
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+    press('a');
+    expect(document.activeElement?.textContent).toBe('Default');
+    press('End');
+    expect(document.activeElement?.textContent).toBe('Updated');
+    press('ArrowDown');
+    expect(document.activeElement?.textContent).toBe('Default');
+    press('ArrowUp');
+    expect(document.activeElement?.textContent).toBe('Updated');
+    press('Home');
+    expect(document.activeElement?.textContent).toBe('Default');
+    act(() => document.querySelector<HTMLButtonElement>('[role="option"][disabled]')!.click());
+    expect(change).not.toHaveBeenCalled();
+    press('ArrowDown');
+    press('Enter');
+    expect(change).toHaveBeenCalledExactlyOnceWith('updated');
+  });
 });

@@ -13,9 +13,12 @@ import {
   Grid3x3,
   List,
   AlertTriangle,
-  SlidersHorizontal,
+  Funnel,
+  ArrowDownUp,
   Library,
   ChevronDown,
+  ChevronRight,
+  UsersRound,
   Upload,
   Maximize2,
   PanelRight,
@@ -59,9 +62,8 @@ import {
 import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
 import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
-import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { DropdownSelect } from '../components/common/forms';
+import { DropdownSelect, Input } from '../components/common/forms';
 import { AnchoredPopover } from '../components/common/AnchoredPopover';
 import { Button } from '../components/common/ui';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
@@ -132,6 +134,8 @@ const SECTION_WHITELIST = new Set(['Mod', 'Sound', 'Wip']);
 const hiddenModKey = (section: string, id: number) => `${section}:${id}`;
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
+const BROWSE_MENU_SECTIONS_CLASS =
+  'space-y-3 [&>div:not(:last-child)]:border-b [&>div:not(:last-child)]:border-border [&>div:not(:last-child)]:pb-3';
 // Below this window width the docked sidebar would crush the grid, so we force
 // the centered modal regardless of the saved preference.
 const BROWSE_SIDEBAR_MIN_WINDOW_WIDTH = 760;
@@ -2483,7 +2487,7 @@ export default function Browse() {
           inside the band. That preserves the corner glow at its viewport
           position while hiding content that scrolls beneath the sticky header. */}
       <div
-        className={`sticky top-0 z-40 p-4 border-b border-border ${
+        className={`sticky top-0 z-40 px-4 py-3 sm:px-6 border-b border-border ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
             : settings?.backgroundGradient
@@ -2552,6 +2556,21 @@ export default function Browse() {
               </div>
             </div>
 
+            {/* Refresh Icon Button */}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={syncing}
+              className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              title={t('browse.refreshFromGameBanana')}
+            >
+              {syncing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-5 h-5" />
+              )}
+            </button>
+
             {/* Import menu: GameBanana content or portable profile. */}
             <div className="relative flex-shrink-0" ref={importMenuRef}>
               <button
@@ -2559,11 +2578,11 @@ export default function Browse() {
                 onClick={() => setImportMenuOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={importMenuOpen}
-                className="h-10 flex items-center justify-center gap-1 pl-2.5 pr-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="h-10 flex items-center justify-center gap-1 pl-2.5 pr-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 title={t('profiles.actions.import')}
               >
                 <Library className="w-5 h-5" />
-                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                <ChevronDown className="w-3.5 h-3.5" />
               </button>
 
               <AnchoredPopover
@@ -2608,33 +2627,18 @@ export default function Browse() {
               </AnchoredPopover>
             </div>
 
-            {/* Refresh Icon Button */}
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={syncing}
-              className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-              title={t('browse.refreshFromGameBanana')}
-            >
-              {syncing ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-5 h-5" />
-              )}
-            </button>
-
             <div className="relative flex-shrink-0" ref={viewMenuRef}>
               <button
                 type="button"
                 onClick={() => setViewMenuOpen((v) => !v)}
                 aria-haspopup="dialog"
                 aria-expanded={viewMenuOpen}
-                className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 title={t('browse.viewOptions.title')}
               >
-                <LayoutGrid className="h-4 w-4 text-text-secondary" />
+                <LayoutGrid className="h-4 w-4" />
                 <span className="@max-[760px]:hidden">{t('common.view')}</span>
-                <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+                <ChevronDown className="h-3.5 w-3.5" />
               </button>
 
               <AnchoredPopover
@@ -2645,9 +2649,9 @@ export default function Browse() {
                 ariaLabel={t('browse.viewOptions.title')}
                 className="p-3"
               >
-                <div className="space-y-4">
+                <div className={BROWSE_MENU_SECTIONS_CLASS}>
                   <div>
-                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
+                    <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
                     <BrowseViewOptionControl<BrowseLayout>
                       label={t('browse.viewOptions.layout')}
                       value={layout}
@@ -2659,48 +2663,44 @@ export default function Browse() {
                     />
                   </div>
 
-                  <div className={layout === 'list' ? 'opacity-45' : ''}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</span>
-                      <span className="inline-flex items-center gap-1 text-2xs text-text-tertiary">
-                        <Grid3x3 className="h-3.5 w-3.5" />
-                        {t('browse.viewOptions.gridOnly')}
-                      </span>
+                  <div className={`space-y-3 ${layout === 'list' ? 'opacity-45' : ''}`}>
+                    <div>
+                      <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</div>
+                      <div className="flex items-center gap-2">
+                        <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <input
+                          type="range"
+                          min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
+                          max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
+                          step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
+                          value={browseCardSizeMultiplier}
+                          disabled={layout === 'list'}
+                          onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
+                          aria-label={t('browse.viewOptions.cardSize')}
+                          aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
+                          className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
+                        />
+                        <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                      <input
-                        type="range"
-                        min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
-                        max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
-                        step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
-                        value={browseCardSizeMultiplier}
-                        disabled={layout === 'list'}
-                        onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
-                        aria-label={t('browse.viewOptions.cardSize')}
-                        aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
-                        className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
-                      />
-                      <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                    </div>
-                  </div>
 
-                  <div className={layout === 'list' ? 'opacity-45' : ''}>
-                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                    <BrowseViewOptionControl<BrowseCardDesign>
-                      disabled={layout === 'list'}
-                      label={t('browse.viewOptions.cardDesign')}
-                      value={browseCardDesign}
-                      onChange={setBrowseCardDesign}
-                      options={[
-                        { value: 'readable', label: t('browse.cardStyle.default') },
-                        { value: 'classic', label: t('browse.cardStyle.classic') },
-                      ]}
-                    />
+                    <div>
+                      <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
+                      <BrowseViewOptionControl<BrowseCardDesign>
+                        disabled={layout === 'list'}
+                        label={t('browse.viewOptions.cardDesign')}
+                        value={browseCardDesign}
+                        onChange={setBrowseCardDesign}
+                        options={[
+                          { value: 'readable', label: t('browse.cardStyle.default') },
+                          { value: 'classic', label: t('browse.cardStyle.classic') },
+                        ]}
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
+                    <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
                     <BrowseViewOptionControl<BrowseDetailsView>
                       label={t('browse.viewOptions.modDetailsView')}
                       value={browseDetailsView}
@@ -2712,51 +2712,6 @@ export default function Browse() {
                     />
                   </div>
 
-                  <div>
-                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
-                    <BrowseViewOptionControl<'show' | 'hide'>
-                      label={t('browse.viewOptions.outdatedContent')}
-                      value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
-                      onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
-                      options={[
-                        { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
-                        { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
-                      ]}
-                    />
-                  </div>
-
-                  <div className="space-y-1 border-t border-border pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      icon={EyeOff}
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        setHiddenCreatorsOpen(true);
-                      }}
-                      className="w-full justify-start px-2 text-text-primary"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
-                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
-                        {hiddenCreators.length}
-                      </span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      icon={EyeOff}
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        setHiddenModsOpen(true);
-                      }}
-                      className="w-full justify-start px-2 text-text-primary"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-left">{t('hiddenMods.manage')}</span>
-                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary">
-                        {hiddenMods.length}
-                      </span>
-                    </Button>
-                  </div>
                 </div>
               </AnchoredPopover>
             </div>
@@ -2773,7 +2728,11 @@ export default function Browse() {
             {/* A-Z has no apiv11 sort token, so it can only come from the local
                 mirror. Offering it against a cold catalog meant picking it
                 silently returned default order. Mark it unavailable instead. */}
-            <DynamicSelect
+            <DropdownSelect
+              ariaLabel={t('installed.filters.sort')}
+              variant="toolbar"
+              size="lg"
+              icon={ArrowDownUp}
               value={sort}
               onChange={(val) => setSort(val as SortOption)}
               options={[
@@ -2800,11 +2759,7 @@ export default function Browse() {
                 which meant a cold catalog could remove the control entirely
                 rather than explain itself. */}
             {(() => {
-              const filterCount =
-                (heroCategoryId !== 'all' ? 1 : 0) +
-                (categoryId !== 'all' ? 1 : 0) +
-                (onlyNsfw ? 1 : 0) +
-                (addedWithin !== 'all' ? 1 : 0);
+              const hasActiveFilters = heroCategoryId !== 'all' || categoryId !== 'all' || onlyNsfw || addedWithin !== 'all';
               return (
                 <div className="relative flex-shrink-0" ref={filtersRef}>
                   <button
@@ -2813,19 +2768,11 @@ export default function Browse() {
                     aria-haspopup="dialog"
                     aria-expanded={filtersOpen}
                     title={t('browse.filters.title')}
-                    className={`flex items-center h-10 gap-2 px-3 rounded-lg border text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      filterCount > 0
-                        ? 'bg-accent/10 border-accent/40 text-accent hover:bg-accent/20'
-                        : 'bg-bg-secondary border-border text-text-primary hover:bg-bg-tertiary'
-                    }`}
+                    className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
-                    <SlidersHorizontal className="w-4 h-4" />
-                    <span>{t('browse.filters.title')}</span>
-                    {filterCount > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-2xs font-semibold flex items-center justify-center">
-                        {filterCount}
-                      </span>
-                    )}
+                    <Funnel className="w-4 h-4" />
+                    <span className="@max-[760px]:hidden">{t('browse.filters.title')}</span>
+                    <ChevronDown className="h-3.5 w-3.5" />
                   </button>
 
                   <AnchoredPopover
@@ -2836,49 +2783,52 @@ export default function Browse() {
                     ariaLabel={t('browse.filters.title')}
                     className="p-3"
                   >
-                    {filterCount > 0 && (
-                      <div className="mb-3 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={clearBrowseFilters}
-                          className="text-xs text-text-secondary hover:text-accent cursor-pointer"
-                        >
-                          {t('browse.filters.clearAll')}
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      {heroOptions.length > 0 && (
+                    <div className={BROWSE_MENU_SECTIONS_CLASS}>
+                      {(heroOptions.length > 0 || hasActiveFilters) && (
                         <div className="block">
-                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
-                          <HeroSelect
-                            ariaLabel={t('browse.filters.filterByHero')}
-                            value={String(heroCategoryId)}
-                            placeholder={t('browse.filters.allHeroes')}
-                            onChange={(v) => {
-                              if (v === 'all') setHeroCategoryId('all');
-                              else if (v === 'none') setHeroCategoryId('none');
-                              else setHeroCategoryId(Number(v));
-                            }}
-                            options={[
-                              ...(!combinedFeed && section === 'Sound'
-                                ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
-                                : []),
-                              ...heroOptions.map((hero) => ({
-                                value: String(hero.id),
-                                label: hero.label,
-                                heroName: hero.label,
-                              })),
-                            ]}
-                            search={{
-                              ariaLabel: t('browse.filters.searchHeroesAria'),
-                              placeholder: t('browse.filters.filterPlaceholder'),
-                              getEmptyMessage: (query) =>
-                                t('browse.filters.noOptionsMatch', { query }),
-                              clearLabel: t('browse.filters.clearSearch'),
-                            }}
-                          />
+                          <div className="mb-1.5 flex items-center justify-between">
+                            {heroOptions.length > 0 && (
+                              <span className="text-xs font-medium text-text-secondary">{t('browse.filters.hero')}</span>
+                            )}
+                            {hasActiveFilters && (
+                              <button
+                                type="button"
+                                onClick={clearBrowseFilters}
+                                className="ml-auto text-xs text-text-secondary hover:text-accent cursor-pointer"
+                              >
+                                {t('browse.filters.clearAll')}
+                              </button>
+                            )}
+                          </div>
+                          {heroOptions.length > 0 && (
+                            <HeroSelect
+                              ariaLabel={t('browse.filters.filterByHero')}
+                              value={String(heroCategoryId)}
+                              placeholder={t('browse.filters.allHeroes')}
+                              onChange={(v) => {
+                                if (v === 'all') setHeroCategoryId('all');
+                                else if (v === 'none') setHeroCategoryId('none');
+                                else setHeroCategoryId(Number(v));
+                              }}
+                              options={[
+                                ...(!combinedFeed && section === 'Sound'
+                                  ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
+                                  : []),
+                                ...heroOptions.map((hero) => ({
+                                  value: String(hero.id),
+                                  label: hero.label,
+                                  heroName: hero.label,
+                                })),
+                              ]}
+                              search={{
+                                ariaLabel: t('browse.filters.searchHeroesAria'),
+                                placeholder: t('browse.filters.filterPlaceholder'),
+                                getEmptyMessage: (query) =>
+                                  t('browse.filters.noOptionsMatch', { query }),
+                                clearLabel: t('browse.filters.clearSearch'),
+                              }}
+                            />
+                          )}
                         </div>
                       )}
 
@@ -2909,19 +2859,67 @@ export default function Browse() {
 
                       {/* Show, Blur and Hide share the app-wide preference.
                           Only is a session filter, counted and cleared above. */}
-                      <div className="block">
-                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.nsfwContent')}</span>
-                        <BrowseViewOptionControl<BrowseContentMode>
-                          label={t('browse.viewOptions.nsfwContent')}
-                          value={onlyNsfw ? 'only' : nsfwContentMode}
-                          onChange={setBrowseContentMode}
-                          options={[
-                            { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
-                            { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
-                            { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
-                            { value: 'only', label: t('browse.viewOptions.only'), icon: EyeDashed },
-                          ]}
-                        />
+                      <div className="space-y-3">
+                        <div className="block">
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.nsfwContent')}</span>
+                          <BrowseViewOptionControl<BrowseContentMode>
+                            label={t('browse.viewOptions.nsfwContent')}
+                            value={onlyNsfw ? 'only' : nsfwContentMode}
+                            onChange={setBrowseContentMode}
+                            options={[
+                              { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                              { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
+                              { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                              { value: 'only', label: t('browse.viewOptions.only'), icon: EyeDashed },
+                            ]}
+                          />
+                        </div>
+
+                        <div className="block">
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.outdatedContent')}</span>
+                          <BrowseViewOptionControl<'show' | 'hide'>
+                            label={t('browse.viewOptions.outdatedContent')}
+                            value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
+                            onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
+                            options={[
+                              { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                              { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                            ]}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            icon={UsersRound}
+                            title={t('hiddenCreators.manage')}
+                            onClick={() => {
+                              setFiltersOpen(false);
+                              setHiddenCreatorsOpen(true);
+                            }}
+                            className="w-full justify-start !px-2 !text-xs"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
+                            <span className="text-2xs tabular-nums text-text-tertiary">{hiddenCreators.length}</span>
+                            <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            icon={EyeOff}
+                            title={t('hiddenMods.manage')}
+                            onClick={() => {
+                              setFiltersOpen(false);
+                              setHiddenModsOpen(true);
+                            }}
+                            className="w-full justify-start !px-2 !text-xs"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-left">{t('hiddenMods.manage')}</span>
+                            <span className="text-2xs tabular-nums text-text-tertiary">{hiddenMods.length}</span>
+                            <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary" aria-hidden="true" />
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Recency can only be answered by the local catalog
@@ -2929,14 +2927,6 @@ export default function Browse() {
                           catalog, so a cold cache looked like "the filters
                           are missing/broken" with no explanation. Render it
                           disabled and say why. */}
-                      {!hasLocalCache && (
-                        <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-2xs text-text-secondary">
-                          {catalogSyncing
-                            ? t('browse.filters.catalogSyncing')
-                            : t('browse.filters.catalogUnavailable')}
-                        </p>
-                      )}
-
                       <div className="block">
                         <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
                         <DropdownSelect
@@ -2952,31 +2942,41 @@ export default function Browse() {
                             { value: 'custom', label: t('browse.filters.customRange') },
                           ]}
                         />
+                        {!hasLocalCache && (
+                          <p className="mt-2 rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-2xs text-text-secondary">
+                            {catalogSyncing
+                              ? t('browse.filters.catalogSyncing')
+                              : t('browse.filters.catalogUnavailable')}
+                          </p>
+                        )}
                         {addedWithin === 'custom' && (
                           <div className="mt-2 grid grid-cols-2 gap-2">
-                            <label className="block">
-                              <span className="block text-2xs text-text-tertiary mb-1">{t('browse.filters.from')}</span>
-                              <input
+                            <label className="block min-w-0">
+                              <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.from')}</span>
+                              <Input
                                 type="date"
+                                inputSize="sm"
                                 value={addedFrom}
                                 max={addedTo || undefined}
                                 onChange={(e) => setAddedFrom(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                className="h-9 min-w-0 !px-2 !text-xs cursor-pointer"
                               />
                             </label>
-                            <label className="block">
-                              <span className="block text-2xs text-text-tertiary mb-1">{t('browse.filters.to')}</span>
-                              <input
+                            <label className="block min-w-0">
+                              <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.to')}</span>
+                              <Input
                                 type="date"
+                                inputSize="sm"
                                 value={addedTo}
                                 min={addedFrom || undefined}
                                 onChange={(e) => setAddedTo(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                className="h-9 min-w-0 !px-2 !text-xs cursor-pointer"
                               />
                             </label>
                           </div>
                         )}
                       </div>
+
                     </div>
                   </AnchoredPopover>
                 </div>
