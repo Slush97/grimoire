@@ -86,16 +86,39 @@ describe('Installed card windowing', () => {
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(60);
   });
 
-  it('measures after an enclosing scroller ref attaches later in the same commit', () => {
+  it.each([false, true])('waits for the enclosing scroller before constructing cards (dragging=%s)', (dragging) => {
     const scrollRef = createRef<HTMLDivElement>();
+    const renderEntry = vi.fn((entry: ModEntry, content: boolean) => content ? <button data-heavy>{entry.key}</button> : null);
     act(() => root.render(<div ref={scrollRef} data-scroller="">
       <InstalledVirtualGrid entries={entries} scrollRef={scrollRef} gridClassName="grid gap-4" viewMode="grid"
-        renderEntry={(entry, content) => content ? <button data-heavy>{entry.key}</button> : null} />
+        dragging={dragging} renderEntry={renderEntry} />
     </div>));
     expect(host.querySelector('[data-installed-window-ready="false"]')).not.toBeNull();
+    expect(renderEntry.mock.calls.length).toBe(0);
+    expect(host.querySelector('[data-installed-window-key]')).toBeNull();
     act(() => { for (const frame of frames.splice(0)) frame(0); });
     expect(host.querySelector('[data-installed-window-ready="true"]')).not.toBeNull();
+    expect(cell('entry:0')!.style.width).toBe('238px');
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(4);
     expect(host.querySelectorAll('[data-heavy]').length).toBeGreaterThan(0);
+    expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(50);
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('waits for positive layout width before constructing %s cards', (viewMode) => {
+    vi.mocked(Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')!.get!).mockReturnValue(0);
+    const renderEntry = vi.fn((entry: ModEntry) => <button data-heavy>{entry.key}</button>);
+    render({ viewMode, renderEntry });
+    expect(host.querySelector('[data-installed-window-ready="false"]')).not.toBeNull();
+    expect(renderEntry.mock.calls.length).toBe(0);
+
+    vi.mocked(Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')!.get!).mockReturnValue(1000);
+    const grid = host.querySelector<HTMLElement>('[data-installed-window-grid]')!;
+    act(() => {
+      for (const observer of observers) if (observer.elements.has(grid)) observer.callback([], {} as ResizeObserver);
+    });
+    paint();
+    expect(host.querySelector('[data-installed-window-ready="true"]')).not.toBeNull();
+    expect(renderEntry).toHaveBeenCalled();
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(50);
   });
 

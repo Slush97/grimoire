@@ -179,6 +179,9 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
         const columnGap = parseFloat(style.columnGap) || (viewMode === 'compact' ? 12 : 16);
         const rowGap = viewMode === 'list' ? 6 : parseFloat(style.rowGap) || columnGap;
         const width = Math.max(0, (grid.clientWidth - columnGap * (columns - 1)) / columns);
+        // A hidden or not-yet-laid-out grid has no usable card geometry.
+        // ResizeObserver will retry when its container acquires a width.
+        if (width <= 0) return;
         const margin = installedGridOffset(grid, scroller);
         if (previous.ready && (previous.columns !== columns || previous.width !== width) &&
           scroller.scrollTop >= previous.margin && scroller.scrollTop < previous.margin + rowVirtualizer.getTotalSize()) {
@@ -310,7 +313,9 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const heavyRows = new Set(virtualRows.map((row) => row.index));
-  const rows = dragging ? rowVirtualizer.measurementsCache : virtualRows;
+  // The scroller ref may attach after our first layout effect. Construct cards
+  // only once it and the grid width are measured, never at the zero-width default.
+  const rows = !geometry.ready ? [] : dragging ? rowVirtualizer.measurementsCache : virtualRows;
   return <div
     ref={gridRef}
     className={gridClassName}
