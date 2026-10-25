@@ -403,6 +403,22 @@ describe('moveListMembership', () => {
     expect(moveListMembership(lists, { key: 'unlisted', fromListId: null, toListId: 'second' })[1].keys).toEqual(['unlisted']);
   });
 
+  it('reorders within a list without changing membership in other lists', () => {
+    const moved = moveListMembership(lists, { key: 'mod', fromListId: 'first', toListId: 'first', beforeKey: null });
+    expect(moved[0].keys).toEqual(['other', 'mod']);
+    expect(moved.slice(1)).toEqual(lists.slice(1));
+    expect(moveListMembership(moved, { key: 'mod', fromListId: 'first', toListId: 'first', beforeKey: 'other' })).toEqual(lists);
+  });
+
+  it('inserts between target members and preserves filtered or orphaned keys', () => {
+    const target = [lists[0], list('second', 'Second', ['hidden', 'a', 'orphan', 'b']), lists[2]];
+    const moved = moveListMembership(target, { key: 'mod', fromListId: 'first', toListId: 'second', beforeKey: 'b' });
+    expect(moved[0].keys).toEqual(['other']);
+    expect(moved[1].keys).toEqual(['hidden', 'a', 'orphan', 'mod', 'b']);
+    expect(target[1].keys).toEqual(['hidden', 'a', 'orphan', 'b']);
+    expect(moveListMembership(moved, { key: 'mod', fromListId: 'first', toListId: 'second', beforeKey: 'b' })).toEqual(moved);
+  });
+
   it('ignores same-list, repeated, stale, and invalid drops', () => {
     for (const move of [
       { key: 'mod', fromListId: 'first', toListId: 'first' },

@@ -39,7 +39,7 @@ export interface ModList {
   id: string;
   name: string;
   icon?: ModListIcon;
-  /** modPreferenceKey values. */
+  /** modPreferenceKey values, in this list's display order. */
   keys: string[];
 }
 
@@ -242,23 +242,35 @@ export function setListMembership(lists: readonly ModList[], id: string, prefKey
 }
 
 /** A null destination means unlisted, so every membership for the key is removed. */
-export function moveListMembership(lists: readonly ModList[], { key, fromListId, toListId }: {
+export function moveListMembership(lists: readonly ModList[], { key, fromListId, toListId, beforeKey }: {
   key: string;
   fromListId: string | null;
   toListId: string | null;
+  beforeKey?: string | null;
 }): ModList[] {
-  if (!key || fromListId === toListId) return [...lists];
+  if (!key || (fromListId === toListId && beforeKey === undefined)) return [...lists];
   if (toListId !== null && !lists.some((list) => list.id === toListId)) return [...lists];
   if (fromListId !== null && !lists.some((list) => list.id === fromListId && list.keys.includes(key))) return [...lists];
   if (fromListId === null && lists.some((list) => list.keys.includes(key))) return [...lists];
   return lists.map((list) => {
     const member = list.keys.includes(key);
-    if (list.id === toListId) return member ? list : { ...list, keys: [...list.keys, key] };
+    if (list.id === toListId) return beforeKey !== undefined
+      ? { ...list, keys: positionListKey(list.keys, key, beforeKey) }
+      : member ? list : { ...list, keys: [...list.keys, key] };
     if (member && (toListId === null || list.id === fromListId)) {
       return { ...list, keys: list.keys.filter((value) => value !== key) };
     }
     return list;
   });
+}
+
+/** Insert before a stable member key, or append. Hidden and orphaned keys keep their order. */
+export function positionListKey(keys: readonly string[], key: string, beforeKey: string | null): string[] {
+  if (!key || beforeKey === key) return [...keys];
+  const next = keys.filter(value => value !== key);
+  const index = beforeKey === null ? -1 : next.indexOf(beforeKey);
+  next.splice(index < 0 ? next.length : index, 0, key);
+  return next;
 }
 
 /**

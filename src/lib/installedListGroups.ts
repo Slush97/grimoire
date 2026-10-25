@@ -9,6 +9,7 @@ export interface InstalledListGroup extends Pick<ModList, 'id' | 'name' | 'icon'
 export interface InstalledListPreferences {
   view: InstalledListView;
   collapsed: string[];
+  unlistedOrder?: string[];
 }
 export const INSTALLED_LIST_PREFS_KEY = 'installedListView';
 
@@ -19,6 +20,7 @@ export function readInstalledListPreferences(): InstalledListPreferences {
       return {
         view: value.view === 'lists' ? 'lists' : 'all',
         collapsed: Array.isArray(value.collapsed) ? value.collapsed.filter((id): id is string => typeof id === 'string') : [],
+        ...('unlistedOrder' in value && Array.isArray(value.unlistedOrder) ? { unlistedOrder: [...new Set(value.unlistedOrder.filter((key): key is string => typeof key === 'string' && !!key))] } : {}),
       };
     }
   } catch { /* Use the default view when storage is unavailable. */ }
@@ -39,13 +41,23 @@ export function installedListEntryKey(listId: string, entry: ModEntry): string {
  *  are slugs, so the colon keeps it clear of them. */
 export const UNLISTED_GROUP_ID = ':unlisted';
 
-export function buildInstalledListGroups(entries: readonly ModEntry[], lists: readonly ModList[]): InstalledListGroup[] {
+export function buildInstalledListGroups(entries: readonly ModEntry[], lists: readonly ModList[], unlistedOrder: readonly string[] = []): InstalledListGroup[] {
+  const byKey = new Map<string, ModEntry[]>();
+  for (const entry of entries) {
+    const key = entryDisabledPreferenceKey(entry);
+    const matches = byKey.get(key);
+    if (matches) matches.push(entry);
+    else byKey.set(key, [entry]);
+  }
   const groups: InstalledListGroup[] = lists.map((list) => {
-    const keys = new Set(list.keys);
-    return { id: list.id, name: list.name, ...(list.icon ? { icon: list.icon } : {}), entries: entries.filter((entry) => keys.has(entryDisabledPreferenceKey(entry))) };
+    return { id: list.id, name: list.name, ...(list.icon ? { icon: list.icon } : {}), entries: list.keys.flatMap(key => byKey.get(key) ?? []) };
   });
   const listed = new Set(lists.flatMap((list) => list.keys));
-  const unlisted = entries.filter((entry) => !listed.has(entryDisabledPreferenceKey(entry)));
+  const orderedUnlisted = new Set(unlistedOrder);
+  const unlisted = [
+    ...unlistedOrder.filter(key => !listed.has(key)).flatMap(key => byKey.get(key) ?? []),
+    ...entries.filter(entry => { const key = entryDisabledPreferenceKey(entry); return !listed.has(key) && !orderedUnlisted.has(key); }),
+  ];
   return unlisted.length > 0 ? [...groups, { id: UNLISTED_GROUP_ID, name: '', entries: unlisted }] : groups;
 }
 

@@ -76,7 +76,7 @@ try {
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await settle();
   const pickups = [];
-  async function dragItem(activator, target, { cancel = false, screenshot = false } = {}) {
+  async function dragItem(activator, target, { cancel = false, screenshot = false, position, memberIndex = 0 } = {}) {
     const movingCard = await activator.getAttribute('data-mod-drag-surface') !== null;
     await activator.scrollIntoViewIfNeeded();
     await activator.hover();
@@ -97,10 +97,23 @@ try {
     await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2 + 12, { steps: 3 });
     await page.locator('[data-list-drag-preview]').waitFor();
     pickups.push(await page.evaluate(() => window.__pickupMs));
+    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    await page.mouse.move(viewport.width / 2, viewport.height / 2);
     await target.locator('h2').evaluate(node => node.scrollIntoView({ block: 'center' }));
-    const destination = await target.locator('h2').boundingBox();
+    await target.locator('h2').scrollIntoViewIfNeeded();
+    await settle();
+    let destination = await target.locator('h2').boundingBox();
     const targetOffset = await target.locator('h2').evaluate(node => node.offsetTop);
-    await page.mouse.move(destination.x + 40, destination.y + destination.height / 2, { steps: 16 });
+    let point = { x: destination.x + 40, y: destination.y + destination.height / 2 };
+    if (position) {
+      const member = target.locator('[data-list-member-key]:not([data-list-drag-source])').nth(memberIndex);
+      await member.scrollIntoViewIfNeeded();
+      await settle();
+      destination = await member.boundingBox();
+      const fraction = position === 'before' ? 0.2 : 0.8;
+      point = { x: destination.x + destination.width * (rows ? 0.5 : fraction), y: destination.y + destination.height * (rows ? fraction : 0.5) };
+    }
+    await page.mouse.move(point.x, point.y, { steps: 4 });
     await settle();
     let dropIndex;
     if (movingCard) {
@@ -118,6 +131,7 @@ try {
       const targetBox = await target.boundingBox();
       await page.mouse.move(targetBox.x + targetBox.width - box.width / 2 - 24, targetBox.y + targetBox.height / 2, { steps: 10 });
       await settle();
+      await target.evaluate(node => Promise.all([...node.querySelectorAll('[data-list-member-key], [data-list-drop-slot]')].flatMap(card => card.getAnimations().map(animation => animation.finished.catch(() => {})))));
       await page.screenshot({ path: resolve('docs/screenshots/installed-list-order/drop-target.png') });
     }
     if (cancel) await page.keyboard.press('Escape', { delay: 30 });
@@ -145,7 +159,7 @@ try {
   assert.equal(landing.animations[0].duration, 240);
   assert.equal(landing.animations[0].easing, 'cubic-bezier(0.2, 0.8, 0.2, 1)');
   assert.match(landing.animations[0].frames[0], /translate3d/);
-  await card('skins').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+  await card('skins').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))));
   assert.equal(await card('skins').evaluate(node => getComputedStyle(node).transform), 'none');
   await dragItem(thumbnail(card('skins')), section('sounds'));
   const key = (await stored()).find(list => list.id === 'sounds').keys[0];
@@ -161,6 +175,43 @@ try {
   assert.deepEqual(await stored(), beforeCancel);
   assert.equal(await page.locator('[data-drop-active]').count(), 0);
   console.log('PASS cancellation restores card and clears targets');
+  const skins = section('skins');
+  const firstSkinName = await skins.locator('[data-list-drag-entry]').first().locator('h3').textContent();
+  const secondSkinName = await skins.locator('[data-list-drag-entry]').nth(1).locator('h3').textContent();
+  const skinCard = name => skins.locator('[data-list-drag-entry]').filter({ has: page.getByRole('heading', { name, exact: true }) });
+  const savedSkins = (await stored()).find(list => list.id === 'skins').keys;
+  const sameList = await dragItem(thumbnail(skinCard(secondSkinName)), skins, { position: 'before' });
+  assert.equal(sameList.dropIndex, 0);
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, [...savedSkins].reverse());
+  await page.reload(); await skins.waitFor();
+  if (await dismissBanner.count()) await dismissBanner.click();
+  assert.equal(await skins.locator('[data-list-drag-entry]').first().locator('h3').textContent(), secondSkinName);
+  if (!stress && !rows) await page.screenshot({ path: resolve('docs/screenshots/installed-list-order/reordered.png') });
+  await dragItem(thumbnail(skinCard(secondSkinName)), skins, { position: 'after' });
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, savedSkins);
+  await dragItem(thumbnail(skinCard(secondSkinName)), skins, { position: 'before', cancel: true });
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, savedSkins);
+  const between = await dragItem(thumbnail(card(':unlisted')), skins, { position: 'before', memberIndex: 1 });
+  assert.equal(between.dropIndex, 1);
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, [savedSkins[0], key, savedSkins[1]]);
+  await dragItem(thumbnail(card('skins')), section(':unlisted'));
+  assert.deepEqual(await page.evaluate(() => window.electronAPI.getMods()), baseline);
+  assert.equal(await skinCard(firstSkinName).count(), 1);
+  await skinCard(firstSkinName).focus();
+  await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowRight', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
+  await settle();
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, [...savedSkins].reverse());
+  assert.ok(await skinCard(firstSkinName).evaluate(node => node === document.activeElement));
+  await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowLeft', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
+  await settle();
+  assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, savedSkins);
+  await card(':unlisted').focus();
+  await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowLeft', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
+  await settle();
+  const unlistedOrder = await page.evaluate(() => JSON.parse(localStorage.getItem('installedListView')).unlistedOrder);
+  assert.equal(unlistedOrder.at(-2), key);
+  assert.deepEqual(await page.evaluate(() => window.electronAPI.getMods()), baseline);
+  console.log('PASS pointer and keyboard sorting, cancellation, persisted order, unlisted order, and insertion between cards');
   await card(':unlisted').focus();
   await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowUp', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
   await settle();
@@ -193,7 +244,11 @@ try {
   assert.deepEqual((await stored()).map(list => list.id), ['testing', 'skins', 'sounds']);
   console.log('PASS header reorder using the same drag sensor');
   await page.locator('[data-mod-list="sounds"]').hover();
-  await page.locator('[data-mod-list="sounds"]').getByRole('button', { name: 'Edit mods in Sounds', exact: true }).click();
+  const emptyAdd = page.locator('[data-mod-list="sounds"] [data-list-empty-add]');
+  assert.equal(await emptyAdd.locator('svg.lucide-plus').count(), 1);
+  assert.equal(await emptyAdd.textContent(), '');
+  assert.equal(await emptyAdd.evaluate(node => node.offsetHeight), 72);
+  await emptyAdd.click();
   const dialog = page.getByRole('dialog', { name: 'Manage lists' });
   await dialog.waitFor();
   await dialog.getByRole('checkbox').first().waitFor();

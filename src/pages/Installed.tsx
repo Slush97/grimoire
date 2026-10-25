@@ -136,6 +136,7 @@ import {
   setListIcon,
   setListMembership,
   moveListMembership,
+  positionListKey,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -3246,8 +3247,7 @@ export default function Installed() {
     return { visibleEnabled, visibleDisabled };
   }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
-  const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
-  const listEntryOrder = useMemo(() => new Map([...visibleEnabled, ...visibleDisabled].map((entry, index) => [entry.key, index])), [visibleEnabled, visibleDisabled]);
+  const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists, listPreferences.unlistedOrder), [visibleEnabled, visibleDisabled, modLists, listPreferences.unlistedOrder]);
   const activeCollapsedLists = searchNeedle
     ? new Set(searchListState.query === searchNeedle ? searchListState.collapsed : []) : collapsedLists;
   const visibleSelection = listsView
@@ -4246,19 +4246,27 @@ export default function Installed() {
           should not get a stray button row under it). */}
       {listsView && <InstalledListGroups
         groups={listGroups}
-        entryOrder={listEntryOrder}
         collapsed={activeCollapsedLists}
         showEmpty={!searchNeedle && !filtersActive}
         onToggle={toggleList}
         onManage={(id) => setManagingLists(id ?? true)}
         dragDisabled={selectMode || shiftHeld || !!bulkProgress}
         pauseUpdates={!!managingLists}
-        onMove={(key, sourceId, targetId) => commitModLists(moveListMembership(modLists, {
-          key, fromListId: sourceId === UNLISTED_GROUP_ID ? null : sourceId,
-          toListId: targetId === UNLISTED_GROUP_ID ? null : targetId,
-        }))}
+        onMove={(key, sourceId, targetId, beforeKey) => {
+          commitModLists(moveListMembership(modLists, {
+            key, fromListId: sourceId === UNLISTED_GROUP_ID ? null : sourceId,
+            toListId: targetId === UNLISTED_GROUP_ID ? null : targetId, beforeKey,
+          }));
+          if (targetId === UNLISTED_GROUP_ID) {
+            const completeGroups = searchNeedle || filtersActive
+              ? buildInstalledListGroups([...enabledEntries, ...disabledEntries], modLists, listPreferences.unlistedOrder) : listGroups;
+            const keys = [...new Set([...(listPreferences.unlistedOrder ?? []), ...(completeGroups.find(group => group.id === UNLISTED_GROUP_ID)?.entries.map(entryDisabledPreferenceKey) ?? [])])];
+            updateListPreferences({ ...listPreferences, unlistedOrder: positionListKey(keys, key, beforeKey) });
+          }
+        }}
         onReorder={(id, targetId) => commitModLists(reorderList(modLists, id, targetId))}
         gridClassName={gridClasses}
+        rows={layout === 'list'}
         gridStyle={gridStyle}
         mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}
         renderEntry={(entry, occurrence) => <StaticEntryCard {...cardPropsFor(entry, occurrence)} />}

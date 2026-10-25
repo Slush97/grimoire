@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildListDragItems, canDropListItem, listDropSlotIndex, listHeaderDragId } from './modListDrag';
+import { buildListDragItems, canDropListItem, listDropSlotIndex, listHeaderDragId, listPointerIndex } from './modListDrag';
 import { buildInstalledListGroups, installedListEntryKey, UNLISTED_GROUP_ID } from './installedListGroups';
 import { buildModEntries } from './modEntries';
 import type { Mod } from '../types/mod';
@@ -16,9 +16,9 @@ describe('list drag identities', () => {
     expect(items.get(listHeaderDragId('a'))).toEqual({ kind: 'list', id: 'a' });
   });
 
-  it('allows mods into unlisted, keeps that section fixed, and rejects same-list drops', () => {
+  it('allows same-list moves and unlisted drops while keeping the unlisted section fixed', () => {
     expect(canDropListItem({ kind: 'entry', entry, sourceId: 'a' }, UNLISTED_GROUP_ID)).toBe(true);
-    expect(canDropListItem({ kind: 'entry', entry, sourceId: 'a' }, 'a')).toBe(false);
+    expect(canDropListItem({ kind: 'entry', entry, sourceId: 'a' }, 'a')).toBe(true);
     expect(canDropListItem({ kind: 'list', id: 'a' }, UNLISTED_GROUP_ID)).toBe(false);
     expect(canDropListItem({ kind: 'list', id: 'a' }, 'a')).toBe(false);
     expect(canDropListItem({ kind: 'list', id: 'a' }, 'b')).toBe(true);
@@ -27,24 +27,42 @@ describe('list drag identities', () => {
 
 describe('list drop slot', () => {
   const entries = buildModEntries(['one', 'two', 'three', 'four'].map((id, index) => ({ ...mod, id, fileName: `${id}.vpk`, metaKey: `${id}.vpk`, sha256: id, priority: index + 1 })));
-  const order = new Map(entries.map((item, index) => [item.key, index]));
 
-  it('previews the actual position before, between, and after existing cards', () => {
-    expect(listDropSlotIndex([entries[1], entries[3]], entries[0], order)).toBe(0);
-    expect(listDropSlotIndex([entries[0], entries[3]], entries[2], order)).toBe(1);
-    expect(listDropSlotIndex([entries[0], entries[1]], entries[3], order)).toBe(2);
-    expect(listDropSlotIndex([], entries[0], order)).toBe(0);
+  it('appends by default regardless of load order', () => {
+    expect(listDropSlotIndex([entries[1], entries[3]], entries[0], null)).toBe(2);
+    expect(listDropSlotIndex([], entries[0], null)).toBe(0);
   });
 
-  it('follows display order when it differs from load order', () => {
-    const reversed = new Map([...entries].reverse().map((item, index) => [item.key, index]));
-    expect(listDropSlotIndex([entries[3], entries[0]], entries[2], reversed)).toBe(1);
-    expect(listDropSlotIndex([entries[1], entries[0]], entries[3], reversed)).toBe(0);
-    expect(entries.map(item => item.key)).toEqual([...order.keys()]);
+  it('inserts before a member and replaces the source card in the same list', () => {
+    expect(listDropSlotIndex(entries, entries[0], 'sha256:two')).toBe(0);
+    expect(listDropSlotIndex(entries, entries[0], 'sha256:four')).toBe(2);
+    expect(listDropSlotIndex(entries, entries[0], null)).toBe(3);
+    expect(listDropSlotIndex(entries, entries[0], 'missing')).toBe(3);
+  });
+});
+
+describe('pointer insertion', () => {
+  const cards = [
+    { left: 0, top: 0, width: 100, height: 80 },
+    { left: 116, top: 0, width: 100, height: 80 },
+    { left: 0, top: 96, width: 100, height: 80 },
+    { left: 116, top: 96, width: 100, height: 80 },
+  ];
+
+  it('inserts before or after a card across grid rows', () => {
+    expect(listPointerIndex(cards, { x: 10, y: 30 }, false)).toBe(0);
+    expect(listPointerIndex(cards, { x: 140, y: 30 }, false)).toBe(1);
+    expect(listPointerIndex(cards, { x: 200, y: 30 }, false)).toBe(2);
+    expect(listPointerIndex(cards, { x: 10, y: 120 }, false)).toBe(2);
+    expect(listPointerIndex(cards, { x: 200, y: 120 }, false)).toBe(4);
+    expect(listPointerIndex(cards, { x: 10, y: 190 }, false)).toBe(4);
   });
 
-  it('does not promise another copy of a mod already in the target', () => {
-    const [sameMod] = buildModEntries([{ ...mod, id: 'another-file', fileName: 'copy.vpk', metaKey: 'copy.vpk' }]);
-    expect(listDropSlotIndex([entry], sameMod, order)).toBeNull();
+  it('uses vertical midpoints for rows and accepts an empty list', () => {
+    const rows = [cards[0], cards[2]];
+    expect(listPointerIndex(rows, { x: 90, y: 10 }, true)).toBe(0);
+    expect(listPointerIndex(rows, { x: 10, y: 70 }, true)).toBe(1);
+    expect(listPointerIndex(rows, { x: 10, y: 150 }, true)).toBe(2);
+    expect(listPointerIndex([], { x: 0, y: 0 }, true)).toBe(0);
   });
 });
