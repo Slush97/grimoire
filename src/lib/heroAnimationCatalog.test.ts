@@ -4,6 +4,10 @@ import { heroAnimationRecipe, isStandaloneHeroAnimation, preferredHeroAnimationN
 const clip = (name: string, extra: Partial<HeroAnimationInfo> = {}): HeroAnimationInfo => ({ name, frameCount: 61, fps: 30, durationSeconds: 2, looping: true, default: false, ...extra });
 
 describe('whole hero showcase actions', () => {
+  it('offers the rendered Lash dash and heavy-melee actions without exporting additive fragments', () => {
+    const clips = ['primary_stand_idle', 'primary_airdash', 'melee_hit', 'flinch_melee_left_add'].map((name) => clip(name));
+    expect(selectHeroAnimations(clips, 'Lash').map((c) => c.name)).toEqual(['primary_stand_idle', 'primary_airdash', 'melee_hit']);
+  });
   it('retains reviewed secondary actions without replacing showcase defaults', () => {
     for (const [hero, idle, secondary] of [
       ['Dynamo', 'primary_stand_idle', 'primary_stand_reload'],

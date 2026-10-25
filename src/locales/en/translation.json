@@ -323,6 +323,8 @@
       "color": "Color",
       "pattern": "Pattern",
       "noPattern": "Original",
+      "focusPart": "Focus part",
+      "wholeModel": "Show whole model",
       "patternUnsupported": "This part cannot use patterns.",
       "intensity": "Amount",
       "phase": "Variation",
@@ -342,7 +344,56 @@
       "customName": "{{hero}} custom",
       "globalUnsupported": "Global skins can't be edited: they load above any skin saved here, so your changes would not show in game. Remove the skin from Global in the Locker to edit it.",
       "sourceMissing_one": "A skin this edit was made from is missing. You're editing without it, and saving replaces the earlier edit.",
-      "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit."
+      "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit.",
+      "thumbnailFailed": "Skin saved, but its preview image could not be generated.",
+      "surface": "Surface",
+      "roughness": "Roughness",
+      "metalness": "Metalness",
+      "originalFinish": "Original",
+      "finishUnsupported": "This part does not support static surface finishes.",
+      "finish": {
+        "matte": "Matte",
+        "satin": "Satin",
+        "polished": "Polished",
+        "metal": "Metal"
+      },
+      "originalFinishHint": "Uses the original maps and values. Choose a finish to create an override."
+    },
+    "draft": {
+      "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",
+      "failed": "Could not keep your draft on this device. Save your work before leaving Door Stuck.",
+      "unknownParts": "Some edited parts are no longer in this model. Your draft is kept.",
+      "keepAvailable": "Keep available parts"
+    },
+    "movement": {
+      "title": "Movement effects",
+      "sounds": "Gameplay sounds",
+      "dash": "Dash trails",
+      "heavy-melee": "Heavy melee",
+      "globalHint": "Applies to all heroes.",
+      "color": "Effect color",
+      "stamp": "Trail image",
+      "emoji": "Emoji or short text",
+      "useEmoji": "Use emoji",
+      "upload": "Choose an image",
+      "originalTrail": "Original trail",
+      "imageTrail": "Emoji / image",
+      "updating": "Updating effect…",
+      "replay": "Replay effect",
+      "loop": "Loop",
+      "export": "Export VPK",
+      "reset": "Reset controls",
+      "saved": "Saved and enabled. Your other movement mods are still installed.",
+      "solid": "Solid",
+      "gradient": "Gradient",
+      "rainbow": "Rainbow",
+      "endColor": "Tail color",
+      "headColor": "Head color",
+      "finish": "Trail finish",
+      "brightness": "Brightness",
+      "illuminated": "Illuminated",
+      "outline": "Image outline",
+      "outlineColor": "Outline color"
     }
   },
   "autoexec": {
@@ -1741,7 +1792,10 @@
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
       "revealInFolder": "Reveal in folder",
-      "soloLaunch": "Start with only this enabled"
+      "soloLaunch": "Start with only this enabled",
+      "openDoorStuck": "Open in Door Stuck",
+      "preview3d": "3D preview of {{name}}",
+      "previewHint": "Hold Alt to preview in 3D"
     },
     "solo": {
       "banner": "Testing {{name}} solo: every other mod is disabled.",
@@ -2239,8 +2293,6 @@
       "swatchUnavailable": "Live swatch unavailable (vpkmerge binary missing or too old)."
     },
     "effects": {
-      "effects": "Effects",
-      "experimental": "Experimental",
       "loading": "Loading...",
       "unavailable": "Effects aren't available for {{hero}} yet (no pinned recipe in the bundled vpkmerge). More heroes are coming.",
       "abilities": "Abilities",
@@ -2340,7 +2392,9 @@
         "relaxedIdle": "Relaxed idle",
         "heroPose": "Hero pose",
         "running": "Run",
-        "reload": "Reload"
+        "reload": "Reload",
+        "dash": "Dash",
+        "heavyMelee": "Heavy melee"
       },
       "hideout": "Hideout",
       "wireframe": "Wireframe",

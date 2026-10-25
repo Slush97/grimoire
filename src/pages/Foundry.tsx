@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../lib/useFoundryDraft';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { skinEditLinkSchema } from '../lib/skinEditSchema';
+import { movementFxLinkSchema } from '../lib/movementFx';
 import {
   Hammer,
   Library,
@@ -42,15 +45,16 @@ export default function Foundry() {
   const navigate = useNavigate();
   const input: unknown = location.state;
   const source = skinEditLinkSchema.safeParse(input);
+  const movementSource = movementFxLinkSchema.safeParse(input);
   const settings = useAppStore((s) => s.settings);
   const hasGamePath = Boolean(settings?.deadlockPath || (settings?.devMode && settings?.devDeadlockPath));
 
   // Hero-first is the primary Foundry experience: pick a hero, edit everything.
   // The Catalog (tool-first) mode keeps the original asset-browse rail.
-  const [mode, setMode] = useState<Mode>('heroes');
-  const [selectedHero, setSelectedHero] = useState<HeroInfo | null>(null);
-  const [active, setActive] = useState<SubtoolId>('library');
-  const [heroQuery, setHeroQuery] = useState('');
+  const [mode, setMode] = useFoundryDraft<Mode>('page:mode', z.enum(['heroes', 'catalog']), 'heroes');
+  const [selectedCode, setSelectedCode] = useFoundryDraft('page:hero', z.string().max(100).nullable(), null);
+  const [active, setActive] = useFoundryDraft<SubtoolId>('page:tool', z.enum(['library', 'sound', 'texture', 'items', 'recolor']), 'library');
+  const [heroQuery, setHeroQuery] = useFoundryDraft('page:query', z.string().max(512), '');
   const [heroes, setHeroes] = useState<HeroInfo[]>([]);
 
   // Roster (codename -> name) loads once; warm the catalog cache opportunistically
@@ -77,7 +81,11 @@ export default function Foundry() {
     return map;
   }, [heroes]);
   const linkedHero = source.success ? heroes.find((hero) => hero.name === source.data.heroName) : undefined;
-  const workshopHero = selectedHero ?? linkedHero;
+  const workshopHero = linkedHero ?? heroes.find((hero) => hero.codename === selectedCode) ?? (movementSource.success ? heroes[0] : undefined);
+  const pickHero = (hero: HeroInfo) => {
+    setSelectedCode(hero.codename);
+    if (source.success || movementSource.success) navigate('/foundry', { replace: true, state: null });
+  };
 
   const orderedHeroes = useMemo(() => orderFoundryHeroes(heroes, heroQuery), [heroes, heroQuery]);
   const neighbors = getFoundryHeroNeighbors(orderedHeroes, workshopHero?.codename ?? '');
@@ -110,16 +118,17 @@ export default function Foundry() {
   }
 
   // Hero workshop: full-bleed, no page chrome (mirrors the Locker hero view).
-  if (mode === 'heroes' && workshopHero) {
+  if ((mode === 'heroes' || linkedHero || movementSource.success) && workshopHero) {
     return (
       <HeroWorkshop
+        key={`${workshopHero.codename}:${source.success || movementSource.success ? location.key : ''}`}
         hero={workshopHero}
         previous={neighbors.previous}
         next={neighbors.next}
-        onNavigate={setSelectedHero}
+        onNavigate={pickHero}
         heroNames={heroNames}
         skinSources={source.success && source.data.heroName === workshopHero.name ? source.data.skinSources : undefined}
-        onBack={() => { setSelectedHero(null); if (linkedHero) navigate('/foundry', { replace: true, state: null }); }}
+        onBack={() => { setSelectedCode(null); setMode('heroes'); if (linkedHero || movementSource.success) navigate('/foundry', { replace: true, state: null }); }}
       />
     );
   }
@@ -142,7 +151,7 @@ export default function Foundry() {
             </Button>
           }
         />
-        <FoundryHeroGrid heroes={heroes} onPick={setSelectedHero} query={heroQuery} onQueryChange={setHeroQuery} />
+        <FoundryHeroGrid heroes={heroes} onPick={pickHero} query={heroQuery} onQueryChange={setHeroQuery} />
       </PageLayout>
     );
   }

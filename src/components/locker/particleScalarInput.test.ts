@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { particleControlPointInputs, particleInitialScalars, particleScalarInput } from './particleScalarInput';
 import type { FxDescriptor } from './fxDescriptor';
 describe('offline authored particle scalar inputs', () => {
+  it('applies dash tail radius and lifetime ramps by birth ordinal without squaring the radius', () => {
+    const curve = { pf: 'PF_TYPE_PARTICLE_NUMBER', map: 'PF_MAP_TYPE_CURVE', curve: { m_spline: [{ x: 0, y: .5 }, { x: 4, y: 1 }] } };
+    const system: FxDescriptor = { name: 'dash', controlPoints: [], emitters: [], operators: [], renderers: [], children: [], initializers: [
+      { class: 'C_INIT_InitFloat', params: { m_InputValue: 20 } },
+      { class: 'C_INIT_InitFloat', params: { m_InputValue: curve, m_nSetMethod: 'PARTICLE_SET_SCALE_INITIAL_VALUE' } },
+      { class: 'C_INIT_InitFloat', params: { m_nOutputField: 1, m_InputValue: 2 } },
+      { class: 'C_INIT_InitFloat', params: { m_nOutputField: 1, m_InputValue: curve, m_nSetMethod: 'PARTICLE_SET_ADD_TO_INITIAL_VALUE' } },
+    ] };
+    expect(particleInitialScalars(system, {}, 0)).toMatchObject({ radius: 10, life: 2.5 });
+    expect(particleInitialScalars(system, {}, 4)).toMatchObject({ radius: 20, life: 3 });
+  });
   it('uses an explicit preview endpoint only when runtime input is absent, preserving supplied zero', () => {
     const curve = { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT', cp: 2, map: 'PF_MAP_TYPE_CURVE', curve: { m_spline: [{x:0,y:.05},{x:1,y:.26}] } };
     expect(particleScalarInput(curve, particleControlPointInputs({2:1}))).toBe(.26);

@@ -6,11 +6,12 @@ import * as THREE from 'three';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
 import { advanceSpriteEmission, ageCurveValue, allSpriteLayers, fxTexturePngName, normalizedWindow, remapSpriteNormal, spriteFadeValue, spriteGradientColor, spriteInitialColor,
   type FxDescriptor, type SpriteEmissionState, type SpriteSimParams } from './fxDescriptor';
-import { resolveParticleAttachment } from './particleAttachment';
+import { resolveParticleControlPoint } from './particleAttachment';
 import { spritecardMaterial } from './spritecardMaterial';
 import { ParticleRopes } from './ParticleRopes';
 import { bindParticleSnapshot, skinnedSnapshotPosition } from './particleSnapshotSkinning';
 import { balanceSpritePreviewComposition } from './spritePreviewComposition';
+import { particleInitialScalars } from './particleScalarInput';
 
 const VERT = /* glsl */ `
   attribute vec3 aPosition;
@@ -22,7 +23,9 @@ const VERT = /* glsl */ `
   attribute float aFrameClamp;
   attribute vec3 aRight;
   attribute vec3 aUp;
+  attribute vec3 aTrail;
   uniform float uAlignNormal;
+  uniform float uRenderTrail;
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha;
@@ -40,7 +43,13 @@ const VERT = /* glsl */ `
     vec2 corner = mat2(c, -s, s, c) * position.xy;
     vec4 viewPosition = modelViewMatrix * vec4(aPosition, 1.0);
     float modelScale = length(modelMatrix[0].xyz);
-    if (uAlignNormal > 0.5) viewPosition += modelViewMatrix * vec4((aRight * corner.x + aUp * corner.y) * aRadius, 0.0);
+    if (uRenderTrail > 0.5) {
+      vec2 direction = (modelViewMatrix * vec4(aTrail, 0.0)).xy;
+      float trailLength = length(direction);
+      vec2 tangent = trailLength > 0.00001 ? direction / trailLength : vec2(0.0, 1.0);
+      viewPosition.xy += vec2(-tangent.y, tangent.x) * corner.x * aRadius * modelScale + tangent * (corner.y - 1.0) * trailLength * 0.5;
+    }
+    else if (uAlignNormal > 0.5) viewPosition += modelViewMatrix * vec4((aRight * corner.x + aUp * corner.y) * aRadius, 0.0);
     else viewPosition.xy += corner * aRadius * modelScale;
     gl_Position = projectionMatrix * viewPosition;
   }
@@ -96,10 +105,11 @@ class SpawnEvents {
   }
 }
 
-function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
+function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents, motionDirection }: {
   layer: SpriteSimParams; textureBaseUrl: string; model?: THREE.Object3D;
   playback?: { paused: boolean; speed: number };
   spawnEvents: RefObject<SpawnEvents>;
+  motionDirection?: THREE.Vector3;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const particles = useRef<Particle[]>([]);
@@ -114,7 +124,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [layer.texture, textureBaseUrl]);
-  const attachment = useMemo(() => model ? resolveParticleAttachment(model, layer.attachment, layer.attachments) : null, [model, layer.attachment, layer.attachments]);
+  const attachment = useMemo(() => model ? resolveParticleControlPoint(model, layer.controlPoint, layer.attachment, layer.attachments) : null, [model, layer.controlPoint, layer.attachment, layer.attachments]);
   const anchor = attachment?.object;
   const snapshot = useMemo(() => model && layer.snapshot ? bindParticleSnapshot(model, layer.snapshot.points) : null, [model, layer.snapshot]);
   const beforeTransmission = useMemo(() => {
@@ -134,10 +144,11 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     const result = spritecardMaterial(renderer, textureBaseUrl, VERT, true, true);
     if (result) {
       result.material.uniforms.uAlignNormal = { value: layer.alignNormal ? 1 : 0 };
+      result.material.uniforms.uRenderTrail = { value: layer.trail ? 1 : 0 };
       result.material.transparent = !beforeTransmission;
     }
     return result;
-  }, [layer.spritecard, layer.alignNormal, textureBaseUrl, beforeTransmission]);
+  }, [layer.spritecard, layer.alignNormal, layer.trail, textureBaseUrl, beforeTransmission]);
   const attachmentRotation = useMemo(() => attachment?.frame ? new THREE.Quaternion(...attachment.frame.rotation) : null, [attachment]);
   // morphic converts Source inches to meters at the skeleton root. The effect
   // sits alongside that root, so apply the same units exactly once.
@@ -145,6 +156,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
   const sourceRoot = useMemo(() => model?.getObjectByName('skeleton') ?? null, [model]);
   const scratch = useMemo(() => ({
     snapshotScratch: new THREE.Vector3(), origin: new THREE.Vector3(), previous: new THREE.Vector3(),
+    actorOrigin: new THREE.Vector3(), previousActorOrigin: new THREE.Vector3(),
     orientation: new THREE.Quaternion(), parentOrientation: new THREE.Quaternion(),
     sourceOrientation: new THREE.Quaternion(), gravity: new THREE.Vector3(),
     previousOrientation: new THREE.Quaternion(), deltaOrientation: new THREE.Quaternion(),
@@ -158,7 +170,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     geom.setIndex(quad.index);
     geom.setAttribute('position', quad.getAttribute('position'));
     geom.setAttribute('uv', quad.getAttribute('uv'));
-    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4], ['aFrameClamp', 1], ['aRight', 3], ['aUp', 3]] as const) {
+    for (const [name, size] of [['aPosition', 3], ['aColor', 3], ['aRadius', 1], ['aAlpha', 1], ['aRotation', 1], ['aRegion', 4], ['aFrameClamp', 1], ['aRight', 3], ['aUp', 3], ['aTrail', 3]] as const) {
       geom.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(layer.maxParticles * size), size).setUsage(THREE.DynamicDrawUsage));
     }
     geom.instanceCount = 0;
@@ -166,7 +178,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     const glow = layer.additive || (typeof layer.spritecard?.params.m_flSelfIllumAmount === 'number' && layer.spritecard.params.m_flSelfIllumAmount > 0);
     return { geometry: geom, material: spritecard?.material ?? new THREE.ShaderMaterial({
       userData: { previewBloom: glow },
-      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
+      uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uRenderTrail: { value: layer.trail ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
       // Three's transmission target includes only the opaque queue. Custom
       // additive blending still works there, after bodies and before glass, so
       // embedded sprites become transmitted scene radiance rather than failing
@@ -176,7 +188,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
       blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
-  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, layer.spritecard, texture, beforeTransmission, spritecard]);
+  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, layer.trail, layer.spritecard, texture, beforeTransmission, spritecard]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
   useEffect(() => () => { spritecard?.textures.forEach((t) => t.dispose()); }, [spritecard]);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
@@ -215,7 +227,11 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       if (attachmentRotation) orientation.multiply(attachmentRotation);
       orientation.premultiply(parentOrientation);
     }
-    if (!initialized.current) { previous.copy(origin); scratch.previousOrientation.copy(orientation); initialized.current = true; }
+    if (layer.controlPoint?.freeze && initialized.current) origin.copy(previous);
+    if (layer.trail && motionDirection) orientation.setFromUnitVectors(new THREE.Vector3(1, 0, 0), motionDirection).premultiply(parentOrientation);
+    if (model) { model.getWorldPosition(scratch.actorOrigin); mesh.parent.worldToLocal(scratch.actorOrigin); }
+    else scratch.actorOrigin.copy(origin);
+    if (!initialized.current) { previous.copy(origin); scratch.previousActorOrigin.copy(scratch.actorOrigin); scratch.previousOrientation.copy(orientation); initialized.current = true; }
     const list = particles.current;
     if (layer.follow) {
       scratch.deltaOrientation.copy(scratch.previousOrientation).invert().premultiply(orientation);
@@ -279,13 +295,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
           .add(new THREE.Vector3(Math.cos(ringAngle), Math.sin(ringAngle), 0).multiplyScalar(sample(layer.ring.radius)))
           .multiplyScalar(sourceUnit).applyQuaternion(orientation);
       }
-      const input = layer.radiusInput as { pf?: string; biasType?: string; bias?: number } | undefined;
-      let radiusRandom = Math.random();
-      if (input?.pf === 'PF_TYPE_RANDOM_BIASED' && input.biasType === 'PF_BIAS_TYPE_EXPONENTIAL') {
-        const bias = THREE.MathUtils.clamp(input.bias ?? 0, -1, 1);
-        radiusRandom = Math.pow(radiusRandom, bias < 0 ? 1 - 19*bias : 1-bias);
-      }
-      const radius = THREE.MathUtils.lerp(...layer.radius, radiusRandom)*sourceUnit;
+      const scalars = particleInitialScalars(layer.sourceSystem, undefined, particleNumber.current);
+      const radius = scalars.radius*sourceUnit;
       for (const positionOffset of layer.offsets) {
         offset.add(new THREE.Vector3(
           THREE.MathUtils.lerp(positionOffset.min[0], positionOffset.max[0], Math.random()),
@@ -299,6 +310,8 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
           THREE.MathUtils.lerp(layer.localSpeedMin[1], layer.localSpeedMax[1], Math.random()),
           THREE.MathUtils.lerp(layer.localSpeedMin[2], layer.localSpeedMax[2], Math.random())
         ).multiplyScalar(sourceUnit).applyQuaternion(orientation));
+      const inherit = layer.sourceSystem.initializers.find(node => node.class === 'C_INIT_InheritVelocity');
+      if (inherit) velocity.addScaledVector(scratch.actorOrigin.clone().sub(scratch.previousActorOrigin), Number(inherit.params.m_flVelocityScale ?? 1) / delta);
       const tint = new THREE.Color().setRGB(...layer.colorMin).lerp(new THREE.Color().setRGB(...layer.colorMax), Math.random());
       const initialColor = spriteInitialColor(layer.colorInitializers, particleNumber.current++);
       if (initialColor) tint.setRGB(...initialColor);
@@ -316,9 +329,9 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       if (layer.publishesSpawnEvents && layer.systemId) {
         spawnEvents.current.publish(layer.systemId, clock.current - birthAge, spawnPosition);
       }
-      live.push({ age: birthAge-delta, life: sample(layer.lifetime),
+      live.push({ age: birthAge-delta, life: scalars.life,
         position: spawnPosition, velocity, snapshotIndex,
-        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: sample(layer.alpha), region, frameClamp: frame?.clamp === true,
+        radius, rotation: sample(layer.rotation), spin: sample(layer.spin), color: tint, alpha: scalars.alpha, region, frameClamp: frame?.clamp === true,
         normal, normalAxis, normalRate: layer.normalRotation ? THREE.MathUtils.lerp(...layer.normalRotation.rate, normalRandom) : 0,
         oscillation: layer.oscillation ? {
           rate: new THREE.Vector3(...layer.oscillation.rateMin.map((lo, i) => THREE.MathUtils.lerp(lo, layer.oscillation!.rateMax[i], Math.random()))),
@@ -327,6 +340,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
         } : null });
     }
     const position = geometry.getAttribute('aPosition') as THREE.InstancedBufferAttribute;
+    const trail = geometry.getAttribute('aTrail') as THREE.InstancedBufferAttribute;
     const color = geometry.getAttribute('aColor') as THREE.InstancedBufferAttribute;
     const radius = geometry.getAttribute('aRadius') as THREE.InstancedBufferAttribute;
     const alpha = geometry.getAttribute('aAlpha') as THREE.InstancedBufferAttribute;
@@ -377,7 +391,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
         }
       }
       scratch.color.copy(p.color);
-      const gradientColor = spriteGradientColor(layer.colorGradient, t);
+      const gradientColor = spriteGradientColor(layer.colorGradient, t, undefined, clock.current);
       if (gradientColor) scratch.color.setRGB(...gradientColor);
       if (scratch.fadeColor) scratch.color.lerp(scratch.fadeColor, normalizedWindow(t, layer.colorFadeTime, layer.colorEase));
       position.setXYZ(count, p.position.x, p.position.y, p.position.z);
@@ -391,6 +405,11 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
       scratch.normalUp.applyQuaternion(sourceOrientation); scratch.normalRight.applyQuaternion(sourceOrientation);
       right.setXYZ(count, scratch.normalRight.x, scratch.normalRight.y, scratch.normalRight.z);
       up.setXYZ(count, scratch.normalUp.x, scratch.normalUp.y, scratch.normalUp.z);
+      if (layer.trail) {
+        const length = THREE.MathUtils.clamp(p.velocity.length() * layer.trail.lengthScale, layer.trail.min * sourceUnit, layer.trail.max * sourceUnit);
+        scratch.normalReference.copy(p.velocity).normalize().multiplyScalar(length);
+        trail.setXYZ(count, scratch.normalReference.x, scratch.normalReference.y, scratch.normalReference.z);
+      }
       rotation.setX(count, p.rotation);
       region.setXYZW(count, ...p.region);
       frameClamp.setX(count, p.frameClamp ? 1 : 0);
@@ -398,8 +417,9 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     }
     live.length = count;
     (mesh.geometry as THREE.InstancedBufferGeometry).instanceCount = count;
-    for (const attr of [position, color, radius, alpha, rotation, region, frameClamp, right, up]) attr.needsUpdate = true;
+    for (const attr of [position, color, radius, alpha, rotation, region, frameClamp, right, up, trail]) attr.needsUpdate = true;
     previous.copy(origin);
+    scratch.previousActorOrigin.copy(scratch.actorOrigin);
     scratch.previousOrientation.copy(orientation);
   });
   if (layer.snapshot && !snapshot) return null;
@@ -408,13 +428,14 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents }: {
     renderOrder={beforeTransmission ? ADDITIVE_OVERLAY_RENDER_ORDER : 0} frustumCulled={false} />;
 }
 
-export function ParticleEffect({ descriptor, textureBaseUrl, model, playback }: {
+export function ParticleEffect({ descriptor, textureBaseUrl, model, playback, motionDirection }: {
   descriptor: FxDescriptor; textureBaseUrl: string; model?: THREE.Object3D;
   playback?: { paused: boolean; speed: number };
+  motionDirection?: THREE.Vector3;
 }) {
   const layers = useMemo(() => balanceSpritePreviewComposition(allSpriteLayers(descriptor)), [descriptor]);
   const spawnEvents = useRef<SpawnEvents>(new SpawnEvents());
   useEffect(() => { spawnEvents.current = new SpawnEvents(); }, [descriptor]);
-  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} spawnEvents={spawnEvents} />)}
+  return <group>{layers.map((layer, i) => <SpriteLayer key={i} layer={layer} textureBaseUrl={textureBaseUrl} model={model} playback={playback} spawnEvents={spawnEvents} motionDirection={motionDirection} />)}
     <ParticleRopes descriptor={descriptor} model={model} textureBaseUrl={textureBaseUrl} playback={playback} /></group>;
 }

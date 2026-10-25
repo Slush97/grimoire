@@ -39,7 +39,15 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
             brightness: z.number().finite().min(0).max(2),
         }).strict().optional(),
         colorize: z.boolean().optional(),
+        finish: z.object({
+            roughness: z.number().finite().min(0).max(1),
+            metalness: z.number().finite().min(0).max(1),
+        }).strict().optional(),
     }).strict()).max(256),
 }).strict();
 
-export const skinEditSaveSchema = skinEditExportSchema.extend({ name: z.string().trim().min(1).max(120) }).strict();
+export const skinThumbnailSchema = z.string().max(1_000_000).regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/);
+
+export const skinEditSaveSchema = skinEditExportSchema.extend({
+    name: z.string().trim().min(1).max(120), thumbnailDataUrl: skinThumbnailSchema.optional(),
+}).strict();

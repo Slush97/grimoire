@@ -170,10 +170,12 @@ describe('PosedModel R3F behavior', () => {
     const activeGroup = active.scene.children[0].instance as THREE.Group;
 
     await ReactThreeTestRenderer.act(async () => {
-      await active.advanceFrames(1, 1);
+      await active.advanceFrames(60, 1 / 60);
     });
 
     expect(activeGroup.rotation.y).toBeCloseTo(0.25);
+    await active.advanceFrames(1, 60);
+    expect(activeGroup.rotation.y).toBeCloseTo(0.275);
     active.unmount();
   });
 

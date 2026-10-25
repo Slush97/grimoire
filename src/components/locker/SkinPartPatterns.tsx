@@ -7,13 +7,14 @@ import { isSkinSurface } from '../../lib/skinPartPreview';
 import { adjustSkinPixels, hasColorAdjustments, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
 import type { SkinPartEdit } from '../../types/skinEditor';
 
-function PartTexture({ scene, edit, onError }: { scene: THREE.Object3D; edit: SkinPartEdit; onError: () => void }) {
+function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3D; edit: SkinPartEdit; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
   const textures = useRef<THREE.CanvasTexture[]>([]);
   const { material, pattern, adjustments = ORIGINAL_SKIN_COLOR } = edit;
   const { hue, saturation, brightness } = adjustments;
   const style = pattern?.style, intensity = pattern?.intensity ?? 0, phase = pattern?.phase ?? 0, scroll = pattern?.scroll ?? 0;
   useEffect(() => {
     let cancelled = false;
+    onPending?.(material, true);
     const restore: Array<() => void> = [];
     const timer = setTimeout(() => {
       void (async () => {
@@ -57,15 +58,15 @@ function PartTexture({ scene, edit, onError }: { scene: THREE.Object3D; edit: Sk
             restore.push(() => { mat.map = original; mat.needsUpdate = true; texture.dispose(); });
           }
         });
-      })().catch(() => { if (!cancelled) onError(); });
+      })().catch(() => { if (!cancelled) onError(); }).finally(() => { if (!cancelled) onPending?.(material, false); });
     }, 75);
-    return () => { cancelled = true; clearTimeout(timer); restore.forEach((reset) => reset()); textures.current = []; };
-  }, [scene, material, style, intensity, phase, scroll, hue, saturation, brightness, onError]);
+    return () => { cancelled = true; onPending?.(material, false); clearTimeout(timer); restore.forEach((reset) => reset()); textures.current = []; };
+  }, [scene, material, style, intensity, phase, scroll, hue, saturation, brightness, onError, onPending]);
   useFrame(({ clock }) => { if (scroll > 0) for (const texture of textures.current) texture.offset.set(clock.elapsedTime * scroll * 0.08, clock.elapsedTime * scroll * 0.05); });
   return null;
 }
 
-export function SkinPartPatterns({ scene, edits, onError }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void }) {
+export function SkinPartPatterns({ scene, edits, onError, onPending }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
   return edits.map((edit) => !edit.hidden && ((edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments))
-    ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} /> : null);
+    ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} /> : null);
 }

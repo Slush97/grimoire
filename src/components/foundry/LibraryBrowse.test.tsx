@@ -8,7 +8,7 @@ import LibraryBrowse from './LibraryBrowse';
 
 vi.mock('../../lib/api', () => ({ foundryThumbnails: vi.fn() }));
 vi.mock('./TextureLightbox', () => ({ default: () => null }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({ initReactI18next: { type: '3rdParty', init: () => {} }, useTranslation: () => ({ t: (key: string) => key }) }));
 
 const heroNames = new Map([['atlas', 'Abrams'], ['viper', 'Vyper']]);
 function item(hero: string | null, label: string, category: TextureCategory): TextureGridItem {
@@ -18,6 +18,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+    localStorage.clear();
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     host = document.createElement('div');
     document.body.append(host);
@@ -42,6 +43,16 @@ async function selectCategory(value: TextureCategory) {
 }
 
 describe('Foundry workshop image scope', () => {
+    it('ignores a slow result from the previously selected category', async () => {
+        let finish!: (items: TextureGridItem[]) => void;
+        vi.mocked(foundryThumbnails).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+        await act(async () => root.render(<LibraryBrowse heroNames={heroNames} />));
+        await selectCategory('hero-image');
+        expect(host.textContent).toContain('Abrams art');
+        await act(async () => finish([item('atlas', 'Stale icon', 'ability-icon')]));
+        expect(host.textContent).toContain('Abrams art');
+        expect(host.textContent).not.toContain('Stale icon');
+    });
     it('keeps hero art scoped across categories and leaves shared item icons available', async () => {
         await act(async () => root.render(<LibraryBrowse heroNames={heroNames} heroCodename="atlas" />));
         expect(host.textContent).toContain('Abrams art');

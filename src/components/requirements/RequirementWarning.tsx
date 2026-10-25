@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Link2 } from 'lucide-react';
-import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, matchRequirement, type RequirementMod } from '../../lib/modRequirements';
+import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, matchRequirement, skinRequirementSource, requirementSnapshot, type RequirementMod } from '../../lib/modRequirements';
 import { useRequirementsStore } from '../../stores/requirementsStore';
 import { useAppStore } from '../../stores/appStore';
 import { Tag } from '../common/ui';
@@ -13,13 +13,15 @@ export function RequirementWarning({ mod, variant = 'inline' }: { mod: Requireme
   const mods = useAppStore(s => s.mods);
   const files = useRequirementOrderStore(s => s.files);
   const refs = modRequirementRefs(mod);
-  const orderIssues = refs.flatMap(target => requirementOrderIssues(target, snapshots[requirementKey(target)], mods, files)).filter(issue => issue.overlay.id === mod.id);
-  const source = refs.find(target => hasInstalledRequirementIssues(mod, snapshots[requirementKey(target)], mods)) ?? orderIssues[0]?.source ?? refs.find(target => {
+  const local = skinRequirementSource(mod, mods);
+  const orderIssues = [...(local ? requirementOrderIssues(local, local.requirements, mods, files) : []),
+    ...refs.flatMap(target => requirementOrderIssues(target, snapshots[requirementKey(target)], mods, files))].filter(issue => issue.overlay.id === mod.id);
+  const source = local ?? refs.find(target => hasInstalledRequirementIssues(mod, snapshots[requirementKey(target)], mods)) ?? orderIssues[0]?.source ?? refs.find(target => {
     const snapshot = snapshots[requirementKey(target)];
     return snapshot?.status === 'loaded' && snapshot.items.some(item => item.importance === 'required');
   });
   if (!source) return null;
-  const snapshot = snapshots[requirementKey(source)];
+  const snapshot = requirementSnapshot(source, mods, snapshots);
   if (snapshot?.status !== 'loaded') return null;
   const issues = hasInstalledRequirementIssues(mod, snapshot, mods);
   const label = issues && snapshot.items.some(item => matchRequirement(item, mods).state === 'missing') ? t('requirements.missing')

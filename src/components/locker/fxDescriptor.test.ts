@@ -17,6 +17,13 @@ const descriptor = (): FxDescriptor => ({
     textures: ['materials/particle/noise.vtex', 'materials/particle/ring.vtex'] }], children: [],
 });
 describe('authored sprite attributes', () => {
+  it('uses a ring initializer\'s hand control point instead of the world-origin CP', () => {
+    const d = descriptor();
+    d.controlPoints.unshift({ cp: 0, attachment: null, attachType: 'PATTACH_WORLDORIGIN', entity: 'self' });
+    d.initializers = [{ class: 'C_INIT_RingWave', params: { m_TransformInput: { m_nControlPoint: 2 } } }];
+    expect(spriteParamsFor(d)?.controlPoint?.cp).toBe(2);
+    expect(spriteParamsFor(d)?.attachment).toBe('ability_cast');
+  });
   it('requires a simulated parent for spawn events and rejects other event types', () => {
     const d = descriptor();
     d.emitters = [{ class: 'C_OP_ContinuousEmitter', params: {
@@ -36,6 +43,13 @@ describe('authored sprite attributes', () => {
     expect(spriteGradientColor(input, 0.65)).toEqual([125/255, 179/255, 120/255]);
     expect(spriteGradientColor(input, 2)).toEqual([93/255, 147/255, 115/255]);
     expect(spriteGradientColor({ ...input, m_FloatInterp: { pf: 'PF_TYPE_CONTROL_POINT_COMPONENT' } }, 0.5)).toBeNull();
+  });
+  it('loops collection-age gradients while particle-age gradients stay independent', () => {
+    const input = { m_nType: 'PVEC_TYPE_FLOAT_INTERP_GRADIENT',
+      m_FloatInterp: { pf: 'PF_TYPE_COLLECTION_AGE', mode: 'PF_INPUT_MODE_LOOPED', in0: 0, in1: 2 },
+      m_Gradient: { m_Stops: [{ m_flPosition: 0, m_Color: [255, 0, 0] }, { m_flPosition: 1, m_Color: [0, 0, 255] }] } };
+    expect(spriteGradientColor(input, .8, undefined, 1)).toEqual([.5, 0, .5]);
+    expect(spriteGradientColor(input, .1, undefined, 3)).toEqual([.5, 0, .5]);
   });
   it('omits parent-event children rather than making their omitted rate an always-on glow', () => {
     const d = descriptor(); d.emitters[0].params.m_bInitFromKilledParentParticles = true;

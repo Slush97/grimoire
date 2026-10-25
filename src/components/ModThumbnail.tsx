@@ -1,4 +1,7 @@
 import { EyeOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { movementFxThumbnail } from '../lib/movementFxThumbnail';
+import type { MovementFxChoice } from '../lib/movementFx';
 import { useTranslation } from 'react-i18next';
 import type { MergedModSource } from '../types/mod';
 import { getHeroRenderPath } from '../lib/lockerUtils';
@@ -9,6 +12,7 @@ import { RevealImage } from './common/RevealImage';
 
 interface ModThumbnailProps {
   src?: string;
+  movementFx?: MovementFxChoice;
   alt: string;
   nsfw?: boolean;
   hideNsfw?: boolean;
@@ -44,6 +48,7 @@ interface ModThumbnailProps {
 
 export default function ModThumbnail({
   src,
+  movementFx,
   alt,
   nsfw,
   hideNsfw,
@@ -61,6 +66,16 @@ export default function ModThumbnail({
   priority,
 }: ModThumbnailProps) {
   const { t } = useTranslation();
+  const [effectThumbnail, setEffectThumbnail] = useState<{ choice: MovementFxChoice; src: string }>();
+  useEffect(() => {
+    let cancelled = false;
+    if (!src && movementFx) {
+      void movementFxThumbnail(movementFx).then(value => {
+        if (!cancelled) setEffectThumbnail({ choice: movementFx, src: value });
+      }).catch((error: unknown) => console.warn('[movementFx] Thumbnail:', error));
+    }
+    return () => { cancelled = true; };
+  }, [src, movementFx]);
   const shouldBlur = nsfw && hideNsfw;
   // Hero portrait wins over the uploader's thumbnail, then any real thumbnail,
   // then the DeadlockForge badge. The badge is last so a forge sound mod still
@@ -68,7 +83,7 @@ export default function ModThumbnail({
   // because neither is a user-uploaded image.
   const forgeBadge = forgeInstalled && !src ? getForgeBadgePath() : undefined;
   const sizedSrc = src && width ? sizeGameBananaThumbUrl(src, width, currentPixelRatio(), height) : src;
-  const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : (sizedSrc ?? forgeBadge);
+  const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : (sizedSrc ?? (effectThumbnail?.choice === movementFx ? effectThumbnail?.src : undefined) ?? forgeBadge);
   const resolvedBlur = heroPortrait || forgeBadge ? false : shouldBlur;
 
   // Collage path: only when there's no explicit src and we have sources to

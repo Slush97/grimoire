@@ -22,6 +22,7 @@ import { exportFoundryAsset } from '../services/foundryAssetExport';
 import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
 import { loadHideoutScene } from '../services/hideoutScene';
 import { resumeSkinEdit, saveSkinEdits } from '../services/saveSkinEdits';
+import { previewMovementFx, exportMovementFx, saveMovementFx } from '../services/movementFx';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -51,6 +52,9 @@ ipcMain.handle('foundry:resumeSkinEdit', (_event, input: unknown) =>
 ipcMain.handle('foundry:exportSkinEdits', (_event, input: unknown) => exportSkinEdits(requireDeadlockPath(), input));
 ipcMain.handle('foundry:saveSkinEdits', (_event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
+ipcMain.handle('foundry:previewMovementFx', (_event, input: unknown) => previewMovementFx(requireDeadlockPath(), input));
+ipcMain.handle('foundry:exportMovementFx', (_event, input: unknown) => exportMovementFx(requireDeadlockPath(), input));
+ipcMain.handle('foundry:saveMovementFx', (_event, input: unknown) => saveMovementFx(requireDeadlockPath(), input));
 
 ipcMain.handle('foundry:exportAsset', async (_e, request: unknown): Promise<VpkExportResult> => {
     return exportFoundryAsset(requireDeadlockPath(), request);

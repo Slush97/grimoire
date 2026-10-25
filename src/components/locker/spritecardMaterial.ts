@@ -15,7 +15,7 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
   const additive = (renderer.blendMode ?? '').includes('ADD');
   const inputs = Array.isArray(renderer.params.m_vecTexturesInput) ? renderer.params.m_vecTexturesInput.map(row).filter((r) => r.m_bEnabled !== false).slice(0, 5) : [];
   const selfIllum = paramScalar(renderer.params.m_flSelfIllumAmount, 0);
-  if (!inputs.length || selfIllum <= 0 || selfIllum > 1 || paramScalar(renderer.params.m_flDiffuseAmount, 0) !== 0) return null;
+  if (!inputs.length || selfIllum <= 0 || selfIllum > 32 || paramScalar(renderer.params.m_flDiffuseAmount, 0) !== 0) return null;
   const textures: THREE.Texture[] = [];
   const uniforms: Record<string, THREE.IUniform> = {};
   let declarations = '', chain = '', previous = 0;
@@ -90,14 +90,27 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
   // after saturation, allowing authored glow to retain HDR radiance.
   uniforms.addSelf = { value: 1 + Math.max(0, Math.min(32, paramScalar(renderer.params.m_flAddSelfAmount, 0))) };
   uniforms.desat = { value: Math.max(0, Math.min(1, paramScalar(renderer.params.m_flDesaturation, 0))) };
+  uniforms.outline = { value: renderer.params.m_bOutline === true };
+  const outline = Array.isArray(renderer.params.m_OutlineColor) ? renderer.params.m_OutlineColor : [255, 255, 255];
+  uniforms.outlineColor = { value: new THREE.Vector3(...outline.slice(0, 3).map(value => Math.max(0, Math.min(255, Number(value))) / 255) as [number, number, number]) };
+  uniforms.outlineRanges = { value: new THREE.Vector4(paramScalar(renderer.params.m_flOutlineStart0, .5),
+    paramScalar(renderer.params.m_flOutlineEnd0, .7), paramScalar(renderer.params.m_flOutlineStart1, .6), paramScalar(renderer.params.m_flOutlineEnd1, .8)) };
+  uniforms.colorBlend = { value: renderer.params.m_nColorBlendType === 'PARTICLE_COLOR_BLEND_MULTIPLY2X' ? 2 : 1 };
   const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `
     ${declarations} uniform vec3 tint; uniform float overbright; uniform float addSelf; uniform float desat;
+    uniform bool outline; uniform vec3 outlineColor; uniform vec4 outlineRanges; uniform float colorBlend;
     varying vec2 vUv; varying float vAlpha; ${vertexColor ? "varying vec3 vColor;" : ""}
     ${frameRegion ? 'varying vec2 vCardUv; varying vec4 vFrameRegion; varying float vFrameClamp;' : ''}
     vec3 gammaColor(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-.055,step(vec3(.0031308),c));}
     vec2 placeUv(vec2 p,vec4 ctl,float angle){float c=cos(angle),s=sin(angle);p-=.5;return vec2(c*p.x-s*p.y,s*p.x+c*p.y)/ctl.xy+fract(ctl.zw+.5);}
     void main(){vec4 accum=vec4(1.0);${chain}
-      vec3 rgb=accum.rgb*tint${vertexColor ? "*vColor" : ""};rgb=mix(rgb,vec3(dot(rgb,vec3(.299,.587,.114))),desat)*overbright;
+      vec3 rgb=accum.rgb*tint${vertexColor ? "*vColor" : ""}*colorBlend;
+      float rawAlpha=accum.a;
+      if(outline && rawAlpha>=outlineRanges.x && rawAlpha<=outlineRanges.w){
+        float ramp=rawAlpha<=outlineRanges.z?smoothstep(outlineRanges.x,outlineRanges.z,rawAlpha):1.0-smoothstep(outlineRanges.y,outlineRanges.w,rawAlpha);
+        rgb=mix(rgb,outlineColor,ramp);accum.a=mix(rawAlpha,1.0,ramp);
+      }
+      rgb=mix(rgb,vec3(dot(rgb,vec3(.299,.587,.114))),desat)*overbright;
       ${renderer.params.m_bSaturateColorPreAlphaBlend === false ? '' : 'rgb=clamp(rgb,0.0,1.0);'}
       rgb*=addSelf;
       float alpha=smoothstep(0.0,1.0,accum.a)*vAlpha;

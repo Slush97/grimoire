@@ -242,6 +242,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     getSkinEditInfo: (source) => ipcRenderer.invoke('foundry:skinEditInfo', source),
+    previewMovementFx: (request) => ipcRenderer.invoke('foundry:previewMovementFx', request),
+    exportMovementFx: (choice) => ipcRenderer.invoke('foundry:exportMovementFx', choice),
+    saveMovementFx: (request) => ipcRenderer.invoke('foundry:saveMovementFx', request),
     resumeSkinEdit: (source) => ipcRenderer.invoke('foundry:resumeSkinEdit', source),
     exportSkinEdits: (request) => ipcRenderer.invoke('foundry:exportSkinEdits', request),
     saveSkinEdits: (request) => ipcRenderer.invoke('foundry:saveSkinEdits', request),

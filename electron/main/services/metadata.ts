@@ -8,6 +8,7 @@ import { getMetadataPath as metadataPathForMode } from '../utils/paths';
 import { loadSettings } from './settings';
 
 export interface ModMetadata {
+    movementFx?: import('../../../src/lib/movementFx').MovementFxChoice;
     modName?: string;      // The human-readable mod name from GameBanana
     /** GameBanana submitter name, captured at download time. Absent for local
      *  mods. Embedded into the imprint (addonauthor / modinfo.author). */

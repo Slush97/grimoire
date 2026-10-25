@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
+import { trippySkinDraftSchema } from '../../lib/effectDraftSchema';
 import { useTranslation } from 'react-i18next';
 import { Loader2, AlertCircle, Check, RefreshCw, RotateCcw } from 'lucide-react';
 import {
@@ -49,14 +51,16 @@ export default function TrippySkinPanel({
   onAppliedChange,
 }: TrippySkinPanelProps) {
   const { t } = useTranslation();
+  const [draft, setDraft] = useFoundryDraft(`effects:${heroName}:skin`, trippySkinDraftSchema.nullable(), null);
+  const restored = useRef(draft);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [style, setStyle] = useState<TrippyStyleName>('confetti');
-  const [intensity, setIntensity] = useState(1);
-  const [phase, setPhase] = useState(0);
-  const [scroll, setScroll] = useState(1);
-  const [targets, setTargets] = useState<TrippySkinTargets>('all');
+  const [style, setStyle] = useState<TrippyStyleName>(draft?.style ?? 'confetti');
+  const [intensity, setIntensity] = useState(draft?.intensity ?? 1);
+  const [phase, setPhase] = useState(draft?.phase ?? 0);
+  const [scroll, setScroll] = useState(draft?.scroll ?? 1);
+  const [targets, setTargets] = useState<TrippySkinTargets>(draft?.targets ?? 'all');
 
   const [activeSkin, setActiveSkin] = useState<ActiveTrippySkin | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,7 +83,7 @@ export default function TrippySkinPanel({
         setActiveSkin(skin);
         setGameRunning(status.running);
         // Reflect whatever is applied so the sliders read back.
-        if (skin) {
+        if (skin && !restored.current) {
           setStyle(skin.style);
           setIntensity(skin.intensity);
           setPhase(skin.phase);
@@ -97,6 +101,9 @@ export default function TrippySkinPanel({
       mounted.current = false;
     };
   }, [heroName]);
+  useLayoutEffect(() => {
+    if (!loading) setDraft({ style, intensity, phase, scroll, targets });
+  }, [loading, style, intensity, phase, scroll, targets, setDraft]);
 
   const applied = activeSkin !== null;
   useEffect(() => {

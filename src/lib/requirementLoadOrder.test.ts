@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
 import type { ModRequirementSnapshot } from '../types/gamebanana';
 import { isTextureOverlay, moveRequirementAboveBase, requirementFileKey, requirementOrderCandidates, requirementOrderIssues } from './requirementLoadOrder';
+import { skinRequirementSource } from './modRequirements';
 
 const mod = (id: string, gameBananaId: number, priority: number, metaKey = `${id}.vpk`): Mod => ({
   id, gameBananaId, priority, metaKey, name: id, path: `/addons/${id}.vpk`, fileName: `${id}.vpk`, size: 100, installedAt: '', enabled: true,
@@ -14,6 +15,18 @@ const model = 'models/skin.vmdl_c';
 const base = mod('base', 704252, 1);
 const overlay = mod('recolor', source.id, 3);
 const files = { [requirementFileKey(base)]: [texture, material, model], [requirementFileKey(overlay)]: [texture, material, 'addoninfo.txt', 'grimoire_meta.json'] };
+
+it('checks and fixes load order for local skin sources using the existing requirement rules', () => {
+  const localBase = { ...base, sha256: 'a'.repeat(64) };
+  const localOverlay = { ...overlay, gameBananaId: undefined, skinEdit: { hero: 'Mina', sources: [localBase.sha256] } };
+  const mods = [localBase, localOverlay];
+  const source = skinRequirementSource(localOverlay, mods);
+  if (!source) throw new Error('Expected source');
+  const localFiles = { [requirementFileKey(localBase)]: [texture, material, model], [requirementFileKey(localOverlay)]: [texture, material] };
+  expect(requirementOrderCandidates(mods, {})).toHaveLength(2);
+  expect(requirementOrderIssues(source, source.requirements, mods, localFiles)).toMatchObject([{ overlay: { id: overlay.id }, base: { id: base.id }, fixable: true }]);
+  expect(moveRequirementAboveBase(mods, overlay.id, base.id)).toEqual([overlay.id, base.id]);
+});
 
 describe('texture dependency order', () => {
   it('warns only for an enabled texture overlay below its author-listed base', () => {

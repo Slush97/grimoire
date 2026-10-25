@@ -7,6 +7,7 @@ import { orderedRopePoints, ropePositionSource } from './particleOrderedRope';
 import { particleControlPointInputs } from './particleScalarInput';
 import { MovingParticleRope } from './MovingParticleRope';
 import { bindParticleSnapshot, skinnedSnapshotPosition } from './particleSnapshotSkinning';
+import { particleAttachmentToWorld, resolveParticleControlPoint } from './particleAttachment';
 
 const VERT = `uniform float ropeDepthBias; attribute float aAlpha; attribute vec3 aColor; varying vec2 vUv; varying float vAlpha; varying vec3 vColor;
   void main(){vUv=uv;vAlpha=aAlpha;vColor=aColor;vec4 viewPosition=modelViewMatrix*vec4(position,1.0);gl_Position=projectionMatrix*viewPosition;
@@ -26,13 +27,16 @@ function attributeAt(d: FxDescriptor, field: number, index: number, fallback: nu
   return Math.max(0, Math.min(128, value));
 }
 
-function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, playback }: {
+function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, playback, attachments }: {
   system: FxDescriptor; renderer: FxRenderer; scale: number; delay: number; model: THREE.Object3D; textureBaseUrl: string;
   playback?: { paused: boolean; speed: number };
+  attachments?: FxDescriptor['attachments'];
 }) {
   const ref = useRef<THREE.Mesh>(null), clock = useRef(0);
   const bound = useMemo(() => bindParticleSnapshot(model, system.snapshot?.points ?? []), [model, system]);
   const ordered = useMemo(() => orderedRopePoints(system), [system]);
+  const params = useMemo(() => spriteParamsFor(system, renderer), [system, renderer]);
+  const attachment = useMemo(() => resolveParticleControlPoint(model, params?.controlPoint, params?.attachment ?? null, attachments), [model, params, attachments]);
   const positionSource = ropePositionSource(bound?.length ?? 0, ordered?.points.length ?? 0);
   const snapshotSubdivisions = Math.floor(Math.max(1, Math.min(8, paramScalar(renderer.params.m_nMaxTesselation, 1))));
   const count = positionSource === 'ordered' && ordered ? Math.min(2048, (ordered.points.length-1)*Math.max(4, Math.min(16, paramScalar(renderer.params.m_nMinTesselation, 4)))+1) : bound?.length ? (bound.length-1)*snapshotSubdivisions+1 : 0;
@@ -85,7 +89,8 @@ function RopeLayer({ system, renderer, scale, delay, model, textureBaseUrl, play
     for (let i = 0; i < state.points.length; i++) {
       if (positionSource !== 'snapshot' && ordered && orderedCurve) {
         orderedCurve.getPoint(i/(count-1), state.points[i]).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.max(0, clock.current-delay)*ordered.orbitRate);
-        if (sourceRoot) sourceRoot.localToWorld(state.points[i]);
+        if (attachment.object && params?.attachment) particleAttachmentToWorld(attachment, state.points[i]);
+        else if (sourceRoot) sourceRoot.localToWorld(state.points[i]);
         else { state.points[i].multiplyScalar(.0254).applyQuaternion(new THREE.Quaternion(.5,.5,.5,.5).invert()); model.localToWorld(state.points[i]); }
       }
     }
@@ -138,5 +143,5 @@ export function ParticleRopes({ descriptor, model, textureBaseUrl, playback }: {
   if (!model) return null;
   return <group>{layers.map((layer, i) => layer.moving
     ? <MovingParticleRope key={i} {...layer} controlPointComponents={particleControlPointInputs(descriptor.previewControlPointComponents, { ...descriptor.controlPointComponents, ...layer.system.controlPointComponents })} attachments={descriptor.attachments} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />
-    : <RopeLayer key={i} {...layer} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />)}</group>;
+    : <RopeLayer key={i} {...layer} attachments={descriptor.attachments} model={model} textureBaseUrl={textureBaseUrl} playback={playback} scale={paramScalar(descriptor.scale, 1)} />)}</group>;
 }

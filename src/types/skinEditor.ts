@@ -13,6 +13,7 @@ export interface SkinPart {
   vertices: number;
   tintable: boolean;
   patternable: boolean;
+  finishable?: boolean;
   textureSize?: { width: number; height: number };
 }
 
@@ -29,6 +30,12 @@ export interface SkinPartEdit {
   pattern?: SkinPartPattern | null;
   adjustments?: SkinColorAdjustments;
   colorize?: boolean;
+  finish?: SkinPartFinish;
+}
+
+export interface SkinPartFinish {
+  roughness: number;
+  metalness: number;
 }
 
 export interface SkinColorAdjustments {
@@ -57,11 +64,13 @@ export interface SkinEditExport extends SkinEditSource {
 
 export interface SkinEditSave extends SkinEditExport {
   name: string;
+  thumbnailDataUrl?: string;
 }
 
 export interface SkinEditSaveResult {
   /** Where each mod the save enabled or moved now lives, keyed by its metaKey before the save. */
   renamed: Record<string, HeroPoseSkinSource>;
+  overlay: HeroPoseSkinSource;
 }
 
 /** Recorded on a skin-editor overlay so saving the same edit target again replaces it. */

@@ -2,6 +2,9 @@ import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo
 import { useShallow } from 'zustand/react/shallow';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
+import { installedDoorStuckTarget } from '../lib/installedSkinTarget';
+import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
   DragOverlay,
@@ -80,7 +83,7 @@ import { RequirementsControl } from '../components/requirements/RequirementsCont
 import { useRequirementOrderStore } from '../stores/requirementOrderStore';
 import { requirementOrderIssues } from '../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../stores/requirementsStore';
-import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey } from '../lib/modRequirements';
+import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -385,11 +388,28 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onToggleList,
   onCreateList,
 }: InstalledEntryCardProps) {
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
+  const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
+  const target = installedDoorStuckTarget(previewMod);
+  const openDoorStuck = doorStuckEnabled && target ? () => {
+    if ('kind' in target && target.kind === 'movement') {
+      const settings = useAppStore.getState().settings;
+      const scope = settings?.devMode && settings.devDeadlockPath ? settings.devDeadlockPath : settings?.deadlockPath ?? '';
+      if (!restoreMovementFxDraft(localStorage, scope, target.choice)) {
+        showToast(t('foundry.draft.failed'), { tone: 'error' });
+        return;
+      }
+    }
+    navigate('/foundry', { state: target });
+  } : undefined;
   if (entry.kind === 'single') {
     const mod = entry.mod;
     return (
       <ModCard
         mod={mod}
+        onOpenDoorStuck={openDoorStuck}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
         conflicts={conflicts}
@@ -458,6 +478,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const outdatedVariant = entry.enabledVariants.find(v => v.outdatedVdata) ?? entry.variants.find(v => v.outdatedVdata);
   return (
     <ModCard
+      onOpenDoorStuck={openDoorStuck}
+      previewMetaKey={previewMod.metaKey}
       mod={{
         ...entry.primary,
         safetyTarget,
@@ -711,8 +733,11 @@ export default function Installed() {
   const requirementSnapshots = useRequirementsStore(state => state.snapshots);
   const requirementFiles = useRequirementOrderStore(state => state.files);
   const [requirementsOnly, setRequirementsOnly] = useState(false);
-  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => modRequirementRefs(mod)
-    .some(target => hasInstalledRequirementIssues(mod, requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id))).map(mod => mod.id)),
+  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => {
+    const local = skinRequirementSource(mod, mods);
+    return (local && (hasInstalledRequirementIssues(mod, local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
+      .some(target => hasInstalledRequirementIssues(mod, requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
+  }).map(mod => mod.id)),
   [visibleMods, mods, requirementSnapshots, requirementFiles]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
@@ -3760,6 +3785,7 @@ export default function Installed() {
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
+      <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
       <div
         className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-hl/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
           settings?.sidebarTransparent

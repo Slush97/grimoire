@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Mod } from '../types/mod';
 import { getMods, listUnknownModFiles, reorderMods } from '../lib/api';
 import { moveRequirementAboveBase, requirementFileKey, requirementOrderIssues, type RequirementFileLists, type RequirementOrderIssue } from '../lib/requirementLoadOrder';
-import { requirementKey } from '../lib/modRequirements';
+import { requirementSnapshot } from '../lib/modRequirements';
 import { useRequirementsStore } from './requirementsStore';
 import { useAppStore } from './appStore';
 
@@ -42,7 +42,7 @@ export const useRequirementOrderStore = create<RequirementOrderStore>((set, get)
       set(state => ({ files: { ...state.files, ...files } }));
       const latest = await getMods();
       if (![overlay, base].every(mod => latest.some(hit => hit.id === mod.id && requirementFileKey(hit) === requirementFileKey(mod)))) return 'changed';
-      const snapshot = useRequirementsStore.getState().snapshots[requirementKey(issue.source)];
+      const snapshot = requirementSnapshot(issue.source, latest, useRequirementsStore.getState().snapshots);
       const current = requirementOrderIssues(issue.source, snapshot, latest, files).find(hit => hit.overlay.id === overlay.id && hit.base.id === base.id && hit.fixable);
       if (!current) return 'changed';
       const order = moveRequirementAboveBase(latest, overlay.id, base.id);

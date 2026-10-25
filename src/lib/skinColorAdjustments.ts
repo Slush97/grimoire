@@ -7,7 +7,7 @@ export function hasColorAdjustments(value: SkinColorAdjustments | undefined): bo
 }
 
 export function hasSkinPartEdit(edit: SkinPartEdit): boolean {
-  return edit.hidden || edit.tint !== null || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments);
+  return edit.hidden || edit.tint !== null || !!edit.finish || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments);
 }
 
 export function adjustSkinPixels(pixels: Uint8ClampedArray | Uint8Array, value: SkinColorAdjustments): void {

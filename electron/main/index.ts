@@ -304,7 +304,6 @@ function createWindow(): void {
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
         backgroundColor: windowBackgroundColor(settings.oledMode),
-        autoHideMenuBar: true,
         // Standard native frame on every platform. themeSource is forced to
         // 'dark' above, so Windows draws its title bar dark; the previous
         // hidden-titleBar + overlay approach put the OS window controls on
@@ -321,6 +320,9 @@ function createWindow(): void {
             additionalArguments: settings.oledMode ? ['--grimoire-oled'] : [],
         },
     });
+
+    // Auto-hiding still lets Alt open the native menu instead of a mod preview.
+    if (process.platform !== 'darwin') mainWindow.removeMenu();
 
     // Show window when ready to prevent white screen flash
     mainWindow.once('ready-to-show', () => {
@@ -413,7 +415,7 @@ function createWindow(): void {
     // --- UI zoom (Ctrl +/-/0), persisted across launches. The renderer is dense
     // and on hi-DPI laptops everything renders tiny, so let the user scale the
     // whole UI. Driven through webContents.setZoomFactor via before-input-event
-    // (the menu bar is auto-hidden, so there's no View > Zoom to lean on).
+    // (Windows/Linux windows have no native View > Zoom menu).
     const ZOOM_MIN = 0.5;
     const ZOOM_MAX = 3.0;
     const ZOOM_STEP = 0.1;

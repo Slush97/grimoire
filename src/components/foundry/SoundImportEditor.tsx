@@ -16,6 +16,7 @@ export interface SoundImportEdits {
 interface SoundImportEditorProps {
     /** The user's picked MP3 (decoded in-renderer via Web Audio, no IPC). */
     file: File;
+    initialEdits?: SoundImportEdits;
     /** A clip path of the sound being replaced (`HeroSound.vsnd[0]`), decoded as
      *  the loudness target for the "match volume" normalizer. Omit to hide it. */
     targetClipPath?: string | null;
@@ -87,7 +88,7 @@ function fmt(ms: number): string {
  * gain are applied losslessly in Rust at mint time; this only authors the
  * numbers and previews them.
  */
-export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImportEditorProps) {
+export function SoundImportEditor({ file, targetClipPath, onChange, initialEdits = {} }: SoundImportEditorProps) {
     const { t } = useTranslation();
     const soundVolume = useAppStore((s) => s.soundVolume);
 
@@ -95,13 +96,14 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
     const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
     const [decodeError, setDecodeError] = useState<string | null>(null);
 
-    const [startMs, setStartMs] = useState(0);
-    const [endMs, setEndMs] = useState(0);
+    const initial = useRef(initialEdits);
+    const [startMs, setStartMs] = useState(initialEdits.trimStartMs ?? 0);
+    const [endMs, setEndMs] = useState(initialEdits.trimEndMs ?? 0);
 
-    const [normalize, setNormalize] = useState(false);
+    const [normalize, setNormalize] = useState(!!initialEdits.gainDb);
     const [targetRms, setTargetRms] = useState<number | null>(null);
     const [targetState, setTargetState] = useState<'idle' | 'loading' | 'missing'>('idle');
-    const [gainDb, setGainDb] = useState(0);
+    const [gainDb, setGainDb] = useState(initialEdits.gainDb ?? 0);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -131,8 +133,9 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
                 const decoded = await acquireCtx().decodeAudioData(ab.slice(0));
                 if (cancelled) return;
                 setBuffer(decoded);
-                setStartMs(0);
-                setEndMs(Math.round(decoded.duration * 1000));
+                const end = Math.min(initial.current.trimEndMs ?? Infinity, Math.round(decoded.duration * 1000));
+                setStartMs(Math.min(initial.current.trimStartMs ?? 0, Math.max(0, end - MIN_WINDOW_MS)));
+                setEndMs(end);
             } catch {
                 if (!cancelled) {
                     setDecodeError(
@@ -200,10 +203,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
     // Report authored edits upward. Trim only when the window is narrower than the
     // whole clip; gain only when the normalizer produced a non-zero value.
     useEffect(() => {
-        if (!buffer) {
-            onChange({});
-            return;
-        }
+        if (!buffer) return;
         const full = Math.round(buffer.duration * 1000);
         const trimmed = startMs > 0 || endMs < full;
         onChange({

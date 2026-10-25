@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowDownUp, ArrowUp, ArrowUpRight, Check, ChevronRight, ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import { Button, Tag } from '../common/ui';
-import { parseGameBananaItemUrl, type ModRequirementSource } from '../../types/gamebanana';
-import { matchRequirement, requirementKey } from '../../lib/modRequirements';
+import { parseGameBananaItemUrl } from '../../types/gamebanana';
+import { matchRequirement, requirementKey, skinRequirementSource, type RequirementSource } from '../../lib/modRequirements';
 import { installedRequirementOrder, requirementOrderIssues } from '../../lib/requirementLoadOrder';
 import { useRequirementOrderStore } from '../../stores/requirementOrderStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
@@ -36,19 +36,21 @@ function RequirementIdentity({ item, target }: { item: ModRequirement; target: G
   </>;
 }
 
-export function RequirementsPanel({ source, onLocate }: { source: ModRequirementSource; onLocate?: (modId: string) => void }) {
+export function RequirementsPanel({ source, onLocate }: { source: RequirementSource; onLocate?: (modId: string) => void }) {
   const { t } = useTranslation();
   const mods = useAppStore(s => s.mods);
   const files = useRequirementOrderStore(s => s.files);
   const fixingOrder = useRequirementOrderStore(s => s.fixing);
   const cached = useRequirementsStore(s => s.snapshots[requirementKey(source)]);
-  const snapshot = cached && cached.checkedAt >= source.requirements.checkedAt ? cached : source.requirements;
+  const owner = 'localModId' in source ? mods.find(mod => mod.id === source.localModId) : undefined;
+  const snapshot = owner ? skinRequirementSource(owner, mods)?.requirements ?? source.requirements
+    : cached && cached.checkedAt >= source.requirements.checkedAt ? cached : source.requirements;
   const [busy, setBusy] = useState(false);
   const states = { enabled: t('requirements.state.enabled'), disabled: t('requirements.state.disabled'),
     missing: t('requirements.state.missing'), met: t('requirements.state.met'), manual: t('requirements.state.manual'), optional: t('requirements.state.optional') };
   const retry = async () => {
     setBusy(true);
-    try { await useRequirementsStore.getState().load([source], true); } finally { setBusy(false); }
+    try { if (!('localModId' in source)) await useRequirementsStore.getState().load([source], true); } finally { setBusy(false); }
   };
   if (snapshot.status === 'loaded' && !snapshot.items.length) return null;
   if (snapshot.status === 'unavailable') return (
@@ -58,7 +60,7 @@ export function RequirementsPanel({ source, onLocate }: { source: ModRequirement
           <p className="mt-1 text-sm text-text-secondary">{t('requirements.loadError')}</p></div></div>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" icon={RefreshCw} isLoading={busy} onClick={() => void retry()}>{t('requirements.retry')}</Button>
-        <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => window.open(`https://gamebanana.com/${source.section === 'Sound' ? 'sounds' : source.section === 'Wip' ? 'wips' : 'mods'}/${source.id}`, '_blank', 'noopener,noreferrer')}>{t('requirements.gamebanana')}</Button>
+        {!('localModId' in source) && <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => window.open(`https://gamebanana.com/${source.section === 'Sound' ? 'sounds' : source.section === 'Wip' ? 'wips' : 'mods'}/${source.id}`, '_blank', 'noopener,noreferrer')}>{t('requirements.gamebanana')}</Button>}
       </div>
     </section>
   );

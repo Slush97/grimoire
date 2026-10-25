@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Loader2, AlertCircle, Zap, Shirt } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { SegmentedControl } from '../common/ui';
 import { getHeroColorSupport } from '../../lib/api';
 import HeroColorPicker from './HeroColorPicker';
 import TrippySkinPanel from './TrippySkinPanel';
@@ -23,7 +26,7 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
   const { t } = useTranslation();
   const [supported, setSupported] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [surface, setSurface] = useState<'abilities' | 'skin'>('abilities');
+  const [surface, setSurface] = useFoundryDraft(`effects:${heroName}:surface`, z.enum(['abilities', 'skin']), 'abilities');
   // Applied dots on the surface toggle, reported up by each child panel.
   const [abilitiesApplied, setAbilitiesApplied] = useState(false);
   const [skinApplied, setSkinApplied] = useState(false);
@@ -44,23 +47,8 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
     };
   }, [heroName]);
 
-  const surfaceBtn = (selected: boolean) =>
-    `flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-      selected
-        ? 'border border-accent/40 bg-accent/10 text-text-primary'
-        : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-    }`;
-
   return (
     <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">{t('locker.effects.effects')}</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-          {t('locker.effects.experimental')}
-        </span>
-      </div>
-
       {error && (
         <div className="flex items-start gap-2 py-2 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -84,24 +72,10 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
         <>
           {/* Surface toggle: ability particles vs body/gun materials. These are
               independent slots; each keeps its own applied dot. */}
-          <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setSurface('abilities')}
-              className={surfaceBtn(surface === 'abilities')}
-            >
-              <Zap className="h-3.5 w-3.5" /> {t('locker.effects.abilities')}
-              {abilitiesApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSurface('skin')}
-              className={surfaceBtn(surface === 'skin')}
-            >
-              <Shirt className="h-3.5 w-3.5" /> {t('locker.effects.bodyGun')}
-              {skinApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-            </button>
-          </div>
+          <SegmentedControl value={surface} onChange={setSurface} options={[
+            { value: 'abilities', label: <span className="flex items-center gap-2">{t('locker.effects.abilities')}{abilitiesApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}</span> },
+            { value: 'skin', label: <span className="flex items-center gap-2">{t('locker.effects.bodyGun')}{skinApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}</span> },
+          ]} />
 
           {/* Both stay mounted so applied dots track without refetch churn and
               in-flight slider state survives flipping between surfaces. */}

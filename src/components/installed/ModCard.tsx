@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
@@ -43,6 +43,7 @@ interface ModCardProps {
     outdatedVdataEnabled?: boolean;
     staleModels?: Mod['staleModels'];
     id: string;
+    metaKey?: string;
     name: string;
     fileName: string;
     enabled: boolean;
@@ -50,6 +51,7 @@ interface ModCardProps {
     size: number;
     installedAt: string;
     thumbnailUrl?: string;
+    movementFx?: Mod['movementFx'];
     audioUrl?: string;
     sourceSection?: string;
     categoryName?: string;
@@ -79,6 +81,8 @@ interface ModCardProps {
    *  The rest need a manual extract or unmerge. */
   updatableSourceCount?: number;
   onOpenDetails?: () => void;
+  onOpenDoorStuck?: () => void;
+  previewMetaKey?: string;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
@@ -224,6 +228,7 @@ function ModMediaPreview({
   const image = (
     <ModThumbnail
       src={mod.thumbnailUrl}
+      movementFx={mod.movementFx}
       alt={mod.name}
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
@@ -686,6 +691,7 @@ function ModListRowContent({
         ) : (
           <ModThumbnail
             src={mod.thumbnailUrl}
+            movementFx={mod.movementFx}
             alt={mod.name}
             nsfw={mod.nsfw}
             hideNsfw={hideNsfwPreviews}
@@ -805,6 +811,8 @@ export function ModCard({
   staleSourceCount = 0,
   updatableSourceCount = 0,
   onOpenDetails,
+  onOpenDoorStuck,
+  previewMetaKey,
   onViewAuthor,
   onToggle,
   onSoloLaunch,
@@ -1204,6 +1212,7 @@ export function ModCard({
           {t('installed.imprintDetails.menuEntry')}
         </MenuItem>
       )}
+      {onOpenDoorStuck && <MenuItem icon={Hammer} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {hasSecondaryActions && <MenuSeparator />}
       {onSoloLaunch && (
         <MenuItem icon={Beaker} disabled={soloBusy} onSelect={onSoloLaunch}>
@@ -1397,6 +1406,8 @@ export function ModCard({
     <div
       ref={cardRef}
       data-mod-entry-key={entryKey}
+      data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
       onPointerEnter={() => {
         pointerInside.current = true;
         if (shiftHeld && !selectMode) setHovered(true);

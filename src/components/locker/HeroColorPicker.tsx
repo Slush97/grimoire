@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useFoundryDraft } from '../../lib/useFoundryDraft';
+import { heroColorDraftSchema } from '../../lib/effectDraftSchema';
 import { useTranslation } from 'react-i18next';
 import {
   Palette,
@@ -145,32 +147,34 @@ const q = (x: number): number => Math.round(x * 100) / 100;
  */
 export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColorPickerProps) {
   const { t } = useTranslation();
+  const [draft, setDraft] = useFoundryDraft(`effects:${heroName}:abilities`, heroColorDraftSchema.nullable(), null);
+  const restored = useRef(draft);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // The target currently applied in-game (null when none), and the live picks.
   const [activeHue, setActiveHue] = useState<number | null>(null);
   const [activeSaturation, setActiveSaturation] = useState<number | null>(null);
   const [activeBrightness, setActiveBrightness] = useState<number | null>(null);
-  const [hue, setHue] = useState(DEFAULT_HUE);
-  const [saturation, setSaturation] = useState(DEFAULT_SCALE);
-  const [brightness, setBrightness] = useState(DEFAULT_SCALE);
+  const [hue, setHue] = useState(draft?.hue ?? DEFAULT_HUE);
+  const [saturation, setSaturation] = useState(draft?.saturation ?? DEFAULT_SCALE);
+  const [brightness, setBrightness] = useState(draft?.brightness ?? DEFAULT_SCALE);
   // Recolor mode: a single picked color, the rainbow prism, or a custom
   // gradient. All three share the one-per-hero slot.
-  const [mode, setMode] = useState<ColorMode>('hue');
-  const [animated, setAnimated] = useState(false);
+  const [mode, setMode] = useState<ColorMode>(draft?.mode ?? 'hue');
+  const [animated, setAnimated] = useState(draft?.animated ?? false);
   // Gradient mode: the chosen preset name (or 'custom') and the custom editor stops.
-  const [gradientPreset, setGradientPreset] = useState<string>(GRADIENT_PRESETS[0].name);
-  const [customStops, setCustomStops] = useState<GStop[]>(DEFAULT_CUSTOM_STOPS);
+  const [gradientPreset, setGradientPreset] = useState<string>(draft?.gradientPreset ?? GRADIENT_PRESETS[0].name);
+  const [customStops, setCustomStops] = useState<GStop[]>(draft?.customStops ?? DEFAULT_CUSTOM_STOPS);
   // Trippy mode: a procedural pattern paint over the same slot (style + strength
   // + phase, plus how the particles animate at runtime and which sets to touch).
-  const [trippyStyle, setTrippyStyle] = useState<TrippyStyleName>(TRIPPY_DEFAULTS.style);
-  const [trippyIntensity, setTrippyIntensity] = useState(TRIPPY_DEFAULTS.intensity);
-  const [trippyPhase, setTrippyPhase] = useState(TRIPPY_DEFAULTS.phase);
+  const [trippyStyle, setTrippyStyle] = useState<TrippyStyleName>(draft?.trippyStyle ?? TRIPPY_DEFAULTS.style);
+  const [trippyIntensity, setTrippyIntensity] = useState(draft?.trippyIntensity ?? TRIPPY_DEFAULTS.intensity);
+  const [trippyPhase, setTrippyPhase] = useState(draft?.trippyPhase ?? TRIPPY_DEFAULTS.phase);
   const [trippyAnimStyle, setTrippyAnimStyle] = useState<TrippyAnimationStyle>(
-    TRIPPY_DEFAULTS.animationStyle,
+    draft?.trippyAnimStyle ?? TRIPPY_DEFAULTS.animationStyle,
   );
-  const [trippyAnimIntensity, setTrippyAnimIntensity] = useState(TRIPPY_DEFAULTS.animationIntensity);
-  const [trippyTargets, setTrippyTargets] = useState<TrippyVfxTargets>(TRIPPY_DEFAULTS.targets);
+  const [trippyAnimIntensity, setTrippyAnimIntensity] = useState(draft?.trippyAnimIntensity ?? TRIPPY_DEFAULTS.animationIntensity);
+  const [trippyTargets, setTrippyTargets] = useState<TrippyVfxTargets>(draft?.trippyTargets ?? TRIPPY_DEFAULTS.targets);
   // What's applied in-game: the mode (null = nothing; 'trippy' is read-only
   // here), its animated flag, gradient, and the trippy params when applicable.
   const [activeMode, setActiveMode] = useState<ColorMode | 'trippy' | null>(null);
@@ -199,16 +203,18 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
     setPreviewUrl(null);
     setPreviewFailed(false);
     setPreviewUnavailable(false);
-    setMode('hue');
-    setAnimated(false);
-    setGradientPreset(GRADIENT_PRESETS[0].name);
-    setCustomStops(DEFAULT_CUSTOM_STOPS);
-    setTrippyStyle(TRIPPY_DEFAULTS.style);
-    setTrippyIntensity(TRIPPY_DEFAULTS.intensity);
-    setTrippyPhase(TRIPPY_DEFAULTS.phase);
-    setTrippyAnimStyle(TRIPPY_DEFAULTS.animationStyle);
-    setTrippyAnimIntensity(TRIPPY_DEFAULTS.animationIntensity);
-    setTrippyTargets(TRIPPY_DEFAULTS.targets);
+    if (!restored.current) {
+      setMode('hue');
+      setAnimated(false);
+      setGradientPreset(GRADIENT_PRESETS[0].name);
+      setCustomStops(DEFAULT_CUSTOM_STOPS);
+      setTrippyStyle(TRIPPY_DEFAULTS.style);
+      setTrippyIntensity(TRIPPY_DEFAULTS.intensity);
+      setTrippyPhase(TRIPPY_DEFAULTS.phase);
+      setTrippyAnimStyle(TRIPPY_DEFAULTS.animationStyle);
+      setTrippyAnimIntensity(TRIPPY_DEFAULTS.animationIntensity);
+      setTrippyTargets(TRIPPY_DEFAULTS.targets);
+    }
     Promise.all([
       getActiveHeroColor(heroName),
       getGameRunningStatus().catch(() => ({ running: false })),
@@ -223,7 +229,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
         setActiveAnimated(active?.animated ?? false);
         setActiveGradient(active?.gradient ?? null);
         setActiveTrippy(activeM === 'trippy' ? (active?.trippy ?? null) : null);
-        if (active && (activeM === 'prism' || activeM === 'gradient')) {
+        if (!restored.current && active && (activeM === 'prism' || activeM === 'gradient')) {
           setMode(activeM);
           setAnimated(active.animated ?? false);
           setHue(active.hue);
@@ -234,7 +240,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             setGradientPreset(parsed.preset);
             setCustomStops(parsed.stops);
           }
-        } else if (active && activeM === 'trippy') {
+        } else if (!restored.current && active && activeM === 'trippy') {
           // Trippy holds the slot: reflect its params so the picker reads back.
           setMode('trippy');
           const t = active.trippy ?? TRIPPY_DEFAULTS;
@@ -244,7 +250,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           setTrippyAnimStyle(t.animationStyle);
           setTrippyAnimIntensity(t.animationIntensity);
           setTrippyTargets(t.targets);
-        } else if (active) {
+        } else if (!restored.current && active) {
           setHue(active.hue);
           setSaturation(active.saturation);
           setBrightness(active.brightness);
@@ -262,6 +268,11 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
     };
   }, [heroName]);
 
+  useLayoutEffect(() => {
+    if (!loading) setDraft({ hue, saturation, brightness, mode, animated, gradientPreset, customStops,
+      trippyStyle, trippyIntensity, trippyPhase, trippyAnimStyle, trippyAnimIntensity, trippyTargets });
+  }, [loading, hue, saturation, brightness, mode, animated, gradientPreset, customStops,
+    trippyStyle, trippyIntensity, trippyPhase, trippyAnimStyle, trippyAnimIntensity, trippyTargets, setDraft]);
   const applied = activeMode !== null;
   useEffect(() => {
     onAppliedChange?.(applied);

@@ -98,6 +98,18 @@ try {
     const page = await application.firstWindow({ timeout: 30000 });
     await page.waitForURL('file:///**/app.asar/dist/renderer/index.html');
     await page.locator('#root > *').first().waitFor({ state: 'visible' });
+    if (process.platform !== 'darwin') {
+        const menuCanAppear = await application.evaluate(({ BrowserWindow }) => {
+            const window = BrowserWindow.getAllWindows()[0];
+            window.setMenuBarVisibility(true);
+            return window.isMenuBarVisible();
+        });
+        assert.equal(menuCanAppear, false, 'The native window menu must stay removed, including after Alt');
+        await page.keyboard.press('Alt');
+        const menuVisible = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMenuBarVisible());
+        assert.equal(menuVisible, false, 'Alt must stay available to renderer previews without opening the native menu');
+        console.log('PASS native menu stays removed after Alt');
+    }
     const ipc = await page.evaluate(async () => ({
         version: await window.electronAPI.updater.getVersion(),
         settings: await window.electronAPI.getSettings(),
