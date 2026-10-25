@@ -41,6 +41,7 @@ import {
   List,
   LayoutGrid,
   Grid3x3,
+  Grid2x2,
   Check,
   CheckSquare,
   Wrench,
@@ -4121,7 +4122,7 @@ export default function Installed() {
                       }`}
                       title={t('installed.view.cardSizeHint')}
                     >
-                      <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                      <Grid3x3 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                       <input
                         type="range"
                         min={CARD_SIZE_MULTIPLIER_MIN}
@@ -4134,7 +4135,7 @@ export default function Installed() {
                         aria-valuetext={`${cardSizeMultiplier.toFixed(2)}x card size`}
                         className="h-1.5 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                       />
-                      <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                      <Grid2x2 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                     </div>
                     {layout === 'list' && (
                       <p className="mt-1.5 text-2xs text-text-secondary">

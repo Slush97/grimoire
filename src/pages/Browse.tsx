@@ -11,6 +11,7 @@ import {
   RefreshCw,
   LayoutGrid,
   Grid3x3,
+  Grid2x2,
   List,
   AlertTriangle,
   Funnel,
@@ -2667,7 +2668,7 @@ export default function Browse() {
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</div>
                       <div className="flex items-center gap-2">
-                        <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <Grid3x3 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                         <input
                           type="range"
                           min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
@@ -2680,7 +2681,7 @@ export default function Browse() {
                           aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
                           className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                         />
-                        <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <Grid2x2 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                       </div>
                     </div>
 
