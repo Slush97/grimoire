@@ -40,7 +40,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 - **Buttons:** `Button` (primary, secondary, ghost, danger, success, warning, update; sm/md; `icon`, `isLoading`) or `IconButton` (icon-only, `label` required, doubles as tooltip). One primary per view. Toolbars use ghost. Danger belongs in confirmations, not on every row.
 - **Pick-one toggles:** `SegmentedControl`. One toggle style; no pills.
-- **Form controls:** `Input`, `Textarea`, `Select`, `FormField` from `forms.tsx`. Domain pickers (`HeroSelect`, `DynamicSelect`) are the exceptions.
+- **Form controls:** `Input`, `Textarea`, `Select`, `DropdownSelect`, `FormField` from `forms.tsx`. `Select` uses the native option menu; `DropdownSelect` provides the shared custom menu with optional icons and search. `HeroSelect` adds hero icons to it for Browse, Installed, and Locker tagging. `DynamicSelect` sizes a native select to its selected label.
 - **Overlays:** `Modal` + `ModalHeader` for dialogs, `ConfirmModal` for confirmations, the `menu.tsx` family for context menus, `showToast()` for transient feedback.
 - **Drag previews:** portal `DragOverlay` to `document.body`. Its coordinates are relative to the viewport; blur and transforms on a containing panel would offset or clip it. Keep the overlay mounted, disable its pointer events, and use the z-index ladder.
 - **Status:** `Tag` (HUD-style card markers), `Badge` (pills), `Skeleton` (placeholders).

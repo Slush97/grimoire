@@ -5,6 +5,7 @@ import {
   Loader2,
   Eye,
   EyeClosed,
+  EyeDashed,
   EyeOff,
   X,
   RefreshCw,
@@ -32,7 +33,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { useStableCallback } from '../lib/useStableCallback';
-import { browseRemoteFilters } from '../lib/browseFilters';
+import { browseNsfwFilter, browseRemoteFilters, type BrowseContentMode } from '../lib/browseFilters';
 import { categorySubtreeIds } from '../lib/heroFilter';
 import {
   isModDownloadPending,
@@ -60,9 +61,9 @@ import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
+import { DropdownSelect } from '../components/common/forms';
 import { AnchoredPopover } from '../components/common/AnchoredPopover';
 import { Button } from '../components/common/ui';
-import { Select } from '../components/common/forms';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { checkQuickInstallRequirements } from '../stores/requirementsStore';
@@ -414,7 +415,7 @@ export default function Browse() {
   );
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
+  const { search, layout, sort, section, selectedSections, addedWithin, addedFrom, addedTo, onlyNsfw, heroCategoryId, categoryId, submitter, hiddenCreatorOverrideId } = browseUi;
   const sectionStamp = selectedSections.slice().sort().join(',');
   const combinedFeed = selectedSections.length > 1;
   // Artist mode: the grid is scoped to one submitter's mods and Browse shows an
@@ -434,19 +435,25 @@ export default function Browse() {
   const setAddedTo = useCallback((v: string) => setBrowseUi({ addedTo: v }), [setBrowseUi]);
   const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
+  const clearBrowseFilters = useCallback(() => setBrowseUi({
+    heroCategoryId: 'all', categoryId: 'all', onlyNsfw: false,
+    addedWithin: 'all', addedFrom: '', addedTo: '',
+  }), [setBrowseUi]);
   const setBrowseCardSizeMultiplier = useCallback((nextMultiplier: number) => {
     const clampedMultiplier = clampBrowseCardSizeMultiplier(nextMultiplier);
     setBrowseCardSizeMultiplierState(clampedMultiplier);
     localStorage.setItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY, String(clampedMultiplier));
   }, []);
-  // Mirrors the Settings control: both write the one app-wide setting.
+  // Show, Blur and Hide mirror Settings. Only narrows this Browse session.
   const nsfwContentMode: NsfwContentMode = settings?.nsfwContentMode ?? 'blur';
-  const browseBlurNsfwPreviews = shouldBlurNsfw(settings);
-  const nsfw = nsfwContentMode === 'hide' ? 'sfw' : 'all';
-  const setNsfwContentMode = useCallback((mode: NsfwContentMode) => {
-    if (!settings) return;
-    void saveSettings({ ...settings, nsfwContentMode: mode });
-  }, [saveSettings, settings]);
+  const browseBlurNsfwPreviews = !onlyNsfw && shouldBlurNsfw(settings);
+  const nsfw = browseNsfwFilter(nsfwContentMode, onlyNsfw);
+  const setBrowseContentMode = useCallback((mode: BrowseContentMode) => {
+    setBrowseUi({ onlyNsfw: mode === 'only' });
+    if (mode !== 'only' && settings && mode !== nsfwContentMode) {
+      void saveSettings({ ...settings, nsfwContentMode: mode });
+    }
+  }, [saveSettings, setBrowseUi, settings, nsfwContentMode]);
   const setBrowseHideOutdated = useCallback((checked: boolean) => {
     if (!settings) return;
     void saveSettings({ ...settings, hideOutdatedMods: checked });
@@ -1007,7 +1014,7 @@ export default function Browse() {
       const ui = useAppStore.getState().browseUi;
       const liveSettings = useAppStore.getState().settings;
       const liveHiddenCreators = liveSettings?.hiddenCreators ?? [];
-      const liveNsfw = liveSettings?.nsfwContentMode === 'hide' ? 'sfw' : 'all';
+      const liveNsfw = browseNsfwFilter(liveSettings?.nsfwContentMode ?? 'blur', ui.onlyNsfw);
       const stamp = `${ui.selectedSections.slice().sort().join(',')}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${liveNsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}|${ui.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorIdsStamp(liveHiddenCreators)}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
@@ -2169,12 +2176,12 @@ export default function Browse() {
     if (!combinedFeed && section === 'Sound' && heroCategoryId === 'none') {
       nextMods = nextMods.filter((m) => inferHeroFromTitle(m.name) === null);
     }
-    // Hide mode is only enforced server-side by the local-search path. The
+    // Content filtering is only enforced server-side by the local-search path. The
     // remote paths (artist mode, and the no-local-cache fallback) return
     // unfiltered records, so enforce it here too. Local results already match,
     // so re-filtering them is a no-op.
-    if (nsfw === 'sfw') {
-      nextMods = nextMods.filter((m) => !m.nsfw);
+    if (nsfw !== 'all') {
+      nextMods = nextMods.filter((m) => Boolean(m.nsfw) === (nsfw === 'nsfw'));
     }
 
     return nextMods;
@@ -2563,10 +2570,10 @@ export default function Browse() {
                 open={importMenuOpen}
                 onClose={closeImportMenu}
                 anchorRef={importMenuRef}
-                width={256}
+                width={288}
                 role="menu"
                 ariaLabel={t('profiles.actions.import')}
-                className="p-1"
+                className="p-3"
               >
                 <button
                   type="button"
@@ -2575,7 +2582,7 @@ export default function Browse() {
                     setImportMenuOpen(false);
                     setCollectionModalOpen(true);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-3 px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
                 >
                   <Library className="w-4 h-4 text-text-secondary shrink-0" />
                   <div className="flex flex-col min-w-0">
@@ -2590,7 +2597,7 @@ export default function Browse() {
                     setImportMenuOpen(false);
                     setImportProfileOpen(true);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-3 px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
                 >
                   <Upload className="w-4 h-4 text-text-secondary shrink-0" />
                   <div className="flex flex-col min-w-0">
@@ -2796,6 +2803,7 @@ export default function Browse() {
               const filterCount =
                 (heroCategoryId !== 'all' ? 1 : 0) +
                 (categoryId !== 'all' ? 1 : 0) +
+                (onlyNsfw ? 1 : 0) +
                 (addedWithin !== 'all' ? 1 : 0);
               return (
                 <div className="relative flex-shrink-0" ref={filtersRef}>
@@ -2826,33 +2834,26 @@ export default function Browse() {
                     anchorRef={filtersRef}
                     width={288}
                     ariaLabel={t('browse.filters.title')}
-                    className="p-4"
+                    className="p-3"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-semibold text-text-primary">{t('browse.filters.title')}</h4>
-                      {filterCount > 0 && (
+                    {filterCount > 0 && (
+                      <div className="mb-3 flex justify-end">
                         <button
                           type="button"
-                          onClick={() => {
-                            setHeroCategoryId('all');
-                            setCategoryId('all');
-                            setAddedWithin('all');
-                            setAddedFrom('');
-                            setAddedTo('');
-                          }}
+                          onClick={clearBrowseFilters}
                           className="text-xs text-text-secondary hover:text-accent cursor-pointer"
                         >
                           {t('browse.filters.clearAll')}
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       {heroOptions.length > 0 && (
                         <div className="block">
                           <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
                           <HeroSelect
-                            ariaLabel="Filter by hero"
+                            ariaLabel={t('browse.filters.filterByHero')}
                             value={String(heroCategoryId)}
                             placeholder={t('browse.filters.allHeroes')}
                             onChange={(v) => {
@@ -2872,10 +2873,10 @@ export default function Browse() {
                             ]}
                             search={{
                               ariaLabel: t('browse.filters.searchHeroesAria'),
-                              placeholder: t('browse.filters.heroFilterPlaceholder'),
+                              placeholder: t('browse.filters.filterPlaceholder'),
                               getEmptyMessage: (query) =>
-                                t('browse.filters.noHeroesMatch', { query }),
-                              clearLabel: t('browse.filters.clearHeroSearch'),
+                                t('browse.filters.noOptionsMatch', { query }),
+                              clearLabel: t('browse.filters.clearSearch'),
                             }}
                           />
                         </div>
@@ -2884,36 +2885,41 @@ export default function Browse() {
                       {!combinedFeed && categoryOptions.length > 0 && (
                         <div className="block">
                           <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                          <Select
-                            aria-label={t('browse.filters.filterByCategory')}
+                          <DropdownSelect
+                            ariaLabel={t('browse.filters.filterByCategory')}
                             value={String(categoryId)}
-                            onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                            onChange={(value) => setCategoryId(value === 'all' ? 'all' : Number(value))}
                             disabled={heroCategoryId !== 'all'}
-                          >
-                            <option value="all">{t('browse.filters.allCategories')}</option>
-                            {categoryOptions.map((cat) => (
-                              <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
-                            ))}
-                          </Select>
+                            options={[
+                              { value: 'all', label: t('browse.filters.allCategories') },
+                              ...categoryOptions.map((cat) => ({ value: String(cat.id), label: cat.label })),
+                            ]}
+                            search={{
+                              ariaLabel: t('browse.filters.searchCategoriesAria'),
+                              placeholder: t('browse.filters.filterPlaceholder'),
+                              getEmptyMessage: (query) => t('browse.filters.noOptionsMatch', { query }),
+                              clearLabel: t('browse.filters.clearSearch'),
+                            }}
+                          />
                           {heroCategoryId !== 'all' && (
                             <span className="block text-2xs text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                           )}
                         </div>
                       )}
 
-                      {/* Not a session filter: this is the app-wide NSFW
-                          setting, shared with Settings > Privacy & Content, so
-                          it isn't counted or reset by Clear all. */}
+                      {/* Show, Blur and Hide share the app-wide preference.
+                          Only is a session filter, counted and cleared above. */}
                       <div className="block">
-                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                        <BrowseViewOptionControl<NsfwContentMode>
+                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.nsfwContent')}</span>
+                        <BrowseViewOptionControl<BrowseContentMode>
                           label={t('browse.viewOptions.nsfwContent')}
-                          value={nsfwContentMode}
-                          onChange={setNsfwContentMode}
+                          value={onlyNsfw ? 'only' : nsfwContentMode}
+                          onChange={setBrowseContentMode}
                           options={[
                             { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
                             { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
                             { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                            { value: 'only', label: t('browse.viewOptions.only'), icon: EyeDashed },
                           ]}
                         />
                       </div>
@@ -2933,18 +2939,19 @@ export default function Browse() {
 
                       <div className="block">
                         <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                        <Select
-                          aria-label={t('browse.filters.filterByDateAdded')}
+                        <DropdownSelect
+                          ariaLabel={t('browse.filters.filterByDateAdded')}
                           value={addedWithin}
                           disabled={!hasLocalCache}
-                          onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                        >
-                          <option value="all">{t('browse.filters.anyTime')}</option>
-                          <option value="today">{t('browse.filters.today')}</option>
-                          <option value="week">{t('browse.filters.thisWeek')}</option>
-                          <option value="month">{t('browse.filters.thisMonth')}</option>
-                          <option value="custom">{t('browse.filters.customRange')}</option>
-                        </Select>
+                          onChange={(value) => setAddedWithin(value as BrowseTimeRange)}
+                          options={[
+                            { value: 'all', label: t('browse.filters.anyTime') },
+                            { value: 'today', label: t('browse.filters.today') },
+                            { value: 'week', label: t('browse.filters.thisWeek') },
+                            { value: 'month', label: t('browse.filters.thisMonth') },
+                            { value: 'custom', label: t('browse.filters.customRange') },
+                          ]}
+                        />
                         {addedWithin === 'custom' && (
                           <div className="mt-2 grid grid-cols-2 gap-2">
                             <label className="block">
@@ -2985,6 +2992,7 @@ export default function Browse() {
         {(() => {
           const hasActiveFilters =
             search.trim().length > 0 ||
+            onlyNsfw ||
             heroCategoryId !== 'all' ||
             categoryId !== 'all' ||
             sort !== 'default' ||
@@ -3038,12 +3046,8 @@ export default function Browse() {
                     <Button
                       onClick={() => {
                         setSearch('');
-                        setHeroCategoryId('all');
-                        setCategoryId('all');
                         setSort('default');
-                        setAddedWithin('all');
-                        setAddedFrom('');
-                        setAddedTo('');
+                        clearBrowseFilters();
                       }}
                     >
                       {t('browse.filters.clearFilters')}

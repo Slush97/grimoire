@@ -193,6 +193,8 @@ export interface BrowseUiState {
   addedWithin: BrowseTimeRange;
   addedFrom: string;
   addedTo: string;
+  // Only narrows Browse; Show, Blur and Hide remain app-wide preferences.
+  onlyNsfw: boolean;
   // 'none' is a Sound-only pseudo-hero: "show me sound mods whose title
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
@@ -277,6 +279,7 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   addedWithin: 'all',
   addedFrom: '',
   addedTo: '',
+  onlyNsfw: false,
   heroCategoryId: 'all',
   categoryId: 'all',
   categoryIdsBySection: {},

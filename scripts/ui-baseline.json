@@ -58,9 +58,6 @@
   "src/components/common/ErrorBoundary.tsx": {
     "raw-palette": 3
   },
-  "src/components/common/HeroSelect.tsx": {
-    "focus-ring": 2
-  },
   "src/components/common/ToastStack.tsx": {
     "raw-palette": 6
   },

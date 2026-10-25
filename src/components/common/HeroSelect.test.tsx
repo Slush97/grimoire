@@ -4,6 +4,7 @@ import { act, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroSelect } from './HeroSelect';
+import { DropdownSelect } from './forms';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -63,7 +64,7 @@ function BrowseFilterHarness() {
   );
 }
 
-describe('HeroSelect inside a dismissable popover', () => {
+describe('DropdownSelect and hero selectors', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -92,9 +93,9 @@ describe('HeroSelect inside a dismissable popover', () => {
     return trigger!;
   };
 
-  const enterSearch = (query: string) => {
+  const enterSearch = (query: string, label = 'Search heroes') => {
     const input = document.querySelector<HTMLInputElement>(
-      'input[aria-label="Search heroes"]'
+      `input[aria-label="${label}"]`
     );
     expect(input).not.toBeNull();
     act(() => {
@@ -239,5 +240,53 @@ describe('HeroSelect inside a dismissable popover', () => {
     );
     expect(reopenedInput?.value).toBe('');
     expect(document.activeElement).toBe(reopenedInput);
+  });
+
+  it('filters category labels and selects a result without hero icons', () => {
+    const change = vi.fn();
+    act(() => root.render(<DropdownSelect
+      ariaLabel="Category" value="all" onChange={change}
+      options={[{ value: 'all', label: 'All categories' }, { value: 'skins', label: 'Skins' }, { value: 'hud', label: 'HUD' }]}
+      search={{ ariaLabel: 'Search categories', placeholder: 'Filter...', getEmptyMessage: query => `No matches for ${query}`, clearLabel: 'Clear' }}
+    />));
+    act(() => host.querySelector('button')!.click());
+    const input = enterSearch('HUD', 'Search categories');
+    expect([...document.querySelectorAll('[role="option"]')].map(option => option.textContent)).toEqual(['HUD']);
+    expect(document.querySelector('[role="listbox"] img')).toBeNull();
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    act(() => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(change).toHaveBeenCalledExactlyOnceWith('hud');
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it('keeps Added free of a search field and supports keyboard selection', () => {
+    const change = vi.fn();
+    act(() => root.render(<DropdownSelect
+      ariaLabel="Added" value="all" onChange={change}
+      options={[{ value: 'all', label: 'Any time' }, { value: 'today', label: 'Today' }, { value: 'week', label: 'This week' }]}
+    />));
+    act(() => host.querySelector('button')!.click());
+    expect(document.querySelector('[role="searchbox"]')).toBeNull();
+    act(() => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })));
+    expect(document.activeElement?.textContent).toBe('This week');
+    act(() => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(change).toHaveBeenCalledExactlyOnceWith('week');
+  });
+
+  it('closes a disabled picker and leaves it closed when re-enabled', () => {
+    const render = (disabled: boolean) => act(() => root.render(<DropdownSelect
+      ariaLabel="Category" value="all" onChange={vi.fn()} disabled={disabled}
+      options={[{ value: 'all', label: 'All categories' }]}
+    />));
+    render(true);
+    act(() => host.querySelector('button')!.click());
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    render(false);
+    act(() => host.querySelector('button')!.click());
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    render(true);
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    render(false);
+    expect(host.querySelector('button')!.getAttribute('aria-expanded')).toBe('false');
   });
 });
