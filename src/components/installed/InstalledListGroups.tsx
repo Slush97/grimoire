@@ -8,8 +8,8 @@ import { EmptyState } from '../common/PageComponents';
 import { ModListGlyph } from './ModListIcon';
 import { installedListEntryKey, UNLISTED_GROUP_ID, type InstalledListGroup } from '../../lib/installedListGroups';
 import { entryDisabledPreferenceKey, entryName, type ModEntry } from '../../lib/modEntries';
-import { buildListDragItems, canDropListItem, listDropId, listHeaderDragId, type ModListDrag } from '../../lib/modListDrag';
-import { InstalledListEntryDrag } from './InstalledListEntryDrag';
+import { buildListDragItems, canDropListItem, listDropId, listDropSlotIndex, listHeaderDragId, type ModListDrag } from '../../lib/modListDrag';
+import { InstalledListEntryDrag, type ListArrivalPoint } from './InstalledListEntryDrag';
 
 interface GridProps {
   gridClassName: string;
@@ -18,6 +18,7 @@ interface GridProps {
 }
 interface ListGroupsProps extends GridProps {
   groups: readonly InstalledListGroup[];
+  entryOrder: ReadonlyMap<string, number>;
   collapsed: ReadonlySet<string>;
   showEmpty: boolean;
   mountLimit: number;
@@ -28,7 +29,7 @@ interface ListGroupsProps extends GridProps {
   dragDisabled: boolean;
   pauseUpdates: boolean;
 }
-interface Arrival { key: string; targetId: string }
+interface Arrival { key: string; targetId: string; from: ListArrivalPoint | null }
 
 function ListHeaderGrip({ group, disabled, onManage }: {
   group: InstalledListGroup;
@@ -43,7 +44,7 @@ function ListHeaderGrip({ group, disabled, onManage }: {
     {...attributes} {...listeners} />;
 }
 
-function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDisabled, active, arrival, gridClassName, gridStyle, renderEntry }: GridProps & {
+function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDisabled, active, dragHeight, entryOrder, arrival, gridClassName, gridStyle, renderEntry }: GridProps & {
   group: InstalledListGroup;
   collapsed: boolean;
   mountLimit: number;
@@ -51,6 +52,8 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
   onManage: (id?: string) => void;
   dragDisabled: boolean;
   active: ModListDrag | null;
+  dragHeight: number;
+  entryOrder: ReadonlyMap<string, number>;
   arrival: Arrival | null;
 }) {
   const { t } = useTranslation();
@@ -63,15 +66,23 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
   const over = isOver && active && canDropListItem(active, group.id);
   const landed = arrival?.targetId === group.id;
   const incomingKey = landed ? arrival.key : null;
+  const arrivalFrom = landed ? arrival.from : null;
   const cards = useMemo(() => group.entries.slice(0, mountLimit).map((entry) => {
     const occurrence = installedListEntryKey(group.id, entry);
     return <InstalledListEntryDrag key={occurrence} id={occurrence} entry={entry} disabled={dragDisabled}
-      arriving={incomingKey === entryDisabledPreferenceKey(entry)}>
+      arriving={incomingKey === entryDisabledPreferenceKey(entry)} arrivalFrom={arrivalFrom}>
       {renderEntry(entry, occurrence)}
     </InstalledListEntryDrag>;
-  }), [group.entries, group.id, mountLimit, dragDisabled, incomingKey, renderEntry]);
-  return <section ref={setNodeRef} data-mod-list={group.id} data-drop-complete={landed || undefined}
-    className={'rounded-sm ' + (over ? 'bg-accent/5 ring-2 ring-inset ring-accent' : '')}>
+  }), [group.entries, group.id, mountLimit, dragDisabled, incomingKey, arrivalFrom, renderEntry]);
+  // Reserve destinations on pickup so hovering cannot move other list headers.
+  const slotIndex = active?.kind === 'entry' && canDropListItem(active, group.id) ? listDropSlotIndex(group.entries, active.entry, entryOrder) : null;
+  const slot = slotIndex === null ? null : <div key="drop-slot" data-list-drop-slot={group.id} data-drop-index={slotIndex} aria-hidden
+    style={{ height: group.entries.length ? dragHeight || 160 : Math.min(dragHeight || 160, 72) }} className={'pointer-events-none flex items-center justify-center rounded-xl border-2 border-dashed transition-colors motion-reduce:transition-none ' + (over ? 'border-accent/60 bg-accent/5 text-accent/80' : 'border-border text-text-tertiary')}>
+    <Plus className="h-8 w-8" aria-hidden />
+  </div>;
+  const displayedCards = slot ? [...cards.slice(0, slotIndex ?? 0), slot, ...cards.slice(slotIndex ?? 0)] : cards;
+  return <section ref={setNodeRef} data-mod-list={group.id} data-drop-active={over || undefined} data-drop-complete={landed || undefined}
+    className={'rounded-sm ' + (over ? 'outline outline-2 outline-offset-4 outline-accent' : '')}>
     <div className="group/list-header flex items-center gap-2">
       <h2 className="min-w-0 flex-1">
         <button type="button" aria-expanded={!collapsed} aria-controls={contentId} onClick={onToggle}
@@ -95,8 +106,8 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
     </div>
     <div id={contentId} hidden={collapsed}>
       {!collapsed && <div className="pb-4">
-        {group.entries.length > 0 ? <div className={gridClassName} style={gridStyle}>
-          {cards}
+        {group.entries.length > 0 || slot ? <div className={gridClassName} style={gridStyle}>
+          {displayedCards}
         </div> : isList ? <div className="py-3">
           <Button variant="ghost" size="sm" icon={Plus} disabled={dragDisabled} onClick={() => onManage(group.id)}>{t('installed.lists.addMods')}</Button>
         </div> : <div className="h-8" />}
@@ -105,9 +116,10 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
   </section>;
 }
 
-function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onToggle, onManage, onMove, onReorder, dragDisabled, gridClassName, gridStyle, renderEntry }: ListGroupsProps) {
+function InstalledListGroupsView({ groups, entryOrder, collapsed, showEmpty, mountLimit, onToggle, onManage, onMove, onReorder, dragDisabled, gridClassName, gridStyle, renderEntry }: ListGroupsProps) {
   const { t } = useTranslation();
   const [active, setActive] = useState<ModListDrag | null>(null);
+  const [dragHeight, setDragHeight] = useState(0);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const keyboardTarget = useRef<string | null>(null);
@@ -117,7 +129,7 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
   const targets = useMemo(() => new Map(dropGroups.map((group) => [listDropId(group.id), group])), [dropGroups]);
   useEffect(() => {
     if (!arrival) return;
-    const timer = window.setTimeout(() => setArrival(null), 420);
+    const timer = window.setTimeout(() => setArrival(null), 300);
     return () => window.clearTimeout(timer);
   }, [arrival]);
 
@@ -192,6 +204,8 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
     onDragStart={({ active: item }) => {
       const drag = dragItems.get(String(item.id)) ?? null;
       setActive(drag);
+      const node = document.querySelector<HTMLElement>('[data-list-drag-id="' + window.CSS.escape(String(item.id)) + '"]');
+      setDragHeight(node?.offsetHeight ?? 0);
       setArrival(null);
       keyboardTarget.current = drag?.kind === 'entry' ? drag.sourceId : drag?.id ?? null;
     }}
@@ -203,8 +217,9 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
         if (drag.kind === 'list') onReorder(drag.id, target.id);
         else {
           const key = entryDisabledPreferenceKey(drag.entry);
+          const preview = document.querySelector<HTMLElement>('[data-list-drag-preview]')?.getBoundingClientRect();
           onMove(key, drag.sourceId, target.id);
-          setArrival({ key, targetId: target.id });
+          setArrival({ key, targetId: target.id, from: preview ? { left: preview.left, top: preview.top } : null });
           if (activatorEvent.type === 'keydown') requestAnimationFrame(() => {
             const occurrence = window.CSS.escape(installedListEntryKey(target.id, drag.entry));
             const card = document.querySelector<HTMLElement>('[data-list-drag-id="' + occurrence + '"]');
@@ -221,7 +236,7 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
       : <div className="divide-y divide-border">
         {visibleGroups.map((group) => <ListSection key={group.id} group={group} collapsed={collapsed.has(group.id)}
           mountLimit={mountLimits.get(group.id) ?? 0} onToggle={() => onToggle(group.id)} onManage={onManage}
-          dragDisabled={dragDisabled} active={active} arrival={arrival} gridClassName={gridClassName} gridStyle={gridStyle} renderEntry={renderEntry} />)}
+          dragDisabled={dragDisabled} active={active} dragHeight={dragHeight} entryOrder={entryOrder} arrival={arrival} gridClassName={gridClassName} gridStyle={gridStyle} renderEntry={renderEntry} />)}
       </div>}
     {createPortal(<DragOverlay adjustScale={false} zIndex={30} dropAnimation={arrival || reducedMotion ? null : { duration: 180 }}
       style={{ pointerEvents: 'none', ...(active?.kind === 'list' ? { width: 220 } : {}) }}>

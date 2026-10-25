@@ -1,4 +1,4 @@
-import type { ModEntry } from './modEntries';
+import { entryDisabledPreferenceKey, type ModEntry } from './modEntries';
 import { installedListEntryKey, UNLISTED_GROUP_ID, type InstalledListGroup } from './installedListGroups';
 
 export type ModListDrag = { kind: 'list'; id: string } | { kind: 'entry'; entry: ModEntry; sourceId: string };
@@ -19,4 +19,14 @@ export function buildListDragItems(groups: readonly InstalledListGroup[]): Map<s
 
 export function canDropListItem(drag: ModListDrag, targetId: string): boolean {
   return drag.kind === 'list' ? targetId !== UNLISTED_GROUP_ID && targetId !== drag.id : targetId !== drag.sourceId;
+}
+
+/** Match the page's current display order without changing mod load order. */
+export function listDropSlotIndex(entries: readonly ModEntry[], incoming: ModEntry, order: ReadonlyMap<string, number>): number | null {
+  const key = entryDisabledPreferenceKey(incoming);
+  if (entries.some((entry) => entryDisabledPreferenceKey(entry) === key)) return null;
+  const position = order.get(incoming.key);
+  if (position === undefined) return entries.length;
+  const index = entries.findIndex((entry) => (order.get(entry.key) ?? Infinity) > position);
+  return index < 0 ? entries.length : index;
 }

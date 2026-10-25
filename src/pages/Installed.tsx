@@ -3247,6 +3247,7 @@ export default function Installed() {
   }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
+  const listEntryOrder = useMemo(() => new Map([...visibleEnabled, ...visibleDisabled].map((entry, index) => [entry.key, index])), [visibleEnabled, visibleDisabled]);
   const activeCollapsedLists = searchNeedle
     ? new Set(searchListState.query === searchNeedle ? searchListState.collapsed : []) : collapsedLists;
   const visibleSelection = listsView
@@ -4245,6 +4246,7 @@ export default function Installed() {
           should not get a stray button row under it). */}
       {listsView && <InstalledListGroups
         groups={listGroups}
+        entryOrder={listEntryOrder}
         collapsed={activeCollapsedLists}
         showEmpty={!searchNeedle && !filtersActive}
         onToggle={toggleList}

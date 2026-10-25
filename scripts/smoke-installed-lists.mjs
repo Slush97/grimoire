@@ -35,7 +35,8 @@ for (let i = 0; i < count; i++) {
   const bytes = Buffer.concat([header, Buffer.from(String(i))]);
   await writeFile(join(i < 18 ? addons : join(addons, '.disabled'), file), bytes);
   metadata[file] = { modName: name, sha256: createHash('sha256').update(bytes).digest('hex'), gameBananaId: 900000 + i,
-    thumbnailUrl: sample.thumbnailUrl, categoryName: sample.categoryName ?? 'Skins', sourceSection: 'Mod', nsfw: i === count - 1 };
+    thumbnailUrl: sample.thumbnailUrl, categoryName: sample.categoryName ?? 'Skins', sourceSection: 'Mod', nsfw: i === count - 1,
+    globalType: null, globalTypeClassifierVersion: 5, abilitySounds: null };
 }
 await writeFile(join(profile, 'mod-metadata.json'), JSON.stringify(metadata));
 await writeFile(join(profile, 'settings.json'), JSON.stringify({
@@ -76,9 +77,11 @@ try {
   await settle();
   const pickups = [];
   async function dragItem(activator, target, { cancel = false, screenshot = false } = {}) {
+    const movingCard = await activator.getAttribute('data-mod-drag-surface') !== null;
     await activator.scrollIntoViewIfNeeded();
     await activator.hover();
     const box = await activator.boundingBox();
+    const cardHeight = movingCard ? await activator.evaluate(node => node.closest('[data-list-drag-entry]').offsetHeight) : null;
     await page.evaluate(() => {
       document.addEventListener('pointerdown', () => { window.__pickupStart = performance.now(); }, { once: true, capture: true });
       const observer = new MutationObserver(() => {
@@ -96,13 +99,38 @@ try {
     pickups.push(await page.evaluate(() => window.__pickupMs));
     await target.locator('h2').evaluate(node => node.scrollIntoView({ block: 'center' }));
     const destination = await target.locator('h2').boundingBox();
+    const targetOffset = await target.locator('h2').evaluate(node => node.offsetTop);
     await page.mouse.move(destination.x + 40, destination.y + destination.height / 2, { steps: 16 });
     await settle();
-    if (screenshot && !stress && !rows) await page.screenshot({ path: resolve('docs/screenshots/installed-list-order/drop-target.png') });
+    let dropIndex;
+    if (movingCard) {
+      const ghost = target.locator('[data-list-drop-slot]');
+      assert.equal(await ghost.count(), 1);
+      assert.equal(await ghost.locator('svg.lucide-plus').count(), 1);
+      const populated = await target.locator('[data-list-drag-entry]').count() > 0;
+      assert.equal(await ghost.evaluate(node => node.offsetHeight), populated ? cardHeight : Math.min(cardHeight, 72));
+      assert.equal(await target.locator('h2').evaluate(node => node.offsetTop), targetOffset);
+      dropIndex = Number(await ghost.getAttribute('data-drop-index'));
+      const outline = await target.evaluate(node => ({ style: getComputedStyle(node).outlineStyle, offset: getComputedStyle(node).outlineOffset }));
+      assert.deepEqual(outline, { style: 'solid', offset: '4px' });
+    }
+    if (screenshot && !stress && !rows) {
+      const targetBox = await target.boundingBox();
+      await page.mouse.move(targetBox.x + targetBox.width - box.width / 2 - 24, targetBox.y + targetBox.height / 2, { steps: 10 });
+      await settle();
+      await page.screenshot({ path: resolve('docs/screenshots/installed-list-order/drop-target.png') });
+    }
     if (cancel) await page.keyboard.press('Escape', { delay: 30 });
     await page.mouse.up();
     await page.locator('[data-list-drag-preview]').waitFor({ state: 'detached' });
     await settle();
+    const animations = await target.locator('.mod-list-arrival').evaluateAll(nodes => nodes.flatMap(node => node.getAnimations().map(animation => ({
+      duration: animation.effect.getTiming().duration,
+      easing: animation.effect.getTiming().easing,
+      frames: animation.effect.getKeyframes().map(frame => frame.transform),
+    }))));
+    assert.equal(await page.locator('[data-list-drop-slot], [data-drop-active]').count(), 0);
+    return { dropIndex, animations };
   }
   const section = (id) => page.locator('[data-mod-list="' + id + '"]');
   const source = section(':unlisted').locator('[data-list-drag-entry]').first();
@@ -110,20 +138,28 @@ try {
   const card = (id) => section(id).locator('[data-list-drag-entry]').filter({ has: page.getByRole('heading', { name: modName, exact: true }) });
   const thumbnail = (node) => node.locator('button[aria-label^="View details for"]').first();
   assert.equal(await page.locator('[data-list-drag-entry] svg.lucide-grip-vertical').count(), 0);
-  await dragItem(thumbnail(source), section('sounds'));
+  const landing = await dragItem(thumbnail(source), section('skins'), { screenshot: true });
+  assert.equal(landing.dropIndex, 2);
+  assert.equal(await section('skins').locator('[data-list-drag-entry]').nth(landing.dropIndex).locator('h3').textContent(), modName);
+  assert.equal(landing.animations.length, 1);
+  assert.equal(landing.animations[0].duration, 240);
+  assert.equal(landing.animations[0].easing, 'cubic-bezier(0.2, 0.8, 0.2, 1)');
+  assert.match(landing.animations[0].frames[0], /translate3d/);
+  await card('skins').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+  assert.equal(await card('skins').evaluate(node => getComputedStyle(node).transform), 'none');
+  await dragItem(thumbnail(card('skins')), section('sounds'));
   const key = (await stored()).find(list => list.id === 'sounds').keys[0];
   assert.ok(key);
   await dragItem(thumbnail(card('sounds')), section('testing'));
   assert.deepEqual((await stored()).find(list => list.id === 'sounds').keys, []);
   assert.deepEqual((await stored()).find(list => list.id === 'testing').keys, [key]);
-  assert.equal(await card('testing').evaluate(node => getComputedStyle(node).animationName), 'mod-list-arrive');
   await dragItem(thumbnail(card('testing')), section(':unlisted'));
   assert.ok((await stored()).every(list => !list.keys.includes(key)));
-  console.log('PASS whole-card moves, no source duplicate, and unlisted drop');
+  console.log('PASS ghost placement, outside outline, eased landing, whole-card moves, no duplicate, and unlisted drop');
   const beforeCancel = await stored();
-  await dragItem(thumbnail(card(':unlisted')), section('testing'), { cancel: true, screenshot: true });
+  await dragItem(thumbnail(card(':unlisted')), section('testing'), { cancel: true });
   assert.deepEqual(await stored(), beforeCancel);
-  assert.equal(await page.locator('[data-mod-list].ring-accent').count(), 0);
+  assert.equal(await page.locator('[data-drop-active]').count(), 0);
   console.log('PASS cancellation restores card and clears targets');
   await card(':unlisted').focus();
   await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowUp', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
@@ -146,6 +182,7 @@ try {
   await dragItem(thumbnail(section('skins').locator('[data-list-drag-entry]').first()), section(':unlisted'));
   assert.equal(await section(':unlisted').locator('[data-list-drag-entry]').count(), 1);
   assert.equal(await section(':unlisted').locator('[data-list-drag-entry]').evaluate(node => getComputedStyle(node).animationName), 'none');
+  assert.equal(await section(':unlisted').locator('[data-list-drag-entry]').evaluate(node => node.getAnimations().length), 0);
   assert.deepEqual(await page.evaluate(() => window.electronAPI.getMods()), baseline);
   console.log('PASS empty unlisted target appears on pickup and reduced motion disables arrival animation');
   await page.emulateMedia({ reducedMotion: null });
