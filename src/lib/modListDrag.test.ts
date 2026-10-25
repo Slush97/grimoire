@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { readModListDrag } from './modListDrag';
+import { buildListDragItems, canDropListItem, listHeaderDragId } from './modListDrag';
+import { buildInstalledListGroups, installedListEntryKey, UNLISTED_GROUP_ID } from './installedListGroups';
+import { buildModEntries } from './modEntries';
+import type { Mod } from '../types/mod';
 
-describe('list drag payloads', () => {
-  it('keeps mod membership and list reordering as distinct operations', () => {
-    expect(readModListDrag('{"kind":"entry","key":"gamebanana:1"}')).toEqual({ kind: 'entry', key: 'gamebanana:1' });
-    expect(readModListDrag('{"kind":"list","id":"skins"}')).toEqual({ kind: 'list', id: 'skins' });
+const mod: Mod = { id: 'one', name: 'One', fileName: 'one.vpk', metaKey: 'one.vpk', path: '/one.vpk', enabled: true, priority: 1, size: 10, installedAt: '2026-10-26', sha256: 'one' };
+const [entry] = buildModEntries([mod]);
+
+describe('list drag identities', () => {
+  it('tracks which occurrence was picked up when a mod belongs to multiple lists', () => {
+    const groups = buildInstalledListGroups([entry], [{ id: 'a', name: 'A', keys: ['sha256:one'] }, { id: 'b', name: 'B', keys: ['sha256:one'] }]);
+    const items = buildListDragItems(groups);
+    expect(items.get(installedListEntryKey('a', entry))).toEqual({ kind: 'entry', entry, sourceId: 'a' });
+    expect(items.get(installedListEntryKey('b', entry))).toEqual({ kind: 'entry', entry, sourceId: 'b' });
+    expect(items.get(listHeaderDragId('a'))).toEqual({ kind: 'list', id: 'a' });
   });
 
-  it('ignores malformed, unrelated and incomplete drops', () => {
-    for (const raw of ['', 'file:///a.vpk', 'null', '[]', '{}', '{"kind":"entry","key":1}', '{"kind":"list","id":""}', '{"kind":"reorder-mods","ids":[1]}']) {
-      expect(readModListDrag(raw)).toBeNull();
-    }
+  it('allows mods into unlisted, keeps that section fixed, and rejects same-list drops', () => {
+    expect(canDropListItem({ kind: 'entry', entry, sourceId: 'a' }, UNLISTED_GROUP_ID)).toBe(true);
+    expect(canDropListItem({ kind: 'entry', entry, sourceId: 'a' }, 'a')).toBe(false);
+    expect(canDropListItem({ kind: 'list', id: 'a' }, UNLISTED_GROUP_ID)).toBe(false);
+    expect(canDropListItem({ kind: 'list', id: 'a' }, 'a')).toBe(false);
+    expect(canDropListItem({ kind: 'list', id: 'a' }, 'b')).toBe(true);
   });
 });

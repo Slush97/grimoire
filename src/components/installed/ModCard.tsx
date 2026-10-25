@@ -266,6 +266,7 @@ function ModMediaPreview({
         className="group absolute inset-0 h-full w-full overflow-hidden rounded-lg border border-hl/[0.08] bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
         aria-label={detailsLabel}
         data-card-action="true"
+        data-mod-drag-surface
         draggable={false}
         onDragStart={stopMediaDrag}
       >
@@ -291,6 +292,7 @@ function ModMediaPreview({
         className="absolute inset-0 h-full w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
         aria-label={detailsLabel}
         data-card-action="true"
+        data-mod-drag-surface
         draggable={false}
         onDragStart={stopMediaDrag}
       >
@@ -306,6 +308,7 @@ function ModMediaPreview({
       <div
         className={audioOverlayClasses}
         data-card-action="true"
+        data-mod-drag-ignore
         draggable={false}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -675,6 +678,7 @@ function ModListRowContent({
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
         data-card-action="true"
+        data-mod-drag-surface
         draggable={false}
         onDragStart={stopMediaDrag}
       >
@@ -783,6 +787,7 @@ function ModListRowContent({
           <div
             className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-hl/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
             data-card-action="true"
+            data-mod-drag-ignore
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >

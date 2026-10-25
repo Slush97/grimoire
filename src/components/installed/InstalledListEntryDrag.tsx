@@ -1,30 +1,27 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { GripVertical } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { useTranslation } from 'react-i18next';
-import { IconButton } from '../common/ui';
-import { entryDisabledPreferenceKey, entryName, type ModEntry } from '../../lib/modEntries';
-import { MOD_LIST_DRAG_TYPE } from '../../lib/modListDrag';
+import { entryName, type ModEntry } from '../../lib/modEntries';
+import { isModCardDragTarget } from './cardDragSurface';
 
-export function InstalledListEntryDrag({ entry, disabled, onPick, children }: {
+export function InstalledListEntryDrag({ entry, id, disabled, arriving, children }: {
   entry: ModEntry;
+  id: string;
   disabled: boolean;
-  onPick: () => void;
+  arriving: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const ref = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState(false);
-  return <div ref={ref} className={`group/list-entry relative min-w-0 ${dragging ? 'opacity-50' : ''}`} data-list-drag-entry={entry.key}>
+  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id, disabled });
+  return <div ref={setNodeRef}
+    className={`relative min-w-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${disabled ? '' : 'cursor-grab active:cursor-grabbing'} ${isDragging ? 'opacity-30' : ''} ${arriving ? 'mod-list-arrival' : ''}`}
+    data-list-drag-entry={entry.key}
+    data-list-drag-id={id}
+    {...(disabled ? {} : attributes)} {...(disabled ? {} : listeners)}
+    onPointerDown={disabled ? undefined : (event) => {
+      if (isModCardDragTarget(event.target, event.currentTarget)) listeners?.onPointerDown?.(event);
+    }}
+    aria-label={disabled ? undefined : t('installed.lists.moveMod', { name: entryName(entry) })}>
     {children}
-    {!disabled && <IconButton icon={GripVertical} size="sm" label={t('installed.lists.fileMod', { name: entryName(entry) })}
-      draggable onClick={onPick}
-      className="absolute left-1/2 top-2 z-20 -translate-x-1/2 cursor-grab bg-bg-secondary opacity-0 group-hover/list-entry:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
-      onDragStart={(event) => {
-        event.stopPropagation();
-        event.dataTransfer.setData(MOD_LIST_DRAG_TYPE, JSON.stringify({ kind: 'entry', key: entryDisabledPreferenceKey(entry) }));
-        event.dataTransfer.effectAllowed = 'copy';
-        if (ref.current) event.dataTransfer.setDragImage(ref.current, 40, 28);
-        setDragging(true);
-      }} onDragEnd={() => setDragging(false)} />}
   </div>;
 }

@@ -12,6 +12,7 @@ import {
   reorderList,
   setListIcon,
   setListMembership,
+  moveListMembership,
   toggleListMembership,
   writeStoredModLists,
 } from './modLists';
@@ -375,6 +376,43 @@ describe('setListMembership', () => {
     expect(setListMembership(removed, 'first', 'shared', false)).toEqual(removed);
     expect(setListMembership(original, 'missing', 'shared', false)).toEqual(original);
     expect(setListMembership(original, 'first', '', true)).toEqual(original);
+  });
+});
+
+describe('moveListMembership', () => {
+  const lists = [list('first', 'First', ['mod', 'other']), list('second', 'Second'), list('third', 'Third', ['mod'])];
+
+  it('moves out of the source list while preserving other intentional memberships', () => {
+    const moved = moveListMembership(lists, { key: 'mod', fromListId: 'first', toListId: 'second' });
+    expect(moved).toEqual([list('first', 'First', ['other']), list('second', 'Second', ['mod']), lists[2]]);
+    expect(lists[0].keys).toEqual(['mod', 'other']);
+    expect(moved[2]).toBe(lists[2]);
+  });
+
+  it('removes the source occurrence even if the destination already has the mod', () => {
+    expect(moveListMembership(lists, { key: 'mod', fromListId: 'first', toListId: 'third' }))
+      .toEqual([list('first', 'First', ['other']), lists[1], lists[2]]);
+  });
+
+  it('drops into unlisted by removing every membership, without deleting lists or other mods', () => {
+    expect(moveListMembership(lists, { key: 'mod', fromListId: 'first', toListId: null }))
+      .toEqual([list('first', 'First', ['other']), lists[1], list('third', 'Third')]);
+  });
+
+  it('files a previously unlisted mod', () => {
+    expect(moveListMembership(lists, { key: 'unlisted', fromListId: null, toListId: 'second' })[1].keys).toEqual(['unlisted']);
+  });
+
+  it('ignores same-list, repeated, stale, and invalid drops', () => {
+    for (const move of [
+      { key: 'mod', fromListId: 'first', toListId: 'first' },
+      { key: 'mod', fromListId: 'missing', toListId: 'second' },
+      { key: 'mod', fromListId: 'first', toListId: 'missing' },
+      { key: 'mod', fromListId: null, toListId: 'second' },
+      { key: '', fromListId: 'first', toListId: 'second' },
+    ]) expect(moveListMembership(lists, move)).toEqual(lists);
+    const moved = moveListMembership(lists, { key: 'mod', fromListId: 'first', toListId: 'second' });
+    expect(moveListMembership(moved, { key: 'mod', fromListId: 'first', toListId: 'second' })).toEqual(moved);
   });
 });
 

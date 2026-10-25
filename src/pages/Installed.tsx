@@ -111,6 +111,7 @@ import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
 import { entryCardShell } from '../components/installed/entryCardShell';
+import { isModCardDragTarget } from '../components/installed/cardDragSurface';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -134,6 +135,7 @@ import {
   reorderList,
   setListIcon,
   setListMembership,
+  moveListMembership,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -148,7 +150,7 @@ import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../comp
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
 import { InstalledListControls, InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
-import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, type InstalledListView } from '../lib/installedListGroups';
+import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, UNLISTED_GROUP_ID, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
@@ -259,6 +261,9 @@ const SortableEntryCard = memo(function SortableEntryCard({
       style={style}
       {...(sortableDisabled ? {} : attributes)}
       {...(sortableDisabled ? {} : listeners)}
+      onPointerDown={sortableDisabled ? undefined : (event) => {
+        if (isModCardDragTarget(event.target, event.currentTarget)) listeners?.onPointerDown?.(event);
+      }}
     >
       <InstalledEntryCard {...cardProps} />
     </div>
@@ -4246,12 +4251,11 @@ export default function Installed() {
         onManage={(id) => setManagingLists(id ?? true)}
         dragDisabled={selectMode || shiftHeld || !!bulkProgress}
         pauseUpdates={!!managingLists}
-        onDrop={(drag, id) => {
-          if (drag.kind === 'list') commitModLists(reorderList(modLists, drag.id, id));
-          else if (allEntries.some((entry) => entryDisabledPreferenceKey(entry) === drag.key)) {
-            commitModLists(setListMembership(modLists, id, drag.key, true));
-          }
-        }}
+        onMove={(key, sourceId, targetId) => commitModLists(moveListMembership(modLists, {
+          key, fromListId: sourceId === UNLISTED_GROUP_ID ? null : sourceId,
+          toListId: targetId === UNLISTED_GROUP_ID ? null : targetId,
+        }))}
+        onReorder={(id, targetId) => commitModLists(reorderList(modLists, id, targetId))}
         gridClassName={gridClasses}
         gridStyle={gridStyle}
         mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}

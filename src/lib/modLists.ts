@@ -241,6 +241,26 @@ export function setListMembership(lists: readonly ModList[], id: string, prefKey
     : list);
 }
 
+/** A null destination means unlisted, so every membership for the key is removed. */
+export function moveListMembership(lists: readonly ModList[], { key, fromListId, toListId }: {
+  key: string;
+  fromListId: string | null;
+  toListId: string | null;
+}): ModList[] {
+  if (!key || fromListId === toListId) return [...lists];
+  if (toListId !== null && !lists.some((list) => list.id === toListId)) return [...lists];
+  if (fromListId !== null && !lists.some((list) => list.id === fromListId && list.keys.includes(key))) return [...lists];
+  if (fromListId === null && lists.some((list) => list.keys.includes(key))) return [...lists];
+  return lists.map((list) => {
+    const member = list.keys.includes(key);
+    if (list.id === toListId) return member ? list : { ...list, keys: [...list.keys, key] };
+    if (member && (toListId === null || list.id === fromListId)) {
+      return { ...list, keys: list.keys.filter((value) => value !== key) };
+    }
+    return list;
+  });
+}
+
 /**
  * prefKey -> list ids. Built once per lists change so the per-entry filter and
  * card-prop passes stay cheap Map lookups instead of scanning every list.
