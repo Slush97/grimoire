@@ -3,7 +3,7 @@ import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { getInstalledCardTaxonomy } from './installedCardTaxonomy';
 import { buildHeroByCategoryId, buildHeroList, getEffectiveGlobalType, groupModsByCategory, isLockerManagedMod } from './lockerUtils';
-import { entryHeroNames } from './modEntries';
+import { entryHeroNames, entryTagKeys } from './modEntries';
 
 const single = (over: Partial<Mod>) => ({
   kind: 'single' as const,
@@ -72,5 +72,23 @@ describe('Installed hero resolution agrees with the Locker grouping', () => {
     expect(lockerHero(mod)).toBe(hero);
     expect(entryHeroNames({ kind: 'single', key: mod.id, mod }, heroByCategoryId)).toEqual(hero ? [hero] : []);
     expect(getInstalledCardTaxonomy(mod, heroByCategoryId).heroName).toBe(hero);
+  });
+
+  it.each<[string, Partial<Mod>, string[]]>([
+    ['hero category', { categoryId: 41313, categoryName: 'Mina' }, ['cat:Skins']],
+    ['hero subcategory', { name: 'Plain', categoryId: 50570, categoryName: 'Faithful/Vanilla+' }, ['cat:Skins']],
+    ['root Skins, manual tag', { categoryId: 33324, categoryName: 'Skins', lockerHero: 'Vindicta' }, ['cat:Skins']],
+    ['Model Replacement root, hero in title', { name: 'goth vindicta by ju', categoryId: 33154, categoryName: 'Model Replacement' }, ['cat:Skins']],
+    ['local import with a manual tag', { sourceSection: undefined, lockerHero: 'Violet' }, ['cat:Skins']],
+    ['root Skins, no hero', { name: 'Midnight Skin', categoryId: 33295, categoryName: 'Skins' }, ['cat:Skins']],
+    ['other root, hero in title', { name: 'Apollo cooldown timer', categoryId: 46154, categoryName: 'Quality of Life/Fixes' }, ['cat:Quality of Life/Fixes']],
+    ['global type over its category', { categoryId: 41868, categoryName: 'Soul Container', globalType: 'soul-container' }, ['global:soul-container']],
+    ['global type over a broader category', { categoryId: 46154, categoryName: 'Quality of Life/Fixes', globalType: 'hud' }, ['global:hud']],
+    ['a category named Other', { sourceSection: undefined, categoryName: 'Other' }, ['other']],
+    ['hero sound', { sourceSection: 'Sound', categoryId: 6270, categoryName: 'Abilities', lockerHero: 'Abrams' }, ['section:sound', 'cat:Abilities']],
+    ['no metadata', { name: 'Kitty Paw Cursor', sourceSection: undefined }, ['other']],
+  ])('tags %s', (_label, over, tags) => {
+    const mod = skin('Some outfit', over);
+    expect(entryTagKeys({ kind: 'single', key: mod.id, mod }, heroByCategoryId)).toEqual(tags);
   });
 });

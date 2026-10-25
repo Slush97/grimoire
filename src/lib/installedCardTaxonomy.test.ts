@@ -88,16 +88,22 @@ describe('getInstalledCardTaxonomy', () => {
     it.each([
       ['Skins', 33295, 'Breezy Butterfly Mina (UPDATED 9/30/2026)', 'Mina'],
       ['Model Replacement', 33154, 'goth vindicta by ju', 'Vindicta'],
-    ])('takes the hero from the title under %s', (categoryName, categoryId, name, hero) => {
+    ])('takes the hero from the title under %s and drops the root label', (categoryName, categoryId, name, hero) => {
       expect(getInstalledCardTaxonomy({
         ...base, name, sourceSection: 'Mod', categoryId, categoryName,
-      }, heroByCategoryId)).toEqual({ heroName: hero, globalType: undefined, categoryLabel: categoryName });
+      }, heroByCategoryId)).toEqual({ heroName: hero, globalType: undefined, categoryLabel: undefined });
     });
 
-    it('leaves a title that names no hero unassigned', () => {
+    it('drops the root label beside a manual hero tag', () => {
+      expect(getInstalledCardTaxonomy({
+        ...base, sourceSection: 'Mod', categoryId: 33324, categoryName: 'Skins', lockerHero: 'Vindicta',
+      }, heroByCategoryId)).toEqual({ heroName: 'Vindicta', globalType: undefined, categoryLabel: undefined });
+    });
+
+    it('leaves a title that names no hero unassigned, under its root label', () => {
       expect(getInstalledCardTaxonomy({
         ...base, name: 'Midnight Skin', sourceSection: 'Mod', categoryId: 33295, categoryName: 'Skins',
-      }, heroByCategoryId).heroName).toBeUndefined();
+      }, heroByCategoryId)).toEqual({ heroName: undefined, globalType: undefined, categoryLabel: 'Skins' });
     });
 
     it('does not title-match a global mod or a mod the Locker does not manage', () => {

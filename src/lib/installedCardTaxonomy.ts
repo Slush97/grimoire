@@ -29,6 +29,14 @@ export interface InstalledCardTaxonomy {
   categoryLabel?: string;
 }
 
+/** GameBanana roots a skin can be filed under directly. Beside a hero they add
+ *  nothing: the skin is that hero's, however the author filed it. */
+const SKIN_ROOT_CATEGORIES: ReadonlySet<string> = new Set(['skins', 'model replacement']);
+
+export function isSkinRootCategory(categoryName?: string): boolean {
+  return SKIN_ROOT_CATEGORIES.has(categoryName?.trim().toLowerCase() ?? '');
+}
+
 function heroFromCategory(categoryName?: string): string | undefined {
   const needle = canonicalHeroName(categoryName?.trim()).toLowerCase();
   if (!needle) return undefined;
@@ -42,7 +50,8 @@ function heroFromCategory(categoryName?: string): string | undefined {
  * survives. The persisted Locker global classification wins over a GameBanana
  * category; otherwise a hero category becomes the hero identity, and a
  * non-hero category remains a text label. A skin filed under a category that
- * names no hero gets one from its title, as the Locker does.
+ * names no hero gets one from its title, as the Locker does, and drops the
+ * root's label so every hero skin reads the same.
  */
 export function getInstalledCardTaxonomy(
   mod: InstalledCardTaxonomyInput,
@@ -54,7 +63,7 @@ export function getInstalledCardTaxonomy(
   // A hero subcategory (Faithful/Vanilla+) gets the hero and keeps its label.
   const subcategoryHero = globalType ? undefined : skinCategoryHero(mod, heroByCategoryId);
   const heroName = explicitHero ?? categoryHero ?? subcategoryHero ?? skinTitleHero(mod, heroByCategoryId);
-  const categoryLabel = !globalType && !categoryHero
+  const categoryLabel = !globalType && !categoryHero && !(heroName && isSkinRootCategory(mod.categoryName))
     ? mod.categoryName?.trim() || undefined
     : undefined;
 
