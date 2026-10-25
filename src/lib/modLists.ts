@@ -233,6 +233,14 @@ export function toggleListMembership(
   });
 }
 
+/** Set membership explicitly so a repeated drop or checkbox event is harmless. */
+export function setListMembership(lists: readonly ModList[], id: string, prefKey: string, member: boolean): ModList[] {
+  if (member) return addListMembership(lists, id, prefKey);
+  return lists.map((list) => list.id === id && list.keys.includes(prefKey)
+    ? { ...list, keys: list.keys.filter((key) => key !== prefKey) }
+    : list);
+}
+
 /**
  * prefKey -> list ids. Built once per lists change so the per-entry filter and
  * card-prop passes stay cheap Map lookups instead of scanning every list.

@@ -11,6 +11,7 @@ import {
   renameList,
   reorderList,
   setListIcon,
+  setListMembership,
   toggleListMembership,
   writeStoredModLists,
 } from './modLists';
@@ -354,6 +355,26 @@ describe('toggleListMembership', () => {
 
     expect(keys).toEqual([]);
     expect(original[0].keys).toBe(keys);
+  });
+});
+
+describe('setListMembership', () => {
+  it('adds idempotently while preserving other memberships and list order', () => {
+    const original = [list('first', 'First', ['shared']), list('second', 'Second', ['existing'])];
+    const added = setListMembership(original, 'second', 'shared', true);
+    expect(added).toEqual([list('first', 'First', ['shared']), list('second', 'Second', ['existing', 'shared'])]);
+    expect(setListMembership(added, 'second', 'shared', true)).toEqual(added);
+    expect(added[0]).toBe(original[0]);
+    expect(original[1].keys).toEqual(['existing']);
+  });
+
+  it('removes only the selected list membership, including stale keys', () => {
+    const original = [list('first', 'First', ['shared', 'orphan']), list('second', 'Second', ['shared'])];
+    const removed = setListMembership(original, 'first', 'shared', false);
+    expect(removed).toEqual([list('first', 'First', ['orphan']), original[1]]);
+    expect(setListMembership(removed, 'first', 'shared', false)).toEqual(removed);
+    expect(setListMembership(original, 'missing', 'shared', false)).toEqual(original);
+    expect(setListMembership(original, 'first', '', true)).toEqual(original);
   });
 });
 

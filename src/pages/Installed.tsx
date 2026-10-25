@@ -133,6 +133,7 @@ import {
   renameList,
   reorderList,
   setListIcon,
+  setListMembership,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -703,7 +704,7 @@ export default function Installed() {
   }, []);
   // Entry the "New list" dialog was opened from, so creating also files it.
   const [creatingList, setCreatingList] = useState<{ keys: string[]; modName?: string } | null>(null);
-  const [managingLists, setManagingLists] = useState(false);
+  const [managingLists, setManagingLists] = useState<boolean | string>(false);
   const [listPreferences, setListPreferences] = useState(readInstalledListPreferences);
   const [searchListState, setSearchListState] = useState<{ query: string; collapsed: string[] }>({ query: '', collapsed: [] });
   const listsView = listPreferences.view === 'lists';
@@ -2789,16 +2790,16 @@ export default function Installed() {
   // Filing is add-only for exactly that reason: a toggle here would un-file a
   // mod that is already in the list whose name was typed.
   // With nothing to file (Manage's create box), a taken name changes nothing,
-  // so it reports false and the dialog says the name is in use.
-  const createModList = useStableCallback((name: string, keys: readonly string[]): boolean => {
+  // so it reports null and the dialog says the name is in use.
+  const createModList = useStableCallback((name: string, keys: readonly string[]): string | null => {
     const { lists, id } = createList(modLists, name, keys);
     const existing = modLists.find((list) => list.id === id);
-    if (!id || (existing && keys.length === 0)) return false;
+    if (!id || (existing && keys.length === 0)) return null;
     commitModLists(lists);
     updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => key !== id) });
     setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => key !== id) }));
     showToast(keys.length > 0 ? t('installed.lists.addedTo', { name: existing?.name ?? name }) : t('installed.lists.created', { name }), { tone: 'success' });
-    return true;
+    return id;
   });
   const renameModList = useStableCallback((id: string, name: string) => {
     // renameList no-ops on a rejected name (blank, or taken by another list)
@@ -4242,7 +4243,15 @@ export default function Installed() {
         collapsed={activeCollapsedLists}
         showEmpty={!searchNeedle && !filtersActive}
         onToggle={toggleList}
-        onManage={() => setManagingLists(true)}
+        onManage={(id) => setManagingLists(id ?? true)}
+        dragDisabled={selectMode || shiftHeld || !!bulkProgress}
+        pauseUpdates={!!managingLists}
+        onDrop={(drag, id) => {
+          if (drag.kind === 'list') commitModLists(reorderList(modLists, drag.id, id));
+          else if (allEntries.some((entry) => entryDisabledPreferenceKey(entry) === drag.key)) {
+            commitModLists(setListMembership(modLists, id, drag.key, true));
+          }
+        }}
         gridClassName={gridClasses}
         gridStyle={gridStyle}
         mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}
@@ -4347,6 +4356,10 @@ export default function Installed() {
       {managingLists && (
         <ManageModListsModal
           lists={modLists}
+          entries={allEntries}
+          hideNsfw={installedHideNsfwPreviews}
+          initialListId={typeof managingLists === 'string' ? managingLists : undefined}
+          onMembership={(id, key, member) => commitModLists(setListMembership(modLists, id, key, member))}
           onCreate={(name) => createModList(name, [])}
           counts={listCounts}
           onClose={() => {
