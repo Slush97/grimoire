@@ -86,6 +86,13 @@ export function hasRequirementIssues(snapshot: ModRequirementSnapshot | undefine
   return snapshot.items.some(item => ['disabled', 'missing', 'manual'].includes(matchRequirement(item, mods).state));
 }
 
+/** Issues for a mod that is already installed. One that is off can't be broken
+ *  by what it needs, the same rule requirementOrderIssues follows. Installs use
+ *  hasRequirementIssues, since the new mod arrives enabled. */
+export function hasInstalledRequirementIssues(mod: Pick<Mod, 'enabled'>, snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[]): boolean {
+  return mod.enabled && hasRequirementIssues(snapshot, mods);
+}
+
 export function modRequirementRefs(mod: Pick<Mod, 'gameBananaId' | 'sourceSection' | 'merged'>): GameBananaItemRef[] {
   return [
     ...(mod.gameBananaId ? [{ id: mod.gameBananaId, section: mod.sourceSection ?? 'Mod' }] : []),

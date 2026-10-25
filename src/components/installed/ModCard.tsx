@@ -6,6 +6,7 @@ import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRo
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
+import { useHeroCategoryStore } from '../../stores/heroCategoryStore';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
@@ -853,6 +854,7 @@ export function ModCard({
   const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
   const [backupBusy, setBackupBusy] = useState(false);
   const setBackupToDelete = useModBackupsStore((state) => state.setDeleteTarget);
+  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
     setBackupBusy(true);
@@ -1092,7 +1094,7 @@ export function ModCard({
   // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
   // manual or auto global tag is visible here, not just in the Locker. A global
   // mod has no hero, so the two chips never both show.
-  const cardTaxonomy = getInstalledCardTaxonomy(mod);
+  const cardTaxonomy = getInstalledCardTaxonomy(mod, heroByCategoryId);
   const cardGlobalLabel = cardTaxonomy.globalType
     ? globalModTypeLabel(cardTaxonomy.globalType, t)
     : undefined;

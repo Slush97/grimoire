@@ -62,6 +62,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
+import { useHeroCategoryStore } from '../stores/heroCategoryStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
@@ -82,7 +83,7 @@ import { RequirementsControl } from '../components/requirements/RequirementsCont
 import { useRequirementOrderStore } from '../stores/requirementOrderStore';
 import { requirementOrderIssues } from '../lib/requirementLoadOrder';
 import { useRequirementsStore } from '../stores/requirementsStore';
-import { hasRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
+import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -734,8 +735,8 @@ export default function Installed() {
   const [requirementsOnly, setRequirementsOnly] = useState(false);
   const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => {
     const local = skinRequirementSource(mod, mods);
-    return (local && (hasRequirementIssues(local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
-      .some(target => hasRequirementIssues(requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
+    return (local && (hasInstalledRequirementIssues(mod, local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
+      .some(target => hasInstalledRequirementIssues(mod, requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
   }).map(mod => mod.id)),
   [visibleMods, mods, requirementSnapshots, requirementFiles]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
@@ -1269,6 +1270,11 @@ export default function Installed() {
   const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
+  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
+  const loadHeroCategories = useHeroCategoryStore((state) => state.load);
+  useEffect(() => {
+    void loadHeroCategories();
+  }, [loadHeroCategories]);
   const finishing = usePendingDownloadCompletions();
   const unavailableUpdateIds = useMemo(() => new Set([
     ...updatingModIds, ...submittingModIds,
@@ -2649,10 +2655,10 @@ export default function Installed() {
   const entryFacetMeta = useMemo(() => {
     const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
     for (const entry of allEntries) {
-      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry) });
     }
     return byKey;
-  }, [allEntries]);
+  }, [allEntries, heroByCategoryId]);
 
   // List membership, deliberately kept OUT of entryFacetMeta: that cache is
   // rebuilt only when allEntries changes, so folding list ids into it would
@@ -3073,7 +3079,7 @@ export default function Installed() {
   // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
   // compute if an entry somehow isn't in the cache.
   const heroNamesOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId);
   const tagKeysOf = (entry: ModEntry): string[] =>
     entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
 
@@ -3182,7 +3188,7 @@ export default function Installed() {
     const matchesSourceEntry = (entry: ModEntry) =>
       entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
     const matchesHeroEntry = (entry: ModEntry) =>
-      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry)).includes(heroFilter);
+      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId)).includes(heroFilter);
     const matchesTagEntry = (entry: ModEntry) =>
       tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
     // Selecting several lists unions them (same as tags), but the list axis as a
@@ -3231,7 +3237,7 @@ export default function Installed() {
         }))
       : [];
     return { visibleEnabled, visibleDisabled };
-  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
+  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
   const activeCollapsedLists = searchNeedle
