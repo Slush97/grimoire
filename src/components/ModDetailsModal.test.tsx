@@ -30,7 +30,7 @@ const mod: GameBananaModDetails = {
   files: [{ id: 30, fileName: 'new.zip', fileSize: 100, downloadCount: 1, downloadUrl: '', isArchived: false }],
 };
 
-describe('file replacement preferences', () => {
+describe('mod details', () => {
   let host: HTMLDivElement;
   let root: Root;
   let previousApi: typeof window.electronAPI;
@@ -170,5 +170,32 @@ describe('file replacement preferences', () => {
     await act(async () => replaceButton().click());
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it.each(['modal', 'sidebar'] as const)('shows the selected image caption only in the %s lightbox', async variant => {
+    await render(false, {
+      variant,
+      mod: { ...mod, previewMedia: { images: [
+        { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'first.jpg', caption: 'why u bulleh meh' },
+        { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'second.jpg', caption: 'Side <b>view</b> & detail' },
+        { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'third.jpg' },
+      ] } },
+    });
+    expect(document.querySelector('figcaption')).toBeNull();
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="View image 1 of 3 full size"]')!.click());
+    expect(document.querySelector('figcaption')?.textContent).toBe('why u bulleh meh');
+    await act(async () => document.querySelector('figcaption')!.click());
+    expect(document.querySelector('figcaption')?.textContent).toBe('why u bulleh meh');
+    const next = () => document.querySelector('figure')!.parentElement!
+      .querySelector<HTMLButtonElement>('[aria-label="modDetails.aria.nextImage"]')!;
+    await act(async () => next().click());
+    expect(document.querySelector('figcaption')?.textContent).toBe('Side <b>view</b> & detail');
+    expect(document.querySelector('figcaption b')).toBeNull();
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+    expect(document.querySelector('figcaption')).toBeNull();
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+    expect(document.querySelector('figcaption')?.textContent).toBe('why u bulleh meh');
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(document.querySelector('figure')).toBeNull();
   });
 });

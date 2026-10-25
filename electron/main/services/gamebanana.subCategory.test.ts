@@ -9,8 +9,9 @@ vi.mock('./modDatabase', () => ({
     getCachedCategoryTree: vi.fn(),
     saveCachedCategoryTree: vi.fn(),
 }));
+vi.mock('./modRequirementCache', () => ({ cacheRequirements: vi.fn() }));
 
-import { fetchSubmissions } from './gamebanana';
+import { fetchCollectionItems, fetchModDetails, fetchSubmissions } from './gamebanana';
 
 // Trimmed from the live Mod/Index list response on 2026-10-16. The list
 // endpoint gives both categories as name + profile URL and no _idRow, and sends
@@ -64,5 +65,36 @@ describe('fetchSubmissions sub-category', () => {
         expect(records[0].rootCategory?.name).toBe('Skins');
         expect(records[0].subCategory).toMatchObject({ id: 42674, name: 'Graves' });
         expect(records[1].subCategory).toBeUndefined();
+    });
+});
+
+describe('GameBanana image captions', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it.each(['details', 'browse', 'collection'] as const)('preserves captions from %s without another request', async source => {
+        const record = {
+            ...payload._aRecords[0],
+            _aPreviewMedia: {
+                _aImages: [
+                    { _sBaseUrl: 'https://images.gamebanana.com/img/ss/mods', _sFile: 'first.jpg', _sCaption: 'why u bulleh meh' },
+                    { _sBaseUrl: 'https://images.gamebanana.com/img/ss/mods', _sFile: 'second.jpg' },
+                    { _sBaseUrl: 'https://images.gamebanana.com/img/ss/mods', _sFile: 'third.jpg', _sCaption: '  ' },
+                ],
+                _aMetadata: { _sAudioUrl: 'https://example.com/preview.mp3' },
+            },
+        };
+        const fetch = vi.fn(async () => Response.json(source === 'details' ? record : { ...payload, _aRecords: [record] }));
+        vi.stubGlobal('fetch', fetch);
+
+        const result = source === 'details' ? await fetchModDetails(record._idRow)
+            : (source === 'browse' ? await fetchSubmissions('Mod', 1, 50) : await fetchCollectionItems(1)).records[0];
+
+        expect(result.previewMedia?.images).toEqual([
+            expect.objectContaining({ file: 'first.jpg', caption: 'why u bulleh meh' }),
+            expect.objectContaining({ file: 'second.jpg', caption: undefined }),
+            expect.objectContaining({ file: 'third.jpg', caption: undefined }),
+        ]);
+        expect(result.previewMedia?.metadata?.audioUrl).toBe('https://example.com/preview.mp3');
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 });

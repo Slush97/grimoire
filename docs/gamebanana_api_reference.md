@@ -80,6 +80,13 @@ Retrieves full metadata for a specific mod. This is the **most reliable** source
 - `_sText`: Full HTML description.
 - `_bIsNsfw`: Definitive NSFW boolean.
 
+Image entries in `_aPreviewMedia._aImages` can include an optional `_sCaption`.
+This is the author-written text shown below enlarged screenshots on GameBanana,
+not the HTML `alt` attribute. It is also returned by the existing
+`/Mod/{id}?_csvProperties=_aPreviewMedia` request, so no extra request is needed.
+Grimoire maps it to `GameBananaImage.caption` and displays it as plain text below
+the image in the mod-details lightbox. Missing or blank captions are hidden.
+
 ---
 
 ## 2. Search API

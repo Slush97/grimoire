@@ -70,6 +70,7 @@ export interface GameBananaImage {
   file: string;
   file220?: string;
   file530?: string;
+  caption?: string;
 }
 
 export interface GameBananaCategory {

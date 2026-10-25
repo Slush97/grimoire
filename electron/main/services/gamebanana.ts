@@ -141,6 +141,7 @@ interface ModRaw {
             _sFile: string;
             _sFile220?: string;
             _sFile530?: string;
+            _sCaption?: string;
         }>;
         _aMetadata?: {
             _sAudioUrl?: string;
@@ -465,21 +466,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         // and correlates with NSFW status, so use it as fallback
         nsfw: raw._bIsNsfw ?? raw._bHasContentRatings ?? false,
         submitter: mapSubmitter(raw._aSubmitter),
-        previewMedia: (raw._aPreviewMedia?._aImages || raw._aPreviewMedia?._aMetadata)
-            ? {
-                images: raw._aPreviewMedia._aImages
-                    ?.filter((img) => img && img._sBaseUrl) // Filter out null/invalid images
-                    .map((img) => ({
-                        baseUrl: img._sBaseUrl,
-                        file: img._sFile,
-                        file220: img._sFile220,
-                        file530: img._sFile530,
-                    })),
-                metadata: raw._aPreviewMedia._aMetadata
-                    ? { audioUrl: raw._aPreviewMedia._aMetadata._sAudioUrl }
-                    : undefined,
-            }
-            : undefined,
+        previewMedia: mapPreviewMedia(raw._aPreviewMedia),
         rootCategory: raw._aRootCategory
             ? {
                 id: raw._aRootCategory._idRow,
@@ -865,19 +852,7 @@ export async function fetchModDetails(
             description: f._sDescription,
             isArchived: f._bIsArchived ?? false,
         })),
-        previewMedia: raw._aPreviewMedia
-            ? {
-                images: raw._aPreviewMedia._aImages?.map((img) => ({
-                    baseUrl: img._sBaseUrl,
-                    file: img._sFile,
-                    file220: img._sFile220,
-                    file530: img._sFile530,
-                })),
-                metadata: raw._aPreviewMedia._aMetadata
-                    ? { audioUrl: raw._aPreviewMedia._aMetadata._sAudioUrl }
-                    : undefined,
-            }
-        : undefined,
+        previewMedia: mapPreviewMedia(raw._aPreviewMedia),
         submitter: mapSubmitter(raw._aSubmitter),
     };
 }
@@ -1228,6 +1203,7 @@ function mapPreviewMedia(raw: ModRaw['_aPreviewMedia']): GameBananaPreviewMedia 
                 file: img._sFile,
                 file220: img._sFile220,
                 file530: img._sFile530,
+                caption: img._sCaption?.trim() || undefined,
             })),
         metadata: raw._aMetadata ? { audioUrl: raw._aMetadata._sAudioUrl } : undefined,
     };

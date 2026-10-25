@@ -1961,17 +1961,28 @@ function ModDetailsModal({
               </div>
             </>
           )}
-          <ImageContextMenu
-            src={currentImageFullUrl}
-            alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
+          <figure
+            className="pointer-events-none flex max-h-full max-w-full flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
           >
-            <img
+            <ImageContextMenu
               src={currentImageFullUrl}
               alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
-              className="max-w-full max-h-full object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </ImageContextMenu>
+            >
+              <img
+                src={currentImageFullUrl}
+                alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
+                className="pointer-events-auto min-h-0 max-w-full object-contain"
+              />
+            </ImageContextMenu>
+            {currentImage.caption && (
+              <figcaption
+                className="pointer-events-auto max-h-32 w-full max-w-3xl shrink-0 overflow-y-auto whitespace-pre-wrap break-words text-center text-sm text-text-secondary select-text"
+              >
+                {currentImage.caption}
+              </figcaption>
+            )}
+          </figure>
         </div>
       )}
     </div>
