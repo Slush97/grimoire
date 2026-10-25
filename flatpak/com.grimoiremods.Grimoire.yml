@@ -43,7 +43,7 @@ modules:
   - name: grimoire
     buildsystem: simple
     build-commands:
-      - ar x grimoire_1.33.0_amd64.deb
+      - ar x grimoire_1.34.0_amd64.deb
       - tar xf data.tar.xz
       - cp -a opt/Grimoire /app/grimoire
       - install -Dm755 grimoire.sh /app/bin/grimoire
@@ -58,8 +58,8 @@ modules:
         done
     sources:
       - type: file
-        url: https://github.com/Slush97/grimoire/releases/download/v1.33.0/grimoire_1.33.0_amd64.deb
-        sha256: 61b3cd54fb50944130b9e7a83a9dc6ed009c016924abe2d827cf8f5b46d8b433
+        url: https://github.com/Slush97/grimoire/releases/download/v1.34.0/grimoire_1.34.0_amd64.deb
+        sha256: e4cb3a49d8cab35458791e332a40740f4e306d5a3db229dc1f02854f606c4323
       - type: file
         path: grimoire.sh
       - type: file
