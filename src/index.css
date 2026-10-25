@@ -649,7 +649,7 @@ body {
   opacity: 1;
 }
 
-/* Category/hero/NSFW chips float over the thumbnail and fade in on card hover
+/* Category/NSFW chips float over the thumbnail and fade in on card hover
    (and keyboard focus), keeping the text body short. */
 .browse-readable-card-chips {
   opacity: 0;

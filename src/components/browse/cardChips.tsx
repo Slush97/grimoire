@@ -1,10 +1,8 @@
-import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { BrowseReadableChip, BrowseReadableChipTone } from './cardUtils';
 
 export const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
 const BROWSE_READABLE_CHIP_GAP_WIDTH = 6;
 const BROWSE_READABLE_CHIP_OVERFLOW_WIDTH = 30;
-const BROWSE_READABLE_HERO_CHIP_WIDTH = 24;
 
 function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = false): string {
   // On-image chips float over the thumbnail (revealed on hover), so they need an
@@ -16,8 +14,6 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
         return 'border-accent/40 bg-black/55 text-accent backdrop-blur-sm';
       case 'danger':
         return 'border-state-danger/45 bg-black/55 text-state-danger backdrop-blur-sm';
-      case 'info':
-        return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
       default:
         return 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm';
     }
@@ -27,8 +23,6 @@ function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = fa
       return 'border-accent/25 bg-accent/[0.08] text-accent';
     case 'danger':
       return 'border-state-danger/30 bg-state-danger/[0.09] text-state-danger';
-    case 'info':
-      return 'border-state-info/25 bg-state-info/[0.08] text-state-info';
     default:
       return 'border-hl/[0.1] bg-hl/[0.04] text-text-secondary';
   }
@@ -40,18 +34,6 @@ function estimateReadableChipWidth(label: string): number {
 }
 
 function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadableChip; onImage?: boolean }) {
-  if (chip.hero) {
-    return (
-      <img
-        src={getHeroChipIconPath(chip.hero)}
-        alt={chip.label}
-        title={chip.label}
-        loading="lazy"
-        draggable={false}
-        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-black/40' : ''}`}
-      />
-    );
-  }
   return (
     <span
       title={chip.label}
@@ -85,7 +67,7 @@ export function BrowseReadableChipRow({
     if (visibleChips.length >= maxVisible) break;
 
     const remainingAfter = orderedChips.length - index - 1;
-    const chipWidth = chip.hero ? BROWSE_READABLE_HERO_CHIP_WIDTH : estimateReadableChipWidth(chip.label);
+    const chipWidth = estimateReadableChipWidth(chip.label);
     const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
     const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
 

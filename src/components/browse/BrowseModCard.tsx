@@ -11,6 +11,7 @@ import { Tag } from '../common/ui';
 import { RevealImage } from '../common/RevealImage';
 import { SkeletonModCard } from '../common/Skeleton';
 import { IconText } from '../common/IconText';
+import { HeroTagLabel } from '../installed/chips';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
 import {
   BROWSE_READABLE_CARD_GOLDEN,
@@ -43,6 +44,7 @@ function handleCardKeyDown(e: React.KeyboardEvent, onClick: () => void): void {
 // Below this card width the "last updated" line moves to its own row under the
 // author instead of sharing the stats row, so it never squashes likes/views.
 const BROWSE_READABLE_UPDATED_INLINE_MIN = 300;
+const BROWSE_READABLE_HERO_ICON_SPACE = 28; // 22px icon plus a 6px gap.
 
 function ReadableBrowseModCard({
   mod,
@@ -70,22 +72,23 @@ function ReadableBrowseModCard({
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
   const inferredHero = inferHeroFromTitle(mod.name);
+  const heroIconSpace = inferredHero ? BROWSE_READABLE_HERO_ICON_SPACE : 0;
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
   const readableDensity = getReadableDensity(readableCardWidth);
   const readableScale = readableCardWidth / BROWSE_READABLE_CARD_GOLDEN;
   const chipRowWidth = Math.round(readableCardWidth - 24 * readableScale);
-  const chips = getReadableCardChips(mod, section, inferredHero);
+  const chips = getReadableCardChips(mod, section);
   const showChips = readableDensity !== 'micro';
   const showAuthor = readableDensity !== 'micro';
   // "Last updated" sits in the stats row when the card is wide enough; on
   // narrower cards it drops to its own line under the author so it can't
   // squash the likes/views counts.
-  const updatedInline = readableDensity === 'full' && readableCardWidth >= BROWSE_READABLE_UPDATED_INLINE_MIN;
+  const updatedInline = readableDensity === 'full' && readableCardWidth >= BROWSE_READABLE_UPDATED_INLINE_MIN + heroIconSpace;
   const updatedWithAuthor = readableDensity === 'full' && !updatedInline;
   const isMicro = readableDensity === 'micro';
-  const actionIconOnly = readableCardWidth < 220;
+  const actionIconOnly = readableCardWidth < 220 + heroIconSpace;
   const cardFrameStyle = typeof cardHeight === 'number' ? { height: `${cardHeight}px` } : undefined;
   const bodyPaddingClass = isMicro ? 'p-2' : 'p-3';
   const media = isSoundSection ? (
@@ -214,7 +217,18 @@ function ReadableBrowseModCard({
         </div>
 
         <div className={`mt-auto flex shrink-0 items-center justify-between gap-2 ${isMicro ? 'h-6' : 'h-7'}`}>
-          <BrowseReadableStatsRow mod={mod} density={readableDensity} showUpdated={updatedInline} />
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {showChips && inferredHero && (
+              <span className="inline-flex flex-shrink-0 items-center" title={inferredHero}>
+                <HeroTagLabel
+                  heroName={inferredHero}
+                  iconClassName={readableDensity === 'full' ? 'h-[22px] w-[22px]' : 'h-5 w-5'}
+                  iconOnly
+                />
+              </span>
+            )}
+            <BrowseReadableStatsRow mod={mod} density={readableDensity} showUpdated={updatedInline} />
+          </div>
           <BrowseReadableAction
             modName={mod.name}
             installed={installed}

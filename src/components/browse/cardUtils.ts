@@ -14,13 +14,11 @@ export function formatCount(n: number | null | undefined): string {
   return `${(value / 1_000_000).toFixed(1)}m`;
 }
 
-export type BrowseReadableChipTone = 'neutral' | 'accent' | 'danger' | 'info';
+export type BrowseReadableChipTone = 'neutral' | 'accent' | 'danger';
 
 export type BrowseReadableChip = {
   label: string;
   tone?: BrowseReadableChipTone;
-  /** When set, the chip renders as the hero's round icon instead of a text pill. */
-  hero?: string;
 };
 
 function normalizeReadableChipLabel(label: string | undefined): string | null {
@@ -44,19 +42,16 @@ function addReadableChip(chips: BrowseReadableChip[], label: string | undefined,
   if (!exists) chips.push({ label: normalized, tone });
 }
 
-export function getReadableCardChips(mod: GameBananaMod, section: string, inferredHero: string | null): BrowseReadableChip[] {
+export function getReadableCardChips(mod: GameBananaMod, section: string): BrowseReadableChip[] {
   const chips: BrowseReadableChip[] = [];
   const isSoundSection = section === 'Sound';
   const categoryLabel = mod.rootCategory?.name ?? section;
 
   addReadableChip(chips, categoryLabel, isSoundSection ? 'accent' : 'neutral');
-  if (inferredHero) chips.push({ label: inferredHero, tone: 'info', hero: inferredHero });
   if (mod.nsfw) addReadableChip(chips, '18+', 'danger');
 
-  // Hero icon stays leftmost as a consistent anchor across cards, then the
-  // NSFW flag, then the rest (category, etc.). Sort is stable, so chips of
-  // equal rank keep their insertion order.
-  const rank = (chip: BrowseReadableChip) => (chip.hero ? 0 : chip.label === '18+' ? 1 : 2);
+  // Keep the NSFW flag ahead of category labels.
+  const rank = (chip: BrowseReadableChip) => (chip.label === '18+' ? 0 : 1);
   chips.sort((a, b) => rank(a) - rank(b));
 
   return chips;

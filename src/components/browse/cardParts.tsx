@@ -178,7 +178,7 @@ export function BrowseReadableStatsRow({ mod, density, showUpdated }: { mod: Gam
   const isMicro = density === 'micro';
   const groupClass = isMicro
     ? 'grid w-full grid-cols-2 items-center text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/85'
-    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/85';
+    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/85 [&>.browse-stat-item]:shrink-0';
   const itemEmphasis = isMicro ? 'strong' : 'muted';
 
   return (
