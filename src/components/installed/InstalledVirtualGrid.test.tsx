@@ -62,6 +62,12 @@ describe('Installed card windowing', () => {
       viewMode="grid" renderEntry={(entry, content) => <div data-shell={entry.key}>
         {content && <div data-heavy={entry.key}><button>{entry.key}</button><audio /></div>}
       </div>} {...extra} />));
+    paint();
+  }
+  function paint() {
+    for (let attempt = 0; frames.length > 0 && attempt < 10; attempt++) {
+      act(() => { for (const frame of frames.splice(0)) frame(0); });
+    }
   }
   function scroll(top: number) {
     act(() => { scroller.scrollTop = top; scroller.dispatchEvent(new Event('scroll')); });
@@ -95,8 +101,7 @@ describe('Installed card windowing', () => {
 
   it.each(['compact', 'list'] as const)('keeps %s cards bounded and uses the matching column geometry', (viewMode) => {
     render({ viewMode, gridClassName: viewMode === 'list' ? 'space-y-1.5' : 'grid gap-3' });
-    const firstRow = host.querySelector<HTMLElement>('[data-installed-window-row]')!;
-    expect(firstRow.children).toHaveLength(viewMode === 'list' ? 1 : 4);
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(viewMode === 'list' ? 1 : 4);
     scroll(18000);
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(viewMode === 'list' ? 20 : 60);
   });
@@ -109,11 +114,11 @@ describe('Installed card windowing', () => {
       for (const observer of observers) if (observer.elements.has(grid)) observer.callback([], {} as ResizeObserver);
       for (const frame of frames.splice(0)) frame(0);
     });
-    expect(host.querySelector('[data-installed-window-row]')!.children).toHaveLength(2);
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(30);
   });
 
-  it('preserves a playing preview through column resize, then regroups after pause', () => {
+  it('preserves a playing preview while responsive columns regroup', () => {
     render();
     const audio = cell('entry:3')!.querySelector('audio')!;
     let paused = false;
@@ -126,10 +131,10 @@ describe('Installed card windowing', () => {
       for (const frame of frames.splice(0)) frame(0);
     });
     expect(cell('entry:3')!.querySelector('audio')).toBe(audio);
-    expect(host.querySelector('[data-installed-window-row]')!.children).toHaveLength(4);
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(2);
     paused = true;
     act(() => audio.dispatchEvent(new Event('pause')));
-    expect(host.querySelector('[data-installed-window-row]')!.children).toHaveLength(2);
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(2);
   });
 
   it('releases interaction pins belonging to filtered or deleted cards', () => {
@@ -140,7 +145,29 @@ describe('Installed card windowing', () => {
     vi.mocked(window.getComputedStyle).mockReturnValue({ gridTemplateColumns: '492px 492px', columnGap: '16px', rowGap: '16px' } as CSSStyleDeclaration);
     render({ entries: entries.slice(1) });
     expect(cell('entry:0')).toBeUndefined();
-    expect(host.querySelector('[data-installed-window-row]')!.children).toHaveLength(2);
+    expect(host.querySelectorAll('[data-installed-window-row="0"]')).toHaveLength(2);
+  });
+
+  it.each(['filter', 'sort'] as const)('preserves a playing preview when a %s regroups its retained card', (change) => {
+    render();
+    const audio = cell('entry:3')!.querySelector('audio')!;
+    Object.defineProperty(audio, 'paused', { value: false });
+    act(() => audio.dispatchEvent(new Event('play')));
+
+    render({ entries: change === 'filter' ? entries.slice(1) : [...entries].reverse() });
+
+    expect(cell('entry:3')!.querySelector('audio')).toBe(audio);
+  });
+
+  it('retains focus when filtering other entries regroups the focused card', () => {
+    render();
+    const button = cell('entry:3')!.querySelector('button')!;
+    act(() => button.focus());
+
+    render({ entries: entries.slice(1) });
+
+    expect(document.activeElement).toBe(button);
+    expect(cell('entry:3')!.querySelector('button')).toBe(button);
   });
 
   it('anchors the first visible entry while column count changes', () => {
@@ -148,7 +175,7 @@ describe('Installed card windowing', () => {
     scroll(18000);
     const currentRow = [...host.querySelectorAll<HTMLElement>('[data-installed-window-row]')]
       .find((row) => parseFloat(row.style.top) + 300 > scroller.scrollTop)!;
-    const anchor = currentRow.firstElementChild!.getAttribute('data-installed-window-key')!;
+    const anchor = currentRow.getAttribute('data-installed-window-key')!;
     const grid = host.querySelector<HTMLElement>('[data-installed-window-grid]')!;
     vi.mocked(window.getComputedStyle).mockReturnValue({ gridTemplateColumns: '492px 492px', columnGap: '16px', rowGap: '16px' } as CSSStyleDeclaration);
     act(() => {
@@ -160,12 +187,44 @@ describe('Installed card windowing', () => {
     expect(cell(anchor)).toBeDefined();
   });
 
+  it.each(['resize', 'remove'] as const)('shrinks a measured row after its tallest card changes through %s', (change) => {
+    const subset = entries.slice(0, 8);
+    let tallHeight = 360;
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.scroller !== undefined) return 600;
+      if (this.dataset.installedWindowKey !== undefined) return this.dataset.installedWindowKey === 'entry:0' ? tallHeight : 100;
+      return 0;
+    });
+    render({ entries: subset });
+    expect(cell('entry:4')!.style.top).toBe('376px');
+    expect(cell('entry:0')!.style.height).toBe('');
+
+    if (change === 'remove') {
+      render({ entries: subset.slice(1) });
+    } else {
+      tallHeight = 80;
+      act(() => {
+        const target = cell('entry:0')!;
+        for (const observer of observers) if (observer.elements.has(target)) {
+          observer.callback([{
+            target, contentRect: target.getBoundingClientRect(),
+            borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [],
+          }], {} as ResizeObserver);
+        }
+      });
+      paint();
+    }
+
+    const secondRow = host.querySelector<HTMLElement>('[data-installed-window-row="1"]')!;
+    expect(secondRow.style.top).toBe('116px');
+  });
+
   it('keeps all sortable shells during a drag without mounting all heavy cards', () => {
     render({ dragging: true, draggingKey: 'entry:400' });
     expect(host.querySelectorAll('[data-shell]')).toHaveLength(500);
     expect(host.querySelector('[data-heavy="entry:400"]')).not.toBeNull();
     expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(60);
-    expect(cell('entry:300')!.parentElement!.style.height).not.toBe('');
+    expect(cell('entry:300')!.style.height).not.toBe('');
   });
 
   it('mounts a reveal target, matching base keys even when list occurrences have different keys', () => {
@@ -194,6 +253,20 @@ describe('Installed card windowing', () => {
     paused = true;
     act(() => audio.dispatchEvent(new Event('pause')));
     expect(cell('entry:0')).toBeUndefined();
+  });
+
+  it('releases a playing card when its media is removed without a pause event', async () => {
+    render();
+    const audio = cell('entry:0')!.querySelector('audio')!;
+    Object.defineProperty(audio, 'paused', { value: false });
+    act(() => audio.dispatchEvent(new Event('play')));
+    scroll(18000);
+    expect(cell('entry:0')).toBeDefined();
+
+    await act(async () => audio.remove());
+
+    expect(cell('entry:0')).toBeUndefined();
+    expect(host.querySelectorAll('[data-heavy]').length).toBeLessThan(60);
   });
 
   it('retains menu owners even when their content is portaled outside the window', async () => {

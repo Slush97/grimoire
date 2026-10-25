@@ -209,6 +209,34 @@ describe('chunked mods move and delete as one set', () => {
         expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'b', 'pak01_000.vpk': 'b0', 'pak02_dir.vpk': 'a' });
     });
 
+    it('retries transient Windows locks while rolling back a partially staged chunk set', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak01_000.vpk': 'a0', 'pak02_dir.vpk': 'b' });
+        const mods = await scanMods(root);
+        const before = await contents(addons);
+        const rename = fs.rename;
+        let rejectedPrimary = false;
+        let rejectedRollback = false;
+        const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+            if (!rejectedPrimary && from === join(addons, 'pak01_dir.vpk') && basename(String(to)).startsWith('tmp')) {
+                rejectedPrimary = true;
+                throw Object.assign(new Error('No space left'), { code: 'ENOSPC' });
+            }
+            if (!rejectedRollback && basename(String(from)).startsWith('tmp') && to === join(addons, 'pak01_000.vpk')) {
+                rejectedRollback = true;
+                throw Object.assign(new Error('Temporarily locked'), { code: 'EPERM' });
+            }
+            return rename(from, to);
+        });
+        try {
+            await expect(reorderMods(root, mods.map(mod => mod.id).reverse())).rejects.toThrow('No space left');
+        } finally {
+            spy.mockRestore();
+        }
+        expect(rejectedPrimary).toBe(true);
+        expect(rejectedRollback).toBe(true);
+        expect(await contents(addons)).toEqual(before);
+    });
+
     it('moves chunks and metadata across overflow roots while reserving orphaned slots', async () => {
         const overflow = join(root, 'game', 'citadel', 'addons1');
         await fs.mkdir(overflow);

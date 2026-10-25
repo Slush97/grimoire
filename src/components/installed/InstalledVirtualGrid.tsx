@@ -26,21 +26,100 @@ function focusableElements(cell: HTMLElement): HTMLElement[] {
   );
 }
 
+/** Measure natural card heights while keeping every card under one React parent. */
+function useRowMeasurements(
+  keys: readonly string[],
+  indexByKey: ReadonlyMap<string, number>,
+  columns: number,
+  layout: string,
+  resizeRow: (index: number, size: number) => void,
+) {
+  const cells = useRef(new Map<string, HTMLDivElement>());
+  const heights = useRef(new Map<string, number>());
+  const queued = useRef(new Set<string>());
+  const frame = useRef(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  const configuration = useRef({ keys, indexByKey, columns, resizeRow });
+  const schedule = useCallback((key: string) => {
+    queued.current.add(key);
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const { keys, indexByKey, columns, resizeRow } = configuration.current;
+      const rows = new Set<number>();
+      // Complete layout reads before resizeItem can adjust row offsets.
+      for (const key of queued.current) {
+        const cell = cells.current.get(key);
+        const index = indexByKey.get(key);
+        if (!cell || index === undefined) continue;
+        const height = cell.getBoundingClientRect().height || cell.offsetHeight;
+        if (height > 0) heights.current.set(key, height);
+        rows.add(Math.floor(index / columns));
+      }
+      queued.current.clear();
+      for (const row of rows) {
+        let height = 0;
+        for (const key of keys.slice(row * columns, (row + 1) * columns)) {
+          height = Math.max(height, heights.current.get(key) ?? 0);
+        }
+        if (height > 0) resizeRow(row, height);
+      }
+    });
+  }, []);
+  useLayoutEffect(() => {
+    configuration.current = { keys, indexByKey, columns, resizeRow };
+    for (const key of cells.current.keys()) schedule(key);
+  }, [keys, indexByKey, columns, layout, resizeRow, schedule]);
+  useLayoutEffect(() => {
+    const pending = queued.current;
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const { target } of entries) {
+        const key = (target as HTMLElement).dataset.installedWindowKey;
+        if (key) schedule(key);
+      }
+    });
+    observer.current = resizeObserver;
+    for (const cell of cells.current.values()) resizeObserver.observe(cell);
+    return () => {
+      resizeObserver.disconnect();
+      observer.current = null;
+      if (frame.current) cancelAnimationFrame(frame.current);
+      frame.current = 0;
+      pending.clear();
+    };
+  }, [schedule]);
+  return useCallback((cell: HTMLDivElement | null) => {
+    if (!cell) return;
+    const key = cell.dataset.installedWindowKey!;
+    cells.current.set(key, cell);
+    observer.current?.observe(cell);
+    schedule(key);
+    return () => {
+      observer.current?.unobserve(cell);
+      if (cells.current.get(key) === cell) {
+        cells.current.delete(key);
+        heights.current.delete(key);
+      }
+    };
+  }, [schedule]);
+}
+
 /** Range changes stay inside this boundary instead of rendering the entire page. */
 export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
   entries, scrollRef, gridClassName, gridStyle, viewMode, renderEntry,
   getEntryKey = entryKey, revealEntryKey = null, draggingKey = null, dragging = false,
 }: InstalledVirtualGridProps) {
+  'use no memo';
   const gridRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
   const [geometry, setGeometry] = useState({ columns: 1, width: 0, columnGap: 0, rowGap: 0, margin: 0, ready: false, viewMode });
   const geometryRef = useRef(geometry);
   const resizeAnchor = useRef<{ key: string; delta: number } | null>(null);
   const [interactiveKeys, setInteractiveKeys] = useState<ReadonlySet<string>>(new Set());
+  const interactiveKeysRef = useRef(interactiveKeys);
   const [pendingFocus, setPendingFocus] = useState<{ key: string; backwards: boolean } | null>(null);
   const keys = useMemo(() => entries.map(getEntryKey), [entries, getEntryKey]);
   const indexByKey = useMemo(() => new Map(keys.map((key, index) => [key, index])), [keys]);
-  const hasInteractivePins = interactiveKeys.size > 0 || pendingFocus !== null;
   const columnCount = geometry.columns;
   const rowCount = Math.ceil(entries.length / columnCount);
   const pinnedRows = useMemo(() => {
@@ -56,6 +135,8 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
   const extractRange = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) =>
     [...new Set([...defaultRangeExtractor(range), ...pinnedRows])].sort((a, b) => a - b), [pinnedRows]);
   const getRowKey = useCallback((index: number) => keys[index * columnCount] ?? index, [keys, columnCount]);
+  // This boundary reads mutable TanStack measurements imperatively, so keep it uncompiled.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollRef.current,
@@ -67,8 +148,11 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
     rangeExtractor: extractRange,
     getItemKey: getRowKey,
   });
+  const resizeRow = useCallback((index: number, height: number) => rowVirtualizer.resizeItem(index, height), [rowVirtualizer]);
+  const measureCell = useRowMeasurements(keys, indexByKey, columnCount, `${geometry.width}:${viewMode}`, resizeRow);
 
   useLayoutEffect(() => { geometryRef.current = geometry; }, [geometry]);
+  useLayoutEffect(() => { interactiveKeysRef.current = interactiveKeys; }, [interactiveKeys]);
   useEffect(() => {
     setInteractiveKeys((previous) => {
       const retained = new Set([...previous].filter((key) => indexByKey.has(key)));
@@ -91,10 +175,7 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
       const measure = () => {
         const style = getComputedStyle(grid);
         const previous = geometryRef.current;
-        const resolvedColumns = installedColumnCount(style.gridTemplateColumns, viewMode);
-        // Regrouping rows recreates their card children. Keep the current row
-        // grouping until an inline editor, menu or playing preview releases it.
-        const columns = hasInteractivePins && previous.ready && previous.viewMode === viewMode ? previous.columns : resolvedColumns;
+        const columns = installedColumnCount(style.gridTemplateColumns, viewMode);
         const columnGap = parseFloat(style.columnGap) || (viewMode === 'compact' ? 12 : 16);
         const rowGap = viewMode === 'list' ? 6 : parseFloat(style.rowGap) || columnGap;
         const width = Math.max(0, (grid.clientWidth - columnGap * (columns - 1)) / columns);
@@ -125,7 +206,7 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
     };
     connect();
     return () => { observer?.disconnect(); if (frame) cancelAnimationFrame(frame); };
-  }, [scrollRef, gridClassName, gridStyle, viewMode, hasInteractivePins, keys, rowVirtualizer]);
+  }, [scrollRef, gridClassName, gridStyle, viewMode, keys, rowVirtualizer]);
 
   useLayoutEffect(() => {
     rowVirtualizer.measure();
@@ -183,11 +264,13 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
       const cells = new Set<HTMLElement>();
       for (const mutation of mutations) {
         const cell = mutation.target instanceof Element ? mutation.target.closest<HTMLElement>('[data-installed-window-key]') : null;
-        if (cell) cells.add(cell);
+        // Removing a focused control or failed media player need not emit
+        // focusout/pause. Recheck existing pins when their content disappears.
+        if (cell && (mutation.type !== 'childList' || interactiveKeysRef.current.has(cell.dataset.installedWindowKey!))) cells.add(cell);
       }
       for (const cell of cells) refreshCell(cell);
     });
-    observer.observe(grid, { subtree: true, attributes: true, attributeFilter: ['data-state'] });
+    observer.observe(grid, { subtree: true, attributes: true, attributeFilter: ['data-state'], childList: true });
     return () => {
       observer.disconnect();
       for (const type of eventTypes) grid.removeEventListener(type, onInteraction, true);
@@ -238,29 +321,23 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
     onKeyDownCapture={onKeyDown}
   >
     <div ref={spacerRef} className="relative w-full" style={{ height: totalHeight, gridColumn: '1 / -1', overflowAnchor: 'none' }}>
-      {rows.map((row) => {
+      {rows.flatMap((row) => {
         const renderContent = heavyRows.has(row.index);
         const start = row.index * columnCount;
-        return <div
-          key={row.key}
-          ref={renderContent ? rowVirtualizer.measureElement : undefined}
-          data-index={row.index}
-          data-installed-window-row={row.index}
-          className="absolute left-0 top-0 grid w-full"
+        return entries.slice(start, start + columnCount).map((entry, offset) => <div
+          key={keys[start + offset]}
+          ref={renderContent ? measureCell : undefined}
+          className="absolute top-0 flex min-w-0 flex-col"
           style={{
             top: row.start - geometry.margin,
-            gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-            columnGap: geometry.columnGap,
+            left: offset * (geometry.width + geometry.columnGap),
+            width: geometry.width,
             height: renderContent ? undefined : row.size,
           }}
-        >
-          {entries.slice(start, start + columnCount).map((entry, offset) => <div
-            key={keys[start + offset]}
-            className="flex min-w-0 flex-col"
-            data-installed-window-key={keys[start + offset]}
-            data-installed-window-entry-key={entry.key}
-          >{renderEntry(entry, renderContent)}</div>)}
-        </div>;
+          data-installed-window-row={row.index}
+          data-installed-window-key={keys[start + offset]}
+          data-installed-window-entry-key={entry.key}
+        >{renderEntry(entry, renderContent)}</div>);
       })}
     </div>
   </div>;

@@ -50,6 +50,12 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
 
+/** Retire reads taken before a successful mod write, including writes published
+ * by another store. A late scan must not restore old filename/slot identities. */
+export function invalidateModsReads(): void {
+  modsGeneration++;
+}
+
 // A download completion event and the renderer action that awaited that same
 // download can both request a rescan in the same instant. Share the scan while
 // it is current so one install does not publish the same library state twice.
@@ -852,6 +858,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? await api.disableMod(modId)
         : await api.enableMod(modId);
 
+      invalidateModsReads();
       set({
         mods: get().mods.map((m) => (m.id === modId ? updatedMod : m)),
       });
@@ -899,6 +906,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().loadMods({ silent: true, force: true });
         return;
       }
+      invalidateModsReads();
       set({ mods: get().mods.filter((m) => m.id !== mod.id) });
     } catch (err) {
       if (isGameRunningModLockError(err)) {
@@ -915,6 +923,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { skipped } = await api.deleteMods(mods, onProgress);
       const removed = new Set(mods.map((m) => m.id));
       for (const id of skipped) removed.delete(id);
+      invalidateModsReads();
       set({ mods: get().mods.filter((m) => !removed.has(m.id)) });
       if (skipped.length > 0) await get().loadMods({ silent: true, force: true });
     } catch (err) {
@@ -928,6 +937,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setModPriority: async (modId: string, priority: number) => {
     try {
       const updatedMod = await api.setModPriority(modId, priority);
+      invalidateModsReads();
       set({
         mods: get()
           .mods.map((m) => (m.id === modId ? updatedMod : m))
@@ -943,6 +953,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   swapModPriority: async (modIdA: string, modIdB: string) => {
     try {
       const updated = await api.swapModPriority(modIdA, modIdB);
+      invalidateModsReads();
       set((state) => {
         const mods = reconcileMods(state.mods, updated);
         return mods === state.mods ? state : { mods };
@@ -959,6 +970,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   reorderMods: async (orderedIds: string[]) => {
     try {
       const updated = await api.reorderMods(orderedIds);
+      invalidateModsReads();
       set((state) => {
         const mods = reconcileMods(state.mods, updated);
         return mods === state.mods ? state : { mods };
@@ -1044,6 +1056,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
       try {
         const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);
+        invalidateModsReads();
         set((state) => {
           const mods = reconcileMods(state.mods, updated);
           return mods === state.mods ? state : { mods };
@@ -1073,6 +1086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const keys = get().soloRestore?.keys ?? mods.filter((m) => m.enabled).map(modRestoreKey);
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      invalidateModsReads();
       set((state) => ({ mods: reconcileMods(state.mods, updated), soloRestore: { keys, label } }));
       // Only enables pass the safety gate, so any safety failure is a target.
       if (failures.some((failure) => failure.includes('MOD_SAFETY_'))) {
@@ -1105,6 +1119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      invalidateModsReads();
       set((state) => ({
         mods: reconcileMods(state.mods, updated),
         soloRestore: failures.length === 0 ? null : snap,
@@ -1127,6 +1142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // name until the next scan (the group card title reads from whichever
     // member is primary).
     const groupId = updated.localGroupId;
+    invalidateModsReads();
     set({
       mods: get().mods.map((m) => {
         if (m.id === modId) return updated;
@@ -1148,7 +1164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The handler returns the full list (memberships and the unified name can
       // touch mods outside `modIds`), so adopt it wholesale and bump the
       // generation like every other whole-list mutation.
-      modsGeneration++;
+      invalidateModsReads();
       set({
         mods,
         shuffleIncluded: migrated.shuffleIncluded,
@@ -1181,6 +1197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setModLockerHero: async (modId: string, heroName: string | null) => {
     const updated = await api.setModLockerHero(modId, heroName);
+    invalidateModsReads();
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
     });
@@ -1188,6 +1205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setModGlobalType: async (modId: string, globalType: GlobalModType | null) => {
     const updated = await api.setModGlobalType(modId, globalType);
+    invalidateModsReads();
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
     });
@@ -1202,6 +1220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const updated = await api.setModPriorityFolder(modId, priority);
         const mods = get().mods.map((m) => (m.id === modId ? updated : m));
+        invalidateModsReads();
         // Pinning retires the mod's shuffle opt-in. Its card swaps the toggle
         // for the always-on pin, so a key left behind would be invisible yet
         // still counted, and unpinning would put the mod back in the shuffle
@@ -1229,6 +1248,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setVariantLabel: async (modId: string, label: string) => {
     try {
       const updated = await api.setVariantLabel(modId, label);
+      invalidateModsReads();
       set({
         mods: get().mods.map((m) => (m.id === modId ? updated : m)),
       });
@@ -1242,7 +1262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { mods, results } = await api.importCustomMods(items);
       // Same generation bump as the single import: whatever landed must not be
       // overwritten by a scan taken before the copies finished.
-      modsGeneration++;
+      invalidateModsReads();
       set({ mods });
       // Per-source failures come back in `results`, not as a throw, so the cap
       // check runs over them. The dialog shows each failed row inline; the

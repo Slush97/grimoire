@@ -113,7 +113,7 @@ async function renameVpkSet(from: string, to: string, chunkNames?: string[], toC
             done.push(move);
         }
     } catch (err) {
-        for (const [source, destination] of done.reverse()) await fs.rename(destination, source).catch(() => {});
+        for (const [source, destination] of done.reverse()) await renameWithRetry(destination, source).catch(() => {});
         throw err;
     }
     moveSafetySnapshot(from, to);

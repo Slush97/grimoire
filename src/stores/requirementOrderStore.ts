@@ -4,7 +4,7 @@ import { getMods, listUnknownModFiles, reorderMods } from '../lib/api';
 import { moveRequirementAboveBase, requirementFileKey, requirementOrderIssues, type RequirementFileLists, type RequirementOrderIssue } from '../lib/requirementLoadOrder';
 import { requirementKey } from '../lib/modRequirements';
 import { useRequirementsStore } from './requirementsStore';
-import { useAppStore } from './appStore';
+import { invalidateModsReads, useAppStore } from './appStore';
 import { reconcileMods } from '../lib/reconcileMods';
 
 interface RequirementOrderStore {
@@ -49,6 +49,7 @@ export const useRequirementOrderStore = create<RequirementOrderStore>((set, get)
       const order = moveRequirementAboveBase(latest, overlay.id, base.id);
       if (!order) return 'changed';
       const updated = await reorderMods(order);
+      invalidateModsReads();
       useAppStore.setState({ mods: reconcileMods(useAppStore.getState().mods, updated) });
       return 'fixed';
     } finally { set({ fixing: false }); }

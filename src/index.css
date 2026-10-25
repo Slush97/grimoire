@@ -1692,19 +1692,13 @@ body {
   border-color: rgba(250, 204, 21, 0.45);
 }
 
-.installed-entry-shell {
-  content-visibility: auto;
-}
-
 .installed-entry-shell-grid:hover:not(:where(.installed-is-scrolling *)) {
-  content-visibility: visible;
   z-index: 10;
 }
 
 /* Menu content is portaled, so inspect the trigger's open state on the card. */
 .installed-entry-shell:focus-within,
 .installed-entry-shell:has([data-state='open']) {
-  content-visibility: visible;
   z-index: 20;
 }
 

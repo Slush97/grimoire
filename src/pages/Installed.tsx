@@ -240,7 +240,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
   const shell = entryCardShell(cardProps.viewMode === 'list');
   const style: CSSProperties = {
     ...shell.style,
-    ...(!renderContent ? { height: '100%', contentVisibility: 'visible' } : {}),
+    ...(!renderContent ? { height: '100%' } : {}),
     transform: sortableDisabled ? undefined : CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
