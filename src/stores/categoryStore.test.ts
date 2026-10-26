@@ -98,6 +98,59 @@ describe('shared category indexes', () => {
     expect(useCategoryStore.getState()).toBe(initial);
   });
 
+  it('follows an older in-flight read with one shared fresh read after main changes the tree', async () => {
+    let finishOld!: (tree: GameBananaCategoryNode[]) => void;
+    let finishFresh!: (tree: GameBananaCategoryNode[]) => void;
+    api.categories
+      .mockImplementationOnce(() => new Promise<GameBananaCategoryNode[]>((resolve) => { finishOld = resolve; }))
+      .mockImplementationOnce(() => new Promise<GameBananaCategoryNode[]>((resolve) => { finishFresh = resolve; }));
+    const updated = structuredClone(mods);
+    updated[0].children![0].children!.push({ id: 4, name: 'New variant', itemCount: 1 });
+    const olderRead = useCategoryStore.getState().load();
+    const changeA = useCategoryStore.getState().load('ModCategory', { afterCurrent: true });
+    const changeB = useCategoryStore.getState().load('ModCategory', { afterCurrent: true });
+    expect(api.categories).toHaveBeenCalledTimes(1);
+    finishOld(mods);
+    await olderRead;
+    expect(api.categories).toHaveBeenCalledTimes(2);
+    finishFresh(updated);
+    await expect(changeA).resolves.toBe(updated);
+    await expect(changeB).resolves.toBe(updated);
+    expect(api.categories).toHaveBeenCalledTimes(2);
+    expect(useCategoryStore.getState().pathsByModel.ModCategory?.get(4)?.at(-1)?.name).toBe('New variant');
+  });
+
+  it('follows a failed pending read even when that read returned cached fallback data', async () => {
+    api.categories.mockResolvedValueOnce(mods);
+    await useCategoryStore.getState().load();
+    let rejectOlder!: (error: Error) => void;
+    const updated = structuredClone(mods);
+    updated[0].name = 'Updated skins';
+    api.categories
+      .mockImplementationOnce(() => new Promise<GameBananaCategoryNode[]>((_resolve, reject) => { rejectOlder = reject; }))
+      .mockResolvedValueOnce(updated);
+    const olderRead = useCategoryStore.getState().load();
+    const refreshed = useCategoryStore.getState().load('ModCategory', { afterCurrent: true });
+    rejectOlder(new Error('Offline'));
+    await expect(olderRead).resolves.toBe(mods);
+    await expect(refreshed).resolves.toBe(updated);
+    expect(api.categories).toHaveBeenCalledTimes(3);
+    expect(useCategoryStore.getState().treesByModel.ModCategory).toBe(updated);
+  });
+
+  it('retries after a failed pending cold read when main reports a newer tree', async () => {
+    let rejectOlder!: (error: Error) => void;
+    api.categories
+      .mockImplementationOnce(() => new Promise<GameBananaCategoryNode[]>((_resolve, reject) => { rejectOlder = reject; }))
+      .mockResolvedValueOnce(mods);
+    const olderRead = useCategoryStore.getState().load();
+    const refreshed = useCategoryStore.getState().load('ModCategory', { afterCurrent: true });
+    rejectOlder(new Error('Offline'));
+    await expect(olderRead).rejects.toThrow('Offline');
+    await expect(refreshed).resolves.toBe(mods);
+    expect(api.categories).toHaveBeenCalledTimes(2);
+  });
+
   it('releases a failed in-flight load so a later call can retry', async () => {
     api.categories.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(mods);
     await expect(useCategoryStore.getState().load()).rejects.toThrow('Offline');

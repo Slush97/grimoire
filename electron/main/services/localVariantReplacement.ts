@@ -3,7 +3,7 @@ import type {
     LocalVariantGroupClassification,
     LocalVariantGroupMember,
 } from './localVariantGroup';
-import { resolveLocalVariantGroupProfile } from './localVariantGroup';
+import { assertCompatibleLocalVariantClassifications, resolveLocalVariantGroupProfile } from './localVariantGroup';
 
 export interface LocalVariantReplacementMember extends LocalVariantGroupMember {
     gameBananaFileId?: number;
@@ -12,7 +12,7 @@ export interface LocalVariantReplacementMember extends LocalVariantGroupMember {
 export interface LocalVariantReplacementPlan {
     groupId: string;
     modName: string;
-    classification: LocalVariantGroupClassification;
+    classification?: LocalVariantGroupClassification;
     replacementMetaKeys: string[];
 }
 
@@ -81,21 +81,29 @@ export function planLocalVariantReplacementRestore(
         throw new Error('Replacement priority-folder placement does not match its variant group');
     }
 
-    const classification: LocalVariantGroupClassification = profile.classification ?? {
-        lockerHero: source.lockerHero,
-        lockerHeroSource: source.lockerHeroSource,
-        lockerHeroVpkChecked: source.lockerHeroVpkChecked,
-        // A group with no positive axis is authoritatively unassigned. Use the
-        // same null sentinel as local import so the replacement is not lazily
-        // reclassified into a different card on the next scan.
-        globalType: source.globalType ?? null,
-        globalTypeClassifierVersion: source.globalTypeClassifierVersion,
-    };
+    for (const replacement of replacements) {
+        const classification = profile.classification;
+        let comparison = replacement;
+        if (classification?.lockerHero || classification?.globalType) {
+            // Retain the group's explicit choice over new automatic detection,
+            // but never silently replace a conflicting manual destination tag.
+            assertCompatibleLocalVariantClassifications(classification, {
+                lockerHero: replacement.lockerHeroSource === 'manual' ? replacement.lockerHero : undefined,
+                globalType: replacement.globalTypeSource === 'manual' ? replacement.globalType : undefined,
+            });
+            comparison = {
+                ...replacement,
+                resolvedHeroes: classification.lockerHero ? [classification.lockerHero] : [],
+                resolvedGlobalType: classification.globalType ?? undefined,
+            };
+        }
+        assertCompatibleLocalVariantClassifications(profile, comparison);
+    }
 
     return {
         groupId,
         modName: source.name,
-        classification,
+        ...(profile.classification ? { classification: profile.classification } : {}),
         replacementMetaKeys: replacements.map((member) => member.metaKey),
     };
 }

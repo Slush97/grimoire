@@ -14,7 +14,7 @@ vi.mock('./modDatabase', () => ({
 vi.mock('./modRequirementCache', () => ({ cacheRequirements: vi.fn() }));
 vi.mock('./rateLimiter', () => ({ gamebananaRateLimiter: { acquire: async () => {} } }));
 
-import { fetchCategoryTreeCached, fetchCollectionItems, fetchModDetails, fetchSubmissions } from './gamebanana';
+import { fetchCategoryTreeCached, fetchCollectionItems, fetchModDetails, fetchSubmissions, observeCategoryTreeChanges, readCachedCategoryPaths } from './gamebanana';
 
 // Trimmed from the live Mod/Index list response on 2026-10-16. The list
 // endpoint gives both categories as name + profile URL and no _idRow, and sends
@@ -87,7 +87,9 @@ describe('fetchSubmissions sub-category', () => {
 });
 
 describe('cached GameBanana category trees', () => {
+    const subscriptions: Array<() => void> = [];
     afterEach(() => {
+        for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
         categoryCache.get.mockReset();
         categoryCache.save.mockReset();
         vi.unstubAllGlobals();
@@ -119,9 +121,89 @@ describe('cached GameBanana category trees', () => {
         categoryCache.get.mockReturnValue({ fetchedAt: Date.now(), payload: JSON.stringify(nodes) });
         const fetch = vi.fn();
         vi.stubGlobal('fetch', fetch);
+        const changed = vi.fn();
+        subscriptions.push(observeCategoryTreeChanges(changed));
 
         expect(await fetchCategoryTreeCached('ModCategory')).toEqual(nodes);
         expect(fetch).not.toHaveBeenCalled();
+        expect(changed).not.toHaveBeenCalled();
+    });
+
+    it('notifies once for changed persisted payloads, coalesces cold requests and avoids notification loops', async () => {
+        let row: { fetchedAt: number; payload: string } | null = null;
+        let name = 'HUD';
+        categoryCache.get.mockImplementation(() => row);
+        categoryCache.save.mockImplementation((_model: string, payload: string) => {
+            row = { fetchedAt: Date.now(), payload };
+        });
+        const fetch = vi.fn(async () => Response.json([{ _idRow: 10, _sName: name, _nItemCount: 1 }]));
+        vi.stubGlobal('fetch', fetch);
+        const changed = vi.fn();
+        subscriptions.push(observeCategoryTreeChanges(changed));
+
+        await Promise.all([fetchCategoryTreeCached('ModCategory'), fetchCategoryTreeCached('ModCategory')]);
+        expect(changed).toHaveBeenCalledExactlyOnceWith('ModCategory');
+        expect(fetch).toHaveBeenCalledTimes(1);
+        row!.fetchedAt = 0;
+        await fetchCategoryTreeCached('ModCategory', true);
+        expect(changed).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledTimes(2);
+
+        row!.fetchedAt = 0;
+        name = 'New HUD';
+        await fetchCategoryTreeCached('ModCategory', true);
+        expect(changed).toHaveBeenCalledTimes(2);
+        expect(readCachedCategoryPaths()?.get(10)?.[0].name).toBe(name);
+        await fetchCategoryTreeCached('ModCategory');
+        expect(changed).toHaveBeenCalledTimes(2);
+        expect(fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('isolates observers and emits nothing if persistence fails', async () => {
+        const failedObserver = vi.fn(() => { throw new Error('observer failed'); });
+        const changed = vi.fn();
+        const unsubscribe = observeCategoryTreeChanges(failedObserver);
+        subscriptions.push(unsubscribe, observeCategoryTreeChanges(changed));
+        vi.stubGlobal('fetch', vi.fn(async () => Response.json([{ _idRow: 10, _sName: 'HUD', _nItemCount: 1 }])));
+        await expect(fetchCategoryTreeCached('ModCategory')).resolves.toHaveLength(1);
+        expect(failedObserver).toHaveBeenCalledTimes(1);
+        expect(changed).toHaveBeenCalledExactlyOnceWith('ModCategory');
+        unsubscribe();
+
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        categoryCache.save.mockImplementationOnce(() => { throw new Error('cache write denied'); });
+        await expect(fetchCategoryTreeCached('SoundCategory')).resolves.toHaveLength(1);
+        expect(failedObserver).toHaveBeenCalledTimes(1);
+        expect(changed).toHaveBeenCalledTimes(1);
+    });
+
+    it('shares synchronous path indexes with the existing cache and rebuilds only when the payload changes', () => {
+        const fetch = vi.fn();
+        vi.stubGlobal('fetch', fetch);
+        const nodes = [{ id: 1, name: 'HUD', children: [{ id: 2, name: 'Character HUD' }] }];
+        categoryCache.get.mockReturnValue({ fetchedAt: 1, payload: JSON.stringify(nodes) });
+        const first = readCachedCategoryPaths();
+        expect(first?.get(2)?.map(category => category.name)).toEqual(['HUD', 'Character HUD']);
+        categoryCache.get.mockReturnValue({ fetchedAt: 2, payload: JSON.stringify(nodes) });
+        expect(readCachedCategoryPaths()).toBe(first);
+        categoryCache.get.mockReturnValue({ fetchedAt: 3, payload: JSON.stringify([{ id: 1, name: 'New category' }]) });
+        expect(readCachedCategoryPaths()).not.toBe(first);
+        expect(readCachedCategoryPaths()?.get(1)?.[0].name).toBe('New category');
+        expect(fetch).not.toHaveBeenCalled();
+        expect(categoryCache.save).not.toHaveBeenCalled();
+    });
+
+    it('keeps synchronous indexes scoped by model and tolerates unavailable or malformed cached data', () => {
+        categoryCache.get.mockImplementation((model: string) => ({
+            fetchedAt: 1,
+            payload: JSON.stringify([{ id: 1, name: model === 'SoundCategory' ? 'Weapons' : 'Skins' }]),
+        }));
+        expect(readCachedCategoryPaths('SoundCategory')?.get(1)?.[0].name).toBe('Weapons');
+        expect(readCachedCategoryPaths('ModCategory')?.get(1)?.[0].name).toBe('Skins');
+        categoryCache.get.mockReturnValue(null);
+        expect(readCachedCategoryPaths()).toBeUndefined();
+        categoryCache.get.mockReturnValue({ fetchedAt: 2, payload: 'not JSON' });
+        expect(readCachedCategoryPaths()).toBeUndefined();
     });
 
     it('preserves network failures on cold loads but falls back when revalidating a stored tree', async () => {

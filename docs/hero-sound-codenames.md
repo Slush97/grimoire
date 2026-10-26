@@ -1,6 +1,20 @@
 # Hero sound codenames
 
-Reference dictionary for mapping Deadlock's internal hero codenames to display names, scoped to **sound-mods-in-Locker** work (organize sound mods by hero and ability slot).
+Reference dictionary for mapping Deadlock's internal hero codenames to display names. Installed Sound, Wip, and HUD detection shares these namespaces; ability-slot extraction also uses the sound dictionary.
+
+## Installed Sound, Wip, and HUD detection
+
+`modHeroDetection.ts` checks each installed VPK's recognized asset paths before examining file labels. `inferHeroesFromVpkPaths` collects every supported hero referenced by model/material, particle, script, panorama, sound and soundevent paths. A multi-hero pack belongs to all detected heroes instead of discarding an ambiguous match.
+
+Sound paths first use `heroSoundCodenames.ts`; model, script and panorama paths use `heroCodenames.ts`. The installed detector filters both through `supportedHeroNames`, which is the roster supported by Grimoire's hero assets. A directory's presence alone never makes it a hero: NPC tokens such as `neutral_gremlin`, `shopkeeper` and `spirit_jar` do not match. Disabled or unsupported hero entries in the historical sound dictionary are also excluded from installed tags.
+
+Detection stops at the first level that names any supported heroes: recognized VPK paths, GameBanana per-file description, original archive/VPK filenames, then the mod submission name. Missing descriptions and text without a recognized hero fall through to the next level. Every hero at the selected level is retained; lower levels cannot add contradictory matches. Grimoire's renamed installed `pakNN` filename is never a matching input. A manual hero assignment overrides automatic detection.
+
+Each installed variant VPK is checked independently, including files from the same archive or submission. Updates detect heroes from the replacement payload rather than carrying forward the predecessor's automatic result. An already-installed successor promoted by an update is checked again as well.
+
+HUD eligibility uses cached category ancestry, including descendants of HUD, with the saved HUD label or breadcrumb as an offline fallback. Explicit and preserved local HUD classifications also qualify. Detected HUD heroes provide icons while the mod stays in Locker's General HUD destination; an explicit manual hero assignment can still reroute it. Automatic HUD matches do not populate the legacy single-hero skin hint.
+
+Results, including empty results, are saved with the VPK size/modified time, original-file inputs and detector version. Unchanged files reuse that result. A transient VPK parse failure is retried rather than saved as a checked empty result. This work is local and makes no additional hero API requests.
 
 ## Why two columns of codenames
 
@@ -9,14 +23,14 @@ Deadlock uses **two parallel codename namespaces** that don't always agree:
 1. **`class_name`** (form: `hero_<name>`) — what `assets.deadlock-api.com/v2/heroes` returns. Used by HUD, panorama, scripts.
 2. **sound-path codename** — what the VPK actually uses inside `sounds/abilities/<codename>/a<1-4>_<ability>/`.
 
-For 33 of the 35 heroes that currently ship ability sounds, these two agree. The exceptions:
+In the historical 35-hero ability-sound snapshot below, these two agree for 33 heroes. The exceptions:
 
 | Display name | Sound-path codename | `class_name` |
 |---|---|---|
 | Abrams | `abrams` | `hero_atlas` |
 | Mo & Krill | `mokrill` | `hero_krill` |
 
-When matching a mod's VPK contents, use the **sound-path** column. When talking to deadlock-api or reading scripts, use **`class_name`**.
+When matching sound paths in a mod's VPK, use the **sound-path** column. When talking to deadlock-api or reading scripts, use **`class_name`**. The installed detector supports both namespaces and existing legacy aliases.
 
 ## Ability slot convention
 
@@ -49,13 +63,13 @@ Treat alternates at the same slot as aliases of that slot, not separate abilitie
 
 Other heroes with similar leftover entries (smaller scale): `tengu a1` (`ghost`, `stone_squall`), `wrecker a2` (`salvage`, `scrap_blast`), `wrecker a4` (`teleport`, `wrecking_crew`), `synth a2` (`flying_cloak`, `grasp`), `tokamak a3` (`breach`, `radiance`), `nano a4` (`bomb`, `tower`).
 
-## Coverage
+## Historical ability-sound coverage
 
-deadlock-api lists 61 heroes total (live + in-development + disabled). The core VPK currently ships ability sound directories for **35** of them. In-dev / disabled heroes that already have sound assets:
+The 2026-05-17 snapshot listed 61 API heroes (live + in-development + disabled), with ability sound directories for **35** of them. In-dev / disabled heroes that already had sound assets:
 
 - Fathom (`hero_slork`), Tokamak (`hero_tokamak`), Trapper (`hero_trapper`), Wrecker (`hero_wrecker`), Kali (`hero_kali`)
 
-UI rule (per product call): **hide heroes whose API record has `disabled: true` until Valve flips them on.** Don't show in the Locker hero list even if their sound dir exists.
+The snapshot's `[hide]` rows are historical reference, not the installed detector's current allowlist. Use `supportedHeroNames` for installed matching; a dormant hero's sound assets do not automatically make that hero a supported tag.
 
 ## Full dictionary (35 heroes with shipped ability sounds)
 
@@ -103,7 +117,7 @@ Sorted by sound-path codename. Hidden-in-UI rows marked `[hide]`.
 
 Plan of record (not yet implemented): a build-time script generates `electron/main/services/heroSoundCodenames.json` from `https://assets.deadlock-api.com/v2/heroes`. Sound-path codenames are scraped from the live `game/citadel/pak01_dir.vpk` (Deadlock core) using its directory tree; the two-namespace mismatches above are baked in as overrides for any case where the API's `class_name` differs from the live sound path.
 
-Until the script lands, this table is the source of truth. To re-verify by hand:
+The runtime dictionaries in `heroCodenames.ts` and `heroSoundCodenames.ts` include newer released heroes beyond this historical table. Keep those dictionaries and the supported roster in agreement when adding heroes. To re-verify by hand:
 
 ```bash
 # 1) Pull current hero list

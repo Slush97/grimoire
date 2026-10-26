@@ -67,14 +67,45 @@ Displaying category paths adds no per-card API calls. It may load a section's sh
 
 The renderer rereads this existing cache when Browse or details opens, sharing concurrent reads. Unchanged trees retain their indexes and hero-map references so this does not redraw all cards. Refreshed trees rebuild those indexes, and a failed read retains any tree already available in memory.
 
+Installed inventory loading also warms the relevant section trees through this same cache in the background, so a missing tree does not delay the library. Main-process enrichment and locked mutations read a synchronous index of the cached payload; they do not fetch a tree for every mod or make requests while changing files. An unavailable tree falls back to the saved category label without inventing ancestors. A successfully changed cached tree notifies the renderer to silently refresh installed metadata and any loaded category index. Cache reads and timestamp-only refreshes do not emit that event.
+
 ## Hero labels and filtering
 
 Match category names to the app's supported hero names and aliases to render hero icons in place of those text labels. Keep other ancestors and leaf categories as text. Do not infer a different category path from a mod's title when explicit category metadata is available.
 
-For Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Sound and Wip filtering currently falls back to title matching where their trees do not provide equivalent hero categories.
+For Browse Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Browse Sound and Wip filtering uses catalog title matching where their trees do not provide equivalent hero categories. Browse card title matching also uses the cached category tree's hero roster and existing aliases, so it recognizes additions beyond the bundled roster without per-card requests. Explicit hero categories take precedence over titles.
 
-Installed cards and filter facets share `installedCardTaxonomy.ts` and the same category-tree indexes. A hero leaf becomes a hero icon rather than a second text tag. A General classification keeps precedence over a GameBanana category on Installed cards; filters also retain distinct leaf categories and section tags. Filter labels have normalized identities independent of their source, so a GameBanana HUD category and a HUD classification contribute to one option. Grouped variants count once per option. This normalization does not rewrite `categoryId`, `categoryName`, `lockerHero`, or `globalType`; these fields retain their provenance and manual overrides, so no metadata migration is needed.
+Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.
 
-The equivalent singular category labels Soul Container and Spirit Urn use the existing plural classification labels in Installed tags. Hero-only and unclassified files do not receive a synthetic Other tag or any replacement bucket.
+Sound cards use a hero portrait only when they resolve to exactly one hero. A multi-hero file or variant group uses the ordinary Sound preview, retaining any explicit thumbnail. Installed, classic Browse, and list cards show every hero icon. Readable Browse captions collapse more than two heroes into one icon and a compact `+n` tooltip, keeping their fixed height and action button clear.
+
+Installed cards and filter facets share `installedCardTaxonomy.ts` and the category-tree indexes:
+
+- The Tags filter includes every non-hero ancestor and leaf label, plus the existing Sounds/Wip section tags. Heroes have their separate filter.
+- Cards display all resolved hero icons and the representative file's deepest non-hero category. A compact `+n` chip lists the remaining tags in its normal mouse tooltip.
+- Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
+- When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
+- Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.
+- Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
+
+## Installed hero detection
+
+Mod-section skin ownership comes from its category ancestry. Installed Sound, Wip, and HUD files use the same local detector, which can return several supported heroes. Recognize HUD descendants through the cached Mod category path, with saved-label fallback offline:
+
+1. Inspect recognized asset paths inside that file's VPK. Resolve sound and model codenames through their existing namespaces and supported-hero mappings; NPC and unsupported hero tokens do not count.
+2. If any supported heroes are found, use that complete set and skip text matching.
+3. Otherwise check the GameBanana per-file description, then original archive/VPK filenames, then the mod submission name. Stop at the first level with supported hero matches, retaining every hero from that level. Missing descriptions simply fall through. Never use Grimoire's renamed `pakNN` filename.
+
+Detect each installed variant separately. Updating a Sound, Wip, or HUD detects heroes from every replacement VPK, including an already-installed successor reused by an update, without copying the predecessor's automatic matches.
+
+The detection result records the file size, modified time, matching inputs and detector version, including an empty result. Unchanged files reuse it. Manual hero assignments remain authoritative. See [the codename reference](hero-sound-codenames.md) for path namespaces and exclusions.
+
+## Locker General routing and metadata upgrade
+
+GameBanana-linked files derive Locker General routing from their category path: HUD descendants use HUD, and Hideout, Soul Container, Spirit Urn and Killstreak Music map to the existing corresponding destinations. Automatic hero attribution on a HUD supplies icons while retaining its HUD routing and shuffle bucket. Other resolved heroes or a manual hero assignment take precedence over automatic General routing. An explicit manual General assignment, including an unassigned choice, is authoritative.
+
+General routing no longer scans VPKs to invent a classification. Existing local classifications, manual assignment and classifications attached to locally generated Soul Container/Spirit Urn imports remain usable. General routing is independent of the Global priority-folder placement setting.
+
+The metadata upgrade removes legacy unmarked General classifications from GameBanana-linked rows and clears their old nonmanual Sound/Wip hero tags so the new detector can recalculate them. Local metadata and explicit manual hero assignments are preserved. Before the first change, the original active sidecar is copied into its mode-specific backup directory; failure to create the backup or atomically write the upgrade stops the operation. Normal and developer metadata upgrade independently. Incoming old backup/import metadata is sanitized on write so retired fields cannot return. Category tag lists are derived at runtime and are not persisted.
 
 Related code: `gamebanana.ts`, `syncService.ts`, `modDatabase.ts`, `src/lib/heroFilter.ts`, and the shared renderer category resolver. See also [the API reference](gamebanana_api_reference.md).

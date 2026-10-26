@@ -1,5 +1,6 @@
 import type { Mod } from '../types/mod';
 import { variantGroupKey } from './variantGroups';
+import { modHeroNames } from './lockerUtils';
 
 export type LocalVariantSelectionIneligibility =
   | 'minimum'
@@ -13,8 +14,8 @@ export type LocalVariantSelectionIneligibility =
  * while an unclassified VPK inherits the established group profile. */
 function classificationKey(mod: Mod): string | undefined {
   if (mod.globalType) return `global:${mod.globalType}`;
-  const hero = mod.lockerHero?.trim();
-  return hero ? `hero:${hero.toLocaleLowerCase()}` : undefined;
+  const heroes = modHeroNames(mod).map(hero => hero.toLowerCase()).sort();
+  return heroes.length > 0 ? `hero:${JSON.stringify(heroes)}` : undefined;
 }
 
 export type LocalVariantSelectionEligibility =

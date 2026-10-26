@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
-import { shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
+import { getManualOnlyShuffleKeys, shuffleExclusionKey, shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
 import { shakeElement } from '../../lib/shakeElement';
 import { isModLoadedInGame, isReorderBlocked } from '../../lib/modLocks';
 import { useAppStore } from '../../stores/appStore';
@@ -976,6 +976,11 @@ export default function HeroSkinsPanel({
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
+  const libraryMods = useAppStore((s) => s.mods);
+  const excludedShuffleKeys = useMemo(
+    () => getManualOnlyShuffleKeys([...libraryMods, ...mods]),
+    [libraryMods, mods],
+  );
   const lockerModImages = useAppStore((s) => s.lockerModImages);
   // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
@@ -1032,14 +1037,15 @@ export default function HeroSkinsPanel({
    */
   const shufflePropsFor = (group: SkinGroup) => {
     const key = shuffleSkinKey(group.primary);
+    const excluded = excludedShuffleKeys.has(shuffleExclusionKey(group.primary));
     const pinned = !!group.primary.priorityMod && !!onToggleShuffleIncluded;
     return {
-      isIncluded: pinned ? false : includedSkinKeys?.has(key),
+      isIncluded: pinned || excluded ? false : includedSkinKeys?.has(key),
       onToggleIncluded:
-        onToggleShuffleIncluded && !pinned ? () => onToggleShuffleIncluded(key) : undefined,
+        onToggleShuffleIncluded && !pinned && !excluded ? () => onToggleShuffleIncluded(key) : undefined,
       shufflePinned: pinned,
-      shuffleVariantChoice: shuffleVariantChoices?.get(key),
-      onSetShuffleVariant: onSetShuffleVariant
+      shuffleVariantChoice: excluded ? undefined : shuffleVariantChoices?.get(key),
+      onSetShuffleVariant: onSetShuffleVariant && !excluded
         ? (choice: VariantChoice | null) => onSetShuffleVariant(key, choice)
         : undefined,
       shuffleArmed,

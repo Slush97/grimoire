@@ -192,7 +192,9 @@ function ModDetailsModal({
   const categoryPaths = useCategoryStore(state => state.pathsByModel[categoryModel]);
   const heroNames = useCategoryStore(state => state.heroNames);
   const loadCategories = useCategoryStore(state => state.load);
-  const categories = resolveCategoryPath(categoryPaths, mod.category, mod.rootCategory);
+  const categories = resolveCategoryPath(categoryPaths, mod.category, mod.rootCategory)
+    .map(category => ({ category, hero: heroNameForLabel(category.name, heroNames) }))
+    .sort((a, b) => Number(!!b.hero) - Number(!!a.hero));
   useEffect(() => {
     const models = categoryModel === 'ModCategory' ? [categoryModel] : [categoryModel, 'ModCategory'];
     void Promise.all(models.map(model => loadCategories(model))).catch(() => {
@@ -1621,16 +1623,13 @@ function ModDetailsModal({
 
               {categories.length > 0 && (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {categories.map(category => {
-                    const hero = heroNameForLabel(category.name, heroNames);
-                    return hero ? (
+                  {categories.map(({ category, hero }) => hero ? (
                       <span key={category.id ?? category.name} className="inline-flex items-center" title={category.name}>
                         <HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly />
                       </span>
                     ) : (
                       <Tag key={category.id ?? category.name}>{category.name}</Tag>
-                    );
-                  })}
+                    ))}
                 </div>
               )}
               <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />

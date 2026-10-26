@@ -2,13 +2,9 @@
 // (deadlock-api `hero_<codename>`, stripped of the `hero_` prefix) that hero
 // card art lives under as `panorama/images/heroes/<codename>_<variant>`.
 //
-// This deliberately does NOT reuse the sound-codename table (heroSoundCodenames
-// .ts). That table is scoped to the ~35 heroes that ship ability sounds, so it
-// (a) omits heroes whose only modded art is panorama cards (Doorman, Graves,
-// Rem, Sinclair, Venator, Victor, Warden, Wraith) and (b) uses the sound-path
-// codename, which diverges from the panorama/class_name codename for Abrams
-// (sound `abrams` vs panorama `atlas`) and Mo & Krill (`mokrill` vs `krill`).
-// Both bugs made the card picker silently return nothing for those heroes.
+// Sound-path codenames have their own table because they diverge from the
+// panorama/class_name namespace for Abrams (sound `abrams`, panorama `atlas`)
+// and Mo & Krill (`mokrill`, `krill`).
 //
 // Source of truth: assets.deadlock-api.com/v2/heroes `class_name`. Both
 // "Doorman" (GameBanana's category name) and "The Doorman" (the API/roster
@@ -93,4 +89,36 @@ export function codenamesForHero(heroName: string): string[] {
     const primary = PANORAMA_CODENAME_BY_HERO[heroName];
     if (!primary) return [];
     return [primary, ...(PANORAMA_CODENAME_ALIASES[heroName] ?? [])];
+}
+
+/** Heroes supported by the app's installed-mod asset and Locker UI. */
+export const supportedHeroNames: readonly string[] = Object.keys(PANORAMA_CODENAME_BY_HERO)
+    .filter((name) => name !== 'The Doorman');
+
+const supportedNamesByKey = new Map(
+    supportedHeroNames.map((name) => [heroNameKey(name), name]),
+);
+supportedNamesByKey.set('thedoorman', 'Doorman');
+supportedNamesByKey.set('moandkrill', 'Mo & Krill');
+
+function heroNameKey(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Exact supported display-name matching, including punctuation aliases. */
+export function canonicalSupportedHeroName(name: string): string | undefined {
+    return supportedNamesByKey.get(heroNameKey(name));
+}
+
+const modelHeroesByCodename = new Map<string, string>();
+for (const name of supportedHeroNames) {
+    for (const code of codenamesForHero(name)) modelHeroesByCodename.set(code, name);
+}
+
+/** Resolve the model/panorama codename namespace without admitting NPCs. */
+export function heroForModelCodename(code: string, namespace: 'model' | 'panorama' = 'model'): string | undefined {
+    const key = code.toLowerCase();
+    // Vyper reuses Kali's portrait names, but Kali's hero payload is unused.
+    if (key === 'kali' && namespace !== 'panorama') return undefined;
+    return modelHeroesByCodename.get(key) ?? canonicalSupportedHeroName(code);
 }

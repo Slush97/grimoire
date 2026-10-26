@@ -20,15 +20,26 @@ function escapeRegex(s: string): string {
 }
 
 const heroPatterns = new Map<string, RegExp>();
+const browseHeroAliases: Readonly<Record<string, readonly string[]>> = {
+  'deadman danny': ['deadman', 'danny'],
+  'nurse harrow': ['harrow'],
+};
 
 /** Whole-word, case-insensitive. Letters bound a name but digits do not, so
  *  "Rem" matches "Rem2" and "Rem's" yet not "Remodel", and "Silver" does not
- *  match "Silverhand". Only used where GameBanana has no hero categories
- *  (Sound, Wip); Mod skins are matched by category. */
+ *  match "Silverhand". Used where GameBanana supplies no hero category,
+ *  including Sound, Wip, and hero-specific HUD titles. */
 export function nameMentionsHero(name: string, hero: string): boolean {
   let pattern = heroPatterns.get(hero);
   if (!pattern) {
-    const aliases = [hero.toLowerCase(), ...(HERO_ALIASES[hero] ?? [])];
+    const aliases = [...new Set([
+      hero,
+      hero.replace(/\s+/g, ''),
+      ...(browseHeroAliases[hero.toLowerCase()] ?? []),
+      ...Object.entries(HERO_ALIASES)
+        .filter(([, name]) => name.toLowerCase() === hero.toLowerCase())
+        .map(([alias]) => alias),
+    ])];
     pattern = new RegExp(`(?<!\\p{L})(?:${aliases.map(escapeRegex).join('|')})(?!\\p{L})`, 'iu');
     heroPatterns.set(hero, pattern);
   }

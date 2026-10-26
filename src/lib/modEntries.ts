@@ -1,8 +1,8 @@
 import type { Mod } from '../types/mod';
-import { GLOBAL_MOD_TYPE_LABELS, modLoadOrder } from './lockerUtils';
+import { modLoadOrder } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
-import { getInstalledCardTaxonomy, normalizeInstalledTagLabel, type InstalledTaxonomyContext } from './installedCardTaxonomy';
+import { getInstalledCardTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 
 /**
  * Rows on the Installed page are either standalone mods or grouped files that
@@ -181,7 +181,7 @@ export function entryIsLocal(entry: ModEntry): boolean {
 export function entryHeroNames(entry: ModEntry, context?: InstalledTaxonomyContext): string[] {
   const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
   return Array.from(new Set(
-    mods.map((mod) => getInstalledCardTaxonomy(mod, context).heroName).filter((name): name is string => !!name)
+    mods.flatMap((mod) => getInstalledCardTaxonomy(mod, context).heroNames)
   ));
 }
 
@@ -192,19 +192,7 @@ export interface InstalledTag {
 
 function modTags(mod: Mod, context?: InstalledTaxonomyContext): InstalledTag[] {
   const taxonomy = getInstalledCardTaxonomy(mod, context);
-  const tags = new Map<string, InstalledTag>();
-  const add = (rawLabel: string) => {
-    const label = normalizeInstalledTagLabel(rawLabel);
-    if (!label) return;
-    const key = `tag:${label.toLowerCase()}`;
-    if (!tags.has(key)) tags.set(key, { key, label });
-  };
-
-  if (taxonomy.globalType) add(GLOBAL_MOD_TYPE_LABELS[taxonomy.globalType]);
-  if (taxonomy.categoryLabel) add(taxonomy.categoryLabel);
-  if (mod.sourceSection === 'Sound') add('Sounds');
-  else if (mod.sourceSection === 'Wip') add('Wip');
-  return [...tags.values()];
+  return installedTaxonomyTags(taxonomy, mod.sourceSection).map(label => ({ key: `tag:${label.toLowerCase()}`, label }));
 }
 
 export function entryTags(entry: ModEntry, context?: InstalledTaxonomyContext): InstalledTag[] {

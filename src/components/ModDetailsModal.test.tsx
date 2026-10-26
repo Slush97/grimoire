@@ -61,6 +61,7 @@ describe('mod details', () => {
     mocks.filePhase = 'idle';
     mocks.store.settings = {} as AppSettings;
     mocks.categoryState.pathsByModel = {};
+    mocks.categoryState.heroNames = ['Violet'];
     mocks.categoryState.load.mockResolvedValue([]);
     mocks.store.saveSettings.mockImplementation(async (settings: AppSettings) => { mocks.store.settings = settings; });
     previousApi = window.electronAPI;
@@ -98,8 +99,10 @@ describe('mod details', () => {
     } });
     const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
     expect(hero.querySelector('img')?.getAttribute('src')).toContain('/heroes/chip-icons/violet.png');
-    expect(hero.parentElement?.textContent).toBe('SkinsVioletFaithful/Vanilla+');
+    expect(hero.parentElement?.textContent).toBe('VioletSkinsFaithful/Vanilla+');
     const tags = hero.parentElement!;
+    expect(tags.firstElementChild).toBe(hero);
+    expect([...tags.children].slice(1).map(tag => tag.textContent)).toEqual(['Skins', 'Faithful/Vanilla+']);
     const requirements = document.querySelector('[aria-label="requirements.title"]')!;
     const fileTitle = [...document.querySelectorAll('h3')].find(item => item.textContent?.includes('modDetails.sections.files'))!;
     expect(tags.nextElementSibling).toBe(requirements);
@@ -107,6 +110,17 @@ describe('mod details', () => {
     expect(tags.parentElement).toBe(fileTitle.parentElement?.parentElement);
     expect(tags.classList.contains('flex-wrap')).toBe(true);
     expect(mocks.categoryState.load).toHaveBeenCalledWith('ModCategory');
+  });
+
+  it.each(['modal', 'sidebar'] as const)('places all hero icons first while preserving the other category order in the %s', async variant => {
+    mocks.categoryState.heroNames = ['Violet', 'Haze'];
+    mocks.categoryState.pathsByModel.ModCategory = new Map([[4, [
+      { id: 1, name: 'Skins' }, { id: 2, name: 'Violet' },
+      { id: 3, name: 'Faithful/Vanilla+' }, { id: 4, name: 'Haze' },
+    ]]]);
+    await render(false, { variant, mod: { ...mod, category: { id: 4, name: 'Haze' } } });
+    const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
+    expect([...hero.parentElement!.children].map(tag => tag.textContent)).toEqual(['Violet', 'Haze', 'Skins', 'Faithful/Vanilla+']);
   });
 
   it('leaves no empty badge group before the title when no status is visible', async () => {

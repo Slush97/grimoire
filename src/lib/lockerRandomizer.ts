@@ -2,6 +2,7 @@ import type { GlobalModType, Mod } from '../types/mod';
 import {
   activeLockerSkin,
   getEffectiveGlobalType,
+  modHeroNames,
   GLOBAL_MOD_TYPE_ORDER,
   groupGlobalMods,
   groupLockerSkins,
@@ -61,6 +62,25 @@ export function shuffleSkinKey(mod: Mod): string {
   return `mod:${mod.id}`;
 }
 
+/** Transient exclusions scope remote identities by section without changing saved pool keys. */
+export function shuffleExclusionKey(mod: Mod): string {
+  const key = shuffleSkinKey(mod);
+  return !mod.localGroupId && typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0
+    ? `${mod.sourceSection ?? 'Mod'}:${key}`
+    : key;
+}
+
+/** A shared hero payload keeps its whole logical skin outside automatic shuffle. */
+export function getManualOnlyShuffleKeys(mods: Iterable<Mod>): Set<string> {
+  const keys = new Set<string>();
+  for (const mod of mods) {
+    if (mod.sourceSection !== 'Sound' && !getEffectiveGlobalType(mod) && modHeroNames(mod).length > 1) {
+      keys.add(shuffleExclusionKey(mod));
+    }
+  }
+  return keys;
+}
+
 /**
  * The pool key for a mod on the axis it actually shuffles on.
  *
@@ -107,6 +127,8 @@ export interface ShuffleGroupOptions {
    * dead opt-in would be a lie; omit it when the caller only needs the axis.
    */
   heroList?: readonly HeroCategory[];
+  /** Full-library exclusions, including siblings outside the current view. */
+  excludedSkinKeys?: ReadonlySet<string>;
 }
 
 /**
@@ -117,13 +139,15 @@ export interface ShuffleGroupOptions {
  */
 function homeGroupKind(
   mod: Mod,
-  heroList?: readonly HeroCategory[]
+  heroList?: readonly HeroCategory[],
+  excludedSkinKeys?: ReadonlySet<string>,
 ): 'hero' | 'bucket' | null {
   if (getEffectiveGlobalType(mod)) return 'bucket';
+  if (modHeroNames(mod).length > 1 || excludedSkinKeys?.has(shuffleExclusionKey(mod))) return null;
   if (!isLockerManagedMod(mod)) return null;
   if (!heroList) return 'hero';
   // Ask the real grouper rather than re-deriving the hero match: its fallback
-  // chain (manual tag, author category, fuzzy name match) lives there, and a
+  // chain (resolved heroes, legacy tag, author category) lives there, and a
   // second copy here is precisely the drift this helper exists to prevent.
   return groupModsByCategory([mod], heroList).map.size > 0 ? 'hero' : null;
 }
@@ -141,7 +165,7 @@ export function shuffleGroupKind(
   // Placement beats filing: a priority-root mod still sits in its home group,
   // but planShuffleGroup neither picks it nor disables it.
   if (mod.priorityMod) return 'priority';
-  return homeGroupKind(mod, options.heroList);
+  return homeGroupKind(mod, options.heroList, options.excludedSkinKeys);
 }
 
 export interface ShufflePoolSummary {
@@ -166,8 +190,9 @@ export function summarizeShufflePool(
 ): ShufflePoolSummary {
   const eligibleKeys: string[] = [];
   const seen = new Set<string>();
+  const excludedSkinKeys = new Set([...(options.excludedSkinKeys ?? []), ...getManualOnlyShuffleKeys(mods)]);
   for (const mod of mods) {
-    const kind = shuffleGroupKind(mod, options);
+    const kind = shuffleGroupKind(mod, { ...options, excludedSkinKeys });
     if (kind !== 'hero' && kind !== 'bucket') continue;
     const key = shufflePoolKey(mod);
     if (seen.has(key)) continue;
@@ -338,6 +363,8 @@ export interface RandomizePlanOptions {
    * one so a repeat shuffle visibly changes its look. Defaults to true.
    */
   avoidCurrent?: boolean;
+  /** Preserve logical skins containing a multi-hero file, including hidden siblings. */
+  excludedSkinKeys?: ReadonlySet<string>;
 }
 
 export interface RandomizePlan {
@@ -361,6 +388,7 @@ interface GroupPlanContext {
   avoidCurrent: boolean;
   enableIds: string[];
   disableIds: string[];
+  excludedSkinKeys: ReadonlySet<string>;
 }
 
 /**
@@ -389,7 +417,9 @@ function planShuffleGroup(
   scope: ShuffleGroupScope,
   { singleSlot = scope === 'hero' }: { singleSlot?: boolean } = {}
 ): boolean {
-  const { included, variants, rng, avoidCurrent, enableIds, disableIds } = ctx;
+  const { included, variants, rng, avoidCurrent, enableIds, disableIds, excludedSkinKeys } = ctx;
+  // Shared payloads stay manual: another hero must never switch them off.
+  mods = mods.filter(mod => !excludedSkinKeys.has(shuffleExclusionKey(mod)));
   // Bucket members are pooled under an axis-qualified key so a hero-card opt-in
   // (or variant choice) on the same submission cannot arm this group.
   const poolKeyOf = scope === 'bucket' ? shufflePoolKey : shuffleSkinKey;
@@ -513,10 +543,14 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
     rng = Math.random,
     avoidCurrent = true,
   } = options;
+  const excludedSkinKeys = new Set([
+    ...(options.excludedSkinKeys ?? []),
+    ...getManualOnlyShuffleKeys([...heroSkins.values(), ...(globalBuckets?.values() ?? [])].flat()),
+  ]);
   const enableIds: string[] = [];
   const disableIds: string[] = [];
   const changedHeroes: number[] = [];
-  const ctx: GroupPlanContext = { included, variants, rng, avoidCurrent, enableIds, disableIds };
+  const ctx: GroupPlanContext = { included, variants, rng, avoidCurrent, enableIds, disableIds, excludedSkinKeys };
 
   for (const heroId of heroIds) {
     const mods = heroSkins.get(heroId);
@@ -568,7 +602,8 @@ export function planLaunchShuffle(options: LaunchShufflePlanOptions): RandomizeP
   // from drifting apart. The hero list is deliberately not passed: the grouping
   // below resolves heroes itself, and mods it cannot place land in `unassigned`
   // and are dropped there.
-  const lockerSkins = mods.filter((m) => homeGroupKind(m) === 'hero');
+  const excludedSkinKeys = getManualOnlyShuffleKeys(mods);
+  const lockerSkins = mods.filter((m) => homeGroupKind(m, undefined, excludedSkinKeys) === 'hero');
   const { map } = groupModsByCategory(lockerSkins, heroList);
   // Bucket over the full mod list, not lockerSkins: getEffectiveGlobalType is
   // exactly what lockerSkins filtered out, so the two group sets partition the
@@ -584,5 +619,6 @@ export function planLaunchShuffle(options: LaunchShufflePlanOptions): RandomizeP
     globalBuckets,
     variants,
     rng,
+    excludedSkinKeys,
   });
 }

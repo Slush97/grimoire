@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { heroNameForLabel } from './heroNames';
+import { heroNameForLabel, heroNamesInText } from './heroNames';
 import { getHeroChipIconPath } from './lockerUtils';
 
 describe('heroNameForLabel', () => {
@@ -20,5 +20,21 @@ describe('heroNameForLabel', () => {
   it('uses known names before a cached tree has loaded', () => {
     expect(heroNameForLabel('Abrams', [])).toBe('Abrams');
     expect(heroNameForLabel('  Custom   category  ', [])).toBeNull();
+  });
+});
+
+describe('heroNamesInText', () => {
+  it('matches newer cached heroes and normalizes authored separators', () => {
+    expect(heroNamesInText('VIOLET + nurse_harrow and deadman-danny', ['Violet', 'Nurse Harrow', 'Deadman Danny']))
+      .toEqual(['Violet', 'Nurse Harrow', 'Deadman Danny']);
+  });
+
+  it('deduplicates canonical names and preserves whole-name boundaries', () => {
+    expect(heroNamesInText('The Doorman, RatKing and Rem2, not Silverhand', ['The Doorman', 'Doorman', 'Rat King', 'Rem', 'Silver']))
+      .toEqual(['Doorman', 'Rat King', 'Rem']);
+  });
+
+  it('uses the bundled roster and its aliases without a cached tree', () => {
+    expect(heroNamesInText('Geist and Mo and Krill', [])).toEqual(['Lady Geist', 'Mo & Krill']);
   });
 });

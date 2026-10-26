@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GameBananaCategory, GameBananaMod } from '../../types/gamebanana';
 import { resolveCategoryPath } from '../../lib/categoryPaths';
-import { heroNameForLabel } from '../../lib/heroNames';
-import { inferHeroFromTitle } from '../../lib/lockerUtils';
+import { heroNameForLabel, heroNamesInText } from '../../lib/heroNames';
 
 // Abbreviate counts (1234 -> 1.2k, 98765 -> 99k). Falsy/non-finite inputs
 // render as "0" — without this, undefined slips past every `<` check
@@ -37,7 +36,7 @@ export function getBrowseCardTaxonomy(
   section: string,
   paths?: ReadonlyMap<number, readonly GameBananaCategory[]>,
   heroNames?: readonly string[],
-): { heroName: string | null; chips: BrowseReadableChip[] } {
+): { heroNames: string[]; chips: BrowseReadableChip[] } {
   const categories = resolveCategoryPath(paths, mod.subCategory, mod.rootCategory);
   const chips: BrowseReadableChip[] = [];
   const isSoundSection = section === 'Sound';
@@ -55,7 +54,7 @@ export function getBrowseCardTaxonomy(
   const rank = (chip: BrowseReadableChip) => (chip.label === '18+' ? 0 : 1);
   chips.sort((a, b) => rank(a) - rank(b));
 
-  return { heroName: categoryHero ?? inferHeroFromTitle(mod.name), chips };
+  return { heroNames: categoryHero ? [categoryHero] : heroNamesInText(mod.name, heroNames), chips };
 }
 
 export function usePrefersReducedMotion() {

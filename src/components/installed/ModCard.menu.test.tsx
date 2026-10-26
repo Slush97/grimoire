@@ -6,6 +6,8 @@ import { ModCard } from './ModCard';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { buildCategoryPaths } from '../../lib/categoryPaths';
+import type { Mod } from '../../types/mod';
+import * as imageActions from '../../lib/imageActions';
 
 const translate = vi.hoisted(() => vi.fn((key: string) => key));
 vi.mock('react-i18next', () => ({
@@ -105,7 +107,113 @@ describe('installed card menu mounting', () => {
     expect(host.querySelectorAll('img[src*="solomon.png"]')).toHaveLength(1);
     const visibleLabels = [...host.querySelectorAll('span')].filter(node =>
       node.childElementCount === 0 && node.textContent === 'Solomon' && !node.classList.contains('sr-only'));
-    expect(visibleLabels).toHaveLength(viewMode === 'list' ? 1 : 0);
+    expect(visibleLabels).toHaveLength(0);
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
+    useCategoryStore.setState({
+      heroNames: ['Haze', 'Wraith'],
+      pathsByModel: { SoundCategory: buildCategoryPaths([{
+        id: 1, name: 'Voices', itemCount: 1,
+        children: [{ id: 2, name: 'VOs', itemCount: 1 }],
+      }]) },
+    });
+    const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', categoryId: 2, lockerHeroes: ['Haze'] };
+    const secondary = { ...primary, id: 'second', lockerHeroes: ['Wraith', 'Haze'] };
+    input = { ...input, viewMode, mod: primary, group: {
+      variants: [primary, secondary] as Mod[], variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker: vi.fn(),
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelectorAll('img[src*="haze.png"]')).toHaveLength(1);
+    expect(host.querySelectorAll('img[src*="wraith.png"]')).toHaveLength(1);
+    const overflow = [...host.querySelectorAll<HTMLElement>('[title]')].find(node => node.textContent === '+2');
+    expect(overflow?.title).toBe('Voices\nSounds');
+    expect([...host.querySelectorAll('span')].some(node => node.childElementCount === 0 && node.textContent === 'VOs')).toBe(true);
+  });
+
+  it('does not infer hero icons or thumbnail art from a sound submission title', async () => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1, name: 'Haze voice', sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3' } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('img[src*="haze"]')).toBeNull();
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('keeps single-hero Sound portrait art and image actions in %s', async viewMode => {
+    const copyImage = vi.spyOn(imageActions, 'copyImageToClipboard').mockResolvedValue();
+    const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
+    const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Wraith'] };
+    input = { ...input, viewMode, mod: primary, group: {
+      variants: [earlier, primary] as Mod[], variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker: vi.fn(),
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('img[src*="Wraith_Render.png"]')).not.toBeNull();
+    expect(host.querySelector('img[src*="Haze_Render.png"]')).toBeNull();
+    expect(host.querySelector('img[src*="haze.png"]')).toBeNull();
+    expect(host.querySelector('img[src*="wraith.png"]')).not.toBeNull();
+    await openMenu('dropdown');
+    const imageMenu = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
+      .find(item => item.textContent === 'imageContextMenu.image')!;
+    await act(async () => {
+      imageMenu.focus();
+      imageMenu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    const copyAction = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find(item => item.textContent === 'imageContextMenu.copyImage')!;
+    await act(async () => copyAction.click());
+    expect(copyImage).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('/locker/heroes/Wraith_Render.png'));
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('uses the normal Sound preview for a multihero file in %s', async viewMode => {
+    input = { ...input, viewMode, mod: {
+      ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Haze', 'Wraith'],
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('img[src*="_Render.png"]')).toBeNull();
+    expect(host.textContent).toContain('installed.card.soundPreview');
+    expect(host.querySelector('img[src*="haze.png"]')).not.toBeNull();
+    expect(host.querySelector('img[src*="wraith.png"]')).not.toBeNull();
+    await openMenu('dropdown');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
+      .some(item => item.textContent === 'imageContextMenu.image')).toBe(false);
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('does not choose a first portrait when Sound variants affect different heroes in %s', async viewMode => {
+    const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: ['Wraith'] };
+    const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
+    input = { ...input, viewMode, mod: primary, group: {
+      variants: [earlier, primary] as Mod[], variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker: vi.fn(),
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('img[src*="_Render.png"]')).toBeNull();
+    expect(host.textContent).toContain('installed.card.soundPreview');
+    expect(host.querySelector('img[src*="haze.png"]')).not.toBeNull();
+    expect(host.querySelector('img[src*="wraith.png"]')).not.toBeNull();
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('retains explicit thumbnail art for a multihero Sound in %s', async viewMode => {
+    const thumbnailUrl = 'https://example.invalid/authored-thumbnail.png';
+    input = { ...input, viewMode, mod: {
+      ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', thumbnailUrl, lockerHeroes: ['Haze', 'Wraith'],
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector(`img[src="${thumbnailUrl}"]`)).not.toBeNull();
+    expect(host.querySelector('img[src*="_Render.png"]')).toBeNull();
+    await openMenu('dropdown');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
+      .some(item => item.textContent === 'imageContextMenu.image')).toBe(true);
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('does not borrow a sibling Sound hero for an unresolved %s representative', async viewMode => {
+    const primary = { ...input.mod, gameBananaId: 1, sourceSection: 'Sound', audioUrl: 'https://example.invalid/voice.mp3', lockerHeroes: [] };
+    const earlier = { ...primary, id: 'earlier', enabled: false, lockerHeroes: ['Haze'] };
+    input = { ...input, viewMode, mod: primary, group: {
+      variants: [earlier, primary] as Mod[], variantCount: 2, enabledCount: 1, enabledLabels: [], onOpenPicker: vi.fn(),
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('img[src*="_Render.png"]')).toBeNull();
+    expect(host.querySelector('img[src*="haze.png"]')).not.toBeNull();
+    await openMenu('dropdown');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
+      .some(item => item.textContent === 'imageContextMenu.image')).toBe(false);
   });
 
   it('offers current category-tree heroes when retagging', async () => {

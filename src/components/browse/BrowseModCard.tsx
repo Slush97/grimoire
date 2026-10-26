@@ -74,8 +74,11 @@ function ReadableBrowseModCard({
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
-  const { heroName: inferredHero, chips } = taxonomy;
-  const heroIconSpace = inferredHero ? BROWSE_READABLE_HERO_ICON_SPACE : 0;
+  const { heroNames, chips } = taxonomy;
+  const inferredHero = heroNames.length === 1 ? heroNames[0] : undefined;
+  const visibleHeroes = heroNames.slice(0, heroNames.length > 2 ? 1 : 2);
+  const hiddenHeroes = heroNames.slice(visibleHeroes.length);
+  const heroIconSpace = (visibleHeroes.length + (hiddenHeroes.length ? 1 : 0)) * BROWSE_READABLE_HERO_ICON_SPACE;
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
@@ -219,14 +222,17 @@ function ReadableBrowseModCard({
 
         <div className={`mt-auto flex shrink-0 items-center justify-between gap-2 ${isMicro ? 'h-6' : 'h-7'}`}>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            {inferredHero && (
-              <span className="inline-flex max-w-6 flex-shrink-0 items-center" title={inferredHero}>
+            {visibleHeroes.map(hero => (
+              <span key={hero} className="inline-flex max-w-6 flex-shrink-0 items-center" title={hero}>
                 <HeroTagLabel
-                  heroName={inferredHero}
+                  heroName={hero}
                   iconClassName={isMicro ? 'h-4 w-4' : readableDensity === 'full' ? 'h-[22px] w-[22px]' : 'h-5 w-5'}
                   iconOnly
                 />
               </span>
+            ))}
+            {hiddenHeroes.length > 0 && (
+              <span className="shrink-0 text-2xs text-text-secondary" title={hiddenHeroes.join('\n')}>+{hiddenHeroes.length}</span>
             )}
             <BrowseReadableStatsRow mod={mod} density={readableDensity} showUpdated={updatedInline} />
           </div>
@@ -324,7 +330,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
-  const inferredHero = taxonomy.heroName;
+  const inferredHero = taxonomy.heroNames.length === 1 ? taxonomy.heroNames[0] : undefined;
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePosX = getHeroFacePosition(inferredHero).x;
   const [audioControlsActive, setAudioControlsActive] = useState(false);
@@ -419,7 +425,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             </div>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-            {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
+            {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
           </div>
@@ -650,7 +656,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           )}
           <h3 className="font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-base">{mod.name}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-xs">
-            {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
+            {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
             <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
             <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -674,7 +680,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             }
           >
             <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-sm">
-              {inferredHero && <span title={inferredHero}><HeroTagLabel heroName={inferredHero} iconClassName="h-5 w-5" iconOnly /></span>}
+              {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
               <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
               <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
               {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}

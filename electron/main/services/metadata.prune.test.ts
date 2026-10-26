@@ -195,7 +195,6 @@ describe('recoverPrunedIdentities', () => {
         const after = loadMetadata();
         expect(after['pak07_dir.vpk']).toEqual({
             sha256: SHA_A.toUpperCase(),
-            globalType: null,
             modName: 'Top Bar HUD',
             gameBananaId: 703330,
         });

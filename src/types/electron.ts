@@ -1218,6 +1218,7 @@ export interface ElectronAPI {
     removeModUpdateRequest: (requestId: string) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
+    onGamebananaCategoriesChanged: (callback: (model: string) => void) => () => void;
     getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;
     getCollectionItems: (args: { collectionId: number; page?: number }) => Promise<GameBananaCollectionItemsResponse>;
 

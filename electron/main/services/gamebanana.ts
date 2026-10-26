@@ -7,6 +7,7 @@ import { parseRequirements } from '../../../src/lib/modRequirements';
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
+import { buildCategoryPaths, type CategoryPaths } from '../../../src/lib/categoryPaths';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
 // build; re-exported so the many `from './gamebanana'` importers keep working.
@@ -587,6 +588,20 @@ const CATEGORY_REVALIDATE_MS = 60 * 60 * 1000;
 
 /** Refreshes already running, keyed by category model. */
 const categoryRefreshesInFlight = new Map<string, Promise<GameBananaCategoryNode[]>>();
+const categoryChangeListeners = new Set<(model: string) => void>();
+
+/** Observe successful tree changes, never cache reads or timestamp-only refreshes. */
+export function observeCategoryTreeChanges(listener: (model: string) => void): () => void {
+    categoryChangeListeners.add(listener);
+    return () => { categoryChangeListeners.delete(listener); };
+}
+
+/** An index of the existing SQLite payload, not a separate freshness cache. */
+const categoryIndexes = new Map<string, {
+    payload: string;
+    nodes: GameBananaCategoryNode[];
+    paths: CategoryPaths;
+}>();
 
 /**
  * Category tree with offline-first serving: return the locally cached tree
@@ -618,26 +633,43 @@ export async function fetchCategoryTreeCached(
 
 function readCategoryCache(
     categoryModel: string
-): { fetchedAt: number; nodes: GameBananaCategoryNode[] } | null {
+): { fetchedAt: number; nodes: GameBananaCategoryNode[]; paths: CategoryPaths } | null {
     try {
         const row = getCachedCategoryTree(categoryModel);
         if (!row) return null;
+        const indexed = categoryIndexes.get(categoryModel);
+        if (indexed?.payload === row.payload) return { fetchedAt: row.fetchedAt, ...indexed };
         const nodes = JSON.parse(row.payload) as GameBananaCategoryNode[];
         if (!Array.isArray(nodes) || nodes.length === 0) return null;
-        return { fetchedAt: row.fetchedAt, nodes };
+        const index = { payload: row.payload, nodes, paths: buildCategoryPaths(nodes) };
+        categoryIndexes.set(categoryModel, index);
+        return { fetchedAt: row.fetchedAt, ...index };
     } catch {
         return null; // unreadable cache = no cache; the live fetch repairs it
     }
+}
+
+/** Synchronous enrichment and locked mutations reuse the tree without requests. */
+export function readCachedCategoryPaths(categoryModel = 'ModCategory'): CategoryPaths | undefined {
+    return readCategoryCache(categoryModel)?.paths;
 }
 
 function persistCategoryCache(
     categoryModel: string,
     nodes: GameBananaCategoryNode[]
 ): void {
+    let previousPayload: string | undefined;
+    try { previousPayload = getCachedCategoryTree(categoryModel)?.payload; } catch { /* The write can repair an unreadable cache. */ }
     try {
-        saveCachedCategoryTree(categoryModel, JSON.stringify(nodes));
+        const payload = JSON.stringify(nodes);
+        saveCachedCategoryTree(categoryModel, payload);
+        if (payload === previousPayload) return;
     } catch (err) {
         console.warn('[fetchCategoryTreeCached] failed to persist cache:', err);
+        return;
+    }
+    for (const listener of categoryChangeListeners) {
+        try { listener(categoryModel); } catch { /* Observers do not own category refreshes. */ }
     }
 }
 

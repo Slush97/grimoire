@@ -550,6 +550,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onToggleList={(listId) => onToggleList(entry, listId)}
       onCreateList={() => onCreateList(entry)}
       group={{
+        variants: entry.variants,
         variantCount: entry.variants.length,
         // Display friendly names for enabled files when possible.
         enabledCount: entry.enabledVariants.length,

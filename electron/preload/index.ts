@@ -472,6 +472,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>
         ipcRenderer.invoke('get-gamebanana-categories', args),
+    onGamebananaCategoriesChanged: (callback: (model: string) => void) => {
+        const listener = (_: unknown, model: string) => callback(model);
+        ipcRenderer.on('gamebanana-categories-changed', listener);
+        return () => ipcRenderer.removeListener('gamebanana-categories-changed', listener);
+    },
     getCollection: (args: { collectionId: number }) =>
         ipcRenderer.invoke('get-collection', args),
     getCollectionItems: (args: { collectionId: number; page?: number }) =>

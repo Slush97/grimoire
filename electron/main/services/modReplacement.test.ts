@@ -3,6 +3,7 @@ import type { DownloadModArgs } from '../../../src/types/electron';
 import type { Mod as FilesystemMod } from './mods';
 import type { ModMetadata } from './metadata';
 import type { DownloadInstallResult, ManagedDownloadHooks } from './download';
+import { buildCategoryPaths, type CategoryPaths } from '../../../src/lib/categoryPaths';
 
 const state = vi.hoisted(() => ({
     mods: [] as FilesystemMod[],
@@ -13,6 +14,8 @@ const state = vi.hoisted(() => ({
     skipped: [] as string[],
     backups: [] as string[],
     events: [] as string[],
+    categoryPaths: undefined as CategoryPaths | undefined,
+    payloadPaths: [] as string[] | null,
     jobs: [] as Array<{
         args: DownloadModArgs;
         hooks: ManagedDownloadHooks;
@@ -27,14 +30,24 @@ const mocks = vi.hoisted(() => ({
     setGlobal: vi.fn(),
     delete: vi.fn(),
     imprint: vi.fn(),
+    detectHeroes: vi.fn(),
+    inferLocalHero: vi.fn(),
 }));
 
-vi.mock('@grimoire/social-types/heroes', () => ({ inferHeroFromTitle: () => null }));
 vi.mock('./settings', () => ({
     loadSettings: () => state.settings,
     getActiveDeadlockPath: () => state.path,
 }));
-vi.mock('./vpk', () => ({ GLOBAL_CLASSIFIER_VERSION: 4 }));
+vi.mock('./gamebanana', () => ({ readCachedCategoryPaths: () => state.categoryPaths }));
+vi.mock('./modHeroDetection', async original => ({
+    ...await original<typeof import('./modHeroDetection')>(), detectModHeroes: mocks.detectHeroes,
+}));
+vi.mock('./vpk', async original => ({
+    ...await original<typeof import('./vpk')>(),
+    parseVpkDirectoryCached: () => state.payloadPaths,
+    invalidateVpkParseCache: vi.fn(),
+}));
+vi.mock('./unknownModDetection', () => ({ inferHeroFromVpkTree: mocks.inferLocalHero }));
 vi.mock('./metadata', () => ({
     getModMetadata: (key: string) => state.metadata.get(key),
     setModMetadata: (key: string, patch: ModMetadata) => {
@@ -65,7 +78,7 @@ vi.mock('./mods', () => ({
     deleteModsUnlocked: mocks.delete,
 }));
 
-import { queueModReplacement as queueReplacementTask, readReplacementMods } from './modReplacement';
+import { queueModReplacement as queueReplacementTask, readReplacementMods, toLocalVariantGroupMember } from './modReplacement';
 
 const args = { modId: 7, fileId: 20, fileName: 'fresh.zip' };
 const mod = (id: string, options: Partial<FilesystemMod> = {}): FilesystemMod => ({
@@ -141,6 +154,10 @@ beforeEach(() => {
     state.skipped = [];
     state.backups = [];
     state.events = [];
+    state.categoryPaths = undefined;
+    state.payloadPaths = [];
+    mocks.detectHeroes.mockImplementation((_mod: FilesystemMod, metadata: ModMetadata) => metadata.heroDetection);
+    mocks.inferLocalHero.mockReturnValue(null);
     mocks.safety.mockReset().mockImplementation(async () => {
         expect(state.locked).toBe(false);
         state.events.push('safety');
@@ -175,6 +192,48 @@ beforeEach(() => {
     mocks.imprint.mockReset().mockImplementation(async () => {
         expect(state.locked).toBe(false);
         state.events.push('imprint');
+    });
+});
+
+describe('local variant comparison metadata', () => {
+    it.each([['Solomon', 'Solomon'], ['The Doorman', 'Doorman'], ['Future Hero', 'Future Hero']])(
+        'resolves category hero %s without turning it into a stored override', (categoryName, heroName) => {
+            state.categoryPaths = buildCategoryPaths([
+                { id: 1, name: 'Skins', itemCount: 0, children: [{ id: 2, name: categoryName, itemCount: 0,
+                    children: [{ id: 3, name: 'Faithful/Vanilla+', itemCount: 0 }] }] },
+            ]);
+            const installed = add('old', { categoryId: 3, categoryName: 'Faithful/Vanilla+' });
+            const original = { ...state.metadata.get(installed.metaKey) };
+            expect(toLocalVariantGroupMember(installed)).toMatchObject({
+                resolvedHeroes: [heroName], lockerHero: undefined, resolvedGlobalType: undefined,
+            });
+            expect(state.metadata.get(installed.metaKey)).toEqual(original);
+        });
+
+    it('uses path-derived Sound/WiP matches for comparison without persisting them through grouping', () => {
+        const installed = add('old', { sourceSection: 'Wip', lockerHero: 'Haze', lockerHeroSource: 'title' });
+        state.payloadPaths = ['sounds/vo/tengu/line.vsnd_c', 'sounds/vo/ghost/line.vsnd_c'];
+        expect(toLocalVariantGroupMember(installed)).toMatchObject({
+            lockerHero: undefined, lockerHeroSource: undefined, resolvedHeroes: ['Ivy', 'Lady Geist'],
+        });
+        expect(state.metadata.get(installed.metaKey)?.heroDetection).toBeUndefined();
+    });
+
+    it('keeps category-derived General identities out of stored classification fields', () => {
+        state.categoryPaths = buildCategoryPaths([{ id: 1, name: 'HUD', itemCount: 0 }]);
+        const installed = add('old', { categoryId: 1, categoryName: 'HUD', globalType: 'effects' });
+        expect(toLocalVariantGroupMember(installed)).toMatchObject({
+            globalType: 'effects', resolvedGlobalType: 'hud', resolvedHeroes: [],
+        });
+    });
+
+    it('keeps confident local VPK inference as comparison-only data', () => {
+        const installed = add('local', { gameBananaId: undefined });
+        mocks.inferLocalHero.mockReturnValue({ name: 'Ivy', strongestSignal: 'medium' });
+        expect(toLocalVariantGroupMember(installed)).toMatchObject({ resolvedHeroes: ['Ivy'], lockerHero: 'Ivy', lockerHeroSource: 'vpk' });
+        expect(state.metadata.get(installed.metaKey)?.lockerHero).toBeUndefined();
+        mocks.inferLocalHero.mockReturnValue({ name: 'Ivy', strongestSignal: 'weak' });
+        expect(toLocalVariantGroupMember(installed).resolvedHeroes).toEqual([]);
     });
 });
 
@@ -226,6 +285,86 @@ describe('queued mod replacements', () => {
         expect(mocks.safety).toHaveBeenCalledWith('/game', ['fresh'], expect.any(AbortSignal));
         expect(state.events).toEqual(['safety', 'lock', 'delete', 'enable', 'unlock']);
         expect(state.mods).toHaveLength(1);
+    });
+
+    it.each([false, true])('preserves successor-specific detection during replacement (promotion: %s)', async (promoteExisting) => {
+        const previousDetection: NonNullable<ModMetadata['heroDetection']> = {
+            version: 1, heroes: ['Haze'], source: 'description', size: 100,
+            modifiedAt: '2026-10-18T00:00:00.000Z', inputs: 'old-inputs',
+        };
+        const successorDetection: NonNullable<ModMetadata['heroDetection']> = {
+            ...previousDetection, heroes: ['Rem'], source: 'vpk', inputs: 'new-inputs',
+        };
+        add('old', { sourceSection: 'Sound', fileDescription: 'Haze', heroDetection: previousDetection });
+        const install = () => add('fresh', {
+            gameBananaFileId: 20, sourceSection: 'Sound', fileDescription: 'Rem',
+            heroDetection: successorDetection,
+        });
+        if (promoteExisting) mocks.detectHeroes.mockReturnValue(successorDetection);
+        if (promoteExisting) install();
+        const queued = queueModReplacement('/game', { ...args, section: 'Sound' }, ['old'], null, { promoteExisting });
+        await run(0, install);
+        await queued;
+        expect(state.metadata.get('fresh.vpk')).toMatchObject({
+            fileDescription: 'Rem', heroDetection: successorDetection,
+        });
+        expect(state.metadata.get('fresh.vpk')?.heroDetection).toBe(successorDetection);
+        if (promoteExisting) {
+            expect(mocks.detectHeroes).toHaveBeenCalledWith(expect.objectContaining({ id: 'fresh' }),
+                expect.objectContaining({ heroDetection: undefined, fileDescription: 'Rem' }), undefined);
+        }
+    });
+
+    it.each(['Sound', 'Mod'])('redetects each promoted %s successor using its own labels even when its old cache looks valid', async section => {
+        if (section === 'Mod') state.categoryPaths = buildCategoryPaths([{ id: 10, name: 'HUD', itemCount: 0,
+            children: [{ id: 12, name: 'Custom widgets', itemCount: 0 }] }]);
+        const cached: NonNullable<ModMetadata['heroDetection']> = {
+            version: 1, heroes: ['Haze'], source: 'name', size: 100,
+            modifiedAt: '2026-10-18T00:00:00.000Z', inputs: 'previous-inputs',
+        };
+        add('old', { sourceSection: section, categoryId: 12, heroDetection: cached });
+        add('fresh-rem', { gameBananaFileId: 20, sourceSection: section, categoryId: 12,
+            fileDescription: 'Rem', heroDetection: cached, lockerHero: 'Wraith', lockerHeroSource: 'manual' });
+        add('fresh-ivy', { gameBananaFileId: 20, sourceSection: section, categoryId: 12, fileDescription: 'Ivy', heroDetection: cached });
+        mocks.detectHeroes.mockImplementation((candidate: FilesystemMod, metadata: ModMetadata) => {
+            expect(candidate.id).not.toBe('old');
+            expect(metadata.heroDetection).toBeUndefined();
+            expect(state.events).not.toContain('delete');
+            return { ...cached, heroes: [metadata.fileDescription!], source: 'description' };
+        });
+        const queued = queueModReplacement('/game', { ...args, section }, ['old'], null, { promoteExisting: true });
+        await run();
+        await queued;
+        expect(mocks.detectHeroes).toHaveBeenCalledTimes(2);
+        expect(state.metadata.get('fresh-rem.vpk')).toMatchObject({
+            lockerHero: 'Wraith', lockerHeroSource: 'manual', heroDetection: { heroes: ['Rem'], source: 'description' },
+        });
+        expect(state.metadata.get('fresh-ivy.vpk')?.heroDetection?.heroes).toEqual(['Ivy']);
+    });
+
+    it('clears an unreadable promoted successor detection without copying predecessor tags', async () => {
+        add('old', { sourceSection: 'Wip' });
+        add('fresh', { gameBananaFileId: 20, sourceSection: 'Wip', heroDetection: {
+            version: 1, heroes: ['Haze'], source: 'name', size: 100,
+            modifiedAt: '2026-10-18T00:00:00.000Z', inputs: 'previous-inputs',
+        } });
+        mocks.detectHeroes.mockReturnValue(undefined);
+        const queued = queueModReplacement('/game', { ...args, section: 'Wip' }, ['old'], null, { promoteExisting: true });
+        await run();
+        await queued;
+        expect(state.metadata.get('fresh.vpk')?.heroDetection).toBeUndefined();
+    });
+
+    it('keeps the predecessor installed if promoted successor detection unexpectedly throws', async () => {
+        add('old', { sourceSection: 'Sound' });
+        add('fresh', { gameBananaFileId: 20, sourceSection: 'Sound' });
+        mocks.detectHeroes.mockImplementation(() => { throw new Error('Detection failed'); });
+        const queued = queueModReplacement('/game', { ...args, section: 'Sound' }, ['old'], null, { promoteExisting: true });
+        const check = expect(queued).rejects.toThrow('Detection failed');
+        await run();
+        await check;
+        expect(state.mods.map((candidate) => candidate.id)).toEqual(['old', 'fresh']);
+        expect(mocks.delete).not.toHaveBeenCalled();
     });
 
     it('retains an already enabled successor when promotion moves it into Global and changes its id', async () => {
@@ -349,12 +488,34 @@ describe('queued mod replacements', () => {
 
     it('restores local group identity before deleting its source and refreshes the embed after unlocking', async () => {
         add('old', { localGroupId: 'group', modName: 'My variants', lockerHero: 'Ivy', lockerHeroSource: 'manual' });
+        add('unrelated-cold-local', { gameBananaId: undefined, modName: 'Unrelated local mod' });
         state.settings.experimentalVpkImprinting = true;
         const queued = queueModReplacement('/game', args, ['old'], null);
         await run();
         await queued;
         expect(state.metadata.get('fresh.vpk')).toMatchObject({ localGroupId: 'group', modName: 'My variants', lockerHero: 'Ivy' });
         expect(state.events).toEqual(['lock', 'delete', 'unlock', 'imprint']);
+        expect(mocks.inferLocalHero).not.toHaveBeenCalled();
+    });
+
+    it('preserves the replacement payload detection when reattaching its local group', async () => {
+        add('old', { localGroupId: 'group', sourceSection: 'Wip', lockerHero: 'Haze', lockerHeroSource: 'title' });
+        mocks.detectHeroes.mockReturnValue({ heroes: ['Ivy', 'Lady Geist'] });
+        state.payloadPaths = ['sounds/vo/tengu/line.vsnd_c', 'sounds/vo/ghost/line.vsnd_c'];
+        const queued = queueModReplacement('/game', { ...args, section: 'Wip' }, ['old'], null);
+        await run(0, () => {
+            add('fresh', {
+                gameBananaFileId: 20,
+                sourceSection: 'Wip',
+                heroDetection: { version: 1, heroes: ['Ivy', 'Lady Geist'], source: 'vpk', size: 100,
+                    modifiedAt: '2026-10-18T00:00:00.000Z', inputs: 'fresh' },
+            });
+        });
+        await queued;
+        expect(state.metadata.get('fresh.vpk')).toMatchObject({
+            localGroupId: 'group', heroDetection: { inputs: 'fresh', heroes: ['Ivy', 'Lady Geist'] },
+        });
+        expect(state.metadata.get('fresh.vpk')?.lockerHero).toBeUndefined();
     });
 
     it('restores a Global local group before joining the replacement to it', async () => {

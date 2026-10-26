@@ -79,6 +79,8 @@ import {
   type HeroCategory,
 } from '../lib/lockerUtils';
 import {
+  getManualOnlyShuffleKeys,
+  shuffleExclusionKey,
   shuffleGroupKind,
   shufflePoolKey,
   shuffleSkinKey,
@@ -547,6 +549,7 @@ export default function Locker() {
   // keep them out of the hero grouping entirely. Without this a fuzzy name
   // match would file e.g. "Lowpoly Holliday Soul Container" into Holliday's
   // pile instead of Soul Containers.
+  const excludedShuffleKeys = useMemo(() => getManualOnlyShuffleKeys(mods), [mods]);
   const lockerMods = useMemo(
     () => mods.filter((m) => isLockerManagedMod(m) && !getEffectiveGlobalType(m)),
     [mods]
@@ -1133,15 +1136,14 @@ export default function Locker() {
     return toggleMod(modId);
   };
 
-  // Heroes that have at least one installed skin.
-  const heroesWithSkins = heroMods.map.size;
   // The shuffle switch is worth showing as soon as ANY axis it can re-roll has
   // something installed: hero skins, or a General classification bucket. The
   // Global (priority root) pile deliberately does not count, since the planner
   // never re-rolls those.
-  const hasShuffleableMods =
-    heroesWithSkins > 0 ||
-    GLOBAL_MOD_TYPE_ORDER.some((type) => globalGroups[type].some((mod) => !mod.priorityMod));
+  const hasShuffleableMods = mods.some((mod) => {
+    const kind = shuffleGroupKind(mod, { heroList, excludedSkinKeys: excludedShuffleKeys });
+    return kind === 'hero' || kind === 'bucket';
+  });
 
   // Hero ids with at least one skin in the launch-shuffle pool. Drives the
   // gallery card's shuffle badge (only shown while the master switch is armed).
@@ -1149,12 +1151,13 @@ export default function Locker() {
     const set = new Set<number>();
     if (shuffleIncluded.size === 0) return set;
     for (const [heroId, heroSkinMods] of heroMods.map) {
-      if (groupLockerSkins(heroSkinMods).some((g) => shuffleIncluded.has(shuffleSkinKey(g.primary)))) {
+      if (groupLockerSkins(heroSkinMods).some((g) => !excludedShuffleKeys.has(shuffleExclusionKey(g.primary))
+        && shuffleIncluded.has(shuffleSkinKey(g.primary)))) {
         set.add(heroId);
       }
     }
     return set;
-  }, [heroMods, shuffleIncluded]);
+  }, [heroMods, shuffleIncluded, excludedShuffleKeys]);
 
   // Reorder the load order of a hero's enabled skins. `orderedModIds` is the
   // new desired order of THIS hero's enabled skin VPK ids (lower index = loads
@@ -1655,6 +1658,7 @@ export default function Locker() {
             onRemoveGlobal={(modId) => setModPriorityFolder(modId, false)}
             shuffleArmed={shuffleOnLaunch}
             includedShuffleKeys={shuffleIncluded}
+            excludedShuffleKeys={excludedShuffleKeys}
             onToggleShuffleIncluded={toggleShuffleIncluded}
             onSetShuffleIncluded={setShuffleIncluded}
             heroList={heroList}
@@ -1934,6 +1938,7 @@ interface LockerGlobalViewProps {
   shuffleArmed: boolean;
   /** Shuffle keys (shufflePoolKey) already in the launch-shuffle pool. */
   includedShuffleKeys: Set<string>;
+  excludedShuffleKeys: ReadonlySet<string>;
   /** Add/remove a mod from the launch-shuffle pool. */
   onToggleShuffleIncluded: (shuffleKey: string) => void;
   /** Pool or un-pool many keys at once (the per-category bulk action). */
@@ -1965,7 +1970,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   // Every tab is selectable, empty or not. We still default the landing tab to
@@ -2085,8 +2090,8 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // hero skins, classified mods and non-shuffleable ones, so the affordance is
   // decided per mod (shuffleGroupKind) rather than per tab.
   const shuffleKinds = useMemo(
-    () => new Map(activeMods.map((mod) => [mod.id, shuffleGroupKind(mod, { heroList })])),
-    [activeMods, heroList]
+    () => new Map(activeMods.map((mod) => [mod.id, shuffleGroupKind(mod, { heroList, excludedSkinKeys: excludedShuffleKeys })])),
+    [activeMods, heroList, excludedShuffleKeys]
   );
   // Pool math for the per-category bulk button. Only a custom tab shows it: the
   // classification tabs ARE shuffle groups, where "add every card" would just
@@ -2095,8 +2100,8 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
     () =>
       activeCategoryId === null
         ? { eligibleKeys: [] as string[], allIncluded: false }
-        : summarizeShufflePool(activeMods, includedShuffleKeys, { heroList }),
-    [activeCategoryId, activeMods, includedShuffleKeys, heroList]
+        : summarizeShufflePool(activeMods, includedShuffleKeys, { heroList, excludedSkinKeys: excludedShuffleKeys }),
+    [activeCategoryId, activeMods, includedShuffleKeys, heroList, excludedShuffleKeys]
   );
 
   // The card the retag menu is open on, and the categories it is already in.

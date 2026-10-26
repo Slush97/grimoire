@@ -17,8 +17,8 @@ import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
-import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../../lib/installedCardTaxonomy';
+import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
+import { getInstalledGroupTaxonomy } from '../../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
@@ -67,6 +67,7 @@ interface ModCardProps {
     isUnknown?: boolean;
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
+    lockerHeroes?: string[];
     globalType?: GlobalModType;
     /** Lives in the citadel/grimoire priority root: wins every file collision
      *  and is never disabled by the launch shuffle. */
@@ -153,6 +154,7 @@ interface ModCardProps {
    *  Swaps the filename meta for an enabled/total count and routes the
    *  card-body click to the picker modal. */
   group?: {
+    variants?: readonly Mod[];
     variantCount: number;
     /** Enabled file labels for this group. Empty when fully disabled. */
     enabledCount: number;
@@ -163,6 +165,7 @@ interface ModCardProps {
 
 interface ModMediaPreviewProps {
   mod: ModCardProps['mod'];
+  heroName?: string;
   hideNsfwPreviews: boolean;
   soundVolume: number;
   overlayBadges: ReactNode;
@@ -202,6 +205,7 @@ function stopMediaDrag(e: React.DragEvent<HTMLElement>) {
 
 function ModMediaPreview({
   mod,
+  heroName,
   hideNsfwPreviews,
   soundVolume,
   overlayBadges,
@@ -224,10 +228,8 @@ function ModMediaPreview({
   const detailsLabel = canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined;
   // Prefer an explicit mod thumbnail. For sound-only mods without one, fall
   // back to the inferred hero render before using the waveform placeholder.
-  // `lockerHero` is persisted from VPK path inference and catches titles that
-  // don't name the hero; title matching covers not-yet-enriched mods.
   const soundHeroName = isSound && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? heroName
     : null;
   const soundHeroRenderUrl = soundHeroName ? getHeroRenderPath(soundHeroName) : null;
   const soundHeroFacePosX = soundHeroName ? getHeroFacePosition(soundHeroName).x : 50;
@@ -334,7 +336,7 @@ function ModMediaPreview({
 
 interface ModListRowContentProps {
   mod: ModCardProps['mod'];
-  taxonomy: InstalledCardTaxonomy;
+  taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
   hideNsfwPreviews: boolean;
   soundVolume: number;
   onOpenDetails?: () => void;
@@ -350,26 +352,10 @@ interface ModListRowContentProps {
   variantStatusTitle: string;
   metaChipClasses: string;
   manualTagChipClasses: string;
-  inferredTagChipClasses: string;
   dangerInlineChipClasses: string;
   tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
-}
-
-function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
-  switch (source) {
-    case 'manual':
-      return 'Manual override';
-    case 'download-title':
-    case 'title':
-      return 'Inferred from title';
-    case 'download-vpk':
-    case 'vpk':
-      return 'Inferred from VPK files';
-    default:
-      return 'Inferred by Grimoire';
-  }
 }
 
 function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
@@ -380,40 +366,31 @@ function MetaTextChip({ label, className, title }: { label: string; className: s
   );
 }
 
-function LockerHeroChip({
-  mod,
-  manualTagChipClasses,
-  inferredTagChipClasses,
-  iconClassName = 'h-4 w-4',
-  iconOnly = false,
+function InstalledTaxonomyChips({
+  taxonomy,
+  className,
+  iconClassName,
 }: {
-  mod: { lockerHero?: string; lockerHeroSource?: Mod['lockerHeroSource'] };
-  manualTagChipClasses: string;
-  inferredTagChipClasses: string;
-  iconClassName?: string;
-  /** Drop the hero name and show just the face icon. Used in the card grid,
-   *  where a narrow chip otherwise truncates the name to a useless "L." */
-  iconOnly?: boolean;
+  taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
+  className: string;
+  iconClassName: string;
 }) {
-  if (!mod.lockerHero) return null;
-  const isManual = mod.lockerHeroSource === 'manual';
-  const title = `${lockerHeroSourceLabel(mod.lockerHeroSource)}: ${mod.lockerHero}`;
-  // Icon-only (card grid): just the bare face icon, no accent chip frame — the
-  // colored manual/inferred border reads as a highlight that fights the theme.
-  if (iconOnly) {
-    return (
-      <span className="inline-flex flex-shrink-0 items-center" title={title}>
-        <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} iconOnly />
-      </span>
-    );
-  }
+  const label = taxonomy.categoryLabel ?? taxonomy.tags[0];
+  const hidden = taxonomy.tags.filter(tag => tag.toLowerCase() !== label?.toLowerCase());
   return (
-    <span
-      className={isManual ? manualTagChipClasses : inferredTagChipClasses}
-      title={title}
-    >
-      <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} />
-    </span>
+    <>
+      {taxonomy.heroNames.map(hero => (
+        <span key={hero} className="inline-flex flex-shrink-0 items-center" title={hero}>
+          <HeroTagLabel heroName={hero} iconClassName={iconClassName} iconOnly />
+        </span>
+      ))}
+      {label && (
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+          <MetaTextChip label={label} className={className} />
+          {hidden.length > 0 && <MetaTextChip label={`+${hidden.length}`} title={hidden.join('\n')} className={`${className} flex-shrink-0`} />}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -597,7 +574,6 @@ function ModListRowContent({
   variantStatusTitle,
   metaChipClasses,
   manualTagChipClasses,
-  inferredTagChipClasses,
   dangerInlineChipClasses,
   tagIconClassName,
   technicalMetaClasses,
@@ -607,13 +583,10 @@ function ModListRowContent({
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
   const canOpen = !!onOpenDetails;
   const listHeroName = isSound && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? taxonomy.previewHeroName
     : null;
   const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
   const listHeroFacePosX = listHeroName ? getHeroFacePosition(listHeroName).x : 50;
-  const taxonomyLabel = taxonomy.globalType
-    ? globalModTypeLabel(taxonomy.globalType, t)
-    : taxonomy.categoryLabel;
 
   return (
     <>
@@ -698,7 +671,7 @@ function ModListRowContent({
           <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
             onOpen={onOpenDetails} variant="inline" />
         </div>
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -706,26 +679,7 @@ function ModListRowContent({
               title={t('installed.priority.hint')}
             />
           )}
-          {taxonomy.heroName && (
-            mod.lockerHero ? (
-              <LockerHeroChip
-                mod={mod}
-                manualTagChipClasses={manualTagChipClasses}
-                inferredTagChipClasses={inferredTagChipClasses}
-                iconClassName={tagIconClassName}
-              />
-            ) : (
-              <span className={metaChipClasses} title={taxonomy.heroName}>
-                <HeroTagLabel heroName={taxonomy.heroName} iconClassName={tagIconClassName} />
-              </span>
-            )
-          )}
-          {taxonomyLabel && (
-            <MetaTextChip
-              label={taxonomyLabel}
-              className={metaChipClasses}
-            />
-          )}
+          <InstalledTaxonomyChips taxonomy={taxonomy} className={metaChipClasses} iconClassName={tagIconClassName} />
           {mod.nsfw && (
             <MetaTextChip label="18+" className={dangerInlineChipClasses} />
           )}
@@ -830,6 +784,7 @@ export function ModCard({
   const heroNames = useCategoryStore((state) => state.heroNames);
   const pathsByModel = useCategoryStore((state) => state.pathsByModel);
   const taxonomyContext = useMemo(() => ({ heroByCategoryId, heroNames, pathsByModel }), [heroByCategoryId, heroNames, pathsByModel]);
+  const cardTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
   const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
@@ -861,7 +816,7 @@ export function ModCard({
   };
   const hasListActions = !selectMode && !!lists && !!onToggleList && !!onCreateList;
   const menuHeroName = mod.sourceSection === 'Sound' && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? cardTaxonomy.previewHeroName
     : null;
   // Right-clicking one tile of a merged mod's collage should act on that tile,
   // not on the merged mod's first source. Captured from the pointer target
@@ -1013,7 +968,6 @@ export function ModCard({
   const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
-  const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
@@ -1061,26 +1015,7 @@ export function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
     : 'text-[15px] font-medium leading-[18px] truncate';
-  // Grid footers stay single-line. Classification is deliberately limited to
-  // one hero identity plus one text label below, so resizing a card never
-  // changes *which* tags it shows.
-  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'h-7 flex-nowrap';
-  // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
-  // manual or auto global tag is visible here, not just in the Locker. A global
-  // mod has no hero, so the two chips never both show.
-  const cardTaxonomy = getInstalledCardTaxonomy(mod, taxonomyContext);
-  const cardGlobalLabel = cardTaxonomy.globalType
-    ? globalModTypeLabel(cardTaxonomy.globalType, t)
-    : undefined;
-  // One stable taxonomy model for every grid size:
-  //   1. the hero identity, when present (bare portrait);
-  //   2. either the Locker global type or the GameBanana category (one label).
-  // Global classification supersedes category because those labels are often
-  // identical (HUD/HUD). A hero category is represented by the portrait and
-  // therefore does not also need a text chip. Previously compact cards counted
-  // available slots and silently dropped later tags, which made the same mod
-  // appear to have different metadata as the size slider crossed a breakpoint.
-  const cardTaxonomyLabel = cardGlobalLabel ?? cardTaxonomy.categoryLabel;
+  const gridTagsClasses = viewMode === 'compact' ? 'min-h-[26px] flex-wrap' : 'min-h-7 flex-wrap';
   // Enabled cards get their own copy: pinning only takes effect once the mod is
   // disabled, and the disabled section's "top of disabled mods" wording would be
   // a lie there.
@@ -1222,9 +1157,8 @@ export function ModCard({
                   {t('installed.tag.clearLockerTag')}
                 </MenuItem>
                 <MenuSeparator />
-                {/* Global type and hero are independent axes (setModGlobalType does
-                    not clear lockerHero), so they are two radio groups rather than
-                    one. "Clear locker tag" above resets both. */}
+                {/* Assigning a General type clears the hero assignment. Separate
+                    radio groups keep the two destination lists easy to scan. */}
                 {onTagGlobal && (
                   <>
                     <MenuLabel>{t('installed.tag.global')}</MenuLabel>
@@ -1449,7 +1383,6 @@ export function ModCard({
             variantStatusTitle={variantStatusTitle}
             metaChipClasses={metaChipClasses}
             manualTagChipClasses={manualTagChipClasses}
-            inferredTagChipClasses={inferredTagChipClasses}
             dangerInlineChipClasses={dangerInlineChipClasses}
             tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
@@ -1586,6 +1519,7 @@ export function ModCard({
         return (
           <ModMediaPreview
             mod={mod}
+            heroName={cardTaxonomy.previewHeroName}
             hideNsfwPreviews={hideNsfwPreviews}
             soundVolume={soundVolume}
             overlayBadges={overlayBadges}
@@ -1606,28 +1540,11 @@ export function ModCard({
             onRename={onRenameLocal}
           />
           <div
-            className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
+            className={`${isCompact ? 'mt-1.5 min-h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
-              {cardTaxonomy.heroName && (
-                <span
-                  className="inline-flex flex-shrink-0 items-center"
-                  title={cardTaxonomy.heroName}
-                >
-                  <HeroTagLabel
-                    heroName={cardTaxonomy.heroName}
-                    iconClassName={tagIconClassName}
-                    iconOnly
-                  />
-                </span>
-              )}
-              {cardTaxonomyLabel && (
-                <MetaTextChip
-                  label={cardTaxonomyLabel}
-                  className={metaChipClasses}
-                />
-              )}
+              <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} iconClassName={tagIconClassName} />
             </div>
 
             <div className={`flex flex-shrink-0 items-center justify-end gap-2 ${isCompact ? '' : 'pr-1'}`}>

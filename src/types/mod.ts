@@ -448,20 +448,22 @@ export interface ApplyTrippySkinResult {
 
 /**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
- * alongside the per-hero piles. Most are derived from the VPK file tree by
- * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
- * category labels are unreliable for them. 'announcer' is path-classified from
- * `sounds/mods/` (global SFX / announcer frameworks like QOL Lock) but is ALSO
- * derived from the GameBanana "Announcer" category for sound packs whose VPK is
- * just `sounds/`. The other exception is 'killstreak-music': a Sound mod's VPK
- * is just `sounds/`, so it can't be path-classified, and is instead derived
- * from the GameBanana "Killstreak Music" category (cat 5895) by
- * `getEffectiveGlobalType` in the renderer (src/lib/lockerUtils.ts). Shared
- * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
- * the union.
+ * alongside the per-hero piles. Linked submissions derive their General
+ * destination from GameBanana category ancestry. Explicit manual assignments
+ * and previously classified local files retain their chosen destination.
  */
 export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
+
+/** Cached automatic hero matches for one installed payload. */
+export interface InstalledHeroDetection {
+  version: number;
+  heroes: string[];
+  source: 'vpk' | 'description' | 'file' | 'name';
+  size: number;
+  modifiedAt: string;
+  inputs: string;
+}
 
 /** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */
 export type AbilitySlot = 1 | 2 | 3 | 4;
@@ -669,19 +671,18 @@ export interface Mod {
    *  meaning outside this install. Undefined for GameBanana mods and for
    *  standalone local imports. See variantGroupKey in src/lib/variantGroups.ts. */
   localGroupId?: string;
-  /** Hero this mod belongs to in the Locker, by canonical hero name. Set
-   *  automatically at download time for Sound mods (inferHeroFromTitle) or
-   *  manually via the Locker's "Tag hero" affordance. Takes precedence over
-   *  categoryId when grouping mods into hero piles. */
+  /** Explicit hero choice, preserved local identity, or a single-hero hint
+   *  for existing consumers. The full effective set is in lockerHeroes. */
   lockerHero?: string;
   /** Where lockerHero came from. Missing means legacy/inferred metadata. */
   lockerHeroSource?: LockerHeroSource;
-  /** Global (non-hero) cosmetic category this mod belongs to in the Locker,
-   *  classified from its VPK file tree (see GlobalModType). Mutually exclusive
-   *  with hero content: the classifier returns null for hero skins/abilities,
-   *  so a mod with a globalType set is never also a hero cosmetic. Undefined
-   *  for hero mods and for anything that matched no global signal. */
+  /** Effective hero identities, including multi-hero Sound, WiP, and HUD files. */
+  lockerHeroes?: string[];
+  /** Effective General destination from category ancestry, a manual override,
+   *  or a preserved legacy local classification. */
   globalType?: GlobalModType;
+  /** Explicit user classification, retained independently of automatic tags. */
+  globalTypeSource?: 'manual';
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;

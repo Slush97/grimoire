@@ -9,7 +9,7 @@ interface CategoryStore {
   pathsByModel: Readonly<Record<string, CategoryPaths | undefined>>;
   heroByCategoryId: ReadonlyMap<number, string>;
   heroNames: readonly string[];
-  load: (categoryModel?: string) => Promise<GameBananaCategoryNode[]>;
+  load: (categoryModel?: string, options?: { afterCurrent?: boolean }) => Promise<GameBananaCategoryNode[]>;
 }
 
 export const useCategoryStore = create<CategoryStore>((set, get) => {
@@ -22,8 +22,14 @@ export const useCategoryStore = create<CategoryStore>((set, get) => {
     // Route and details mounts reread main's existing cache, so a completed
     // background refresh becomes visible. Keep unchanged indexes stable to
     // avoid rerendering every subscribed card. Main owns network freshness.
-    load: (categoryModel = 'ModCategory') => {
+    load: (categoryModel = 'ModCategory', options) => {
       const pending = pendingByModel.get(categoryModel);
+      if (pending && options?.afterCurrent) {
+        // A main-process change may arrive while an older IPC read is pending.
+        // Its settlement must be followed by a fresh, normally coalesced read.
+        const reload = () => get().load(categoryModel);
+        return pending.then(reload, reload);
+      }
       if (pending) return pending;
 
       const request = getGamebananaCategories(categoryModel).then((tree) => {

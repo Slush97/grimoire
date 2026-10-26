@@ -305,17 +305,11 @@ export function isLockerManagedMod(mod: Mod): boolean {
   if (mod.lockerCosmetics) return false;
   if (mod.lockerSounds) return false;
 
-  // Sound-section mods are the Sounds tab's domain (see isLockerManagedSound),
-  // never hero skins. They get an auto hero-tag at download time, so guard on
-  // the section explicitly before the lockerHero escape hatch below — otherwise
-  // a hero-tagged sound (e.g. a "Seven Ult Sound Replacer") falls through that
-  // hatch and surfaces in the Skins pile.
+  // Sounds stay in the Sounds list even when they have resolved hero identities.
   if (mod.sourceSection === 'Sound') return false;
 
-  // A manual Locker hero tag is an explicit user intent to manage this VPK as
-  // a hero skin, including custom local imports that do not have GameBanana
-  // section metadata.
-  if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
+  // Hero-tagged WiPs and custom local files share the skin list.
+  if (mod.sourceSection !== 'Mod' && modHeroNames(mod).length === 0) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Leftover preset VPKs from the removed Midnight Mina variants feature
@@ -351,76 +345,22 @@ const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
  */
 export function isLockerManagedSound(mod: Mod): boolean {
   if (mod.sourceSection !== 'Sound') return false;
-  // An explicit hero tag (auto-set from the title at download, or set by hand)
-  // means this sound is hero-specific and belongs in that hero's Sounds tab,
-  // even when GameBanana filed it under a global music/UI category. The
-  // GLOBAL_SOUND_CATEGORIES drop exists only for sounds with no hero to tag;
-  // without this short-circuit, a "Seven Ult Sound Replacer" categorized as
-  // "In-Game Music" gets dropped here and then mis-surfaces under Skins.
-  if (mod.lockerHero) return true;
+  // Resolved heroes retain their Sounds placement even under a broad category.
+  if (modHeroNames(mod).length > 0) return true;
   const category = mod.categoryName?.trim().toLowerCase();
   if (category && GLOBAL_SOUND_CATEGORIES.has(category)) return false;
   return true;
 }
 
-/**
- * Lowercased GameBanana category name for the Killstreak Music sound category
- * (cat 5895 — see docs/gamebanana_categories_reference.md).
- */
-const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
-
-/**
- * True for Sound mods filed under GameBanana's "Killstreak Music" category.
- * This music plays match-wide (no hero), so the Locker treats it as a global
- * type on the Global card rather than per-hero sounds. Used by
- * getEffectiveGlobalType; kept narrow (category only) on purpose.
- */
-/** Minimal mod shape the global-type helpers read. Lets card components pass a
- *  structural subset of Mod (e.g. ModCardProps['mod']) without the full type. */
-type GlobalTypeModFields = Pick<Mod, 'globalType' | 'lockerHero' | 'sourceSection' | 'categoryName'>;
-
-export function isKillstreakMusicSound(mod: GlobalTypeModFields): boolean {
-  return (
-    mod.sourceSection === 'Sound' &&
-    mod.categoryName?.trim().toLowerCase() === KILLSTREAK_MUSIC_CATEGORY
-  );
+/** Main resolves category-derived and explicit classifications consistently. */
+export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType'>): GlobalModType | undefined {
+  return mod.globalType;
 }
 
-/** Lowercased GameBanana "Announcer" sound category name. */
-const ANNOUNCER_CATEGORY = 'announcer';
-
-/**
- * True for Sound mods filed under GameBanana's "Announcer" category. These play
- * match-wide with no hero, so the Locker surfaces them on the Global card's
- * Announcer / SFX slide rather than dropping them (GLOBAL_SOUND_CATEGORIES) or
- * mis-filing them under a hero. Path-classifiable announcer frameworks (QOL
- * Lock, `sounds/mods/`) already carry a 'announcer' globalType from the
- * main-process classifier; this rescues the sound-only packs that don't.
- */
-export function isAnnouncerSound(mod: GlobalTypeModFields): boolean {
-  return (
-    mod.sourceSection === 'Sound' &&
-    mod.categoryName?.trim().toLowerCase() === ANNOUNCER_CATEGORY
-  );
-}
-
-/**
- * A mod's effective Locker global type. Prefers the persisted globalType (the
- * VPK-path classification, or a manual override set via the Global card's
- * retag menu), then derives 'killstreak-music' from the GameBanana category.
- *
- * Killstreak music can't be path-classified (a Sound VPK is just `sounds/`),
- * so it's derived here instead of in the main-process classifier. Deriving it
- * live also means it lights up for mods that were already installed before the
- * category existed, with no metadata migration. A manual override still wins,
- * since `mod.globalType` is checked first.
- */
-export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType | undefined {
-  if (mod.globalType) return mod.globalType;
-  if (isKillstreakMusicSound(mod)) return 'killstreak-music';
-  // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
-  if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
-  return undefined;
+/** The effective set is supplied by main; legacy local hero tags remain usable. */
+export function modHeroNames(mod: Pick<Mod, 'lockerHeroes' | 'lockerHero'>): string[] {
+  return [...new Set((mod.lockerHeroes ?? (mod.lockerHero ? [mod.lockerHero] : []))
+    .map(name => canonicalHeroName(name.trim())).filter(Boolean))];
 }
 
 /**
@@ -500,12 +440,7 @@ export function countLockerSkins(mods: Mod[]): number {
   return new Set(mods.map(getLockerSkinKey)).size;
 }
 
-/**
- * Display labels for the global (non-hero) cosmetic types. The "Icons &
- * Portraits" merge is deliberate: icon packs and "portrait" packs write the
- * same panorama/images/heroes files, so they're one category (see
- * classifyGlobalModType).
- */
+/** Display labels for Locker's General destinations and explicit local tags. */
 export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   'soul-container': 'Soul Containers',
   'spirit-urn': 'Spirit Urns',
@@ -613,42 +548,26 @@ export function groupModsByCategory(mods: Mod[], heroList?: readonly HeroCategor
   }
 
   for (const mod of mods) {
-    let categoryId: number | undefined;
-
-    // 1. Manual override wins. Users tag a mod when GameBanana left it under
-    //    the generic "Skins" parent or when the title doesn't mention the hero.
-    if (mod.lockerHero) {
-      categoryId = heroNameToId.get(mod.lockerHero.toLowerCase());
+    const heroIds = new Set<number>();
+    for (const hero of modHeroNames(mod)) {
+      const id = heroNameToId.get(hero.toLowerCase());
+      if (id !== undefined) heroIds.add(id);
     }
-
-    // 2. Resolve the author's category to its hero, including skin subcategories.
-    //    Unknown categories fall through to the title or Unassigned so a stale
-    //    tree cannot hide a mod in a bucket with no hero tile.
-    if (!categoryId && mod.categoryId && mod.categoryName?.toLowerCase() !== 'skins') {
-      categoryId = heroList?.length ? categoryToHeroId.get(mod.categoryId) : mod.categoryId;
+    // Legacy callers can still supply a Mod-category identity before main has
+    // resolved it. Sound/WiP IDs belong to separate trees and never map here.
+    if (mod.lockerHeroes === undefined && heroIds.size === 0
+      && (mod.sourceSection ?? 'Mod') === 'Mod' && mod.categoryId !== undefined) {
+      const id = heroList?.length ? categoryToHeroId.get(mod.categoryId) : mod.categoryId;
+      if (id !== undefined) heroIds.add(id);
     }
-
-    // 3. Fall back to fuzzy match on the mod's display name. Same logic the
-    //    "Skins"-parent branch used to do; broadened to also fire when there's
-    //    no categoryId at all (sound mods, custom imports).
-    if (!categoryId) {
-      const nameLower = mod.name?.toLowerCase() || '';
-      for (const [heroName, heroId] of heroNameToId) {
-        if (nameLower.includes(heroName)) {
-          categoryId = heroId;
-          break;
-        }
-      }
-    }
-
-    if (!categoryId) {
+    if (heroIds.size === 0) {
       unassigned.push(mod);
       continue;
     }
-    if (!map.has(categoryId)) {
-      map.set(categoryId, []);
+    for (const id of heroIds) {
+      if (!map.has(id)) map.set(id, []);
+      map.get(id)!.push(mod);
     }
-    map.get(categoryId)?.push(mod);
   }
 
   return { map, unassigned };

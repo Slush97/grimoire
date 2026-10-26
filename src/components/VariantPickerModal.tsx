@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -41,7 +41,11 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
 import { shakeElement } from '../lib/shakeElement';
 import { useAppStore } from '../stores/appStore';
+import { useCategoryStore } from '../stores/categoryStore';
+import { getInstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
+import { canonicalHeroName } from '../lib/lockerUtils';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
+import { HeroTagLabel } from './installed/chips';
 
 type DropPosition = 'before' | 'after';
 type VariantSection = 'enabled' | 'disabled';
@@ -153,6 +157,20 @@ export default function VariantPickerModal({
 }: Props) {
     const { t } = useTranslation();
     const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
+    const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
+    const heroNames = useCategoryStore((state) => state.heroNames);
+    const pathsByModel = useCategoryStore((state) => state.pathsByModel);
+    const variantHeroes = useMemo(() => new Map(variants.map(variant => {
+        const resolved = getInstalledCardTaxonomy(variant, { heroByCategoryId, heroNames, pathsByModel }).heroNames;
+        const heroes = [...new Map(resolved.map(hero => {
+            const canonical = canonicalHeroName(hero);
+            return [canonical.toLowerCase(), canonical];
+        })).values()];
+        return [variant.id, heroes];
+    })), [variants, heroByCategoryId, heroNames, pathsByModel]);
+    const showVariantHeroes = new Set([...variantHeroes.values()].map(heroes =>
+        JSON.stringify(heroes.map(hero => hero.toLowerCase()).sort()),
+    )).size > 1;
     const isOrderLocked = (mod?: Mod) => isModLoadedInGame(mod, loadedGameModIds);
     const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
@@ -328,6 +346,7 @@ export default function VariantPickerModal({
         const primaryTitle = variantDisplayName(v);
         const showSecondaryFileName =
             !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
+        const heroes = variantHeroes.get(v.id) ?? [];
 
         return (
             <div
@@ -348,6 +367,16 @@ export default function VariantPickerModal({
                     <div className="flex items-center gap-3">
                         <CheckboxMark checked={isActive} />
                         <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-start gap-2">
+                            {showVariantHeroes && heroes.length > 0 && (
+                                <span className="inline-flex max-w-[50%] flex-shrink-0 flex-wrap items-center gap-1 pt-0.5">
+                                    {heroes.map(hero => (
+                                        <span key={hero} title={hero}>
+                                            <HeroTagLabel heroName={hero} iconOnly iconClassName="h-4 w-4" />
+                                        </span>
+                                    ))}
+                                </span>
+                            )}
                             {isEditing ? (
                                 <Input
                                     ref={editInputRef}
@@ -369,7 +398,7 @@ export default function VariantPickerModal({
                                     maxLength={80}
                                 />
                             ) : (
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <span
                                         className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
                                         title={primaryTitle}
@@ -399,6 +428,7 @@ export default function VariantPickerModal({
                                     )}
                                 </div>
                             )}
+                            </div>
                             <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
                                 <span className="flex-shrink-0">{formatBytes(v.size)}</span>
                                 <span className="opacity-50 flex-shrink-0">-</span>
