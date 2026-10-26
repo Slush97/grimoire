@@ -136,9 +136,6 @@
   "src/components/sidebar/surfaceArt.tsx": {
     "raw-palette": 2
   },
-  "src/components/social/EditProfileDialog.tsx": {
-    "raw-palette": 5
-  },
   "src/components/social/MyPublishedSection.tsx": {
     "raw-palette": 4
   },

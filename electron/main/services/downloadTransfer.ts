@@ -3,8 +3,12 @@ import type { FileHandle } from 'fs/promises';
 import http, { type Agent, type IncomingHttpHeaders, type IncomingMessage } from 'http';
 import https from 'https';
 import { finished } from 'stream/promises';
+import { Readable } from 'stream';
 import { describeNetworkError } from './networkErrors';
 import { isAllowedGameBananaDownloadHostname } from './security';
+import { fetchChromiumGameBananaDownload, isGameBananaConnectionFailure } from './gamebananaDownloadTransport';
+
+type DownloadResponse = Readable & Pick<IncomingMessage, 'headers' | 'statusCode'>;
 
 export type DownloadServerStatus =
     | { phase: 'selected'; server: string }
@@ -134,7 +138,7 @@ function parseContentDispositionFilename(header: string): string | undefined {
     return legacy?.[1].trim() || undefined;
 }
 
-async function singleResponse(
+async function nodeResponse(
     url: string,
     headers: Record<string, string>,
     connectionTimeoutMs: number,
@@ -184,10 +188,60 @@ async function singleResponse(
             finish(error);
         }, connectionTimeoutMs);
         request.on('error', (error) => {
-            finish(signal?.aborted ? cancellationError() : new RetryableTransferError(describeNetworkError(error)));
+            finish(signal?.aborted ? cancellationError() : new RetryableTransferError(describeNetworkError(error), { cause: error }));
         });
         signal?.addEventListener('abort', abort, { once: true });
     });
+}
+
+async function singleResponse(
+    url: string,
+    headers: Record<string, string>,
+    connectionTimeoutMs: number,
+    signal?: AbortSignal,
+    agent?: Agent,
+): Promise<DownloadResponse> {
+    const started = Date.now();
+    try {
+        return await nodeResponse(url, headers, connectionTimeoutMs, signal, agent);
+    } catch (error) {
+        const parsed = new URL(url);
+        const remaining = connectionTimeoutMs - (Date.now() - started);
+        if (signal?.aborted || agent || parsed.protocol !== 'https:' ||
+            !isAllowedGameBananaDownloadHostname(parsed.hostname) ||
+            !isGameBananaConnectionFailure(error) || remaining <= 0) throw error;
+        console.warn(`[download] ${parsed.hostname} Node connection failed; retrying with Chromium`);
+        const controller = new AbortController();
+        const abort = () => controller.abort(cancellationError());
+        signal?.addEventListener('abort', abort, { once: true });
+        const timeout = setTimeout(() => controller.abort(new RetryableTransferError(
+            `Download connection timed out after ${connectionTimeoutMs / 1000} seconds`,
+        )), remaining);
+        try {
+            const response = await fetchChromiumGameBananaDownload(new Request(url, {
+                headers, redirect: 'manual', signal: controller.signal,
+            }));
+            const body = response.body ? Readable.fromWeb(response.body) : Readable.from([]);
+            // Cancelling before consumeResponse starts reading errors the body
+            // with no listener yet. Its reader still receives the stored error.
+            body.on('error', () => undefined);
+            // Keep cancellation wired through the response lifetime, including
+            // redirects discarded before their body is consumed.
+            body.once('close', () => {
+                signal?.removeEventListener('abort', abort);
+                controller.abort();
+            });
+            return Object.assign(body, {
+                statusCode: response.status,
+                headers: Object.fromEntries(response.headers),
+            });
+        } catch (chromiumError) {
+            signal?.removeEventListener('abort', abort);
+            throw chromiumError;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
 }
 
 async function requestResponse(
@@ -197,7 +251,7 @@ async function requestResponse(
     signal?: AbortSignal,
     resolveRedirectCandidates?: DownloadTransferOptions['resolveRedirectCandidates'],
     agent?: Agent,
-): Promise<IncomingMessage> {
+): Promise<DownloadResponse> {
     let url = initialUrl;
     for (let redirects = 0; redirects <= 5; redirects += 1) {
         const response = await singleResponse(url, headers, connectionTimeoutMs, signal, agent);
@@ -260,7 +314,7 @@ async function writeAll(file: FileHandle, chunk: Buffer): Promise<void> {
 }
 
 async function consumeResponse(
-    response: IncomingMessage,
+    response: DownloadResponse,
     destinationPath: string,
     mode: 'a' | 'w',
     startingOffset: number,
@@ -311,7 +365,7 @@ async function consumeResponse(
             onProgress(startingOffset + received, total ?? 0);
         }
         if (signal?.aborted) throw cancellationError();
-        if (!response.complete) {
+        if (!response.readableEnded) {
             throw new RetryableTransferError('Download response ended before the full body was received');
         }
         if (expectedResponseBytes !== undefined && received !== expectedResponseBytes) {

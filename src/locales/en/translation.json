@@ -2689,7 +2689,12 @@
     },
     "editProfile": {
       "editYourPost": "Edit your post",
-      "modListStays": "Update the title or description. The mod list stays as published.",
+      "keepsLikesAndLink": "Update this post while keeping its likes and link.",
+      "replaceModList": "Replace mod list (optional)",
+      "keepPublishedMods": "Keep published mods",
+      "replacementCount_one": "Replace with {{count}} mod",
+      "replacementCount_other": "Replace with {{count}} mods",
+      "unnamedMod": "Mod {{index}}",
       "saved": "Saved.",
       "changesLiveOnDiscover": "Your changes are live on Discover.",
       "title": "Title",
@@ -2709,7 +2714,7 @@
       "featured": "Featured",
       "unpublishConfirm": "Unpublish?",
       "viewDetails": "View details",
-      "editTitleAndDescription": "Edit title and description",
+      "editPost": "Edit post and mod list",
       "edit": "Edit",
       "unpublishThisProfile": "Unpublish this profile"
     },

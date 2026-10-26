@@ -35,7 +35,7 @@ interface MyPublishedSectionProps {
   // Notify parent when a profile was unpublished so the main Discover list
   // can drop the row optimistically.
   onUnpublished?: (profileId: string) => void;
-  // Notify parent when a profile's title/description was edited so the
+  // Notify parent when a profile was edited so the
   // main Discover list can patch its cached row.
   onUpdated?: (updated: SocialUpdateProfileResponse) => void;
 }
@@ -111,9 +111,8 @@ export default function MyPublishedSection({
                 p.id === updated.id
                   ? {
                       ...p,
-                      title: updated.title,
-                      description: updated.description,
-                      updated_at: updated.updated_at,
+                      ...updated,
+                      viewer_has_liked: updated.viewer_has_liked ?? p.viewer_has_liked,
                     }
                   : p
               ),
@@ -263,7 +262,7 @@ export default function MyPublishedSection({
                           description: p.description,
                         })
                       }
-                      title={t('social.published.editTitleAndDescription')}
+                      title={t('social.published.editPost')}
                     >
                       {t('social.published.edit')}
                     </Button>

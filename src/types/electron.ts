@@ -1446,6 +1446,10 @@ export interface ElectronAPI {
             id: string,
             body: import('@grimoire/social-types').UpdateProfileRequest
         ) => Promise<import('@grimoire/social-types').UpdateProfileResponse>;
+        updateProfileContents: (
+            id: string,
+            body: import('@grimoire/social-types').UpdateProfileContentsRequest
+        ) => Promise<import('@grimoire/social-types').UpdateProfileResponse>;
         like: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;
         unlike: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;
         report: (
