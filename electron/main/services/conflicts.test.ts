@@ -203,6 +203,19 @@ describe('indexed conflict scans', () => {
     expect((await detectConflicts('/deadlock'))[0].files).toEqual(['nested/default_foo.vtex_c']);
   });
 
+  it('ignores only the exact DeadlockForge marker path, case-insensitively', async () => {
+    const paths = ['deadlockforge/made_with_dlf.txt', 'DEADLOCKFORGE/MADE_WITH_DLF.TXT',
+      'made_with_dlf.txt', 'other/made_with_dlf.txt', 'deadlockforge/settings.txt',
+      'models/heroes/abrams/body.vmdl_c'];
+    installed([paths, paths.slice()]);
+    expect((await detectConflicts('/deadlock'))[0].files).toEqual(paths.slice(2));
+  });
+
+  it('reports no conflict for mods sharing only the DeadlockForge marker', async () => {
+    installed([['deadlockforge/made_with_dlf.txt'], ['deadlockforge/made_with_dlf.txt']]);
+    expect(await detectConflicts('/deadlock')).toEqual([]);
+  });
+
   it('applies every ignore layer freshly even when the file index is cached', async () => {
     installed([['a.txt', 'b.txt', 'c.txt'], ['c.txt', 'b.txt', 'a.txt']]);
     const [conflict] = await detectConflicts('/deadlock');

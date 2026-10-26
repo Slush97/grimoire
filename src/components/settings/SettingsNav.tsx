@@ -13,6 +13,7 @@ export interface SettingsNavItem {
   id: string;
   label: ReactNode;
   icon: LucideIcon;
+  count?: number;
 }
 
 export interface SettingsNavGroup {
@@ -26,14 +27,16 @@ interface SettingsNavProps {
   active: string;
   onSelect: (id: string) => void;
   label: string;
+  search?: ReactNode;
 }
 
-export default function SettingsNav({ groups, active, onSelect, label }: SettingsNavProps) {
+export default function SettingsNav({ groups, active, onSelect, label, search }: SettingsNavProps) {
   return (
     <nav
       aria-label={label}
       className="w-full shrink-0 md:sticky md:top-6 md:w-56 md:self-start"
     >
+      {search}
       <div className="space-y-5">
         {groups.map((group) => (
           <div key={group.id}>
@@ -48,6 +51,7 @@ export default function SettingsNav({ groups, active, onSelect, label }: Setting
                   <li key={item.id}>
                     <button
                       type="button"
+                      data-settings-category={item.id}
                       onClick={() => onSelect(item.id)}
                       aria-current={isActive ? 'true' : undefined}
                       className={`group relative flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-sm border px-3 text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
@@ -65,7 +69,8 @@ export default function SettingsNav({ groups, active, onSelect, label }: Setting
                         }`}
                         strokeWidth={isActive ? 2 : 1.75}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+                      {item.count !== undefined && <span aria-hidden className="text-xs tabular-nums text-text-secondary">{item.count}</span>}
                     </button>
                   </li>
                 );

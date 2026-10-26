@@ -1,3 +1,4 @@
+import { FilterItem, FilterDivider } from '../../common/FilteredContent';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Database, HardDrive, RefreshCw, Trash2, Wrench } from 'lucide-react';
@@ -164,9 +165,9 @@ export default function MaintenanceSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench}>
+      <Card id="settings-maintenance-settings-sections-maintenance-card" title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench}>
         <div className="space-y-6">
-          <div className="flex justify-between items-start gap-4">
+          <FilterItem id="settings-cleanup" className="flex justify-between items-start gap-4">
             <div>
               <h4 className="font-medium text-sm">
                 <Tx k="settings.maintenance.cleanupAddons" fallback="Cleanup Addons Folder" />
@@ -191,11 +192,11 @@ export default function MaintenanceSection() {
             >
               <Tx k="settings.maintenance.cleanup" fallback="Cleanup" />
             </Button>
-          </div>
+          </FilterItem>
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <div className="flex justify-between items-start gap-4">
+          <FilterItem id="settings-reset-setup" className="flex justify-between items-start gap-4">
             <div>
               <h4 className="font-medium text-sm">
                 <Tx k="settings.setupWizard.title" fallback="Reset Setup Wizard" />
@@ -218,14 +219,14 @@ export default function MaintenanceSection() {
             >
               <Tx k="common.actions.reset" fallback="Reset" />
             </Button>
-          </div>
+          </FilterItem>
         </div>
       </Card>
 
-      <DownloadServersCard key={downloadRouteVersion} />
-      <DownloadProxyCard onSaved={() => setDownloadRouteVersion((version) => version + 1)} />
+      <FilterItem id="settings-download-servers"><DownloadServersCard key={downloadRouteVersion} /></FilterItem>
+      <FilterItem id="settings-download-proxy"><DownloadProxyCard onSaved={() => setDownloadRouteVersion((version) => version + 1)} /></FilterItem>
 
-      <Card title={<Tx k="settings.sections.modDatabaseCache" fallback="Mod Database Cache" />} icon={Database}>
+      <Card id="settings-maintenance-settings-sections-modDatabaseCache-card" title={<Tx k="settings.sections.modDatabaseCache" fallback="Mod Database Cache" />} icon={Database}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2">
@@ -284,7 +285,7 @@ export default function MaintenanceSection() {
         </div>
       </Card>
 
-      <Card title={<Tx k="settings.sections.localPreviewCache" fallback="Local preview cache" />} icon={HardDrive}>
+      <Card id="settings-maintenance-settings-sections-localPreviewCache-card" title={<Tx k="settings.sections.localPreviewCache" fallback="Local preview cache" />} icon={HardDrive}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2">
