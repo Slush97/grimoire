@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -186,4 +186,14 @@ describe('countLockerSkins', () => {
     expect(mods).toEqual(original);
     expect(countLockerSkins([])).toBe(0);
   });
+});
+
+
+it('files GameBanana animations in General unless manually reassigned', () => {
+  const animation = mod({ id: 'animation', metaKey: 'pak01_dir.vpk', priority: 1,
+    sourceSection: 'Mod', categoryName: 'Animations', lockerHero: 'Haze', lockerHeroSource: 'download-title' });
+  expect(groupGlobalMods([animation]).animations).toEqual([animation]);
+  expect(getEffectiveGlobalType({ ...animation, lockerHeroSource: undefined })).toBe('animations');
+  expect(getEffectiveGlobalType({ ...animation, lockerHeroSource: 'manual' })).toBeUndefined();
+  expect(getEffectiveGlobalType({ ...animation, globalType: 'hud' })).toBe('hud');
 });
