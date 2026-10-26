@@ -341,6 +341,7 @@ export const TRIPPY_STYLES = [
   'halftone',
   'lava',
   'vaporwave',
+  'moo',
 ] as const;
 export type TrippyStyleName = (typeof TRIPPY_STYLES)[number];
 
@@ -358,6 +359,9 @@ export type TrippyVfxTargets = 'all' | 'abilities' | 'weapons';
 /** Request for one animated trippy preview sprite (vpkmerge trippy-preview).
  *  Pure pattern generation: hero-independent and cheap (no VPK read). */
 export interface TrippySpriteOptions {
+  colors?: string[];
+  /** Moo density multiplier, 0.25..8. Omitted means 1x. */
+  scale?: number;
   style: TrippyStyleName;
   /** Pattern phase / hue offset, normalized 0..1. */
   phase: number;

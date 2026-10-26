@@ -38,6 +38,7 @@ import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } fro
 import { codenamesForHero } from './heroCodenames';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 import { parseVpkDirectoryCached } from './vpk';
+import { skinPreviewForm, skinFormExportArgs } from '../../../src/lib/skinModelForms';
 import { hideoutCacheFile } from './hideoutScene';
 import { movementCacheFile } from './movementFxPaths';
 import { selectMovementClips } from '../../../src/lib/movementMotion';
@@ -160,7 +161,7 @@ function modelCodenamesForHero(heroName: string): string[] {
  * Each element is the discriminating arg pair spliced into the export command.
  */
 function modelSelectorsForHero(heroName: string): string[][] {
-    const entry = MODEL_ENTRY_OVERRIDES[heroName];
+    const entry = skinPreviewForm(heroName)?.entry ?? MODEL_ENTRY_OVERRIDES[heroName];
     if (entry) return [['--entry', entry]];
     return modelCodenamesForHero(heroName).map((codename) => ['--hero', codename]);
 }
@@ -204,7 +205,9 @@ function poseKey(
               : `${heroName}::stack::${skinSources
                     .map((source) => `${source.priority}:${source.metaKey}`)
                     .join('+')}`;
-    return fingerprint ? `${base}::c${fingerprint}` : base;
+    const form = skinPreviewForm(heroName);
+    const selected = form ? `${base}::form2-${createHash('sha256').update(JSON.stringify([form.entry, form.meshGroup, form.materialGroup, form.materialOverride])).digest('hex').slice(0, 8)}` : base;
+    return fingerprint ? `${selected}::c${fingerprint}` : selected;
 }
 
 function modelDir(key: string): string {
@@ -991,13 +994,14 @@ async function runHeroPoseExportForSources(
                     '--vpk',
                     source.vpk,
                     ...selector,
+                    ...skinFormExportArgs(skinPreviewForm(heroName)),
                     '--base',
                     pak01,
                     '--pose',
                     // Refuse to bake a static bind/T-pose: a clipless WIP hero
                     // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
                     // Locker falls back to the 2D portrait instead of an unposed model.
-                    '--require-pose',
+                    ...(!skinPreviewForm(heroName) ? ['--require-pose'] : []),
                     '--max-texture',
                     PREVIEW_MAX_TEXTURE,
                     '--out',
@@ -1138,6 +1142,7 @@ async function runRiggedHeroExportForSources(
                     '--base',
                     pak01,
                     // The viewer plays one action at a time from this menu.
+                    ...skinFormExportArgs(skinPreviewForm(heroName)),
                     ...clips.flatMap((clip) => ['--clip', clip.name]),
                     '--max-texture',
                     PREVIEW_MAX_TEXTURE,

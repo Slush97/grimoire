@@ -23,4 +23,14 @@ describe('skin texture adjustment', () => {
     expect(skinEditExportSchema.safeParse(source).success).toBe(false);
     expect(skinEditSaveSchema.safeParse({ ...source, edits: [], name: ' ' }).success).toBe(false);
   });
+  it('retains a transparency-only edit and validates its mode and opacity at the IPC boundary', () => {
+    const edit = { material: 'gun.vmat', hidden: false, tint: null, surface: { mode: 'ghost', opacity: 0.35 } };
+    const source = { heroName: 'Abrams', skinSources: [], fingerprint: 'a'.repeat(64), edits: [edit] };
+    expect(skinEditExportSchema.parse(source).edits[0].surface).toEqual(edit.surface);
+    expect(hasSkinPartEdit({ ...edit, surface: { mode: 'ghost', opacity: 0 } })).toBe(true);
+    for (const opacity of [-0.1, 1.1, NaN, Infinity]) {
+      expect(skinEditExportSchema.safeParse({ ...source, edits: [{ ...edit, surface: { mode: 'ghost', opacity } }] }).success).toBe(false);
+    }
+    expect(skinEditExportSchema.safeParse({ ...source, edits: [{ ...edit, surface: { mode: 'glass', opacity: 0.35 } }] }).success).toBe(false);
+  });
 });

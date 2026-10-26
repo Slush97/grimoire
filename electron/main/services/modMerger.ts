@@ -148,10 +148,10 @@ export function vpkmergeBinaryPath(): string {
     return full;
 }
 
-export function runVpkmerge(args: string[], timeoutMs = 300000): Promise<void> {
+export function runVpkmerge(args: string[], timeoutMs = 300000, env?: NodeJS.ProcessEnv): Promise<void> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
-        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(env && { env: { ...process.env, ...env } }) });
         let stderr = '';
         let stdout = '';
         let killed = false;

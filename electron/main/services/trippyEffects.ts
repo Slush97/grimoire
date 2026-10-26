@@ -24,6 +24,7 @@
 import { promises as fs, existsSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { skinPartPatternSchema } from '../../../src/lib/skinEditSchema';
 import { app } from 'electron';
 import { getCitadelPath, getGrimoirePath } from './deadlock';
 import { invalidateVpkParseCache } from './vpk';
@@ -44,7 +45,7 @@ import type {
 
 /** Bumped when the paint pipeline/binary changes in a way that should re-bake
  *  cached skin addons (and re-render cached preview sprites). */
-const TRIPPY_CACHE_VERSION = 1;
+const TRIPPY_CACHE_VERSION = 2;
 
 function clampRound(x: number, min: number, max: number): number {
     const v = Number.isFinite(x) ? x : min;
@@ -95,9 +96,11 @@ export async function previewTrippySprite(opts: TrippySpriteOptions): Promise<Tr
     const intensity = clampRound(opts.intensity ?? 1, 0, 1);
     const frames = clampInt(opts.frames ?? 24, SPRITE_FRAME_BOUNDS.min, SPRITE_FRAME_BOUNDS.max);
     const size = clampInt(opts.size ?? 256, SPRITE_SIZE_BOUNDS.min, SPRITE_SIZE_BOUNDS.max);
+    const colors = skinPartPatternSchema.shape.colors.parse(opts.colors)?.map((color) => color.toLowerCase());
+    const scale = style === 'moo' ? skinPartPatternSchema.shape.scale.parse(opts.scale) ?? 1 : 1;
 
     const dir = join(app.getPath('userData'), 'trippy-previews');
-    const key = `${style}_p${Math.round(phase * 100)}_s${Math.round(scroll * 100)}_i${Math.round(intensity * 100)}_f${frames}_x${size}_v${TRIPPY_CACHE_VERSION}.png`;
+    const key = `${style}_p${Math.round(phase * 100)}_s${Math.round(scroll * 100)}_i${Math.round(intensity * 100)}_f${frames}_x${size}_d${scale}${colors ? `_c${colors.map((color) => color.slice(1)).join('_')}` : ''}_v${TRIPPY_CACHE_VERSION}.png`;
     const cachePath = join(dir, key);
 
     if (!existsSync(cachePath)) {
@@ -120,6 +123,8 @@ export async function previewTrippySprite(opts: TrippySpriteOptions): Promise<Tr
                 String(size),
                 '--out',
                 tmp,
+                ...(colors ? ['--palette', colors.join(',')] : []),
+                '--scale', String(scale),
             ]);
             await fs.rename(tmp, cachePath);
         } finally {

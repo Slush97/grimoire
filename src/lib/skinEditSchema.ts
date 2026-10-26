@@ -2,8 +2,10 @@ import { z } from 'zod';
 import { TRIPPY_STYLES } from '../types/mod';
 
 export const skinPartPatternSchema = z.object({
+    colors: z.array(z.string().regex(/^#[a-f0-9]{6}$/i)).min(2).max(4).optional(),
     style: z.enum(TRIPPY_STYLES), intensity: z.number().finite().min(0).max(1),
     phase: z.number().finite().min(0).max(1), scroll: z.number().finite().min(0).max(4),
+    scale: z.number().finite().min(0.25).max(8).optional(),
 }).strict();
 
 const skinSourcesSchema = (metaKey: RegExp) => z.array(z.object({
@@ -42,6 +44,10 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
         finish: z.object({
             roughness: z.number().finite().min(0).max(1),
             metalness: z.number().finite().min(0).max(1),
+        }).strict().optional(),
+        surface: z.object({
+            mode: z.enum(['translucent', 'ghost']),
+            opacity: z.number().finite().min(0).max(1),
         }).strict().optional(),
     }).strict()).max(256),
 }).strict();

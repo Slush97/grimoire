@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { editForMaterial, materialBasename } from './skinParts';
 import { getMorphic } from './source2NprMaterial';
+import { TRANSLUCENT_OVERLAY_RENDER_ORDER } from './source2Preview/types';
 import type { SkinPartEdit, SkinPartTexture } from '../types/skinEditor';
 
 export function isSkinSurface(material: THREE.Material): material is THREE.Material & Pick<THREE.MeshStandardMaterial, 'map' | 'color'> {
@@ -18,18 +19,68 @@ export function isEditorMaterial(material: THREE.Material): material is THREE.Ma
     && !!tint && typeof tint === 'object' && 'value' in tint && tint.value instanceof THREE.Color;
 }
 
+function numericUniform(material: THREE.Material, name: string): { value: number } | null {
+  if (!('uniforms' in material) || !material.uniforms || typeof material.uniforms !== 'object') return null;
+  const uniform: unknown = Reflect.get(material.uniforms, name);
+  const matches = (value: unknown): value is { value: number } => !!value && typeof value === 'object' && 'value' in value && typeof value.value === 'number';
+  return matches(uniform) ? uniform : null;
+}
+
+function applySkinTransparency(material: THREE.Material, opacity: number): () => void {
+  const before = { transparent: material.transparent, opacity: material.opacity, blending: material.blending,
+    depthTest: material.depthTest, depthWrite: material.depthWrite, alphaTest: material.alphaTest };
+  material.transparent = true;
+  material.opacity = opacity;
+  material.blending = THREE.NormalBlending;
+  material.depthTest = true;
+  material.depthWrite = true;
+  material.alphaTest = 0;
+  const restore: Array<() => void> = [];
+  if ('alphaMap' in material) {
+    const previous = material.alphaMap;
+    material.alphaMap = null;
+    restore.push(() => { material.alphaMap = previous; });
+  }
+  if ('transmission' in material && typeof material.transmission === 'number' && 'transmissionMap' in material) {
+    const previous = { transmission: material.transmission, transmissionMap: material.transmissionMap };
+    material.transmission = 0;
+    material.transmissionMap = null;
+    restore.push(() => { Object.assign(material, previous); });
+  }
+  for (const name of ['uCitadelGlass', 'uCitadelGlassBackfacePass', 'uNprLighting']) {
+    const uniform = numericUniform(material, name);
+    if (!uniform) continue;
+    const previous = uniform.value;
+    uniform.value = 0;
+    restore.push(() => { uniform.value = previous; });
+  }
+  material.needsUpdate = true;
+  return () => {
+    Object.assign(material, before);
+    restore.forEach((reset) => reset());
+    material.needsUpdate = true;
+  };
+}
+
 export function applySkinPartEdits(scene: THREE.Object3D, edits: SkinPartEdit[], wireframe: boolean): () => void {
   const restore: Array<() => void> = [];
   const seen = new Set<THREE.Material>();
   scene.traverse((object) => {
     if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
-    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    if (materials.some((material) => editForMaterial(material.name, edits)?.surface)) {
+      const previous = object.renderOrder;
+      object.renderOrder = Math.max(previous, TRANSLUCENT_OVERLAY_RENDER_ORDER);
+      restore.push(() => { object.renderOrder = previous; });
+    }
+    for (const material of materials) {
       if (seen.has(material)) continue;
       seen.add(material);
       const edit = editForMaterial(material.name, edits);
       const visible = material.visible;
       material.visible = visible && !edit?.hidden;
       restore.push(() => { material.visible = visible; });
+      if (edit?.surface) restore.push(applySkinTransparency(material, edit.surface.opacity));
       if (edit?.finish && 'roughness' in material && 'metalness' in material
         && 'roughnessMap' in material && 'metalnessMap' in material) {
         const previous = { roughness: material.roughness, metalness: material.metalness,

@@ -8,12 +8,19 @@ export interface SkinEditSource {
 
 export interface SkinPart {
   material: string;
+  /** Models that use this material, including separately editable transformed bodies. */
+  modelEntries?: string[];
+  /** Authored player forms using this material, including states on the same model. */
+  formIds?: string[];
+  /** Material-group swaps cannot hide geometry independently of the other state. */
+  hideable?: boolean;
   label: string;
   drawCalls: number;
   vertices: number;
   tintable: boolean;
   patternable: boolean;
   finishable?: boolean;
+  surfaceable?: boolean;
   textureSize?: { width: number; height: number };
 }
 
@@ -21,6 +28,7 @@ export interface SkinEditInfo {
   fingerprint: string;
   entry: string;
   parts: SkinPart[];
+  forms?: { id: string; available: boolean }[];
 }
 
 export interface SkinPartEdit {
@@ -31,6 +39,12 @@ export interface SkinPartEdit {
   adjustments?: SkinColorAdjustments;
   colorize?: boolean;
   finish?: SkinPartFinish;
+  surface?: SkinPartSurface;
+}
+
+export interface SkinPartSurface {
+  mode: 'translucent' | 'ghost';
+  opacity: number;
 }
 
 export interface SkinPartFinish {
@@ -55,6 +69,9 @@ export interface SkinPartPattern {
   intensity: number;
   phase: number;
   scroll: number;
+  /** Moo density multiplier. Omitted means the original 1x density. */
+  scale?: number;
+  colors?: string[];
 }
 
 export interface SkinEditExport extends SkinEditSource {
@@ -72,6 +89,9 @@ export interface SkinEditSaveResult {
   renamed: Record<string, HeroPoseSkinSource>;
   overlay: HeroPoseSkinSource;
 }
+
+export type SkinEditProgress = { stage: 'inspect' | 'install' }
+  | { stage: 'build'; completed: number; total: number };
 
 /** Recorded on a skin-editor overlay so saving the same edit target again replaces it. */
 export interface SkinEditTarget {

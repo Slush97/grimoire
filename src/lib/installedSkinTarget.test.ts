@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
-import { installedDoorStuckTarget, installedSkinPreviewTarget } from './installedSkinTarget';
+import { installedDoorStuckTarget, installedSkinPreviewTarget, installedSkinTarget } from './installedSkinTarget';
 import { movementFxSchema } from './movementFx';
 
 const base: Mod = { id: 'base', name: 'Blackmore Academy Mina', metaKey: 'pak13_dir.vpk',
@@ -8,6 +8,33 @@ const base: Mod = { id: 'base', name: 'Blackmore Academy Mina', metaKey: 'pak13_
   size: 100, installedAt: '', sha256: 'a'.repeat(64), lockerHero: 'Mina' };
 const overlay: Mod = { ...base, id: 'overlay', name: 'Mina custom', metaKey: 'pak12_dir.vpk',
   priority: 12, enabled: true, sha256: 'b'.repeat(64), skinEdit: { hero: 'Mina', sources: [base.sha256 ?? ''] } };
+
+it('previews categorized skins whose titles do not name their hero', () => {
+  const mod: Mod = { ...base, id: 'tetodox', name: 'Tetodox', metaKey: 'pak39_dir.vpk', priority: 39,
+    lockerHero: undefined, sourceSection: 'Mod', categoryId: 33320, categoryName: 'Paradox', gameBananaId: 699448 };
+  const target = { heroName: 'Paradox', skinSources: [{ metaKey: 'pak39_dir.vpk', priority: 39 }] };
+  expect(installedSkinTarget(mod)).toEqual(target);
+  expect(installedSkinPreviewTarget(mod, [mod])).toEqual(target);
+  expect(installedDoorStuckTarget(mod)).toEqual(target);
+});
+
+it('resolves hero subcategories before ambiguous title matches', () => {
+  const mod: Mod = { ...base, name: 'Mina cosplay', lockerHero: undefined, sourceSection: 'Mod',
+    categoryId: 50570, categoryName: 'Faithful/Vanilla+' };
+  const categories = new Map([[50570, 'Viscous']]);
+  expect(installedSkinPreviewTarget(mod, [mod], categories)?.heroName).toBe('Viscous');
+  expect(installedDoorStuckTarget(mod, categories)).toMatchObject({ heroName: 'Viscous' });
+  expect(installedSkinTarget({ ...mod, lockerHero: 'Calico' }, categories)?.heroName).toBe('Calico');
+  expect(installedSkinTarget({ ...mod, skinEdit: { hero: 'Paradox', sources: [] } }, categories)?.heroName).toBe('Paradox');
+});
+
+it('rejects unrelated categories and sound sections without guessing a hero', () => {
+  const mod: Mod = { ...base, name: 'Unnamed replacement', lockerHero: undefined, sourceSection: 'Mod',
+    categoryId: 50570, categoryName: 'Faithful/Vanilla+' };
+  expect(installedSkinTarget(mod)).toBeNull();
+  expect(installedSkinTarget({ ...mod, categoryName: 'Definitely Paradox-like props' })).toBeNull();
+  expect(installedSkinTarget({ ...mod, sourceSection: 'Sound', categoryName: 'Paradox' }, new Map([[50570, 'Viscous']]))).toBeNull();
+});
 
 it('opens enabled or disabled global movement effects without requiring a hero tag', () => {
   for (const kind of ['dash', 'heavy-melee']) {

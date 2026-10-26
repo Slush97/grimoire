@@ -50,7 +50,9 @@ ipcMain.handle('foundry:skinEditInfo', (_event, input: unknown) =>
 ipcMain.handle('foundry:resumeSkinEdit', (_event, input: unknown) =>
     resumeSkinEdit(requireDeadlockPath(), skinEditSourceSchema.parse(input)));
 ipcMain.handle('foundry:exportSkinEdits', (_event, input: unknown) => exportSkinEdits(requireDeadlockPath(), input));
-ipcMain.handle('foundry:saveSkinEdits', (_event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input));
+ipcMain.handle('foundry:saveSkinEdits', (event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input, (progress) => {
+    if (!event.sender.isDestroyed()) event.sender.send('foundry:skinEditProgress', progress);
+}));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
 ipcMain.handle('foundry:previewMovementFx', (_event, input: unknown) => previewMovementFx(requireDeadlockPath(), input));
 ipcMain.handle('foundry:exportMovementFx', (_event, input: unknown) => exportMovementFx(requireDeadlockPath(), input));

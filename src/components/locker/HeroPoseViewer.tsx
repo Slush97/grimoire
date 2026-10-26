@@ -53,6 +53,7 @@ import { BloomEffect } from './BloomEffect';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
+import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
 import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
@@ -667,6 +668,8 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
       const controls = controlsRef.current;
       if (!controls) return;
       e.preventDefault();
+      // Part picking listens on the parent; wheel input must not raycast the model.
+      e.stopPropagation();
       const offset = camera.position.clone().sub(controls.target);
       const dist = THREE.MathUtils.clamp(
         offset.length() * Math.exp(THREE.MathUtils.clamp(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? gl.domElement.clientHeight : 1), -240, 240) * 0.001),
@@ -1570,12 +1573,8 @@ export default function HeroPoseViewer({
             <shadowMaterial transparent opacity={0.25} />
           </mesh>
         )}
-        <group onClick={(event) => {
-          if (!onPartPick || event.delta > 4 || !(event.object instanceof THREE.Mesh)) return;
-          const materials = event.object.material;
-          const material = Array.isArray(materials) ? materials[event.face?.materialIndex ?? 0] : materials;
-          if (material) { event.stopPropagation(); onPartPick(material.name); }
-        }}>
+        <group>
+        {onPartPick && <SkinPartPicking model={scene} onPick={onPartPick} />}
         <MovementFxStage preview={movementPreview} scene={scene} paused={playback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
             movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView} />}>

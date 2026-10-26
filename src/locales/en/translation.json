@@ -94,7 +94,8 @@
       "undo": "Undo",
       "collapseDetails": "Collapse details",
       "expandDetails": "Expand details",
-      "tryAgain": "Try again"
+      "tryAgain": "Try again",
+      "redo": "Redo"
     },
     "errorBoundary": {
       "title": "Something went wrong",
@@ -301,6 +302,16 @@
       "originalGame": "Default skin",
       "equipped": "Equipped skins",
       "loading": "Loading skin parts...",
+      "preparing": "Preparing skin changes...",
+      "form": "Form",
+      "defaultForm": "Normal",
+      "buildProgress": "Building skin: {{completed}} of {{total}} steps",
+      "installing": "Installing skin and refreshing mods...",
+      "customPatternColors": "Custom pattern colors",
+      "patternColor": "Pattern color {{index}}",
+      "removePatternColor": "Remove pattern color {{index}}",
+      "addPatternColor": "Add color",
+      "patternColorsHint": "Pattern colors replace the part tint. Lower intensity blends with the original texture.",
       "compare": "Compare skin",
       "original": "Original",
       "edited": "Edited",
@@ -347,17 +358,39 @@
       "sourceMissing_other": "{{count}} skins this edit was made from are missing. You're editing without them, and saving replaces the earlier edit.",
       "thumbnailFailed": "Skin saved, but its preview image could not be generated.",
       "surface": "Surface",
+      "finishTitle": "Finish",
       "roughness": "Roughness",
       "metalness": "Metalness",
+      "transparency": "Transparency",
+      "translucent": "Translucent",
+      "opacity": "Opacity",
+      "scale": "Scale",
+      "ghostUnsupported": "This draft uses an experimental Ghost surface that can render incorrectly. Choose Original or Translucent for each affected part before saving.",
+      "surfaceUnsupported": "This part does not support transparency overrides.",
       "originalFinish": "Original",
       "finishUnsupported": "This part does not support static surface finishes.",
       "finish": {
         "matte": "Matte",
         "satin": "Satin",
-        "polished": "Polished",
+        "glossy": "Glossy",
+        "polished": "Polished metal",
         "metal": "Metal"
       },
-      "originalFinishHint": "Uses the original maps and values. Choose a finish to create an override."
+      "originalFinishHint": "Uses the original maps and values. Choose a finish to create an override.",
+      "forms": {
+        "werewolf": "Werewolf",
+        "cat": "Cat",
+        "ball": "Goo Ball",
+        "cube": "The Cube",
+        "stone": "Stone Form"
+      },
+      "sharedForms": "Used in {{forms}}",
+      "sharedGeometry": "Visibility is shared with another form",
+      "formUnavailable": "{{form}} is unavailable for this skin. Your edits are kept.",
+      "changedAcrossForms_one": "{{count}} change across {{forms}} forms",
+      "changedAcrossForms_other": "{{count}} changes across {{forms}} forms",
+      "changedInForm_one": "{{count}} change in {{form}}",
+      "changedInForm_other": "{{count}} changes in {{form}}"
     },
     "draft": {
       "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",
@@ -2155,7 +2188,8 @@
     },
     "colors": {
       "loading": "Loading...",
-      "intro": "Repaint {{hero}}'s ability effects (particles, projectiles, and the ult body). Pick a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.",
+      "intro": "Recolor {{hero}}'s ability effects. Pick a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.",
+      "hueHint": "Single color shifts existing hues. White highlights and shared effects can keep their original colors. Body materials are edited separately in Skin parts.",
       "modes": {
         "singleColor": "Single Color",
         "rainbow": "Rainbow",

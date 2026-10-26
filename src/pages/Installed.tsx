@@ -394,8 +394,9 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
+  const heroByCategoryId = useHeroCategoryStore(state => state.heroByCategoryId);
   const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
-  const target = installedDoorStuckTarget(previewMod);
+  const target = installedDoorStuckTarget(previewMod, heroByCategoryId);
   const openDoorStuck = doorStuckEnabled && target ? () => {
     if ('kind' in target && target.kind === 'movement') {
       const settings = useAppStore.getState().settings;
