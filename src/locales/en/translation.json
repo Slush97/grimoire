@@ -1215,6 +1215,14 @@
       "nsfwContentDescription": "Applies across Grimoire. Blur covers thumbnails; Hide also removes NSFW mods from Browse results.",
       "noHiddenCreators": "No creators are hidden right now.",
       "whatGrimoireSends": "Everything Grimoire can send, and who receives it, is listed on the <privacyLink>privacy page</privacyLink>."
+    },
+    "search": {
+      "placeholder": "Search settings",
+      "clear": "Clear search",
+      "results_one": "{{count}} match",
+      "results_other": "{{count}} matches",
+      "empty": "Try another word, such as language, downloads, or cache.",
+      "emptyTitle": "No matching settings"
     }
   },
   "crosshair": {

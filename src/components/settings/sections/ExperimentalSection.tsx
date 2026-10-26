@@ -1,3 +1,4 @@
+import { FilterDivider } from '../../common/FilteredContent';
 import { useState } from 'react';
 import { Beaker, Copy, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -53,7 +54,7 @@ export default function ExperimentalSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
+      <Card id="settings-experimental-settings-sections-experimentalFeatures-card" title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
         <div className="space-y-6">
           <p className="text-xs text-text-secondary -mt-2">
             <Tx
@@ -62,70 +63,70 @@ export default function ExperimentalSection() {
             />
           </p>
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-statsDashboard-toggle"
             checked={settings?.experimentalStats ?? false}
             onChange={(checked) => update({ experimentalStats: checked })}
             label={<Tx k="settings.experimental.statsDashboard" fallback="Stats Dashboard" />}
             description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-crosshairDesigner-toggle"
             checked={settings?.experimentalCrosshair ?? false}
             onChange={(checked) => update({ experimentalCrosshair: checked })}
             label={<Tx k="settings.experimental.crosshairDesigner" fallback="Crosshair Designer" />}
             description={<Tx k="settings.experimental.crosshairDesignerDescription" fallback="Create custom crosshairs with a live preview." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-sections-grimoireSocial-toggle"
             checked={settings?.experimentalSocial ?? false}
             onChange={(checked) => update({ experimentalSocial: checked })}
             label={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />}
             description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-fixUnknownMods-toggle"
             checked={settings?.experimentalUnknownModMatching ?? false}
             onChange={(checked) => update({ experimentalUnknownModMatching: checked })}
             label={<Tx k="settings.experimental.fixUnknownMods" fallback="Fix Unknown Mods" />}
             description={<Tx k="settings.toggles.fixUnknown" fallback="Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-vpkImprint-toggle"
             checked={settings?.experimentalVpkImprinting ?? false}
             onChange={(checked) => update({ experimentalVpkImprinting: checked })}
             label={<Tx k="settings.experimental.vpkImprint" fallback="Imprint installed mods" />}
             description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-modSafety-manage-toggle"
             checked={settings?.experimentalModSafety ?? false}
             onChange={(checked) => update({ experimentalModSafety: checked })}
             label={<Tx k="modSafety.manage" fallback="Mod safety" />}
             description={<Tx k="settings.toggles.modSafety" fallback="Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them. Added for a Deadlock bug that let HUD scripts read files on your computer. Valve has since fixed it, so you don't need this to stay safe." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-deadworksServers-toggle"
             checked={settings?.experimentalDeadworksServers ?? false}
             onChange={(checked) => update({ experimentalDeadworksServers: checked })}
             label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}
             description={<Tx k="settings.toggles.deadworks" fallback="Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-foundry-toggle"
             checked={settings?.experimentalFoundry ?? false}
             onChange={(checked) => update({ experimentalFoundry: checked })}
             label={<Tx k="settings.experimental.foundry" fallback="Door Stuck" />}
@@ -133,8 +134,8 @@ export default function ExperimentalSection() {
         </div>
       </Card>
 
-      <Card title={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />} icon={Wrench}>
-        <Toggle
+      <Card id="settings-experimental-settings-preferences-developerMode-card" title={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />} icon={Wrench}>
+        <Toggle id="settings-experimental-settings-preferences-developerMode-toggle"
           checked={settings?.devMode ?? false}
           onChange={handleDevModeChange}
           disabled={isCreatingDevPath || isCopyingMods}
