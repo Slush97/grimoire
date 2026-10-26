@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -185,5 +185,24 @@ describe('countLockerSkins', () => {
     expect(countLockerSkins(mods)).toBe(groupLockerSkins(mods).length);
     expect(mods).toEqual(original);
     expect(countLockerSkins([])).toBe(0);
+  });
+});
+
+
+describe('Maps in General', () => {
+  const map = mod({ id: 'map', metaKey: 'pak01_dir.vpk', priority: 1,
+    sourceSection: 'Mod', categoryName: ' Maps ' });
+
+  it('groups existing GameBanana maps under Maps', () => {
+    expect(getEffectiveGlobalType(map)).toBe('maps');
+    expect(groupGlobalMods([map]).maps).toEqual([map]);
+  });
+
+  it('respects explicit assignments and ignores other sections', () => {
+    expect(getEffectiveGlobalType({ ...map, globalType: 'hud' })).toBe('hud');
+    expect(getEffectiveGlobalType({ ...map, lockerHero: 'Haze' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, categoryName: 'Minimaps' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, categoryName: undefined, globalType: 'maps' })).toBe('maps');
   });
 });
