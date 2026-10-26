@@ -1,3 +1,4 @@
+import { promises as fsPromises } from 'fs';
 import { createServer, request as httpRequest, type Server } from 'http';
 import https from 'https';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
@@ -190,6 +191,19 @@ describe('GameBanana download connection recovery', () => {
         cancel.abort();
         await rejected;
         await expect(stat(destinationPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('cancels Chromium while the destination file is opening', async () => {
+        const cancel = new AbortController();
+        const open = fsPromises.open;
+        vi.spyOn(fsPromises, 'open').mockImplementationOnce(async (...args: Parameters<typeof open>) => {
+            cancel.abort();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            return open(...args);
+        });
+        await expect(downloadTransfer({
+            candidateUrls: [mirror], destinationPath: join(harness.root, 'opening.zip'), signal: cancel.signal, onProgress: () => {},
+        })).rejects.toThrow('CANCELLED_BY_USER');
     });
 
     it('suspends a Chromium body and resumes its partial file', async () => {

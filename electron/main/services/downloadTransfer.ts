@@ -222,6 +222,9 @@ async function singleResponse(
                 headers, redirect: 'manual', signal: controller.signal,
             }));
             const body = response.body ? Readable.fromWeb(response.body) : Readable.from([]);
+            // Cancelling before consumeResponse starts reading errors the body
+            // with no listener yet. Its reader still receives the stored error.
+            body.on('error', () => undefined);
             // Keep cancellation wired through the response lifetime, including
             // redirects discarded before their body is consumed.
             body.once('close', () => {
