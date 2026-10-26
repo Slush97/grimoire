@@ -24,9 +24,7 @@ jobs:
         with:
           repository: Slush97/grimoire-social
           path: grimoire-social
-          # Companion PR #9 adds UpdateProfileContentsRequest. Use its exact
-          # commit so this PR can be checked before the backend merges.
-          ref: 1893c6b1d54b43ebdad207ea4414dc84a3dfbc29
+          ref: main
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
