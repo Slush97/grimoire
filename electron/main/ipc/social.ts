@@ -13,6 +13,7 @@ import type {
     ProfileSort,
     ReportRequest,
     UpdateProfileRequest,
+    UpdateProfileContentsRequest,
     UpdateProfileResponse,
 } from '@grimoire/social-types';
 import {
@@ -26,6 +27,7 @@ import {
     reportProfile,
     unlikeProfile,
     updateProfile,
+    updateProfileContents,
     type ListProfilesArgs,
 } from '../services/social';
 import {
@@ -113,6 +115,13 @@ ipcMain.handle(
 ipcMain.handle('social:deleteProfile', async (_event, id: string): Promise<void> => {
     await deleteProfile(id);
 });
+
+ipcMain.handle(
+    'social:updateProfileContents',
+    async (_event, args: { id: string; body: UpdateProfileContentsRequest }): Promise<UpdateProfileResponse> => {
+        return updateProfileContents(args.id, args.body);
+    }
+);
 
 ipcMain.handle('social:deleteAccount', async (): Promise<SessionStatus> => {
     await deleteAccount();
