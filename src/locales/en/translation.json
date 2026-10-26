@@ -992,10 +992,6 @@
       "oled": {
         "title": "OLED mode"
       },
-      "scrollBounce": {
-        "title": "Scroll bounce",
-        "description": "Bounce the page when scrolling past the top or bottom."
-      },
       "launchButtons": {
         "combine": "Combine launch buttons",
         "combineDescription": "Use a single launch button and switch between Modded and Vanilla with the swap icon or right-click, instead of two stacked buttons."

@@ -50,7 +50,6 @@ import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
 import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { RevealImage } from '../components/common/RevealImage';
 import {
   FAVORITE_HEROES_KEY,
@@ -369,7 +368,6 @@ export default function Locker() {
     }
   }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(lockerScrollRef);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
   const heroTypeaheadRef = useRef(heroTypeahead);
   const heroTypeaheadFadeTimerRef = useRef<number | null>(null);

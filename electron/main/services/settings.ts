@@ -44,7 +44,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflictMods: [],
     accentColor: '#f97316',
     oledMode: false,
-    elasticOverscroll: true,
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
     language: null,

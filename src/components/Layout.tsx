@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -34,7 +34,6 @@ import ImportCustomModsModal from './ImportCustomModsModal';
 import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
 import { RequirementsHost } from './requirements/RequirementsHost';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 export default function Layout() {
   const { t } = useTranslation();
@@ -44,10 +43,6 @@ export default function Layout() {
   // Keyed on the top-level route only, so sub-routes (/locker/<hero>, /settings/<section>)
   // swap content in place instead of remounting the whole page.
   const outletKey = location.pathname.split('/')[1];
-  // Flow pages (Settings, Profiles, Discover...) scroll here; pages that own a
-  // scroller never overflow this one, so only theirs bounces.
-  const outletScrollRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(outletScrollRef);
   const [showWelcome, setShowWelcome] = useState(false);
   const [loading, setLoading] = useState(true);
   // Normal one-click download progress is handled by DownloadQueueIndicator.
@@ -331,7 +326,7 @@ export default function Layout() {
         <AppUpdateBanner />
         <ModSafetyBanner />
         <Suspense fallback={null}>
-          <div key={outletKey} ref={outletScrollRef} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
+          <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in [scrollbar-gutter:stable]">
             <Outlet />
           </div>
         </Suspense>

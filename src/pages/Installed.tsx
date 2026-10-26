@@ -66,7 +66,6 @@ import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { useHeroCategoryStore } from '../stores/heroCategoryStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
@@ -1362,7 +1361,6 @@ export default function Installed() {
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(installedScrollRef);
   useInstalledScrollActivity(installedScrollRef);
   useInstalledScrollRestoration(
     installedScrollRef,

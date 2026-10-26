@@ -90,7 +90,6 @@ import {
   type ViewMode,
 } from '../components/browse/cardGeometry';
 import { usePrefersReducedMotion } from '../components/browse/cardUtils';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 const DEFAULT_PER_PAGE = 36;
 // Row count below which the local catalog mirror is treated as unusable. A
@@ -516,7 +515,6 @@ export default function Browse() {
   const pendingScrollTopRef = useRef<number | null>(initialCache?.scrollTop ?? null);
   // The outer scroll container — same element with `h-full overflow-y-auto`.
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(scrollContainerRef);
   // The virtualized grid's relative wrapper (the div sized to getTotalSize()).
   // Used by the scroll anchor below to translate scrollTop into item space.
   const gridWrapRef = useRef<HTMLDivElement | null>(null);

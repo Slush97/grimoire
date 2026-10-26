@@ -15,7 +15,6 @@ describe('Settings search', () => {
     expect(searchSettings(entries, 'language')[0]).toMatchObject({ section: 'appearance', label: 'Language & region' });
     expect(searchSettings(entries, 'backups')[0]).toMatchObject({ section: 'preferences', label: 'Keep removed mod files for 24 hours' });
     expect(searchSettings(entries, 'FRAME RATE')[0]).toMatchObject({ section: 'performance' });
-    expect(searchSettings(entries, 'scroll bounce')[0]).toMatchObject({ section: 'appearance', target: 'settings-elastic-overscroll' });
     expect(searchSettings(entries, 'date')[0]).toMatchObject({ section: 'appearance', label: 'Date Format' });
     expect(searchSettings(entries, 'preferences download').length).toBeGreaterThan(0);
     expect(searchSettings(entries, '  \n  ')).toEqual([]);
