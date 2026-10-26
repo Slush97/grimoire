@@ -116,7 +116,7 @@ export default function UpdatesSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download}>
+      <Card id="settings-updates-settings-sections-updates-card" title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download}>
         <div className="space-y-4">
           {installSource !== 'managed' && (
             <div className="space-y-2">
@@ -145,7 +145,7 @@ export default function UpdatesSection() {
             </div>
           )}
           {installSource !== 'managed' && (
-            <Toggle
+            <Toggle id="settings-updates-settings-updates-autoCheck-toggle"
               checked={settings?.autoCheckAppUpdates ?? true}
               onChange={checked => { if (settings) void saveSettings({ ...settings, autoCheckAppUpdates: checked }); }}
               disabled={!settings}

@@ -492,7 +492,7 @@ export default function AppearanceArtSection() {
 
   return (
     <div>
-      <Toggle
+      <Toggle id="settings-appearance-settings-appearance-launchButtons-combine-toggle"
         checked={settings?.unifiedLaunchButton ?? false}
         onChange={(checked) => settings && void saveSettings({ ...settings, unifiedLaunchButton: checked })}
         label={<Tx k="settings.appearance.launchButtons.combine" fallback="Combine launch buttons" />}
@@ -506,7 +506,7 @@ export default function AppearanceArtSection() {
 
       <div className="my-5 h-px bg-hl/5" />
 
-      <div className="mb-3">
+      <div id="settings-launcher-art" className="mb-3">
         <h3 className="text-sm font-semibold text-text-primary">
           <Tx k="settings.appearance.art.title" fallback="Launcher & sidebar art" />
         </h3>
@@ -548,7 +548,7 @@ export default function AppearanceArtSection() {
         })}
       </div>
 
-      <Toggle
+      <Toggle id="settings-appearance-settings-appearance-sidebar-transparent-toggle"
         checked={settings?.sidebarTransparent ?? false}
         onChange={(checked) => settings && void saveSettings({ ...settings, sidebarTransparent: checked })}
         label={<Tx k="settings.appearance.sidebar.transparent" fallback="Transparent sidebar" />}

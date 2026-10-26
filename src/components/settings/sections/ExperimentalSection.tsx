@@ -53,7 +53,7 @@ export default function ExperimentalSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
+      <Card id="settings-experimental-settings-sections-experimentalFeatures-card" title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
         <div className="space-y-6">
           <p className="text-xs text-text-secondary -mt-2">
             <Tx
@@ -62,7 +62,7 @@ export default function ExperimentalSection() {
             />
           </p>
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-statsDashboard-toggle"
             checked={settings?.experimentalStats ?? false}
             onChange={(checked) => update({ experimentalStats: checked })}
             label={<Tx k="settings.experimental.statsDashboard" fallback="Stats Dashboard" />}
@@ -71,7 +71,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-crosshairDesigner-toggle"
             checked={settings?.experimentalCrosshair ?? false}
             onChange={(checked) => update({ experimentalCrosshair: checked })}
             label={<Tx k="settings.experimental.crosshairDesigner" fallback="Crosshair Designer" />}
@@ -80,7 +80,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-sections-grimoireSocial-toggle"
             checked={settings?.experimentalSocial ?? false}
             onChange={(checked) => update({ experimentalSocial: checked })}
             label={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />}
@@ -89,7 +89,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-fixUnknownMods-toggle"
             checked={settings?.experimentalUnknownModMatching ?? false}
             onChange={(checked) => update({ experimentalUnknownModMatching: checked })}
             label={<Tx k="settings.experimental.fixUnknownMods" fallback="Fix Unknown Mods" />}
@@ -98,7 +98,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-vpkImprint-toggle"
             checked={settings?.experimentalVpkImprinting ?? false}
             onChange={(checked) => update({ experimentalVpkImprinting: checked })}
             label={<Tx k="settings.experimental.vpkImprint" fallback="Imprint installed mods" />}
@@ -107,7 +107,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-modSafety-manage-toggle"
             checked={settings?.experimentalModSafety ?? false}
             onChange={(checked) => update({ experimentalModSafety: checked })}
             label={<Tx k="modSafety.manage" fallback="Mod safety" />}
@@ -116,7 +116,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-deadworksServers-toggle"
             checked={settings?.experimentalDeadworksServers ?? false}
             onChange={(checked) => update({ experimentalDeadworksServers: checked })}
             label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}
@@ -125,7 +125,7 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-experimental-settings-experimental-foundry-toggle"
             checked={settings?.experimentalFoundry ?? false}
             onChange={(checked) => update({ experimentalFoundry: checked })}
             label={<Tx k="settings.experimental.foundry" fallback="Door Stuck" />}
@@ -133,8 +133,8 @@ export default function ExperimentalSection() {
         </div>
       </Card>
 
-      <Card title={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />} icon={Wrench}>
-        <Toggle
+      <Card id="settings-experimental-settings-preferences-developerMode-card" title={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />} icon={Wrench}>
+        <Toggle id="settings-experimental-settings-preferences-developerMode-toggle"
           checked={settings?.devMode ?? false}
           onChange={handleDevModeChange}
           disabled={isCreatingDevPath || isCopyingMods}

@@ -29,8 +29,8 @@ export default function AppearanceSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.appearance" fallback="Appearance" />} icon={Palette}>
-        <Toggle
+      <Card id="settings-appearance-settings-sections-appearance-card" title={<Tx k="settings.sections.appearance" fallback="Appearance" />} icon={Palette}>
+        <Toggle id="settings-appearance-settings-appearance-oled-title-toggle"
           checked={settings?.oledMode ?? false}
           onChange={(checked) => settings && void saveSettings({ ...settings, oledMode: checked })}
           label={<Tx k="settings.appearance.oled.title" fallback="OLED mode" />}
@@ -38,18 +38,18 @@ export default function AppearanceSection() {
 
         <div className="my-5 h-px bg-hl/5" />
 
-        <AccentColorPicker />
+        <div id="settings-accent"><AccentColorPicker /></div>
 
         <div className="my-5 h-px bg-hl/5" />
 
-        <BackgroundGradientPicker />
+        <div id="settings-background"><BackgroundGradientPicker /></div>
 
         <div className="my-5 h-px bg-hl/5" />
 
         <AppearanceArtSection />
       </Card>
 
-      <Card title={<Tx k="settings.nav.language" fallback="Language & region" />} icon={Languages}>
+      <Card id="settings-appearance-settings-nav-language-card" title={<Tx k="settings.nav.language" fallback="Language & region" />} icon={Languages}>
         <div className="space-y-6">
           <LanguageSelector
             value={settings?.language ?? null}
@@ -58,7 +58,7 @@ export default function AppearanceSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <div>
+          <div id="settings-date-format">
             <label className="text-sm font-medium text-text-primary block">
               <Tx k="settings.preferences.dateFormat" fallback="Date Format" />
             </label>

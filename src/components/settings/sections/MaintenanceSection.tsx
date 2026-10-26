@@ -164,7 +164,7 @@ export default function MaintenanceSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench}>
+      <Card id="settings-maintenance-settings-sections-maintenance-card" title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench}>
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
             <div>
@@ -222,10 +222,10 @@ export default function MaintenanceSection() {
         </div>
       </Card>
 
-      <DownloadServersCard key={downloadRouteVersion} />
-      <DownloadProxyCard onSaved={() => setDownloadRouteVersion((version) => version + 1)} />
+      <div id="settings-download-servers"><DownloadServersCard key={downloadRouteVersion} /></div>
+      <div id="settings-download-proxy"><DownloadProxyCard onSaved={() => setDownloadRouteVersion((version) => version + 1)} /></div>
 
-      <Card title={<Tx k="settings.sections.modDatabaseCache" fallback="Mod Database Cache" />} icon={Database}>
+      <Card id="settings-maintenance-settings-sections-modDatabaseCache-card" title={<Tx k="settings.sections.modDatabaseCache" fallback="Mod Database Cache" />} icon={Database}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2">
@@ -284,7 +284,7 @@ export default function MaintenanceSection() {
         </div>
       </Card>
 
-      <Card title={<Tx k="settings.sections.localPreviewCache" fallback="Local preview cache" />} icon={HardDrive}>
+      <Card id="settings-maintenance-settings-sections-localPreviewCache-card" title={<Tx k="settings.sections.localPreviewCache" fallback="Local preview cache" />} icon={HardDrive}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2">

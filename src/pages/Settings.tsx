@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Beaker,
   Download,
@@ -20,6 +20,8 @@ import { PageHeader, PageLayout, LoadingState } from '../components/common/PageC
 import Tx from '../components/translation/Tx';
 import KofiSupportButton from '../components/KofiSupportButton';
 import SocialAccountSection from '../components/social/SocialAccountSection';
+import SettingsSearch from '../components/settings/SettingsSearch';
+import type { SettingsSearchEntry } from '../components/settings/settingsSearchIndex';
 import SettingsNav, { type SettingsNavGroup } from '../components/settings/SettingsNav';
 import GameSection from '../components/settings/sections/GameSection';
 import UpdatesSection from '../components/settings/sections/UpdatesSection';
@@ -57,6 +59,15 @@ export default function Settings() {
   const settingsLoading = useAppStore((s) => s.settingsLoading);
   const loadSettings = useAppStore((s) => s.loadSettings);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState('');
+  const targetId = searchParams.get('setting');
+  const searching = query.trim().length > 0;
+
+  const openSearchResult = (entry: SettingsSearchEntry) => {
+    setQuery('');
+    navigate(`/settings/${entry.section}?setting=${encodeURIComponent(entry.target)}`);
+  };
   // The section lives in the URL so other pages can link straight to one (/settings/mod-safety).
   const { section: sectionParam } = useParams();
   const activeSection: SectionId = SECTION_IDS.find((id) => id === sectionParam) ?? 'game';
@@ -111,6 +122,23 @@ export default function Settings() {
       ? 'preferences'
       : activeSection;
 
+  useEffect(() => {
+    if (searching || !targetId || settingsLoading) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.tabIndex = -1;
+    target.setAttribute('data-settings-highlight', '');
+    const control = target.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled), select:not(:disabled)');
+    (control ?? target).focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const timeout = window.setTimeout(() => target.removeAttribute('data-settings-highlight'), 3000);
+    return () => {
+      window.clearTimeout(timeout);
+      target.removeAttribute('data-settings-highlight');
+      target.removeAttribute('tabindex');
+    };
+  }, [targetId, section, searching, settingsLoading]);
+
   if (settingsLoading && !settings) {
     return <LoadingState />;
   }
@@ -123,32 +151,43 @@ export default function Settings() {
         action={<KofiSupportButton />}
       />
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-        <SettingsNav
-          groups={navGroups}
-          active={section}
-          onSelect={(id) => navigate(`/settings/${id}`, { replace: true })}
-          label={t('settings.nav.label')}
-        />
+      <SettingsSearch
+        query={query}
+        socialEnabled={socialEnabled}
+        modSafetyEnabled={modSafetyEnabled}
+        onQueryChange={(value) => {
+          setQuery(value);
+          if (targetId) navigate(`/settings/${section}`, { replace: true });
+        }}
+        onSelect={openSearchResult}
+      >
+        <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+          <SettingsNav
+            groups={navGroups}
+            active={section}
+            onSelect={(id) => { setQuery(''); navigate(`/settings/${id}`, { replace: true }); }}
+            label={t('settings.nav.label')}
+          />
 
-        <div className="min-w-0 flex-1 space-y-6">
-          {section === 'game' && <GameSection />}
-          {section === 'performance' && <PerformanceConfigCard />}
-          {section === 'appearance' && <AppearanceSection />}
-          {section === 'preferences' && <PreferencesSection />}
-          {section === 'privacy' && <PrivacySection />}
-          {section === 'mod-safety' && <ModSafetySection />}
-          {section === 'social' && socialEnabled && (
-            <Card title={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />} icon={Globe}>
-              <SocialAccountSection />
-            </Card>
-          )}
-          {section === 'updates' && <UpdatesSection />}
-          {section === 'experimental' && <ExperimentalSection />}
-          {section === 'maintenance' && <MaintenanceSection />}
-          {section === 'support' && <SupportSection />}
+          <div className="min-w-0 flex-1 space-y-6">
+            {section === 'game' && <GameSection />}
+            {section === 'performance' && <div id="settings-performance"><PerformanceConfigCard /></div>}
+            {section === 'appearance' && <AppearanceSection />}
+            {section === 'preferences' && <PreferencesSection />}
+            {section === 'privacy' && <PrivacySection />}
+            {section === 'mod-safety' && <div id="settings-mod-safety"><ModSafetySection /></div>}
+            {section === 'social' && socialEnabled && (
+              <Card id="settings-social" title={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />} icon={Globe}>
+                <SocialAccountSection />
+              </Card>
+            )}
+            {section === 'updates' && <UpdatesSection />}
+            {section === 'experimental' && <ExperimentalSection />}
+            {section === 'maintenance' && <MaintenanceSection />}
+            {section === 'support' && <SupportSection />}
+          </div>
         </div>
-      </div>
+      </SettingsSearch>
     </PageLayout>
   );
 }

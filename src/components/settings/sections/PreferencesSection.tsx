@@ -36,9 +36,9 @@ export default function PreferencesSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={SlidersHorizontal}>
+      <Card id="settings-preferences-settings-sections-preferences-card" title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={SlidersHorizontal}>
         <div className="space-y-6">
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-expandLocker-toggle"
             checked={settings?.lockerCardsExpandedByDefault ?? false}
             onChange={(checked) => update({ lockerCardsExpandedByDefault: checked })}
             label={<Tx k="settings.preferences.expandLocker" fallback="Expand Locker cards by default" />}
@@ -47,7 +47,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-confirmProfileUpdate-toggle"
             checked={settings?.confirmProfileUpdate ?? true}
             onChange={(checked) => update({ confirmProfileUpdate: checked })}
             label={<Tx k="settings.preferences.confirmProfileUpdate" fallback="Confirm before updating a profile" />}
@@ -56,7 +56,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-ignoreConflicts-toggle"
             checked={settings?.ignoreConflictsByDefault ?? false}
             onChange={(checked) => update({ ignoreConflictsByDefault: checked })}
             label={<Tx k="settings.preferences.ignoreConflicts" fallback="Ignore conflicts by default" />}
@@ -65,7 +65,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-keepModBackups-toggle"
             checked={settings?.keepModBackups ?? false}
             onChange={(checked) => update({ keepModBackups: checked })}
             label={<Tx k="settings.preferences.keepModBackups" fallback="Keep removed mod files for 24 hours" />}
@@ -74,9 +74,9 @@ export default function PreferencesSection() {
         </div>
       </Card>
 
-      <Card title={t('settings.sections.installationAndUpdates')} icon={Download}>
+      <Card id="settings-preferences-settings-sections-installationAndUpdates-card" title={t('settings.sections.installationAndUpdates')} icon={Download}>
         <div className="space-y-6">
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-switchVariants-toggle"
             checked={settings?.autoDisableSiblingVariants ?? true}
             onChange={(checked) => update({ autoDisableSiblingVariants: checked })}
             label={<Tx k="settings.preferences.switchVariants" fallback="Switch variants instead of stacking them" />}
@@ -85,7 +85,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-enableAfterDownload-toggle"
             checked={settings?.autoEnableDownloads ?? false}
             onChange={(checked) => update({ autoEnableDownloads: checked })}
             label={<Tx k="settings.preferences.enableAfterDownload" fallback="Enable mods after download" />}
@@ -94,7 +94,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-autoMatchRemainingFiles-toggle"
             checked={settings?.autoMatchRemainingFiles ?? true}
             onChange={(checked) => update({ autoMatchRemainingFiles: checked })}
             label={<Tx k="settings.preferences.autoMatchRemainingFiles" fallback="Match remaining update files automatically" />}
@@ -103,7 +103,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-skipModReplacementConfirmation-toggle"
             checked={settings?.skipModReplacementConfirmation ?? false}
             onChange={(checked) => update({ skipModReplacementConfirmation: checked })}
             label={t('settings.preferences.skipModReplacementConfirmation')}
@@ -112,7 +112,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-swapManualReplacementActions-toggle"
             checked={settings?.swapManualReplacementActions ?? true}
             onChange={(checked) => update({ swapManualReplacementActions: checked })}
             label={t('settings.preferences.swapManualReplacementActions')}
@@ -121,9 +121,9 @@ export default function PreferencesSection() {
         </div>
       </Card>
 
-      <Card title={t('settings.sections.integrations')} icon={Wrench}>
+      <Card id="settings-preferences-settings-sections-integrations-card" title={t('settings.sections.integrations')} icon={Wrench}>
         <div className="space-y-6">
-          <Toggle
+          <Toggle id="settings-preferences-forge-settings-toggleLabel-toggle"
             checked={forgeEnabled}
             onChange={(checked) => update({ forgeLocalInstallEnabled: checked })}
             label={<Tx k="forge.settings.toggleLabel" fallback="Allow DeadlockForge 1-click installs" />}
@@ -146,7 +146,7 @@ export default function PreferencesSection() {
 
           <div className="h-px bg-hl/5" />
 
-          <Toggle
+          <Toggle id="settings-preferences-settings-preferences-discordRpc-toggle"
             checked={settings?.discordRpcEnabled ?? false}
             onChange={(checked) => update({ discordRpcEnabled: checked })}
             label={<Tx k="settings.preferences.discordRpc" fallback="Discord Rich Presence" />}

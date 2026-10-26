@@ -1831,3 +1831,11 @@ body {
     animation: none;
   }
 }
+
+/* Search destinations stay visible after the result list closes. */
+[data-settings-highlight] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 6px;
+  border-radius: 4px;
+  scroll-margin-block: 24px;
+}

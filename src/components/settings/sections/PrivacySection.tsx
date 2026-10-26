@@ -80,7 +80,7 @@ export default function PrivacySection() {
 
   return (
     <>
-      <Card
+      <Card id="settings-privacy-settings-nav-privacy-card"
         title={<Tx k="settings.nav.privacy" fallback="Privacy & Content" />}
         description={
           <Trans
@@ -125,7 +125,7 @@ export default function PrivacySection() {
           <div className="h-px bg-hl/5" />
 
           <div>
-            <Toggle
+            <Toggle id="settings-privacy-settings-preferences-contributeMatchData-toggle"
               checked={settings?.contributeMatchSalts ?? false}
               onChange={handleContributeMatchSaltsChange}
               label={<Tx k="settings.preferences.contributeMatchData" fallback="Contribute match data to deadlock-api.com" />}
@@ -143,7 +143,7 @@ export default function PrivacySection() {
         </div>
       </Card>
 
-      <Card
+      <Card id="settings-privacy-settings-sections-hiddenCreators-card"
         title={<Tx k="settings.sections.hiddenCreators" fallback="Hidden creators" />}
         description={<Tx k="hiddenCreators.description" fallback="Hide uploads from selected GameBanana creators in Browse. Installed mods remain visible." />}
         icon={EyeOff}
@@ -171,7 +171,7 @@ export default function PrivacySection() {
         )}
       </Card>
 
-      <Card
+      <Card id="settings-privacy-hiddenMods-title-card"
         title={<Tx k="hiddenMods.title" fallback="Hidden mods" />}
         description={<Tx k="hiddenMods.description" fallback="Hide individual GameBanana mods from Browse. Installed mods remain visible." />}
         icon={EyeOff}

@@ -173,7 +173,7 @@ export default function GameSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.gameConfiguration" fallback="Game Configuration" />} icon={HardDrive}>
+      <Card id="settings-game-settings-sections-gameConfiguration-card" title={<Tx k="settings.sections.gameConfiguration" fallback="Game Configuration" />} icon={HardDrive}>
         <div className="space-y-6">
           <div>
             <div className="flex justify-between items-center mb-2">

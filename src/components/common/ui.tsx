@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
 
 interface CardProps {
+    id?: string;
     children?: ReactNode;
     className?: string;
     contentClassName?: string;
@@ -17,13 +18,13 @@ interface CardProps {
     accentEdge?: 'none' | 'subtle' | 'active';
 }
 
-export function Card({ children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
+export function Card({ id, children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
     const showHeader = !!(title || action);
     const edge: NonNullable<CardProps['accentEdge']> = accentEdge ?? (showHeader ? 'subtle' : 'none');
     const edgeClass = edge === 'active' ? 'w-[3px] bg-accent' : 'w-[2px] bg-accent/60';
     const hasBody = children !== undefined && children !== null && children !== false;
     return (
-        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
+        <div id={id} className={`bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
             {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
             {showHeader && (
                 <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-hl/5' : ''}`}>
@@ -305,6 +306,7 @@ export function ProgressBar({ value, max, label, indeterminate = false, classNam
 }
 
 interface ToggleProps {
+    id?: string;
     checked: boolean;
     onChange: (checked: boolean) => void;
     label?: ReactNode;
@@ -338,9 +340,9 @@ export function ToggleIndicator({ checked, disabled, className = '' }: ToggleInd
     );
 }
 
-export function Toggle({ checked, onChange, label, description, className = '', disabled }: ToggleProps) {
+export function Toggle({ id, checked, onChange, label, description, className = '', disabled }: ToggleProps) {
     return (
-        <label className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
+        <label id={id} className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
             <div className="relative shrink-0 mt-0.5">
                 <input
                     type="checkbox"
