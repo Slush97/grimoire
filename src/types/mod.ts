@@ -1235,6 +1235,7 @@ export interface AppSettings {
   accentColor: string;
   /** Use true black for the app canvas and near-black neutral surfaces. */
   oledMode: boolean;
+  elasticOverscroll: boolean;
   /** Hero render used as the active sidebar highlight background.
    *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
    *  legacy compat read so existing installs keep their chosen highlight; the

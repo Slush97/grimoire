@@ -39,6 +39,15 @@ export default function AppearanceSection() {
 
         <FilterDivider className="my-5 h-px bg-hl/5" />
 
+        <Toggle id="settings-elastic-overscroll"
+          checked={settings?.elasticOverscroll ?? true}
+          onChange={(checked) => settings && void saveSettings({ ...settings, elasticOverscroll: checked })}
+          label={<Tx k="settings.appearance.scrollBounce.title" fallback="Scroll bounce" />}
+          description={<Tx k="settings.appearance.scrollBounce.description" fallback="Bounce the page when scrolling past the top or bottom." />}
+        />
+
+        <FilterDivider className="my-5 h-px bg-hl/5" />
+
         <FilterItem id="settings-accent"><AccentColorPicker /></FilterItem>
 
         <FilterDivider className="my-5 h-px bg-hl/5" />

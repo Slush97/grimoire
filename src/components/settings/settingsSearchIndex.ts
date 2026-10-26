@@ -18,6 +18,7 @@ export function settingsSearchEntries(
     ...(modSafetyEnabled ? [{ section: 'mod-safety', category: t('modSafety.manage'), label: t('modSafety.manage'), description: t('settings.toggles.modSafety'), target: 'settings-mod-safety' }] : []),
     { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.sections.appearance'), description: '', target: 'settings-appearance-settings-sections-appearance-card' },
     { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.appearance.oled.title'), description: '', target: 'settings-appearance-settings-appearance-oled-title-toggle' },
+    { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.appearance.scrollBounce.title'), description: t('settings.appearance.scrollBounce.description'), target: 'settings-elastic-overscroll' },
     { section: 'appearance', category: t('settings.sections.appearance'), label: t('settings.nav.language'), description: '', target: 'settings-appearance-settings-nav-language-card' },
     { section: 'experimental', category: t('settings.sections.experimentalFeatures'), label: t('settings.sections.experimentalFeatures'), description: '', target: 'settings-experimental-settings-sections-experimentalFeatures-card' },
     { section: 'experimental', category: t('settings.sections.experimentalFeatures'), label: t('settings.experimental.statsDashboard'), description: t('settings.experimental.statsDashboardDescription'), target: 'settings-experimental-settings-experimental-statsDashboard-toggle' },
@@ -97,6 +98,7 @@ export function searchSettings(entries: SettingsSearchEntry[], query: string): S
 
 const TARGET_PARENTS: Readonly<Partial<Record<string, string>>> = {
   "settings-appearance-settings-appearance-oled-title-toggle": "settings-appearance-settings-sections-appearance-card",
+  "settings-elastic-overscroll": "settings-appearance-settings-sections-appearance-card",
   "settings-accent": "settings-appearance-settings-sections-appearance-card",
   "settings-background": "settings-appearance-settings-sections-appearance-card",
   "settings-language": "settings-appearance-settings-nav-language-card",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { useAppStore } from '../stores/appStore';
 import { ELASTIC, rubberBand, rubberBandInverse, springSettled, springStep, wheelDeltaPx } from './elasticOverscroll';
 
 const SCROLLS = /(auto|scroll|overlay)/;
@@ -62,9 +63,10 @@ function claimedBelow(target: EventTarget | null, scroller: HTMLElement, down: b
  * that swaps its scroller in after a loading state still gets the bounce.
  */
 export function useElasticOverscroll(ref: RefObject<HTMLElement | null>): void {
+  const enabled = useAppStore((state) => state.settings?.elasticOverscroll ?? true);
   const bound = useRef<{ el: HTMLElement; detach: () => void } | null>(null);
   useEffect(() => {
-    const el = ref.current;
+    const el = enabled ? ref.current : null;
     if (bound.current?.el === el) return;
     bound.current?.detach();
     bound.current = el ? { el, detach: attachElasticOverscroll(el) } : null;
