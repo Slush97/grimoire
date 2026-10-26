@@ -14,4 +14,3 @@ export function useContentFilter(id?: string) {
     childrenFilter: id && filter?.matches.has(id) ? null : filter,
   };
 }
-
