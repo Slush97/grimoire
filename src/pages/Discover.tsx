@@ -33,6 +33,7 @@ import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { formatRelativeDate } from '../lib/dates';
 import { mergeProfileLikes } from '../components/social/profileLikes';
+import { applyProfileUpdate } from '../components/social/profileUpdates';
 import { currentPixelRatio, sizeGameBananaThumbUrl } from '../lib/gameBananaImage';
 import { RevealImage } from '../components/common/RevealImage';
 import { Skeleton, SkeletonCircle, SkeletonText } from '../components/common/Skeleton';
@@ -397,20 +398,7 @@ export default function Discover() {
             // Keep the browse-list cache in sync so switching back to Top/New
             // doesn't show stale contents or metadata.
             setData((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    profiles: prev.profiles.map((p) =>
-                      p.id === updated.id
-                        ? {
-                            ...p,
-                            ...updated,
-                            viewer_has_liked: updated.viewer_has_liked ?? p.viewer_has_liked,
-                          }
-                        : p
-                    ),
-                  }
-                : prev
+              prev ? { ...prev, profiles: applyProfileUpdate(prev.profiles, updated, hideNsfw) } : prev
             );
           }}
         />
