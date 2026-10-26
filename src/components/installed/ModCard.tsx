@@ -33,6 +33,12 @@ import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
 
+// Radix only mounts content when its menu opens. A component boundary also
+// defers constructing the item tree, including the full locker-tag roster.
+function DeferredMenuItems({ children }: { children: () => ReactNode }) {
+  return children();
+}
+
 interface ModCardProps {
   mod: {
     safety?: Mod['safety'];
@@ -234,7 +240,7 @@ function ModMediaPreview({
       hideNsfw={hideNsfwPreviews}
       className="w-full h-full"
       enableImageContextMenu={false}
-      imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      imageClassName="installed-card-media-zoom origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
       forgeInstalled={!!mod.forgeInstall}
     />
@@ -244,7 +250,7 @@ function ModMediaPreview({
       src={soundHeroRenderUrl}
       alt={soundHeroName ?? mod.name}
       draggable={false}
-      className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      className="installed-card-media-zoom block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
       style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
     />
   ) : (
@@ -271,7 +277,7 @@ function ModMediaPreview({
       >
         <div className={`h-full w-full ${mediaDisabledClass}`}>{image}</div>
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/20" />
         )}
       </button>
       {overlayBadges}
@@ -299,7 +305,7 @@ function ModMediaPreview({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-bg-primary/80 via-bg-primary/25 to-transparent" />
         )}
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/15" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/15" />
         )}
       </button>
       {overlayBadges}
@@ -683,7 +689,7 @@ function ModListRowContent({
             src={listHeroRenderUrl}
             alt={listHeroName ?? mod.name}
             draggable={false}
-            className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            className="installed-card-media-zoom block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
             style={{ objectPosition: `${listHeroFacePosX}% 25%` }}
           />
         ) : isSound && !mod.thumbnailUrl ? (
@@ -697,7 +703,7 @@ function ModListRowContent({
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
             enableImageContextMenu={false}
-            imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            imageClassName="installed-card-media-zoom origin-center transition-transform duration-200 group-enabled:group-installed-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
             forgeInstalled={!!mod.forgeInstall}
             width={56}
@@ -705,7 +711,7 @@ function ModListRowContent({
           />
         )}
         {canOpen && (
-          <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
+          <div className="installed-card-media-overlay pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-installed-hover:bg-bg-primary/20" />
         )}
       </button>
 
@@ -1001,8 +1007,8 @@ export function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-bg-tertiary border-hl/[0.08] hover:border-hl/[0.14] hover:bg-bg-secondary'
-      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 hover:border-hl/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-hl/[0.08] installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-hl/[0.08] text-text-primary/80 installed-hover:border-hl/[0.14] installed-hover:bg-bg-secondary installed-hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
@@ -1048,7 +1054,7 @@ export function ModCard({
   // is a mis-click straight into a real action (delete, or a persisted
   // favorite). pointer-events does not gate keyboard focus, so tab-then-Enter
   // still reaches the button, and the focus: pair keeps it visible once there.
-  const hoverRevealClasses = 'opacity-0 pointer-events-none group-hover/card:opacity-90 group-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
+  const hoverRevealClasses = 'installed-card-hover-action opacity-0 pointer-events-none group-installed-hover/card:opacity-90 group-installed-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
   const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
   // A set star stays permanently visible in both sections, so there is always an
   // affordance to unpin. An unset star is hover-only like its delete / overflow
@@ -1124,17 +1130,17 @@ export function ModCard({
     ? t('installed.card.unfavorite')
     : t('installed.card.favorite');
 
-  // One canonical list of card actions, mounted twice: once under the
-  // right-click (context) root wrapping the whole card, once under the
-  // dropdown root on the three-dot button. Only one of the two is open at a
-  // time, so this renders once in practice.
+  // One canonical list of card actions, shared by the right-click (context)
+  // root wrapping the card and dropdown root on the three-dot button.
+  // Construct it only when Radix mounts the open menu, rather than on every
+  // closed card's render.
   const hasTopActions =
     !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
     || !!cardImageSource;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
-  const cardMenuItems = (
+  const renderCardMenuItems = () => (
     <>
       {onEditLocal && (
         <MenuItem icon={Pencil} onSelect={onEditLocal}>
@@ -1239,49 +1245,53 @@ export function ModCard({
           {/* Cap the height: the hero list is the full roster and would
               otherwise run taller than the window. */}
           <MenuSubContent className="max-h-72 overflow-y-auto">
-            <MenuItem
-              disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
-              onSelect={() => void clearLockerTag()}
-            >
-              {t('installed.tag.clearLockerTag')}
-            </MenuItem>
-            <MenuSeparator />
-            {/* Global type and hero are independent axes (setModGlobalType does
-                not clear lockerHero), so they are two radio groups rather than
-                one. "Clear locker tag" above resets both. */}
-            {onTagGlobal && (
+            <DeferredMenuItems>{() => (
               <>
-                <MenuLabel>{t('installed.tag.global')}</MenuLabel>
-                <MenuRadioGroup
-                  value={mod.globalType ?? ''}
-                  onValueChange={(value) => void applyGlobalTag(value as GlobalModType)}
+                <MenuItem
+                  disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
+                  onSelect={() => void clearLockerTag()}
                 >
-                  {GLOBAL_MOD_TYPE_ORDER.map((type) => (
-                    <MenuRadioItem key={type} value={type} disabled={menuBusy}>
-                      {globalModTypeLabel(type, t)}
+                  {t('installed.tag.clearLockerTag')}
+                </MenuItem>
+                <MenuSeparator />
+                {/* Global type and hero are independent axes (setModGlobalType does
+                    not clear lockerHero), so they are two radio groups rather than
+                    one. "Clear locker tag" above resets both. */}
+                {onTagGlobal && (
+                  <>
+                    <MenuLabel>{t('installed.tag.global')}</MenuLabel>
+                    <MenuRadioGroup
+                      value={mod.globalType ?? ''}
+                      onValueChange={(value) => void applyGlobalTag(value as GlobalModType)}
+                    >
+                      {GLOBAL_MOD_TYPE_ORDER.map((type) => (
+                        <MenuRadioItem key={type} value={type} disabled={menuBusy}>
+                          {globalModTypeLabel(type, t)}
+                        </MenuRadioItem>
+                      ))}
+                    </MenuRadioGroup>
+                    <MenuSeparator />
+                  </>
+                )}
+                <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
+                <MenuRadioGroup
+                  value={canonicalHeroName(mod.lockerHero) ?? ''}
+                  onValueChange={(value) => void applyLockerTag(value)}
+                >
+                  {HERO_NAMES_SORTED.map((heroName) => (
+                    <MenuRadioItem
+                      key={heroName}
+                      value={heroName}
+                      disabled={menuBusy}
+                      // Inferred tags read as informational, manual ones as chosen.
+                      tone={mod.lockerHeroSource === 'manual' ? 'accent' : 'info'}
+                    >
+                      <HeroTagLabel heroName={heroName} />
                     </MenuRadioItem>
                   ))}
                 </MenuRadioGroup>
-                <MenuSeparator />
               </>
-            )}
-            <MenuLabel>{t('installed.tag.hero')}</MenuLabel>
-            <MenuRadioGroup
-              value={canonicalHeroName(mod.lockerHero) ?? ''}
-              onValueChange={(value) => void applyLockerTag(value)}
-            >
-              {HERO_NAMES_SORTED.map((heroName) => (
-                <MenuRadioItem
-                  key={heroName}
-                  value={heroName}
-                  disabled={menuBusy}
-                  // Inferred tags read as informational, manual ones as chosen.
-                  tone={mod.lockerHeroSource === 'manual' ? 'accent' : 'info'}
-                >
-                  <HeroTagLabel heroName={heroName} />
-                </MenuRadioItem>
-              ))}
-            </MenuRadioGroup>
+            )}</DeferredMenuItems>
           </MenuSubContent>
         </MenuSub>
       )}
@@ -1371,7 +1381,7 @@ export function ModCard({
             </button>
           </MenuTrigger>
           <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
-            {cardMenuItems}
+            <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
           </MenuContent>
         </MenuRoot>
       </div>
@@ -1396,6 +1406,7 @@ export function ModCard({
         </button>
     </div>
   );
+  // Isolate the negative-z backdrop without forcing a GPU surface per card.
   return (
     <MenuRoot onOpenChange={(open) => { if (!open) setPointerImageSrc(null); }}>
       {/* Disabled in select mode so right-click doesn't fight the full-card
@@ -1424,7 +1435,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {(selectMode || selectionPreview) && (
@@ -1663,7 +1674,7 @@ export function ModCard({
     </div>
       </MenuTrigger>
       <MenuContent className="max-h-[70vh] overflow-y-auto" data-card-menu-open>
-        {cardMenuItems}
+        <DeferredMenuItems>{renderCardMenuItems}</DeferredMenuItems>
       </MenuContent>
     </MenuRoot>
   );

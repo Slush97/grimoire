@@ -1,4 +1,4 @@
-import { Fragment, useId, type CSSProperties, type ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { ChevronRight, List } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../common/ui';
@@ -6,14 +6,17 @@ import { EmptyState } from '../common/PageComponents';
 import { ModListGlyph } from './ModListIcon';
 import { installedListEntryKey, UNLISTED_GROUP_ID, type InstalledListGroup } from '../../lib/installedListGroups';
 import type { ModEntry } from '../../lib/modEntries';
+import { InstalledVirtualGrid } from './InstalledVirtualGrid';
 
-function ListSection({ group, collapsed, mountLimit, onToggle, gridClassName, gridStyle, renderEntry }: {
+function ListSection({ group, collapsed, onToggle, gridClassName, gridStyle, scrollRef, viewMode, revealEntryKey, renderEntry }: {
   group: InstalledListGroup;
   collapsed: boolean;
-  mountLimit: number;
   onToggle: () => void;
   gridClassName: string;
   gridStyle?: CSSProperties;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  viewMode: 'grid' | 'compact' | 'list';
+  revealEntryKey?: string | null;
   renderEntry: (entry: ModEntry, occurrenceKey: string) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -35,27 +38,32 @@ function ListSection({ group, collapsed, mountLimit, onToggle, gridClassName, gr
     </h2>
     <div id={contentId} hidden={collapsed}>
       {!collapsed && <div className="pb-4">
-        {group.entries.length > 0 ? <div className={gridClassName} style={gridStyle}>
-          {group.entries.slice(0, mountLimit).map((entry) => {
-            const occurrence = installedListEntryKey(group.id, entry);
-            return <Fragment key={occurrence}>{renderEntry(entry, occurrence)}</Fragment>;
-          })}
-        </div> : <p className="py-3 text-xs text-text-secondary">{t('installed.lists.emptyList')}</p>}
+        {group.entries.length > 0 ? <InstalledVirtualGrid
+          entries={group.entries}
+          scrollRef={scrollRef}
+          gridClassName={gridClassName}
+          gridStyle={gridStyle}
+          viewMode={viewMode}
+          revealEntryKey={revealEntryKey}
+          getEntryKey={(entry) => installedListEntryKey(group.id, entry)}
+          renderEntry={(entry) => renderEntry(entry, installedListEntryKey(group.id, entry))}
+        /> : <p className="py-3 text-xs text-text-secondary">{t('installed.lists.emptyList')}</p>}
       </div>}
     </div>
   </section>;
 }
 
-export function InstalledListGroups({ groups, collapsed, showEmpty, mountLimit, onToggle, onManage, ...grid }: {
+export function InstalledListGroups({ groups, collapsed, showEmpty, onToggle, onManage, ...grid }: {
   groups: readonly InstalledListGroup[];
   collapsed: ReadonlySet<string>;
   showEmpty: boolean;
-  /** Cards to mount across all open lists; the page's first-paint cap. */
-  mountLimit: number;
   onToggle: (id: string) => void;
   onManage: () => void;
   gridClassName: string;
   gridStyle?: CSSProperties;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  viewMode: 'grid' | 'compact' | 'list';
+  revealEntryKey?: string | null;
   renderEntry: (entry: ModEntry, occurrenceKey: string) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -68,16 +76,10 @@ export function InstalledListGroups({ groups, collapsed, showEmpty, mountLimit, 
     className="py-12"
   />;
   if (visibleGroups.length === 0) return emptyState ?? <p className="py-8 text-center text-sm text-text-secondary">{t('installed.lists.noMatches')}</p>;
-  const mountLimits = new Map<string, number>();
-  let remaining = mountLimit;
-  for (const group of visibleGroups) {
-    mountLimits.set(group.id, remaining);
-    if (!collapsed.has(group.id)) remaining = Math.max(0, remaining - group.entries.length);
-  }
   return <>
     {emptyState}
     <div className="divide-y divide-border">
-      {visibleGroups.map((group) => <ListSection key={group.id} group={group} collapsed={collapsed.has(group.id)} mountLimit={mountLimits.get(group.id) ?? 0} onToggle={() => onToggle(group.id)} {...grid} />)}
+      {visibleGroups.map((group) => <ListSection key={group.id} group={group} collapsed={collapsed.has(group.id)} onToggle={() => onToggle(group.id)} {...grid} />)}
     </div>
   </>;
 }

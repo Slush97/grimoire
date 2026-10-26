@@ -62,6 +62,7 @@ export function isTextureOverlay(overlay: readonly string[], base: readonly stri
 
 export function requirementOrderIssues(source: RequirementRef, snapshot: ModRequirementSnapshot | undefined, mods: readonly Mod[], files: RequirementFileLists): RequirementOrderIssue[] {
   if (snapshot?.status !== 'loaded') return [];
+  if (!snapshot.items.some(item => item.importance === 'required' && item.state !== 'off')) return [];
   const issues: RequirementOrderIssue[] = [];
   const owners = requirementOwners(source, mods).filter(mod => mod.enabled);
   for (const item of snapshot.items) {

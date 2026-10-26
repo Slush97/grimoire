@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Real mods.ts file moves on real folders. Only the content check is faked.
@@ -9,9 +9,9 @@ vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 vi.mock('./launch', () => ({ isDeadlockRunning: async () => h.running, readStash: async () => null }));
 vi.mock('./modSafety', () => ({ assertVpkSafety: h.assertVpkSafety, moveSafetySnapshot: vi.fn(), forgetSafetySnapshot: vi.fn() }));
 
-import { deleteMods, enableMod, healModFolders, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
+import { deleteMods, disableMod, enableMod, healModFolders, installEnabledVpk, reorderMods, scanMods, setModPriority, swapModPriority } from './mods';
 import { getModMetadata, saveMetadata, setModMetadata, type ModMetadata } from './metadata';
-import { clearLoadedGameMods } from './gameSessionMods';
+import { captureEmptyGameMods, captureLoadedGameMods, clearLoadedGameMods, getLoadedGameModIds, markLaunchGrace, syncKnownRunningGameModSnapshot } from './gameSessionMods';
 import { copyModBackupTo, listModBackups } from './modBackups';
 import { restoreModBackup } from './modBackupRestore';
 import type { DeleteModsProgress } from '../../../src/types/mod';
@@ -38,8 +38,8 @@ const put = (folder: string, files: Record<string, string>) =>
     Promise.all(Object.entries(files).map(([name, bytes]) => fs.writeFile(join(folder, name), bytes)));
 const contents = async (folder: string) => {
     const out: Record<string, string> = {};
-    for (const name of (await fs.readdir(folder)).sort()) {
-        if (name !== '.disabled') out[name] = await fs.readFile(join(folder, name), 'utf8');
+    for (const entry of await fs.readdir(folder, { withFileTypes: true })) {
+        if (entry.isFile()) out[entry.name] = await fs.readFile(join(folder, entry.name), 'utf8');
     }
     return out;
 };
@@ -47,16 +47,215 @@ const idAt = async (path: string) => (await scanMods(root)).find((m) => m.path =
 const entryAt = async (path: string) => (await scanMods(root)).find((m) => m.path === path)!;
 
 describe('chunked mods move and delete as one set', () => {
+    it('rejects direct and indirect moves of loaded mods without changing files', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0' });
+        const mods = await scanMods(root);
+        captureLoadedGameMods(mods);
+        h.running = true;
+        const [a, b] = mods.sort((a, b) => a.priority - b.priority);
+        const before = await contents(addons);
+
+        await expect(reorderMods(root, [b.id, a.id])).rejects.toThrow('Game is running');
+        await expect(setModPriority(root, a.id, 3)).rejects.toThrow('Game is running');
+        await expect(swapModPriority(root, a.id, b.id)).rejects.toThrow('Game is running');
+        expect(await contents(addons)).toEqual(before);
+    });
+
+    it('allows reordering newly enabled mods while leaving loaded mods in place', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        h.running = true;
+        await put(addons, { 'pak02_dir.vpk': 'b', 'pak03_dir.vpk': 'c' });
+        const b = await idAt(join(addons, 'pak02_dir.vpk'));
+        const c = await idAt(join(addons, 'pak03_dir.vpk'));
+
+        await reorderMods(root, [loaded.id, c, b]);
+
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'loaded', 'pak02_dir.vpk': 'c', 'pak03_dir.vpk': 'b' });
+        expect(getLoadedGameModIds()).toEqual([loaded.id]);
+    });
+
+    it('reports locks through launch grace and releases them after the game exits', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+        syncKnownRunningGameModSnapshot(false, []);
+        expect(getLoadedGameModIds()).toEqual([loaded.id]);
+
+        syncKnownRunningGameModSnapshot(true, []);
+        syncKnownRunningGameModSnapshot(false, []);
+        expect(getLoadedGameModIds()).toEqual([]);
+    });
+
+    it('blocks disabling throughout launch grace but unlocks if the game never starts', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        const [loaded] = await scanMods(root);
+        captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+
+        await expect(disableMod(root, loaded.id)).rejects.toThrow('Game is running');
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'loaded' });
+
+        markLaunchGrace(0);
+        expect((await disableMod(root, loaded.id)).enabled).toBe(false);
+        expect(getLoadedGameModIds()).toEqual([]);
+    });
+
+    it.each([false, true])('allows disabling later-enabled mods in a running session (vanilla: %s)', async (vanilla) => {
+        await put(addons, { 'pak01_dir.vpk': 'loaded' });
+        await put(disabled, { 'later_dir.vpk': 'later' });
+        const [loaded] = (await scanMods(root)).filter((mod) => mod.enabled);
+        if (vanilla) captureEmptyGameMods();
+        else captureLoadedGameMods([loaded]);
+        markLaunchGrace();
+        syncKnownRunningGameModSnapshot(false, []);
+        h.running = true;
+
+        const later = await enableMod(root, await idAt(join(disabled, 'later_dir.vpk')));
+        expect((await disableMod(root, later.id)).enabled).toBe(false);
+        expect(getLoadedGameModIds()).toEqual(vanilla ? [] : [loaded.id]);
+        if (!vanilla) await expect(disableMod(root, loaded.id)).rejects.toThrow('Game is running');
+    });
+
     it('reorder swaps a chunked mod with a single-file one', async () => {
-        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0', 'pak02_001.vpk': 'b1' });
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'PAK02_000.vpk': 'b0', 'pak02_001.VPK': 'b1' });
         const a = await idAt(join(addons, 'pak01_dir.vpk'));
         const b = await idAt(join(addons, 'pak02_dir.vpk'));
 
         await reorderMods(root, [b, a]);
 
         expect(await contents(addons)).toEqual({
-            'pak01_000.vpk': 'b0', 'pak01_001.vpk': 'b1', 'pak01_dir.vpk': 'b', 'pak02_dir.vpk': 'a',
+            'pak01_000.vpk': 'b0', 'pak01_001.VPK': 'b1', 'pak01_dir.vpk': 'b', 'pak02_dir.vpk': 'a',
         });
+    });
+
+    it.each([2, 12])('reorder inventories %i mods once and keeps directory reads bounded', async (count) => {
+        const files: Record<string, string> = {};
+        for (let slot = 1; slot <= count; slot++) {
+            const stem = `pak${String(slot).padStart(2, '0')}`;
+            files[`${stem}_dir.vpk`] = `mod ${slot}`;
+            files[`${stem}_000.vpk`] = `chunk ${slot}`;
+        }
+        await put(addons, files);
+        const mods = await scanMods(root);
+        const stat = vi.spyOn(fs, 'stat');
+        const readdir = vi.spyOn(fs, 'readdir');
+        try {
+            await reorderMods(root, mods.map(mod => mod.id).reverse());
+
+            const inventoryReads = stat.mock.calls.filter(([path]) => String(path).endsWith('_dir.vpk'));
+            expect(inventoryReads).toHaveLength(count);
+            // Healing and slot reservation may list a folder, but staging and
+            // placing another mod must not add directory reads per move.
+            expect(readdir.mock.calls.filter(([path]) => path === addons).length).toBeLessThanOrEqual(4);
+        } finally {
+            stat.mockRestore();
+            readdir.mockRestore();
+        }
+        expect(await fs.readFile(join(addons, 'pak01_dir.vpk'), 'utf8')).toBe(`mod ${count}`);
+        expect(await fs.readFile(join(addons, 'pak01_000.vpk'), 'utf8')).toBe(`chunk ${count}`);
+    });
+
+    it.each(['staging', 'placement'])('rolls back chunks and metadata after a failure during %s', async (phase) => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'PAK01_000.vpk': 'a0', 'pak01_001.VPK': 'a1',
+            'pak02_dir.vpk': 'b', 'PAK02_000.vpk': 'b0' });
+        setModMetadata('pak01_dir.vpk', { modName: 'A' });
+        setModMetadata('pak02_dir.vpk', { modName: 'B' });
+        const mods = await scanMods(root);
+        const before = await contents(addons);
+        const rename = fs.rename;
+        let failed = false;
+        const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+            const staging = from === join(addons, 'pak01_dir.vpk') && basename(String(to)).startsWith('tmp');
+            const placement = basename(String(from)).startsWith('tmp') && to === join(addons, 'pak02_dir.vpk');
+            if (!failed && (phase === 'staging' ? staging : placement)) {
+                failed = true;
+                throw Object.assign(new Error('No space left'), { code: 'ENOSPC' });
+            }
+            return rename(from, to);
+        });
+        try {
+            await expect(reorderMods(root, mods.map(mod => mod.id).reverse())).rejects.toThrow('No space left');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(failed).toBe(true);
+        expect(await contents(addons)).toEqual(before);
+        expect(getModMetadata('pak01_dir.vpk')).toMatchObject({ modName: 'A' });
+        expect(getModMetadata('pak02_dir.vpk')).toMatchObject({ modName: 'B' });
+    });
+
+    it('reuses chunk plans while retrying a transient Windows lock', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak02_dir.vpk': 'b', 'pak02_000.vpk': 'b0' });
+        const mods = await scanMods(root);
+        const rename = fs.rename;
+        let failed = false;
+        const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+            if (!failed && from === join(addons, 'pak02_000.vpk')) {
+                failed = true;
+                throw Object.assign(new Error('Temporarily locked'), { code: 'EBUSY' });
+            }
+            return rename(from, to);
+        });
+        try {
+            await reorderMods(root, mods.map(mod => mod.id).reverse());
+        } finally {
+            spy.mockRestore();
+        }
+        expect(failed).toBe(true);
+        expect(await contents(addons)).toEqual({ 'pak01_dir.vpk': 'b', 'pak01_000.vpk': 'b0', 'pak02_dir.vpk': 'a' });
+    });
+
+    it('retries transient Windows locks while rolling back a partially staged chunk set', async () => {
+        await put(addons, { 'pak01_dir.vpk': 'a', 'pak01_000.vpk': 'a0', 'pak02_dir.vpk': 'b' });
+        const mods = await scanMods(root);
+        const before = await contents(addons);
+        const rename = fs.rename;
+        let rejectedPrimary = false;
+        let rejectedRollback = false;
+        const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+            if (!rejectedPrimary && from === join(addons, 'pak01_dir.vpk') && basename(String(to)).startsWith('tmp')) {
+                rejectedPrimary = true;
+                throw Object.assign(new Error('No space left'), { code: 'ENOSPC' });
+            }
+            if (!rejectedRollback && basename(String(from)).startsWith('tmp') && to === join(addons, 'pak01_000.vpk')) {
+                rejectedRollback = true;
+                throw Object.assign(new Error('Temporarily locked'), { code: 'EPERM' });
+            }
+            return rename(from, to);
+        });
+        try {
+            await expect(reorderMods(root, mods.map(mod => mod.id).reverse())).rejects.toThrow('No space left');
+        } finally {
+            spy.mockRestore();
+        }
+        expect(rejectedPrimary).toBe(true);
+        expect(rejectedRollback).toBe(true);
+        expect(await contents(addons)).toEqual(before);
+    });
+
+    it('moves chunks and metadata across overflow roots while reserving orphaned slots', async () => {
+        const overflow = join(root, 'game', 'citadel', 'addons1');
+        await fs.mkdir(overflow);
+        await fs.writeFile(join(root, 'game', 'citadel', 'gameinfo.gi'),
+            'GameInfo { FileSystem { SearchPaths { Game citadel } } }');
+        const reserved: Record<string, string> = {};
+        for (let slot = 1; slot < 99; slot++) reserved[`pak${String(slot).padStart(2, '0')}_000.vpk`] = 'orphan';
+        await put(addons, { ...reserved, 'pak99_dir.vpk': 'a', 'pak99_000.vpk': 'a0' });
+        await put(overflow, { 'pak01_dir.vpk': 'b', 'pak01_000.vpk': 'b0' });
+        setModMetadata('pak99_dir.vpk', { modName: 'A' });
+        setModMetadata('addons1/pak01_dir.vpk', { modName: 'B' });
+        const mods = await scanMods(root);
+
+        await reorderMods(root, mods.map(mod => mod.id).reverse());
+
+        expect(await contents(addons)).toEqual({ ...reserved, 'pak99_dir.vpk': 'b', 'pak99_000.vpk': 'b0' });
+        expect(await contents(overflow)).toEqual({ 'pak01_dir.vpk': 'a', 'pak01_000.vpk': 'a0' });
+        expect(getModMetadata('pak99_dir.vpk')).toMatchObject({ modName: 'B' });
+        expect(getModMetadata('addons1/pak01_dir.vpk')).toMatchObject({ modName: 'A' });
     });
 
     it('reorder treats a slot holding only chunk files as taken', async () => {

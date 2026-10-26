@@ -3329,7 +3329,6 @@
     "moveFileUp": "Move file up in load order",
     "moveFileDown": "Move file down in load order",
     "renameFile": "Rename file",
-    "saving": "Saving...",
     "filesEnabled": "{{enabled}} of {{total}} files enabled",
     "openModPage": "Open the GameBanana mod page",
     "addVariant": "Add variant",

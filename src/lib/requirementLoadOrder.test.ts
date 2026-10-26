@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Mod } from '../types/mod';
-import type { ModRequirementSnapshot } from '../types/gamebanana';
+import type { ModRequirement, ModRequirementSnapshot } from '../types/gamebanana';
 import { isTextureOverlay, moveRequirementAboveBase, requirementFileKey, requirementOrderCandidates, requirementOrderIssues } from './requirementLoadOrder';
 import { skinRequirementSource } from './modRequirements';
 
@@ -29,6 +29,32 @@ it('checks and fixes load order for local skin sources using the existing requir
 });
 
 describe('texture dependency order', () => {
+  it.each<{ name: string; items: ModRequirement[] }>([
+    { name: 'empty requirements', items: [] },
+    { name: 'optional requirements', items: [{ ...snapshot.items[0], importance: 'optional' }] },
+    { name: 'unknown importance', items: [{ ...snapshot.items[0], importance: 'unknown' }] },
+    { name: 'disabled required items', items: [{ ...snapshot.items[0], state: 'off' }] },
+    { name: 'mixed irrelevant requirements', items: [
+      { ...snapshot.items[0], importance: 'optional' },
+      { ...snapshot.items[0], state: 'off' },
+    ] },
+  ])('does not inspect any installed mods for $name', ({ items }) => {
+    const inspectMod = vi.fn();
+    const mods = [base, overlay].map(candidate => new Proxy(candidate, {
+      get(target, key, receiver) {
+        inspectMod();
+        return Reflect.get(target, key, receiver);
+      },
+    }));
+    expect(requirementOrderIssues(source, { ...snapshot, items }, mods, files)).toEqual([]);
+    expect(inspectMod).not.toHaveBeenCalled();
+  });
+  it.each(['on', 'unknown'] as const)('still warns for a required dependency with state %s', state => {
+    const requirements = { ...snapshot, items: [{ ...snapshot.items[0], state }] };
+    expect(requirementOrderIssues(source, requirements, [base, overlay], files)).toEqual([
+      { source, overlay, base, fixable: true },
+    ]);
+  });
   it('warns only for an enabled texture overlay below its author-listed base', () => {
     const mods = [base, overlay];
     expect(requirementOrderIssues(source, snapshot, mods, files)).toMatchObject([{ overlay: { id: 'recolor' }, base: { id: 'base' }, fixable: true }]);

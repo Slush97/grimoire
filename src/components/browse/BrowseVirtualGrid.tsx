@@ -104,15 +104,14 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
               gap: layout === 'list' ? undefined : `${gridGap}px`,
             }}
           >
-            {rowMods.map((mod, index) => {
+            {rowMods.map((mod) => {
               const queuedState = queuedByModId.get(mod.id);
               const itemKey = browseModKey(mod);
               const installedLocal = installedByGbId.get(itemKey);
               return (
                 <div
                   key={itemKey}
-                  className="browse-result-card min-w-0 [contain:layout_style]"
-                  style={{ animationDelay: `${Math.min(index * 18, 72)}ms` }}
+                  className="min-w-0 [contain:layout_style]"
                 >
                   <MemoizedModCard
                     key={itemKey}

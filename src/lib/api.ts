@@ -33,6 +33,7 @@ import type {
 } from '../types/gamebanana';
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
 import type {
+  GameRunningStatus,
   ImportCustomModArgs,
   ImportCustomModResult,
   ImportCustomModsBatchResult,
@@ -43,20 +44,9 @@ import type {
 import { showToast } from '../stores/toastStore';
 import type { ChooseModUpdateReplacementArgs, ModUpdateState, StartModUpdatesArgs } from '../types/modUpdates';
 import i18n from '../i18n';
+import { isGameRunningModLockError, VANILLA_WINDOW_LOCK_MESSAGE } from './modLocks';
 
-// Sentinel that matches the Error thrown by the main process
-// (GAME_RUNNING_MOD_LOCK_MESSAGE in gameSessionMods.ts). It crosses the IPC
-// boundary as a raw string, so it must NOT be translated. The user-facing
-// toast is translated separately.
-const GAME_RUNNING_NOTICE = 'Game is running';
-// Same for VANILLA_WINDOW_LOCK_MESSAGE in vanillaWindow.ts: mods are refused
-// while Launch Vanilla has them parked.
-const VANILLA_WINDOW_NOTICE = 'Vanilla launch in progress';
-
-export function isGameRunningModLockError(err: unknown): boolean {
-  const text = String(err);
-  return text.includes(GAME_RUNNING_NOTICE) || text.includes(VANILLA_WINDOW_NOTICE);
-}
+export { isGameRunningModLockError };
 
 async function withGameRunningWarning<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -64,7 +54,7 @@ async function withGameRunningWarning<T>(operation: () => Promise<T>): Promise<T
   } catch (err) {
     if (isGameRunningModLockError(err)) {
       showToast(
-        String(err).includes(VANILLA_WINDOW_NOTICE)
+        String(err).includes(VANILLA_WINDOW_LOCK_MESSAGE)
           ? i18n.t('common.vanillaLaunchWarning')
           : i18n.t('common.gameRunningWarning'),
         { tone: 'warning' },
@@ -864,9 +854,7 @@ export interface VanillaRestoreResult {
   failed: string[];
 }
 
-export interface GameRunningStatus {
-  running: boolean;
-}
+export type { GameRunningStatus };
 
 export interface StopGameResult {
   wasRunning: boolean;
