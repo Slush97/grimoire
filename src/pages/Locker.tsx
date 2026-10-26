@@ -17,6 +17,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
 import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
@@ -271,7 +272,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, reorderPriorityMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore(useShallow((s) => ({
       settings: s.settings,
       mods: s.mods,
@@ -281,6 +282,7 @@ export default function Locker() {
       loadMods: s.loadMods,
       toggleMod: s.toggleMod,
       reorderMods: s.reorderMods,
+      reorderPriorityMods: s.reorderPriorityMods,
       deleteMods: s.deleteMods,
       setModPriorityFolder: s.setModPriorityFolder,
       setBrowseUi: s.setBrowseUi,
@@ -563,7 +565,7 @@ export default function Locker() {
   // belongs in that hero's pile, it just also wins every collision. This list
   // only feeds the General view's Global tab.
   const priorityMods = useMemo(
-    () => mods.filter((m) => m.priorityMod).sort((a, b) => a.name.localeCompare(b.name)),
+    () => mods.filter((m) => m.priorityMod).sort((a, b) => modLoadOrder(a) - modLoadOrder(b)),
     [mods]
   );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
@@ -1651,6 +1653,7 @@ export default function Locker() {
             onImportSoul={() => setSoulImportOpen(true)}
             onImportUrn={() => setUrnImportOpen(true)}
             priorityMods={priorityMods}
+            onReorderPriorityMods={reorderPriorityMods}
             onAddGlobal={() => setGlobalPickerOpen(true)}
             onRemoveGlobal={(modId) => setModPriorityFolder(modId, false)}
             shuffleArmed={shuffleOnLaunch}
@@ -1926,6 +1929,7 @@ interface LockerGlobalViewProps {
   onImportUrn: () => void;
   /** Mods living in the citadel/grimoire priority root (the "Global" tab). */
   priorityMods: Mod[];
+  onReorderPriorityMods: (ids: string[]) => void | Promise<void>;
   /** Open the picker that adds installed mods to Global. */
   onAddGlobal: () => void;
   /** Move a mod back out of the priority root. */
@@ -1965,7 +1969,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onReorderPriorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   // Every tab is selectable, empty or not. We still default the landing tab to
@@ -2399,6 +2403,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 )}
               </div>
+              {isPriorityTab && (
+                <SkinLoadOrderStrip mods={priorityMods} onReorder={onReorderPriorityMods}
+                  hideNsfwPreviews={hideNsfw} hint={t('locker.global.loadOrderHint')} />
+              )}
               {activeType === CURSOR_TAB ? (
                 <CursorPackPane />
               ) : activeMods.length === 0 && isPropContainer ? (
