@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildListDragItems, canDropListItem, listDropSlotIndex, listHeaderDragId, listPointerIndex } from './modListDrag';
+import { buildListDragItems, canDropListItem, listDropSlotIndex, listGroupRendered, listHeaderDragId, listPointerIndex } from './modListDrag';
 import { buildInstalledListGroups, installedListEntryKey, UNLISTED_GROUP_ID } from './installedListGroups';
 import { buildModEntries } from './modEntries';
 import type { Mod } from '../types/mod';
@@ -22,6 +22,17 @@ describe('list drag identities', () => {
     expect(canDropListItem({ kind: 'list', id: 'a' }, UNLISTED_GROUP_ID)).toBe(false);
     expect(canDropListItem({ kind: 'list', id: 'a' }, 'a')).toBe(false);
     expect(canDropListItem({ kind: 'list', id: 'a' }, 'b')).toBe(true);
+  });
+
+  it('skips lists a search emptied when moving a list, but keeps them as mod targets', () => {
+    const groups = [...buildInstalledListGroups([entry], [{ id: 'a', name: 'A', keys: ['sha256:one'] }, { id: 'b', name: 'B', keys: [] }]),
+      { id: UNLISTED_GROUP_ID, name: '', entries: [] }];
+    const rendered = (kind: 'list' | 'entry' | undefined, showEmpty: boolean) =>
+      groups.filter((group) => listGroupRendered(group, kind, showEmpty)).map((group) => group.id);
+    expect(rendered('list', false)).toEqual(['a']);
+    expect(rendered('list', true)).toEqual(['a', 'b']);
+    expect(rendered('entry', false)).toEqual(['a', 'b', UNLISTED_GROUP_ID]);
+    expect(rendered(undefined, false)).toEqual(['a']);
   });
 });
 

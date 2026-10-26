@@ -19,6 +19,12 @@ export function buildListDragItems(groups: readonly InstalledListGroup[]): Map<s
   return items;
 }
 
+/** Keyboard targets must match the rendered sections, or arrow keys stall on a hidden list with no droppable rect. */
+export function listGroupRendered(group: InstalledListGroup, dragging: ModListDrag['kind'] | undefined, showEmpty: boolean): boolean {
+  if (group.entries.length > 0) return true;
+  return group.id === UNLISTED_GROUP_ID ? dragging === 'entry' : showEmpty || dragging === 'entry';
+}
+
 export function canDropListItem(drag: ModListDrag, targetId: string): boolean {
   return drag.kind === 'list' ? targetId !== UNLISTED_GROUP_ID && targetId !== drag.id : true;
 }

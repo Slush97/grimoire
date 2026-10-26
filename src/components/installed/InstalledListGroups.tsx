@@ -9,7 +9,7 @@ import { EmptyState } from '../common/PageComponents';
 import { ModListGlyph } from './ModListIcon';
 import { installedListEntryKey, UNLISTED_GROUP_ID, type InstalledListGroup } from '../../lib/installedListGroups';
 import { entryDisabledPreferenceKey, entryName, type ModEntry } from '../../lib/modEntries';
-import { buildListDragItems, canDropListItem, listDropId, listDropSlotIndex, listHeaderDragId, listPointerIndex, listSlotId, type ListDropPosition, type ModListDrag } from '../../lib/modListDrag';
+import { buildListDragItems, canDropListItem, listDropId, listDropSlotIndex, listGroupRendered, listHeaderDragId, listPointerIndex, listSlotId, type ListDropPosition, type ModListDrag } from '../../lib/modListDrag';
 import { InstalledListAddCard, InstalledListDropSlot, InstalledListEntryDrag, type ListArrivalPoint } from './InstalledListEntryDrag';
 import { InstalledListDragBoxContext, type ListDragBox } from './listDragBox';
 
@@ -188,7 +188,7 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
     if (!direction) return;
     const item = dragItems.get(String(id));
     if (!item) return;
-    const choices = dropGroups.filter((group) => item.kind !== 'list' || group.id !== UNLISTED_GROUP_ID);
+    const choices = dropGroups.filter((group) => listGroupRendered(group, item.kind, showEmpty) && (item.kind !== 'list' || group.id !== UNLISTED_GROUP_ID));
     const current = choices.findIndex((group) => group.id === keyboardTarget.current?.groupId);
     let target = choices[current];
     let next: ListDropPosition;
@@ -238,7 +238,7 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
     ? t('installed.lists.dropPosition', { position: listDropSlotIndex(positionedGroup.entries, active.entry, placement.beforeKey) + 1,
       count: positionedGroup.entries.filter(entry => entryDisabledPreferenceKey(entry) !== entryDisabledPreferenceKey(active.entry)).length + 1,
       name: targetName(positionedGroup.id) }) : '';
-  const visibleGroups = dropGroups.filter((group) => group.entries.length > 0 || (group.id === UNLISTED_GROUP_ID ? active?.kind === 'entry' : showEmpty || active?.kind === 'entry'));
+  const visibleGroups = dropGroups.filter((group) => listGroupRendered(group, active?.kind, showEmpty));
   const emptyState = groups.some((group) => group.id !== UNLISTED_GROUP_ID) ? null : <EmptyState icon={List}
     title={t('installed.lists.emptyTitle')} description={t('installed.lists.emptyHint')}
     action={<Button variant="secondary" onClick={() => onManage()}>{t('installed.lists.manageTitle')}</Button>} className="py-12" />;
