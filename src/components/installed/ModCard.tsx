@@ -27,7 +27,7 @@ import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
-import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
+import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, FittingTagList, MetaTextChip } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -353,43 +353,21 @@ interface ModListRowContentProps {
   metaChipClasses: string;
   manualTagChipClasses: string;
   dangerInlineChipClasses: string;
-  tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
-}
-
-function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
-  return (
-    <span className={className} title={title ?? label}>
-      <ChipText>{label}</ChipText>
-    </span>
-  );
 }
 
 function InstalledTaxonomyChips({
   taxonomy,
   className,
-  iconClassName,
 }: {
   taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
   className: string;
-  iconClassName: string;
 }) {
-  const label = taxonomy.categoryLabel ?? taxonomy.tags[0];
-  const hidden = taxonomy.tags.filter(tag => tag.toLowerCase() !== label?.toLowerCase());
   return (
     <>
-      {taxonomy.heroNames.map(hero => (
-        <span key={hero} className="inline-flex flex-shrink-0 items-center" title={hero}>
-          <HeroTagLabel heroName={hero} iconClassName={iconClassName} iconOnly />
-        </span>
-      ))}
-      {label && (
-        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
-          <MetaTextChip label={label} className={className} />
-          {hidden.length > 0 && <MetaTextChip label={`+${hidden.length}`} title={hidden.join('\n')} className={`${className} flex-shrink-0`} />}
-        </span>
-      )}
+      <HeroIconStack heroes={taxonomy.heroNames} />
+      <FittingTagList labels={taxonomy.tags} chipClassName={className} />
     </>
   );
 }
@@ -575,7 +553,6 @@ function ModListRowContent({
   metaChipClasses,
   manualTagChipClasses,
   dangerInlineChipClasses,
-  tagIconClassName,
   technicalMetaClasses,
   actions,
 }: ModListRowContentProps) {
@@ -679,7 +656,7 @@ function ModListRowContent({
               title={t('installed.priority.hint')}
             />
           )}
-          <InstalledTaxonomyChips taxonomy={taxonomy} className={metaChipClasses} iconClassName={tagIconClassName} />
+          <InstalledTaxonomyChips taxonomy={taxonomy} className={metaChipClasses} />
           {mod.nsfw && (
             <MetaTextChip label="18+" className={dangerInlineChipClasses} />
           )}
@@ -955,17 +932,7 @@ export function ModCard({
       : '';
   const chipMaxClass =
     viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
-  const chipSizeClasses =
-    viewMode === 'list'
-      ? 'h-6 rounded-[7px] px-2 text-2xs'
-      : viewMode === 'compact'
-        ? 'h-[26px] rounded-lg px-2 text-[12px]'
-        : 'h-7 rounded-lg px-2.5 text-[12px]';
-  const tagIconClassName =
-    viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
-  // List hero icons need the same minimum room as compact-card labels.
-  const chipMinClass = viewMode === 'grid' ? 'min-w-0' : 'min-w-9';
-  const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
+  const baseChipClasses = `inline-flex h-[22px] min-w-0 ${chipMaxClass} items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
@@ -993,6 +960,7 @@ export function ModCard({
   }`;
   const isList = viewMode === 'list';
   const isCompact = viewMode === 'compact';
+  const quickActionSizeClasses = isList ? '' : '@max-[240px]/installed-card:hidden';
   // Cover-art source for the glass backdrop. Skipped when NSFW previews are
   // hidden so we never bleed hidden imagery, even blurred.
   const glassBackdropUrl =
@@ -1015,7 +983,6 @@ export function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
     : 'text-[15px] font-medium leading-[18px] truncate';
-  const gridTagsClasses = viewMode === 'compact' ? 'min-h-[26px] flex-wrap' : 'min-h-7 flex-wrap';
   // Enabled cards get their own copy: pinning only takes effect once the mod is
   // disabled, and the disabled section's "top of disabled mods" wording would be
   // a lie there.
@@ -1232,7 +1199,7 @@ export function ModCard({
 
   const actions = (
     <div className="ml-auto flex items-center gap-1">
-      {/* At compact size the direct favorite/delete buttons consumed 56px even
+      {/* At small sizes the direct favorite/delete buttons consumed 56px even
           while transparent, squeezing the adjacent taxonomy chip down to a
           one-pixel border. Both actions remain available from the kebab and
           right-click menus; larger cards keep their faster hover affordances. */}
@@ -1244,7 +1211,7 @@ export function ModCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
+          className={`${utilityActionClasses} ${quickActionSizeClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
           title={favoriteLabel}
           aria-label={favoriteLabel}
           aria-pressed={favorite}
@@ -1260,7 +1227,7 @@ export function ModCard({
             e.stopPropagation();
             onDelete();
           }}
-          className={`${utilityActionClasses} ${hoverActionVisibilityClasses} text-state-danger hover:bg-state-danger/10 hover:text-state-danger focus-visible:ring-state-danger/60`}
+          className={`${utilityActionClasses} ${quickActionSizeClasses} ${hoverActionVisibilityClasses} text-state-danger hover:bg-state-danger/10 hover:text-state-danger focus-visible:ring-state-danger/60`}
           title={t('installed.card.deleteNamed', { name: mod.name })}
           aria-label={t('installed.card.deleteNamed', { name: mod.name })}
           data-card-action="true"
@@ -1337,7 +1304,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {(selectMode || selectionPreview) && (
@@ -1384,7 +1351,6 @@ export function ModCard({
             metaChipClasses={metaChipClasses}
             manualTagChipClasses={manualTagChipClasses}
             dangerInlineChipClasses={dangerInlineChipClasses}
-            tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
           />
@@ -1540,11 +1506,11 @@ export function ModCard({
             onRename={onRenameLocal}
           />
           <div
-            className={`${isCompact ? 'mt-1.5 min-h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
+            className={`${isCompact ? 'mt-1.5' : 'mt-1'} grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-1.5`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
-            <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
-              <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} iconClassName={tagIconClassName} />
+            <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
+              <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} />
             </div>
 
             <div className={`flex flex-shrink-0 items-center justify-end gap-2 ${isCompact ? '' : 'pr-1'}`}>

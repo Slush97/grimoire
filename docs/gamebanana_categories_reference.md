@@ -77,12 +77,13 @@ For Browse Mod hero filters, include the hero category and all descendant IDs so
 
 Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.
 
-Sound cards use a hero portrait only when they resolve to exactly one hero. A multi-hero file or variant group uses the ordinary Sound preview, retaining any explicit thumbnail. Installed, classic Browse, and list cards show every hero icon. Readable Browse captions collapse more than two heroes into one icon and a compact `+n` tooltip, keeping their fixed height and action button clear.
+Sound cards use a hero portrait only when they resolve to exactly one hero. A multi-hero file or variant group uses the ordinary Sound preview, retaining any explicit thumbnail. Classic Browse and list cards show every hero icon. Readable Browse captions collapse more than two heroes into one icon and a compact `+n` tooltip, keeping their fixed height and action button clear.
 
 Installed cards and filter facets share `installedCardTaxonomy.ts` and the category-tree indexes:
 
 - The Tags filter includes every non-hero ancestor and leaf label, plus the existing Sounds/Wip section tags. Heroes have their separate filter.
-- Cards display all resolved hero icons and the representative file's deepest non-hero category. A compact `+n` chip lists the remaining tags in its normal mouse tooltip.
+- Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to five hero icons are visible; from six heroes onward, four icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
+- Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
 - When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
 - Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.

@@ -75,8 +75,13 @@ describe('getInstalledCardTaxonomy', () => {
   });
 
   it('preserves local explicit General labels only when no category is available', () => {
-    expect(getInstalledCardTaxonomy({ globalType: 'hud' }).categoryLabels).toEqual(['HUD']);
-    expect(getInstalledCardTaxonomy({ globalType: 'hud', categoryName: 'Custom visuals' }).categoryLabels).toEqual(['Custom visuals']);
+    const local = getInstalledCardTaxonomy({ globalType: 'hud' });
+    expect(local.categoryLabels).toEqual([]);
+    expect(local.customLabels).toEqual(['HUD']);
+    expect(installedTaxonomyTags(local)).toEqual(['HUD']);
+    const categorized = getInstalledCardTaxonomy({ globalType: 'hud', categoryName: 'Custom visuals' });
+    expect(categorized.categoryLabels).toEqual(['Custom visuals']);
+    expect(categorized.customLabels).toBeUndefined();
   });
 
   it('keeps singular and plural categories distinct', () => {
@@ -128,6 +133,46 @@ describe('getInstalledGroupTaxonomy', () => {
     expect(taxonomy.heroNames).toEqual(['Haze', 'Wraith']);
     expect(taxonomy.categoryLabel).toBe('VOs');
     expect(taxonomy.categoryLabels).toEqual(['VOs', 'Abilities']);
-    expect(taxonomy.tags).toEqual(['VOs', 'Sounds', 'Abilities']);
+    expect(taxonomy.tags).toEqual(['VOs', 'Abilities', 'Sounds']);
+  });
+
+  it('orders card categories deepest-first without changing root-to-leaf filter facets', () => {
+    const mod = { gameBananaId: 1, categoryId: 3, categoryName: 'Old label' };
+    const taxonomy = getInstalledGroupTaxonomy(mod, [mod], context);
+    expect(taxonomy.tags).toEqual(['Faithful/Vanilla+', 'Skins']);
+    expect(taxonomy.categoryLabels).toEqual(['Skins', 'Faithful/Vanilla+']);
+    expect(installedTaxonomyTags(getInstalledCardTaxonomy(mod, context))).toEqual(['Skins', 'Faithful/Vanilla+']);
+  });
+
+  it('starts with the representative leaf and keeps all group branch children before their ancestors', () => {
+    const branchContext = { pathsByModel: { ModCategory: buildCategoryPaths([{
+      id: 10, name: 'Visuals', itemCount: 1, children: [{
+        id: 11, name: 'Accessibility', itemCount: 1, children: [{ id: 12, name: 'Crosshair', itemCount: 1 }],
+      }, {
+        id: 13, name: 'Animations', itemCount: 1, children: [{ id: 14, name: 'Reload', itemCount: 1 }],
+      }],
+    }]) } };
+    const representative = { gameBananaId: 1, categoryId: 12 };
+    const other = { gameBananaId: 1, categoryId: 14 };
+    const taxonomy = getInstalledGroupTaxonomy(representative, [other, representative, other], branchContext);
+    expect(taxonomy.tags).toEqual(['Crosshair', 'Reload', 'Accessibility', 'Animations', 'Visuals']);
+    expect(new Set(taxonomy.tags)).toEqual(new Set([
+      ...installedTaxonomyTags(getInstalledCardTaxonomy(representative, branchContext)),
+      ...installedTaxonomyTags(getInstalledCardTaxonomy(other, branchContext)),
+    ]));
+  });
+
+  it('keeps section markers and local custom classifications behind every real category', () => {
+    const soundContext = { pathsByModel: { SoundCategory: buildCategoryPaths([{
+      id: 10, name: 'Voices', itemCount: 1, children: [{ id: 11, name: 'VOs', itemCount: 1 }],
+    }]) } };
+    const representative = { globalType: 'hud' as const };
+    const sound = { sourceSection: 'Sound', categoryId: 11 };
+    const taxonomy = getInstalledGroupTaxonomy(representative, [representative, sound], soundContext);
+    expect(taxonomy.categoryLabels).toEqual(['Voices', 'VOs']);
+    expect(taxonomy.customLabels).toEqual(['HUD']);
+    expect(taxonomy.tags).toEqual(['VOs', 'Voices', 'Sounds', 'HUD']);
+    const duplicate = getInstalledGroupTaxonomy(representative, [representative, { categoryName: 'HUD' }]);
+    expect(duplicate.tags).toEqual(['HUD']);
   });
 });

@@ -111,6 +111,14 @@ describe('installed card menu mounting', () => {
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {
+    const originalBounds = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-fitting-tags')) return DOMRect.fromRect({ width: 70, height: 22 });
+      if (this.parentElement?.hasAttribute('data-tag-measure')) {
+        return DOMRect.fromRect({ width: this.textContent?.startsWith('+') ? 20 : 40, height: 22 });
+      }
+      return originalBounds.call(this);
+    });
     useCategoryStore.setState({
       heroNames: ['Haze', 'Wraith'],
       pathsByModel: { SoundCategory: buildCategoryPaths([{
@@ -126,9 +134,11 @@ describe('installed card menu mounting', () => {
     await act(async () => root.render(<ModCard {...input} />));
     expect(host.querySelectorAll('img[src*="haze.png"]')).toHaveLength(1);
     expect(host.querySelectorAll('img[src*="wraith.png"]')).toHaveLength(1);
-    const overflow = [...host.querySelectorAll<HTMLElement>('[title]')].find(node => node.textContent === '+2');
+    const row = host.querySelector('[data-fitting-tags]')!;
+    const visibleTags = [...row.children].filter(node => node.hasAttribute('title'));
+    expect(visibleTags.map(node => node.textContent)).toEqual(['VOs', '+2']);
+    const overflow = visibleTags.find(node => node.textContent === '+2') as HTMLElement | undefined;
     expect(overflow?.title).toBe('Voices\nSounds');
-    expect([...host.querySelectorAll('span')].some(node => node.childElementCount === 0 && node.textContent === 'VOs')).toBe(true);
   });
 
   it('does not infer hero icons or thumbnail art from a sound submission title', async () => {

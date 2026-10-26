@@ -18,6 +18,8 @@ export interface InstalledCardTaxonomy {
   heroNames: string[];
   /** All non-hero category ancestors and the assigned leaf, in path order. */
   categoryLabels: string[];
+  /** Preserved local General labels, separate from GameBanana ancestry. */
+  customLabels?: string[];
   /** The representative file's deepest non-hero category. */
   categoryLabel?: string;
   globalType?: GlobalModType;
@@ -58,20 +60,27 @@ export function getInstalledCardTaxonomy(
     && !heroNames.some(hero => hero.toLowerCase() === canonicalHeroName(label).toLowerCase())));
   // Locally generated/imported files keep their explicit General label when
   // there is no category to display. Linked files only expose real categories.
-  if (!linked && labels.length === 0 && mod.globalType) categoryLabels.push(GLOBAL_MOD_TYPE_LABELS[mod.globalType]);
+  const customLabels = !linked && labels.length === 0 && mod.globalType
+    ? [GLOBAL_MOD_TYPE_LABELS[mod.globalType]] : [];
   return {
     heroNames,
     categoryLabels,
     categoryLabel: categoryLabels.at(-1),
+    ...(customLabels.length > 0 ? { customLabels } : {}),
     globalType: mod.globalType,
   };
 }
 
-/** Shared by card overflow and filter facets so they expose the same tags. */
+function sectionTags(section?: string): string[] {
+  return section === 'Sound' ? ['Sounds'] : section === 'Wip' ? ['Wip'] : [];
+}
+
+/** Filter facets keep the complete tag set, independently of card ordering. */
 export function installedTaxonomyTags(taxonomy: InstalledCardTaxonomy, section?: string): string[] {
   return uniqueLabels([
     ...taxonomy.categoryLabels,
-    ...(section === 'Sound' ? ['Sounds'] : section === 'Wip' ? ['Wip'] : []),
+    ...(taxonomy.customLabels ?? []),
+    ...sectionTags(section),
   ]);
 }
 
@@ -83,11 +92,31 @@ export function getInstalledGroupTaxonomy(
   const primary = getInstalledCardTaxonomy(representative, context);
   const taxonomies = variants.map(mod => ({ mod, taxonomy: mod === representative ? primary : getInstalledCardTaxonomy(mod, context) }));
   const heroNames = uniqueLabels(taxonomies.flatMap(({ taxonomy }) => taxonomy.heroNames));
+  const customLabels = uniqueLabels(taxonomies.flatMap(({ taxonomy }) => taxonomy.customLabels ?? []));
+  const categories = new Map<string, { label: string; depth: number }>();
+  for (const taxonomy of [primary, ...taxonomies.map(({ taxonomy }) => taxonomy)]) {
+    taxonomy.categoryLabels.forEach((label, depth) => {
+      const key = label.toLowerCase();
+      const existing = categories.get(key);
+      if (existing) existing.depth = Math.max(existing.depth, depth);
+      else categories.set(key, { label, depth });
+    });
+  }
+  const primaryLeaf = primary.categoryLabel?.toLowerCase();
+  const orderedCategories = [...categories.values()].sort((a, b) =>
+    Number(b.label.toLowerCase() === primaryLeaf) - Number(a.label.toLowerCase() === primaryLeaf)
+    || b.depth - a.depth,
+  ).map(({ label }) => label);
   return {
     ...primary,
     previewHeroName: heroNames.length === 1 ? primary.heroNames[0] : undefined,
     heroNames,
     categoryLabels: uniqueLabels(taxonomies.flatMap(({ taxonomy }) => taxonomy.categoryLabels)),
-    tags: uniqueLabels(taxonomies.flatMap(({ mod, taxonomy }) => installedTaxonomyTags(taxonomy, mod.sourceSection))),
+    ...(customLabels.length > 0 ? { customLabels } : {}),
+    tags: uniqueLabels([
+      ...orderedCategories,
+      ...taxonomies.flatMap(({ mod }) => sectionTags(mod.sourceSection)),
+      ...customLabels,
+    ]),
   };
 }
