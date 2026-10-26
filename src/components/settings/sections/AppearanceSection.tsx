@@ -1,3 +1,4 @@
+import { FilterItem, FilterDivider } from '../../common/FilteredContent';
 import { Languages, Palette } from 'lucide-react';
 import { useAppStore } from '../../../stores/appStore';
 import { formatDateParts } from '../../../lib/dateFormat';
@@ -36,29 +37,31 @@ export default function AppearanceSection() {
           label={<Tx k="settings.appearance.oled.title" fallback="OLED mode" />}
         />
 
-        <div className="my-5 h-px bg-hl/5" />
+        <FilterDivider className="my-5 h-px bg-hl/5" />
 
-        <div id="settings-accent"><AccentColorPicker /></div>
+        <FilterItem id="settings-accent"><AccentColorPicker /></FilterItem>
 
-        <div className="my-5 h-px bg-hl/5" />
+        <FilterDivider className="my-5 h-px bg-hl/5" />
 
-        <div id="settings-background"><BackgroundGradientPicker /></div>
+        <FilterItem id="settings-background"><BackgroundGradientPicker /></FilterItem>
 
-        <div className="my-5 h-px bg-hl/5" />
+        <FilterDivider className="my-5 h-px bg-hl/5" />
 
         <AppearanceArtSection />
       </Card>
 
       <Card id="settings-appearance-settings-nav-language-card" title={<Tx k="settings.nav.language" fallback="Language & region" />} icon={Languages}>
         <div className="space-y-6">
-          <LanguageSelector
-            value={settings?.language ?? null}
-            onChange={handleLanguageChange}
-          />
+          <FilterItem id="settings-language">
+            <LanguageSelector
+              value={settings?.language ?? null}
+              onChange={handleLanguageChange}
+            />
+          </FilterItem>
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <div id="settings-date-format">
+          <FilterItem id="settings-date-format">
             <label className="text-sm font-medium text-text-primary block">
               <Tx k="settings.preferences.dateFormat" fallback="Date Format" />
             </label>
@@ -89,7 +92,7 @@ export default function AppearanceSection() {
                 );
               })}
             </div>
-          </div>
+          </FilterItem>
         </div>
       </Card>
     </>

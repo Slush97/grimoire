@@ -1,7 +1,7 @@
 import { createInstance } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import en from '../../locales/en/translation.json';
-import { searchSettings, settingsSearchEntries } from './settingsSearchIndex';
+import { searchSettings, settingsContentFilter, settingsSearchEntries } from './settingsSearchIndex';
 
 async function englishEntries() {
   const i18n = createInstance();
@@ -15,6 +15,7 @@ describe('Settings search', () => {
     expect(searchSettings(entries, 'language')[0]).toMatchObject({ section: 'appearance', label: 'Language & region' });
     expect(searchSettings(entries, 'backups')[0]).toMatchObject({ section: 'preferences', label: 'Keep removed mod files for 24 hours' });
     expect(searchSettings(entries, 'FRAME RATE')[0]).toMatchObject({ section: 'performance' });
+    expect(searchSettings(entries, 'date')[0]).toMatchObject({ section: 'appearance', label: 'Date Format' });
     expect(searchSettings(entries, 'preferences download').length).toBeGreaterThan(0);
     expect(searchSettings(entries, '  \n  ')).toEqual([]);
     expect(searchSettings(entries, 'no-such-setting-987')).toEqual([]);
@@ -63,4 +64,15 @@ describe('Settings search', () => {
     expect(enabled.some((entry) => entry.section === 'social')).toBe(true);
     expect(enabled.some((entry) => entry.section === 'mod-safety')).toBe(true);
   });
+  it('retains the containing cards and nested groups for matching controls', async () => {
+    const entries = await englishEntries();
+    const backups = settingsContentFilter(searchSettings(entries, 'backups'));
+    expect(backups.visible.has('settings-preferences-settings-sections-preferences-card')).toBe(true);
+    expect(backups.visible.has('settings-preferences-settings-sections-integrations-card')).toBe(false);
+    const art = settingsContentFilter(searchSettings(entries, 'transparent'));
+    expect(art.visible.has('settings-art-controls')).toBe(true);
+    expect(art.visible.has('settings-appearance-settings-sections-appearance-card')).toBe(true);
+    expect(art.matches.has('settings-art-controls')).toBe(false);
+  });
+
 });

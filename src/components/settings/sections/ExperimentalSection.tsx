@@ -1,3 +1,4 @@
+import { FilterDivider } from '../../common/FilteredContent';
 import { useState } from 'react';
 import { Beaker, Copy, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -69,7 +70,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-crosshairDesigner-toggle"
             checked={settings?.experimentalCrosshair ?? false}
@@ -78,7 +79,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.crosshairDesignerDescription" fallback="Create custom crosshairs with a live preview." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-sections-grimoireSocial-toggle"
             checked={settings?.experimentalSocial ?? false}
@@ -87,7 +88,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-fixUnknownMods-toggle"
             checked={settings?.experimentalUnknownModMatching ?? false}
@@ -96,7 +97,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.fixUnknown" fallback="Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-vpkImprint-toggle"
             checked={settings?.experimentalVpkImprinting ?? false}
@@ -105,7 +106,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-modSafety-manage-toggle"
             checked={settings?.experimentalModSafety ?? false}
@@ -114,7 +115,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.modSafety" fallback="Check each mod for scripts and ask before enabling one that has them. Imported mods wait disabled until you review them. Added for a Deadlock bug that let HUD scripts read files on your computer. Valve has since fixed it, so you don't need this to stay safe." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-deadworksServers-toggle"
             checked={settings?.experimentalDeadworksServers ?? false}
@@ -123,7 +124,7 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.toggles.deadworks" fallback="Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-foundry-toggle"
             checked={settings?.experimentalFoundry ?? false}

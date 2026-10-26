@@ -1,3 +1,4 @@
+import { FilterDivider } from '../../common/FilteredContent';
 import { useEffect, useState } from 'react';
 import { Download, SlidersHorizontal, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -45,7 +46,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.expandLocker" fallback="Start Locker list view with hero cards expanded." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-confirmProfileUpdate-toggle"
             checked={settings?.confirmProfileUpdate ?? true}
@@ -54,7 +55,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.confirmProfileUpdate" fallback="Confirm before overwriting a profile's saved mods. Off overwrites immediately." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-ignoreConflicts-toggle"
             checked={settings?.ignoreConflictsByDefault ?? false}
@@ -63,7 +64,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.ignoreConflicts" fallback="Hide all conflicts from the Conflicts page. Off shows them." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-keepModBackups-toggle"
             checked={settings?.keepModBackups ?? false}
@@ -83,7 +84,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.switchVariants" fallback="Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-enableAfterDownload-toggle"
             checked={settings?.autoEnableDownloads ?? false}
@@ -92,7 +93,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.enableAfterDownload" fallback="Enable mods as soon as they finish downloading. Stays disabled if no slot is free." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-autoMatchRemainingFiles-toggle"
             checked={settings?.autoMatchRemainingFiles ?? true}
@@ -101,7 +102,7 @@ export default function PreferencesSection() {
             description={<Tx k="settings.toggles.autoMatchRemainingFiles" fallback="After matching names and descriptions, pair one unmatched installed file with one remaining new upload. This can replace a different variant. Turn off to choose these replacements yourself." />}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-skipModReplacementConfirmation-toggle"
             checked={settings?.skipModReplacementConfirmation ?? false}
@@ -110,7 +111,7 @@ export default function PreferencesSection() {
             description={t('settings.toggles.skipModReplacementConfirmation')}
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-swapManualReplacementActions-toggle"
             checked={settings?.swapManualReplacementActions ?? true}
@@ -144,7 +145,7 @@ export default function PreferencesSection() {
             }
           />
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-preferences-settings-preferences-discordRpc-toggle"
             checked={settings?.discordRpcEnabled ?? false}

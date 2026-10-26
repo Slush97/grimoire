@@ -1,3 +1,4 @@
+import { FilterItem, FilterDivider } from '../../common/FilteredContent';
 import { useCallback, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Eye, EyeClosed, EyeOff, Shield } from 'lucide-react';
@@ -100,7 +101,7 @@ export default function PrivacySection() {
         icon={Shield}
       >
         <div className="space-y-6">
-          <div>
+          <FilterItem id="settings-nsfw">
             <span className="block text-sm font-medium text-text-primary">
               <Tx k="settings.privacy.nsfwContent" fallback="NSFW content" />
             </span>
@@ -120,12 +121,12 @@ export default function PrivacySection() {
                 { value: 'hide', label: <><EyeOff className="h-3.5 w-3.5" />{t('browse.viewOptions.hide')}</> },
               ]}
             />
-          </div>
+          </FilterItem>
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <div>
-            <Toggle id="settings-privacy-settings-preferences-contributeMatchData-toggle"
+          <FilterItem id="settings-privacy-settings-preferences-contributeMatchData-toggle">
+            <Toggle
               checked={settings?.contributeMatchSalts ?? false}
               onChange={handleContributeMatchSaltsChange}
               label={<Tx k="settings.preferences.contributeMatchData" fallback="Contribute match data to deadlock-api.com" />}
@@ -139,7 +140,7 @@ export default function PrivacySection() {
                 {saltIngestStatus.lastError ? ` ${t('settings.preferences.lastSaltAttemptFailed', { error: saltIngestStatus.lastError })}` : ''}
               </div>
             )}
-          </div>
+          </FilterItem>
         </div>
       </Card>
 

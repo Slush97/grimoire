@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Beaker,
   Download,
@@ -15,13 +15,15 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
+import { ContentFilterContext } from '../components/common/contentFilter';
+import { FilterItem } from '../components/common/FilteredContent';
 import { Card } from '../components/common/ui';
 import { PageHeader, PageLayout, LoadingState } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import KofiSupportButton from '../components/KofiSupportButton';
 import SocialAccountSection from '../components/social/SocialAccountSection';
 import SettingsSearch from '../components/settings/SettingsSearch';
-import type { SettingsSearchEntry } from '../components/settings/settingsSearchIndex';
+import { searchSettings, settingsContentFilter, settingsSearchEntries } from '../components/settings/settingsSearchIndex';
 import SettingsNav, { type SettingsNavGroup } from '../components/settings/SettingsNav';
 import GameSection from '../components/settings/sections/GameSection';
 import UpdatesSection from '../components/settings/sections/UpdatesSection';
@@ -59,15 +61,8 @@ export default function Settings() {
   const settingsLoading = useAppStore((s) => s.settingsLoading);
   const loadSettings = useAppStore((s) => s.loadSettings);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
-  const targetId = searchParams.get('setting');
   const searching = query.trim().length > 0;
-
-  const openSearchResult = (entry: SettingsSearchEntry) => {
-    setQuery('');
-    navigate(`/settings/${entry.section}?setting=${encodeURIComponent(entry.target)}`);
-  };
   // The section lives in the URL so other pages can link straight to one (/settings/mod-safety).
   const { section: sectionParam } = useParams();
   const activeSection: SectionId = SECTION_IDS.find((id) => id === sectionParam) ?? 'game';
@@ -122,22 +117,26 @@ export default function Settings() {
       ? 'preferences'
       : activeSection;
 
-  useEffect(() => {
-    if (searching || !targetId || settingsLoading) return;
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    target.tabIndex = -1;
-    target.setAttribute('data-settings-highlight', '');
-    const control = target.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled), select:not(:disabled)');
-    (control ?? target).focus({ preventScroll: true });
-    target.scrollIntoView({ block: 'center', behavior: 'instant' });
-    const timeout = window.setTimeout(() => target.removeAttribute('data-settings-highlight'), 3000);
-    return () => {
-      window.clearTimeout(timeout);
-      target.removeAttribute('data-settings-highlight');
-      target.removeAttribute('tabindex');
-    };
-  }, [targetId, section, searching, settingsLoading]);
+  const matches = useMemo(() => searchSettings(
+    settingsSearchEntries(t, { socialEnabled, modSafetyEnabled }), query,
+  ), [t, socialEnabled, modSafetyEnabled, query]);
+  const counts = new Map<string, Set<string>>();
+  for (const match of matches) {
+    const targets = counts.get(match.section) ?? new Set<string>();
+    targets.add(match.target);
+    counts.set(match.section, targets);
+  }
+  const filteredGroups = searching
+    ? navGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => counts.has(item.id)).map((item) => ({ ...item, count: counts.get(item.id)?.size })),
+    })).filter((group) => group.items.length > 0)
+    : navGroups;
+  const displayedSection = searching && !counts.has(section)
+    ? SECTION_IDS.find((id) => id === matches[0]?.section) ?? section
+    : section;
+  const filter = searching ? settingsContentFilter(matches) : null;
+  const matchCount = [...counts.values()].reduce((sum, targets) => sum + targets.size, 0);
 
   if (settingsLoading && !settings) {
     return <LoadingState />;
@@ -151,43 +150,42 @@ export default function Settings() {
         action={<KofiSupportButton />}
       />
 
-      <SettingsSearch
-        query={query}
-        socialEnabled={socialEnabled}
-        modSafetyEnabled={modSafetyEnabled}
-        onQueryChange={(value) => {
-          setQuery(value);
-          if (targetId) navigate(`/settings/${section}`, { replace: true });
-        }}
-        onSelect={openSearchResult}
-      >
-        <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-          <SettingsNav
-            groups={navGroups}
-            active={section}
-            onSelect={(id) => { setQuery(''); navigate(`/settings/${id}`, { replace: true }); }}
-            label={t('settings.nav.label')}
-          />
+      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+        <SettingsNav
+          groups={filteredGroups}
+          active={displayedSection}
+          onSelect={(id) => navigate(`/settings/${id}`, { replace: true })}
+          label={t('settings.nav.label')}
+          search={<SettingsSearch query={query} count={matchCount} onQueryChange={setQuery} />}
+        />
 
-          <div className="min-w-0 flex-1 space-y-6">
-            {section === 'game' && <GameSection />}
-            {section === 'performance' && <div id="settings-performance"><PerformanceConfigCard /></div>}
-            {section === 'appearance' && <AppearanceSection />}
-            {section === 'preferences' && <PreferencesSection />}
-            {section === 'privacy' && <PrivacySection />}
-            {section === 'mod-safety' && <div id="settings-mod-safety"><ModSafetySection /></div>}
-            {section === 'social' && socialEnabled && (
-              <Card id="settings-social" title={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />} icon={Globe}>
-                <SocialAccountSection />
+        <ContentFilterContext value={filter}>
+          <div id="settings-content" className="min-w-0 flex-1 space-y-6">
+            {searching && matches.length === 0 && (
+              <Card title={t('settings.search.emptyTitle')} accentEdge="none">
+                <p className="text-sm text-text-secondary">{t('settings.search.empty')}</p>
               </Card>
             )}
-            {section === 'updates' && <UpdatesSection />}
-            {section === 'experimental' && <ExperimentalSection />}
-            {section === 'maintenance' && <MaintenanceSection />}
-            {section === 'support' && <SupportSection />}
+            {(!searching || matches.length > 0) && <>
+              {displayedSection === 'game' && <GameSection />}
+              {displayedSection === 'performance' && <FilterItem id="settings-performance"><PerformanceConfigCard /></FilterItem>}
+              {displayedSection === 'appearance' && <AppearanceSection />}
+              {displayedSection === 'preferences' && <PreferencesSection />}
+              {displayedSection === 'privacy' && <PrivacySection />}
+              {displayedSection === 'mod-safety' && <FilterItem id="settings-mod-safety"><ModSafetySection /></FilterItem>}
+              {displayedSection === 'social' && socialEnabled && (
+                <Card id="settings-social" title={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />} icon={Globe}>
+                  <SocialAccountSection />
+                </Card>
+              )}
+              {displayedSection === 'updates' && <UpdatesSection />}
+              {displayedSection === 'experimental' && <ExperimentalSection />}
+              {displayedSection === 'maintenance' && <MaintenanceSection />}
+              {displayedSection === 'support' && <SupportSection />}
+            </>}
           </div>
-        </div>
-      </SettingsSearch>
+        </ContentFilterContext>
+      </div>
     </PageLayout>
   );
 }

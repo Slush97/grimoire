@@ -1219,10 +1219,10 @@
     "search": {
       "placeholder": "Search settings",
       "clear": "Clear search",
-      "results_one": "{{count}} setting found",
-      "results_other": "{{count}} settings found",
-      "resultsLabel": "Settings search results",
-      "empty": "No settings found. Try a different word, such as language, downloads, or cache."
+      "results_one": "{{count}} match",
+      "results_other": "{{count}} matches",
+      "empty": "Try another word, such as language, downloads, or cache.",
+      "emptyTitle": "No matching settings"
     }
   },
   "crosshair": {

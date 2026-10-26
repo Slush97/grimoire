@@ -1,3 +1,4 @@
+import { FilterDivider } from '../../common/FilteredContent';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bug, Check, Copy, FileText, LifeBuoy } from 'lucide-react';
@@ -114,7 +115,7 @@ export default function SupportSection() {
           </div>
         </div>
 
-        <div className="h-px bg-hl/5" />
+        <FilterDivider className="h-px bg-hl/5" />
 
         <CrashHistoryPanel selectedIds={crashReportIds} onToggle={id => {
           setCrashReportIds(previous => previous.includes(id) ? previous.filter(item => item !== id)
@@ -122,7 +123,7 @@ export default function SupportSection() {
           setBugReportText(null);
         }} />
 
-        <div className="h-px bg-hl/5" />
+        <FilterDivider className="h-px bg-hl/5" />
 
         <div className="space-y-3">
           <div>
