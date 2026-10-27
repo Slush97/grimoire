@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
-import { SkinRegionEditor, SkinRegionSelecting, SkinRegionTargets } from './SkinRegionControls';
+import { SkinPaintPanel, SkinRegionEditor } from './SkinRegionControls';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import type { SkinPartRegion } from '../../types/skinEditor';
 
@@ -17,27 +17,36 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const button = (text: string) => [...host.querySelectorAll('button')].find((element) => element.textContent === text) as HTMLButtonElement;
 const tab = (text: string) => [...host.querySelectorAll('[role="tab"]')].find((element) => element.textContent === text) as HTMLButtonElement;
-const region: SkinPartRegion = { id: 'r3', seeds: [{ u: 0.5, v: 0.5 }] };
+const region: SkinPartRegion = { id: 'r3', seeds: [{ u: 0.5, v: 0.5 }], paint: '#ef4444' };
 
-describe('SkinRegionTargets', () => {
-  it('names unnamed areas by their id and targets the whole part with null', () => {
-    const onSelect = vi.fn();
-    act(() => root.render(<SkinRegionTargets part="Dress" regions={[region, { ...region, id: 'r4', name: 'Trim' }]} active="r3" disabled={false}
-      onSelect={onSelect} onAdd={vi.fn()} onPreview={vi.fn()} />));
-    expect(button('foundry.skin.region.areaName:3foundry.skin.region.unedited').getAttribute('aria-pressed')).toBe('true');
-    expect(button('Trimfoundry.skin.region.unedited')).toBeTruthy();
-    act(() => button('foundry.skin.region.wholePart').click());
-    expect(onSelect).toHaveBeenCalledWith(null);
+describe('SkinPaintPanel', () => {
+  const props = (patch: Partial<ComponentProps<typeof SkinPaintPanel>> = {}): ComponentProps<typeof SkinPaintPanel> => ({
+    part: 'Dress', color: '#2dd4bf', tool: 'fill', brushSize: 16, tolerance: 8, areas: [], missed: false, canUndo: false, disabled: false,
+    onColor: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
+    onEditArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
   });
-});
-
-describe('SkinRegionTargets without areas', () => {
-  it('explains what an area is and offers to start one', () => {
-    const onAdd = vi.fn();
-    act(() => root.render(<SkinRegionTargets part="Dress" regions={[]} active={null} disabled={false} onSelect={vi.fn()} onAdd={onAdd} onPreview={vi.fn()} />));
-    expect(host.textContent).toContain('foundry.skin.region.intro');
-    act(() => button('foundry.skin.region.add').click());
-    expect(onAdd).toHaveBeenCalled();
+  it('explains the chosen tool and shows only its setting', () => {
+    act(() => root.render(<SkinPaintPanel {...props()} />));
+    expect(host.textContent).toContain('foundry.skin.paint.fillHint');
+    expect(host.querySelector('input[aria-label="foundry.skin.paint.fillRange"]')).not.toBeNull();
+    expect(host.textContent).toContain('foundry.skin.paint.nothingYet');
+    act(() => root.render(<SkinPaintPanel {...props({ tool: 'eraser' })} />));
+    expect(host.textContent).toContain('foundry.skin.paint.eraserHint');
+    expect(host.querySelector('input[aria-label="foundry.skin.paint.size"]')).not.toBeNull();
+    // Erasing needs no color.
+    expect(host.querySelector('button[aria-label="#ef4444"]')).toBeNull();
+  });
+  it('reuses a painted color and opens its details', () => {
+    const value = props({ areas: [region], missed: 'Jacket', canUndo: true });
+    act(() => root.render(<SkinPaintPanel {...value} />));
+    expect(host.textContent).toContain('foundry.skin.region.otherPart');
+    act(() => button('foundry.skin.region.areaName:3').click());
+    expect(value.onColor).toHaveBeenCalledWith('#ef4444');
+    expect(value.onTool).toHaveBeenCalledWith('fill');
+    act(() => (host.querySelector('button[aria-label="foundry.skin.paint.more"]') as HTMLButtonElement).click());
+    expect(value.onEditArea).toHaveBeenCalledWith('r3');
+    act(() => button('common.actions.undo').click());
+    expect(value.onUndo).toHaveBeenCalled();
   });
 });
 
@@ -45,29 +54,14 @@ describe('SkinRegionEditor', () => {
   it('paints without a tint mode and keeps area patterns still', () => {
     const onChange = vi.fn();
     const render = (value: SkinPartRegion, tool: 'color' | 'pattern') => act(() => root.render(<SkinRegionEditor region={value} color="#336699" tool={tool} disabled={false}
-      onTool={vi.fn()} onChange={onChange} onSelect={vi.fn()} onDelete={vi.fn()} />));
+      onTool={vi.fn()} onChange={onChange} onBack={vi.fn()} onDelete={vi.fn()} />));
     render(region, 'color');
     expect(tab('foundry.skin.tint')).toBeUndefined();
-    act(() => (host.querySelector('button[aria-label="#ef4444"]') as HTMLButtonElement).click());
-    expect(onChange).toHaveBeenLastCalledWith({ paint: '#ef4444' });
+    act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
+    expect(onChange).toHaveBeenLastCalledWith({ paint: '#3b82f6' });
     render({ ...region, pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } }, 'pattern');
     expect(host.querySelector('input[aria-label="foundry.skin.scroll"]')).toBeNull();
     act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABELS.holo}"]`) as HTMLButtonElement).click());
     expect(onChange).toHaveBeenLastCalledWith({ pattern: expect.objectContaining({ style: 'holo', scroll: 0 }) });
-  });
-});
-
-describe('SkinRegionSelecting', () => {
-  it('shows the setting for the chosen tool', () => {
-    const render = (by: 'piece' | 'color' | 'brush') => act(() => root.render(<SkinRegionSelecting part="Dress" mode="add" by={by} tolerance={8} brushSize={16}
-      empty missed="Jacket" onMode={vi.fn()} onBy={vi.fn()} onTolerance={vi.fn()} onBrushSize={vi.fn()} onClear={vi.fn()} onDone={vi.fn()} />));
-    render('piece');
-    expect(host.querySelectorAll('input[type="range"]')).toHaveLength(0);
-    render('color');
-    expect(host.querySelector('input[aria-label="foundry.skin.region.colorRange"]')).not.toBeNull();
-    render('brush');
-    expect(host.querySelector('input[aria-label="foundry.skin.region.brushSize"]')).not.toBeNull();
-    expect(host.textContent).toContain('foundry.skin.region.brushHint');
-    expect(host.textContent).toContain('foundry.skin.region.otherPart');
   });
 });

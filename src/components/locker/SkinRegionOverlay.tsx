@@ -10,6 +10,8 @@ import type { SkinRegionSeed } from '../../types/skinEditor';
 const SIZE = 1024;
 /** Alpha over the model: light enough that the texture stays readable under the selection. */
 const FILL = 46, HOVER = 96, EDGE = 230;
+/** A paint preview is mostly opaque, so it reads as the color it will be. */
+const PAINT = 200;
 
 export interface RegionPicker {
   by: 'piece' | 'color' | 'brush';
@@ -19,6 +21,8 @@ export interface RegionPicker {
   remove: boolean;
   /** A finished brush stroke, as one dab per seed. */
   onStroke: (seeds: SkinRegionSeed[]) => void;
+  /** Show what a click or stroke would paint in this color, instead of the accent. */
+  tint?: string | null;
 }
 
 type Dab = { u: number; v: number; radius: number };
@@ -33,7 +37,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
 }) {
   const { invalidate, camera, gl } = useThree();
   const islands = useMemo(() => materialIslands(scene, material), [scene, material]);
-  const by = picker?.by, tolerance = picker?.tolerance, brushSize = picker?.brushSize ?? 0;
+  const by = picker?.by, tolerance = picker?.tolerance, brushSize = picker?.brushSize ?? 0, tint = picker?.tint ?? null;
   const [hovered, setHovered] = useState<Dab | null>(null);
   // Dabs of the stroke in progress, drawn live and committed once on release. Once committed the seeds
   // change, and the seeds hold the stroke instead.
@@ -86,6 +90,8 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
       active = null;
       if (frame) { cancelAnimationFrame(frame); frame = 0; }
       finishStroke(dabs);
+      // Painting shows the stroke in the texture itself, and its seeds never reach this overlay.
+      setDrawn({ over: currentSeeds(), dabs: [] });
     };
     canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointermove', move);
@@ -104,16 +110,18 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
   const strokeMask = useRef({ dabs: 0, mask: new Uint8Array(SIZE * SIZE) });
   useEffect(() => {
     const alpha = new THREE.DataTexture(new Uint8Array(SIZE * SIZE * 4), SIZE, SIZE, THREE.RGBAFormat);
+    // A paint preview shows the paint color; selection feedback uses the accent.
     alpha.magFilter = THREE.LinearFilter; alpha.minFilter = THREE.LinearFilter; alpha.generateMipmaps = false;
     // Seeds and masks wrap texture coordinates, so tiled UVs must sample the same texel here.
     alpha.wrapS = THREE.RepeatWrapping; alpha.wrapT = THREE.RepeatWrapping;
     texture.current = alpha;
     const color = new THREE.Color();
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
-    if (accent) color.set(accent);
+    if (tint) color.set(tint);
+    else if (accent) color.set(accent);
     const restore = overlayRegion(scene, material, alpha, color);
     return () => { restore(); alpha.dispose(); texture.current = null; invalidate(); };
-  }, [scene, material, invalidate]);
+  }, [scene, material, tint, invalidate]);
   // The fill and edge only change with the seeds, so hovering reuses them.
   const base = useMemo(() => {
     if (!islands) return null;
@@ -143,12 +151,12 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     const drawing = stroke.length > 0;
     const data = alpha.image.data as Uint8Array;
     for (let pixel = 0; pixel < base.length; pixel++) {
-      const value = base[pixel] === EDGE ? EDGE : (drawing && live.mask[pixel]) || hint?.[pixel] ? HOVER : base[pixel];
+      const value = base[pixel] === EDGE ? EDGE : (drawing && live.mask[pixel]) || hint?.[pixel] ? (tint ? PAINT : HOVER) : base[pixel];
       data[pixel * 4] = data[pixel * 4 + 1] = data[pixel * 4 + 2] = value;
       data[pixel * 4 + 3] = 255;
     }
     alpha.needsUpdate = true;
     invalidate();
-  }, [islands, base, hovered, stroke, by, tolerance, scene, material, invalidate]);
+  }, [islands, base, hovered, stroke, by, tolerance, tint, scene, material, invalidate]);
   return null;
 }

@@ -160,17 +160,6 @@ export function islandsAt(islands: UvIslands, u: number, v: number): number[] {
   return [...found];
 }
 
-/** Apply seeds in order: each adds or removes every island under its texture point. */
-export function resolveRegion(islands: UvIslands, seeds: SkinRegionSeed[]): Set<number> {
-  const selected = new Set<number>();
-  for (const seed of seeds) {
-    for (const island of islandsAt(islands, seed.u, seed.v)) {
-      if (seed.remove) selected.delete(island); else selected.add(island);
-    }
-  }
-  return selected;
-}
-
 function fillTriangle(target: Uint8Array | Int32Array, width: number, height: number, t: ArrayLike<number>, value = 255) {
   const x0 = t[0] * width, y0 = t[1] * height, x1 = t[2] * width, y1 = t[3] * height, x2 = t[4] * width, y2 = t[5] * height;
   const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
@@ -340,48 +329,101 @@ export function texelsToLab(pixels: ArrayLike<number>): Float32Array {
   return lab;
 }
 
+const texel = (value: number, size: number) => Math.min(size - 1, Math.floor((value - Math.floor(value)) * size));
+
+const linkCache = new WeakMap<UvIslands, Float32Array>();
+
 /**
- * Texels connected to (x, y) through `allowed` whose color is within `tolerance` (CIELAB delta E) of
- * the clicked texel's. Comparing against the clicked color, not each neighbour, keeps a soft
- * gradient from leaking across a whole garment.
+ * Where two islands meet on the model: six numbers per link, island A, u, v, island B, u, v. A link pairs
+ * the same triangle edge (by position) in two islands, at its midpoint nudged into each triangle so the
+ * point lands on a texel of that island rather than on the seam.
  */
-export function floodFillTexels(lab: Float32Array, allowed: Uint8Array, width: number, height: number, x: number, y: number, tolerance: number): Uint8Array {
+export function seamLinks(islands: UvIslands): Float32Array {
+  const cached = linkCache.get(islands);
+  if (cached) return cached;
+  const p = islands.positions, t = islands.triangles;
+  const key = (corner: number) => `${Math.round(p[corner * 3] / POSITION_STEP)},${Math.round(p[corner * 3 + 1] / POSITION_STEP)},${Math.round(p[corner * 3 + 2] / POSITION_STEP)}`;
+  const edges = new Map<string, number[]>();
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const o = triangle * 6;
+    const cu = (t[o] + t[o + 2] + t[o + 4]) / 3, cv = (t[o + 1] + t[o + 3] + t[o + 5]) / 3;
+    for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+      const ka = key(triangle * 3 + a), kb = key(triangle * 3 + b);
+      const id = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+      const mu = (t[o + a * 2] + t[o + b * 2]) / 2, mv = (t[o + a * 2 + 1] + t[o + b * 2 + 1]) / 2;
+      const list = edges.get(id) ?? [];
+      list.push(islands.island[triangle], mu + (cu - mu) * 0.2, mv + (cv - mv) * 0.2);
+      edges.set(id, list);
+    }
+  }
+  const links: number[] = [];
+  for (const list of edges.values()) {
+    for (let i = 0; i < list.length; i += 3) for (let j = i + 3; j < list.length; j += 3) {
+      if (list[i] !== list[j]) links.push(list[i], list[i + 1], list[i + 2], list[j], list[j + 1], list[j + 2]);
+    }
+  }
+  const result = Float32Array.from(links);
+  linkCache.set(islands, result);
+  return result;
+}
+
+/**
+ * Like a paint bucket on the model: texels close to the clicked color, connected on the surface. It fills
+ * the clicked island, then follows seams into neighbouring islands wherever the color continues there,
+ * so one click covers a whole sleeve even when the texture cuts it into pieces. Neighbours only in the
+ * texture layout stay untouched.
+ */
+export function fillAcrossSeams(islands: UvIslands, lab: Float32Array, width: number, height: number, x: number, y: number, tolerance: number): Uint8Array {
+  const ids = rasterizeIslandIds(islands, width, height);
   const mask = new Uint8Array(width * height);
   const start = y * width + x;
-  if (x < 0 || y < 0 || x >= width || y >= height || !allowed[start]) return mask;
+  if (x < 0 || y < 0 || x >= width || y >= height || !ids[start]) return mask;
   const reach = tolerance * tolerance;
   const l = lab[start * 3], a = lab[start * 3 + 1], b = lab[start * 3 + 2];
   const close = (index: number) => (lab[index * 3] - l) ** 2 + (lab[index * 3 + 1] - a) ** 2 + (lab[index * 3 + 2] - b) ** 2 <= reach;
   const stack = new Int32Array(width * height);
-  let top = 0;
-  stack[top++] = start; mask[start] = 255;
-  while (top) {
-    const index = stack[--top];
-    const px = index % width;
-    for (const next of [px > 0 ? index - 1 : -1, px + 1 < width ? index + 1 : -1, index - width, index + width]) {
-      if (next < 0 || next >= mask.length || mask[next] || !allowed[next] || !close(next)) continue;
-      mask[next] = 255;
-      stack[top++] = next;
+  const flood = (from: number) => {
+    let top = 0;
+    stack[top++] = from; mask[from] = 255;
+    while (top) {
+      const index = stack[--top];
+      const px = index % width;
+      for (const next of [px > 0 ? index - 1 : -1, px + 1 < width ? index + 1 : -1, index - width, index + width]) {
+        if (next < 0 || next >= mask.length || mask[next] || ids[next] !== ids[index] || !close(next)) continue;
+        mask[next] = 255;
+        stack[top++] = next;
+      }
+    }
+  };
+  flood(start);
+  const links = seamLinks(islands);
+  const at = (u: number, v: number) => texel(v, height) * width + texel(u, width);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let link = 0; link < links.length; link += 6) {
+      const from = at(links[link + 1], links[link + 2]), to = at(links[link + 4], links[link + 5]);
+      for (const [source, target, island] of [[from, to, links[link + 3]], [to, from, links[link]]]) {
+        if (!mask[source] || mask[target] || ids[target] !== island + 1 || !close(target)) continue;
+        flood(target);
+        changed = true;
+      }
     }
   }
   return mask;
 }
 
-const texel = (value: number, size: number) => Math.min(size - 1, Math.floor((value - Math.floor(value)) * size));
-
 export const DEFAULT_COLOR_RANGE = 8;
 
 /**
- * One seed's texels: its UV islands; with `by: 'color'` the similar colors connected to it inside those
- * islands (atlases pack islands closer than a texel apart, so a fill must not cross them); with
- * `by: 'brush'` the surface within `radius` of it. The result may be a shared raster: do not modify.
+ * One seed's texels: its UV islands; with `by: 'color'` the similar colors connected to it on the model
+ * (`fillAcrossSeams`); with `by: 'brush'` the surface within `radius` of it. The result may be a shared
+ * raster: do not modify.
  */
 export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {
   if (seed.by === 'brush') return rasterizeBrush(islands, seed.u, seed.v, seed.radius ?? 0, width, height);
-  const pieces = rasterizeIslandsAt(islands, seed.u, seed.v, width, height);
-  if (seed.by !== 'color') return pieces;
+  if (seed.by !== 'color') return rasterizeIslandsAt(islands, seed.u, seed.v, width, height);
   if (!lab) return new Uint8Array(width * height);
-  return floodFillTexels(lab, pieces, width, height, texel(seed.u, width), texel(seed.v, height), seed.tolerance ?? DEFAULT_COLOR_RANGE);
+  return fillAcrossSeams(islands, lab, width, height, texel(seed.u, width), texel(seed.v, height), seed.tolerance ?? DEFAULT_COLOR_RANGE);
 }
 
 /** Grow a mask into texels no triangle uses, so filtering and mips do not pull the unedited color in at seams. */
@@ -414,12 +456,6 @@ export function rasterizeSeeds(islands: UvIslands, seeds: SkinRegionSeed[], widt
     }
   }
   return padding ? padMask(mask, rasterizeUsed(islands, width, height), width, height, padding) : mask;
-}
-
-/** Bake whole islands to a mask. Kept for previews that already know which islands they want. */
-export function rasterizeRegion(islands: UvIslands, selected: Set<number>, width: number, height: number, padding = 2): Uint8Array {
-  const mask = rasterize(islands, (island) => selected.has(island), width, height);
-  return padding && selected.size ? padMask(mask, rasterizeUsed(islands, width, height), width, height, padding) : mask;
 }
 
 /**

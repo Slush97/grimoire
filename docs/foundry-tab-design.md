@@ -282,17 +282,21 @@ this resolves the display name (`Vindicta`, `Mina`) the UI shows.
 
 A skin part is one material, which often covers several garments. Areas let a player paint, pattern or adjust a smaller piece of a part (a cuff, the trim, a panel) without a model edit. Finish and transparency stay whole-part: they are material parameters, and a material tint cannot stop at a texture boundary, so an area's color is always Paint.
 
-**Selecting.** The player picks on the model in one of three ways:
+**Painting.** A part has two modes, Whole part and Paint on it. Painting works like a coloring book: pick a color, then click or drag on the model. There is nothing to select first.
 
-- **Piece:** the UV islands under the click. Islands weld vertices on position and UV, so normal splits do not fragment them. Hero meshes also carry thousands of zero-area triangles stretched across the whole texture; they are skipped, or one click selects most of the atlas.
-- **Similar color:** connected texels within a CIELAB delta E of the clicked color, inside the clicked islands. Hero color maps are dark, and RGB distance treats most dark colors as equal. Atlases pack islands closer than a texel apart, so a fill never crosses into a neighbouring island.
+- **Fill:** a paint bucket. It fills texels close to the clicked color (CIELAB delta E, since hero color maps are dark and RGB distance treats most dark colors as equal), then follows UV seams into the neighbouring islands on the model wherever the color continues. One click covers a whole skirt even though the texture cuts it into many pieces, while islands that are only neighbours in the atlas stay untouched.
 - **Brush:** texels whose point on the model lies within the brush radius, so a stroke follows the surface across UV seams. While painting, the left button belongs to the brush and the right button turns the model.
+- **Eraser:** a brush that removes paint, showing the original texture.
+
+Each color is one area underneath. A color owns what it paints: the same seeds are removed from every other area, so the newest paint shows whatever order the areas are in. "Your colors" lists them; each opens its pattern, adjustments and name. Hero meshes carry thousands of zero-area triangles stretched across the whole texture; islands skip them, or one click would paint most of the atlas.
+
+Picking holds the pose and the turntable, and tests rays against geometry skinned once per pose: three.js skins every vertex on the CPU per raycast, over 100 ms on a hero.
 
 **Storage.** An area is a list of seeds: texture points with add or remove, and the tool's tolerance or radius (mesh units, rest pose). Seeds survive resuming a saved skin because they do not depend on mesh or triangle order. A point covering mirrored pieces selects all of them, since they share texels and cannot be edited apart.
 
 **Preview and export.** The viewer rasterizes seeds to a UV mask and blends the area's edit over the whole-part texture edit in the preview canvas. On save, it bakes each edited area's mask (texture size, capped at 2048) and the main process runs `vpkmerge trippy-skin --material ... --mask`, which blends the edit into the isolated color texture and keeps its alpha. Areas apply after the whole-part texture edit and before the material tint, in both paths.
 
-**Limits.** An area is texture-only: it cannot change shape, hide geometry or use another shader. Islands follow the asset's UV seams, which on hero meshes run along quad rows, so Piece can give stepped edges. Similar color or the brush follow what the player sees.
+**Limits.** An area is texture-only: it cannot change shape, hide geometry or use another shader. A pattern in an area cannot scroll, since scrolling moves the material's whole texture; that, a finish or transparency per area needs the area split into its own material. A masked finish is feasible natively (the whole-part finish already writes the roughness and metalness maps) but not built.
 
 ## Phasing / recommendation
 

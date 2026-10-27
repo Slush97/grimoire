@@ -10,13 +10,14 @@ import { SkinColorControls } from './SkinColorControls';
 import { SkinFinishControls } from './SkinFinishControls';
 import { SkinSurfaceControls } from './SkinSurfaceControls';
 import { WorkshopWorkbench } from './WorkshopWorkbench';
-import { SkinRegionEditor, SkinRegionSelecting, SkinRegionTargets } from './SkinRegionControls';
+import { SkinPaintPanel, SkinRegionEditor, type PaintTool } from './SkinRegionControls';
 import { adjustSkinPixels, hasRegionEdit, hasSkinPartEdit, keepSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
 import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
 import { DEFAULT_COLOR_RANGE, hasRegionSelection, newRegionId } from '../../lib/skinRegions';
+import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
@@ -31,6 +32,7 @@ const MASK_EDGE = 2048;
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
 const NO_EDITS: SkinPartEdit[] = [];
+const NO_SEEDS: SkinRegionSeed[] = [];
 
 export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES, onDirtyChange }: {
   heroName: string; initialSkinSources?: HeroPoseSkinSource[]; onDirtyChange?: (dirty: boolean) => void;
@@ -172,15 +174,16 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   // The shown form's model. Areas of other forms keep the masks baked when the form was left.
   const [baker, setBaker] = useState<RegionBaker | null>(null);
   const bakedMasks = useRef(new Map<string, string>());
-  const [regionTargets, setRegionTargets] = useState<Record<string, string | null>>({});
-  const [selecting, setSelecting] = useState<{ material: string; region: string; fresh: boolean } | null>(null);
-  const [selectMode, setSelectMode] = useState<'add' | 'remove'>('add');
-  const [pickBy, setPickBy] = useFoundryDraft('skin:regionPickBy', z.enum(['piece', 'color', 'brush']), 'color');
+  // Painting on the selected part: pick a color, then fill or brush it on the model.
+  const [painting, setPainting] = useState(false);
+  const [paintTool, setPaintTool] = useFoundryDraft<PaintTool>('skin:paintTool', z.enum(['fill', 'brush', 'eraser']), 'fill');
+  const [paintColor, setPaintColor] = useFoundryDraft('skin:paintColor', z.string().regex(/^#[0-9a-f]{6}$/i), '#2dd4bf');
   const [brushSize, setBrushSize] = useFoundryDraft('skin:regionBrushSize', z.number().int().min(2).max(120), 16);
   const [pickTolerance, setPickTolerance] = useFoundryDraft('skin:regionColorRange', z.number().int().min(1).max(40), DEFAULT_COLOR_RANGE);
-  // The part a selecting click landed on instead of the selected one: its name, '' if unknown, false if none.
+  // The part a paint click landed on instead of the selected one: its name, '' if unknown, false if none.
   const [missedPick, setMissedPick] = useState<string | false>(false);
   const [previewRegion, setPreviewRegion] = useState<string | null>(null);
+  const [editingArea, setEditingArea] = useState<{ material: string; id: string } | null>(null);
   const [regionTool, setRegionTool] = useState<'color' | 'pattern'>('color');
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,72 +246,57 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   };
   const updateRegion = (material: string, id: string, patch: Partial<SkinPartRegion>) =>
     updateRegions(material, (regions) => regions.map((region) => region.id === id ? { ...region, ...patch } : region));
-  // A new area exists only once it selects something, so leaving it empty never leaves a chip behind.
-  const selectingRegion = selecting && selected?.material === selecting.material
-    ? edits.find((edit) => edit.material === selecting.material)?.regions?.find((region) => region.id === selecting.region)
-      ?? (selecting.fresh ? { id: selecting.region, seeds: [] } : null) : null;
-  const regions = [...(selectedEdit?.regions ?? []).filter((region) => hasRegionSelection(region) || hasRegionEdit(region) || region.id === selectingRegion?.id),
-    ...(selectingRegion && !selectedEdit?.regions?.some((region) => region.id === selectingRegion.id) ? [selectingRegion] : [])];
-  const activeRegion = selected ? regions.find((region) => region.id === regionTargets[selected.material]) ?? null : null;
-  // Outline a hovered area, or the open one until it changes something, so the player can see what it covers.
-  const highlightRegion = !selectingRegion && selected ? regions.find((region) => region.id === previewRegion)
-    ?? (activeRegion && !hasRegionEdit(activeRegion) ? activeRegion : null) : null;
-  const startSelecting = (material: string, region: string, fresh = false) => {
-    setRegionTargets((current) => ({ ...current, [material]: region }));
-    setSelecting({ material, region, fresh }); setSelectMode('add'); setMissedPick(false); setHoveredMaterial(null);
-  };
-  const addRegion = () => {
-    if (!selected) return;
-    startSelecting(selected.material, newRegionId(selectedEdit?.regions ?? []), true);
-  };
+  const regions = (selectedEdit?.regions ?? []).filter((region) => hasRegionSelection(region) || hasRegionEdit(region));
+  const canPaint = !!selected && selected.patternable && !ambiguous(selected) && !selectedEdit?.hidden;
+  const paintingPart = painting && canPaint ? selected : null;
+  const editedArea = selected && editingArea?.material === selected.material ? regions.find((region) => region.id === editingArea.id) ?? null : null;
+  const highlightRegion = selected && !paintingPart ? regions.find((region) => region.id === previewRegion) ?? null : null;
   const layoutOf = (material: string) => baker?.layout(material) ?? null;
   const staleRegion = (material: string, region: SkinPartRegion) => !!region.layout && !!layoutOf(material) && region.layout !== layoutOf(material);
-  const addSeeds = (seeds: SkinRegionSeed[]) => {
-    if (!selecting || !selectingRegion) return;
-    const { material, region: id } = selecting;
+  /**
+   * Paint seeds in the current color, or erase them. A color owns what it paints: the same seeds are
+   * removed from every other area, so the newest paint always shows whatever order the areas are in.
+   */
+  const applyPaint = (seeds: SkinRegionSeed[]) => {
+    if (!paintingPart || !seeds.length) return;
+    setMissedPick(false);
+    const material = paintingPart.material;
     const layout = layoutOf(material) ?? undefined;
-    // Seeds picked on another layout point at other texels, so a new pick replaces them.
-    updateRegions(material, (current) => current.some((region) => region.id === id)
-      ? current.map((region) => region.id === id ? { ...region, layout, seeds: [...staleRegion(material, region) ? [] : region.seeds, ...seeds].slice(0, 4096) } : region)
-      : [...current, { id, layout, seeds }]);
+    const erase = paintTool === 'eraser';
+    const removed = seeds.map((seed) => ({ ...seed, remove: true as const }));
+    const add = (current: SkinRegionSeed[], more: SkinRegionSeed[]) => current.length + more.length > 4096 ? current : [...current, ...more];
+    updateRegions(material, (current) => {
+      // Seeds picked on another texture layout point at other texels, so they start over.
+      const fresh = current.map((region) => staleRegion(material, region) ? { ...region, layout, seeds: [] } : region);
+      const target = erase ? undefined : fresh.find((region) => region.paint?.toLowerCase() === paintColor.toLowerCase() && !region.pattern);
+      const next = fresh.map((region) => region === target ? { ...region, layout, seeds: add(region.seeds, seeds) } : { ...region, seeds: add(region.seeds, removed) });
+      if (!erase && !target) next.push({ id: newRegionId(current), paint: paintColor, layout, seeds });
+      return next;
+    });
   };
-  const pickRegion = (hit: ViewerPartHit) => {
-    if (!selecting || !selectingRegion) return;
-    if (!hit.uv || materialBasename(hit.material) !== materialBasename(selecting.material)) {
+  const round = (value: number) => Math.round(value * 1e5) / 1e5;
+  const fillAt = (hit: ViewerPartHit) => {
+    if (!paintingPart) return;
+    if (!hit.uv || materialBasename(hit.material) !== materialBasename(paintingPart.material)) {
       const other = formParts.find((part) => materialBasename(part.material) === materialBasename(hit.material));
       setMissedPick(other ? nameOf(other) : '');
       return;
     }
-    setMissedPick(false);
-    if (selectingRegion.seeds.length >= 4096) return;
-    const round = (value: number) => Math.round(value * 1e5) / 1e5;
-    addSeeds([{ u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}),
-      ...(pickBy === 'color' ? { by: 'color' as const, tolerance: pickTolerance } : {}) }]);
+    applyPaint([{ u: round(hit.uv.x), v: round(hit.uv.y), by: 'color', tolerance: pickTolerance }]);
   };
-  const paintRegion = (dabs: SkinRegionSeed[]) => {
-    setMissedPick(false);
-    addSeeds(dabs);
-  };
-  const finishSelecting = () => {
-    if (selecting && selectingRegion && !hasRegionSelection(selectingRegion)) {
-      updateRegions(selecting.material, (current) => current.filter((region) => region.id !== selecting.region));
-      setRegionTargets((current) => ({ ...current, [selecting.material]: null }));
-    }
-    setSelecting(null); setMissedPick(false);
-  };
-  /** Bake each edited area's export mask from the shown model, or reuse the one baked when its form was left. */
-  // Escape finishes selecting, like Done, unless it is closing something inside a field.
-  const escapeSelecting = useEffectEvent((event: KeyboardEvent) => {
+  const stopPainting = () => { setPainting(false); setMissedPick(false); };
+  // Escape stops painting, like Done, unless it is closing something inside a field.
+  const escapePainting = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.defaultPrevented || (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [role="dialog"]'))) return;
     event.preventDefault();
-    finishSelecting();
+    stopPainting();
   });
-  const isSelecting = !!selectingRegion;
+  const isPainting = !!paintingPart;
   useEffect(() => {
-    if (!isSelecting) return;
-    window.addEventListener('keydown', escapeSelecting);
-    return () => window.removeEventListener('keydown', escapeSelecting);
-  }, [isSelecting]);
+    if (!isPainting) return;
+    window.addEventListener('keydown', escapePainting);
+    return () => window.removeEventListener('keydown', escapePainting);
+  }, [isPainting]);
   const bakeRegionMasks = async (exported: SkinPartEdit[], required = true) => {
     const masks: Record<string, string> = {};
     for (const edit of exported.filter((item) => !item.hidden)) {
@@ -332,7 +320,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   // Leaving a form unmounts its model, so bake its areas first. They cannot change until it is shown again.
   const switchForm = async (id: string) => {
     if (id === form.id) return;
-    setHoveredMaterial(null); setSelecting(null);
+    setHoveredMaterial(null); setPainting(false);
     await bakeRegionMasks(edits.filter((edit) => formParts.some((part) => part.material === edit.material)), false).catch(() => {});
     setFormId(id);
   };
@@ -352,7 +340,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     if (!current || blocked || unknownCount || unsupportedSurface || !name.trim()) return;
     const saving = edits;
     setExporting(true); setError(null); setSaved(null); setProgress({ stage: 'inspect' });
-    setComparison('edited'); setHoveredMaterial(null); setThumbnailFailed(false); setSelecting(null);
+    setComparison('edited'); setHoveredMaterial(null); setThumbnailFailed(false); setPainting(false);
     try {
       const regionMasks = await bakeRegionMasks(saving);
       let thumbnailDataUrl: string | undefined;
@@ -369,7 +357,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
   };
-  const highlight = partsExpanded && !selectingRegion ? hoveredMaterial : null;
+  const highlight = partsExpanded && !paintingPart ? hoveredMaterial : null;
   const highlightedPart = info?.parts.find((part) => part.material === highlight);
   return <section ref={editorRef} onPointerDownCapture={history.onPointerDownCapture} onFocusCapture={history.onFocusCapture}
     onBlurCapture={history.onBlurCapture} onKeyDownCapture={history.onKeyDownCapture} className="@container space-y-3" aria-label={t('foundry.skin.title')}>
@@ -393,8 +381,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
             onRegionBaker={setBaker}
-            regionSelection={selecting && selectingRegion && !exporting ? { material: selecting.material, seeds: selectingRegion.seeds,
-              picker: { by: pickBy, tolerance: pickTolerance, brushSize, remove: selectMode === 'remove', onStroke: paintRegion }, onPick: pickRegion } : null}
+            regionSelection={paintingPart && !exporting ? { material: paintingPart.material, seeds: NO_SEEDS,
+              picker: { by: paintTool === 'fill' ? 'color' : 'brush', tolerance: pickTolerance, brushSize, remove: paintTool === 'eraser', onStroke: applyPaint,
+                tint: paintTool === 'eraser' ? null : paintColor }, onPick: fillAt } : null}
             regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}
             workspaceKey={form.id === 'default' ? draftKey : `${draftKey}:${form.id}`}
             highlightedPart={!exporting && highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
@@ -482,21 +471,24 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
               label={t(focusMaterial === selected.material ? 'foundry.skin.wholeModel' : 'foundry.skin.focusPart')}
               onClick={() => setFocusMaterial(focusMaterial === selected.material ? null : selected.material)} />
             <IconButton size="sm" icon={RotateCcw} disabled={!selectedEdit || exporting} label={t('foundry.skin.resetPart', { part: nameOf(selected) })}
-              onClick={() => { finishSelecting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, regions: undefined }); }} />
+              onClick={() => { stopPainting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, regions: undefined }); }} />
           </div>
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
-          {selected.patternable && !ambiguous(selected) && <SkinRegionTargets part={nameOf(selected)} regions={regions} active={activeRegion?.id ?? null}
-            disabled={exporting || !!selectedEdit?.hidden || !!selectingRegion}
-            onSelect={(id) => setRegionTargets((current) => ({ ...current, [selected.material]: id }))} onAdd={addRegion} onPreview={setPreviewRegion} />}
-          {selectingRegion ? <SkinRegionSelecting part={nameOf(selected)} mode={selectMode} by={pickBy} tolerance={pickTolerance} brushSize={brushSize} onBrushSize={setBrushSize}
-            empty={!hasRegionSelection(selectingRegion)} missed={missedPick}
-            onMode={setSelectMode} onBy={setPickBy} onTolerance={setPickTolerance} onDone={finishSelecting}
-            onClear={() => { if (selecting) updateRegion(selecting.material, selecting.region, { seeds: [] }); }} />
-          : activeRegion ? <SkinRegionEditor key={activeRegion.id} region={activeRegion} stale={staleRegion(selected.material, activeRegion)} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
-            disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, activeRegion.id, patch)}
-            onSelect={() => startSelecting(selected.material, activeRegion.id)}
-            onDelete={() => { updateRegions(selected.material, (current) => current.filter((region) => region.id !== activeRegion.id)); setRegionTargets((current) => ({ ...current, [selected.material]: null })); setPreviewRegion(null); }} />
-          : <><SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
+          {canPaint && <SegmentedControl fill label={t('foundry.skin.paint.mode')} value={paintingPart ? 'paint' : 'whole'}
+            onChange={(mode) => { setPainting(mode === 'paint'); setMissedPick(false); setEditingArea(null); setHoveredMaterial(null); }} options={[
+              { value: 'whole', label: t('foundry.skin.paint.wholePart') },
+              { value: 'paint', label: <span className="flex items-center justify-center gap-1.5"><Brush className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.paint.paintOn')}</span> },
+            ]} />}
+          {editedArea ? <SkinRegionEditor key={editedArea.id} region={editedArea} stale={staleRegion(selected.material, editedArea)} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
+            disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, editedArea.id, patch)} onBack={() => setEditingArea(null)}
+            onDelete={() => { updateRegions(selected.material, (current) => current.filter((region) => region.id !== editedArea.id)); setEditingArea(null); setPreviewRegion(null); }} />
+          : paintingPart ? <SkinPaintPanel part={nameOf(selected)} color={paintColor} tool={paintTool} brushSize={brushSize} tolerance={pickTolerance}
+            areas={regions} missed={missedPick} canUndo={history.canUndo} disabled={exporting}
+            onColor={setPaintColor} onTool={setPaintTool} onBrushSize={setBrushSize} onTolerance={setPickTolerance} onUndo={history.undo}
+            onStartOver={() => updateRegions(selected.material, () => [])} onDone={stopPainting}
+            onEditArea={(id) => { setEditingArea({ material: selected.material, id }); setRegionTool('color'); }} onPreviewArea={setPreviewRegion} />
+          : <>{regions.length > 0 && <p className="text-xs text-text-secondary">{t('foundry.skin.paint.wholeNote', { count: regions.length })}</p>}
+          <SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
           {tool === 'surface' ? <div className="space-y-4">
             {selected.finishable ? <SkinFinishControls value={selectedEdit?.finish} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
               onChange={(finish) => update(selected.material, { finish })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.finishUnsupported')}</p>}
