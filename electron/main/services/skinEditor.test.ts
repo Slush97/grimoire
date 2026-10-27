@@ -139,6 +139,43 @@ describe('skin transparency export chain', () => {
   });
 });
 
+describe('skin region export chain', () => {
+  const key = '8'.repeat(64);
+  const mask = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const region = { id: 'r1', seeds: [{ u: 0.25, v: 0.5 }], paint: '#3366ff' };
+  const setup = () => {
+    vi.mocked(runVpkmerge).mockClear();
+    vi.mocked(withHeroSkinSource).mockImplementation(async (_path, _hero, _sources, action) => action({
+      vpk: 'skin.vpk', base: 'game.vpk', entry: 'model.vmdl_c', fingerprint: key,
+    }));
+    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[0] === 'model'
+      ? JSON.stringify({ draw_calls: [{ material: 'coat.vmat', vertex_count: 3 }] })
+      : args[0] === 'texture-info' ? JSON.stringify({ width: 512, height: 512 })
+      : JSON.stringify({ m_shaderName: 'pbr.vfx', m_vectorParams: [],
+        m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }] }));
+  };
+  it('paints regions over the whole-part texture and under the material tint', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: '#ff8800', adjustments: { hue: 20, saturation: 1, brightness: 1 },
+      regions: [region, { id: 'r2', seeds: [{ u: 0.1, v: 0.1 }] }],
+    }], regionMasks: { 'coat.vmat|r1': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0])).toEqual(['trippy-skin', 'trippy-skin', 'vmat', 'out.vpk']);
+    const outputOf = (args: string[]) => args[args.indexOf('--encode-vpk') + 1];
+    const [whole, painted, tint] = calls;
+    expect(whole).not.toContain('--mask');
+    expect(painted[painted.indexOf('--vpk') + 1]).toBe(outputOf(whole));
+    expect(painted).toEqual(expect.arrayContaining(['--repaint', '3366ff', '--scroll', '0', '--hue-shift', '0', '--mask']));
+    expect(tint[tint.indexOf('--vpk') + 1]).toBe(outputOf(painted));
+  });
+  it('rejects an edited region without a baked mask', () => {
+    const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true })) };
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, regions: [region] }] })).toThrow('no selection');
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: '#ffffff', regions: [{ id: 'r2', seeds: [] }] }] })).not.toThrow();
+  });
+});
+
 describe('skin inspection cache', () => {
   it('allows static pbr opacity and excludes cutouts, expression-driven alpha and unsupported shaders', async () => {
     vi.mocked(withHeroSkinSource).mockImplementation(async (_path, _hero, _sources, action) => action({

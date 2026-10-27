@@ -41,6 +41,27 @@ export interface SkinPartEdit {
   repaint?: boolean;
   finish?: SkinPartFinish;
   surface?: SkinPartSurface;
+  /** Smaller areas of this part's color texture, each with its own texture edit. Applied in order over the whole-part edit. */
+  regions?: SkinPartRegion[];
+}
+
+/** A texture point. The region takes (or, with `remove`, drops) every UV island covering it. */
+export interface SkinRegionSeed {
+  u: number;
+  v: number;
+  remove?: true;
+}
+
+export interface SkinPartRegion {
+  id: string;
+  /** Optional: an unnamed region is still saved. */
+  name?: string;
+  seeds: SkinRegionSeed[];
+  /** Paint color. Regions always paint: a material tint cannot stop at a texture boundary. */
+  paint?: string | null;
+  adjustments?: SkinColorAdjustments;
+  /** Region patterns never scroll: scrolling moves the whole material. */
+  pattern?: SkinPartPattern | null;
 }
 
 export interface SkinPartSurface {
@@ -78,6 +99,8 @@ export interface SkinPartPattern {
 export interface SkinEditExport extends SkinEditSource {
   fingerprint: string;
   edits: SkinPartEdit[];
+  /** White-on-black PNG data URLs keyed `material|regionId`, baked by the viewer for each edited region. */
+  regionMasks?: Record<string, string>;
 }
 
 export interface SkinEditSave extends SkinEditExport {

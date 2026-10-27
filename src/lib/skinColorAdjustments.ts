@@ -1,4 +1,4 @@
-import type { SkinColorAdjustments, SkinPartEdit } from '../types/skinEditor';
+import type { SkinColorAdjustments, SkinPartEdit, SkinPartRegion } from '../types/skinEditor';
 
 export const ORIGINAL_SKIN_COLOR: SkinColorAdjustments = { hue: 0, saturation: 1, brightness: 1 };
 
@@ -6,8 +6,19 @@ export function hasColorAdjustments(value: SkinColorAdjustments | undefined): bo
   return !!value && (value.hue !== 0 || value.saturation !== 1 || value.brightness !== 1);
 }
 
+export function hasRegionEdit(region: SkinPartRegion): boolean {
+  return !!region.paint || (region.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(region.adjustments);
+}
+
+/** Whether the part looks different. A region that only selects an area changes nothing yet. */
 export function hasSkinPartEdit(edit: SkinPartEdit): boolean {
-  return edit.hidden || edit.tint !== null || !!edit.finish || !!edit.surface || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments);
+  return edit.hidden || edit.tint !== null || !!edit.finish || !!edit.surface || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments)
+    || !!edit.regions?.some(hasRegionEdit);
+}
+
+/** Whether the edit list keeps this entry: unedited regions stay so a selection is never lost. */
+export function keepSkinPartEdit(edit: SkinPartEdit): boolean {
+  return hasSkinPartEdit(edit) || !!edit.regions?.length;
 }
 
 /** Paint the entire color texture while keeping some of its light and dark detail. */

@@ -55,7 +55,10 @@ import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
-import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
+import { SkinRegionOverlay } from './SkinRegionOverlay';
+import { materialIslands, regionMask, regionMaskPng } from '../../lib/skinRegionScene';
+import type { ViewerPartHit } from '../../lib/viewerPartPicking';
+import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
 import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
@@ -1152,6 +1155,9 @@ export default function HeroPoseViewer({
   onPartTextures,
   onPartPick,
   onPreviewCapture,
+  regionSelection = null,
+  regionHighlight = null,
+  onRegionBaker,
   compact = false,
   active = true,
   workspaceKey,
@@ -1174,6 +1180,12 @@ export default function HeroPoseViewer({
   onPartTextures?: (textures: Record<string, SkinPartTexture>) => void;
   onPartPick?: (material: string) => void;
   onPreviewCapture?: (capture: (() => Promise<string>) | null) => void;
+  /** Selecting an area: clicks report texture points instead of picking a part, and the selection is drawn on the model. */
+  regionSelection?: { material: string; seeds: SkinRegionSeed[]; onPick: (hit: ViewerPartHit) => void } | null;
+  /** A saved area to outline without changing what clicks do. */
+  regionHighlight?: { material: string; seeds: SkinRegionSeed[] } | null;
+  /** Bakes a region's export mask from the loaded model. Resolves null when the material is not in this model. */
+  onRegionBaker?: (bake: ((material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>) | null) => void;
   compact?: boolean;
   active?: boolean;
   workspaceKey?: string;
@@ -1217,6 +1229,14 @@ export default function HeroPoseViewer({
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!scene || !onRegionBaker) return;
+    onRegionBaker(async (material, seeds, width, height) => {
+      const islands = materialIslands(scene, material);
+      return islands ? regionMaskPng(regionMask(islands, seeds, width, height), width, height) : null;
+    });
+    return () => onRegionBaker(null);
+  }, [scene, onRegionBaker]);
   useEffect(() => {
     if (!scene || !onPreviewCapture) return;
     let active = true;
@@ -1574,7 +1594,9 @@ export default function HeroPoseViewer({
           </mesh>
         )}
         <group>
-        {onPartPick && <SkinPartPicking model={scene} onPick={onPartPick} />}
+        {onPartPick && <SkinPartPicking model={scene} onPick={regionSelection ? (_material, hit) => regionSelection.onPick(hit) : onPartPick} />}
+        {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} />
+          : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} interactive={false} />}
         <MovementFxStage preview={movementPreview} scene={scene} paused={playback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
             movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView} />}>

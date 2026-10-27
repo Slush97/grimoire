@@ -6,13 +6,13 @@ import { withHeroSkinSource } from './heroPoseModels';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
-import { hasColorAdjustments, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
+import { hasColorAdjustments, hasRegionEdit, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
 import { skinModelForms, type SkinModelForm } from '../../../src/lib/skinModelForms';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinEditProgress, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
 
 export { skinEditSourceSchema, skinEditExportSchema } from '../../../src/lib/skinEditSchema';
-import { skinEditSourceSchema, skinEditExportSchema } from '../../../src/lib/skinEditSchema';
+import { skinEditSourceSchema, skinEditExportSchema, regionMaskKey } from '../../../src/lib/skinEditSchema';
 
 const drawCallsSchema = z.object({ draw_calls: z.array(z.object({
     material: z.string().min(1), vertex_count: z.number().int().nonnegative(), index_count: z.number().int().nonnegative().optional(),
@@ -176,6 +176,11 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
             throw new Error('This material does not expose a supported static color tint.');
         }
         if ((edit.pattern || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint)) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
+        for (const region of edit.regions ?? []) {
+            if (!hasRegionEdit(region) || edit.hidden) continue;
+            if (!info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
+            if (!request.regionMasks?.[regionMaskKey(edit.material, region.id)]) throw new Error('An edited area has no selection. Reselect it before exporting.');
+        }
         if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
             throw new Error('This material name also selects another part. Hiding it cannot be exported safely.');
         }
@@ -195,7 +200,8 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
         const { parts } = await inspectSkinModels(request.heroName, source);
         validateSkinEdits({ ...source, parts }, request);
         const total = 1 + request.edits.reduce((count, edit) => count + (edit.hidden ? parts.find((part) => part.material === edit.material)?.modelEntries?.length ?? 1
-            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)), 0);
+            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)
+                + (edit.regions?.filter(hasRegionEdit).length ?? 0)), 0);
         let completed = 0;
         const advance = () => onProgress?.({ stage: 'build', completed: ++completed, total });
         onProgress?.({ stage: 'build', completed, total });
@@ -231,6 +237,28 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);
                 advance();
+            }
+            // Regions paint over the whole-part texture edit and under the material tint, like the preview.
+            for (const edit of request.edits.filter((item) => !item.hidden)) {
+                for (const region of edit.regions?.filter(hasRegionEdit) ?? []) {
+                    const mask = join(dir, `mask-${layers.length}.png`);
+                    await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
+                    const pattern = region.pattern;
+                    const color = region.adjustments ?? ORIGINAL_SKIN_COLOR;
+                    const layer = join(dir, `region-${layers.length}_dir.vpk`);
+                    await runVpkmerge(['trippy-skin', '--hero', request.heroName, '--vpk', patternLayers.get(edit.material) ?? source.vpk, '--base', source.base,
+                        '--material', edit.material, '--style', pattern?.style ?? 'confetti', '--intensity', String(pattern?.intensity ?? 0),
+                        '--phase', String(pattern?.phase ?? 0), '--scroll', '0',
+                        '--scale', String(pattern?.style === 'moo' ? pattern.scale ?? 1 : 1),
+                        ...(region.paint ? ['--repaint', region.paint.slice(1)] : []),
+                        ...(pattern?.colors ? ['--palette', pattern.colors.join(',')] : []),
+                        '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness),
+                        '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                    await verifyVpkOutput(layer);
+                    layers.push(layer);
+                    patternLayers.set(edit.material, layer);
+                    advance();
+                }
             }
             for (const edit of request.edits.filter((item) => item.tint !== null && !item.repaint && !item.hidden)) {
                 if (edit.tint === null) continue;

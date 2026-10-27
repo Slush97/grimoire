@@ -8,14 +8,15 @@ const SWATCHES = ['#ef4444', '#f97316', '#facc15', '#84cc16', '#2dd4bf', '#3b82f
 /** Tint multiplies or colorizes the texture, so near-white colors leave it unchanged; only Paint can lighten it. */
 const isLight = (hex: string) => [1, 3, 5].every((index) => Number.parseInt(hex.slice(index, index + 2), 16) >= 0xe0);
 
-export function SkinColorControls({ color, edit, tintable, adjustable, disabled, onChange }: {
-  color: string; edit?: SkinPartEdit; tintable: boolean; adjustable: boolean; disabled: boolean;
+/** `paintOnly` is for areas of a part: a material tint cannot stop at a texture boundary, so only Paint applies. */
+export function SkinColorControls({ color, edit, tintable, adjustable, disabled, paintOnly = false, onChange }: {
+  color: string; edit?: SkinPartEdit; tintable: boolean; adjustable: boolean; disabled: boolean; paintOnly?: boolean;
   onChange: (patch: Partial<SkinPartEdit>) => void;
 }) {
   const { t } = useTranslation();
   // New edits start in Paint, which shows the picked color as picked. Edits saved before the mode existed have a
   // tint but no repaint flag, and keep rendering as Tint.
-  const mode = (edit?.repaint ?? (adjustable && !edit?.tint)) ? 'paint' : 'tint';
+  const mode = paintOnly || (edit?.repaint ?? (adjustable && !edit?.tint)) ? 'paint' : 'tint';
   const setMode = (next: typeof mode) => onChange({ repaint: next === 'paint', tint: edit?.tint ?? color });
   const pick = (tint: string) => onChange(edit?.repaint === undefined ? { tint, repaint: mode === 'paint' } : { tint });
   // Custom pattern colors set a white tint to show the pattern as picked; that white is not the user's choice.
@@ -28,7 +29,7 @@ export function SkinColorControls({ color, edit, tintable, adjustable, disabled,
   ] satisfies Array<{ key: keyof typeof adjustments; label: string; min: number; max: number; step: number }>;
   return <div className="space-y-3">
     <fieldset disabled={disabled || !tintable} className="space-y-2 disabled:opacity-40">
-      {adjustable && <SegmentedControl fill label={t('foundry.skin.colorMode')} value={mode} onChange={setMode} options={[
+      {adjustable && !paintOnly && <SegmentedControl fill label={t('foundry.skin.colorMode')} value={mode} onChange={setMode} options={[
         { value: 'paint', label: t('foundry.skin.repaint'), title: t('foundry.skin.repaintHint') },
         { value: 'tint', label: t('foundry.skin.tint'), title: t('foundry.skin.tintHint') },
       ]} />}
@@ -48,10 +49,10 @@ export function SkinColorControls({ color, edit, tintable, adjustable, disabled,
           aria-label={t('foundry.skin.hex')} className="h-8 min-w-0 flex-1 bg-transparent text-sm uppercase tabular-nums text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
       </label>
       {/* Paint ignores blending; hide it without collapsing its space so the sliders below stay put. */}
-      <div className={`pt-1 ${mode === 'paint' ? 'invisible' : ''}`}>
+      {!paintOnly && <div className={`pt-1 ${mode === 'paint' ? 'invisible' : ''}`}>
         <Toggle label={t('foundry.skin.blendOriginal')} checked={edit?.colorize === false}
           onChange={(blend) => onChange({ colorize: !blend, tint: edit?.tint ?? color })} />
-      </div>
+      </div>}
       {/* Below the picker, so it can appear mid-drag without moving the picker. */}
       {lightTint && <p role="status" className="text-xs text-text-secondary">
         {t('foundry.skin.tintNoWhite')}{adjustable && <>{' '}

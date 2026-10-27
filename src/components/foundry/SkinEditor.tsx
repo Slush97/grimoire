@@ -10,16 +10,23 @@ import { SkinColorControls } from './SkinColorControls';
 import { SkinFinishControls } from './SkinFinishControls';
 import { SkinSurfaceControls } from './SkinSurfaceControls';
 import { WorkshopWorkbench } from './WorkshopWorkbench';
-import { adjustSkinPixels, hasSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
+import { SkinRegionEditor, SkinRegionSelecting, SkinRegionTargets } from './SkinRegionControls';
+import { adjustSkinPixels, hasRegionEdit, hasSkinPartEdit, keepSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
 import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
-import { isGlobalSkinSource } from '../../lib/skinEditSchema';
+import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
+import { hasRegionSelection, newRegionId } from '../../lib/skinRegions';
+import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { useSkinEditHistory } from '../../lib/useSkinEditHistory';
 import { skinModelForms } from '../../lib/skinModelForms';
 import type { HeroPoseSkinSource } from '../../types/portrait';
-import type { SkinEditInfo, SkinEditProgress, SkinEditResume, SkinPart, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
+import type { SkinEditInfo, SkinEditProgress, SkinEditResume, SkinPart, SkinPartEdit, SkinPartRegion, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
+
+type RegionBaker = (material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>;
+/** Export masks follow the texture, capped so a 4K map does not ship a 16 MP mask. */
+const MASK_EDGE = 2048;
 
 const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
@@ -162,6 +169,14 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const partsId = useId();
   const capture = useRef<(() => Promise<string>) | null>(null);
   const receiveCapture = useCallback((value: (() => Promise<string>) | null) => { capture.current = value; }, []);
+  const baker = useRef<RegionBaker | null>(null);
+  const receiveBaker = useCallback((value: RegionBaker | null) => { baker.current = value; }, []);
+  const [regionTargets, setRegionTargets] = useState<Record<string, string | null>>({});
+  const [selecting, setSelecting] = useState<{ material: string; region: string } | null>(null);
+  const [selectMode, setSelectMode] = useState<'add' | 'remove'>('add');
+  const [missedPick, setMissedPick] = useState(false);
+  const [previewRegion, setPreviewRegion] = useState<string | null>(null);
+  const [regionTool, setRegionTool] = useState<'color' | 'pattern'>('color');
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<SkinEditProgress | null>(null);
@@ -210,15 +225,70 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     setSaved(null); setComparison('edited');
     setEdits((current) => {
       const next = { ...(current.find((edit) => edit.material === material) ?? { material, hidden: false, tint: null, pattern: null }), ...patch };
-      return [...current.filter((edit) => edit.material !== material), next].filter(hasSkinPartEdit);
+      return [...current.filter((edit) => edit.material !== material), next].filter(keepSkinPartEdit);
     });
+  };
+  const updateRegions = (material: string, change: (regions: SkinPartRegion[]) => SkinPartRegion[]) => {
+    setSaved(null); setComparison('edited');
+    setEdits((current) => {
+      const existing = current.find((edit) => edit.material === material) ?? { material, hidden: false, tint: null, pattern: null };
+      const regions = change(existing.regions ?? []);
+      return [...current.filter((edit) => edit.material !== material), { ...existing, regions: regions.length ? regions : undefined }].filter(keepSkinPartEdit);
+    });
+  };
+  const updateRegion = (material: string, id: string, patch: Partial<SkinPartRegion>) =>
+    updateRegions(material, (regions) => regions.map((region) => region.id === id ? { ...region, ...patch } : region));
+  const regions = selectedEdit?.regions ?? [];
+  const activeRegion = selected ? regions.find((region) => region.id === regionTargets[selected.material]) ?? null : null;
+  const selectingRegion = selecting && selected?.material === selecting.material
+    ? edits.find((edit) => edit.material === selecting.material)?.regions?.find((region) => region.id === selecting.region) ?? null : null;
+  const highlightRegion = !selectingRegion && selected ? regions.find((region) => region.id === previewRegion) ?? null : null;
+  const startSelecting = (material: string, region: string) => {
+    setRegionTargets((current) => ({ ...current, [material]: region }));
+    setSelecting({ material, region }); setSelectMode('add'); setMissedPick(false); setHoveredMaterial(null);
+  };
+  const addRegion = () => {
+    if (!selected) return;
+    const id = newRegionId(regions);
+    updateRegions(selected.material, (current) => [...current, { id, seeds: [] }]);
+    startSelecting(selected.material, id);
+  };
+  const pickRegion = (hit: ViewerPartHit) => {
+    if (!selecting || !selectingRegion) return;
+    if (!hit.uv || materialBasename(hit.material) !== materialBasename(selecting.material)) { setMissedPick(true); return; }
+    setMissedPick(false);
+    if (selectingRegion.seeds.length >= 512) return;
+    const round = (value: number) => Math.round(value * 1e5) / 1e5;
+    const seed: SkinRegionSeed = { u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}) };
+    updateRegion(selecting.material, selecting.region, { seeds: [...selectingRegion.seeds, seed] });
+  };
+  const finishSelecting = () => {
+    if (selecting && selectingRegion && !hasRegionSelection(selectingRegion)) {
+      updateRegions(selecting.material, (current) => current.filter((region) => region.id !== selecting.region));
+      setRegionTargets((current) => ({ ...current, [selecting.material]: null }));
+    }
+    setSelecting(null); setMissedPick(false);
+  };
+  const bakeRegionMasks = async (exported: SkinPartEdit[]) => {
+    const masks: Record<string, string> = {};
+    for (const edit of exported.filter((item) => !item.hidden)) {
+      for (const region of edit.regions?.filter(hasRegionEdit) ?? []) {
+        const size = info?.parts.find((part) => part.material === edit.material)?.textureSize ?? { width: 1024, height: 1024 };
+        const scale = Math.min(1, MASK_EDGE / Math.max(size.width, size.height));
+        const mask = await baker.current?.(edit.material, region.seeds, Math.max(1, Math.round(size.width * scale)), Math.max(1, Math.round(size.height * scale)));
+        if (!mask) throw new Error(t('foundry.skin.region.maskUnavailable'));
+        masks[regionMaskKey(edit.material, region.id)] = mask;
+      }
+    }
+    return masks;
   };
   const exportVpk = async () => {
     if (!current || blocked || unknownCount || unsupportedSurface) return;
     const exported = edits;
     setExporting(true); setError(null); setSaved(null); setProgress(null);
     try {
-      if ((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: current.fingerprint, edits: exported })).exported) {
+      const regionMasks = await bakeRegionMasks(exported);
+      if ((await window.electronAPI.exportSkinEdits({ heroName, skinSources: sources, fingerprint: current.fingerprint, edits: exported, regionMasks })).exported) {
         setSaved('exported'); setSavedEdits(exported);
       }
     } catch (reason) { setError(String(reason)); }
@@ -228,15 +298,16 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     if (!current || blocked || unknownCount || unsupportedSurface || !name.trim()) return;
     const saving = edits;
     setExporting(true); setError(null); setSaved(null); setProgress({ stage: 'inspect' });
-    setComparison('edited'); setHoveredMaterial(null); setThumbnailFailed(false);
+    setComparison('edited'); setHoveredMaterial(null); setThumbnailFailed(false); setSelecting(null);
     try {
+      const regionMasks = await bakeRegionMasks(saving);
       let thumbnailDataUrl: string | undefined;
       try {
         if (!capture.current) throw new Error('Preview is not ready');
         thumbnailDataUrl = await capture.current();
       } catch { setThumbnailFailed(true); }
       const { renamed, overlay } = await window.electronAPI.saveSkinEdits({ heroName, skinSources: replaces ? [replaces, ...sources] : sources,
-        fingerprint: current.fingerprint, edits: saving, name: name.trim(), thumbnailDataUrl });
+        fingerprint: current.fingerprint, edits: saving, regionMasks, name: name.trim(), thumbnailDataUrl });
       setSavedEdits(saving);
       await useAppStore.getState().loadMods({ silent: true, force: true });
       onSaved?.(renamed, saving, name.trim(), overlay);
@@ -244,7 +315,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
   };
-  const highlight = partsExpanded ? hoveredMaterial : null;
+  const highlight = partsExpanded && !selectingRegion ? hoveredMaterial : null;
   const highlightedPart = info?.parts.find((part) => part.material === highlight);
   return <section ref={editorRef} onPointerDownCapture={history.onPointerDownCapture} onFocusCapture={history.onFocusCapture}
     onBlurCapture={history.onBlurCapture} onKeyDownCapture={history.onKeyDownCapture} className="@container space-y-3" aria-label={t('foundry.skin.title')}>
@@ -267,6 +338,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
           <HeroPoseViewer key={form.id} heroName={form.previewHero} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits}
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
+            onRegionBaker={receiveBaker}
+            regionSelection={selecting && selectingRegion && !exporting ? { material: selecting.material, seeds: selectingRegion.seeds, onPick: pickRegion } : null}
+            regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}
             workspaceKey={form.id === 'default' ? draftKey : `${draftKey}:${form.id}`}
             highlightedPart={!exporting && highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
             onPartColors={setColors} onPartTextures={setTextures} onPartPick={(name) => { const part = formParts.find((part) => materialBasename(part.material) === materialBasename(name)); if (part) setSelectedMaterial(part.material); }} />
@@ -337,7 +411,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
           })}
         </div>
         {hiddenCount > 0 && <Button size="sm" variant="ghost" icon={Eye} onClick={() => {
-          setEdits((current) => current.map((edit) => ({ ...edit, hidden: false })).filter(hasSkinPartEdit)); setSaved(null); setComparison('edited');
+          setEdits((current) => current.map((edit) => ({ ...edit, hidden: false })).filter(keepSkinPartEdit)); setSaved(null); setComparison('edited');
         }}>{t('foundry.skin.showAll')}</Button>}
         </div>}
       </fieldset>
@@ -353,10 +427,20 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
               label={t(focusMaterial === selected.material ? 'foundry.skin.wholeModel' : 'foundry.skin.focusPart')}
               onClick={() => setFocusMaterial(focusMaterial === selected.material ? null : selected.material)} />
             <IconButton size="sm" icon={RotateCcw} disabled={!selectedEdit || exporting} label={t('foundry.skin.resetPart', { part: nameOf(selected) })}
-              onClick={() => update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined })} />
+              onClick={() => { finishSelecting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, regions: undefined }); }} />
           </div>
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
-          <SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
+          {selected.patternable && !ambiguous(selected) && <SkinRegionTargets regions={regions} active={activeRegion?.id ?? null}
+            disabled={exporting || !!selectedEdit?.hidden || !!selectingRegion}
+            onSelect={(id) => setRegionTargets((current) => ({ ...current, [selected.material]: id }))} onAdd={addRegion} onPreview={setPreviewRegion} />}
+          {selectingRegion ? <SkinRegionSelecting part={nameOf(selected)} mode={selectMode} empty={!hasRegionSelection(selectingRegion)} missed={missedPick}
+            onMode={setSelectMode} onDone={finishSelecting}
+            onClear={() => { if (selecting) updateRegion(selecting.material, selecting.region, { seeds: [] }); }} />
+          : activeRegion ? <SkinRegionEditor key={activeRegion.id} region={activeRegion} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
+            disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, activeRegion.id, patch)}
+            onSelect={() => startSelecting(selected.material, activeRegion.id)}
+            onDelete={() => { updateRegions(selected.material, (current) => current.filter((region) => region.id !== activeRegion.id)); setRegionTargets((current) => ({ ...current, [selected.material]: null })); setPreviewRegion(null); }} />
+          : <><SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
           {tool === 'surface' ? <div className="space-y-4">
             {selected.finishable ? <SkinFinishControls value={selectedEdit?.finish} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
               onChange={(finish) => update(selected.material, { finish })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.finishUnsupported')}</p>}
@@ -368,6 +452,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             tintable={selected.tintable} adjustable={selected.patternable} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
             onChange={(patch) => update(selected.material, patch)} /> : selected.patternable ? <SkinPatternPicker value={selectedEdit?.pattern ?? null} color={colorOf(selected)} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
             onChange={(pattern) => update(selected.material, { pattern, ...(pattern?.colors && selected.tintable && selectedEdit?.repaint !== true ? { tint: '#ffffff', colorize: false, repaint: false } : {}) })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
+          </>}
         </div>}
     </WorkshopWorkbench>
   </section>;

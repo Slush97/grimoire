@@ -42,7 +42,7 @@ describe('viewer part picking', () => {
     const { canvas, pick, detach } = setup();
     pointer(canvas, 'pointerdown'); pointer(canvas, 'pointerup');
     canvas.dispatchEvent(new MouseEvent('click', { clientX: 100, clientY: 100 }));
-    expect(pick).toHaveBeenCalledExactlyOnceWith('body.vmat');
+    expect(pick).toHaveBeenCalledExactlyOnceWith('body.vmat', expect.objectContaining({ material: 'body.vmat' }));
     detach();
   });
   it('ignores cancelled and multi-pointer gestures', () => {
@@ -56,7 +56,7 @@ describe('viewer part picking', () => {
     const hidden = new THREE.MeshBasicMaterial({ visible: false }); hidden.name = 'hidden.vmat';
     const front = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), hidden); front.position.z = .5; scene.add(front);
     pointer(canvas, 'pointerdown'); pointer(canvas, 'pointerup');
-    expect(pick).toHaveBeenLastCalledWith('body.vmat');
+    expect(pick).toHaveBeenLastCalledWith('body.vmat', expect.objectContaining({ material: 'body.vmat' }));
     pick.mockClear(); scene.visible = false;
     pointer(canvas, 'pointerdown'); pointer(canvas, 'pointerup');
     expect(pick).not.toHaveBeenCalled(); detach();
@@ -68,7 +68,7 @@ describe('viewer part picking', () => {
     });
     mesh.material = materials;
     pointer(canvas, 'pointerdown'); pointer(canvas, 'pointerup');
-    expect(pick).toHaveBeenCalledExactlyOnceWith('face-4.vmat'); detach();
+    expect(pick).toHaveBeenCalledExactlyOnceWith('face-4.vmat', expect.objectContaining({ material: 'face-4.vmat' })); detach();
   });
   it('removes all input listeners on cleanup', () => {
     const { canvas, raycast, pick, detach } = setup(); detach();

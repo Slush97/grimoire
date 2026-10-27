@@ -396,7 +396,29 @@
       "changedAcrossForms_one": "{{count}} change across {{forms}} forms",
       "changedAcrossForms_other": "{{count}} changes across {{forms}} forms",
       "changedInForm_one": "{{count}} change in {{form}}",
-      "changedInForm_other": "{{count}} changes in {{form}}"
+      "changedInForm_other": "{{count}} changes in {{form}}",
+      "region": {
+        "target": "Edit target",
+        "wholePart": "Whole part",
+        "areaName": "Area {{index}}",
+        "add": "Select an area",
+        "unedited": "no changes yet",
+        "selectingTitle": "Select an area of {{part}}",
+        "selectingHint": "Click the model to add pieces. Hovering shows what a click will select.",
+        "selectionMode": "Selection",
+        "addPieces": "Add",
+        "removePieces": "Remove",
+        "nothingSelected": "Nothing selected yet. Click a piece of {{part}} on the model.",
+        "otherPart": "That is a different part. Click {{part}} to change this area.",
+        "sharedHint": "Pieces that use the same texture pixels, like mirrored sleeves, are always selected together.",
+        "clear": "Clear",
+        "done": "Done selecting",
+        "name": "Area name",
+        "changeSelection": "Change selection",
+        "delete": "Delete {{area}}",
+        "wholePartOnly": "Finish and transparency apply to the whole part.",
+        "maskUnavailable": "An edited area could not be read from the preview. Show its form in the preview, then try again."
+      }
     },
     "draft": {
       "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",
