@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { materialBasename } from './skinParts';
-import { buildUvIslands, padMask, rasterizeSeeds, rasterizeUsed, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
+import { buildUvIslands, islandsFingerprint, padMask, rasterizeSeeds, rasterizeUsed, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
 import { getMorphic } from './source2NprMaterial';
 import type { SkinRegionSeed } from '../types/skinEditor';
 
@@ -89,30 +89,56 @@ export function materialLab(scene: THREE.Object3D, material: string, width: numb
   return lab;
 }
 
-const maskCache = new Map<string, Uint8Array>();
-/** The last unpadded mask per material and size, so a growing selection only rasterizes its new seeds. */
-const lastMask = new Map<string, { islands: UvIslands; seeds: SkinRegionSeed[]; mask: Uint8Array }>();
+/** Masks per texture layout, so two layouts with the same seeds never share one. */
+const maskCache = new WeakMap<UvIslands, Map<string, Uint8Array>>();
+/** The last unpadded mask per layout and size, so a growing selection only rasterizes its new seeds. */
+const lastMask = new WeakMap<UvIslands, Map<string, { seeds: SkinRegionSeed[]; mask: Uint8Array }>>();
 
 /** Region mask at a size, cached so slider drags reuse the raster. */
 export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinRegionSeed[], width: number, height: number, padding = 2): Uint8Array | null {
   const islands = materialIslands(scene, material);
   if (!islands) return null;
-  const key = JSON.stringify([materialBasename(material), islands.island.length, seeds, width, height, padding]);
-  const cached = maskCache.get(key);
-  if (cached) { maskCache.delete(key); maskCache.set(key, cached); return cached; }
+  let masks = maskCache.get(islands);
+  if (!masks) { masks = new Map(); maskCache.set(islands, masks); }
+  const key = JSON.stringify([seeds, width, height, padding]);
+  const cached = masks.get(key);
+  if (cached) { masks.delete(key); masks.set(key, cached); return cached; }
   const lab = seeds.some((seed) => seed.by === 'color') ? materialLab(scene, material, width, height) : null;
-  const slot = `${materialBasename(material)}|${width}x${height}`;
-  const last = lastMask.get(slot);
-  const grows = last && last.islands === islands && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => seed === seeds[index]);
+  let lasts = lastMask.get(islands);
+  if (!lasts) { lasts = new Map(); lastMask.set(islands, lasts); }
+  const size = `${width}x${height}`;
+  const last = lasts.get(size);
+  const grows = last && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => seed === seeds[index]);
   const unpadded = rasterizeSeeds(islands, grows ? seeds.slice(last.seeds.length) : seeds, width, height, lab, 0, grows ? last.mask : undefined);
-  lastMask.set(slot, { islands, seeds, mask: unpadded });
+  lasts.set(size, { seeds, mask: unpadded });
   const mask = padding ? padMask(unpadded, rasterizeUsed(islands, width, height), width, height, padding) : unpadded;
-  maskCache.set(key, mask);
-  while (maskCache.size > 24) {
-    const oldest = maskCache.keys().next().value;
-    if (oldest !== undefined) maskCache.delete(oldest);
+  masks.set(key, mask);
+  while (masks.size > 24) {
+    const oldest = masks.keys().next().value;
+    if (oldest !== undefined) masks.delete(oldest);
   }
   return mask;
+}
+
+/** What the editor needs from a loaded model to save areas. */
+export interface RegionBaker {
+  /** A white-on-black mask PNG data URL, or null when the material is not in this model. */
+  bake: (material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>;
+  /** The material's texture layout fingerprint, or null when it is not in this model. */
+  layout: (material: string) => string | null;
+}
+
+export function regionBaker(scene: THREE.Object3D): RegionBaker {
+  return {
+    bake: async (material, seeds, width, height) => {
+      const mask = regionMask(scene, material, seeds, width, height);
+      return mask ? regionMaskPng(mask, width, height) : null;
+    },
+    layout: (material) => {
+      const islands = materialIslands(scene, material);
+      return islands ? islandsFingerprint(islands) : null;
+    },
+  };
 }
 
 /** White-on-black PNG data URL for the native export. */
@@ -139,24 +165,13 @@ export async function regionMaskPng(mask: Uint8Array, width: number, height: num
 export function overlayRegion(scene: THREE.Object3D, material: string, alpha: THREE.Texture, color: THREE.Color): () => void {
   const overlay = new THREE.MeshBasicMaterial({ color, alphaMap: alpha, transparent: true, depthWrite: false, toneMapped: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const ranges = new Map<THREE.Mesh, Array<{ start: number; count: number }> | null>();
-  for (const { mesh, start, count } of materialMeshes(scene, material)) {
-    if (start === undefined || count === undefined) ranges.set(mesh, null);
-    else ranges.set(mesh, [...ranges.get(mesh) ?? [], { start, count }]);
-  }
+  // Multi-material meshes share their geometry and hide every group drawing another material.
+  const skip = new THREE.MeshBasicMaterial({ visible: false });
+  const name = materialBasename(material);
   const added: Array<[THREE.Mesh, THREE.Mesh]> = [];
-  for (const [mesh, groups] of ranges) {
-    let geometry = mesh.geometry;
-    if (groups) {
-      // Share the source buffers and draw only this material's groups. Disposing this view would free them.
-      geometry = new THREE.BufferGeometry();
-      for (const [name, attribute] of Object.entries(mesh.geometry.attributes)) geometry.setAttribute(name, attribute);
-      geometry.setIndex(mesh.geometry.index);
-      groups.forEach(({ start, count }) => geometry.addGroup(start, count, 0));
-      geometry.boundingSphere = mesh.geometry.boundingSphere;
-      geometry.boundingBox = mesh.geometry.boundingBox;
-    }
-    const child = mesh instanceof THREE.SkinnedMesh ? new THREE.SkinnedMesh(geometry, groups ? [overlay] : overlay) : new THREE.Mesh(geometry, groups ? [overlay] : overlay);
+  for (const mesh of new Set(materialMeshes(scene, material).map(({ mesh }) => mesh))) {
+    const materials = Array.isArray(mesh.material) ? mesh.material.map((item) => materialBasename(item.name) === name ? overlay : skip) : overlay;
+    const child = mesh instanceof THREE.SkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, materials) : new THREE.Mesh(mesh.geometry, materials);
     if (child instanceof THREE.SkinnedMesh && mesh instanceof THREE.SkinnedMesh) {
       child.bind(mesh.skeleton, mesh.bindMatrix);
       child.bindMatrixInverse.copy(mesh.bindMatrixInverse);
@@ -170,6 +185,6 @@ export function overlayRegion(scene: THREE.Object3D, material: string, alpha: TH
   }
   return () => {
     for (const [mesh, child] of added) mesh.remove(child);
-    overlay.dispose();
+    overlay.dispose(); skip.dispose();
   };
 }

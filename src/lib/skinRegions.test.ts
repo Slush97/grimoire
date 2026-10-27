@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, floodFillTexels, rasterizeBrush, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, floodFillTexels, islandsFingerprint, rasterizeBrush, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -30,6 +30,18 @@ describe('UV islands', () => {
     const islands = buildUvIslands([geometry, bridge]);
     expect(islands.count).toBe(2);
     expect(islands.island).toHaveLength(4);
+  });
+  it('ignores triangles with no UV area, which would contain every point', () => {
+    // A real triangle on the model whose UVs all sit on one point, joined to the right quad.
+    const pinched: UvGeometry = { position: [2, 0, 0, 3, 0, 0, 3, 1, 0], uv: [0.75, 0.25, 0.75, 0.25, 0.75, 0.25], index: null };
+    const islands = buildUvIslands([geometry, pinched]);
+    expect(islands.island).toHaveLength(4);
+    expect(islandsAt(islands, 0.2, 0.5)).toHaveLength(1);
+  });
+  it('fingerprints the texture layout, not the triangle order of anything else', () => {
+    const moved: UvGeometry = { ...geometry, uv: geometry.uv.map((value, index) => index === 2 ? 0.55 : value) };
+    expect(islandsFingerprint(buildUvIslands([geometry]))).toBe(islandsFingerprint(buildUvIslands([geometry])));
+    expect(islandsFingerprint(buildUvIslands([geometry]))).not.toBe(islandsFingerprint(buildUvIslands([moved])));
   });
   it('selects every island on shared texels, like mirrored sleeves', () => {
     const mirrored: UvGeometry = { position: [5, 0, 0, 6, 0, 0, 6, 1, 0], uv: [0, 0, 0.5, 0, 0.5, 1], index: null };

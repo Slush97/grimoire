@@ -114,6 +114,14 @@ async function inspect(vpk: string, base: string, form: SkinModelForm, withForms
 }
 
 const skinInfoCache = new Map<string, Promise<SkinEditInfo>>();
+let maskSupport: Promise<boolean> | null = null;
+/** Area edits need `trippy-skin --mask`, added after vpkmerge 0.26.0. */
+async function vpkmergeSupportsMask(): Promise<boolean> {
+    maskSupport ??= runVpkmergeStdout(['trippy-skin', '--help']).then((help) => /--mask\b/.test(help), () => false);
+    const supported = await maskSupport;
+    if (!supported) maskSupport = null;
+    return supported;
+}
 const textureBakeEnv = { RAYON_NUM_THREADS: process.env['RAYON_NUM_THREADS'] ?? '4' };
 
 async function inspectSkinModels(heroName: string, source: { vpk: string; base: string; entry: string; fingerprint: string }): Promise<SkinEditInfo> {
@@ -199,6 +207,9 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
     return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
         const { parts } = await inspectSkinModels(request.heroName, source);
         validateSkinEdits({ ...source, parts }, request);
+        if (request.edits.some((edit) => !edit.hidden && edit.regions?.some(hasRegionEdit)) && !await vpkmergeSupportsMask()) {
+            throw new Error('Editing areas of a part needs a newer vpkmerge than this Grimoire build includes. Update Grimoire, or reset the areas to save.');
+        }
         const total = 1 + request.edits.reduce((count, edit) => count + (edit.hidden ? parts.find((part) => part.material === edit.material)?.modelEntries?.length ?? 1
             : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)
                 + (edit.regions?.filter(hasRegionEdit).length ?? 0)), 0);

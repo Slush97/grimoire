@@ -151,9 +151,20 @@ describe('skin region export chain', () => {
     vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[0] === 'model'
       ? JSON.stringify({ draw_calls: [{ material: 'coat.vmat', vertex_count: 3 }] })
       : args[0] === 'texture-info' ? JSON.stringify({ width: 512, height: 512 })
+      : args[1] === '--help' ? '  --mask <PNG>  Limit the edit to the white area of this UV mask PNG'
       : JSON.stringify({ m_shaderName: 'pbr.vfx', m_vectorParams: [],
         m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }] }));
   };
+  // First: a supported check is cached for the session, an unsupported one is not.
+  it('explains when the bundled vpkmerge cannot edit areas', async () => {
+    setup();
+    const supported = vi.mocked(runVpkmergeStdout).getMockImplementation()!;
+    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[1] === '--help' ? '  --material <VMAT>' : supported(args));
+    await expect(buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, regions: [region],
+    }], regionMasks: { 'coat.vmat|r1': mask } }, 'out.vpk')).rejects.toThrow('newer vpkmerge');
+    expect(vi.mocked(runVpkmerge)).not.toHaveBeenCalled();
+  });
   it('paints regions over the whole-part texture and under the material tint', async () => {
     setup();
     await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{

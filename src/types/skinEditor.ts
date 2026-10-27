@@ -64,6 +64,8 @@ export interface SkinPartRegion {
   /** Optional: an unnamed region is still saved. */
   name?: string;
   seeds: SkinRegionSeed[];
+  /** Fingerprint of the texture layout the seeds were picked on. A different layout needs a new selection. */
+  layout?: string;
   /** Paint color. Regions always paint: a material tint cannot stop at a texture boundary. */
   paint?: string | null;
   adjustments?: SkinColorAdjustments;

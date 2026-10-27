@@ -105,6 +105,8 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
   useEffect(() => {
     const alpha = new THREE.DataTexture(new Uint8Array(SIZE * SIZE * 4), SIZE, SIZE, THREE.RGBAFormat);
     alpha.magFilter = THREE.LinearFilter; alpha.minFilter = THREE.LinearFilter; alpha.generateMipmaps = false;
+    // Seeds and masks wrap texture coordinates, so tiled UVs must sample the same texel here.
+    alpha.wrapS = THREE.RepeatWrapping; alpha.wrapT = THREE.RepeatWrapping;
     texture.current = alpha;
     const color = new THREE.Color();
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();

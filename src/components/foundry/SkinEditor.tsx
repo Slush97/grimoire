@@ -18,13 +18,13 @@ import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
 import { DEFAULT_COLOR_RANGE, hasRegionSelection, newRegionId } from '../../lib/skinRegions';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
+import type { RegionBaker } from '../../lib/skinRegionScene';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { useSkinEditHistory } from '../../lib/useSkinEditHistory';
 import { skinModelForms } from '../../lib/skinModelForms';
 import type { HeroPoseSkinSource } from '../../types/portrait';
 import type { SkinEditInfo, SkinEditProgress, SkinEditResume, SkinPart, SkinPartEdit, SkinPartRegion, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 
-type RegionBaker = (material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>;
 /** Export masks follow the texture, capped so a 4K map does not ship a 16 MP mask. */
 const MASK_EDGE = 2048;
 
@@ -169,8 +169,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const partsId = useId();
   const capture = useRef<(() => Promise<string>) | null>(null);
   const receiveCapture = useCallback((value: (() => Promise<string>) | null) => { capture.current = value; }, []);
-  const baker = useRef<RegionBaker | null>(null);
-  const receiveBaker = useCallback((value: RegionBaker | null) => { baker.current = value; }, []);
+  // The shown form's model. Areas of other forms keep the masks baked when the form was left.
+  const [baker, setBaker] = useState<RegionBaker | null>(null);
+  const bakedMasks = useRef(new Map<string, string>());
   const [regionTargets, setRegionTargets] = useState<Record<string, string | null>>({});
   const [selecting, setSelecting] = useState<{ material: string; region: string; fresh: boolean } | null>(null);
   const [selectMode, setSelectMode] = useState<'add' | 'remove'>('add');
@@ -257,12 +258,16 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     if (!selected) return;
     startSelecting(selected.material, newRegionId(selectedEdit?.regions ?? []), true);
   };
+  const layoutOf = (material: string) => baker?.layout(material) ?? null;
+  const staleRegion = (material: string, region: SkinPartRegion) => !!region.layout && !!layoutOf(material) && region.layout !== layoutOf(material);
   const addSeeds = (seeds: SkinRegionSeed[]) => {
     if (!selecting || !selectingRegion) return;
     const { material, region: id } = selecting;
+    const layout = layoutOf(material) ?? undefined;
+    // Seeds picked on another layout point at other texels, so a new pick replaces them.
     updateRegions(material, (current) => current.some((region) => region.id === id)
-      ? current.map((region) => region.id === id ? { ...region, seeds: [...region.seeds, ...seeds].slice(0, 4096) } : region)
-      : [...current, { id, seeds }]);
+      ? current.map((region) => region.id === id ? { ...region, layout, seeds: [...staleRegion(material, region) ? [] : region.seeds, ...seeds].slice(0, 4096) } : region)
+      : [...current, { id, layout, seeds }]);
   };
   const pickRegion = (hit: ViewerPartHit) => {
     if (!selecting || !selectingRegion) return;
@@ -284,18 +289,33 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     }
     setSelecting(null); setMissedPick(false);
   };
-  const bakeRegionMasks = async (exported: SkinPartEdit[]) => {
+  /** Bake each edited area's export mask from the shown model, or reuse the one baked when its form was left. */
+  const bakeRegionMasks = async (exported: SkinPartEdit[], required = true) => {
     const masks: Record<string, string> = {};
     for (const edit of exported.filter((item) => !item.hidden)) {
       for (const region of edit.regions?.filter(hasRegionEdit) ?? []) {
+        if (staleRegion(edit.material, region)) throw new Error(t('foundry.skin.region.stale'));
         const size = info?.parts.find((part) => part.material === edit.material)?.textureSize ?? { width: 1024, height: 1024 };
         const scale = Math.min(1, MASK_EDGE / Math.max(size.width, size.height));
-        const mask = await baker.current?.(edit.material, region.seeds, Math.max(1, Math.round(size.width * scale)), Math.max(1, Math.round(size.height * scale)));
-        if (!mask) throw new Error(t('foundry.skin.region.maskUnavailable'));
-        masks[regionMaskKey(edit.material, region.id)] = mask;
+        const width = Math.max(1, Math.round(size.width * scale)), height = Math.max(1, Math.round(size.height * scale));
+        const key = JSON.stringify([edit.material, region.seeds, width, height]);
+        let mask: string | null = null;
+        try { mask = await baker?.bake(edit.material, region.seeds, width, height) ?? null; }
+        catch { /* A canvas or encoder failure reads as unavailable below. */ }
+        if (mask) bakedMasks.current.set(key, mask);
+        else mask = bakedMasks.current.get(key) ?? null;
+        if (mask) masks[regionMaskKey(edit.material, region.id)] = mask;
+        else if (required) throw new Error(t('foundry.skin.region.maskUnavailable'));
       }
     }
     return masks;
+  };
+  // Leaving a form unmounts its model, so bake its areas first. They cannot change until it is shown again.
+  const switchForm = async (id: string) => {
+    if (id === form.id) return;
+    setHoveredMaterial(null); setSelecting(null);
+    await bakeRegionMasks(edits.filter((edit) => formParts.some((part) => part.material === edit.material)), false).catch(() => {});
+    setFormId(id);
   };
   const exportVpk = async () => {
     if (!current || blocked || unknownCount || unsupportedSurface) return;
@@ -353,7 +373,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
           <HeroPoseViewer key={form.id} heroName={form.previewHero} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits}
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
-            onRegionBaker={receiveBaker}
+            onRegionBaker={setBaker}
             regionSelection={selecting && selectingRegion && !exporting ? { material: selecting.material, seeds: selectingRegion.seeds,
               picker: { by: pickBy, tolerance: pickTolerance, brushSize, remove: selectMode === 'remove', onStroke: paintRegion }, onPick: pickRegion } : null}
             regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}
@@ -365,7 +385,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
       previewFooter={forms.length > 1 ? <>
         <span className="text-xs text-text-secondary">{t('foundry.skin.form')}</span>
         <SegmentedControl label={t('foundry.skin.form')} value={form.id} disabled={exporting}
-          onChange={(id) => { setFormId(id); setHoveredMaterial(null); }}
+          onChange={(id) => { void switchForm(id); }}
           options={forms.map((item) => ({ value: item.id, label: <span className="flex items-center gap-2">
             {t(item.labelKey)}{changesInForm(item.id) > 0 && <span aria-label={t('foundry.skin.changed', { count: changesInForm(item.id) })} className="text-2xs tabular-nums text-text-secondary">{changesInForm(item.id)}</span>}
           </span> }))} />
@@ -453,7 +473,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             empty={!hasRegionSelection(selectingRegion)} missed={missedPick}
             onMode={setSelectMode} onBy={setPickBy} onTolerance={setPickTolerance} onDone={finishSelecting}
             onClear={() => { if (selecting) updateRegion(selecting.material, selecting.region, { seeds: [] }); }} />
-          : activeRegion ? <SkinRegionEditor key={activeRegion.id} region={activeRegion} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
+          : activeRegion ? <SkinRegionEditor key={activeRegion.id} region={activeRegion} stale={staleRegion(selected.material, activeRegion)} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
             disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, activeRegion.id, patch)}
             onSelect={() => startSelecting(selected.material, activeRegion.id)}
             onDelete={() => { updateRegions(selected.material, (current) => current.filter((region) => region.id !== activeRegion.id)); setRegionTargets((current) => ({ ...current, [selected.material]: null })); setPreviewRegion(null); }} />

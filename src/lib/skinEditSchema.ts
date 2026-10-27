@@ -37,6 +37,7 @@ const adjustmentsSchema = z.object({
 export const skinPartRegionSchema = z.object({
     id: z.string().regex(/^[a-z0-9]{1,16}$/),
     name: z.string().max(60).optional(),
+    layout: z.string().regex(/^[a-f0-9]{8}$/).optional(),
     seeds: z.array(z.object({
         u: z.number().finite().min(-64).max(64), v: z.number().finite().min(-64).max(64), remove: z.literal(true).optional(),
         by: z.enum(['color', 'brush']).optional(), tolerance: z.number().finite().min(0).max(100).optional(),

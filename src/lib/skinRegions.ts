@@ -28,6 +28,10 @@ export interface UvIslands {
 }
 
 const POSITION_STEP = 1e-3;
+
+/** A triangle with no UV area draws no texels, and would contain every point in a containment test. */
+const uvArea = (uv: ArrayLike<number>, [a, b, c]: number[]) =>
+  (uv[b * 2] - uv[a * 2]) * (uv[c * 2 + 1] - uv[a * 2 + 1]) - (uv[c * 2] - uv[a * 2]) * (uv[b * 2 + 1] - uv[a * 2 + 1]);
 const UV_STEP = 1 / 16384;
 
 /**
@@ -67,7 +71,7 @@ export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
     const end = Math.min(total, start + (geometry.count ?? total));
     for (let corner = start; corner + 2 < end; corner += 3) {
       const triangle = [0, 1, 2].map((offset) => geometry.index ? geometry.index[corner + offset] : corner + offset);
-      if (collapsed(geometry.position, triangle)) continue;
+      if (collapsed(geometry.position, triangle) || !uvArea(geometry.uv, triangle)) continue;
       const welded = triangle.map((vertex) => vertexId(geometry, vertex));
       parent[find(welded[1])] = find(welded[0]);
       parent[find(welded[2])] = find(welded[0]);
@@ -90,6 +94,18 @@ export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
 }
 
 const wrap = (value: number) => value - Math.floor(value);
+
+/**
+ * A short hash of the texture layout. Seeds are texture points, so an area saved against one layout
+ * selects something else after a game update changes it: compare before trusting saved seeds.
+ */
+export function islandsFingerprint(islands: UvIslands): string {
+  let hash = 0x811c9dc5;
+  const mix = (value: number) => { hash = Math.imul(hash ^ (value & 0xffff), 0x01000193) >>> 0; hash = Math.imul(hash ^ (value >>> 16), 0x01000193) >>> 0; };
+  mix(islands.island.length); mix(islands.count);
+  for (let index = 0; index < islands.triangles.length; index++) mix(Math.round(islands.triangles[index] * 8192));
+  return hash.toString(16).padStart(8, '0');
+}
 
 function containsPoint(t: Float32Array, offset: number, u: number, v: number): boolean {
   const [ax, ay, bx, by, cx, cy] = t.subarray(offset, offset + 6);

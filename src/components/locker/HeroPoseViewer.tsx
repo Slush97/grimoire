@@ -56,7 +56,7 @@ import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
 import { SkinRegionOverlay, type RegionPicker } from './SkinRegionOverlay';
-import { regionMask, regionMaskPng } from '../../lib/skinRegionScene';
+import { regionBaker, type RegionBaker } from '../../lib/skinRegionScene';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
@@ -1190,7 +1190,7 @@ export default function HeroPoseViewer({
   /** A saved area to outline without changing what clicks do. */
   regionHighlight?: { material: string; seeds: SkinRegionSeed[] } | null;
   /** Bakes a region's export mask from the loaded model. Resolves null when the material is not in this model. */
-  onRegionBaker?: (bake: ((material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>) | null) => void;
+  onRegionBaker?: (baker: RegionBaker | null) => void;
   compact?: boolean;
   active?: boolean;
   workspaceKey?: string;
@@ -1236,10 +1236,7 @@ export default function HeroPoseViewer({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!scene || !onRegionBaker) return;
-    onRegionBaker(async (material, seeds, width, height) => {
-      const mask = regionMask(scene, material, seeds, width, height);
-      return mask ? regionMaskPng(mask, width, height) : null;
-    });
+    onRegionBaker(regionBaker(scene));
     return () => onRegionBaker(null);
   }, [scene, onRegionBaker]);
   useEffect(() => {

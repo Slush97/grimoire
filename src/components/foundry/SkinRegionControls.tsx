@@ -76,8 +76,8 @@ export function SkinRegionSelecting({ part, mode, by, tolerance, brushSize, empt
 }
 
 /** Name, selection and texture edits for one area. Only texture edits can stop at an area's edge. */
-export function SkinRegionEditor({ region, color, tool, disabled, onTool, onChange, onSelect, onDelete }: {
-  region: SkinPartRegion; color: string; tool: 'color' | 'pattern'; disabled: boolean;
+export function SkinRegionEditor({ region, stale = false, color, tool, disabled, onTool, onChange, onSelect, onDelete }: {
+  region: SkinPartRegion; stale?: boolean; color: string; tool: 'color' | 'pattern'; disabled: boolean;
   onTool: (tool: 'color' | 'pattern') => void; onChange: (patch: Partial<SkinPartRegion>) => void; onSelect: () => void; onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -89,6 +89,7 @@ export function SkinRegionEditor({ region, color, tool, disabled, onTool, onChan
       <IconButton size="sm" icon={SquareDashedMousePointer} disabled={disabled} label={t('foundry.skin.region.changeSelection')} onClick={onSelect} />
       <IconButton size="sm" icon={Trash2} disabled={disabled} label={t('foundry.skin.region.delete', { area: label })} onClick={onDelete} />
     </div>
+    {stale && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.region.staleHint')}</p>}
     <SegmentedControl fill value={tool} onChange={onTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }]} />
     {tool === 'color'
       ? <SkinColorControls paintOnly color={region.paint ?? color} tintable adjustable disabled={disabled}

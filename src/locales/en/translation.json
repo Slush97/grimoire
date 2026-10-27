@@ -427,7 +427,9 @@
         "byBrush": "Brush",
         "byBrushHint": "Paints the area freehand on the model, for edges no piece or color follows.",
         "brushSize": "Brush size",
-        "brushHint": "Drag on the model to paint the area. Right-drag turns the model and middle-drag moves it."
+        "brushHint": "Drag on the model to paint the area. Right-drag turns the model and middle-drag moves it.",
+        "stale": "An edited area was selected on a different version of this skin. Change its selection before saving.",
+        "staleHint": "This area was selected on a different version of this skin, so it may cover the wrong pixels. Change its selection."
       }
     },
     "draft": {
