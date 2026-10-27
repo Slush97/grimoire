@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { materialBasename } from './skinParts';
-import { buildUvIslands, islandsFingerprint, padMask, rasterizeSeeds, rasterizeUsed, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
+import { buildUvIslands, islandsFingerprint, padMask, rasterizeSeeds, rasterizeUsed, sameSeed, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
 import { getMorphic } from './source2NprMaterial';
 import type { SkinRegionSeed } from '../types/skinEditor';
 
@@ -109,7 +109,7 @@ export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinR
   // One running mask per area, so painting one color does not make another replay its whole history.
   const size = `${width}x${height}|${area}`;
   const last = lasts.get(size);
-  const grows = last && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => seed === seeds[index]);
+  const grows = last && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => sameSeed(seed, seeds[index]));
   const unpadded = rasterizeSeeds(islands, grows ? seeds.slice(last.seeds.length) : seeds, width, height, lab, 0, grows ? last.mask : undefined);
   lasts.set(size, { seeds, mask: unpadded });
   const mask = padding ? padMask(unpadded, rasterizeUsed(islands, width, height), width, height, padding) : unpadded;

@@ -84,6 +84,7 @@ export class SurfaceSnapshot {
     this.root.updateMatrixWorld(true);
     let best: SurfaceHit | null = null;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), hit = new THREE.Vector3();
+    const { x: ox, y: oy, z: oz } = ray.origin, { x: dx, y: dy, z: dz } = ray.direction;
     this.root.traverseVisible((object) => {
       if (!(object instanceof THREE.Mesh) || this.skip(object)) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
@@ -99,12 +100,27 @@ export class SurfaceSnapshot {
         if (!material?.visible) continue;
         const begin = Math.max(group.start, drawStart);
         const end = Math.min(total, group.start + group.count, drawStart + drawCount);
+        const position = snap.positions;
         for (let corner = begin; corner + 2 < end; corner += 3) {
           const ia = snap.index ? snap.index[corner] : corner, ib = snap.index ? snap.index[corner + 1] : corner + 1, ic = snap.index ? snap.index[corner + 2] : corner + 2;
-          a.fromArray(snap.positions, ia * 3); b.fromArray(snap.positions, ib * 3); c.fromArray(snap.positions, ic * 3);
-          if (!ray.intersectTriangle(a, b, c, false, hit)) continue;
-          const distance = ray.origin.distanceTo(hit);
-          if (best && distance >= best.distance) continue;
+          // Moller-Trumbore on the raw arrays, both sides: copying every triangle into vectors dominated brush strokes.
+          const ax = position[ia * 3], ay = position[ia * 3 + 1], az = position[ia * 3 + 2];
+          const e1x = position[ib * 3] - ax, e1y = position[ib * 3 + 1] - ay, e1z = position[ib * 3 + 2] - az;
+          const e2x = position[ic * 3] - ax, e2y = position[ic * 3 + 1] - ay, e2z = position[ic * 3 + 2] - az;
+          const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+          const det = e1x * px + e1y * py + e1z * pz;
+          if (Math.abs(det) < 1e-12) continue;
+          const inverse = 1 / det;
+          const tx = ox - ax, ty = oy - ay, tz = oz - az;
+          const w1 = (tx * px + ty * py + tz * pz) * inverse;
+          if (w1 < 0 || w1 > 1) continue;
+          const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+          const w2 = (dx * qx + dy * qy + dz * qz) * inverse;
+          if (w2 < 0 || w1 + w2 > 1) continue;
+          const distance = (e2x * qx + e2y * qy + e2z * qz) * inverse;
+          if (distance < 0 || (best && distance >= best.distance)) continue;
+          a.fromArray(position, ia * 3); b.fromArray(position, ib * 3); c.fromArray(position, ic * 3);
+          hit.copy(ray.origin).addScaledVector(ray.direction, distance);
           const uv = object.geometry.attributes.uv;
           let coordinate: THREE.Vector2 | null = null;
           if (uv) {

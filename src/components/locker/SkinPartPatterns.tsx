@@ -7,7 +7,7 @@ import { isSkinSurface } from '../../lib/skinPartPreview';
 import { adjustSkinPixels, hasColorAdjustments, hasRegionEdit, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
-import type { SkinPartEdit, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
+import type { SkinColorAdjustments, SkinPartEdit, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
 
 async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement> {
   const { style, phase, colors } = pattern;
@@ -15,6 +15,20 @@ async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement>
   const image = new Image();
   await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = reject; image.src = sprite.dataUrl; });
   return image;
+}
+
+/** Paint and adjust only the texels an area covers: the same result as `editRegionPixels` without a pattern, without copying the texture. */
+function paintRegionPixels(pixels: Uint8ClampedArray, mask: Uint8Array, paint: string | null, adjustments: SkinColorAdjustments): void {
+  const texel = new Uint8ClampedArray(4);
+  for (let index = 0; index < mask.length; index++) {
+    const weight = mask[index] / 255;
+    if (!weight) continue;
+    const offset = index * 4;
+    texel.set(pixels.subarray(offset, offset + 4));
+    if (paint) repaintSkinPixels(texel, paint);
+    adjustSkinPixels(texel, adjustments);
+    for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = Math.round(pixels[offset + channel] + (texel[channel] - pixels[offset + channel]) * weight);
+  }
 }
 
 /** Paint, pattern, then adjust a copy of `base`, the same order as the whole-part edit and the export. */
@@ -47,6 +61,8 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
   const colors = pattern?.colors;
   // A string, so the effect reruns only when an applied region actually changes.
   const regionKey = JSON.stringify(edit.regions?.filter(hasRegionEdit) ?? []);
+  // Paint strokes redraw at once; slider drags still wait a moment so they do not queue redraws.
+  const lastRegions = useRef(regionKey);
   useEffect(() => {
     const current = textures.current;
     animationOffset.current.set(0, 0);
@@ -62,6 +78,8 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
     onPending?.(material, true);
     const replacements = new Map<THREE.Material & Pick<THREE.MeshStandardMaterial, 'map' | 'color'>,
       { original: THREE.Texture | null; texture: THREE.CanvasTexture }>();
+    const delay = regionKey !== lastRegions.current ? 0 : 75;
+    lastRegions.current = regionKey;
     const timer = setTimeout(() => {
       void (async () => {
         const wholePattern = style && intensity > 0 ? await patternImage({ style, intensity, phase, scroll: 0, scale, colors }) : null;
@@ -100,7 +118,9 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             adjustSkinPixels(pixels.data, { hue, saturation, brightness });
             regions.forEach((region, index) => {
               const mask = regionMask(scene, material, region.seeds, canvas.width, canvas.height, 2, region.id);
-              if (mask) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), mask);
+              if (!mask) return;
+              if (regionPatterns[index]) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), mask);
+              else paintRegionPixels(pixels.data, mask, region.paint ?? null, region.adjustments ?? ORIGINAL_SKIN_COLOR);
             });
             context.putImageData(pixels, 0, 0);
             const texture = new THREE.CanvasTexture(canvas);
@@ -128,7 +148,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
         replacements.forEach(({ texture }) => texture.dispose());
         if (!cancelled) onError();
       }).finally(() => { if (!cancelled) onPending?.(material, false); });
-    }, 75);
+    }, delay);
     return () => { cancelled = true; onPending?.(material, false); clearTimeout(timer); };
   }, [scene, material, style, intensity, phase, colors, scale, hue, saturation, brightness, paintColor, regionKey, onError, onPending]);
   useFrame((_state, delta) => {
