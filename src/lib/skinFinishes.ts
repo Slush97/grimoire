@@ -22,6 +22,14 @@ export function finishBall(finish: SkinPartFinish): string {
 
 /** Default self-illumination scale of painted glow: bright enough to bloom in game without washing out. */
 export const GLOW_STRENGTH = 4;
+/**
+ * Brightest painted glow. Shipped hero glow runs 0.3 to 5; at 20 a teal sword blew out to solid white
+ * in game. Older drafts saved above this are clamped wherever the strength is read.
+ */
+export const GLOW_MAX_STRENGTH = 8;
+
+/** A glow's strength, defaulted and clamped to what reads as a color in game. */
+export const glowStrength = (strength: number | undefined) => Math.min(strength ?? GLOW_STRENGTH, GLOW_MAX_STRENGTH);
 
 /** See-through presets offered as paint: how solid the area stays. */
 export const CLEAR_PRESETS = [

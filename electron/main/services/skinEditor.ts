@@ -7,7 +7,7 @@ import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
 import { hasColorAdjustments, hasRegionEdit, hasRegionLook, ORIGINAL_SKIN_COLOR, regionKind } from '../../../src/lib/skinColorAdjustments';
-import { GLOW_STRENGTH } from '../../../src/lib/skinFinishes';
+import { glowStrength } from '../../../src/lib/skinFinishes';
 import { skinModelForms, type SkinModelForm } from '../../../src/lib/skinModelForms';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinEditProgress, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
@@ -366,7 +366,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const layer = join(dir, `glow-${layers.length}_dir.vpk`);
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                 await runVpkmerge(['workshop', 'glow', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, ...(mask ? ['--mask', mask] : []),
-                    '--color', glow.color.slice(1), '--strength', String(glow.strength ?? GLOW_STRENGTH), '--animation', glow.animation,
+                    '--color', glow.color.slice(1), '--strength', String(glowStrength(glow.strength)), '--animation', glow.animation,
                     '--speed', String(glow.speed ?? 1), ...(glow.paintColors ? ['--paint-colors'] : []), '--encode-vpk', layer], 300000, textureBakeEnv);
                 await verifyVpkOutput(layer);
                 layers.push(layer);

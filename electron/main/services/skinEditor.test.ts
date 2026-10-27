@@ -199,12 +199,13 @@ describe('skin region export chain', () => {
     setup();
     await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
       material: 'coat.vmat', hidden: false, tint: null,
-      regions: [region, { id: 'r4', seeds: [{ u: 0.3, v: 0.3 }], glow: { color: '#33ccff', animation: 'pulse', strength: 8, speed: 2, paintColors: true } }],
+      regions: [region, { id: 'r4', seeds: [{ u: 0.3, v: 0.3 }], glow: { color: '#33ccff', animation: 'pulse', strength: 12, speed: 2, paintColors: true } }],
     }], regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r4': mask } }, 'out.vpk');
     const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
     expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['trippy-skin', 'workshop glow', 'out.vpk']);
     const [painted, glow] = calls;
     expect(glow[glow.indexOf('--vpk') + 1]).toBe(painted[painted.indexOf('--encode-vpk') + 1]);
+    // Drafts saved before the cap glow no brighter than 8.
     expect(glow).toEqual(expect.arrayContaining(['--color', '33ccff', '--animation', 'pulse', '--mask', '--strength', '8', '--speed', '2', '--paint-colors']));
   });
   it('carves see-through areas before the finish, and lights a whole-part glow without a mask', async () => {

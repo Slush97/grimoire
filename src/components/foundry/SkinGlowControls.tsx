@@ -1,14 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { HexColorPicker } from 'react-colorful';
 import { SegmentedControl, Toggle } from '../common/ui';
-import { GLOW_STRENGTH } from '../../lib/skinFinishes';
+import { GLOW_MAX_STRENGTH, glowStrength } from '../../lib/skinFinishes';
 import type { SkinGlowAnimation, SkinPartGlow } from '../../types/skinEditor';
 
 /** Brightness, speed and "glow in paint colors" for one glow. */
 export function SkinGlowExtras({ value, disabled, onChange }: { value: SkinPartGlow; disabled: boolean; onChange: (glow: SkinPartGlow) => void }) {
   const { t } = useTranslation();
   const slider = (key: 'strength' | 'speed', min: number, max: number, step: number, fallback: number) => {
-    const current = value[key] ?? fallback;
+    const current = key === 'strength' ? glowStrength(value.strength) : value[key] ?? fallback;
     return <label className="block space-y-2 text-xs text-text-secondary">
       <span className="flex items-center justify-between gap-2"><span>{t(`foundry.skin.glow.${key}`)}</span>
         <span className="tabular-nums text-text-primary">{key === 'speed' ? `${current.toFixed(2)}x` : current.toFixed(1)}</span></span>
@@ -17,7 +17,7 @@ export function SkinGlowExtras({ value, disabled, onChange }: { value: SkinPartG
     </label>;
   };
   return <div className="space-y-3">
-    {slider('strength', 0.5, 20, 0.5, GLOW_STRENGTH)}
+    {slider('strength', 0.5, GLOW_MAX_STRENGTH, 0.25, GLOW_MAX_STRENGTH)}
     {value.animation !== 'steady' && slider('speed', 0.25, 4, 0.25, 1)}
     <Toggle label={t('foundry.skin.glow.paintColors')} checked={!!value.paintColors} disabled={disabled}
       onChange={(paintColors) => onChange({ ...value, paintColors: paintColors || undefined })} />

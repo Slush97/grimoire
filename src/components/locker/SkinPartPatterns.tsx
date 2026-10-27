@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { applySkinTransparency, isSkinSurface } from '../../lib/skinPartPreview';
-import { GLOW_STRENGTH } from '../../lib/skinFinishes';
+import { GLOW_STRENGTH, glowStrength } from '../../lib/skinFinishes';
 import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isClearRegion, isFinishRegion, isGlowRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
@@ -279,7 +279,7 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
   const seedKey = region ? JSON.stringify(region.seeds) : '';
   const regionId = region?.id ?? '';
   const { color, animation, paintColors = false } = glow;
-  const level = (glow.strength ?? GLOW_STRENGTH) / GLOW_STRENGTH;
+  const level = glowStrength(glow.strength) / GLOW_STRENGTH;
   const speed = glow.speed ?? 1;
   const lights = useRef<GlowLight[]>([]);
   // Color, brightness and animation only retune the lights (below and per frame); they never rebuild the mask.
