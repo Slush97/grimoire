@@ -69,6 +69,9 @@ describe('SkinColorControls', () => {
 
     render(edit({ tint: '#ffffff', repaint: true }));
     expect(nudge()).toBeNull();
+    // Custom pattern colors set white themselves; that is not a pick to warn about.
+    render(edit({ tint: '#ffffff', repaint: false, pattern: { style: 'confetti', intensity: 1, phase: 0, scroll: 0, colors: ['#ef4444', '#ffffff'] } }));
+    expect(nudge()).toBeNull();
   });
 
   it('keeps tint-only parts without the mode switch or a Paint link', () => {

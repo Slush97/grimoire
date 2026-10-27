@@ -18,7 +18,8 @@ export function SkinColorControls({ color, edit, tintable, adjustable, disabled,
   const mode = (edit?.repaint ?? (adjustable && !edit?.tint)) ? 'paint' : 'tint';
   const setMode = (next: typeof mode) => onChange({ repaint: next === 'paint', tint: edit?.tint ?? color });
   const pick = (tint: string) => onChange(edit?.repaint === undefined ? { tint, repaint: mode === 'paint' } : { tint });
-  const lightTint = mode === 'tint' && !!edit?.tint && isLight(edit.tint);
+  // Custom pattern colors set a white tint to show the pattern as picked; that white is not the user's choice.
+  const lightTint = mode === 'tint' && !!edit?.tint && isLight(edit.tint) && !edit.pattern?.colors;
   const adjustments = edit?.adjustments ?? ORIGINAL_SKIN_COLOR;
   const sliders = [
     { key: 'hue', label: t('foundry.skin.hue'), min: -180, max: 180, step: 1 },

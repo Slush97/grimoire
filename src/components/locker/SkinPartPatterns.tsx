@@ -61,13 +61,18 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             if (!context) throw new Error('No texture preview context');
             if (image) context.drawImage(image, 0, 0, canvas.width, canvas.height);
             else { context.fillStyle = 'white'; context.fillRect(0, 0, canvas.width, canvas.height); }
+            // Paint goes on the base first so the pattern keeps its own colors on top, matching vpkmerge's export.
+            if (paintColor) {
+              const base = context.getImageData(0, 0, canvas.width, canvas.height);
+              repaintSkinPixels(base.data, paintColor);
+              context.putImageData(base, 0, 0);
+            }
             if (patternImage) {
               context.globalCompositeOperation = 'source-atop'; context.globalAlpha = intensity;
               context.drawImage(patternImage, 0, 0, canvas.width, canvas.height);
             }
             const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
             adjustSkinPixels(pixels.data, { hue, saturation, brightness });
-            if (paintColor) repaintSkinPixels(pixels.data, paintColor);
             context.putImageData(pixels, 0, 0);
             const texture = new THREE.CanvasTexture(canvas);
             texture.colorSpace = THREE.SRGBColorSpace; texture.flipY = original?.flipY ?? false;

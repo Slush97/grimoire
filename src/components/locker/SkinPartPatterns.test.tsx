@@ -14,6 +14,7 @@ const edit = (phase = 0, scroll = .5): SkinPartEdit => ({ material: 'coat.vmat',
   pattern: { style: 'gradient', intensity: 1, phase, scroll } });
 const getContext = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'getContext');
 const draws: unknown[] = [];
+const ops: Array<['draw', unknown] | ['put', number[]]> = [];
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -24,10 +25,11 @@ beforeEach(() => {
     onload: (() => void) | null = null;
     set src(_value: string) { queueMicrotask(() => this.onload?.()); }
   });
-  draws.length = 0;
+  draws.length = 0; ops.length = 0;
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { configurable: true, value: () => ({
-    drawImage: (source: unknown) => draws.push(source), fillRect: vi.fn(),
-    getImageData: () => ({ data: new Uint8ClampedArray([100, 100, 100, 255]) }), putImageData: vi.fn(),
+    drawImage: (source: unknown) => { draws.push(source); ops.push(['draw', source]); }, fillRect: vi.fn(),
+    getImageData: () => ({ data: new Uint8ClampedArray([100, 100, 100, 255]) }),
+    putImageData: (image: { data: Uint8ClampedArray }) => { ops.push(['put', [...image.data]]); },
   }) });
 });
 afterEach(() => {
@@ -68,6 +70,20 @@ describe('skin part pattern replacement', () => {
       expect(previewTrippySprite).toHaveBeenLastCalledWith(expect.objectContaining({ style: 'gradient', scale: 1, size: 256 }));
     } finally { await renderer.unmount(); }
   });
+  it('paints the base before drawing the pattern so the pattern keeps its colors', async () => {
+    const { scene, source } = model(); const onError = vi.fn();
+    const painted: SkinPartEdit = { ...edit(), tint: '#ff0000', repaint: true };
+    const renderer = await ReactThreeTestRenderer.create(<SkinPartPatterns scene={scene} edits={[painted]} onError={onError} />);
+    try {
+      await bake();
+      expect(onError).not.toHaveBeenCalled();
+      // Base texture, then the painted base written back, then the pattern on top.
+      expect(ops.map(([kind, value]) => kind === 'draw' ? (value === source ? 'base' : 'pattern') : 'put'))
+        .toEqual(['base', 'put', 'pattern', 'put']);
+      expect(ops[1][1]).toEqual([201, 0, 0, 255]);
+    } finally { await renderer.unmount(); }
+  });
+
   it('keeps the applied pattern during debounce and async preparation, then swaps without baking over the previous result', async () => {
     const { scene, material, original, source } = model();
     const onError = vi.fn();

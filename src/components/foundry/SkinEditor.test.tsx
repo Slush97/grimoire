@@ -182,6 +182,17 @@ describe('Door Stuck skin recovery', () => {
     await historyKey();
     expect(previewEdits()).toEqual([{ material: 'body.vmat', hidden: false, tint: '#ef4444', pattern: null, repaint: true }]);
   });
+  it('keeps Paint when custom pattern colors are picked on a painted part', async () => {
+    await act(async () => root.render(<SkinEditorSession heroName="Mina" sources={[]} />));
+    const click = (selector: string, text?: string) => act(async () => {
+      [...host.querySelectorAll<HTMLElement>(selector)].find((element) => text === undefined || element.textContent?.includes(text))!.click();
+    });
+    await click('button[aria-label="#ef4444"]');
+    await click('[role="tab"]', 'foundry.skin.pattern');
+    await click('button[aria-label="Confetti"]');
+    await click('label', 'foundry.skin.customPatternColors');
+    expect(previewEdits()[0]).toMatchObject({ tint: '#ef4444', repaint: true, pattern: { style: 'confetti', colors: ['#ef4444', '#ffffff'] } });
+  });
   it('locks history during export and compares undo/redo with the most recently saved edits', async () => {
     const dirty = vi.fn();
     await act(async () => root.render(<SkinEditorSession heroName="Mina" sources={[]} onDirtyChange={dirty} />));

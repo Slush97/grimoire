@@ -367,7 +367,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             : tool === 'color' ? <SkinColorControls key={selected.material} color={colorOf(selected)} edit={selectedEdit}
             tintable={selected.tintable} adjustable={selected.patternable} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
             onChange={(patch) => update(selected.material, patch)} /> : selected.patternable ? <SkinPatternPicker value={selectedEdit?.pattern ?? null} color={colorOf(selected)} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
-            onChange={(pattern) => update(selected.material, { pattern, ...(pattern?.colors && selected.tintable ? { tint: '#ffffff', colorize: false, repaint: false } : {}) })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
+            onChange={(pattern) => update(selected.material, { pattern, ...(pattern?.colors && selected.tintable && selectedEdit?.repaint !== true ? { tint: '#ffffff', colorize: false, repaint: false } : {}) })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
         </div>}
     </WorkshopWorkbench>
   </section>;
