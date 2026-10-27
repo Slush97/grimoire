@@ -26,6 +26,12 @@ export function requirementOwners(source: RequirementRef, mods: readonly Mod[]):
     : modRequirementRefs(mod).some(ref => requirementKey(ref) === requirementKey(source)));
 }
 
+export function inferRequirementImportance(name: string): Exclude<ModRequirement['importance'], 'unknown'> {
+  if (/\boptional\b/i.test(name)) return 'optional';
+  if (/\brecommended\b/i.test(name)) return 'recommended';
+  return 'required';
+}
+
 export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequirementSnapshot {
   if (raw === null) return { status: 'loaded', checkedAt, items: [] };
   if (!Array.isArray(raw)) return { status: 'unavailable', checkedAt };
@@ -41,18 +47,21 @@ export function parseRequirements(raw: unknown, checkedAt = Date.now()): ModRequ
       const parsed = new URL(row[1]);
       if (['https:', 'http:'].includes(parsed.protocol) && !parsed.username && !parsed.password) url = parsed.href;
     } catch { /* Text-only requirements have no URL. */ }
-    // Most mods use GameBanana's simple [name, url] form, which carries no
-    // state or importance; authors fill it with credits and recommendations.
+    // The simple [name, url] form has no importance label. Authors can put
+    // Optional or Recommended in the name; otherwise assume Required.
     if (row.length === 2) {
-      items.push({ name, url, state: 'on', importance: 'optional' });
+      items.push({ name, url, state: 'on', importance: inferRequirementImportance(name) });
       continue;
     }
-    const state = row[2].toLowerCase();
-    const importance = row[row.length === 6 ? 4 : 3].toLowerCase();
+    // Raw rows put importance before state; ProfilePage returns labeled state
+    // and importance columns interleaved with their colors.
+    const state = row[row.length === 6 ? 2 : 3].trim().toLowerCase();
+    const importance = row[row.length === 6 ? 4 : 2].trim().toLowerCase();
     items.push({ name, url,
-      state: ['1', 'on', 'enabled'].includes(state) ? 'on' : ['off', 'disabled'].includes(state) ? 'off' : 'unknown',
-      importance: importance === '7' || importance === 'required' ? 'required'
-        : ['optional', 'recommended'].includes(importance) ? 'optional' : 'unknown',
+      state: ['1', '7', 'on', 'enabled', 'installed', 'present'].includes(state) ? 'on' : ['off', 'disabled'].includes(state) ? 'off' : 'unknown',
+      importance: ['1', 'required'].includes(importance) ? 'required'
+        : ['2', 'recommended'].includes(importance) ? 'recommended'
+          : importance === 'optional' ? 'optional' : 'unknown',
     });
   }
   return { status: 'loaded', checkedAt, items };

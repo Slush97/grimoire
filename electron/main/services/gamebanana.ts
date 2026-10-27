@@ -3,7 +3,7 @@ import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
 import { fetchGameBananaApi } from './gamebananaTransport';
-import { parseRequirements } from '../../../src/lib/modRequirements';
+import { inferRequirementImportance, parseRequirements } from '../../../src/lib/modRequirements';
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
@@ -812,14 +812,19 @@ export async function fetchModRequirements(modId: number, section = 'Mod') {
 }
 
 async function normalizeRequirements(raw: unknown, modId: number, section: string) {
-    const snapshot = parseRequirements(raw);
+    let snapshot = parseRequirements(raw);
     if (snapshot.status === 'loaded' && snapshot.items.some(item => item.state === 'unknown' || item.importance === 'unknown')) {
         try {
             const profile = await fetchJson<{ _aRequirements?: unknown }>(`${GAMEBANANA_API_BASE}/${section}/${modId}/ProfilePage`);
-            return parseRequirements(profile._aRequirements);
-        } catch { /* Preserve unknown enums for manual review when labels are unavailable. */ }
+            const labeled = parseRequirements(profile._aRequirements);
+            if (labeled.status === 'loaded') snapshot = labeled;
+        } catch { /* Infer missing importance from the name if labels are unavailable. */ }
     }
-    return snapshot;
+    return snapshot.status === 'loaded' ? {
+        ...snapshot,
+        items: snapshot.items.map(item => item.importance === 'unknown'
+            ? { ...item, importance: inferRequirementImportance(item.name) } : item),
+    } : snapshot;
 }
 
 export async function fetchModDetails(

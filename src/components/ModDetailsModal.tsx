@@ -1632,8 +1632,8 @@ function ModDetailsModal({
                     ))}
                 </div>
               )}
-              <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
               {filesSection}
+              <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
 
               {submitter && (
                 <section>

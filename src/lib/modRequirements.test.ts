@@ -31,15 +31,43 @@ describe('GameBanana requirement parsing', () => {
   it('normalizes the labeled ProfilePage response', () => {
     expect(parseRequirements([['Original Model Replacement Mod', requirement.url, 'On', 'BlueColor', 'Required', 'OrangeColor']], 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [requirement] });
   });
+  it('keeps Recommended separate from Required in raw and labeled responses', () => {
+    for (const row of [
+      ['Base mod', requirement.url, '2', '7'],
+      ['Mal0 Billy Supplementary Additions', 'https://gamebanana.com/mods/672307', '2', '1'],
+      ['Base mod', requirement.url, 'On', 'BlueColor', 'Recommended', 'GreyColor'],
+      ['Mal0 Billy Supplementary Additions', 'https://gamebanana.com/mods/672307', 'Installed', 'BlueColor', 'Recommended', 'GreyColor'],
+    ]) {
+      const snapshot = parseRequirements([row]);
+      expect(snapshot).toMatchObject({ items: [{ importance: 'recommended', state: 'on' }] });
+      expect(hasRequirementIssues(snapshot, [])).toBe(false);
+    }
+  });
   it('distinguishes empty requirements from an omitted or malformed response', () => {
     for (const raw of [null, []]) expect(parseRequirements(raw, 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [] });
     for (const raw of [undefined, {}, [['model']], [['model', '', 1, 7]]]) expect(parseRequirements(raw, 100)).toEqual({ status: 'unavailable', checkedAt: 100 });
   });
-  it('reads the simple [name, url] form as optional notes', () => {
+  it('defaults unlabelled requirements to Required', () => {
     expect(parseRequirements([['optimize mod screenspace_city', 'https://gamebanana.com/mods/722853'], ['a pc helps', '']], 100)).toEqual({ status: 'loaded', checkedAt: 100, items: [
-      { name: 'optimize mod screenspace_city', url: 'https://gamebanana.com/mods/722853', state: 'on', importance: 'optional' },
-      { name: 'a pc helps', url: undefined, state: 'on', importance: 'optional' },
+      { name: 'optimize mod screenspace_city', url: 'https://gamebanana.com/mods/722853', state: 'on', importance: 'required' },
+      { name: 'a pc helps', url: undefined, state: 'on', importance: 'required' },
     ] });
+  });
+  it.each([
+    ['(Optional)Doorman Fox mod', 'optional'],
+    ['OPTIONAL: Doorman Fox mod (recommended)', 'optional'],
+    ['Recommended addon - optional', 'optional'],
+    ['(rEcOmMeNdEd) Doorman Fox mod', 'recommended'],
+    ['An optionally named mod', 'required'],
+    ['An unrecommended mod', 'required'],
+  ])('infers %s as %s only when no importance is provided', (name, importance) => {
+    expect(parseRequirements([[name, requirement.url]])).toMatchObject({ items: [{ name, importance }] });
+  });
+  it('preserves explicit labels when names contain conflicting words', () => {
+    expect(parseRequirements([
+      ['Optional addon', requirement.url, '1', '7'],
+      ['Optional addon', requirement.url, 'On', 'BlueColor', 'Recommended', 'GreyColor'],
+    ])).toMatchObject({ items: [{ importance: 'required' }, { importance: 'recommended' }] });
   });
   it('reads Enabled and Disabled labels as states', () => {
     const [enabled, disabled] = [['Enabled', 'on'], ['Disabled', 'off']].map(([label]) =>

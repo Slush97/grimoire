@@ -120,7 +120,7 @@ export interface ModRequirement {
   /** Exact installed source required by a locally generated skin overlay. */
   sha256?: string;
   url?: string;
-  importance: 'required' | 'optional' | 'unknown';
+  importance: 'required' | 'recommended' | 'optional' | 'unknown';
   state: 'on' | 'off' | 'unknown';
 }
 

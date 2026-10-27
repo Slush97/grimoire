@@ -9,7 +9,7 @@ export const requirementTargetsSchema = z.array(z.object({
   id: z.number().int().positive(), section: z.enum(['Mod', 'Sound', 'Wip']),
 })).max(5000);
 const snapshotSchema = z.object({ status: z.literal('loaded'), checkedAt: z.number(), items: z.array(z.object({
-  name: z.string(), url: z.string().optional(), importance: z.enum(['required', 'optional', 'unknown']), state: z.enum(['on', 'off', 'unknown']),
+  name: z.string(), url: z.string().optional(), importance: z.enum(['required', 'recommended', 'optional', 'unknown']), state: z.enum(['on', 'off', 'unknown']),
 })) });
 const cacheSchema = z.record(snapshotSchema);
 let currentPath = '';

@@ -3719,14 +3719,6 @@
     "saved": "Crash dump saved."
   },
   "requirements": {
-    "state": {
-      "enabled": "On",
-      "optional": "Optional",
-      "missing": "Not installed",
-      "met": "OK",
-      "disabled": "Off",
-      "manual": "Check mod page"
-    },
     "back": "Back",
     "missing": "Needs another mod",
     "disabled": "Needed mod is off",
@@ -3739,7 +3731,6 @@
     "orderHint": "The top mod wins if both change the same thing.",
     "locateOrder": "Show in Installed",
     "orderWarning": "Recolor won't show",
-    "orderState": "Wrong order",
     "orderFixHint": "The base skin is hiding it.",
     "orderGlobalHint": "Turn off Global on the base skin, then try again.",
     "fixOrder": "Fix it",
@@ -3756,7 +3747,8 @@
     "installAnyway": "Install anyway",
     "view": "Open needed mod",
     "unavailable": "Couldn't check this mod",
-    "required": "Needs this mod",
+    "required": "Required",
+    "recommended": "Recommended",
     "install": "Install",
     "cancel": "Cancel",
     "manual": "Check the mod page for instructions.",

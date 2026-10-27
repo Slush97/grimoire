@@ -222,6 +222,17 @@ See [GameBanana Categories Reference](gamebanana_categories_reference.md) for a 
 
 ---
 
+### Requirement labels
+
+The raw `_aRequirements` rows contain `[name, url, importance, state]`. Verified importance codes are `1` (Required) and `2` (Recommended). `ProfilePage` expands this to `[name, url, stateLabel, stateColor, importanceLabel, importanceColor]`. Keep Recommended separate from Required; only Required entries participate in missing-dependency and load-order warnings.
+
+Installed, Enabled, Present, and On are state labels, separate from importance. Older two-column `[name, url]` entries have no importance label: infer Optional from the whole word `optional` in the name first, then Recommended from `recommended`, ignoring case. Otherwise default to Required. Explicit API labels take precedence over the name. Unknown codes use the existing ProfilePage label request before applying the same fallback to any unresolved importance.
+
+### Reference responses
+
+- [Required and Recommended with different states](https://gamebanana.com/apiv11/Mod/589554/ProfilePage?_csvProperties=_aRequirements)
+- [Raw importance and state codes](https://gamebanana.com/apiv11/Mod/589554?_csvProperties=_aRequirements)
+
 ## 5. File Downloads
 
 Downloading is a multi-step process to ensure valid links.

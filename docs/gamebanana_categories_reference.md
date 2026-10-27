@@ -73,6 +73,8 @@ Installed inventory loading also warms the relevant section trees through this s
 
 Match category names to the app's supported hero names and aliases to render hero icons in place of those text labels. Keep other ancestors and leaf categories as text. Do not infer a different category path from a mod's title when explicit category metadata is available.
 
+Mod details place the category tags above Files. Requirements share one compact card below current and archived files, before the artist information. Their thumbnails and names open the linked mod's details. Required and Recommended tags sit beside the existing actions; downloads remain in the linked mod's file section.
+
 For Browse Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Browse Sound and Wip filtering uses catalog title matching where their trees do not provide equivalent hero categories. Browse card title matching also uses the cached category tree's hero roster and existing aliases, so it recognizes additions beyond the bundled roster without per-card requests. Explicit hero categories take precedence over titles.
 
 Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.

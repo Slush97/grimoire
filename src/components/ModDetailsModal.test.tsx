@@ -86,17 +86,30 @@ describe('mod details', () => {
     expect(mocks.categoryState.load).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['modal', 'sidebar'] as const)('shows category tags above requirements and files in the %s', async (variant) => {
+  it.each((['modal', 'sidebar'] as const).flatMap(variant => [
+    { variant, withFiles: true }, { variant, withFiles: false },
+  ]))('keeps requirements after every file and before the artist: %j', async ({ variant, withFiles }) => {
     mocks.categoryState.pathsByModel.ModCategory = new Map([[3, [
       { id: 1, name: 'Skins' }, { id: 2, name: 'Violet' }, { id: 3, name: 'Faithful/Vanilla+' },
     ]]]);
     await render(false, { variant, mod: {
       ...mod,
+      files: withFiles ? [
+        { ...mod.files![0], fileName: 'active.zip' },
+        { ...mod.files![0], id: 31, fileName: 'archived.zip', isArchived: true },
+      ] : [],
+      submitter: { id: 1, name: 'Test artist' },
       category: { id: 3, name: 'Faithful/Vanilla+' },
       requirements: { status: 'loaded', checkedAt: 1, items: [
         { name: 'Dependency', url: 'https://example.com', importance: 'required', state: 'on' },
       ] },
     } });
+    if (withFiles) {
+      const archived = [...document.querySelectorAll<HTMLButtonElement>('button')]
+        .find(item => item.textContent?.includes('modDetails.files.archived'))!;
+      await act(async () => archived.click());
+      expect(archived.getAttribute('aria-expanded')).toBe('true');
+    }
     const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
     expect(hero.querySelector('img')?.getAttribute('src')).toContain('/heroes/chip-icons/violet.png');
     expect(hero.parentElement?.textContent).toBe('VioletSkinsFaithful/Vanilla+');
@@ -104,10 +117,20 @@ describe('mod details', () => {
     expect(tags.firstElementChild).toBe(hero);
     expect([...tags.children].slice(1).map(tag => tag.textContent)).toEqual(['Skins', 'Faithful/Vanilla+']);
     const requirements = document.querySelector('[aria-label="requirements.title"]')!;
+    expect(requirements.querySelector(':scope > h3')?.textContent).toBe('requirements.title');
     const fileTitle = [...document.querySelectorAll('h3')].find(item => item.textContent?.includes('modDetails.sections.files'))!;
-    expect(tags.nextElementSibling).toBe(requirements);
-    expect(requirements.nextElementSibling).toBe(fileTitle.parentElement);
-    expect(tags.parentElement).toBe(fileTitle.parentElement?.parentElement);
+    const artist = [...document.querySelectorAll('div')].find(item => item.textContent === 'modDetails.meta.artist')!.closest('section');
+    expect(requirements.nextElementSibling).toBe(artist);
+    if (withFiles) {
+      const files = fileTitle.closest('section')!;
+      expect(files.textContent).toContain('active.zip');
+      expect(files.textContent).toContain('archived.zip');
+      expect(tags.nextElementSibling).toBe(files);
+      expect(files.nextElementSibling).toBe(requirements);
+    } else {
+      expect(fileTitle).toBeUndefined();
+      expect(tags.nextElementSibling).toBe(requirements);
+    }
     expect(tags.classList.contains('flex-wrap')).toBe(true);
     expect(mocks.categoryState.load).toHaveBeenCalledWith('ModCategory');
   });
