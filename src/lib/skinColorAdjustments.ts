@@ -33,12 +33,28 @@ export function keepSkinPartEdit(edit: SkinPartEdit): boolean {
 }
 
 /** Paint the entire color texture while keeping some of its light and dark detail. */
-export function repaintSkinPixels(pixels: Uint8ClampedArray | Uint8Array, hex: string): void {
+const luminanceAt = (pixels: Uint8ClampedArray | Uint8Array, i: number) => (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255;
+
+/** Mean luminance of the texels being painted: all of them, or weighted by an area mask (one byte per texel). */
+export function meanLuminance(pixels: Uint8ClampedArray | Uint8Array, mask?: Uint8Array): number {
+  let sum = 0, total = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const weight = mask ? mask[i / 4] / 255 : 1;
+    sum += luminanceAt(pixels, i) * weight; total += weight;
+  }
+  return total > 0 ? sum / total : 0.5;
+}
+
+/**
+ * Paint with `hex` while keeping the texture's light and dark detail. Detail is relative to `mean`
+ * (the painted texels' mean luminance), so the painted area averages to the picked color even on a
+ * dark texture. vpkmerge's `repaint_material_pixels` uses the same formula, so preview and export match.
+ */
+export function repaintSkinPixels(pixels: Uint8ClampedArray | Uint8Array, hex: string, mean = meanLuminance(pixels)): void {
   const target = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
   for (let i = 0; i < pixels.length; i += 4) {
-    const luminance = (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255;
-    const shade = 0.65 + 0.35 * luminance;
-    for (let channel = 0; channel < 3; channel++) pixels[i + channel] = Math.round(target[channel] * shade);
+    const shade = Math.min(1.5, Math.max(0.5, 1 + 0.5 * (luminanceAt(pixels, i) - mean)));
+    for (let channel = 0; channel < 3; channel++) pixels[i + channel] = Math.min(255, Math.round(target[channel] * shade));
   }
 }
 

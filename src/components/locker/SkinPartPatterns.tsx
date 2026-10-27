@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { isSkinSurface } from '../../lib/skinPartPreview';
-import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
+import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
 import type { SkinColorAdjustments, SkinPartEdit, SkinPartFinish, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
@@ -20,25 +20,26 @@ async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement>
 /** Paint and adjust only the texels an area covers: the same result as `editRegionPixels` without a pattern, without copying the texture. */
 function paintRegionPixels(pixels: Uint8ClampedArray, mask: Uint8Array, paint: string | null, adjustments: SkinColorAdjustments): void {
   const texel = new Uint8ClampedArray(4);
+  const mean = paint ? meanLuminance(pixels, mask) : 0;
   for (let index = 0; index < mask.length; index++) {
     const weight = mask[index] / 255;
     if (!weight) continue;
     const offset = index * 4;
     texel.set(pixels.subarray(offset, offset + 4));
-    if (paint) repaintSkinPixels(texel, paint);
+    if (paint) repaintSkinPixels(texel, paint, mean);
     adjustSkinPixels(texel, adjustments);
     for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = Math.round(pixels[offset + channel] + (texel[channel] - pixels[offset + channel]) * weight);
   }
 }
 
 /** Paint, pattern, then adjust a copy of `base`, the same order as the whole-part edit and the export. */
-function editRegionPixels(base: ImageData, region: SkinPartRegion, pattern: HTMLImageElement | null): Uint8ClampedArray {
+function editRegionPixels(base: ImageData, region: SkinPartRegion, pattern: HTMLImageElement | null, mask: Uint8Array): Uint8ClampedArray {
   const canvas = document.createElement('canvas');
   canvas.width = base.width; canvas.height = base.height;
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('No region preview context');
   const pixels = new ImageData(new Uint8ClampedArray(base.data), base.width, base.height);
-  if (region.paint) repaintSkinPixels(pixels.data, region.paint);
+  if (region.paint) repaintSkinPixels(pixels.data, region.paint, meanLuminance(base.data, mask));
   if (pattern && region.pattern) {
     context.putImageData(pixels, 0, 0);
     context.globalCompositeOperation = 'source-atop'; context.globalAlpha = region.pattern.intensity;
@@ -119,7 +120,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             regions.forEach((region, index) => {
               const mask = regionMask(scene, material, region.seeds, canvas.width, canvas.height, 2, region.id);
               if (!mask) return;
-              if (regionPatterns[index]) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), mask);
+              if (regionPatterns[index]) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index], mask), mask);
               else paintRegionPixels(pixels.data, mask, region.paint ?? null, region.adjustments ?? ORIGINAL_SKIN_COLOR);
             });
             context.putImageData(pixels, 0, 0);

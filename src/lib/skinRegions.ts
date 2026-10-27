@@ -671,6 +671,12 @@ export function hasRegionSelection(region: SkinPartRegion): boolean {
   return region.seeds.some((seed) => !seed.remove);
 }
 
+/** Remove an area and the cuts its paint made in the others, so whatever it covered shows again. */
+export function removeRegion(regions: SkinPartRegion[], id: string): SkinPartRegion[] {
+  return regions.filter((region) => region.id !== id).map((region) => region.seeds.some((seed) => seed.from === id)
+    ? { ...region, seeds: region.seeds.filter((seed) => seed.from !== id) } : region);
+}
+
 export function newRegionId(existing: SkinPartRegion[]): string {
   for (let index = existing.length + 1; ; index++) {
     const id = `r${index}`;

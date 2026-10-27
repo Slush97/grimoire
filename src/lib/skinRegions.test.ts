@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, removeRegion, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -160,5 +160,14 @@ describe('region edits', () => {
     expect(hasSkinPartEdit(edit)).toBe(false);
     expect(keepSkinPartEdit(edit)).toBe(true);
     expect(hasSkinPartEdit({ ...edit, regions: [{ ...edit.regions[0], paint: '#ff0000' }] })).toBe(true);
+  });
+});
+
+describe('removing an area', () => {
+  it('takes back the cuts its paint made, so what it covered shows again', () => {
+    const blue = { id: 'r1', paint: '#3b82f6', seeds: [{ u: 0.5, v: 0.5 }, { u: 0.2, v: 0.2, remove: true as const, from: 'r2' }, { u: 0.3, v: 0.3, remove: true as const }] };
+    const red = { id: 'r2', paint: '#ef4444', seeds: [{ u: 0.2, v: 0.2 }] };
+    // The eraser's cut has no owner and stays.
+    expect(removeRegion([blue, red], 'r2')).toEqual([{ ...blue, seeds: [blue.seeds[0], blue.seeds[2]] }]);
   });
 });

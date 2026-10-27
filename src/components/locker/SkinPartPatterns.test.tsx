@@ -80,7 +80,8 @@ describe('skin part pattern replacement', () => {
       // Base texture, then the painted base written back, then the pattern on top.
       expect(ops.map(([kind, value]) => kind === 'draw' ? (value === source ? 'base' : 'pattern') : 'put'))
         .toEqual(['base', 'put', 'pattern', 'put']);
-      expect(ops[1][1]).toEqual([201, 0, 0, 255]);
+      // A flat texture has no detail to keep, so the paint is exactly the picked red.
+      expect(ops[1][1]).toEqual([255, 0, 0, 255]);
     } finally { await renderer.unmount(); }
   });
 

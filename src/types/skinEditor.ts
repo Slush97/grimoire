@@ -57,6 +57,8 @@ export interface SkinRegionSeed {
   by?: 'color' | 'brush';
   tolerance?: number;
   radius?: number;
+  /** The area whose paint cut this remove seed. Removing that area takes the cut back, so what was under it shows again. */
+  from?: string;
 }
 
 export interface SkinPartRegion {

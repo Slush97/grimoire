@@ -17,7 +17,7 @@ import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
-import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId } from '../../lib/skinRegions';
+import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId, removeRegion } from '../../lib/skinRegions';
 import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
@@ -276,7 +276,6 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     const material = paintingPart.material;
     const layout = layoutOf(material) ?? undefined;
     const erase = paintTool === 'eraser';
-    const removed = seeds.map((seed) => ({ ...seed, remove: true as const }));
     const current = edits.find((edit) => edit.material === material)?.regions ?? [];
     // Colors picked on another texture layout keep their seeds and their warning; paint never touches them.
     const live = current.filter((region) => !staleRegion(material, region));
@@ -285,6 +284,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     const target = erase ? undefined : live.find((region) => finish ? isFinishRegion(region) && sameFinish(region.finish, finish)
       : paintPattern ? region.pattern?.style === paintPattern && !region.paint
         : region.paint?.toLowerCase() === paintColor.toLowerCase() && !region.pattern);
+    // Cuts in the other areas remember which area made them, so removing it brings back what it covered.
+    const owner = erase ? undefined : target?.id ?? newRegionId(current);
+    const removed = seeds.map((seed) => ({ ...seed, remove: true as const, ...(owner ? { from: owner } : {}) }));
     // Check the whole operation first: half of one would remove paint without adding its replacement.
     if (!erase && !target && current.length >= MAX_COLORS) { setPaintNotice('colors'); return; }
     if ((!target && !erase ? seeds.length : 0) > MAX_SEEDS
@@ -294,7 +296,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
       const next = regions.map((region) => staleRegion(material, region) ? region
         : region.id === target?.id ? { ...region, layout, seeds: [...region.seeds, ...seeds] }
           : sameKind(region) ? { ...region, seeds: [...region.seeds, ...removed] } : region);
-      if (!erase && !target) next.push({ id: newRegionId(regions), layout, seeds,
+      if (owner && !target) next.push({ id: owner, layout, seeds,
         ...(finish ? { finish } : paintPattern ? { pattern: { style: paintPattern, intensity: 1, phase: 0, scroll: 0 } } : { paint: paintColor }) });
       return next;
     });
@@ -507,7 +509,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             ]} />}
           {editedArea ? <SkinRegionEditor key={editedArea.id} region={editedArea} stale={staleRegion(selected.material, editedArea)} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
             disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, editedArea.id, patch)} onBack={() => setEditingArea(null)}
-            onDelete={() => { updateRegions(selected.material, (current) => current.filter((region) => region.id !== editedArea.id)); setEditingArea(null); setPreviewRegion(null); }} />
+            onDelete={() => { updateRegions(selected.material, (current) => removeRegion(current, editedArea.id)); setEditingArea(null); setPreviewRegion(null); }} />
           : paintingPart ? <SkinPaintPanel part={nameOf(selected)} color={paintColor} pattern={paintPattern} onPattern={setPaintPattern}
             finish={paintFinish} onFinish={setPaintFinish} finishable={selected.finishable} tool={paintTool} brushSize={brushSize} tolerance={pickTolerance}
             areas={regions} missed={missedPick} canUndo={history.canUndo} disabled={exporting}
@@ -516,7 +518,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             onColor={setPaintColor} onTool={setPaintTool} onBrushSize={setBrushSize} onTolerance={setPickTolerance} onUndo={history.undo}
             onStartOver={() => { setPaintNotice(null); updateRegions(selected.material, () => []); }} onDone={stopPainting}
             onEditArea={(id) => { setEditingArea({ material: selected.material, id }); setRegionTool('color'); }} onPreviewArea={setPreviewRegion}
-            onRemoveArea={(id) => { setPreviewRegion(null); updateRegions(selected.material, (current) => current.filter((region) => region.id !== id)); }} />
+            onRemoveArea={(id) => { setPreviewRegion(null); updateRegions(selected.material, (current) => removeRegion(current, id)); }} />
           : <><SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
           {tool === 'surface' ? <div className="space-y-4">
             {selected.finishable ? <SkinFinishControls value={selectedEdit?.finish} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
