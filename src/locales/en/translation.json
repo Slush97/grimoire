@@ -433,7 +433,8 @@
         "yourColors": "Your colors",
         "moreNone": "Pick one of your colors to change its pattern",
         "colorCount_one": "{{count}} painted color",
-        "colorCount_other": "{{count}} painted colors"
+        "colorCount_other": "{{count}} painted colors",
+        "patterns": "Patterns"
       }
     },
     "draft": {

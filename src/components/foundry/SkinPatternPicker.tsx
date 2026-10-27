@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, RotateCcw, X } from 'lucide-react';
 import { Button, IconButton, Toggle } from '../common/ui';
 import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
-import { previewTrippySprite } from '../../lib/api';
+import { useTrippySwatches } from '../../lib/useTrippySwatches';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
-import { TRIPPY_STYLES, type TrippyStyleName, type TrippySpriteResult } from '../../types/mod';
+import { TRIPPY_STYLES } from '../../types/mod';
 import type { SkinPartPattern } from '../../types/skinEditor';
 
 // Moo saves patch density (vpkmerge draws 9 x scale patches across), so a bigger scale means smaller patches.
@@ -22,20 +21,7 @@ export function SkinPatternPicker({ value, color, disabled, still = false, onCha
 }) {
   const { t } = useTranslation();
   const labels = { intensity: t('foundry.skin.intensity'), phase: t('foundry.skin.phase'), scroll: t('foundry.skin.scroll') };
-  const [sprites, setSprites] = useState<Partial<Record<TrippyStyleName, TrippySpriteResult>>>({});
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all(TRIPPY_STYLES.map(async (style) => {
-      try { return { style, sprite: await previewTrippySprite({ style, intensity: 1, phase: 0, scroll: 0, frames: 1, size: 64 }) }; }
-      catch { return null; }
-    })).then((entries) => {
-      if (cancelled) return;
-      const next: Partial<Record<TrippyStyleName, TrippySpriteResult>> = {};
-      for (const entry of entries) if (entry) next[entry.style] = entry.sprite;
-      setSprites(next);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const sprites = useTrippySwatches();
   return <div className="space-y-3">
     <div className="grid grid-cols-4 gap-1">
       <button type="button" disabled={disabled} aria-pressed={value === null} onClick={() => onChange(null)}

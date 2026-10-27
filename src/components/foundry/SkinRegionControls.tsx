@@ -6,6 +6,10 @@ import { Input } from '../common/forms';
 import { SkinColorControls } from './SkinColorControls';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { regionLabel } from '../../lib/skinRegions';
+import { useTrippySwatches } from '../../lib/useTrippySwatches';
+import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
+import { TRIPPY_STYLES, type TrippyStyleName } from '../../types/mod';
 import type { SkinPartRegion } from '../../types/skinEditor';
 
 export type PaintTool = 'fill' | 'brush' | 'eraser';
@@ -17,9 +21,12 @@ const SWATCHES = ['#ef4444', '#f97316', '#facc15', '#84cc16', '#2dd4bf', '#3b82f
  * underneath, so there is nothing to select first and nothing to name. The hover preview does the
  * teaching; words stay in tooltips, plus one line until the part has paint.
  */
-export function SkinPaintPanel({ part, color, tool, brushSize, tolerance, areas, missed, notice = null, isStale = () => false, canUndo, disabled,
-  onColor, onTool, onBrushSize, onTolerance, onUndo, onStartOver, onDone, onEditArea, onPreviewArea }: {
-  part: string; color: string; tool: PaintTool; brushSize: number; tolerance: number; areas: SkinPartRegion[];
+export function SkinPaintPanel({ part, color, pattern = null, tool, brushSize, tolerance, areas, missed, notice = null, isStale = () => false, canUndo, disabled,
+  onColor, onPattern, onTool, onBrushSize, onTolerance, onUndo, onStartOver, onDone, onEditArea, onPreviewArea }: {
+  part: string; color: string;
+  /** Painting with a pattern instead of a color. */
+  pattern?: TrippyStyleName | null;
+  tool: PaintTool; brushSize: number; tolerance: number; areas: SkinPartRegion[];
   /** The part a stroke or click landed on instead, '' when unknown, false when none. */
   missed: string | false;
   /** Why the last paint did nothing. */
@@ -27,19 +34,29 @@ export function SkinPaintPanel({ part, color, tool, brushSize, tolerance, areas,
   /** Areas painted on an older texture layout, which need painting again. */
   isStale?: (area: SkinPartRegion) => boolean;
   canUndo: boolean; disabled: boolean;
-  onColor: (color: string) => void; onTool: (tool: PaintTool) => void; onBrushSize: (size: number) => void; onTolerance: (tolerance: number) => void;
+  onColor: (color: string) => void; onPattern: (pattern: TrippyStyleName | null) => void;
+  onTool: (tool: PaintTool) => void; onBrushSize: (size: number) => void; onTolerance: (tolerance: number) => void;
   onUndo: () => void; onStartOver: () => void; onDone: () => void; onEditArea: (id: string) => void; onPreviewArea: (id: string | null) => void;
 }) {
   const { t } = useTranslation();
+  const sprites = useTrippySwatches();
   const tools = [
     { value: 'fill' as const, icon: PaintBucket, label: t('foundry.skin.paint.fill'), hint: t('foundry.skin.paint.fillHint', { part }) },
     { value: 'brush' as const, icon: Brush, label: t('foundry.skin.paint.brush'), hint: t('foundry.skin.paint.brushHint', { part }) },
     { value: 'eraser' as const, icon: Eraser, label: t('foundry.skin.paint.eraser'), hint: t('foundry.skin.paint.eraserHint', { part }) },
   ];
-  const current = areas.find((area) => area.paint?.toLowerCase() === color.toLowerCase() && !area.pattern);
+  const current = areas.find((area) => pattern ? area.pattern?.style === pattern && !area.paint : area.paint?.toLowerCase() === color.toLowerCase() && !area.pattern);
+  const pick = (next: { color: string } | { pattern: TrippyStyleName }) => {
+    if ('pattern' in next) onPattern(next.pattern); else { onPattern(null); onColor(next.color); }
+    if (tool === 'eraser') onTool('fill');
+  };
+  const chip = 'shrink-0 overflow-hidden rounded-sm border border-hl/20 outline-offset-2 aria-pressed:outline aria-pressed:outline-2 aria-pressed:outline-accent';
   const swatch = (value: string, label: string, pressed: boolean, size = 'h-5 w-5') => <button key={value} type="button" aria-label={label} title={label} aria-pressed={pressed}
-    onClick={() => { onColor(value); if (tool === 'eraser') onTool('fill'); }} style={{ backgroundColor: value }}
-    className={`${size} shrink-0 rounded-sm border border-hl/20 outline-offset-2 aria-pressed:outline aria-pressed:outline-2 aria-pressed:outline-accent`} />;
+    onClick={() => pick({ color: value })} style={{ backgroundColor: value }} className={`${size} ${chip}`} />;
+  const patternSwatch = (style: TrippyStyleName, label: string, pressed: boolean, size = 'h-5 w-5', key: string = style) => <button key={key} type="button" aria-label={label} title={label}
+    aria-pressed={pressed} onClick={() => pick({ pattern: style })} className={`${size} ${chip}`}>
+    <TrippySpriteSwatch sprite={sprites[style] ?? null} className="h-full w-full" />
+  </button>;
   return <div className="space-y-3">
     <SegmentedControl fill label={t('foundry.skin.paint.tool')} value={tool} onChange={onTool} options={tools.map(({ value, icon: Icon, label, hint }) => ({
       value, title: hint, label: <span className="flex items-center justify-center gap-1.5"><Icon className="h-3.5 w-3.5" aria-hidden />{label}</span>,
@@ -47,8 +64,11 @@ export function SkinPaintPanel({ part, color, tool, brushSize, tolerance, areas,
     {!areas.length && <p className="text-xs text-text-secondary">{tools.find((item) => item.value === tool)?.hint}</p>}
     <fieldset disabled={disabled} className="space-y-2">
       <legend className="sr-only">{t('foundry.skin.paint.color')}</legend>
-      <div className="flex justify-between gap-1">{SWATCHES.map((value) => swatch(value, value, tool !== 'eraser' && color.toLowerCase() === value))}</div>
-      {tool !== 'eraser' && <div className="px-2 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
+      <div className="flex justify-between gap-1">{SWATCHES.map((value) => swatch(value, value, tool !== 'eraser' && !pattern && color.toLowerCase() === value))}</div>
+      <div className="grid grid-cols-8 justify-items-center gap-1" role="group" aria-label={t('foundry.skin.paint.patterns')}>
+        {TRIPPY_STYLES.map((style) => patternSwatch(style, TRIPPY_STYLE_LABELS[style], tool !== 'eraser' && pattern === style))}
+      </div>
+      {tool !== 'eraser' && !pattern && <div className="px-2 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
         <HexColorPicker color={color} onChange={onColor} style={{ width: '100%', height: 64 }} />
       </div>}
     </fieldset>
@@ -67,7 +87,9 @@ export function SkinPaintPanel({ part, color, tool, brushSize, tolerance, areas,
       <span title={t('foundry.skin.paint.yourColors')}><Palette className="h-4 w-4 shrink-0 text-text-tertiary" aria-hidden /></span>
       <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
         {areas.map((area) => <span key={area.id} className="relative" onPointerEnter={() => onPreviewArea(area.id)} onPointerLeave={() => onPreviewArea(null)}>
-          {area.paint ? swatch(area.paint, regionLabel(area, t), tool !== 'eraser' && area === current, 'h-6 w-6')
+          {/* An area painted with a pattern shows the pattern, so two areas of one color still look different. */}
+          {area.pattern ? patternSwatch(area.pattern.style, regionLabel(area, t), tool !== 'eraser' && area === current, 'h-6 w-6', area.id)
+            : area.paint ? swatch(area.paint, regionLabel(area, t), tool !== 'eraser' && area === current, 'h-6 w-6')
             : <button type="button" aria-label={regionLabel(area, t)} title={regionLabel(area, t)} onClick={() => onEditArea(area.id)}
               className="h-6 w-6 rounded-sm border border-dashed border-hl/30" />}
           {isStale(area) && <span role="img" aria-label={t('foundry.skin.paint.stale')} title={t('foundry.skin.paint.stale')}

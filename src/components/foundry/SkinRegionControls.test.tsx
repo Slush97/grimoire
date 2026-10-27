@@ -21,7 +21,7 @@ const region: SkinPartRegion = { id: 'r3', seeds: [{ u: 0.5, v: 0.5 }], paint: '
 describe('SkinPaintPanel', () => {
   const props = (patch: Partial<ComponentProps<typeof SkinPaintPanel>> = {}): ComponentProps<typeof SkinPaintPanel> => ({
     part: 'Dress', color: '#2dd4bf', tool: 'fill', brushSize: 16, tolerance: 8, areas: [], missed: false, canUndo: false, disabled: false,
-    onColor: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
+    onColor: vi.fn(), onPattern: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
     onEditArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
   });
   it('explains the chosen tool and shows only its setting', () => {
@@ -49,6 +49,25 @@ describe('SkinPaintPanel', () => {
     expect(value.onEditArea).toHaveBeenCalledWith('r3');
     act(() => (host.querySelector('button[aria-label="common.actions.undo"]') as HTMLButtonElement).click());
     expect(value.onUndo).toHaveBeenCalled();
+  });
+});
+
+describe('SkinPaintPanel patterns', () => {
+  it('paints with a pattern in one click and shows patterned areas as their pattern', () => {
+    const onPattern = vi.fn(), onColor = vi.fn();
+    const patterned: SkinPartRegion = { id: 'r4', seeds: [{ u: 0.5, v: 0.5 }], pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } };
+    act(() => root.render(<SkinPaintPanel part="Dress" color="#2dd4bf" tool="fill" brushSize={16} tolerance={8} areas={[region, patterned]} missed={false}
+      canUndo={false} disabled={false} onColor={onColor} onPattern={onPattern} onTool={vi.fn()} onBrushSize={vi.fn()} onTolerance={vi.fn()}
+      onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onPreviewArea={vi.fn()} />));
+    act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABELS.holo}"]`) as HTMLButtonElement).click());
+    expect(onPattern).toHaveBeenCalledWith('holo');
+    act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
+    expect(onPattern).toHaveBeenLastCalledWith(null);
+    expect(onColor).toHaveBeenLastCalledWith('#3b82f6');
+    // The patterned area's chip is its pattern, not a plain color.
+    const chip = host.querySelector('button[aria-label="foundry.skin.region.areaName:4"]') as HTMLButtonElement;
+    expect(chip.style.backgroundColor).toBe('');
+    expect((host.querySelector('button[aria-label="foundry.skin.region.areaName:3"]') as HTMLButtonElement).style.backgroundColor).not.toBe('');
   });
 });
 
