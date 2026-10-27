@@ -353,7 +353,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
               label={t(focusMaterial === selected.material ? 'foundry.skin.wholeModel' : 'foundry.skin.focusPart')}
               onClick={() => setFocusMaterial(focusMaterial === selected.material ? null : selected.material)} />
             <IconButton size="sm" icon={RotateCcw} disabled={!selectedEdit || exporting} label={t('foundry.skin.resetPart', { part: nameOf(selected) })}
-              onClick={() => update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, finish: undefined, surface: undefined })} />
+              onClick={() => update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined })} />
           </div>
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
           <SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
@@ -367,7 +367,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             : tool === 'color' ? <SkinColorControls key={selected.material} color={colorOf(selected)} edit={selectedEdit}
             tintable={selected.tintable} adjustable={selected.patternable} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
             onChange={(patch) => update(selected.material, patch)} /> : selected.patternable ? <SkinPatternPicker value={selectedEdit?.pattern ?? null} color={colorOf(selected)} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
-            onChange={(pattern) => update(selected.material, { pattern, ...(pattern?.colors && selected.tintable ? { tint: '#ffffff', colorize: false } : {}) })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
+            onChange={(pattern) => update(selected.material, { pattern, ...(pattern?.colors && selected.tintable ? { tint: '#ffffff', colorize: false, repaint: false } : {}) })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.patternUnsupported')}</p>}
         </div>}
     </WorkshopWorkbench>
   </section>;

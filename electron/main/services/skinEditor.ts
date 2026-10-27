@@ -175,7 +175,7 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
         if (edit.tint !== null && !info.parts.some((part) => part.material === edit.material && part.tintable)) {
             throw new Error('This material does not expose a supported static color tint.');
         }
-        if ((edit.pattern || hasColorAdjustments(edit.adjustments)) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
+        if ((edit.pattern || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint)) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
         if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
             throw new Error('This material name also selects another part. Hiding it cannot be exported safely.');
         }
@@ -195,7 +195,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
         const { parts } = await inspectSkinModels(request.heroName, source);
         validateSkinEdits({ ...source, parts }, request);
         const total = 1 + request.edits.reduce((count, edit) => count + (edit.hidden ? parts.find((part) => part.material === edit.material)?.modelEntries?.length ?? 1
-            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments)) + Number(edit.tint !== null) + Number(!!edit.surface) + Number(!!edit.finish)), 0);
+            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)), 0);
         let completed = 0;
         const advance = () => onProgress?.({ stage: 'build', completed: ++completed, total });
         onProgress?.({ stage: 'build', completed, total });
@@ -216,7 +216,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             }
             layers.push(...modelLayers.values());
             const patternLayers = new Map<string, string>();
-            for (const edit of request.edits.filter((item) => (item.pattern || hasColorAdjustments(item.adjustments)) && !item.hidden)) {
+            for (const edit of request.edits.filter((item) => (item.pattern || hasColorAdjustments(item.adjustments) || (item.repaint && item.tint)) && !item.hidden)) {
                 const pattern = edit.pattern;
                 const color = edit.adjustments ?? ORIGINAL_SKIN_COLOR;
                 const layer = join(dir, `pattern-${layers.length}_dir.vpk`);
@@ -224,6 +224,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                     '--material', edit.material, '--style', pattern?.style ?? 'confetti', '--intensity', String(pattern?.intensity ?? 0),
                     '--phase', String(pattern?.phase ?? 0), '--scroll', String(pattern?.scroll ?? 0),
                     '--scale', String(pattern?.style === 'moo' ? pattern.scale ?? 1 : 1),
+                    ...(edit.repaint && edit.tint ? ['--repaint', edit.tint.slice(1)] : []),
                     ...(pattern?.colors ? ['--palette', pattern.colors.join(',')] : []),
                     '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness), '--encode-vpk', layer], 300000, textureBakeEnv);
                 await verifyVpkOutput(layer);
@@ -231,7 +232,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 patternLayers.set(edit.material, layer);
                 advance();
             }
-            for (const edit of request.edits.filter((item) => item.tint !== null && !item.hidden)) {
+            for (const edit of request.edits.filter((item) => item.tint !== null && !item.repaint && !item.hidden)) {
                 if (edit.tint === null) continue;
                 const tintSource = patternLayers.get(edit.material) ?? source.vpk;
                 const layer = join(dir, `tint-${layers.length}_dir.vpk`);

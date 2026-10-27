@@ -21,9 +21,13 @@ export function SkinColorControls({ color, edit, tintable, adjustable, disabled,
     <fieldset disabled={disabled || !tintable} className="space-y-2 disabled:opacity-40">
       <div className="flex items-center gap-2">
         <span className="flex-1 text-xs text-text-secondary">{t('foundry.skin.tint')}</span>
-        <Toggle label={t('foundry.skin.colorize')} checked={edit?.colorize !== false}
+        {!edit?.repaint && <Toggle label={t('foundry.skin.colorize')} checked={edit?.colorize !== false}
           onChange={(colorize) => onChange({ colorize, tint: edit?.tint ?? color })} />
+        }
       </div>
+      <Toggle label={t('foundry.skin.repaint')} checked={!!edit?.repaint}
+        disabled={!adjustable} onChange={(repaint) => onChange({ repaint, tint: edit?.tint ?? color })} />
+      {edit?.repaint && <p className="text-xs text-text-secondary">{t('foundry.skin.repaintHint')}</p>}
       <div className="flex justify-between gap-1" aria-label={t('foundry.skin.swatches')}>
         {SWATCHES.map((swatch) => <button key={swatch} type="button" disabled={disabled || !tintable} aria-label={swatch}
           title={swatch} aria-pressed={edit?.tint?.toLowerCase() === swatch} onClick={() => onChange({ tint: swatch })}

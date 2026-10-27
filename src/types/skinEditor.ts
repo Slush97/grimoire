@@ -38,6 +38,7 @@ export interface SkinPartEdit {
   pattern?: SkinPartPattern | null;
   adjustments?: SkinColorAdjustments;
   colorize?: boolean;
+  repaint?: boolean;
   finish?: SkinPartFinish;
   surface?: SkinPartSurface;
 }

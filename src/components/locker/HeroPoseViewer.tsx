@@ -1060,8 +1060,8 @@ function NprMaterials({
       if (!edit?.tint || !morphic || !(matrix instanceof THREE.Matrix3) || !(offset instanceof THREE.Vector3)) return;
       const previousMatrix = matrix.clone();
       const previousOffset = offset.clone();
-      const color = new THREE.Color(edit.tint);
-      const mode = edit.colorize === false ? 0 : 1;
+      const color = new THREE.Color(edit.repaint ? '#ffffff' : edit.tint);
+      const mode = edit.repaint || edit.colorize === false ? 0 : 1;
       matrix.copy(source2TintMatrix(color, mode));
       const vector = new THREE.Vector3(color.r, color.g, color.b);
       offset.copy(mode === 1 ? vector.clone().sub(vector.clone().applyMatrix3(matrix)) : new THREE.Vector3());

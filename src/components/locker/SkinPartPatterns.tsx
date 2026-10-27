@@ -4,14 +4,15 @@ import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { isSkinSurface } from '../../lib/skinPartPreview';
-import { adjustSkinPixels, hasColorAdjustments, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
+import { adjustSkinPixels, hasColorAdjustments, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import type { SkinPartEdit } from '../../types/skinEditor';
 
 function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3D; edit: SkinPartEdit; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
   const textures = useRef(new Map<THREE.Material & Pick<THREE.MeshStandardMaterial, 'map' | 'color'>,
     { original: THREE.Texture | null; texture: THREE.CanvasTexture }>());
   const animationOffset = useRef(new THREE.Vector2());
-  const { material, pattern, adjustments = ORIGINAL_SKIN_COLOR } = edit;
+  const { material, pattern, adjustments = ORIGINAL_SKIN_COLOR, repaint, tint } = edit;
+  const paintColor = repaint ? tint : null;
   const { hue, saturation, brightness } = adjustments;
   const style = pattern?.style, intensity = pattern?.intensity ?? 0, phase = pattern?.phase ?? 0, scroll = pattern?.scroll ?? 0;
   const scale = style === 'moo' ? pattern?.scale ?? 1 : 1;
@@ -66,6 +67,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             }
             const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
             adjustSkinPixels(pixels.data, { hue, saturation, brightness });
+            if (paintColor) repaintSkinPixels(pixels.data, paintColor);
             context.putImageData(pixels, 0, 0);
             const texture = new THREE.CanvasTexture(canvas);
             texture.colorSpace = THREE.SRGBColorSpace; texture.flipY = original?.flipY ?? false;
@@ -92,7 +94,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
       }).finally(() => { if (!cancelled) onPending?.(material, false); });
     }, 75);
     return () => { cancelled = true; onPending?.(material, false); clearTimeout(timer); };
-  }, [scene, material, style, intensity, phase, colors, scale, hue, saturation, brightness, onError, onPending]);
+  }, [scene, material, style, intensity, phase, colors, scale, hue, saturation, brightness, paintColor, onError, onPending]);
   useFrame((_state, delta) => {
     if (scroll <= 0) return;
     const x = delta * scroll * .08, y = delta * scroll * .05;
@@ -105,6 +107,6 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
 }
 
 export function SkinPartPatterns({ scene, edits, onError, onPending }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
-  return edits.map((edit) => !edit.hidden && ((edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments))
+  return edits.map((edit) => !edit.hidden && ((edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint))
     ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} /> : null);
 }

@@ -126,6 +126,15 @@ describe('skin transparency export chain', () => {
     expect(surface).toEqual(expect.arrayContaining(['surface', '--mode', mode, '--opacity', '0.35']));
     expect(finish[finish.indexOf('--vpk') + 1]).toBe(outputOf(surface));
     expect(progress.at(-1)).toEqual({ stage: 'build', completed: 5, total: 5 });
+    vi.mocked(runVpkmerge).mockClear();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: '#ffffff', repaint: true,
+      surface: { mode, opacity: 0.35 },
+    }] }, 'out.vpk');
+    const repaintCalls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(repaintCalls.map((args) => args[0])).toEqual(['trippy-skin', 'workshop', 'out.vpk']);
+    expect(repaintCalls[0]).toEqual(expect.arrayContaining(['--repaint', 'ffffff']));
+    expect(repaintCalls[1][repaintCalls[1].indexOf('--vpk') + 1]).toBe(outputOf(repaintCalls[0]));
     vi.mocked(runVpkmergeStdout).mockClear();
   });
 });

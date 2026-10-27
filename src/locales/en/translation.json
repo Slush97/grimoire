@@ -346,6 +346,8 @@
       "brightness": "Brightness",
       "tint": "Tint",
       "colorize": "Colorize",
+      "repaint": "Paint whole part",
+      "repaintHint": "Replaces the color across this whole material, including details outside the tint mask.",
       "swatches": "Quick colors",
       "hex": "Hex color",
       "exactValue": "{{control}} value",

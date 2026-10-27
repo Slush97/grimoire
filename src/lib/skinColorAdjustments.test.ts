@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit } from './skinColorAdjustments';
+import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit, repaintSkinPixels } from './skinColorAdjustments';
 import { skinEditExportSchema, skinEditSaveSchema } from './skinEditSchema';
 
 describe('skin texture adjustment', () => {
+  it('paints black and light pixels white while retaining shading and packed alpha', () => {
+    const pixels = new Uint8Array([0, 0, 0, 17, 128, 128, 128, 128, 255, 255, 255, 239]);
+    repaintSkinPixels(pixels, '#ffffff');
+    expect([...pixels]).toEqual([166, 166, 166, 17, 211, 211, 211, 128, 255, 255, 255, 239]);
+    repaintSkinPixels(pixels, '#000000');
+    expect([...pixels]).toEqual([0, 0, 0, 17, 0, 0, 0, 128, 0, 0, 0, 239]);
+  });
   it('keeps neutral pixels exact, shifts hues, and preserves every alpha byte', () => {
     const pixels = new Uint8Array([255, 0, 0, 19, 0, 255, 0, 128, 80, 80, 80, 0]);
     const original = pixels.slice();

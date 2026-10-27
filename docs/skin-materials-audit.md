@@ -14,7 +14,7 @@ These do not replace the shader or create an authored cloth, rubber or stone mat
 
 ## Tint limitation
 
-White is an identity tint in both current modes. Multiply leaves the texture unchanged at white; Colorize uses an identity matrix for neutral grayscale colors. Brightness multiplies the existing pixels and cannot lift pure black to white. Repainting a dark texture white needs a separate, shared texture-bake operation with a policy for detail and tint masks. This is not implemented by the existing picker and remains follow-up work.
+White is an identity tint in Multiply and Colorize. Brightness multiplies the existing pixels and cannot lift pure black to white. Paint whole part instead bakes the chosen color into the color texture, retaining some luminance detail. It covers the whole material, including areas outside the original tint mask, and preserves the packed alpha channel. Preview and export use the same operation; in-game visual confirmation is still needed.
 
 ## Export checks
 
