@@ -418,7 +418,6 @@
         "fill": "Fill",
         "brush": "Brush",
         "eraser": "Eraser",
-        "color": "Paint color",
         "fillRange": "Reach",
         "size": "Size",
         "startOver": "Start over",
@@ -431,10 +430,13 @@
         "stale": "Paint again",
         "fillRangeHint": "Low fills only the exact color you click. High also fills similar colors.",
         "yourColors": "Your colors",
-        "moreNone": "Pick one of your colors to change its pattern",
+        "moreNone": "Pick one of your colors first",
         "colorCount_one": "{{count}} painted color",
         "colorCount_other": "{{count}} painted colors",
-        "patterns": "Patterns"
+        "patterns": "Patterns",
+        "customColor": "Any color",
+        "remove": "Remove {{area}} from the model",
+        "color": "Paint color"
       }
     },
     "draft": {

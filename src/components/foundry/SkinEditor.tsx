@@ -504,7 +504,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             isStale={(area) => staleRegion(selected.material, area)}
             onColor={setPaintColor} onTool={setPaintTool} onBrushSize={setBrushSize} onTolerance={setPickTolerance} onUndo={history.undo}
             onStartOver={() => { setPaintNotice(null); updateRegions(selected.material, () => []); }} onDone={stopPainting}
-            onEditArea={(id) => { setEditingArea({ material: selected.material, id }); setRegionTool('color'); }} onPreviewArea={setPreviewRegion} />
+            onEditArea={(id) => { setEditingArea({ material: selected.material, id }); setRegionTool('color'); }} onPreviewArea={setPreviewRegion}
+            onRemoveArea={(id) => { setPreviewRegion(null); updateRegions(selected.material, (current) => current.filter((region) => region.id !== id)); }} />
           : <><SegmentedControl fill value={tool} onChange={setTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }, { value: 'surface', label: t('foundry.skin.surface') }]} />
           {tool === 'surface' ? <div className="space-y-4">
             {selected.finishable ? <SkinFinishControls value={selectedEdit?.finish} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}

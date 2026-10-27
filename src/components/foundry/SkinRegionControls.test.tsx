@@ -22,7 +22,7 @@ describe('SkinPaintPanel', () => {
   const props = (patch: Partial<ComponentProps<typeof SkinPaintPanel>> = {}): ComponentProps<typeof SkinPaintPanel> => ({
     part: 'Dress', color: '#2dd4bf', tool: 'fill', brushSize: 16, tolerance: 8, areas: [], missed: false, canUndo: false, disabled: false,
     onColor: vi.fn(), onPattern: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
-    onEditArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
+    onEditArea: vi.fn(), onRemoveArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
   });
   it('explains the chosen tool and shows only its setting', () => {
     act(() => root.render(<SkinPaintPanel {...props()} />));
@@ -49,6 +49,8 @@ describe('SkinPaintPanel', () => {
     expect(value.onEditArea).toHaveBeenCalledWith('r3');
     act(() => (host.querySelector('button[aria-label="common.actions.undo"]') as HTMLButtonElement).click());
     expect(value.onUndo).toHaveBeenCalled();
+    act(() => (host.querySelector('button[aria-label="foundry.skin.paint.remove"]') as HTMLButtonElement).click());
+    expect(value.onRemoveArea).toHaveBeenCalledWith('r3');
   });
 });
 
@@ -58,7 +60,7 @@ describe('SkinPaintPanel patterns', () => {
     const patterned: SkinPartRegion = { id: 'r4', seeds: [{ u: 0.5, v: 0.5 }], pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } };
     act(() => root.render(<SkinPaintPanel part="Dress" color="#2dd4bf" tool="fill" brushSize={16} tolerance={8} areas={[region, patterned]} missed={false}
       canUndo={false} disabled={false} onColor={onColor} onPattern={onPattern} onTool={vi.fn()} onBrushSize={vi.fn()} onTolerance={vi.fn()}
-      onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onPreviewArea={vi.fn()} />));
+      onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onRemoveArea={vi.fn()} onPreviewArea={vi.fn()} />));
     act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABELS.holo}"]`) as HTMLButtonElement).click());
     expect(onPattern).toHaveBeenCalledWith('holo');
     act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
