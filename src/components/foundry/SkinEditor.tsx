@@ -22,6 +22,7 @@ import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
+import { skinEditErrorDetail, skinEditErrorMessage } from '../../lib/skinEditError';
 import { useSkinEditHistory } from '../../lib/useSkinEditHistory';
 import { skinModelForms } from '../../lib/skinModelForms';
 import type { HeroPoseSkinSource } from '../../types/portrait';
@@ -120,7 +121,7 @@ export default function SkinEditor({ heroName, initialSkinSources = NO_SOURCES, 
     </Select>
   </label>;
   if (selection.resuming) {
-    return <>{sourceControl}{resumeError ? <p role="alert" className="text-sm text-state-danger">{resumeError}</p>
+    return <>{sourceControl}{resumeError ? <p role="alert" title={skinEditErrorDetail(resumeError)} className="text-sm text-state-danger">{skinEditErrorMessage(resumeError, t)}</p>
       : <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.loading')}</p>}</>;
   }
   return <>
@@ -447,7 +448,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
         </div>}
         {saved && <p role="status" className="text-xs text-state-success">{t(saved === 'enabled' ? 'foundry.skin.enabled' : 'foundry.skin.saved')}</p>}
         {saved === 'enabled' && thumbnailFailed && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.thumbnailFailed')}</p>}
-        {error && <p role="alert" className="break-words text-xs text-state-danger">{error}</p>}
+        {error && <p role="alert" title={skinEditErrorDetail(error)} className="break-words text-xs text-state-danger">{skinEditErrorMessage(error, t)}</p>}
       </>}>
       <fieldset disabled={exporting} className="min-w-0 space-y-2">
         <legend className="sr-only">{t('foundry.skin.parts')}</legend>

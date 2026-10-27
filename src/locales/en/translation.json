@@ -438,6 +438,11 @@
         "remove": "Remove {{area}} from the model",
         "color": "Paint color",
         "shine": "Shine"
+      },
+      "errors": {
+        "generic": "That did not work. Your changes are still here, so try again. If it keeps happening, restart Grimoire.",
+        "diskFull": "Your disk is full. Free up some space, then try again.",
+        "fileBusy": "Another program is using the mod files. Close Deadlock or any mod tools, then try again."
       }
     },
     "draft": {
