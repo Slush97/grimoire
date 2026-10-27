@@ -400,7 +400,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     } catch (reason) { setError(String(reason)); }
     finally { setExporting(false); }
   };
-  const highlight = partsExpanded && !paintingPart ? hoveredMaterial : null;
+  const highlight = partsExpanded ? hoveredMaterial : null;
   const highlightedPart = info?.parts.find((part) => part.material === highlight);
   return <section ref={editorRef} onPointerDownCapture={history.onPointerDownCapture} onFocusCapture={history.onFocusCapture}
     onBlurCapture={history.onBlurCapture} onKeyDownCapture={history.onKeyDownCapture} className="@container space-y-3" aria-label={t('foundry.skin.title')}>
