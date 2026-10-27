@@ -1,14 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '../common/ui';
+import { FINISHES } from '../../lib/skinFinishes';
 import type { SkinPartFinish } from '../../types/skinEditor';
-
-const FINISHES = [
-  { name: 'matte', roughness: 0.9, metalness: 0 },
-  { name: 'satin', roughness: 0.45, metalness: 0 },
-  { name: 'glossy', roughness: 0.12, metalness: 0 },
-  { name: 'metal', roughness: 0.18, metalness: 1 },
-  { name: 'polished', roughness: 0.04, metalness: 1 },
-] as const;
 
 export function SkinFinishControls({ value, disabled, onChange }: {
   value?: SkinPartFinish; disabled: boolean; onChange: (finish: SkinPartFinish | undefined) => void;

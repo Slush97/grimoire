@@ -73,6 +73,26 @@ describe('SkinPaintPanel patterns', () => {
   });
 });
 
+describe('SkinPaintPanel shine', () => {
+  it('paints shine in one click, shows shine areas as balls and greys out on parts without a finish', () => {
+    const onFinish = vi.fn(), onPattern = vi.fn(), onColor = vi.fn();
+    const shiny: SkinPartRegion = { id: 'r5', seeds: [{ u: 0.5, v: 0.5 }], finish: { roughness: 0.18, metalness: 1 } };
+    const render = (finishable: boolean) => act(() => root.render(<SkinPaintPanel part="Dress" color="#2dd4bf" tool="fill" brushSize={16} tolerance={8} areas={[region, shiny]}
+      missed={false} canUndo={false} disabled={false} finishable={finishable} onColor={onColor} onPattern={onPattern} onFinish={onFinish} onTool={vi.fn()}
+      onBrushSize={vi.fn()} onTolerance={vi.fn()} onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onRemoveArea={vi.fn()} onPreviewArea={vi.fn()} />));
+    render(true);
+    act(() => (host.querySelector('button[aria-label="foundry.skin.finish.metal"]') as HTMLButtonElement).click());
+    // Only the finish values: a preset name would fail the strict export schema.
+    expect(onFinish).toHaveBeenLastCalledWith({ roughness: 0.18, metalness: 1 });
+    expect(onPattern).toHaveBeenLastCalledWith(null);
+    act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
+    expect(onFinish).toHaveBeenLastCalledWith(null);
+    expect((host.querySelector('button[aria-label="foundry.skin.region.areaName:5"]') as HTMLButtonElement).style.background).toContain('gradient');
+    render(false);
+    expect((host.querySelector('button[aria-label="foundry.skin.finish.metal"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe('SkinRegionEditor', () => {
   it('paints without a tint mode and keeps area patterns still', () => {
     const onChange = vi.fn();

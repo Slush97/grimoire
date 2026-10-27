@@ -46,6 +46,10 @@ export const skinPartRegionSchema = z.object({
     paint: z.string().regex(/^#[a-f0-9]{6}$/i).nullable().optional(),
     adjustments: adjustmentsSchema.optional(),
     pattern: skinPartPatternSchema.extend({ scroll: z.literal(0) }).nullable().optional(),
+    finish: z.object({
+        roughness: z.number().finite().min(0).max(1),
+        metalness: z.number().finite().min(0).max(1),
+    }).strict().optional(),
 }).strict();
 
 export const regionMaskSchema = z.string().max(4_000_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/);

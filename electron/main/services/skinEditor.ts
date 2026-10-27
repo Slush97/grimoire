@@ -6,7 +6,7 @@ import { withHeroSkinSource } from './heroPoseModels';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
-import { hasColorAdjustments, hasRegionEdit, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
+import { hasColorAdjustments, hasRegionEdit, hasRegionLook, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
 import { skinModelForms, type SkinModelForm } from '../../../src/lib/skinModelForms';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinEditProgress, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
@@ -114,12 +114,14 @@ async function inspect(vpk: string, base: string, form: SkinModelForm, withForms
 }
 
 const skinInfoCache = new Map<string, Promise<SkinEditInfo>>();
-let maskSupport: Promise<boolean> | null = null;
-/** Area edits need `trippy-skin --mask`, added after vpkmerge 0.26.0. */
-async function vpkmergeSupportsMask(): Promise<boolean> {
-    maskSupport ??= runVpkmergeStdout(['trippy-skin', '--help']).then((help) => /--mask\b/.test(help), () => false);
-    const supported = await maskSupport;
-    if (!supported) maskSupport = null;
+const maskSupport = new Map<string, Promise<boolean>>();
+/** Area edits need `--mask` on `trippy-skin` (colors) and `workshop finish` (shine), added after vpkmerge 0.26.0. */
+async function vpkmergeSupportsMask(command: string[]): Promise<boolean> {
+    const key = command.join(' ');
+    const probe = maskSupport.get(key) ?? runVpkmergeStdout([...command, '--help']).then((help) => /--mask\b/.test(help), () => false);
+    maskSupport.set(key, probe);
+    const supported = await probe;
+    if (!supported) maskSupport.delete(key);
     return supported;
 }
 const textureBakeEnv = { RAYON_NUM_THREADS: process.env['RAYON_NUM_THREADS'] ?? '4' };
@@ -186,7 +188,8 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
         if ((edit.pattern || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint)) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
         for (const region of edit.regions ?? []) {
             if (!hasRegionEdit(region) || edit.hidden) continue;
-            if (!info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
+            if (hasRegionLook(region) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
+            if (region.finish && !info.parts.some((part) => part.material === edit.material && part.finishable)) throw new Error('This part does not support static material finishes.');
             if (!request.regionMasks?.[regionMaskKey(edit.material, region.id)]) throw new Error('An edited area has no selection. Reselect it before exporting.');
         }
         if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
@@ -207,12 +210,14 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
     return withHeroSkinSource(deadlockPath, request.heroName, request.skinSources, async (source) => {
         const { parts } = await inspectSkinModels(request.heroName, source);
         validateSkinEdits({ ...source, parts }, request);
-        if (request.edits.some((edit) => !edit.hidden && edit.regions?.some(hasRegionEdit)) && !await vpkmergeSupportsMask()) {
+        const visibleRegions = request.edits.flatMap((edit) => edit.hidden ? [] : edit.regions ?? []);
+        if ((visibleRegions.some(hasRegionLook) && !await vpkmergeSupportsMask(['trippy-skin']))
+            || (visibleRegions.some((region) => region.finish) && !await vpkmergeSupportsMask(['workshop', 'finish']))) {
             throw new Error('Editing areas of a part needs a newer vpkmerge than this Grimoire build includes. Update Grimoire, or reset the areas to save.');
         }
         const total = 1 + request.edits.reduce((count, edit) => count + (edit.hidden ? parts.find((part) => part.material === edit.material)?.modelEntries?.length ?? 1
             : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)
-                + (edit.regions?.filter(hasRegionEdit).length ?? 0)), 0);
+                + (edit.regions?.filter(hasRegionLook).length ?? 0) + (edit.regions?.filter((region) => region.finish).length ?? 0)), 0);
         let completed = 0;
         const advance = () => onProgress?.({ stage: 'build', completed: ++completed, total });
         onProgress?.({ stage: 'build', completed, total });
@@ -251,7 +256,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             }
             // Regions paint over the whole-part texture edit and under the material tint, like the preview.
             for (const edit of request.edits.filter((item) => !item.hidden)) {
-                for (const region of edit.regions?.filter(hasRegionEdit) ?? []) {
+                for (const region of edit.regions?.filter(hasRegionLook) ?? []) {
                     const mask = join(dir, `mask-${layers.length}.png`);
                     await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
                     const pattern = region.pattern;
@@ -303,7 +308,25 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                     '--roughness', String(edit.finish.roughness), '--metalness', String(edit.finish.metalness), '--encode-vpk', layer], 300000, textureBakeEnv);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
+                // Shine areas read this layer's material and masks, so they stack on the whole-part finish.
+                patternLayers.set(edit.material, layer);
                 advance();
+            }
+            // Shine areas last: each blends its finish into the textures the previous layers left, inside its mask.
+            for (const edit of request.edits.filter((item) => !item.hidden)) {
+                for (const region of edit.regions?.filter((item) => item.finish) ?? []) {
+                    if (!region.finish) continue;
+                    const mask = join(dir, `mask-${layers.length}.png`);
+                    await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
+                    const layer = join(dir, `shine-${layers.length}_dir.vpk`);
+                    const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
+                    await runVpkmerge(['workshop', 'finish', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material,
+                        '--roughness', String(region.finish.roughness), '--metalness', String(region.finish.metalness), '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                    await verifyVpkOutput(layer);
+                    layers.push(layer);
+                    patternLayers.set(edit.material, layer);
+                    advance();
+                }
             }
             if (layers.length === 1) await fs.copyFile(layers[0], out);
             else await runVpkmerge([out, ...layers]);

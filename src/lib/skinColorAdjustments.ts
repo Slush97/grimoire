@@ -6,8 +6,19 @@ export function hasColorAdjustments(value: SkinColorAdjustments | undefined): bo
   return !!value && (value.hue !== 0 || value.saturation !== 1 || value.brightness !== 1);
 }
 
-export function hasRegionEdit(region: SkinPartRegion): boolean {
+/** Whether an area changes colors, which bake into the color texture. */
+export function hasRegionLook(region: SkinPartRegion): boolean {
   return !!region.paint || (region.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(region.adjustments);
+}
+
+/** Whether an area changes anything: its colors or its shine. */
+export function hasRegionEdit(region: SkinPartRegion): boolean {
+  return hasRegionLook(region) || !!region.finish;
+}
+
+/** A shine area: it competes only with other shine areas, so painting shine never wipes paint. */
+export function isFinishRegion(region: SkinPartRegion): boolean {
+  return !!region.finish && !hasRegionLook(region);
 }
 
 /** Whether the part looks different. A region that only selects an area changes nothing yet. */

@@ -151,7 +151,7 @@ describe('skin region export chain', () => {
     vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[0] === 'model'
       ? JSON.stringify({ draw_calls: [{ material: 'coat.vmat', vertex_count: 3 }] })
       : args[0] === 'texture-info' ? JSON.stringify({ width: 512, height: 512 })
-      : args[1] === '--help' ? '  --mask <PNG>  Limit the edit to the white area of this UV mask PNG'
+      : args.at(-1) === '--help' ? '  --mask <PNG>  Limit the edit to the white area of this UV mask PNG'
       : JSON.stringify({ m_shaderName: 'pbr.vfx', m_vectorParams: [],
         m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }] }));
   };
@@ -159,7 +159,7 @@ describe('skin region export chain', () => {
   it('explains when the bundled vpkmerge cannot edit areas', async () => {
     setup();
     const supported = vi.mocked(runVpkmergeStdout).getMockImplementation()!;
-    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[1] === '--help' ? '  --material <VMAT>' : supported(args));
+    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args.at(-1) === '--help' ? '  --material <VMAT>' : supported(args));
     await expect(buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
       material: 'coat.vmat', hidden: false, tint: null, regions: [region],
     }], regionMasks: { 'coat.vmat|r1': mask } }, 'out.vpk')).rejects.toThrow('newer vpkmerge');
@@ -179,6 +179,21 @@ describe('skin region export chain', () => {
     expect(painted[painted.indexOf('--vpk') + 1]).toBe(outputOf(whole));
     expect(painted).toEqual(expect.arrayContaining(['--repaint', '3366ff', '--scroll', '0', '--hue-shift', '0', '--mask']));
     expect(tint[tint.indexOf('--vpk') + 1]).toBe(outputOf(painted));
+  });
+  it('stacks shine areas on the whole-part finish, after every color layer', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, finish: { roughness: 0.5, metalness: 0 },
+      regions: [region, { id: 'r3', seeds: [{ u: 0.7, v: 0.2 }], finish: { roughness: 0.18, metalness: 1 } }],
+    }], regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r3': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['trippy-skin', 'workshop finish', 'workshop finish', 'out.vpk']);
+    const outputOf = (args: string[]) => args[args.indexOf('--encode-vpk') + 1];
+    const [, whole, shine] = calls;
+    expect(whole).not.toContain('--mask');
+    // The shine reads the whole-part finish first, so it blends into that finish instead of replacing it.
+    expect(shine[shine.indexOf('--vpk') + 1]).toBe(outputOf(whole));
+    expect(shine).toEqual(expect.arrayContaining(['--roughness', '0.18', '--metalness', '1', '--mask']));
   });
   it('rejects an edited region without a baked mask', () => {
     const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true })) };

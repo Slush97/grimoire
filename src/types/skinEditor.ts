@@ -71,6 +71,8 @@ export interface SkinPartRegion {
   adjustments?: SkinColorAdjustments;
   /** Region patterns never scroll: scrolling moves the whole material. */
   pattern?: SkinPartPattern | null;
+  /** Shine painted onto the area. A finish area keeps the colors under it, so it never has paint or a pattern. */
+  finish?: SkinPartFinish;
 }
 
 export interface SkinPartSurface {

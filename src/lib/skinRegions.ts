@@ -1,5 +1,5 @@
 import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
-export { hasRegionEdit } from './skinColorAdjustments';
+export { hasRegionEdit, hasRegionLook, isFinishRegion } from './skinColorAdjustments';
 
 /** One triangle list in texture space. `index` null means every three vertices form a triangle. */
 export interface UvGeometry {

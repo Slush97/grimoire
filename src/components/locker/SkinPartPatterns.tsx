@@ -4,10 +4,10 @@ import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { isSkinSurface } from '../../lib/skinPartPreview';
-import { adjustSkinPixels, hasColorAdjustments, hasRegionEdit, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
+import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
-import type { SkinColorAdjustments, SkinPartEdit, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
+import type { SkinColorAdjustments, SkinPartEdit, SkinPartFinish, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
 
 async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement> {
   const { style, phase, colors } = pattern;
@@ -60,7 +60,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
   const scale = style === 'moo' ? pattern?.scale ?? 1 : 1;
   const colors = pattern?.colors;
   // A string, so the effect reruns only when an applied region actually changes.
-  const regionKey = JSON.stringify(edit.regions?.filter(hasRegionEdit) ?? []);
+  const regionKey = JSON.stringify(edit.regions?.filter(hasRegionLook) ?? []);
   // Paint strokes redraw at once; slider drags still wait a moment so they do not queue redraws.
   const lastRegions = useRef(regionKey);
   useEffect(() => {
@@ -162,7 +162,86 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
   return null;
 }
 
+type FinishMaterial = THREE.Material & Pick<THREE.MeshStandardMaterial, 'roughness' | 'metalness' | 'roughnessMap' | 'metalnessMap' | 'map'>;
+
+/** One channel of a finish map as 0..255 values: the map's texels times its scalar, or the scalar alone. */
+function finishChannel(texture: THREE.Texture | null, scalar: number, channel: number, width: number, height: number): Float32Array {
+  const values = new Float32Array(width * height).fill(scalar * 255);
+  const source: unknown = texture?.image;
+  if (!(source instanceof HTMLImageElement || source instanceof ImageBitmap || source instanceof HTMLCanvasElement)) return values;
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return values;
+  context.drawImage(source, 0, 0, width, height);
+  const pixels = context.getImageData(0, 0, width, height).data;
+  for (let index = 0; index < values.length; index++) values[index] = pixels[index * 4 + channel] * scalar;
+  return values;
+}
+
+/**
+ * Shine areas: a roughness and metalness map with each area's finish blended in by its mask, on the
+ * same UVs as the color texture. The material scalars become 1 so the map alone decides.
+ */
+function PartFinish({ scene, material, whole, regions }: { scene: THREE.Object3D; material: string; whole?: SkinPartFinish; regions: SkinPartRegion[] }) {
+  const regionKey = JSON.stringify(regions);
+  const roughness = whole?.roughness, metalness = whole?.metalness;
+  useEffect(() => {
+    const areas: SkinPartRegion[] = JSON.parse(regionKey);
+    const restore: Array<() => void> = [];
+    const seen = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
+      for (const mat of (Array.isArray(object.material) ? object.material : [object.material]) as FinishMaterial[]) {
+        if (seen.has(mat) || materialBasename(mat.name) !== materialBasename(material) || !('roughnessMap' in mat) || !('metalnessMap' in mat)) continue;
+        seen.add(mat);
+        const map = mat.map;
+        const size: unknown = map?.image;
+        const scale = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement ? Math.min(1, 1024 / Math.max(size.width, size.height)) : 0;
+        const width = scale ? Math.max(1, Math.round((size as { width: number }).width * scale)) : 512;
+        const height = scale ? Math.max(1, Math.round((size as { height: number }).height * scale)) : 512;
+        // The base is the whole-part finish when there is one, else the part's own maps.
+        const rough = roughness !== undefined ? new Float32Array(width * height).fill(roughness * 255) : finishChannel(mat.roughnessMap, mat.roughness, 1, width, height);
+        const metal = metalness !== undefined ? new Float32Array(width * height).fill(metalness * 255) : finishChannel(mat.metalnessMap, mat.metalness, 2, width, height);
+        for (const area of areas) {
+          if (!area.finish) continue;
+          const mask = regionMask(scene, material, area.seeds, width, height, 2, area.id);
+          if (!mask) continue;
+          const r = area.finish.roughness * 255, m = area.finish.metalness * 255;
+          for (let index = 0; index < mask.length; index++) {
+            const weight = mask[index] / 255;
+            if (!weight) continue;
+            rough[index] += (r - rough[index]) * weight;
+            metal[index] += (m - metal[index]) * weight;
+          }
+        }
+        const data = new Uint8Array(width * height * 4);
+        for (let index = 0; index < rough.length; index++) {
+          data[index * 4 + 1] = rough[index]; data[index * 4 + 2] = metal[index]; data[index * 4 + 3] = 255;
+        }
+        const texture = new THREE.DataTexture(data, width, height);
+        texture.flipY = map?.flipY ?? false;
+        texture.wrapS = map?.wrapS ?? THREE.RepeatWrapping; texture.wrapT = map?.wrapT ?? THREE.RepeatWrapping;
+        if (map) { texture.repeat.copy(map.repeat); texture.offset.copy(map.offset); texture.rotation = map.rotation; texture.center.copy(map.center); }
+        texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
+        texture.needsUpdate = true;
+        const previous = { roughness: mat.roughness, metalness: mat.metalness, roughnessMap: mat.roughnessMap, metalnessMap: mat.metalnessMap };
+        Object.assign(mat, { roughness: 1, metalness: 1, roughnessMap: texture, metalnessMap: texture });
+        mat.needsUpdate = true;
+        restore.push(() => { Object.assign(mat, previous); mat.needsUpdate = true; texture.dispose(); });
+      }
+    });
+    return () => restore.forEach((reset) => reset());
+  }, [scene, material, regionKey, roughness, metalness]);
+  return null;
+}
+
 export function SkinPartPatterns({ scene, edits, onError, onPending }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
-  return edits.map((edit) => !edit.hidden && ((edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint) || edit.regions?.some(hasRegionEdit))
-    ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} /> : null);
+  return edits.map((edit) => {
+    if (edit.hidden) return null;
+    const textured = (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint) || edit.regions?.some(hasRegionLook);
+    const shine = edit.regions?.filter(isFinishRegion) ?? [];
+    return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} /> : null,
+      shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} /> : null];
+  });
 }

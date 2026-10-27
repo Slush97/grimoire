@@ -436,7 +436,8 @@
         "patterns": "Patterns",
         "customColor": "Any color",
         "remove": "Remove {{area}} from the model",
-        "color": "Paint color"
+        "color": "Paint color",
+        "shine": "Shine"
       }
     },
     "draft": {

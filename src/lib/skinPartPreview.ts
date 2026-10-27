@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isFinishRegion } from './skinColorAdjustments';
 import { editForMaterial, materialBasename } from './skinParts';
 import { getMorphic } from './source2NprMaterial';
 import { TRANSLUCENT_OVERLAY_RENDER_ORDER } from './source2Preview/types';
@@ -81,7 +82,7 @@ export function applySkinPartEdits(scene: THREE.Object3D, edits: SkinPartEdit[],
       material.visible = visible && !edit?.hidden;
       restore.push(() => { material.visible = visible; });
       if (edit?.surface) restore.push(applySkinTransparency(material, edit.surface.opacity));
-      if (edit?.finish && 'roughness' in material && 'metalness' in material
+      if (edit?.finish && !edit.regions?.some(isFinishRegion) && 'roughness' in material && 'metalness' in material
         && 'roughnessMap' in material && 'metalnessMap' in material) {
         const previous = { roughness: material.roughness, metalness: material.metalness,
           roughnessMap: material.roughnessMap, metalnessMap: material.metalnessMap };
