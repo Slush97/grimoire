@@ -21,6 +21,8 @@ export interface UvGeometry {
 export interface UvIslands {
   /** Six numbers per triangle: u0 v0 u1 v1 u2 v2, shifted so each centroid sits in [0, 1). */
   triangles: Float32Array;
+  /** Nine numbers per triangle: its corners on the model, in the mesh's own (bind pose) space. */
+  positions: Float32Array;
   island: Int32Array;
   count: number;
 }
@@ -41,6 +43,7 @@ function collapsed(position: ArrayLike<number>, [a, b, c]: number[]): boolean {
 
 export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
   const corners: number[] = [];
+  const points: number[] = [];
   const keys = new Map<string, number>();
   const ids: number[] = [];
   const parent: number[] = [];
@@ -72,6 +75,7 @@ export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
       const uvs = triangle.flatMap((vertex) => [geometry.uv[vertex * 2], geometry.uv[vertex * 2 + 1]]);
       const shiftU = Math.floor((uvs[0] + uvs[2] + uvs[4]) / 3), shiftV = Math.floor((uvs[1] + uvs[3] + uvs[5]) / 3);
       corners.push(uvs[0] - shiftU, uvs[1] - shiftV, uvs[2] - shiftU, uvs[3] - shiftV, uvs[4] - shiftU, uvs[5] - shiftV);
+      for (const vertex of triangle) points.push(geometry.position[vertex * 3], geometry.position[vertex * 3 + 1], geometry.position[vertex * 3 + 2]);
     }
   }
   const roots = new Map<number, number>();
@@ -82,7 +86,7 @@ export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
     if (value === undefined) { value = roots.size; roots.set(root, value); }
     island[triangle] = value;
   });
-  return { triangles: Float32Array.from(corners), island, count: roots.size };
+  return { triangles: Float32Array.from(corners), positions: Float32Array.from(points), island, count: roots.size };
 }
 
 const wrap = (value: number) => value - Math.floor(value);
@@ -155,15 +159,94 @@ function rasterize(islands: UvIslands, include: (island: number) => boolean, wid
   return target;
 }
 
-/** Every texel some triangle of the material covers. Selections never grow outside it. */
-export function rasterizeUsed(islands: UvIslands, width: number, height: number): Uint8Array {
-  return rasterize(islands, () => true, width, height);
+const rasterCache = new WeakMap<UvIslands, Map<string, Uint8Array>>();
+
+/** Rasters of whole island sets, cached: every brush dab and click on one piece reuses its raster. */
+function cachedRaster(islands: UvIslands, key: string, width: number, height: number, include: (island: number) => boolean): Uint8Array {
+  let cache = rasterCache.get(islands);
+  if (!cache) { cache = new Map(); rasterCache.set(islands, cache); }
+  const id = `${key}|${width}x${height}`;
+  const cached = cache.get(id);
+  if (cached) { cache.delete(id); cache.set(id, cached); return cached; }
+  const raster = rasterize(islands, include, width, height);
+  cache.set(id, raster);
+  while (cache.size > 24) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  return raster;
 }
 
-/** Texels covering every island under (u, v). */
+/** Every texel some triangle of the material covers. Selections never grow outside it. Shared: do not modify. */
+export function rasterizeUsed(islands: UvIslands, width: number, height: number): Uint8Array {
+  return cachedRaster(islands, 'all', width, height, () => true);
+}
+
+/** Texels covering every island under (u, v). Shared: do not modify. */
 export function rasterizeIslandsAt(islands: UvIslands, u: number, v: number, width: number, height: number): Uint8Array {
-  const found = new Set(islandsAt(islands, u, v));
-  return rasterize(islands, (island) => found.has(island), width, height);
+  const found = islandsAt(islands, u, v).sort((a, b) => a - b);
+  const set = new Set(found);
+  return cachedRaster(islands, found.join(','), width, height, (island) => set.has(island));
+}
+
+const OFFSETS = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [-1, -1], [1, -1], [-1, 1]];
+
+/** Points on the model drawn at texture point (u, v). Mirrored pieces give one point each. */
+export function pointsAt(islands: UvIslands, u: number, v: number): Array<[number, number, number]> {
+  const found: Array<[number, number, number]> = [];
+  const pu = wrap(u), pv = wrap(v);
+  const t = islands.triangles, p = islands.positions;
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const o = triangle * 6;
+    for (const [du, dv] of OFFSETS) {
+      const x = pu + du, y = pv + dv;
+      const area = (t[o + 2] - t[o]) * (t[o + 5] - t[o + 1]) - (t[o + 4] - t[o]) * (t[o + 3] - t[o + 1]);
+      if (!area) break;
+      const w1 = ((x - t[o]) * (t[o + 5] - t[o + 1]) - (t[o + 4] - t[o]) * (y - t[o + 1])) / area;
+      const w2 = ((t[o + 2] - t[o]) * (y - t[o + 1]) - (x - t[o]) * (t[o + 3] - t[o + 1])) / area;
+      if (w1 < 0 || w2 < 0 || w1 + w2 > 1) continue;
+      const w0 = 1 - w1 - w2, q = triangle * 9;
+      found.push([0, 1, 2].map((axis) => w0 * p[q + axis] + w1 * p[q + 3 + axis] + w2 * p[q + 6 + axis]) as [number, number, number]);
+      break;
+    }
+  }
+  return found;
+}
+
+/**
+ * Texels whose point on the model lies within `radius` (mesh units) of a point drawn at (u, v): a brush
+ * that follows the surface across UV seams and stops at its own edge, never at an island's.
+ * Drawn into `mask` when given.
+ */
+export function rasterizeBrush(islands: UvIslands, u: number, v: number, radius: number, width: number, height: number, mask = new Uint8Array(width * height)): Uint8Array {
+  const centers = pointsAt(islands, u, v);
+  if (!centers.length || radius <= 0) return mask;
+  const reach = radius * radius;
+  const t = islands.triangles, p = islands.positions;
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const q = triangle * 9;
+    const cx = (p[q] + p[q + 3] + p[q + 6]) / 3, cy = (p[q + 1] + p[q + 4] + p[q + 7]) / 3, cz = (p[q + 2] + p[q + 5] + p[q + 8]) / 3;
+    let spread = 0;
+    for (let corner = 0; corner < 3; corner++) spread = Math.max(spread, Math.hypot(p[q + corner * 3] - cx, p[q + corner * 3 + 1] - cy, p[q + corner * 3 + 2] - cz));
+    const near = centers.filter(([x, y, z]) => Math.hypot(x - cx, y - cy, z - cz) <= radius + spread);
+    if (!near.length) continue;
+    const o = triangle * 6;
+    const x0 = t[o] * width, y0 = t[o + 1] * height, x1 = t[o + 2] * width, y1 = t[o + 3] * height, x2 = t[o + 4] * width, y2 = t[o + 5] * height;
+    const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (!area) continue;
+    const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
+    const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
+    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+      const px = x + 0.5, py = y + 0.5;
+      const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
+      const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
+      const w2 = 1 - w0 - w1;
+      if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+      const sx = w0 * p[q] + w1 * p[q + 3] + w2 * p[q + 6], sy = w0 * p[q + 1] + w1 * p[q + 4] + w2 * p[q + 7], sz = w0 * p[q + 2] + w1 * p[q + 5] + w2 * p[q + 8];
+      if (near.some(([cx2, cy2, cz2]) => (sx - cx2) ** 2 + (sy - cy2) ** 2 + (sz - cz2) ** 2 <= reach)) mask[y * width + x] = 255;
+    }
+  }
+  return mask;
 }
 
 const LINEAR = Float32Array.from({ length: 256 }, (_, value) => {
@@ -217,10 +300,12 @@ const texel = (value: number, size: number) => Math.min(size - 1, Math.floor((va
 export const DEFAULT_COLOR_RANGE = 8;
 
 /**
- * One seed's texels: its UV islands, or with `by: 'color'` the similar colors connected to it inside
- * those islands. Atlases pack islands closer than a texel apart, so a fill must not cross them.
+ * One seed's texels: its UV islands; with `by: 'color'` the similar colors connected to it inside those
+ * islands (atlases pack islands closer than a texel apart, so a fill must not cross them); with
+ * `by: 'brush'` the surface within `radius` of it. The result may be a shared raster: do not modify.
  */
 export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {
+  if (seed.by === 'brush') return rasterizeBrush(islands, seed.u, seed.v, seed.radius ?? 0, width, height);
   const pieces = rasterizeIslandsAt(islands, seed.u, seed.v, width, height);
   if (seed.by !== 'color') return pieces;
   if (!lab) return new Uint8Array(width * height);
@@ -246,10 +331,10 @@ export function padMask(mask: Uint8Array, used: Uint8Array, width: number, heigh
 /**
  * Bake seeds to a 0/255 mask at `width` x `height`, in the texture's row order. Seeds apply in
  * order, each adding or removing its texels. `lab` (from `texelsToLab` at the same size) is only
- * read by color seeds; without it they select nothing.
+ * read by color seeds; without it they select nothing. `from` continues an unpadded mask of earlier seeds.
  */
-export function rasterizeSeeds(islands: UvIslands, seeds: SkinRegionSeed[], width: number, height: number, lab: Float32Array | null, padding = 2): Uint8Array {
-  const mask = new Uint8Array(width * height);
+export function rasterizeSeeds(islands: UvIslands, seeds: SkinRegionSeed[], width: number, height: number, lab: Float32Array | null, padding = 2, from?: Uint8Array): Uint8Array {
+  const mask = from ? from.slice() : new Uint8Array(width * height);
   for (const seed of seeds) {
     const texels = rasterizeSeed(islands, seed, width, height, lab);
     for (let index = 0; index < mask.length; index++) {

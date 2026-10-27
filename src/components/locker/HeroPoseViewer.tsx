@@ -554,11 +554,15 @@ export function RiggedModel({
 
 /** Mouse orbit + zoom, damped. Auto-rotation lives on the model group so the
  *  controls don't fight it; dragging just reorients the camera. */
-export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement }: {
+/** While painting, the primary button belongs to the brush: the right button turns and the middle button pans. */
+const PAINT_MOUSE_BUTTONS = { MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+
+export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement, painting = false }: {
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
   savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
   focusMaterial?: string | null;
   movement?: Pick<MovementViewerPreview, 'kind' | 'loop'>;
+  painting?: boolean;
 }) {
   const motionClock = useContext(MovementClock);
   const { camera, gl, size: viewportSize } = useThree();
@@ -691,6 +695,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   return (
     <DreiOrbitControls
       ref={controlsRef}
+      mouseButtons={painting ? PAINT_MOUSE_BUTTONS : undefined}
       enableDamping
       enablePan
       enableZoom={false}
@@ -1594,12 +1599,13 @@ export default function HeroPoseViewer({
           </mesh>
         )}
         <group>
-        {onPartPick && <SkinPartPicking model={scene} onPick={regionSelection ? (_material, hit) => regionSelection.onPick(hit) : onPartPick} />}
+        {onPartPick && <SkinPartPicking model={scene} onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
         {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} />
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
         <MovementFxStage preview={movementPreview} scene={scene} paused={playback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
-            movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView} />}>
+            movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
+            painting={regionSelection?.picker.by === 'brush'} />}>
         {rigged ? (
           <RiggedModel
             heroName={heroName}

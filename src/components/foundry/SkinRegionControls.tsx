@@ -32,21 +32,29 @@ export function SkinRegionTargets({ regions, active, disabled, onSelect, onAdd, 
 }
 
 /** Replaces the appearance controls while clicks on the model change the selection. */
-export function SkinRegionSelecting({ part, mode, by, tolerance, empty, missed, onMode, onBy, onTolerance, onClear, onDone }: {
-  part: string; mode: 'add' | 'remove'; by: 'piece' | 'color'; tolerance: number; empty: boolean; missed: boolean;
-  onMode: (mode: 'add' | 'remove') => void; onBy: (by: 'piece' | 'color') => void; onTolerance: (tolerance: number) => void;
+export function SkinRegionSelecting({ part, mode, by, tolerance, brushSize, empty, missed, onMode, onBy, onTolerance, onBrushSize, onClear, onDone }: {
+  part: string; mode: 'add' | 'remove'; by: 'piece' | 'color' | 'brush'; tolerance: number; brushSize: number; empty: boolean; missed: boolean;
+  onMode: (mode: 'add' | 'remove') => void; onBy: (by: 'piece' | 'color' | 'brush') => void; onTolerance: (tolerance: number) => void;
+  onBrushSize: (size: number) => void;
   onClear: () => void; onDone: () => void;
 }) {
   const { t } = useTranslation();
   return <div className="space-y-3">
     <div className="space-y-1">
       <h5 className="text-sm font-semibold text-text-primary">{t('foundry.skin.region.selectingTitle', { part })}</h5>
-      <p className="text-xs text-text-secondary">{t('foundry.skin.region.selectingHint')}</p>
+      <p className="text-xs text-text-secondary">{t(by === 'brush' ? 'foundry.skin.region.brushHint' : 'foundry.skin.region.selectingHint')}</p>
     </div>
     <SegmentedControl fill label={t('foundry.skin.region.selectBy')} value={by} onChange={onBy} options={[
       { value: 'piece', label: t('foundry.skin.region.byPiece'), title: t('foundry.skin.region.byPieceHint') },
       { value: 'color', label: t('foundry.skin.region.byColor'), title: t('foundry.skin.region.byColorHint') },
+      { value: 'brush', label: t('foundry.skin.region.byBrush'), title: t('foundry.skin.region.byBrushHint') },
     ]} />
+    {by === 'brush' && <label className="flex items-center gap-2 text-xs text-text-secondary">
+      <span className="shrink-0">{t('foundry.skin.region.brushSize')}</span>
+      <input type="range" min={2} max={120} value={brushSize} aria-label={t('foundry.skin.region.brushSize')}
+        className="h-7 min-w-0 flex-1 accent-accent" onChange={(event) => onBrushSize(Number(event.target.value))} />
+      <span className="w-7 text-right tabular-nums">{brushSize}</span>
+    </label>}
     {by === 'color' && <label className="flex items-center gap-2 text-xs text-text-secondary">
       <span className="shrink-0">{t('foundry.skin.region.colorRange')}</span>
       <input type="range" min={1} max={40} value={tolerance} aria-label={t('foundry.skin.region.colorRange')}

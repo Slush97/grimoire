@@ -39,8 +39,9 @@ export const skinPartRegionSchema = z.object({
     name: z.string().max(60).optional(),
     seeds: z.array(z.object({
         u: z.number().finite().min(-64).max(64), v: z.number().finite().min(-64).max(64), remove: z.literal(true).optional(),
-        by: z.literal('color').optional(), tolerance: z.number().finite().min(0).max(100).optional(),
-    }).strict()).max(512),
+        by: z.enum(['color', 'brush']).optional(), tolerance: z.number().finite().min(0).max(100).optional(),
+        radius: z.number().finite().min(0).max(1000).optional(),
+    }).strict()).max(4096),
     paint: z.string().regex(/^#[a-f0-9]{6}$/i).nullable().optional(),
     adjustments: adjustmentsSchema.optional(),
     pattern: skinPartPatternSchema.extend({ scroll: z.literal(0) }).nullable().optional(),

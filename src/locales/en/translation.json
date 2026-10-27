@@ -423,7 +423,11 @@
         "byPieceHint": "Selects whole pieces of the texture layout, such as a sleeve or a panel.",
         "byColor": "Similar color",
         "byColorHint": "Selects connected texture pixels close to the color you click, such as trim or stripes.",
-        "colorRange": "Color range"
+        "colorRange": "Color range",
+        "byBrush": "Brush",
+        "byBrushHint": "Paints the area freehand on the model, for edges no piece or color follows.",
+        "brushSize": "Brush size",
+        "brushHint": "Drag on the model to paint the area. Right-drag turns the model and middle-drag moves it."
       }
     },
     "draft": {

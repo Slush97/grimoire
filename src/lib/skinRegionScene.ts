@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { materialBasename } from './skinParts';
-import { buildUvIslands, rasterizeSeeds, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
+import { buildUvIslands, padMask, rasterizeSeeds, rasterizeUsed, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
 import { getMorphic } from './source2NprMaterial';
 import type { SkinRegionSeed } from '../types/skinEditor';
 
@@ -90,6 +90,8 @@ export function materialLab(scene: THREE.Object3D, material: string, width: numb
 }
 
 const maskCache = new Map<string, Uint8Array>();
+/** The last unpadded mask per material and size, so a growing selection only rasterizes its new seeds. */
+const lastMask = new Map<string, { islands: UvIslands; seeds: SkinRegionSeed[]; mask: Uint8Array }>();
 
 /** Region mask at a size, cached so slider drags reuse the raster. */
 export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinRegionSeed[], width: number, height: number, padding = 2): Uint8Array | null {
@@ -99,7 +101,12 @@ export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinR
   const cached = maskCache.get(key);
   if (cached) { maskCache.delete(key); maskCache.set(key, cached); return cached; }
   const lab = seeds.some((seed) => seed.by === 'color') ? materialLab(scene, material, width, height) : null;
-  const mask = rasterizeSeeds(islands, seeds, width, height, lab, padding);
+  const slot = `${materialBasename(material)}|${width}x${height}`;
+  const last = lastMask.get(slot);
+  const grows = last && last.islands === islands && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => seed === seeds[index]);
+  const unpadded = rasterizeSeeds(islands, grows ? seeds.slice(last.seeds.length) : seeds, width, height, lab, 0, grows ? last.mask : undefined);
+  lastMask.set(slot, { islands, seeds, mask: unpadded });
+  const mask = padding ? padMask(unpadded, rasterizeUsed(islands, width, height), width, height, padding) : unpadded;
   maskCache.set(key, mask);
   while (maskCache.size > 24) {
     const oldest = maskCache.keys().next().value;

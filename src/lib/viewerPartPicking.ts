@@ -4,6 +4,24 @@ export interface ViewerPartHit {
   material: string;
   /** Texture coordinate under the pointer, when the mesh has UVs. */
   uv: THREE.Vector2 | null;
+  /** How far one screen pixel reaches on the hit surface, in the mesh's own units, for sizing a brush. */
+  unitsPerPixel: number | null;
+}
+
+/** Screen pixels to mesh units at the hit's depth, through the hit triangle's posed-to-rest scale. */
+function unitsPerPixel(hit: THREE.Intersection, camera: THREE.Camera, viewportHeight: number): number | null {
+  const mesh = hit.object;
+  if (!(mesh instanceof THREE.Mesh) || !hit.face || !(camera instanceof THREE.PerspectiveCamera)) return null;
+  const position = mesh.geometry.attributes.position;
+  if (!position) return null;
+  const { a, b, c } = hit.face;
+  const rest = [a, b, c].map((index) => new THREE.Vector3().fromBufferAttribute(position, index));
+  const posed = [a, b, c].map((index) => mesh.getVertexPosition(index, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld));
+  const area = (points: THREE.Vector3[]) => points[1].clone().sub(points[0]).cross(points[2].clone().sub(points[0])).length();
+  const restArea = area(rest), posedArea = area(posed);
+  if (!restArea || !posedArea) return null;
+  const worldPerPixel = 2 * hit.distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(1, viewportHeight);
+  return worldPerPixel * Math.sqrt(restArea / posedArea);
 }
 
 /** The first visible model surface under a client point. */
@@ -25,7 +43,7 @@ export function viewerPartAt(canvas: HTMLElement, model: THREE.Object3D, camera:
     if (!(hit.object instanceof THREE.Mesh)) continue;
     const materials = hit.object.material;
     const material = Array.isArray(materials) ? materials[hit.face?.materialIndex ?? 0] : materials;
-    if (material?.visible) return { material: material.name, uv: hit.uv?.clone() ?? null };
+    if (material?.visible) return { material: material.name, uv: hit.uv?.clone() ?? null, unitsPerPixel: unitsPerPixel(hit, camera, rect.height) };
   }
   return null;
 }

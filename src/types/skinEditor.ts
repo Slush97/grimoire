@@ -46,15 +46,17 @@ export interface SkinPartEdit {
 }
 
 /**
- * A texture point. The region takes (or, with `remove`, drops) every UV island covering it, or with
- * `by: 'color'` the connected texels whose color is within `tolerance` (0..100) of the point's.
+ * A texture point. The region takes (or, with `remove`, drops) every UV island covering it; with
+ * `by: 'color'` the connected texels whose color is within `tolerance` (CIELAB delta E) of the point's;
+ * with `by: 'brush'` the texels whose point on the model is within `radius` (mesh units) of it.
  */
 export interface SkinRegionSeed {
   u: number;
   v: number;
   remove?: true;
-  by?: 'color';
+  by?: 'color' | 'brush';
   tolerance?: number;
+  radius?: number;
 }
 
 export interface SkinPartRegion {

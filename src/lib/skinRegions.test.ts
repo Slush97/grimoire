@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, floodFillTexels, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, floodFillTexels, rasterizeBrush, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -88,6 +88,23 @@ describe('color selection', () => {
     // The whole quad, minus every red texel connected to the bottom-left one: only the blues stay.
     expect([...mask].map(Boolean)).toEqual([false, false, false, true, false, true, false, false]);
     expect(rasterizeSeeds(islands, [{ u: 0.1, v: 0.1, by: 'color' }], 4, 2, null, 0).every((value) => !value)).toBe(true);
+  });
+});
+
+describe('brush', () => {
+  // Two unit quads that touch on the model at x = 1, but sit in opposite halves of the texture.
+  const left: UvGeometry = { position: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], uv: [0, 0, 0.25, 0, 0.25, 1, 0, 1], index: [0, 1, 2, 0, 2, 3] };
+  const right: UvGeometry = { position: [1, 0, 0, 2, 0, 0, 2, 1, 0, 1, 1, 0], uv: [0.75, 0, 1, 0, 1, 1, 0.75, 1], index: [0, 1, 2, 0, 2, 3] };
+  // A quad far away on the model, right next to the left quad in the texture.
+  const far: UvGeometry = { position: [9, 0, 0, 10, 0, 0, 10, 1, 0, 9, 1, 0], uv: [0.25, 0, 0.5, 0, 0.5, 1, 0.25, 1], index: [0, 1, 2, 0, 2, 3] };
+  const islands = buildUvIslands([left, right, far]);
+  const columns = (mask: Uint8Array) => [...mask.subarray(8 * 4, 8 * 5)].map(Boolean);
+  it('follows the surface across a UV seam but not to pieces that are only neighbours in the texture', () => {
+    // Centred on the left quad's right edge (u 0.24, y 0.5 on the model), reaching 0.6 units.
+    expect(columns(rasterizeBrush(islands, 0.24, 0.5, 0.6, 8, 8))).toEqual([false, true, false, false, false, false, true, false]);
+  });
+  it('selects nothing for a point no triangle draws', () => {
+    expect(rasterizeBrush(islands, 0.6, 0.5, 5, 8, 8).some(Boolean)).toBe(false);
   });
 });
 
