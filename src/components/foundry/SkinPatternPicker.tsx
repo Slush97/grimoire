@@ -8,6 +8,14 @@ import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import { TRIPPY_STYLES, type TrippyStyleName, type TrippySpriteResult } from '../../types/mod';
 import type { SkinPartPattern } from '../../types/skinEditor';
 
+// Moo saves patch density (vpkmerge draws 9 x scale patches across), so a bigger scale means smaller patches.
+// The slider shows patch size instead: right is bigger, and each step changes the size by the same ratio.
+const MOO_MIN_SCALE = 0.25, MOO_MAX_SCALE = 8;
+const mooScaleAt = (position: number) =>
+  Math.round(MOO_MAX_SCALE * (MOO_MIN_SCALE / MOO_MAX_SCALE) ** (position / 100) * 100) / 100;
+const mooSizePosition = (scale: number) =>
+  Math.round(100 * Math.log(scale / MOO_MAX_SCALE) / Math.log(MOO_MIN_SCALE / MOO_MAX_SCALE));
+
 export function SkinPatternPicker({ value, color, disabled, onChange }: {
   value: SkinPartPattern | null; color: string; disabled: boolean; onChange: (value: SkinPartPattern | null) => void;
 }) {
@@ -44,11 +52,11 @@ export function SkinPatternPicker({ value, color, disabled, onChange }: {
     </div>
     {value && <div className="space-y-2">
       {value.style === 'moo' && <label className="flex items-center gap-2 text-xs text-text-secondary">
-        <span className="w-16 shrink-0">{t('foundry.skin.scale')}</span>
-        <input type="range" min={25} max={800} step={25} value={Math.round((value.scale ?? 1) * 100)} disabled={disabled}
-          aria-label={t('foundry.skin.scale')} className="h-7 min-w-0 flex-1 accent-accent"
-          onChange={(event) => onChange({ ...value, scale: Number(event.target.value) / 100 })} />
-        <span className="w-9 text-right tabular-nums">{value.scale ?? 1}×</span>
+        <span className="w-16 shrink-0">{t('foundry.skin.patchSize')}</span>
+        <input type="range" min={0} max={100} step={1} value={mooSizePosition(value.scale ?? 1)} disabled={disabled}
+          aria-label={t('foundry.skin.patchSize')} className="h-7 min-w-0 flex-1 accent-accent"
+          onChange={(event) => onChange({ ...value, scale: mooScaleAt(Number(event.target.value)) })} />
+        <span className="w-9 text-right tabular-nums">{Number((1 / (value.scale ?? 1)).toPrecision(2))}×</span>
       </label>}
       <Toggle label={t('foundry.skin.customPatternColors')} checked={!!value.colors} disabled={disabled}
         onChange={(custom) => onChange({ ...value, colors: custom ? [color, '#ffffff'] : undefined })} />

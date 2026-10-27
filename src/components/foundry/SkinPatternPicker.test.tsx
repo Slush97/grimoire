@@ -36,13 +36,40 @@ describe('Moo density', () => {
     const value: SkinPartPattern = { style: 'moo', intensity: 1, phase: 0, scroll: .5, scale: 2.25 };
     try {
       await act(async () => { root.render(<SkinPatternPicker value={value} color="#123456" disabled={false} onChange={change} />); });
-      expect(host.querySelector<HTMLInputElement>('input[aria-label="foundry.skin.scale"]')?.value).toBe('225');
+      expect(host.querySelector<HTMLInputElement>('input[aria-label="foundry.skin.patchSize"]')?.value).toBe('37');
       await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="Moo"]')!.click(); });
       expect(change).toHaveBeenLastCalledWith({ ...value, colors: undefined });
       await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="Galaxy"]')!.click(); });
       expect(change).toHaveBeenLastCalledWith({ ...value, style: 'galaxy', scale: undefined, colors: undefined });
       await act(async () => { root.render(<SkinPatternPicker value={{ ...value, style: 'galaxy' }} color="#123456" disabled={false} onChange={change} />); });
-      expect(host.querySelector('input[aria-label="foundry.skin.scale"]')).toBeNull();
+      expect(host.querySelector('input[aria-label="foundry.skin.patchSize"]')).toBeNull();
+    } finally { act(() => root.unmount()); }
+  });
+});
+
+describe('Moo patch size', () => {
+  it('makes patches bigger as the slider moves right, within the saved scale range', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    const change = vi.fn();
+    const value: SkinPartPattern = { style: 'moo', intensity: 1, phase: 0, scroll: .5, scale: 1 };
+    const slide = (position: number) => act(async () => {
+      const input = host.querySelector<HTMLInputElement>('input[aria-label="foundry.skin.patchSize"]')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(position));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    try {
+      await act(async () => { root.render(<SkinPatternPicker value={value} color="#123456" disabled={false} onChange={change} />); });
+      expect(host.textContent).toContain('1×');
+      const scales: number[] = [];
+      for (const position of [0, 25, 50, 75, 100]) { await slide(position); scales.push(change.mock.lastCall![0].scale); }
+      // Saved scale is patch density, so bigger patches mean a smaller saved scale.
+      expect(scales[0]).toBe(8);
+      expect(scales[4]).toBe(0.25);
+      expect([...scales].sort((a, b) => b - a)).toEqual(scales);
+      await act(async () => { root.render(<SkinPatternPicker value={{ ...value, scale: 0.25 }} color="#123456" disabled={false} onChange={change} />); });
+      expect(host.textContent).toContain('4×');
     } finally { act(() => root.unmount()); }
   });
 });

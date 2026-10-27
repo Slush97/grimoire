@@ -370,7 +370,7 @@
       "transparency": "Transparency",
       "translucent": "Translucent",
       "opacity": "Opacity",
-      "scale": "Scale",
+      "patchSize": "Patch size",
       "ghostUnsupported": "This draft uses an experimental Ghost surface that can render incorrectly. Choose Original or Translucent for each affected part before saving.",
       "surfaceUnsupported": "This part does not support transparency overrides.",
       "originalFinish": "Original",
