@@ -172,7 +172,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const baker = useRef<RegionBaker | null>(null);
   const receiveBaker = useCallback((value: RegionBaker | null) => { baker.current = value; }, []);
   const [regionTargets, setRegionTargets] = useState<Record<string, string | null>>({});
-  const [selecting, setSelecting] = useState<{ material: string; region: string } | null>(null);
+  const [selecting, setSelecting] = useState<{ material: string; region: string; fresh: boolean } | null>(null);
   const [selectMode, setSelectMode] = useState<'add' | 'remove'>('add');
   const [pickBy, setPickBy] = useFoundryDraft('skin:regionPickBy', z.enum(['piece', 'color', 'brush']), 'color');
   const [brushSize, setBrushSize] = useFoundryDraft('skin:regionBrushSize', z.number().int().min(2).max(120), 16);
@@ -241,20 +241,28 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   };
   const updateRegion = (material: string, id: string, patch: Partial<SkinPartRegion>) =>
     updateRegions(material, (regions) => regions.map((region) => region.id === id ? { ...region, ...patch } : region));
-  const regions = selectedEdit?.regions ?? [];
-  const activeRegion = selected ? regions.find((region) => region.id === regionTargets[selected.material]) ?? null : null;
+  // A new area exists only once it selects something, so leaving it empty never leaves a chip behind.
   const selectingRegion = selecting && selected?.material === selecting.material
-    ? edits.find((edit) => edit.material === selecting.material)?.regions?.find((region) => region.id === selecting.region) ?? null : null;
+    ? edits.find((edit) => edit.material === selecting.material)?.regions?.find((region) => region.id === selecting.region)
+      ?? (selecting.fresh ? { id: selecting.region, seeds: [] } : null) : null;
+  const regions = [...(selectedEdit?.regions ?? []).filter((region) => hasRegionSelection(region) || hasRegionEdit(region) || region.id === selectingRegion?.id),
+    ...(selectingRegion && !selectedEdit?.regions?.some((region) => region.id === selectingRegion.id) ? [selectingRegion] : [])];
+  const activeRegion = selected ? regions.find((region) => region.id === regionTargets[selected.material]) ?? null : null;
   const highlightRegion = !selectingRegion && selected ? regions.find((region) => region.id === previewRegion) ?? null : null;
-  const startSelecting = (material: string, region: string) => {
+  const startSelecting = (material: string, region: string, fresh = false) => {
     setRegionTargets((current) => ({ ...current, [material]: region }));
-    setSelecting({ material, region }); setSelectMode('add'); setMissedPick(false); setHoveredMaterial(null);
+    setSelecting({ material, region, fresh }); setSelectMode('add'); setMissedPick(false); setHoveredMaterial(null);
   };
   const addRegion = () => {
     if (!selected) return;
-    const id = newRegionId(regions);
-    updateRegions(selected.material, (current) => [...current, { id, seeds: [] }]);
-    startSelecting(selected.material, id);
+    startSelecting(selected.material, newRegionId(selectedEdit?.regions ?? []), true);
+  };
+  const addSeeds = (seeds: SkinRegionSeed[]) => {
+    if (!selecting || !selectingRegion) return;
+    const { material, region: id } = selecting;
+    updateRegions(material, (current) => current.some((region) => region.id === id)
+      ? current.map((region) => region.id === id ? { ...region, seeds: [...region.seeds, ...seeds].slice(0, 4096) } : region)
+      : [...current, { id, seeds }]);
   };
   const pickRegion = (hit: ViewerPartHit) => {
     if (!selecting || !selectingRegion) return;
@@ -262,14 +270,12 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     setMissedPick(false);
     if (selectingRegion.seeds.length >= 4096) return;
     const round = (value: number) => Math.round(value * 1e5) / 1e5;
-    const seed: SkinRegionSeed = { u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}),
-      ...(pickBy === 'color' ? { by: 'color' as const, tolerance: pickTolerance } : {}) };
-    updateRegion(selecting.material, selecting.region, { seeds: [...selectingRegion.seeds, seed] });
+    addSeeds([{ u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}),
+      ...(pickBy === 'color' ? { by: 'color' as const, tolerance: pickTolerance } : {}) }]);
   };
   const paintRegion = (dabs: SkinRegionSeed[]) => {
-    if (!selecting || !selectingRegion) return;
     setMissedPick(false);
-    updateRegion(selecting.material, selecting.region, { seeds: [...selectingRegion.seeds, ...dabs].slice(0, 4096) });
+    addSeeds(dabs);
   };
   const finishSelecting = () => {
     if (selecting && selectingRegion && !hasRegionSelection(selectingRegion)) {
