@@ -195,6 +195,24 @@ describe('skin region export chain', () => {
     expect(shine[shine.indexOf('--vpk') + 1]).toBe(outputOf(whole));
     expect(shine).toEqual(expect.arrayContaining(['--roughness', '0.18', '--metalness', '1', '--mask']));
   });
+  it('turns on glow last, with the glow area as its mask', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null,
+      regions: [region, { id: 'r4', seeds: [{ u: 0.3, v: 0.3 }], glow: { color: '#33ccff', animation: 'pulse' } }],
+    }], regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r4': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['trippy-skin', 'workshop glow', 'out.vpk']);
+    const [painted, glow] = calls;
+    expect(glow[glow.indexOf('--vpk') + 1]).toBe(painted[painted.indexOf('--encode-vpk') + 1]);
+    expect(glow).toEqual(expect.arrayContaining(['--color', '33ccff', '--animation', 'pulse', '--mask']));
+  });
+  it('allows one glow per part', () => {
+    const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true, glowable: true })) };
+    const glow = (id: string) => ({ id, seeds: [{ u: 0.5, v: 0.5 }], glow: { color: '#ffffff', animation: 'steady' as const } });
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, regions: [glow('r1'), glow('r2')] }],
+      regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r2': mask } })).toThrow('one glow');
+  });
   it('rejects an edited region without a baked mask', () => {
     const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true })) };
     expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, regions: [region] }] })).toThrow('no selection');

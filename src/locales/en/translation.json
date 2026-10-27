@@ -457,6 +457,14 @@
           "glossy": "Glossy",
           "metal": "Metal",
           "polished": "Chrome"
+        },
+        "glow": "Glow",
+        "glowColor": "in your color",
+        "glowUnsupported": "This part can't glow.",
+        "glows": {
+          "steady": "Glow",
+          "pulse": "Pulse",
+          "rainbow": "Rainbow"
         }
       },
       "errors": {

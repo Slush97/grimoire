@@ -20,6 +20,8 @@ export interface SkinPart {
   tintable: boolean;
   patternable: boolean;
   finishable?: boolean;
+  /** Whether the material can take painted glow: pbr.vfx with a color texture and no animated self-illumination. */
+  glowable?: boolean;
   surfaceable?: boolean;
   textureSize?: { width: number; height: number };
 }
@@ -77,6 +79,15 @@ export interface SkinPartRegion {
   pattern?: SkinPartPattern | null;
   /** Shine painted onto the area. A finish area keeps the colors under it, so it never has paint or a pattern. */
   finish?: SkinPartFinish;
+  /** Glow painted onto the area. A material has one glow color, so a part has at most one glow area. */
+  glow?: SkinPartGlow;
+}
+
+export type SkinGlowAnimation = 'steady' | 'pulse' | 'rainbow';
+
+export interface SkinPartGlow {
+  color: string;
+  animation: SkinGlowAnimation;
 }
 
 export interface SkinPartSurface {

@@ -4,10 +4,10 @@ import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { isSkinSurface } from '../../lib/skinPartPreview';
-import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
+import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, isGlowRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
-import type { SkinColorAdjustments, SkinPartEdit, SkinPartFinish, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
+import type { SkinColorAdjustments, SkinPartEdit, SkinPartFinish, SkinPartGlow, SkinPartPattern, SkinPartRegion, SkinRegionSeed } from '../../types/skinEditor';
 
 async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement> {
   const { style, phase, colors } = pattern;
@@ -241,13 +241,80 @@ function PartFinish({ scene, material, whole, regions, onApplied }: { scene: THR
 }
 
 /** `onApplied` fires each time an edit lands on the model, so a live stroke preview can stay until then. */
+type GlowMaterial = THREE.Material & Pick<THREE.MeshStandardMaterial, 'emissive' | 'emissiveMap' | 'emissiveIntensity' | 'map'>;
+/** Preview brightness of painted glow. The game's bloom makes the exported strength read about this bright. */
+const GLOW_PREVIEW = 2.5;
+
+/**
+ * A glow area: the area mask as the part's emissive map, in the glow color, pulsing or cycling the
+ * same way the exported dynamic expressions do.
+ */
+function PartGlow({ scene, material, region, onApplied }: { scene: THREE.Object3D; material: string; region: SkinPartRegion & { glow: SkinPartGlow }; onApplied?: () => void }) {
+  const seedKey = JSON.stringify(region.seeds);
+  const { color, animation } = region.glow;
+  const glowing = useRef<GlowMaterial[]>([]);
+  useEffect(() => {
+    const seeds: SkinRegionSeed[] = JSON.parse(seedKey);
+    const restore: Array<() => void> = [];
+    const seen = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
+      for (const mat of (Array.isArray(object.material) ? object.material : [object.material]) as GlowMaterial[]) {
+        if (seen.has(mat) || materialBasename(mat.name) !== materialBasename(material) || !('emissiveMap' in mat) || !(mat.emissive instanceof THREE.Color)) continue;
+        seen.add(mat);
+        const size: unknown = mat.map?.image;
+        const sized = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement;
+        const scale = sized ? Math.min(1, 1024 / Math.max(size.width, size.height)) : 0;
+        const width = sized ? Math.max(1, Math.round(size.width * scale)) : 512, height = sized ? Math.max(1, Math.round(size.height * scale)) : 512;
+        const mask = regionMask(scene, material, seeds, width, height, 2, region.id);
+        if (!mask) continue;
+        const data = new Uint8Array(width * height * 4);
+        for (let index = 0; index < mask.length; index++) { data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = mask[index]; data[index * 4 + 3] = 255; }
+        const texture = new THREE.DataTexture(data, width, height);
+        const map = mat.map;
+        texture.flipY = map?.flipY ?? false;
+        texture.wrapS = map?.wrapS ?? THREE.RepeatWrapping; texture.wrapT = map?.wrapT ?? THREE.RepeatWrapping;
+        if (map) { texture.repeat.copy(map.repeat); texture.offset.copy(map.offset); texture.rotation = map.rotation; texture.center.copy(map.center); }
+        texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
+        texture.needsUpdate = true;
+        const previous = { emissive: mat.emissive.clone(), emissiveMap: mat.emissiveMap, emissiveIntensity: mat.emissiveIntensity };
+        mat.emissiveMap = texture; mat.emissive.set(color); mat.emissiveIntensity = GLOW_PREVIEW;
+        mat.needsUpdate = true;
+        glowing.current.push(mat);
+        restore.push(() => {
+          mat.emissive.copy(previous.emissive); mat.emissiveMap = previous.emissiveMap; mat.emissiveIntensity = previous.emissiveIntensity;
+          mat.needsUpdate = true; texture.dispose();
+        });
+      }
+    });
+    onApplied?.();
+    return () => { glowing.current = []; restore.forEach((reset) => reset()); };
+  }, [scene, material, region.id, seedKey, color, onApplied]);
+  useFrame(({ clock }) => {
+    if (animation === 'steady') return;
+    const time = clock.getElapsedTime();
+    for (const mat of glowing.current) {
+      // Three.js materials are mutable scene state, not React state.
+      if (animation === 'pulse') Reflect.set(mat, 'emissiveIntensity', GLOW_PREVIEW * (0.5 * Math.sin(3 * time) + 0.5));
+      else mat.emissive.setRGB(0.5 + 0.5 * Math.sin(2 * time), 0.5 + 0.5 * Math.sin(2 * time + 2.094), 0.5 + 0.5 * Math.sin(2 * time + 4.189));
+    }
+  });
+  useEffect(() => {
+    if (animation !== 'steady') return;
+    for (const mat of glowing.current) { mat.emissive.set(color); Reflect.set(mat, 'emissiveIntensity', GLOW_PREVIEW); }
+  }, [animation, color]);
+  return null;
+}
+
 export function SkinPartPatterns({ scene, edits, onError, onPending, onApplied }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void;
   onPending?: (material: string, pending: boolean) => void; onApplied?: () => void }) {
   return edits.map((edit) => {
     if (edit.hidden) return null;
     const textured = (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint) || edit.regions?.some(hasRegionLook);
     const shine = edit.regions?.filter(isFinishRegion) ?? [];
+    const glow = edit.regions?.find(isGlowRegion);
     return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} onApplied={onApplied} /> : null,
-      shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} onApplied={onApplied} /> : null];
+      shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} onApplied={onApplied} /> : null,
+      glow?.glow ? <PartGlow key={`${edit.material}:glow`} scene={scene} material={edit.material} region={glow as SkinPartRegion & { glow: SkinPartGlow }} onApplied={onApplied} /> : null];
   });
 }

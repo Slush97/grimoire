@@ -55,6 +55,10 @@ export const skinPartRegionSchema = z.object({
         roughness: z.number().finite().min(0).max(1),
         metalness: z.number().finite().min(0).max(1),
     }).strict().optional(),
+    glow: z.object({
+        color: z.string().regex(/^#[a-f0-9]{6}$/i),
+        animation: z.enum(['steady', 'pulse', 'rainbow']),
+    }).strict().optional(),
 }).strict();
 
 export const regionMaskSchema = z.string().max(4_000_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/);

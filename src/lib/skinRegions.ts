@@ -1,5 +1,5 @@
 import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
-export { hasRegionEdit, hasRegionLook, isFinishRegion } from './skinColorAdjustments';
+export { hasRegionEdit, hasRegionLook, isFinishRegion, isGlowRegion, regionKind } from './skinColorAdjustments';
 import { colorFamily, PAINT_SWATCHES } from './colorNames';
 import { FINISHES, sameFinish } from './skinFinishes';
 import { TRIPPY_STYLE_LABELS } from './trippy';
@@ -749,6 +749,7 @@ export function areaName(area: SkinPartRegion, t: (key: string, options?: Record
   if (area.pattern) return TRIPPY_STYLE_LABELS[area.pattern.style];
   // A swatch has an everyday name; a color from the picker shows its code, so two similar ones stay apart.
   if (area.paint) return PAINT_SWATCHES.includes(area.paint.toLowerCase()) ? t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`) : area.paint.toUpperCase();
+  if (area.glow) return t(`foundry.skin.paint.glows.${area.glow.animation}`);
   if (area.finish) {
     const preset = FINISHES.find((item) => sameFinish(item, area.finish));
     return preset && preset.name in SHINE_NAMES ? t(`foundry.skin.paint.shines.${preset.name}`) : preset ? t(`foundry.skin.finish.${preset.name}`) : t('foundry.skin.paint.shine');
