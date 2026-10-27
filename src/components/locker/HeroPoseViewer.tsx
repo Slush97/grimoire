@@ -1236,6 +1236,9 @@ export default function HeroPoseViewer({
   const pendingTextures = useRef(new Set<string>());
   const textureFailed = useRef(false);
   const partPatternFailed = useCallback(() => { textureFailed.current = true; setViewerError(t('foundry.skin.patternPreviewFailed')); }, [t]);
+  // Counts edits landing on the model, so a finished paint stroke stays drawn until its paint shows.
+  const [partEditsApplied, setPartEditsApplied] = useState(0);
+  const partEditApplied = useCallback(() => setPartEditsApplied((count) => count + 1), []);
   const partTexturePending = useCallback((material: string, pending: boolean) => {
     if (pending) { pendingTextures.current.add(material); textureFailed.current = false; }
     else pendingTextures.current.delete(material);
@@ -1609,7 +1612,7 @@ export default function HeroPoseViewer({
         <group>
         {onPartPick && <SkinPartPicking model={scene} posed={!!regionSelection}
           onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
-        {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} />
+        {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} applied={partEditsApplied} />
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
         <MovementFxStage preview={movementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
@@ -1660,7 +1663,7 @@ export default function HeroPoseViewer({
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
         <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />
-        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} />
+        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} onApplied={partEditApplied} />
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect

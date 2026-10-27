@@ -50,7 +50,8 @@ function editRegionPixels(base: ImageData, region: SkinPartRegion, pattern: HTML
   return pixels.data;
 }
 
-function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3D; edit: SkinPartEdit; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
+function PartTexture({ scene, edit, onError, onPending, onApplied }: { scene: THREE.Object3D; edit: SkinPartEdit; onError: () => void;
+  onPending?: (material: string, pending: boolean) => void; onApplied?: () => void }) {
   const textures = useRef(new Map<THREE.Material & Pick<THREE.MeshStandardMaterial, 'map' | 'color'>,
     { original: THREE.Texture | null; texture: THREE.CanvasTexture }>());
   const animationOffset = useRef(new THREE.Vector2());
@@ -145,13 +146,14 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
         textures.current.clear();
         for (const [mat, next] of replacements) textures.current.set(mat, next);
         replacements.clear();
+        onApplied?.();
       })().catch(() => {
         replacements.forEach(({ texture }) => texture.dispose());
         if (!cancelled) onError();
       }).finally(() => { if (!cancelled) onPending?.(material, false); });
     }, delay);
     return () => { cancelled = true; onPending?.(material, false); clearTimeout(timer); };
-  }, [scene, material, style, intensity, phase, colors, scale, hue, saturation, brightness, paintColor, regionKey, onError, onPending]);
+  }, [scene, material, style, intensity, phase, colors, scale, hue, saturation, brightness, paintColor, regionKey, onError, onPending, onApplied]);
   useFrame((_state, delta) => {
     if (scroll <= 0) return;
     const x = delta * scroll * .08, y = delta * scroll * .05;
@@ -184,7 +186,7 @@ function finishChannel(texture: THREE.Texture | null, scalar: number, channel: n
  * Shine areas: a roughness and metalness map with each area's finish blended in by its mask, on the
  * same UVs as the color texture. The material scalars become 1 so the map alone decides.
  */
-function PartFinish({ scene, material, whole, regions }: { scene: THREE.Object3D; material: string; whole?: SkinPartFinish; regions: SkinPartRegion[] }) {
+function PartFinish({ scene, material, whole, regions, onApplied }: { scene: THREE.Object3D; material: string; whole?: SkinPartFinish; regions: SkinPartRegion[]; onApplied?: () => void }) {
   const regionKey = JSON.stringify(regions);
   const roughness = whole?.roughness, metalness = whole?.metalness;
   useEffect(() => {
@@ -232,17 +234,20 @@ function PartFinish({ scene, material, whole, regions }: { scene: THREE.Object3D
         restore.push(() => { Object.assign(mat, previous); mat.needsUpdate = true; texture.dispose(); });
       }
     });
+    onApplied?.();
     return () => restore.forEach((reset) => reset());
-  }, [scene, material, regionKey, roughness, metalness]);
+  }, [scene, material, regionKey, roughness, metalness, onApplied]);
   return null;
 }
 
-export function SkinPartPatterns({ scene, edits, onError, onPending }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void; onPending?: (material: string, pending: boolean) => void }) {
+/** `onApplied` fires each time an edit lands on the model, so a live stroke preview can stay until then. */
+export function SkinPartPatterns({ scene, edits, onError, onPending, onApplied }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void;
+  onPending?: (material: string, pending: boolean) => void; onApplied?: () => void }) {
   return edits.map((edit) => {
     if (edit.hidden) return null;
     const textured = (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint) || edit.regions?.some(hasRegionLook);
     const shine = edit.regions?.filter(isFinishRegion) ?? [];
-    return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} /> : null,
-      shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} /> : null];
+    return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} onApplied={onApplied} /> : null,
+      shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} onApplied={onApplied} /> : null];
   });
 }

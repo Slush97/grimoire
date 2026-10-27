@@ -32,8 +32,13 @@ const NO_DABS: SkinRegionSeed[] = [];
  * While selecting: a light fill and a solid edge for the selection, and a brighter fill for what a click,
  * or the brush under the pointer, would change. Without `picker` it just shows a saved area.
  */
-export function SkinRegionOverlay({ scene, material, seeds, picker }: {
+/** How long a finished stroke stays drawn when no edit lands, for a stroke that changed nothing. */
+const HOLD_MS = 3000;
+
+export function SkinRegionOverlay({ scene, material, seeds, picker, applied = 0 }: {
   scene: THREE.Object3D; material: string; seeds: SkinRegionSeed[]; picker?: RegionPicker;
+  /** Bumped each time an edit lands on the model. A finished stroke stays drawn until then. */
+  applied?: number;
 }) {
   const { invalidate, camera, gl } = useThree();
   const islands = useMemo(() => materialIslands(scene, material), [scene, material]);
@@ -41,8 +46,15 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
   const [hovered, setHovered] = useState<Dab | null>(null);
   // Dabs of the stroke in progress, drawn live and committed once on release. Once committed the seeds
   // change, and the seeds hold the stroke instead.
-  const [drawn, setDrawn] = useState<{ over: SkinRegionSeed[]; dabs: SkinRegionSeed[] }>({ over: seeds, dabs: [] });
-  const stroke = drawn.over === seeds ? drawn.dabs : NO_DABS;
+  // A released stroke is held (with the edit count at release) until its paint lands, so it never blinks out.
+  const [drawn, setDrawn] = useState<{ over: SkinRegionSeed[]; dabs: SkinRegionSeed[]; held?: number }>({ over: seeds, dabs: [] });
+  const stroke = drawn.over === seeds && (drawn.held === undefined || drawn.held === applied) ? drawn.dabs : NO_DABS;
+  const appliedNow = useEffectEvent(() => applied);
+  useEffect(() => {
+    if (drawn.held === undefined) return;
+    const timer = setTimeout(() => setDrawn((current) => current === drawn ? { over: current.over, dabs: [] } : current), HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [drawn]);
   const currentSeeds = useEffectEvent(() => seeds);
   const finishStroke = useEffectEvent((dabs: SkinRegionSeed[]) => { if (dabs.length) picker?.onStroke(dabs); });
   const removing = useEffectEvent(() => !!picker?.remove);
@@ -89,9 +101,10 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
       const dabs = active.dabs;
       active = null;
       if (frame) { cancelAnimationFrame(frame); frame = 0; }
+      // Painting shows the stroke in the texture itself, and its seeds never reach this overlay: keep the
+      // stroke drawn until that texture lands.
+      setDrawn({ over: currentSeeds(), dabs, held: appliedNow() });
       finishStroke(dabs);
-      // Painting shows the stroke in the texture itself, and its seeds never reach this overlay.
-      setDrawn({ over: currentSeeds(), dabs: [] });
     };
     canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointermove', move);
