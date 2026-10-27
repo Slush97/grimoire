@@ -20,6 +20,9 @@ export function finishBall(finish: SkinPartFinish): string {
     : 'radial-gradient(circle at 32% 28%, var(--color-text-primary), var(--color-text-secondary) 35%, var(--color-bg-tertiary) 78%, var(--color-text-tertiary))';
 }
 
+/** Default self-illumination scale of painted glow: bright enough to bloom in game without washing out. */
+export const GLOW_STRENGTH = 4;
+
 /** See-through presets offered as paint: how solid the area stays. */
 export const CLEAR_PRESETS = [
   { name: 'hazy', opacity: 0.7 },

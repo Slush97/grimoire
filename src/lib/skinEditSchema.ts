@@ -40,6 +40,9 @@ export const STROKE_PATH_LENGTH = 765;
 const glowSchema = z.object({
     color: z.string().regex(/^#[a-f0-9]{6}$/i),
     animation: z.enum(['steady', 'pulse', 'rainbow']),
+    strength: z.number().finite().min(0.5).max(20).optional(),
+    speed: z.number().finite().min(0.25).max(4).optional(),
+    paintColors: z.boolean().optional(),
 }).strict();
 
 export const skinPartRegionSchema = z.object({

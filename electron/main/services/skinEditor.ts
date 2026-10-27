@@ -7,6 +7,7 @@ import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
 import { hasColorAdjustments, hasRegionEdit, hasRegionLook, ORIGINAL_SKIN_COLOR, regionKind } from '../../../src/lib/skinColorAdjustments';
+import { GLOW_STRENGTH } from '../../../src/lib/skinFinishes';
 import { skinModelForms, type SkinModelForm } from '../../../src/lib/skinModelForms';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinEditProgress, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
@@ -116,8 +117,7 @@ async function inspect(vpk: string, base: string, form: SkinModelForm, withForms
 
 const skinInfoCache = new Map<string, Promise<SkinEditInfo>>();
 const maskSupport = new Map<string, Promise<boolean>>();
-/** Self-illumination scale for painted glow: bright enough to bloom in game without washing the area out. */
-const GLOW_STRENGTH = 4;
+
 /** Area edits need `--mask` on `trippy-skin` (colors) and `workshop finish` (shine), added after vpkmerge 0.26.0. */
 async function vpkmergeSupportsMask(command: string[]): Promise<boolean> {
     const key = command.join(' ');
@@ -364,7 +364,8 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const layer = join(dir, `glow-${layers.length}_dir.vpk`);
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                 await runVpkmerge(['workshop', 'glow', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, ...(mask ? ['--mask', mask] : []),
-                    '--color', glow.color.slice(1), '--strength', String(GLOW_STRENGTH), '--animation', glow.animation, '--encode-vpk', layer], 300000, textureBakeEnv);
+                    '--color', glow.color.slice(1), '--strength', String(glow.strength ?? GLOW_STRENGTH), '--animation', glow.animation,
+                    '--speed', String(glow.speed ?? 1), ...(glow.paintColors ? ['--paint-colors'] : []), '--encode-vpk', layer], 300000, textureBakeEnv);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);

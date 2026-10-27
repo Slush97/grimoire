@@ -480,7 +480,12 @@
         "fileBusy": "Another program is using the mod files. Close Deadlock or any mod tools, then try again."
       },
       "glowOff": "Off",
-      "glowPainted": "This part already glows where you painted. Remove that glow to light the whole part."
+      "glowPainted": "This part already glows where you painted. Remove that glow to light the whole part.",
+      "glow": {
+        "strength": "Brightness",
+        "speed": "Speed",
+        "paintColors": "Glow in paint colors"
+      }
     },
     "draft": {
       "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",

@@ -92,6 +92,12 @@ export type SkinGlowAnimation = 'steady' | 'pulse' | 'rainbow';
 export interface SkinPartGlow {
   color: string;
   animation: SkinGlowAnimation;
+  /** Self-illumination scale; 4 when unset. */
+  strength?: number;
+  /** Pulse and rainbow speed; 1 (about a two second pulse) when unset. */
+  speed?: number;
+  /** Glow in the part's own texture colors instead of `color`. */
+  paintColors?: boolean;
 }
 
 export interface SkinPartSurface {

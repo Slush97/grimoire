@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
 import { applySkinTransparency, isSkinSurface } from '../../lib/skinPartPreview';
+import { GLOW_STRENGTH } from '../../lib/skinFinishes';
 import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isClearRegion, isFinishRegion, isGlowRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
@@ -253,8 +254,12 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
   // No area: the whole part glows.
   const seedKey = region ? JSON.stringify(region.seeds) : '';
   const regionId = region?.id ?? '';
-  const { color, animation } = glow;
+  const { color, animation, paintColors = false } = glow;
+  const brightness = GLOW_PREVIEW * (glow.strength ?? GLOW_STRENGTH) / GLOW_STRENGTH;
+  const speed = glow.speed ?? 1;
   const glowing = useRef<GlowMaterial[]>([]);
+  // Brightness changes only retune the light (below and per frame); they never rebuild the mask.
+  const currentBrightness = useEffectEvent(() => brightness);
   useEffect(() => {
     const seeds: SkinRegionSeed[] | null = seedKey ? JSON.parse(seedKey) : null;
     const restore: Array<() => void> = [];
@@ -272,6 +277,19 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
         if (seeds && !mask) continue;
         const data = new Uint8Array(width * height * 4).fill(255);
         if (mask) for (let index = 0; index < mask.length; index++) data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = mask[index];
+        // Glowing in the paint's colors: the color texture under the mask.
+        if (paintColors && sized) {
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (context) {
+            context.drawImage(size, 0, 0, width, height);
+            const pixels = context.getImageData(0, 0, width, height).data;
+            for (let index = 0; index < width * height; index++) for (let channel = 0; channel < 3; channel++) {
+              data[index * 4 + channel] = data[index * 4 + channel] * pixels[index * 4 + channel] / 255;
+            }
+          }
+        }
         const texture = new THREE.DataTexture(data, width, height);
         const map = mat.map;
         texture.flipY = map?.flipY ?? false;
@@ -280,7 +298,7 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
         texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
         texture.needsUpdate = true;
         const previous = { emissive: mat.emissive.clone(), emissiveMap: mat.emissiveMap, emissiveIntensity: mat.emissiveIntensity };
-        mat.emissiveMap = texture; mat.emissive.set(color); mat.emissiveIntensity = GLOW_PREVIEW;
+        mat.emissiveMap = texture; mat.emissive.set(paintColors ? '#ffffff' : color); mat.emissiveIntensity = currentBrightness();
         mat.needsUpdate = true;
         glowing.current.push(mat);
         restore.push(() => {
@@ -291,20 +309,24 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
     });
     onApplied?.();
     return () => { glowing.current = []; restore.forEach((reset) => reset()); };
-  }, [scene, material, regionId, seedKey, color, onApplied]);
+  }, [scene, material, regionId, seedKey, color, paintColors, onApplied]);
   useFrame(({ clock }) => {
     if (animation === 'steady') return;
     const time = clock.getElapsedTime();
     for (const mat of glowing.current) {
       // Three.js materials are mutable scene state, not React state.
-      if (animation === 'pulse') Reflect.set(mat, 'emissiveIntensity', GLOW_PREVIEW * (0.5 * Math.sin(3 * time) + 0.5));
-      else mat.emissive.setRGB(0.5 + 0.5 * Math.sin(2 * time), 0.5 + 0.5 * Math.sin(2 * time + 2.094), 0.5 + 0.5 * Math.sin(2 * time + 4.189));
+      if (animation === 'pulse') Reflect.set(mat, 'emissiveIntensity', brightness * (0.5 * Math.sin(3 * speed * time) + 0.5));
+      else {
+        const rate = 2 * speed;
+        mat.emissive.setRGB(0.5 + 0.5 * Math.sin(rate * time), 0.5 + 0.5 * Math.sin(rate * time + 2.094), 0.5 + 0.5 * Math.sin(rate * time + 4.189));
+        Reflect.set(mat, 'emissiveIntensity', brightness);
+      }
     }
   });
   useEffect(() => {
     if (animation !== 'steady') return;
-    for (const mat of glowing.current) { mat.emissive.set(color); Reflect.set(mat, 'emissiveIntensity', GLOW_PREVIEW); }
-  }, [animation, color]);
+    for (const mat of glowing.current) { mat.emissive.set(paintColors ? '#ffffff' : color); Reflect.set(mat, 'emissiveIntensity', brightness); }
+  }, [animation, color, paintColors, brightness]);
   return null;
 }
 

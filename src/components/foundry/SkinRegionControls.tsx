@@ -8,6 +8,7 @@ import { AnchoredPopover } from '../common/AnchoredPopover';
 import { SkinColorControls } from './SkinColorControls';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { SkinFinishControls } from './SkinFinishControls';
+import { SkinGlowExtras } from './SkinGlowControls';
 import { CHECKER, CLEAR_PRESETS, finishBall, PAINT_FINISHES, sameFinish } from '../../lib/skinFinishes';
 import { colorFamily, PAINT_SWATCHES } from '../../lib/colorNames';
 import { areaName, isClearRegion, isFinishRegion, isGlowRegion, regionKind } from '../../lib/skinRegions';
@@ -171,7 +172,7 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
         <span className="text-text-tertiary">{t('foundry.skin.paint.glowColor')}</span></legend>
       <div className="grid grid-cols-3 gap-1">
         {GLOWS.map((animation) => {
-          const value = { color: glow && animation !== 'rainbow' && glow.animation === 'rainbow' ? glow.color : color, animation };
+          const value = { ...glow, color: glow && animation !== 'rainbow' && glow.animation === 'rainbow' ? glow.color : color, animation };
           return <button key={animation} type="button" aria-pressed={painting && glow?.animation === animation} onClick={() => pick({ glow: value })}
             className="flex min-w-0 items-center gap-1.5 rounded-sm border border-transparent px-1 py-1 text-xs text-text-secondary hover:bg-hl/5 hover:text-text-primary aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-text-primary">
             <GlowDot glow={value} className="h-4 w-4 shrink-0" />
@@ -251,10 +252,10 @@ export function SkinRegionEditor({ region, stale = false, color, tool, disabled,
       <input type="range" min="0" max="1" step="0.01" aria-label={t('foundry.skin.opacity')} value={region.surface.opacity} disabled={disabled}
         className="h-7 w-full accent-accent" onChange={(event) => onChange({ surface: { opacity: Number(event.target.value) } })} />
     </label>
-    : isGlowRegion(region) && region.glow ? <div className="space-y-3 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
+    : isGlowRegion(region) && region.glow ? <div className="space-y-3">
       <SegmentedControl fill value={region.glow.animation} onChange={(animation) => onChange({ glow: { ...region.glow!, animation } })}
         options={GLOWS.map((animation) => ({ value: animation, label: t(`foundry.skin.paint.glows.${animation}`) }))} />
-      {region.glow.animation !== 'rainbow' && <HexColorPicker color={region.glow.color} onChange={(value) => onChange({ glow: { ...region.glow!, color: value } })} style={{ width: '100%', height: 120 }} />}
+      <SkinGlowExtras value={region.glow} disabled={disabled} onChange={(glow) => onChange({ glow })} />
     </div>
     : isFinishRegion(region) ? <SkinFinishControls value={region.finish} disabled={disabled} onChange={(finish) => onChange({ finish })} /> : <>
     <SegmentedControl fill value={tool} onChange={onTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }]} />
