@@ -1,3 +1,6 @@
+/** The paint panel's swatches, each with an everyday name. */
+export const PAINT_SWATCHES = ['#ef4444', '#f97316', '#facc15', '#84cc16', '#2dd4bf', '#3b82f6', '#a855f7', '#eeeeee', '#252525'];
+
 export type ColorFamily = 'red' | 'orange' | 'brown' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'white' | 'gray' | 'black';
 
 /** The everyday name for a color, so a painted area can be called "Blue" instead of "#3b82f6". */

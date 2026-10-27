@@ -17,7 +17,7 @@ import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey, STROKE_PATH_LENGTH } from '../../lib/skinEditSchema';
-import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId, removeRegion, strokeSeeds } from '../../lib/skinRegions';
+import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId, removeRegion, compactLegacySeeds } from '../../lib/skinRegions';
 import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
@@ -278,7 +278,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     const erase = paintTool === 'eraser';
     // Older drafts stored a seed per brush dab: pack them first so they do not fill the part.
     const current = (edits.find((edit) => edit.material === material)?.regions ?? []).map((region) => {
-      const seeds = strokeSeeds(region.seeds, STROKE_PATH_LENGTH);
+      const seeds = compactLegacySeeds(region.seeds, STROKE_PATH_LENGTH);
       return seeds === region.seeds ? region : { ...region, seeds };
     });
     // Colors picked on another texture layout keep their seeds and their warning; paint never touches them.

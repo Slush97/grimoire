@@ -1,6 +1,6 @@
 import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
 export { hasRegionEdit, hasRegionLook, isFinishRegion } from './skinColorAdjustments';
-import { colorFamily } from './colorNames';
+import { colorFamily, PAINT_SWATCHES } from './colorNames';
 import { FINISHES, sameFinish } from './skinFinishes';
 import { TRIPPY_STYLE_LABELS } from './trippy';
 
@@ -572,22 +572,40 @@ export function brushDabs(seed: SkinRegionSeed): Array<[number, number, number]>
 }
 
 /**
- * Pack neighbouring brush seeds into as few as the path limit allows: a stroke is one seed, not one per
- * dab, so a part holds thousands of strokes and the cuts painting makes in other areas stay small too.
- * Only seeds that paint the same way (add or remove, cut by the same area) join, in order, so the
- * texels never change. Drafts saved with a seed per dab compact the same way.
+ * Pack a stroke's dabs into as few seeds as the path limit allows: a stroke is one seed, not one per dab,
+ * so a part holds thousands of strokes and the cuts painting makes in other areas stay small too. Every
+ * packed brush seed carries a `path` (empty for a single dab), which marks it as already packed.
  */
 export function strokeSeeds(dabs: SkinRegionSeed[], pathLength: number): SkinRegionSeed[] {
   const seeds: SkinRegionSeed[] = [];
   for (const dab of dabs) {
     const last = seeds.at(-1);
-    const extra = 3 + (dab.path?.length ?? 0);
-    if (last && dab.by === 'brush' && last.by === 'brush' && !!last.remove === !!dab.remove && last.from === dab.from
-      && (last.path?.length ?? 0) + extra <= pathLength) {
-      seeds[seeds.length - 1] = { ...last, path: [...(last.path ?? []), dab.u, dab.v, dab.radius ?? 0, ...(dab.path ?? [])] };
-    } else seeds.push(dab);
+    if (last && dab.by === 'brush' && last.by === 'brush' && !!last.remove === !!dab.remove && (last.path?.length ?? 0) + 3 <= pathLength) {
+      last.path = [...(last.path ?? []), dab.u, dab.v, dab.radius ?? 0];
+    } else seeds.push(dab.by === 'brush' ? { ...dab, path: [] } : dab);
   }
-  return seeds.length === dabs.length ? dabs : seeds;
+  return seeds;
+}
+
+/**
+ * Pack runs of brush seeds from drafts saved with a seed per dab (no `path`). Packed seeds never merge,
+ * so painting keeps adding to the end and each area's mask only rasterizes the new strokes. Only seeds
+ * that paint the same way (add or remove, cut by the same area) join, in order, so the texels never change.
+ */
+export function compactLegacySeeds(seeds: SkinRegionSeed[], pathLength: number): SkinRegionSeed[] {
+  if (!seeds.some((seed) => seed.by === 'brush' && !seed.path)) return seeds;
+  const out: SkinRegionSeed[] = [];
+  let run: SkinRegionSeed | null = null;
+  for (const seed of seeds) {
+    const legacy = seed.by === 'brush' && !seed.path;
+    if (legacy && run && !!run.remove === !!seed.remove && run.from === seed.from && run.path!.length + 3 <= pathLength) {
+      run.path = [...run.path!, seed.u, seed.v, seed.radius ?? 0];
+      continue;
+    }
+    run = legacy ? { ...seed, path: [] } : null;
+    out.push(run ?? seed);
+  }
+  return out;
 }
 
 export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {
@@ -729,7 +747,8 @@ const SHINE_NAMES = { glossy: true, metal: true, polished: true };
 export function areaName(area: SkinPartRegion, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (area.name?.trim()) return area.name.trim();
   if (area.pattern) return TRIPPY_STYLE_LABELS[area.pattern.style];
-  if (area.paint) return t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`);
+  // A swatch has an everyday name; a color from the picker shows its code, so two similar ones stay apart.
+  if (area.paint) return PAINT_SWATCHES.includes(area.paint.toLowerCase()) ? t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`) : area.paint.toUpperCase();
   if (area.finish) {
     const preset = FINISHES.find((item) => sameFinish(item, area.finish));
     return preset && preset.name in SHINE_NAMES ? t(`foundry.skin.paint.shines.${preset.name}`) : preset ? t(`foundry.skin.finish.${preset.name}`) : t('foundry.skin.paint.shine');

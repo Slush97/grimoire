@@ -9,7 +9,7 @@ import { SkinColorControls } from './SkinColorControls';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { SkinFinishControls } from './SkinFinishControls';
 import { finishBall, PAINT_FINISHES, sameFinish } from '../../lib/skinFinishes';
-import { colorFamily } from '../../lib/colorNames';
+import { colorFamily, PAINT_SWATCHES } from '../../lib/colorNames';
 import { areaName, isFinishRegion } from '../../lib/skinRegions';
 import { useTrippySwatches } from '../../lib/useTrippySwatches';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
@@ -19,7 +19,7 @@ import type { SkinPartFinish, SkinPartRegion } from '../../types/skinEditor';
 
 export type PaintTool = 'fill' | 'brush' | 'eraser';
 
-const SWATCHES = ['#ef4444', '#f97316', '#facc15', '#84cc16', '#2dd4bf', '#3b82f6', '#a855f7', '#eeeeee', '#252525'];
+const SWATCHES = PAINT_SWATCHES;
 /** The custom color swatch: a color wheel, so it reads as "any color" without a label. */
 const WHEEL = 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)';
 

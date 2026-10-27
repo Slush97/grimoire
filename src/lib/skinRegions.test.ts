@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, removeRegion, sameSeed, strokeSeeds, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, removeRegion, sameSeed, strokeSeeds, compactLegacySeeds, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -127,6 +127,8 @@ describe('brush', () => {
     const packed = strokeSeeds(dabs, 6);
     // Two more dabs fit per seed at this path limit; a remove dab never joins a paint stroke.
     expect(packed.map((seed) => seed.path?.length ?? 0)).toEqual([6, 3]);
+    // Packed seeds are marked, so later strokes append instead of rewriting them.
+    expect(compactLegacySeeds(packed, 765)).toBe(packed);
     expect(strokeSeeds([...dabs.slice(0, 2), { ...dabs[2], remove: true }], 765)).toHaveLength(2);
     expect(rasterizeSeeds(islands, packed, 8, 8, null, 0)).toEqual(rasterizeSeeds(islands, dabs, 8, 8, null, 0));
     expect(sameSeed(packed[0], { ...packed[0], path: [...packed[0].path!] })).toBe(true);
@@ -135,11 +137,11 @@ describe('brush', () => {
   it('compacts a draft saved with a seed per dab without changing what it paints', () => {
     const cut = (u: number, from: string) => ({ u, v: 0.5, by: 'brush' as const, radius: 0.2, remove: true as const, from });
     const saved = [{ u: 0.5, v: 0.5, by: 'color' as const }, cut(0.05, 'r2'), cut(0.1, 'r2'), cut(0.15, 'r3'), cut(0.2, 'r3')];
-    const compact = strokeSeeds(saved, 765);
+    const compact = compactLegacySeeds(saved, 765);
     // Cuts from different areas stay apart, so removing one area still takes back only its own.
     expect(compact.map((seed) => seed.from ?? null)).toEqual([null, 'r2', 'r3']);
     expect(rasterizeSeeds(islands, compact, 8, 8, null, 0)).toEqual(rasterizeSeeds(islands, saved, 8, 8, null, 0));
-    expect(strokeSeeds(compact, 765)).toBe(compact);
+    expect(compactLegacySeeds(compact, 765)).toBe(compact);
   });
 });
 
