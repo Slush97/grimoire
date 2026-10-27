@@ -153,7 +153,7 @@ describe('skin region export chain', () => {
       : args[0] === 'texture-info' ? JSON.stringify({ width: 512, height: 512 })
       : args.at(-1) === '--help' ? '  --mask <PNG>  Limit the edit to the white area of this UV mask PNG'
       : JSON.stringify({ m_shaderName: 'pbr.vfx', m_vectorParams: [],
-        m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }] }));
+        m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }, { m_name: 'g_tSelfIllumMask', m_pValue: 'mask.vtex' }] }));
   };
   // First: a supported check is cached for the session, an unsupported one is not.
   it('explains when the bundled vpkmerge cannot edit areas', async () => {

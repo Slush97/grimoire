@@ -243,23 +243,48 @@ function PartFinish({ scene, material, whole, regions, onApplied }: { scene: THR
 
 /** `onApplied` fires each time an edit lands on the model, so a live stroke preview can stay until then. */
 type GlowMaterial = THREE.Material & Pick<THREE.MeshStandardMaterial, 'emissive' | 'emissiveMap' | 'emissiveIntensity' | 'map'>;
-/** Preview brightness of painted glow. The game's bloom makes the exported strength read about this bright. */
+/** Emissive brightness of painted glow at the default strength, on materials without the hero shader. */
 const GLOW_PREVIEW = 2.5;
+/** Lights one material: tint (0..1 per channel) and level (1 at the default strength). */
+type GlowLight = (r: number, g: number, b: number, level: number) => void;
+type SelfIllumNumber = 'uHasSelfIllum' | 'uSelfIllumScale' | 'uSelfIllumPulse' | 'uSelfIllumAlbedoFactor' | 'uSelfIllumCap' | 'uSelfIllumSat' | 'uSelfIllumMaskShaping';
+type SelfIllumUniforms = Record<SelfIllumNumber, THREE.IUniform<number>>
+  & { uSelfIllumMap: THREE.IUniform<THREE.Texture>; uSelfIllumScroll: THREE.IUniform<THREE.Vector2>; uSelfIllumTint: THREE.IUniform<THREE.Color> };
+const SELF_ILLUM_NUMBERS: SelfIllumNumber[] = ['uHasSelfIllum', 'uSelfIllumScale', 'uSelfIllumPulse', 'uSelfIllumAlbedoFactor', 'uSelfIllumCap', 'uSelfIllumSat', 'uSelfIllumMaskShaping'];
+
+/** The hero (toon) shader draws Source 2 self-illumination itself and ignores three's emissive channel. */
+function selfIllumUniforms(material: THREE.Material): SelfIllumUniforms | null {
+  const uniforms: unknown = Reflect.get(material, 'uniforms');
+  return uniforms && typeof uniforms === 'object' && 'uHasSelfIllum' in uniforms && 'uSelfIllumMap' in uniforms ? uniforms as SelfIllumUniforms : null;
+}
+
+/** The glow's tint: white when it glows in the paint's own colors. */
+function glowTint(color: string, paintColors: boolean): [number, number, number] {
+  if (paintColors) return [1, 1, 1];
+  const value = new THREE.Color(color);
+  return [value.r, value.g, value.b];
+}
+
+/** Three.js uniforms are mutable scene state, not React state. */
+function setUniform<T>(uniform: THREE.IUniform<T>, value: T): void {
+  Reflect.set(uniform, 'value', value);
+}
 
 /**
- * A glow area: the area mask as the part's emissive map, in the glow color, pulsing or cycling the
- * same way the exported dynamic expressions do.
+ * Glow over an area, or the whole part without one, pulsing or cycling the way the exported dynamic
+ * expressions do. On hero materials it drives the shader's own self-illumination (mask, tint, scale and
+ * albedo factor, the parameters the export writes); elsewhere it uses three's emissive map.
  */
 function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.Object3D; material: string; region: SkinPartRegion | null; glow: SkinPartGlow; onApplied?: () => void }) {
-  // No area: the whole part glows.
   const seedKey = region ? JSON.stringify(region.seeds) : '';
   const regionId = region?.id ?? '';
   const { color, animation, paintColors = false } = glow;
-  const brightness = GLOW_PREVIEW * (glow.strength ?? GLOW_STRENGTH) / GLOW_STRENGTH;
+  const level = (glow.strength ?? GLOW_STRENGTH) / GLOW_STRENGTH;
   const speed = glow.speed ?? 1;
-  const glowing = useRef<GlowMaterial[]>([]);
-  // Brightness changes only retune the light (below and per frame); they never rebuild the mask.
-  const currentBrightness = useEffectEvent(() => brightness);
+  const lights = useRef<GlowLight[]>([]);
+  // Color, brightness and animation only retune the lights (below and per frame); they never rebuild the mask.
+  const currentTint = useEffectEvent(() => glowTint(color, paintColors));
+  const currentLevel = useEffectEvent(() => level);
   useEffect(() => {
     const seeds: SkinRegionSeed[] | null = seedKey ? JSON.parse(seedKey) : null;
     const restore: Array<() => void> = [];
@@ -267,7 +292,9 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
       for (const mat of (Array.isArray(object.material) ? object.material : [object.material]) as GlowMaterial[]) {
-        if (seen.has(mat) || materialBasename(mat.name) !== materialBasename(material) || !('emissiveMap' in mat) || !(mat.emissive instanceof THREE.Color)) continue;
+        if (seen.has(mat) || materialBasename(mat.name) !== materialBasename(material)) continue;
+        const uniforms = selfIllumUniforms(mat);
+        if (!uniforms && !('emissiveMap' in mat && mat.emissive instanceof THREE.Color)) continue;
         seen.add(mat);
         const size: unknown = mat.map?.image;
         const sized = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement;
@@ -277,8 +304,8 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
         if (seeds && !mask) continue;
         const data = new Uint8Array(width * height * 4).fill(255);
         if (mask) for (let index = 0; index < mask.length; index++) data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = mask[index];
-        // Glowing in the paint's colors: the color texture under the mask.
-        if (paintColors && sized) {
+        // Three's emissive channel has no albedo factor: glowing in the paint's colors bakes them into the map.
+        if (!uniforms && paintColors && sized) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -297,36 +324,54 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
         if (map) { texture.repeat.copy(map.repeat); texture.offset.copy(map.offset); texture.rotation = map.rotation; texture.center.copy(map.center); }
         texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
         texture.needsUpdate = true;
-        const previous = { emissive: mat.emissive.clone(), emissiveMap: mat.emissiveMap, emissiveIntensity: mat.emissiveIntensity };
-        mat.emissiveMap = texture; mat.emissive.set(paintColors ? '#ffffff' : color); mat.emissiveIntensity = currentBrightness();
-        mat.needsUpdate = true;
-        glowing.current.push(mat);
-        restore.push(() => {
-          mat.emissive.copy(previous.emissive); mat.emissiveMap = previous.emissiveMap; mat.emissiveIntensity = previous.emissiveIntensity;
-          mat.needsUpdate = true; texture.dispose();
-        });
+        if (uniforms) {
+          const previous = { numbers: SELF_ILLUM_NUMBERS.map((key) => uniforms[key].value), map: uniforms.uSelfIllumMap.value,
+            scroll: uniforms.uSelfIllumScroll.value.clone(), tint: uniforms.uSelfIllumTint.value.clone() };
+          setUniform(uniforms.uHasSelfIllum, 1); setUniform(uniforms.uSelfIllumPulse, 1);
+          setUniform(uniforms.uSelfIllumAlbedoFactor, paintColors ? 1 : 0); setUniform(uniforms.uSelfIllumSat, 1);
+          setUniform(uniforms.uSelfIllumMaskShaping, 0);
+          // The preview caps glow so authored masks never wash out; painted glow gets room to brighten.
+          setUniform(uniforms.uSelfIllumCap, 8);
+          setUniform(uniforms.uSelfIllumMap, texture);
+          uniforms.uSelfIllumScroll.value.set(0, 0);
+          lights.current.push((r, g, b, value) => { uniforms.uSelfIllumTint.value.setRGB(r, g, b); setUniform(uniforms.uSelfIllumScale, value); });
+          restore.push(() => {
+            SELF_ILLUM_NUMBERS.forEach((key, index) => setUniform(uniforms[key], previous.numbers[index]));
+            setUniform(uniforms.uSelfIllumMap, previous.map);
+            uniforms.uSelfIllumScroll.value.copy(previous.scroll);
+            uniforms.uSelfIllumTint.value.copy(previous.tint);
+            texture.dispose();
+          });
+        } else {
+          const previous = { emissive: mat.emissive.clone(), emissiveMap: mat.emissiveMap, emissiveIntensity: mat.emissiveIntensity };
+          mat.emissiveMap = texture; mat.needsUpdate = true;
+          lights.current.push((r, g, b, value) => { mat.emissive.setRGB(r, g, b); Reflect.set(mat, 'emissiveIntensity', value * GLOW_PREVIEW); });
+          restore.push(() => {
+            mat.emissive.copy(previous.emissive); mat.emissiveMap = previous.emissiveMap; mat.emissiveIntensity = previous.emissiveIntensity;
+            mat.needsUpdate = true; texture.dispose();
+          });
+        }
+        lights.current.at(-1)?.(...currentTint(), currentLevel());
       }
     });
     onApplied?.();
-    return () => { glowing.current = []; restore.forEach((reset) => reset()); };
-  }, [scene, material, regionId, seedKey, color, paintColors, onApplied]);
+    return () => { lights.current = []; restore.forEach((reset) => reset()); };
+  }, [scene, material, regionId, seedKey, paintColors, onApplied]);
   useFrame(({ clock }) => {
     if (animation === 'steady') return;
     const time = clock.getElapsedTime();
-    for (const mat of glowing.current) {
-      // Three.js materials are mutable scene state, not React state.
-      if (animation === 'pulse') Reflect.set(mat, 'emissiveIntensity', brightness * (0.5 * Math.sin(3 * speed * time) + 0.5));
+    for (const light of lights.current) {
+      if (animation === 'pulse') light(...glowTint(color, paintColors), level * (0.5 * Math.sin(3 * speed * time) + 0.5));
       else {
         const rate = 2 * speed;
-        mat.emissive.setRGB(0.5 + 0.5 * Math.sin(rate * time), 0.5 + 0.5 * Math.sin(rate * time + 2.094), 0.5 + 0.5 * Math.sin(rate * time + 4.189));
-        Reflect.set(mat, 'emissiveIntensity', brightness);
+        light(0.5 + 0.5 * Math.sin(rate * time), 0.5 + 0.5 * Math.sin(rate * time + 2.094), 0.5 + 0.5 * Math.sin(rate * time + 4.189), level);
       }
     }
   });
   useEffect(() => {
     if (animation !== 'steady') return;
-    for (const mat of glowing.current) { mat.emissive.set(paintColors ? '#ffffff' : color); Reflect.set(mat, 'emissiveIntensity', brightness); }
-  }, [animation, color, paintColors, brightness]);
+    for (const light of lights.current) light(...glowTint(color, paintColors), level);
+  }, [animation, color, paintColors, level]);
   return null;
 }
 

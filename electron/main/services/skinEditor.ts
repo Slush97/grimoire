@@ -95,7 +95,9 @@ async function inspect(vpk: string, base: string, form: SkinModelForm, withForms
                     && !material.m_dynamicParams.some((param) => param.m_name === 'g_vColorTint1');
                 part.patternable = material.m_shaderName === 'pbr.vfx' && material.m_textureParams.some((param) => ['g_tColor', 'g_tColorA', 'g_tBaseColor', 'g_tAlbedo'].includes(param.m_name));
                 part.finishable = material.m_shaderName === 'pbr.vfx' && !material.m_dynamicParams.some((param) => /Roughness|Metalness/.test(param.m_name));
-                part.glowable = part.patternable && !material.m_dynamicParams.some((param) => /SelfIllum/.test(param.m_name));
+                // Glow fills the material's own mask slot; a material without one cannot take it in game.
+                part.glowable = part.patternable && material.m_textureParams.some((param) => param.m_name === 'g_tSelfIllumMask')
+                    && !material.m_dynamicParams.some((param) => /SelfIllum/.test(param.m_name));
                 part.surfaceable = material.m_shaderName === 'pbr.vfx'
                     && material.m_textureParams.some((param) => param.m_name === 'g_tColor')
                     && !material.m_intParams.some((param) => param.m_name === 'F_ALPHA_TEST' && param.m_nValue !== 0)
