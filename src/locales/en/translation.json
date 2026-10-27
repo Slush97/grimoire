@@ -405,7 +405,8 @@
         "maskUnavailable": "An edited area could not be read from the preview. Show its form in the preview, then try again.",
         "stale": "An edited area was selected on a different version of this skin. Change its selection before saving.",
         "staleHint": "This area was selected on a different version of this skin, so it may cover the wrong pixels. Change its selection.",
-        "otherPartUnknown": "That is not {{part}}. This paint only goes on {{part}}."
+        "otherPartUnknown": "That is not {{part}}. This paint only goes on {{part}}.",
+        "maskOtherForm": "Show the {{form}} form in the preview once so its painted areas can be saved, then save again."
       },
       "paint": {
         "mode": "How to color",

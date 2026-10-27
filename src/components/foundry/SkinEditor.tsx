@@ -269,6 +269,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const paintingPart = painting && canPaint ? selected : null;
   const editedArea = selected && editingArea?.material === selected.material ? regions.find((region) => region.id === editingArea.id) ?? null : null;
   const highlightRegion = selected && !paintingPart ? regions.find((region) => region.id === previewRegion) ?? null : null;
+  // While painting, hovering a row in the list outlines that area through the paint overlay.
+  const hoveredSeeds = paintingPart ? regions.find((region) => region.id === previewRegion)?.seeds ?? NO_SEEDS : NO_SEEDS;
   const layoutOf = (material: string) => baker?.layout(material) ?? null;
   const staleRegion = (material: string, region: SkinPartRegion) => !!region.layout && !!layoutOf(material) && region.layout !== layoutOf(material);
   /**
@@ -355,7 +357,13 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
         if (mask) bakedMasks.current.set(key, mask);
         else mask = bakedMasks.current.get(key) ?? null;
         if (mask) masks[regionMaskKey(edit.material, region.id)] = mask;
-        else if (required) throw new Error(t('foundry.skin.region.maskUnavailable'));
+        else if (required) {
+          // Masks bake from the loaded model, so an area on another form needs that form shown once.
+          const part = info?.parts.find((item) => item.material === edit.material);
+          const other = forms.find((item) => item.id !== form.id
+            && (part?.formIds ? part.formIds.includes(item.id) : !part?.modelEntries || part.modelEntries.includes(item.entry)));
+          throw new Error(other ? t('foundry.skin.region.maskOtherForm', { form: t(other.labelKey) }) : t('foundry.skin.region.maskUnavailable'));
+        }
       }
     }
     return masks;
@@ -424,7 +432,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
             onRegionBaker={setBaker}
-            regionSelection={paintingPart && !exporting ? { material: paintingPart.material, seeds: NO_SEEDS,
+            regionSelection={paintingPart && !exporting ? { material: paintingPart.material, seeds: hoveredSeeds,
               picker: { by: paintTool === 'fill' ? 'color' : 'brush', tolerance: pickTolerance, brushSize, remove: paintTool === 'eraser', onStroke: applyPaint,
                 tint: paintTool === 'eraser' || paintPattern || paintFinish || paintClear !== null || paintGlow?.animation === 'rainbow' ? null : paintGlow?.color ?? paintColor }, onPick: fillAt } : null}
             regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}

@@ -258,11 +258,14 @@ function selfIllumUniforms(material: THREE.Material): SelfIllumUniforms | null {
   return uniforms && typeof uniforms === 'object' && 'uHasSelfIllum' in uniforms && 'uSelfIllumMap' in uniforms ? uniforms as SelfIllumUniforms : null;
 }
 
-/** The glow's tint: white when it glows in the paint's own colors. */
+/**
+ * The glow's tint as the raw 0..1 channels the export writes to g_vSelfIllumTint1 (the viewer reads a
+ * material's own tint the same way, without an sRGB conversion). White when it glows in the paint's colors.
+ */
 function glowTint(color: string, paintColors: boolean): [number, number, number] {
   if (paintColors) return [1, 1, 1];
-  const value = new THREE.Color(color);
-  return [value.r, value.g, value.b];
+  const value = Number.parseInt(color.slice(1), 16);
+  return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
 }
 
 /** Three.js uniforms are mutable scene state, not React state. */
@@ -328,13 +331,18 @@ function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.O
           const previous = { numbers: SELF_ILLUM_NUMBERS.map((key) => uniforms[key].value), map: uniforms.uSelfIllumMap.value,
             scroll: uniforms.uSelfIllumScroll.value.clone(), tint: uniforms.uSelfIllumTint.value.clone() };
           setUniform(uniforms.uHasSelfIllum, 1); setUniform(uniforms.uSelfIllumPulse, 1);
-          setUniform(uniforms.uSelfIllumAlbedoFactor, paintColors ? 1 : 0); setUniform(uniforms.uSelfIllumSat, 1);
+          setUniform(uniforms.uSelfIllumAlbedoFactor, paintColors ? 1 : 0);
           setUniform(uniforms.uSelfIllumMaskShaping, 0);
-          // The preview caps glow so authored masks never wash out; painted glow gets room to brighten.
-          setUniform(uniforms.uSelfIllumCap, 8);
           setUniform(uniforms.uSelfIllumMap, texture);
           uniforms.uSelfIllumScroll.value.set(0, 0);
-          lights.current.push((r, g, b, value) => { uniforms.uSelfIllumTint.value.setRGB(r, g, b); setUniform(uniforms.uSelfIllumScale, value); });
+          // The scale is the exported g_flSelfIllumScale1, as the viewer shows authored glow. The preview caps
+          // glow so authored masks never wash out; above the default strength the cap rises with the slider.
+          const cap = previous.numbers[SELF_ILLUM_NUMBERS.indexOf('uSelfIllumCap')];
+          lights.current.push((r, g, b, value) => {
+            uniforms.uSelfIllumTint.value.setRGB(r, g, b);
+            setUniform(uniforms.uSelfIllumScale, value * GLOW_STRENGTH);
+            setUniform(uniforms.uSelfIllumCap, cap * Math.max(1, value));
+          });
           restore.push(() => {
             SELF_ILLUM_NUMBERS.forEach((key, index) => setUniform(uniforms[key], previous.numbers[index]));
             setUniform(uniforms.uSelfIllumMap, previous.map);
@@ -394,7 +402,19 @@ function PartClear({ scene, material, whole, regions, onApplied }: { scene: THRE
         const sized = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement;
         const scale = sized ? Math.min(1, 1024 / Math.max(size.width, size.height)) : 0;
         const width = sized ? Math.max(1, Math.round(size.width * scale)) : 512, height = sized ? Math.max(1, Math.round(size.height * scale)) : 512;
+        // Start from the part's own alpha map, like the export scales the color alpha it finds.
         const alpha = new Float32Array(width * height).fill(255);
+        const own: unknown = mat.alphaMap?.image;
+        if (own instanceof HTMLImageElement || own instanceof ImageBitmap || own instanceof HTMLCanvasElement) {
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (context) {
+            context.drawImage(own, 0, 0, width, height);
+            const pixels = context.getImageData(0, 0, width, height).data;
+            for (let index = 0; index < alpha.length; index++) alpha[index] = pixels[index * 4 + 1];
+          }
+        }
         for (const area of areas) {
           if (!area.surface) continue;
           const mask = regionMask(scene, material, area.seeds, width, height, 2, area.id);
@@ -410,7 +430,8 @@ function PartClear({ scene, material, whole, regions, onApplied }: { scene: THRE
         if (map) { texture.repeat.copy(map.repeat); texture.offset.copy(map.offset); texture.rotation = map.rotation; texture.center.copy(map.center); }
         texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
         texture.needsUpdate = true;
-        const reset = applySkinTransparency(mat, whole ?? 1);
+        // A part that already blends keeps its opacity outside the areas; the export leaves its opacity scale too.
+        const reset = applySkinTransparency(mat, whole ?? (mat.transparent ? mat.opacity : 1));
         mat.alphaMap = texture;
         mat.needsUpdate = true;
         restore.push(() => { mat.alphaMap = null; reset(); texture.dispose(); });

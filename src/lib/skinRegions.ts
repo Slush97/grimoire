@@ -392,19 +392,25 @@ export function rasterizeBrush(islands: UvIslands, u: number, v: number, radius:
     const near = centers.filter(([x, y, z]) => Math.hypot(x - cx, y - cy, z - cz) <= radius + spread);
     if (!near.length) continue;
     const o = triangle * 6;
-    const x0 = t[o] * width, y0 = t[o + 1] * height, x1 = t[o + 2] * width, y1 = t[o + 3] * height, x2 = t[o + 4] * width, y2 = t[o + 5] * height;
-    const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-    if (!area) continue;
-    const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
-    const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
-    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
-      const px = x + 0.5, py = y + 0.5;
-      const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
-      const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
-      const w2 = 1 - w0 - w1;
-      if (w0 < 0 || w1 < 0 || w2 < 0) continue;
-      const sx = w0 * p[q] + w1 * p[q + 3] + w2 * p[q + 6], sy = w0 * p[q + 1] + w1 * p[q + 4] + w2 * p[q + 7], sz = w0 * p[q + 2] + w1 * p[q + 5] + w2 * p[q + 8];
-      if (near.some(([cx2, cy2, cz2]) => (sx - cx2) ** 2 + (sy - cy2) ** 2 + (sz - cz2) ** 2 <= reach)) mask[y * width + x] = value;
+    // A triangle reaching past the unit square also paints its wrapped copy, like the island masks.
+    const spansU = Math.min(t[o], t[o + 2], t[o + 4]) < 0 || Math.max(t[o], t[o + 2], t[o + 4]) > 1;
+    const spansV = Math.min(t[o + 1], t[o + 3], t[o + 5]) < 0 || Math.max(t[o + 1], t[o + 3], t[o + 5]) > 1;
+    for (const du of spansU ? [-1, 0, 1] : [0]) for (const dv of spansV ? [-1, 0, 1] : [0]) {
+      const x0 = (t[o] + du) * width, y0 = (t[o + 1] + dv) * height, x1 = (t[o + 2] + du) * width, y1 = (t[o + 3] + dv) * height;
+      const x2 = (t[o + 4] + du) * width, y2 = (t[o + 5] + dv) * height;
+      const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+      if (!area) continue;
+      const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
+      const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
+      for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+        const px = x + 0.5, py = y + 0.5;
+        const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
+        const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
+        const w2 = 1 - w0 - w1;
+        if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+        const sx = w0 * p[q] + w1 * p[q + 3] + w2 * p[q + 6], sy = w0 * p[q + 1] + w1 * p[q + 4] + w2 * p[q + 7], sz = w0 * p[q + 2] + w1 * p[q + 5] + w2 * p[q + 8];
+        if (near.some(([cx2, cy2, cz2]) => (sx - cx2) ** 2 + (sy - cy2) ** 2 + (sz - cz2) ** 2 <= reach)) mask[y * width + x] = value;
+      }
     }
   }
   return mask;
@@ -501,21 +507,28 @@ export function fillAcrossSeams(islands: UvIslands, lab: Float32Array, width: nu
   const reach = tolerance * tolerance;
   const l = lab[start * 3], a = lab[start * 3 + 1], b = lab[start * 3 + 2];
   const close = (index: number) => (lab[index * 3] - l) ** 2 + (lab[index * 3 + 1] - a) ** 2 + (lab[index * 3 + 2] - b) ** 2 <= reach;
-  // Texels already flooded per island: a texel shared by two islands is walked in each.
-  const flooded = new Map<number, Uint8Array>();
+  // Texels already flooded per island: a texel shared by two islands is walked in each. Most texels have
+  // one island, so one bitmap covers each texel's first island and a set holds the rare shared ones,
+  // instead of a full bitmap per island reached (thousands of islands at 2048 would be gigabytes).
+  const seenFirst = new Uint8Array(width * height);
+  const seenShared = new Set<number>();
+  const islandCount = islands.island.length + 1;
+  const seen = (index: number, island: number) => first[index] === island ? seenFirst[index] === 1 : seenShared.has(index * islandCount + island);
+  const visit = (index: number, island: number) => {
+    if (first[index] === island) seenFirst[index] = 1; else seenShared.add(index * islandCount + island);
+    mask[index] = 255;
+  };
   const stack = new Int32Array(width * height);
   const flood = (from: number, island: number) => {
-    let seen = flooded.get(island);
-    if (!seen) { seen = new Uint8Array(width * height); flooded.set(island, seen); }
-    if (seen[from]) return false;
+    if (seen(from, island)) return false;
     let top = 0;
-    stack[top++] = from; seen[from] = 1; mask[from] = 255;
+    stack[top++] = from; visit(from, island);
     while (top) {
       const index = stack[--top];
       const px = index % width;
       for (const next of [px > 0 ? index - 1 : -1, px + 1 < width ? index + 1 : -1, index - width, index + width]) {
-        if (next < 0 || next >= mask.length || seen[next] || !has(next, island) || !close(next)) continue;
-        seen[next] = 1; mask[next] = 255;
+        if (next < 0 || next >= mask.length || !has(next, island) || seen(next, island) || !close(next)) continue;
+        visit(next, island);
         stack[top++] = next;
       }
     }

@@ -122,6 +122,12 @@ describe('brush', () => {
   it('selects nothing for a point no triangle draws', () => {
     expect(rasterizeBrush(islands, 0.6, 0.5, 5, 8, 8).some(Boolean)).toBe(false);
   });
+  it('paints the wrapped part of a triangle that crosses the edge of the texture', () => {
+    // One quad spanning U 0.75..1.25: half at the right edge, half wrapped to the left edge.
+    const wrapped = buildUvIslands([{ position: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], uv: [0.75, 0, 1.25, 0, 1.25, 1, 0.75, 1], index: [0, 1, 2, 0, 2, 3] }]);
+    const painted = rasterizeBrush(wrapped, 0.9, 0.5, 5, 16, 16);
+    expect(painted.filter(Boolean).length).toBe(rasterizeIslandIds(wrapped, 16, 16).filter(Boolean).length);
+  });
   it('stores a stroke as one seed that paints the same texels as its dabs', () => {
     const dabs = [0.05, 0.12, 0.2, 0.8, 0.9].map((u) => ({ u, v: 0.5, by: 'brush' as const, radius: 0.3 }));
     const packed = strokeSeeds(dabs, 6);
