@@ -32,9 +32,10 @@ export function SkinRegionTargets({ regions, active, disabled, onSelect, onAdd, 
 }
 
 /** Replaces the appearance controls while clicks on the model change the selection. */
-export function SkinRegionSelecting({ part, mode, empty, missed, onMode, onClear, onDone }: {
-  part: string; mode: 'add' | 'remove'; empty: boolean; missed: boolean;
-  onMode: (mode: 'add' | 'remove') => void; onClear: () => void; onDone: () => void;
+export function SkinRegionSelecting({ part, mode, by, tolerance, empty, missed, onMode, onBy, onTolerance, onClear, onDone }: {
+  part: string; mode: 'add' | 'remove'; by: 'piece' | 'color'; tolerance: number; empty: boolean; missed: boolean;
+  onMode: (mode: 'add' | 'remove') => void; onBy: (by: 'piece' | 'color') => void; onTolerance: (tolerance: number) => void;
+  onClear: () => void; onDone: () => void;
 }) {
   const { t } = useTranslation();
   return <div className="space-y-3">
@@ -42,6 +43,16 @@ export function SkinRegionSelecting({ part, mode, empty, missed, onMode, onClear
       <h5 className="text-sm font-semibold text-text-primary">{t('foundry.skin.region.selectingTitle', { part })}</h5>
       <p className="text-xs text-text-secondary">{t('foundry.skin.region.selectingHint')}</p>
     </div>
+    <SegmentedControl fill label={t('foundry.skin.region.selectBy')} value={by} onChange={onBy} options={[
+      { value: 'piece', label: t('foundry.skin.region.byPiece'), title: t('foundry.skin.region.byPieceHint') },
+      { value: 'color', label: t('foundry.skin.region.byColor'), title: t('foundry.skin.region.byColorHint') },
+    ]} />
+    {by === 'color' && <label className="flex items-center gap-2 text-xs text-text-secondary">
+      <span className="shrink-0">{t('foundry.skin.region.colorRange')}</span>
+      <input type="range" min={1} max={40} value={tolerance} aria-label={t('foundry.skin.region.colorRange')}
+        className="h-7 min-w-0 flex-1 accent-accent" onChange={(event) => onTolerance(Number(event.target.value))} />
+      <span className="w-7 text-right tabular-nums">{tolerance}</span>
+    </label>}
     <SegmentedControl fill label={t('foundry.skin.region.selectionMode')} value={mode} onChange={onMode} options={[
       { value: 'add', label: t('foundry.skin.region.addPieces') },
       { value: 'remove', label: t('foundry.skin.region.removePieces') },

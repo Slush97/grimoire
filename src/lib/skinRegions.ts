@@ -28,6 +28,17 @@ export interface UvIslands {
 const POSITION_STEP = 1e-3;
 const UV_STEP = 1 / 16384;
 
+/**
+ * Whether a triangle has no area on the model. Hero meshes carry thousands of these, stretched
+ * across the whole texture: invisible, but they would join every island and paint the atlas.
+ */
+function collapsed(position: ArrayLike<number>, [a, b, c]: number[]): boolean {
+  const e1 = [0, 1, 2].map((axis) => position[b * 3 + axis] - position[a * 3 + axis]);
+  const e2 = [0, 1, 2].map((axis) => position[c * 3 + axis] - position[a * 3 + axis]);
+  const cross = Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]);
+  return cross <= 1e-6 * Math.hypot(...e1) * Math.hypot(...e2);
+}
+
 export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
   const corners: number[] = [];
   const keys = new Map<string, number>();
@@ -53,6 +64,7 @@ export function buildUvIslands(geometries: UvGeometry[]): UvIslands {
     const end = Math.min(total, start + (geometry.count ?? total));
     for (let corner = start; corner + 2 < end; corner += 3) {
       const triangle = [0, 1, 2].map((offset) => geometry.index ? geometry.index[corner + offset] : corner + offset);
+      if (collapsed(geometry.position, triangle)) continue;
       const welded = triangle.map((vertex) => vertexId(geometry, vertex));
       parent[find(welded[1])] = find(welded[0]);
       parent[find(welded[2])] = find(welded[0]);
@@ -108,19 +120,21 @@ export function resolveRegion(islands: UvIslands, seeds: SkinRegionSeed[]): Set<
 }
 
 function fillTriangle(target: Uint8Array, width: number, height: number, t: ArrayLike<number>) {
-  const xs = [t[0] * width, t[2] * width, t[4] * width], ys = [t[1] * height, t[3] * height, t[5] * height];
-  const minY = Math.max(0, Math.floor(Math.min(...ys))), maxY = Math.min(height - 1, Math.ceil(Math.max(...ys)));
-  const minX = Math.max(0, Math.floor(Math.min(...xs))), maxX = Math.min(width - 1, Math.ceil(Math.max(...xs)));
+  const x0 = t[0] * width, y0 = t[1] * height, x1 = t[2] * width, y1 = t[3] * height, x2 = t[4] * width, y2 = t[5] * height;
+  const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
+  const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
   if (minX > maxX || minY > maxY) return;
-  const area = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
+  const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
   if (area === 0) return;
   for (let y = minY; y <= maxY; y++) {
     const py = y + 0.5;
+    const row = y * width;
     for (let x = minX; x <= maxX; x++) {
       const px = x + 0.5;
-      const w0 = ((xs[1] - px) * (ys[2] - py) - (xs[2] - px) * (ys[1] - py)) / area;
-      const w1 = ((xs[2] - px) * (ys[0] - py) - (xs[0] - px) * (ys[2] - py)) / area;
-      if (w0 >= 0 && w1 >= 0 && w0 + w1 <= 1) target[y * width + x] = 255;
+      const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
+      if (w0 < 0) continue;
+      const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
+      if (w1 >= 0 && w0 + w1 <= 1) target[row + x] = 255;
     }
   }
 }
@@ -141,15 +155,80 @@ function rasterize(islands: UvIslands, include: (island: number) => boolean, wid
   return target;
 }
 
+/** Every texel some triangle of the material covers. Selections never grow outside it. */
+export function rasterizeUsed(islands: UvIslands, width: number, height: number): Uint8Array {
+  return rasterize(islands, () => true, width, height);
+}
+
+/** Texels covering every island under (u, v). */
+export function rasterizeIslandsAt(islands: UvIslands, u: number, v: number, width: number, height: number): Uint8Array {
+  const found = new Set(islandsAt(islands, u, v));
+  return rasterize(islands, (island) => found.has(island), width, height);
+}
+
+const LINEAR = Float32Array.from({ length: 256 }, (_, value) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+});
+const labF = (t: number) => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+
+/** CIELAB (D65) of every sRGB texel, three floats each. Dark textures need it: their colors sit close together in RGB. */
+export function texelsToLab(pixels: ArrayLike<number>): Float32Array {
+  const lab = new Float32Array(pixels.length / 4 * 3);
+  for (let index = 0; index * 4 < pixels.length; index++) {
+    const r = LINEAR[pixels[index * 4]], g = LINEAR[pixels[index * 4 + 1]], b = LINEAR[pixels[index * 4 + 2]];
+    const x = labF((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
+    const y = labF(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    const z = labF((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+    lab[index * 3] = 116 * y - 16; lab[index * 3 + 1] = 500 * (x - y); lab[index * 3 + 2] = 200 * (y - z);
+  }
+  return lab;
+}
+
 /**
- * Bake a region to a 0/255 mask at `width` x `height`, matching the texture's row order.
- * The edge grows into texels no triangle of the material uses, so filtering and mips do not
- * pull the unedited color in at seams, but it never grows into a neighbouring island.
+ * Texels connected to (x, y) through `allowed` whose color is within `tolerance` (CIELAB delta E) of
+ * the clicked texel's. Comparing against the clicked color, not each neighbour, keeps a soft
+ * gradient from leaking across a whole garment.
  */
-export function rasterizeRegion(islands: UvIslands, selected: Set<number>, width: number, height: number, padding = 2): Uint8Array {
-  const mask = rasterize(islands, (island) => selected.has(island), width, height);
-  if (!padding || !selected.size) return mask;
-  const used = rasterize(islands, () => true, width, height);
+export function floodFillTexels(lab: Float32Array, allowed: Uint8Array, width: number, height: number, x: number, y: number, tolerance: number): Uint8Array {
+  const mask = new Uint8Array(width * height);
+  const start = y * width + x;
+  if (x < 0 || y < 0 || x >= width || y >= height || !allowed[start]) return mask;
+  const reach = tolerance * tolerance;
+  const l = lab[start * 3], a = lab[start * 3 + 1], b = lab[start * 3 + 2];
+  const close = (index: number) => (lab[index * 3] - l) ** 2 + (lab[index * 3 + 1] - a) ** 2 + (lab[index * 3 + 2] - b) ** 2 <= reach;
+  const stack = new Int32Array(width * height);
+  let top = 0;
+  stack[top++] = start; mask[start] = 255;
+  while (top) {
+    const index = stack[--top];
+    const px = index % width;
+    for (const next of [px > 0 ? index - 1 : -1, px + 1 < width ? index + 1 : -1, index - width, index + width]) {
+      if (next < 0 || next >= mask.length || mask[next] || !allowed[next] || !close(next)) continue;
+      mask[next] = 255;
+      stack[top++] = next;
+    }
+  }
+  return mask;
+}
+
+const texel = (value: number, size: number) => Math.min(size - 1, Math.floor((value - Math.floor(value)) * size));
+
+export const DEFAULT_COLOR_RANGE = 8;
+
+/**
+ * One seed's texels: its UV islands, or with `by: 'color'` the similar colors connected to it inside
+ * those islands. Atlases pack islands closer than a texel apart, so a fill must not cross them.
+ */
+export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {
+  const pieces = rasterizeIslandsAt(islands, seed.u, seed.v, width, height);
+  if (seed.by !== 'color') return pieces;
+  if (!lab) return new Uint8Array(width * height);
+  return floodFillTexels(lab, pieces, width, height, texel(seed.u, width), texel(seed.v, height), seed.tolerance ?? DEFAULT_COLOR_RANGE);
+}
+
+/** Grow a mask into texels no triangle uses, so filtering and mips do not pull the unedited color in at seams. */
+export function padMask(mask: Uint8Array, used: Uint8Array, width: number, height: number, padding: number): Uint8Array {
   let frontier = mask;
   for (let pass = 0; pass < padding; pass++) {
     const next = frontier.slice();
@@ -162,6 +241,28 @@ export function rasterizeRegion(islands: UvIslands, selected: Set<number>, width
     frontier = next;
   }
   return frontier;
+}
+
+/**
+ * Bake seeds to a 0/255 mask at `width` x `height`, in the texture's row order. Seeds apply in
+ * order, each adding or removing its texels. `lab` (from `texelsToLab` at the same size) is only
+ * read by color seeds; without it they select nothing.
+ */
+export function rasterizeSeeds(islands: UvIslands, seeds: SkinRegionSeed[], width: number, height: number, lab: Float32Array | null, padding = 2): Uint8Array {
+  const mask = new Uint8Array(width * height);
+  for (const seed of seeds) {
+    const texels = rasterizeSeed(islands, seed, width, height, lab);
+    for (let index = 0; index < mask.length; index++) {
+      if (texels[index]) mask[index] = seed.remove ? 0 : 255;
+    }
+  }
+  return padding ? padMask(mask, rasterizeUsed(islands, width, height), width, height, padding) : mask;
+}
+
+/** Bake whole islands to a mask. Kept for previews that already know which islands they want. */
+export function rasterizeRegion(islands: UvIslands, selected: Set<number>, width: number, height: number, padding = 2): Uint8Array {
+  const mask = rasterize(islands, (island) => selected.has(island), width, height);
+  return padding && selected.size ? padMask(mask, rasterizeUsed(islands, width, height), width, height, padding) : mask;
 }
 
 /** Mask texels on the boundary of the selection, for an outline that reads at any fill strength. */

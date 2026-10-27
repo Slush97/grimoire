@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, islandsAt, rasterizeRegion, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, floodFillTexels, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -23,6 +23,13 @@ describe('UV islands', () => {
     expect(left).not.toBe(right);
     expect(islandsAt(islands, 1.2, -0.5)).toEqual([left]);
     expect([...resolveRegion(islands, [{ u: 0.2, v: 0.5 }, { u: 0.8, v: 0.5 }, { u: 0.2, v: 0.5, remove: true }])]).toEqual([right]);
+  });
+  it('ignores triangles with no area on the model, however far they stretch in UV', () => {
+    // A collapsed triangle joining the two quads across the texture, like the ones hero meshes carry.
+    const bridge: UvGeometry = { position: [0, 0, 0, 0, 0, 0, 1, 0, 0], uv: [0.1, 0.1, 0.9, 0.9, 0.1, 0.9], index: null };
+    const islands = buildUvIslands([geometry, bridge]);
+    expect(islands.count).toBe(2);
+    expect(islands.island).toHaveLength(4);
   });
   it('selects every island on shared texels, like mirrored sleeves', () => {
     const mirrored: UvGeometry = { position: [5, 0, 0, 6, 0, 0, 6, 1, 0], uv: [0, 0, 0.5, 0, 0.5, 1], index: null };
@@ -56,6 +63,31 @@ describe('region masks', () => {
     const base = Uint8Array.from([100, 100, 100, 7, 100, 100, 100, 9]);
     blendRegionPixels(base, Uint8Array.from([200, 0, 50, 255, 200, 0, 50, 255]), Uint8Array.from([255, 128]));
     expect([...base]).toEqual([200, 0, 50, 7, 150, 50, 75, 9]);
+  });
+});
+
+describe('color selection', () => {
+  // A 4x2 texture: red, red, near-red, blue on top; red, blue, red, red below.
+  const colors = [[255, 0, 0], [255, 0, 0], [240, 10, 10], [0, 0, 255], [255, 0, 0], [0, 0, 255], [255, 0, 0], [255, 0, 0]];
+  const pixels = colors.flatMap((rgb) => [...rgb, 255]);
+  const lab = texelsToLab(pixels);
+  const all = new Uint8Array(8).fill(255);
+  it('fills connected texels close to the clicked color', () => {
+    // The near-red texel joins at range 10 and leads on to the reds below it.
+    expect([...floodFillTexels(lab, all, 4, 2, 0, 0, 10)].map(Boolean)).toEqual([true, true, true, false, true, false, true, true]);
+    expect([...floodFillTexels(lab, all, 4, 2, 0, 0, 1)].map(Boolean)).toEqual([true, true, false, false, true, false, false, false]);
+  });
+  it('stops at texels no triangle uses', () => {
+    const used = Uint8Array.from([255, 0, 255, 255, 255, 0, 255, 255]);
+    expect([...floodFillTexels(lab, used, 4, 2, 0, 0, 10)].map(Boolean)).toEqual([true, false, false, false, true, false, false, false]);
+  });
+  it('applies piece and color seeds in order', () => {
+    const quad: UvGeometry = { position: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], uv: [0, 0, 1, 0, 1, 1, 0, 1], index: [0, 1, 2, 0, 2, 3] };
+    const islands = buildUvIslands([quad]);
+    const mask = rasterizeSeeds(islands, [{ u: 0.5, v: 0.5 }, { u: 0.1, v: 0.9, by: 'color', tolerance: 10, remove: true }], 4, 2, lab, 0);
+    // The whole quad, minus every red texel connected to the bottom-left one: only the blues stay.
+    expect([...mask].map(Boolean)).toEqual([false, false, false, true, false, true, false, false]);
+    expect(rasterizeSeeds(islands, [{ u: 0.1, v: 0.1, by: 'color' }], 4, 2, null, 0).every((value) => !value)).toBe(true);
   });
 });
 

@@ -6,7 +6,7 @@ import { materialBasename } from '../../lib/skinParts';
 import { isSkinSurface } from '../../lib/skinPartPreview';
 import { adjustSkinPixels, hasColorAdjustments, hasRegionEdit, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
-import { materialIslands, regionMask } from '../../lib/skinRegionScene';
+import { regionMask } from '../../lib/skinRegionScene';
 import type { SkinPartEdit, SkinPartPattern, SkinPartRegion } from '../../types/skinEditor';
 
 async function patternImage(pattern: SkinPartPattern): Promise<HTMLImageElement> {
@@ -67,7 +67,6 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
         const wholePattern = style && intensity > 0 ? await patternImage({ style, intensity, phase, scroll: 0, scale, colors }) : null;
         const regions: SkinPartRegion[] = JSON.parse(regionKey);
         const regionPatterns = await Promise.all(regions.map((region) => region.pattern && region.pattern.intensity > 0 ? patternImage(region.pattern) : null));
-        const islands = regions.length ? materialIslands(scene, material) : null;
         if (cancelled) return;
         const seen = new Set<THREE.Material>();
         scene.traverse((object) => {
@@ -99,11 +98,14 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             }
             const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
             adjustSkinPixels(pixels.data, { hue, saturation, brightness });
-            if (islands) regions.forEach((region, index) => {
-              blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), regionMask(islands, region.seeds, canvas.width, canvas.height));
+            regions.forEach((region, index) => {
+              const mask = regionMask(scene, material, region.seeds, canvas.width, canvas.height);
+              if (mask) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), mask);
             });
             context.putImageData(pixels, 0, 0);
             const texture = new THREE.CanvasTexture(canvas);
+            // Color selection reads the loaded texture, not this edited copy.
+            texture.userData.skinSourceImage = image;
             texture.colorSpace = THREE.SRGBColorSpace; texture.flipY = original?.flipY ?? false;
             texture.wrapS = original?.wrapS ?? THREE.RepeatWrapping; texture.wrapT = original?.wrapT ?? THREE.RepeatWrapping;
             if (original) { texture.repeat.copy(original.repeat); texture.offset.copy(original.offset); texture.rotation = original.rotation; texture.center.copy(original.center); }

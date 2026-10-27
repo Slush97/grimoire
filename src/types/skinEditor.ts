@@ -45,11 +45,16 @@ export interface SkinPartEdit {
   regions?: SkinPartRegion[];
 }
 
-/** A texture point. The region takes (or, with `remove`, drops) every UV island covering it. */
+/**
+ * A texture point. The region takes (or, with `remove`, drops) every UV island covering it, or with
+ * `by: 'color'` the connected texels whose color is within `tolerance` (0..100) of the point's.
+ */
 export interface SkinRegionSeed {
   u: number;
   v: number;
   remove?: true;
+  by?: 'color';
+  tolerance?: number;
 }
 
 export interface SkinPartRegion {

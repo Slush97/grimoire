@@ -16,7 +16,7 @@ import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
-import { hasRegionSelection, newRegionId } from '../../lib/skinRegions';
+import { DEFAULT_COLOR_RANGE, hasRegionSelection, newRegionId } from '../../lib/skinRegions';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { useSkinEditHistory } from '../../lib/useSkinEditHistory';
@@ -174,6 +174,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const [regionTargets, setRegionTargets] = useState<Record<string, string | null>>({});
   const [selecting, setSelecting] = useState<{ material: string; region: string } | null>(null);
   const [selectMode, setSelectMode] = useState<'add' | 'remove'>('add');
+  const [pickBy, setPickBy] = useFoundryDraft('skin:regionPickBy', z.enum(['piece', 'color']), 'color');
+  const [pickTolerance, setPickTolerance] = useFoundryDraft('skin:regionColorRange', z.number().int().min(1).max(40), DEFAULT_COLOR_RANGE);
   const [missedPick, setMissedPick] = useState(false);
   const [previewRegion, setPreviewRegion] = useState<string | null>(null);
   const [regionTool, setRegionTool] = useState<'color' | 'pattern'>('color');
@@ -259,7 +261,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     setMissedPick(false);
     if (selectingRegion.seeds.length >= 512) return;
     const round = (value: number) => Math.round(value * 1e5) / 1e5;
-    const seed: SkinRegionSeed = { u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}) };
+    const seed: SkinRegionSeed = { u: round(hit.uv.x), v: round(hit.uv.y), ...(selectMode === 'remove' ? { remove: true as const } : {}),
+      ...(pickBy === 'color' ? { by: 'color' as const, tolerance: pickTolerance } : {}) };
     updateRegion(selecting.material, selecting.region, { seeds: [...selectingRegion.seeds, seed] });
   };
   const finishSelecting = () => {
@@ -339,7 +342,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
             onRegionBaker={receiveBaker}
-            regionSelection={selecting && selectingRegion && !exporting ? { material: selecting.material, seeds: selectingRegion.seeds, onPick: pickRegion } : null}
+            regionSelection={selecting && selectingRegion && !exporting ? { material: selecting.material, seeds: selectingRegion.seeds,
+              picker: { by: pickBy, tolerance: pickTolerance }, onPick: pickRegion } : null}
             regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}
             workspaceKey={form.id === 'default' ? draftKey : `${draftKey}:${form.id}`}
             highlightedPart={!exporting && highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
@@ -433,8 +437,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
           {selected.patternable && !ambiguous(selected) && <SkinRegionTargets regions={regions} active={activeRegion?.id ?? null}
             disabled={exporting || !!selectedEdit?.hidden || !!selectingRegion}
             onSelect={(id) => setRegionTargets((current) => ({ ...current, [selected.material]: id }))} onAdd={addRegion} onPreview={setPreviewRegion} />}
-          {selectingRegion ? <SkinRegionSelecting part={nameOf(selected)} mode={selectMode} empty={!hasRegionSelection(selectingRegion)} missed={missedPick}
-            onMode={setSelectMode} onDone={finishSelecting}
+          {selectingRegion ? <SkinRegionSelecting part={nameOf(selected)} mode={selectMode} by={pickBy} tolerance={pickTolerance}
+            empty={!hasRegionSelection(selectingRegion)} missed={missedPick}
+            onMode={setSelectMode} onBy={setPickBy} onTolerance={setPickTolerance} onDone={finishSelecting}
             onClear={() => { if (selecting) updateRegion(selecting.material, selecting.region, { seeds: [] }); }} />
           : activeRegion ? <SkinRegionEditor key={activeRegion.id} region={activeRegion} color={colorOf(selected)} tool={regionTool} onTool={setRegionTool}
             disabled={exporting || !!selectedEdit?.hidden} onChange={(patch) => updateRegion(selected.material, activeRegion.id, patch)}

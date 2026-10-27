@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { materialBasename } from './skinParts';
-import { buildUvIslands, rasterizeRegion, resolveRegion, type UvGeometry, type UvIslands } from './skinRegions';
+import { buildUvIslands, rasterizeSeeds, texelsToLab, type UvGeometry, type UvIslands } from './skinRegions';
+import { getMorphic } from './source2NprMaterial';
 import type { SkinRegionSeed } from '../types/skinEditor';
 
 const islandCache = new WeakMap<THREE.Object3D, Map<string, UvIslands | null>>();
@@ -55,14 +56,50 @@ export function materialIslands(scene: THREE.Object3D, material: string): UvIsla
   return islands;
 }
 
+const texelCache = new WeakMap<THREE.Object3D, Map<string, Float32Array | null>>();
+
+/** The image a material was loaded with, before any preview edit replaced its map. */
+function sourceImage(material: THREE.Material): CanvasImageSource | null {
+  const candidates: unknown[] = [getMorphic(material)?.resolvedTextures?.g_tColor?.image];
+  if ('map' in material && material.map instanceof THREE.Texture) candidates.push(material.map.userData.skinSourceImage, material.map.image);
+  const image = candidates.find((value) => value instanceof HTMLImageElement || value instanceof ImageBitmap || value instanceof HTMLCanvasElement);
+  return image instanceof HTMLImageElement || image instanceof ImageBitmap || image instanceof HTMLCanvasElement ? image : null;
+}
+
+/** The material's original color texture in CIELAB at a size, for color selection. */
+export function materialLab(scene: THREE.Object3D, material: string, width: number, height: number): Float32Array | null {
+  let cache = texelCache.get(scene);
+  if (!cache) { cache = new Map(); texelCache.set(scene, cache); }
+  const key = `${materialBasename(material)}|${width}x${height}`;
+  if (cache.has(key)) return cache.get(key) ?? null;
+  let lab: Float32Array | null = null;
+  for (const { mesh } of materialMeshes(scene, material)) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const image = materials.filter((item) => materialBasename(item.name) === materialBasename(material)).map(sourceImage).find(Boolean);
+    if (!image) continue;
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) break;
+    context.drawImage(image, 0, 0, width, height);
+    lab = texelsToLab(context.getImageData(0, 0, width, height).data);
+    break;
+  }
+  cache.set(key, lab);
+  return lab;
+}
+
 const maskCache = new Map<string, Uint8Array>();
 
 /** Region mask at a size, cached so slider drags reuse the raster. */
-export function regionMask(islands: UvIslands, seeds: SkinRegionSeed[], width: number, height: number, padding = 2): Uint8Array {
-  const key = JSON.stringify([islands.island.length, islands.count, islands.triangles[0], seeds, width, height, padding]);
+export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinRegionSeed[], width: number, height: number, padding = 2): Uint8Array | null {
+  const islands = materialIslands(scene, material);
+  if (!islands) return null;
+  const key = JSON.stringify([materialBasename(material), islands.island.length, seeds, width, height, padding]);
   const cached = maskCache.get(key);
   if (cached) { maskCache.delete(key); maskCache.set(key, cached); return cached; }
-  const mask = rasterizeRegion(islands, resolveRegion(islands, seeds), width, height, padding);
+  const lab = seeds.some((seed) => seed.by === 'color') ? materialLab(scene, material, width, height) : null;
+  const mask = rasterizeSeeds(islands, seeds, width, height, lab, padding);
   maskCache.set(key, mask);
   while (maskCache.size > 24) {
     const oldest = maskCache.keys().next().value;

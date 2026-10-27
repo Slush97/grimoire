@@ -404,7 +404,7 @@
         "add": "Select an area",
         "unedited": "no changes yet",
         "selectingTitle": "Select an area of {{part}}",
-        "selectingHint": "Click the model to add pieces. Hovering shows what a click will select.",
+        "selectingHint": "Click the model to add to the area. Hovering shows what a click will select.",
         "selectionMode": "Selection",
         "addPieces": "Add",
         "removePieces": "Remove",
@@ -417,7 +417,13 @@
         "changeSelection": "Change selection",
         "delete": "Delete {{area}}",
         "wholePartOnly": "Finish and transparency apply to the whole part.",
-        "maskUnavailable": "An edited area could not be read from the preview. Show its form in the preview, then try again."
+        "maskUnavailable": "An edited area could not be read from the preview. Show its form in the preview, then try again.",
+        "selectBy": "Select by",
+        "byPiece": "Piece",
+        "byPieceHint": "Selects whole pieces of the texture layout, such as a sleeve or a panel.",
+        "byColor": "Similar color",
+        "byColorHint": "Selects connected texture pixels close to the color you click, such as trim or stripes.",
+        "colorRange": "Color range"
       }
     },
     "draft": {

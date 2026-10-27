@@ -1,31 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { islandsAt, rasterizeRegion, regionOutline } from '../../lib/skinRegions';
-import { materialIslands, overlayRegion, regionMask } from '../../lib/skinRegionScene';
+import { regionOutline, rasterizeSeed } from '../../lib/skinRegions';
+import { materialIslands, materialLab, overlayRegion, regionMask } from '../../lib/skinRegionScene';
 import { materialBasename } from '../../lib/skinParts';
 import { attachViewerHover } from '../../lib/viewerPartPicking';
 import type { SkinRegionSeed } from '../../types/skinEditor';
 
 const SIZE = 1024;
-const FILL = 72, HOVER = 120, EDGE = 255;
+/** Alpha over the model: light enough that the texture stays readable under the selection. */
+const FILL = 46, HOVER = 96, EDGE = 230;
+
+export interface RegionPicker {
+  by: 'piece' | 'color';
+  tolerance: number;
+}
 
 /**
  * While selecting: a light fill and a solid edge for the selection, and a brighter fill for what a click would change.
- * `interactive` false just shows a saved area, for example while its name is hovered.
+ * Without `picker` it just shows a saved area, for example while its name is hovered.
  */
-export function SkinRegionOverlay({ scene, material, seeds, interactive = true }: {
-  scene: THREE.Object3D; material: string; seeds: SkinRegionSeed[]; interactive?: boolean;
+export function SkinRegionOverlay({ scene, material, seeds, picker }: {
+  scene: THREE.Object3D; material: string; seeds: SkinRegionSeed[]; picker?: RegionPicker;
 }) {
   const { invalidate, camera, gl } = useThree();
   const islands = useMemo(() => materialIslands(scene, material), [scene, material]);
-  // The hovered islands as a string, so moving within one island does not rerender.
-  const [hovered, setHovered] = useState('');
+  // The hovered texture point, snapped so small moves inside one texel cluster do not rerender.
+  const [hovered, setHovered] = useState<{ u: number; v: number } | null>(null);
+  const interactive = !!picker;
   useEffect(() => {
     if (!islands || !interactive) return;
-    const detach = attachViewerHover(gl.domElement, scene, camera, (hit) => setHovered(hit?.uv && materialBasename(hit.material) === materialBasename(material)
-      ? islandsAt(islands, hit.uv.x, hit.uv.y).sort((a, b) => a - b).join(',') : ''), 'crosshair');
-    return () => { detach(); setHovered(''); };
+    const step = 4 / SIZE;
+    const detach = attachViewerHover(gl.domElement, scene, camera, (hit) => {
+      const next = hit?.uv && materialBasename(hit.material) === materialBasename(material)
+        ? { u: Math.round(hit.uv.x / step) * step, v: Math.round(hit.uv.y / step) * step } : null;
+      setHovered((current) => current?.u === next?.u && current?.v === next?.v ? current : next);
+    }, 'crosshair');
+    return () => { detach(); setHovered(null); };
   }, [islands, interactive, gl, scene, camera, material]);
   const texture = useRef<THREE.DataTexture | null>(null);
   useEffect(() => {
@@ -38,12 +49,18 @@ export function SkinRegionOverlay({ scene, material, seeds, interactive = true }
     const restore = overlayRegion(scene, material, alpha, color);
     return () => { restore(); alpha.dispose(); texture.current = null; invalidate(); };
   }, [scene, material, invalidate]);
+  const by = picker?.by, tolerance = picker?.tolerance;
   useEffect(() => {
     const alpha = texture.current;
     if (!islands || !alpha) return;
-    const selected = regionMask(islands, seeds, SIZE, SIZE, 0);
+    const selected = regionMask(scene, material, seeds, SIZE, SIZE, 0) ?? new Uint8Array(SIZE * SIZE);
     const edge = regionOutline(selected, SIZE, SIZE, 2);
-    const hoverMask = hovered ? rasterizeRegion(islands, new Set(hovered.split(',').map(Number)), SIZE, SIZE, 0) : null;
+    let hoverMask: Uint8Array | null = null;
+    if (hovered && by) {
+      const color = by === 'color';
+      hoverMask = rasterizeSeed(islands, { ...hovered, ...(color ? { by: 'color' as const, tolerance } : {}) }, SIZE, SIZE,
+        color ? materialLab(scene, material, SIZE, SIZE) : null);
+    }
     const data = alpha.image.data as Uint8Array;
     for (let pixel = 0; pixel < selected.length; pixel++) {
       const value = edge[pixel] ? EDGE : hoverMask?.[pixel] ? HOVER : selected[pixel] ? FILL : 0;
@@ -52,6 +69,6 @@ export function SkinRegionOverlay({ scene, material, seeds, interactive = true }
     }
     alpha.needsUpdate = true;
     invalidate();
-  }, [islands, seeds, hovered, scene, material, invalidate]);
+  }, [islands, seeds, hovered, by, tolerance, scene, material, invalidate]);
   return null;
 }
