@@ -161,6 +161,11 @@ export function islandsAt(islands: UvIslands, u: number, v: number): number[] {
 }
 
 function fillTriangle(target: Uint8Array | Int32Array, width: number, height: number, t: ArrayLike<number>, value = 255) {
+  forEachTexel(width, height, t, (index) => { target[index] = value; });
+}
+
+/** Visit every texel whose centre lies inside a UV triangle. */
+function forEachTexel(width: number, height: number, t: ArrayLike<number>, visit: (index: number) => void) {
   const x0 = t[0] * width, y0 = t[1] * height, x1 = t[2] * width, y1 = t[3] * height, x2 = t[4] * width, y2 = t[5] * height;
   const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
   const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
@@ -175,7 +180,7 @@ function fillTriangle(target: Uint8Array | Int32Array, width: number, height: nu
       const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
       if (w0 < 0) continue;
       const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
-      if (w1 >= 0 && w0 + w1 <= 1) target[row + x] = value;
+      if (w1 >= 0 && w0 + w1 <= 1) visit(row + x);
     }
   }
 }
@@ -236,6 +241,47 @@ export function rasterizeIslandIds(islands: UvIslands, width: number, height: nu
   }
   cache.set(key, ids);
   return ids;
+}
+
+export interface IslandMembership {
+  /** The first island drawn at each texel, plus one; 0 where no triangle draws. */
+  first: Int32Array;
+  /** Further islands (plus one) at texels several islands share, like mirrored pieces. */
+  more: Map<number, number[]>;
+}
+
+const membershipCache = new WeakMap<UvIslands, Map<string, IslandMembership>>();
+
+/** Every island at every texel. Overlapping islands share texels, and a fill must be able to walk each of them. */
+export function islandMembership(islands: UvIslands, width: number, height: number): IslandMembership {
+  let cache = membershipCache.get(islands);
+  if (!cache) { cache = new Map(); membershipCache.set(islands, cache); }
+  const key = `${width}x${height}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const first = new Int32Array(width * height);
+  const more = new Map<number, number[]>();
+  const shifted = new Float32Array(6);
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const id = islands.island[triangle] + 1;
+    const t = islands.triangles.subarray(triangle * 6, triangle * 6 + 6);
+    const spansU = Math.min(t[0], t[2], t[4]) < 0 || Math.max(t[0], t[2], t[4]) > 1;
+    const spansV = Math.min(t[1], t[3], t[5]) < 0 || Math.max(t[1], t[3], t[5]) > 1;
+    for (const du of spansU ? [-1, 0, 1] : [0]) for (const dv of spansV ? [-1, 0, 1] : [0]) {
+      for (let corner = 0; corner < 3; corner++) { shifted[corner * 2] = t[corner * 2] + du; shifted[corner * 2 + 1] = t[corner * 2 + 1] + dv; }
+      forEachTexel(width, height, shifted, (index) => {
+        if (!first[index]) first[index] = id;
+        else if (first[index] !== id) {
+          const list = more.get(index) ?? [];
+          if (!list.includes(id)) list.push(id);
+          more.set(index, list);
+        }
+      });
+    }
+  }
+  const membership = { first, more };
+  cache.set(key, membership);
+  return membership;
 }
 
 /** Every texel some triangle of the material covers. Selections never grow outside it. Shared: do not modify. */
@@ -331,86 +377,131 @@ export function texelsToLab(pixels: ArrayLike<number>): Float32Array {
 
 const texel = (value: number, size: number) => Math.min(size - 1, Math.floor((value - Math.floor(value)) * size));
 
-const linkCache = new WeakMap<UvIslands, Float32Array>();
+const seamCache = new WeakMap<UvIslands, Float32Array>();
+const SEAM = 14;
 
 /**
- * Where two islands meet on the model: six numbers per link, island A, u, v, island B, u, v. A link pairs
- * the same triangle edge (by position) in two islands, at its midpoint nudged into each triangle so the
- * point lands on a texel of that island rather than on the seam.
+ * Where two islands meet on the model. Fourteen numbers per seam: for each side, its island, the edge's
+ * two UV ends (in the same order on both sides, by position) and its triangle's UV centroid.
  */
-export function seamLinks(islands: UvIslands): Float32Array {
-  const cached = linkCache.get(islands);
+export function seamEdges(islands: UvIslands): Float32Array {
+  const cached = seamCache.get(islands);
   if (cached) return cached;
   const p = islands.positions, t = islands.triangles;
   const key = (corner: number) => `${Math.round(p[corner * 3] / POSITION_STEP)},${Math.round(p[corner * 3 + 1] / POSITION_STEP)},${Math.round(p[corner * 3 + 2] / POSITION_STEP)}`;
-  const edges = new Map<string, number[]>();
+  const edges = new Map<string, number[][]>();
   for (let triangle = 0; triangle < islands.island.length; triangle++) {
     const o = triangle * 6;
     const cu = (t[o] + t[o + 2] + t[o + 4]) / 3, cv = (t[o + 1] + t[o + 3] + t[o + 5]) / 3;
     for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
       const ka = key(triangle * 3 + a), kb = key(triangle * 3 + b);
+      // Order both ends by position, so the two sides of a seam list them alike.
+      const [first, second] = ka < kb ? [a, b] : [b, a];
       const id = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-      const mu = (t[o + a * 2] + t[o + b * 2]) / 2, mv = (t[o + a * 2 + 1] + t[o + b * 2 + 1]) / 2;
-      const list = edges.get(id) ?? [];
-      list.push(islands.island[triangle], mu + (cu - mu) * 0.2, mv + (cv - mv) * 0.2);
-      edges.set(id, list);
+      const side = [islands.island[triangle], t[o + first * 2], t[o + first * 2 + 1], t[o + second * 2], t[o + second * 2 + 1], cu, cv];
+      edges.set(id, [...edges.get(id) ?? [], side]);
     }
   }
-  const links: number[] = [];
-  for (const list of edges.values()) {
-    for (let i = 0; i < list.length; i += 3) for (let j = i + 3; j < list.length; j += 3) {
-      if (list[i] !== list[j]) links.push(list[i], list[i + 1], list[i + 2], list[j], list[j + 1], list[j + 2]);
+  const seams: number[] = [];
+  for (const sides of edges.values()) {
+    for (let i = 0; i < sides.length; i++) for (let j = i + 1; j < sides.length; j++) {
+      if (sides[i][0] !== sides[j][0]) seams.push(...sides[i], ...sides[j]);
     }
   }
-  const result = Float32Array.from(links);
-  linkCache.set(islands, result);
+  const result = Float32Array.from(seams);
+  seamCache.set(islands, result);
   return result;
+}
+
+const seamIndexCache = new WeakMap<UvIslands, Map<number, number[]>>();
+
+/** Offsets into `seamEdges` for every seam touching each island (plus one), so a fill walks only nearby seams. */
+function seamsByIsland(islands: UvIslands): Map<number, number[]> {
+  const cached = seamIndexCache.get(islands);
+  if (cached) return cached;
+  const seams = seamEdges(islands);
+  const index = new Map<number, number[]>();
+  for (let seam = 0; seam < seams.length; seam += SEAM) {
+    for (const island of [seams[seam] + 1, seams[seam + 7] + 1]) {
+      const list = index.get(island);
+      if (list) list.push(seam); else index.set(island, [seam]);
+    }
+  }
+  seamIndexCache.set(islands, index);
+  return index;
 }
 
 /**
  * Like a paint bucket on the model: texels close to the clicked color, connected on the surface. It fills
  * the clicked island, then follows seams into neighbouring islands wherever the color continues there,
- * so one click covers a whole sleeve even when the texture cuts it into pieces. Neighbours only in the
- * texture layout stay untouched.
+ * so one click covers a whole sleeve even when the texture cuts it into pieces. Seams are sampled along
+ * their whole length, a texel apart, so color crossing any part of one carries over. Neighbours only in
+ * the texture layout stay untouched.
  */
 export function fillAcrossSeams(islands: UvIslands, lab: Float32Array, width: number, height: number, x: number, y: number, tolerance: number): Uint8Array {
-  const ids = rasterizeIslandIds(islands, width, height);
+  const { first, more } = islandMembership(islands, width, height);
+  const has = (index: number, island: number) => first[index] === island || !!more.get(index)?.includes(island);
   const mask = new Uint8Array(width * height);
   const start = y * width + x;
-  if (x < 0 || y < 0 || x >= width || y >= height || !ids[start]) return mask;
+  if (x < 0 || y < 0 || x >= width || y >= height || !first[start]) return mask;
   const reach = tolerance * tolerance;
   const l = lab[start * 3], a = lab[start * 3 + 1], b = lab[start * 3 + 2];
   const close = (index: number) => (lab[index * 3] - l) ** 2 + (lab[index * 3 + 1] - a) ** 2 + (lab[index * 3 + 2] - b) ** 2 <= reach;
+  // Texels already flooded per island: a texel shared by two islands is walked in each.
+  const flooded = new Map<number, Uint8Array>();
   const stack = new Int32Array(width * height);
-  const flood = (from: number) => {
+  const flood = (from: number, island: number) => {
+    let seen = flooded.get(island);
+    if (!seen) { seen = new Uint8Array(width * height); flooded.set(island, seen); }
+    if (seen[from]) return false;
     let top = 0;
-    stack[top++] = from; mask[from] = 255;
+    stack[top++] = from; seen[from] = 1; mask[from] = 255;
     while (top) {
       const index = stack[--top];
       const px = index % width;
       for (const next of [px > 0 ? index - 1 : -1, px + 1 < width ? index + 1 : -1, index - width, index + width]) {
-        if (next < 0 || next >= mask.length || mask[next] || ids[next] !== ids[index] || !close(next)) continue;
-        mask[next] = 255;
+        if (next < 0 || next >= mask.length || seen[next] || !has(next, island) || !close(next)) continue;
+        seen[next] = 1; mask[next] = 255;
         stack[top++] = next;
       }
     }
+    return true;
   };
-  flood(start);
-  const links = seamLinks(islands);
+  for (const island of [first[start], ...more.get(start) ?? []]) flood(start, island);
+  const seams = seamEdges(islands);
   const at = (u: number, v: number) => texel(v, height) * width + texel(u, width);
-  for (let changed = true; changed;) {
-    changed = false;
-    for (let link = 0; link < links.length; link += 6) {
-      const from = at(links[link + 1], links[link + 2]), to = at(links[link + 4], links[link + 5]);
-      for (const [source, target, island] of [[from, to, links[link + 3]], [to, from, links[link]]]) {
-        if (!mask[source] || mask[target] || ids[target] !== island + 1 || !close(target)) continue;
-        flood(target);
-        changed = true;
+  // A sample point on one side of a seam: along the edge, stepped a texel and a half into its triangle.
+  const point = (seam: number, side: number, along: number) => {
+    const o = seam + side * 7;
+    const u = lerpAt(seams, o + 1, o + 3, along), v = lerpAt(seams, o + 2, o + 4, along);
+    const du = seams[o + 5] - u, dv = seams[o + 6] - v;
+    const length = Math.hypot(du * width, dv * height) || 1;
+    return at(u + du / length * 1.5, v + dv / length * 1.5);
+  };
+  // Seams of each island, so only islands that just gained paint are checked again.
+  const byIsland = seamsByIsland(islands);
+  const pending = new Set<number>([first[start], ...more.get(start) ?? []]);
+  while (pending.size) {
+    const island = pending.values().next().value!;
+    pending.delete(island);
+    for (const seam of byIsland.get(island) ?? []) {
+      const span = Math.max(Math.hypot((seams[seam + 3] - seams[seam + 1]) * width, (seams[seam + 4] - seams[seam + 2]) * height),
+        Math.hypot((seams[seam + 10] - seams[seam + 8]) * width, (seams[seam + 11] - seams[seam + 9]) * height));
+      const samples = Math.max(1, Math.ceil(span));
+      for (let sample = 0; sample < samples; sample++) {
+        const along = (sample + 0.5) / samples;
+        const sideA = point(seam, 0, along), sideB = point(seam, 1, along);
+        for (const [source, target, other] of [[sideA, sideB, seams[seam + 7] + 1], [sideB, sideA, seams[seam] + 1]]) {
+          if (other === island || !mask[source] || !has(target, other) || !close(target)) continue;
+          if (flood(target, other)) pending.add(other);
+        }
       }
     }
   }
   return mask;
 }
+
+const lerpAt = (values: Float32Array, from: number, to: number, along: number) => values[from] + (values[to] - values[from]) * along;
 
 export const DEFAULT_COLOR_RANGE = 8;
 

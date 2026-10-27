@@ -136,6 +136,19 @@ describe('fill across seams', () => {
   it('continues into the piece across a seam when its color matches, but not into texture neighbours', () => {
     expect(columns(fillAcrossSeams(islands, texture([200, 30, 30]), 8, 8, 0, 4, 8))).toEqual([true, true, false, false, false, false, true, true]);
   });
+  it('walks an island that shares its texels with another', () => {
+    // A mirrored copy of the right quad, far away on the model, drawn on the same texels.
+    const copy: UvGeometry = { ...right, position: [20, 0, 0, 21, 0, 0, 21, 1, 0, 20, 1, 0] };
+    const shared = buildUvIslands([left, right, copy]);
+    expect(columns(fillAcrossSeams(shared, texture([200, 30, 30]), 8, 8, 0, 4, 8))).toEqual([true, true, false, false, false, false, true, true]);
+  });
+  it('carries a color across any part of a seam, not just its middle', () => {
+    // Only the top two rows are red, on both sides of the seam.
+    const stripe = texelsToLab(Array.from({ length: 64 }, (_, index) => index < 16 ? [200, 30, 30] : [30, 30, 200]).flatMap((rgb) => [...rgb, 255]));
+    const mask = fillAcrossSeams(islands, stripe, 8, 8, 0, 0, 8);
+    expect([...mask.subarray(0, 8)].map(Boolean)).toEqual([true, true, false, false, false, false, true, true]);
+    expect([...mask.subarray(16, 24)].some(Boolean)).toBe(false);
+  });
   it('stops at the seam when the other side is a different color', () => {
     expect(columns(fillAcrossSeams(islands, texture([30, 30, 200]), 8, 8, 0, 4, 8))).toEqual([true, true, false, false, false, false, false, false]);
   });

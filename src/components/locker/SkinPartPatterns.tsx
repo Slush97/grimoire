@@ -99,7 +99,7 @@ function PartTexture({ scene, edit, onError, onPending }: { scene: THREE.Object3
             const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
             adjustSkinPixels(pixels.data, { hue, saturation, brightness });
             regions.forEach((region, index) => {
-              const mask = regionMask(scene, material, region.seeds, canvas.width, canvas.height);
+              const mask = regionMask(scene, material, region.seeds, canvas.width, canvas.height, 2, region.id);
               if (mask) blendRegionPixels(pixels.data, editRegionPixels(pixels, region, regionPatterns[index]), mask);
             });
             context.putImageData(pixels, 0, 0);

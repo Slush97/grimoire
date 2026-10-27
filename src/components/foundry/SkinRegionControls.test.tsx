@@ -15,7 +15,6 @@ beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
-const button = (text: string) => [...host.querySelectorAll('button')].find((element) => element.textContent === text) as HTMLButtonElement;
 const tab = (text: string) => [...host.querySelectorAll('[role="tab"]')].find((element) => element.textContent === text) as HTMLButtonElement;
 const region: SkinPartRegion = { id: 'r3', seeds: [{ u: 0.5, v: 0.5 }], paint: '#ef4444' };
 
@@ -27,25 +26,28 @@ describe('SkinPaintPanel', () => {
   });
   it('explains the chosen tool and shows only its setting', () => {
     act(() => root.render(<SkinPaintPanel {...props()} />));
+    // One line of help until the part has paint; after that the tool's hint is only a tooltip.
     expect(host.textContent).toContain('foundry.skin.paint.fillHint');
     expect(host.querySelector('input[aria-label="foundry.skin.paint.fillRange"]')).not.toBeNull();
-    expect(host.textContent).toContain('foundry.skin.paint.nothingYet');
+    act(() => root.render(<SkinPaintPanel {...props({ areas: [region] })} />));
+    expect(host.textContent).not.toContain('foundry.skin.paint.fillHint');
+    expect(tab('foundry.skin.paint.fill').title).toBe('foundry.skin.paint.fillHint');
     act(() => root.render(<SkinPaintPanel {...props({ tool: 'eraser' })} />));
     expect(host.textContent).toContain('foundry.skin.paint.eraserHint');
     expect(host.querySelector('input[aria-label="foundry.skin.paint.size"]')).not.toBeNull();
-    // Erasing needs no color.
-    expect(host.querySelector('button[aria-label="#ef4444"]')).toBeNull();
+    // Erasing needs no color picker; a swatch switches back to filling.
+    expect(host.querySelector('.react-colorful')).toBeNull();
   });
   it('reuses a painted color and opens its details', () => {
     const value = props({ areas: [region], missed: 'Jacket', canUndo: true });
     act(() => root.render(<SkinPaintPanel {...value} />));
     expect(host.textContent).toContain('foundry.skin.region.otherPart');
-    act(() => button('foundry.skin.region.areaName:3').click());
+    act(() => (host.querySelector('button[aria-label="foundry.skin.region.areaName:3"]') as HTMLButtonElement).click());
     expect(value.onColor).toHaveBeenCalledWith('#ef4444');
-    expect(value.onTool).toHaveBeenCalledWith('fill');
+    act(() => root.render(<SkinPaintPanel {...value} color="#ef4444" />));
     act(() => (host.querySelector('button[aria-label="foundry.skin.paint.more"]') as HTMLButtonElement).click());
     expect(value.onEditArea).toHaveBeenCalledWith('r3');
-    act(() => button('common.actions.undo').click());
+    act(() => (host.querySelector('button[aria-label="common.actions.undo"]') as HTMLButtonElement).click());
     expect(value.onUndo).toHaveBeenCalled();
   });
 });

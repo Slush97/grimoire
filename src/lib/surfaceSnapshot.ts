@@ -3,6 +3,7 @@ import * as THREE from 'three';
 /** One mesh's triangles where the renderer last drew them. */
 interface MeshSnapshot {
   mesh: THREE.Mesh;
+  geometry: THREE.BufferGeometry;
   /** World-space vertex positions, three floats each. */
   positions: Float32Array;
   index: ArrayLike<number> | null;
@@ -19,11 +20,17 @@ export interface SurfaceHit {
   uv: THREE.Vector2 | null;
 }
 
+/** Everything that moves a mesh's vertices: its transform, bones, morph weights and the position data itself. */
 const poseOf = (mesh: THREE.Mesh) => {
   const bones = mesh instanceof THREE.SkinnedMesh ? mesh.skeleton.boneMatrices : null;
-  const pose = new Float32Array(16 + (bones?.length ?? 0));
+  const morphs = mesh.morphTargetInfluences ?? [];
+  const position = mesh.geometry.attributes.position;
+  const version = 'version' in position ? position.version : 0;
+  const pose = new Float32Array(17 + morphs.length + (bones?.length ?? 0));
   pose.set(mesh.matrixWorld.elements);
-  if (bones) pose.set(bones, 16);
+  pose[16] = version;
+  pose.set(morphs, 17);
+  if (bones) pose.set(bones, 17 + morphs.length);
   return pose;
 };
 
@@ -50,7 +57,7 @@ export class SurfaceSnapshot {
   private snapshot(mesh: THREE.Mesh): MeshSnapshot {
     const pose = poseOf(mesh);
     const cached = this.meshes.get(mesh);
-    if (cached && samePose(cached.pose, pose)) return cached;
+    if (cached && cached.geometry === mesh.geometry && samePose(cached.pose, pose)) return cached;
     const count = mesh.geometry.attributes.position.count;
     const positions = cached?.positions.length === count * 3 ? cached.positions : new Float32Array(count * 3);
     const point = new THREE.Vector3();
@@ -61,7 +68,7 @@ export class SurfaceSnapshot {
       bounds.expandByPoint(point);
     }
     const index = mesh.geometry.index;
-    const next = { mesh, positions, index: index ? index.array : null, bounds, pose };
+    const next = { mesh, geometry: mesh.geometry, positions, index: index ? index.array : null, bounds, pose };
     this.meshes.set(mesh, next);
     return next;
   }
@@ -83,13 +90,16 @@ export class SurfaceSnapshot {
       if (!materials.some((material) => material.visible)) return;
       const snap = this.snapshot(object);
       if (!ray.intersectsBox(snap.bounds)) return;
-      const groups = object.geometry.groups.length ? object.geometry.groups : [{ start: 0, count: Infinity, materialIndex: 0 }];
+      // Like three.js: groups only split a multi-material mesh, and every range stops at the draw range.
+      const groups = Array.isArray(object.material) && object.geometry.groups.length ? object.geometry.groups : [{ start: 0, count: Infinity, materialIndex: 0 }];
       const total = snap.index ? snap.index.length : snap.positions.length / 3;
+      const { start: drawStart, count: drawCount } = object.geometry.drawRange;
       for (const group of groups) {
         const material = materials[group.materialIndex ?? 0];
         if (!material?.visible) continue;
-        const end = Math.min(total, group.start + group.count);
-        for (let corner = group.start; corner + 2 < end; corner += 3) {
+        const begin = Math.max(group.start, drawStart);
+        const end = Math.min(total, group.start + group.count, drawStart + drawCount);
+        for (let corner = begin; corner + 2 < end; corner += 3) {
           const ia = snap.index ? snap.index[corner] : corner, ib = snap.index ? snap.index[corner + 1] : corner + 1, ic = snap.index ? snap.index[corner + 2] : corner + 2;
           a.fromArray(snap.positions, ia * 3); b.fromArray(snap.positions, ib * 3); c.fromArray(snap.positions, ic * 3);
           if (!ray.intersectTriangle(a, b, c, false, hit)) continue;

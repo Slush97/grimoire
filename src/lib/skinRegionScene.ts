@@ -95,7 +95,7 @@ const maskCache = new WeakMap<UvIslands, Map<string, Uint8Array>>();
 const lastMask = new WeakMap<UvIslands, Map<string, { seeds: SkinRegionSeed[]; mask: Uint8Array }>>();
 
 /** Region mask at a size, cached so slider drags reuse the raster. */
-export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinRegionSeed[], width: number, height: number, padding = 2): Uint8Array | null {
+export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinRegionSeed[], width: number, height: number, padding = 2, area = ''): Uint8Array | null {
   const islands = materialIslands(scene, material);
   if (!islands) return null;
   let masks = maskCache.get(islands);
@@ -106,7 +106,8 @@ export function regionMask(scene: THREE.Object3D, material: string, seeds: SkinR
   const lab = seeds.some((seed) => seed.by === 'color') ? materialLab(scene, material, width, height) : null;
   let lasts = lastMask.get(islands);
   if (!lasts) { lasts = new Map(); lastMask.set(islands, lasts); }
-  const size = `${width}x${height}`;
+  // One running mask per area, so painting one color does not make another replay its whole history.
+  const size = `${width}x${height}|${area}`;
   const last = lasts.get(size);
   const grows = last && last.seeds.length <= seeds.length && last.seeds.every((seed, index) => seed === seeds[index]);
   const unpadded = rasterizeSeeds(islands, grows ? seeds.slice(last.seeds.length) : seeds, width, height, lab, 0, grows ? last.mask : undefined);

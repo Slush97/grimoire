@@ -108,6 +108,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
   }, [islands, by, brushSize, gl, scene, camera, material]);
   const texture = useRef<THREE.DataTexture | null>(null);
   const strokeMask = useRef({ dabs: 0, mask: new Uint8Array(SIZE * SIZE) });
+  const lastFill = useRef<{ islands: unknown; tolerance: number | undefined; texel: number; mask: Uint8Array } | null>(null);
   useEffect(() => {
     const alpha = new THREE.DataTexture(new Uint8Array(SIZE * SIZE * 4), SIZE, SIZE, THREE.RGBAFormat);
     // A paint preview shows the paint color; selection feedback uses the accent.
@@ -143,11 +144,18 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     live.dabs = stroke.length;
     let hint: Uint8Array | null = null;
     if (hovered && by === 'brush') hint = rasterizeBrush(islands, hovered.u, hovered.v, hovered.radius, SIZE, SIZE);
-    else if (hovered && by && !stroke.length) {
-      const color = by === 'color';
-      hint = rasterizeSeed(islands, { u: hovered.u, v: hovered.v, ...(color ? { by: 'color' as const, tolerance } : {}) }, SIZE, SIZE,
-        color ? materialLab(scene, material, SIZE, SIZE) : null);
-    }
+    else if (hovered && by === 'color' && !stroke.length) {
+      const lab = materialLab(scene, material, SIZE, SIZE);
+      const texel = Math.min(SIZE - 1, Math.floor((hovered.v - Math.floor(hovered.v)) * SIZE)) * SIZE + Math.min(SIZE - 1, Math.floor((hovered.u - Math.floor(hovered.u)) * SIZE));
+      const last = lastFill.current;
+      // Moving within a previewed fill of nearly the same color would fill the same texels: reuse them.
+      const near = (a: number, b: number) => !!lab && Math.hypot(lab[a * 3] - lab[b * 3], lab[a * 3 + 1] - lab[b * 3 + 1], lab[a * 3 + 2] - lab[b * 3 + 2]) <= (tolerance ?? 0) / 4;
+      if (last && last.islands === islands && last.tolerance === tolerance && last.mask[texel] && near(texel, last.texel)) hint = last.mask;
+      else {
+        hint = rasterizeSeed(islands, { u: hovered.u, v: hovered.v, by: 'color', tolerance }, SIZE, SIZE, lab);
+        lastFill.current = { islands, tolerance, texel, mask: hint };
+      }
+    } else if (hovered && by && !stroke.length) hint = rasterizeSeed(islands, { u: hovered.u, v: hovered.v }, SIZE, SIZE, null);
     const drawing = stroke.length > 0;
     const data = alpha.image.data as Uint8Array;
     for (let pixel = 0; pixel < base.length; pixel++) {
