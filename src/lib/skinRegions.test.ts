@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, removeRegion, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, fillAcrossSeams, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeSeeds, regionOutline, removeRegion, sameSeed, strokeSeeds, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -121,6 +121,16 @@ describe('brush', () => {
   });
   it('selects nothing for a point no triangle draws', () => {
     expect(rasterizeBrush(islands, 0.6, 0.5, 5, 8, 8).some(Boolean)).toBe(false);
+  });
+  it('stores a stroke as one seed that paints the same texels as its dabs', () => {
+    const dabs = [0.05, 0.12, 0.2, 0.8, 0.9].map((u) => ({ u, v: 0.5, by: 'brush' as const, radius: 0.3 }));
+    const packed = strokeSeeds(dabs, 6);
+    // Two more dabs fit per seed at this path limit; a remove dab never joins a paint stroke.
+    expect(packed.map((seed) => seed.path?.length ?? 0)).toEqual([6, 3]);
+    expect(strokeSeeds([...dabs.slice(0, 2), { ...dabs[2], remove: true }], 765)).toHaveLength(2);
+    expect(rasterizeSeeds(islands, packed, 8, 8, null, 0)).toEqual(rasterizeSeeds(islands, dabs, 8, 8, null, 0));
+    expect(sameSeed(packed[0], { ...packed[0], path: [...packed[0].path!] })).toBe(true);
+    expect(sameSeed(packed[0], { ...packed[0], path: packed[0].path!.slice(3) })).toBe(false);
   });
 });
 

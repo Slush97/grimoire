@@ -57,6 +57,8 @@ export interface SkinRegionSeed {
   by?: 'color' | 'brush';
   tolerance?: number;
   radius?: number;
+  /** The rest of a brush stroke after this seed's own dab, as flat (u, v, radius) triples: one seed per stroke, not per dab. */
+  path?: number[];
   /** The area whose paint cut this remove seed. Removing that area takes the cut back, so what was under it shows again. */
   from?: string;
 }

@@ -564,8 +564,34 @@ export const DEFAULT_COLOR_RANGE = 8;
  * (`fillAcrossSeams`); with `by: 'brush'` the surface within `radius` of it. The result may be a shared
  * raster: do not modify.
  */
+/** Every dab of a brush seed: its own, then the rest of its stroke. */
+export function brushDabs(seed: SkinRegionSeed): Array<[number, number, number]> {
+  const dabs: Array<[number, number, number]> = [[seed.u, seed.v, seed.radius ?? 0]];
+  for (let index = 0; index + 2 < (seed.path?.length ?? 0); index += 3) dabs.push([seed.path![index], seed.path![index + 1], seed.path![index + 2]]);
+  return dabs;
+}
+
+/**
+ * Pack a stroke's dabs into as few seeds as the path limit allows: a stroke is one seed, not one per dab,
+ * so a part holds thousands of strokes and the cuts painting makes in other areas stay small too.
+ */
+export function strokeSeeds(dabs: SkinRegionSeed[], pathLength: number): SkinRegionSeed[] {
+  const seeds: SkinRegionSeed[] = [];
+  for (const dab of dabs) {
+    const last = seeds.at(-1);
+    if (last && dab.by === 'brush' && last.by === 'brush' && !!last.remove === !!dab.remove && (last.path?.length ?? 0) + 3 <= pathLength) {
+      last.path = [...(last.path ?? []), dab.u, dab.v, dab.radius ?? 0];
+    } else seeds.push({ ...dab });
+  }
+  return seeds;
+}
+
 export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {
-  if (seed.by === 'brush') return rasterizeBrush(islands, seed.u, seed.v, seed.radius ?? 0, width, height);
+  if (seed.by === 'brush') {
+    const mask = new Uint8Array(width * height);
+    for (const [u, v, radius] of brushDabs(seed)) rasterizeBrush(islands, u, v, radius, width, height, mask);
+    return mask;
+  }
   if (seed.by !== 'color') return rasterizeIslandsAt(islands, seed.u, seed.v, width, height);
   if (!lab) return new Uint8Array(width * height);
   return fillAcrossSeams(islands, lab, width, height, texel(seed.u, width), texel(seed.v, height), seed.tolerance ?? DEFAULT_COLOR_RANGE);
@@ -612,13 +638,17 @@ function cachedSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, hei
 
 /** Whether two seeds pick the same texels: saved edits come back as new objects, so compare values. */
 export function sameSeed(a: SkinRegionSeed, b: SkinRegionSeed): boolean {
-  return a === b || (a.u === b.u && a.v === b.v && a.remove === b.remove && a.by === b.by && a.tolerance === b.tolerance && a.radius === b.radius);
+  return a === b || (a.u === b.u && a.v === b.v && a.remove === b.remove && a.by === b.by && a.tolerance === b.tolerance && a.radius === b.radius
+    && (a.path ?? []).length === (b.path ?? []).length && (a.path ?? []).every((value, index) => value === b.path![index]));
 }
 
 export function rasterizeSeeds(islands: UvIslands, seeds: SkinRegionSeed[], width: number, height: number, lab: Float32Array | null, padding = 2, from?: Uint8Array): Uint8Array {
   const mask = from ? from.slice() : new Uint8Array(width * height);
   for (const seed of seeds) {
-    if (seed.by === 'brush') { rasterizeBrush(islands, seed.u, seed.v, seed.radius ?? 0, width, height, mask, seed.remove ? 0 : 255); continue; }
+    if (seed.by === 'brush') {
+      for (const [u, v, radius] of brushDabs(seed)) rasterizeBrush(islands, u, v, radius, width, height, mask, seed.remove ? 0 : 255);
+      continue;
+    }
     const texels = cachedSeed(islands, seed, width, height, lab);
     const value = seed.remove ? 0 : 255;
     for (let index = 0; index < mask.length; index++) {

@@ -1,7 +1,8 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { rasterizeBrush, rasterizeIslandIds, regionOutline, rasterizeSeed } from '../../lib/skinRegions';
+import { rasterizeBrush, rasterizeIslandIds, regionOutline, rasterizeSeed, strokeSeeds } from '../../lib/skinRegions';
+import { STROKE_PATH_LENGTH } from '../../lib/skinEditSchema';
 import { materialIslands, materialLab, overlayRegion, regionMask } from '../../lib/skinRegionScene';
 import { materialBasename } from '../../lib/skinParts';
 import { attachViewerHover, viewerPartAt, type ViewerPartHit } from '../../lib/viewerPartPicking';
@@ -56,7 +57,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker, applied = 0 
     return () => clearTimeout(timer);
   }, [drawn]);
   const currentSeeds = useEffectEvent(() => seeds);
-  const finishStroke = useEffectEvent((dabs: SkinRegionSeed[]) => { if (dabs.length) picker?.onStroke(dabs); });
+  const finishStroke = useEffectEvent((dabs: SkinRegionSeed[]) => { if (dabs.length) picker?.onStroke(strokeSeeds(dabs, STROKE_PATH_LENGTH)); });
   const removing = useEffectEvent(() => !!picker?.remove);
   useEffect(() => {
     if (!islands || !by) return;
