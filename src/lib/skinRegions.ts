@@ -115,11 +115,43 @@ function containsPoint(t: Float32Array, offset: number, u: number, v: number): b
   return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
 }
 
+const GRID = 64;
+const gridCache = new WeakMap<UvIslands, Int32Array[]>();
+
+/**
+ * Triangles per cell of a 64 x 64 grid over the unit texture, by their wrapped UV bounds. A point lookup
+ * then tests a handful of triangles instead of every one: hover runs it each time the pointer moves.
+ */
+function uvGrid(islands: UvIslands): Int32Array[] {
+  const cached = gridCache.get(islands);
+  if (cached) return cached;
+  const cells: number[][] = Array.from({ length: GRID * GRID }, () => []);
+  const t = islands.triangles;
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const o = triangle * 6;
+    const minU = Math.min(t[o], t[o + 2], t[o + 4]), maxU = Math.max(t[o], t[o + 2], t[o + 4]);
+    const minV = Math.min(t[o + 1], t[o + 3], t[o + 5]), maxV = Math.max(t[o + 1], t[o + 3], t[o + 5]);
+    // A triangle reaching past the unit square also covers the wrapped cells on the other side.
+    const span = (min: number, max: number) => max - min >= 1 ? Array.from({ length: GRID }, (_, cell) => cell)
+      : Array.from({ length: Math.floor(max * GRID) - Math.floor(min * GRID) + 1 }, (_, step) => ((Math.floor(min * GRID) + step) % GRID + GRID) % GRID);
+    for (const x of span(minU, maxU)) for (const y of span(minV, maxV)) cells[y * GRID + x].push(triangle);
+  }
+  const grid = cells.map((cell) => Int32Array.from(new Set(cell)));
+  gridCache.set(islands, grid);
+  return grid;
+}
+
+/** Triangles that may cover texture point (u, v). */
+function candidates(islands: UvIslands, u: number, v: number): Int32Array {
+  const x = Math.min(GRID - 1, Math.floor(wrap(u) * GRID)), y = Math.min(GRID - 1, Math.floor(wrap(v) * GRID));
+  return uvGrid(islands)[y * GRID + x];
+}
+
 /** Islands with a triangle covering texture point (u, v), including tiled copies. */
 export function islandsAt(islands: UvIslands, u: number, v: number): number[] {
   const found = new Set<number>();
   const pu = wrap(u), pv = wrap(v);
-  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+  for (const triangle of candidates(islands, u, v)) {
     if (found.has(islands.island[triangle])) continue;
     for (const [du, dv] of [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [-1, -1], [1, -1], [-1, 1]]) {
       if (containsPoint(islands.triangles, triangle * 6, pu + du, pv + dv)) { found.add(islands.island[triangle]); break; }
@@ -236,7 +268,7 @@ export function pointsAt(islands: UvIslands, u: number, v: number): Array<[numbe
   const found: Array<[number, number, number]> = [];
   const pu = wrap(u), pv = wrap(v);
   const t = islands.triangles, p = islands.positions;
-  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+  for (const triangle of candidates(islands, u, v)) {
     const o = triangle * 6;
     for (const [du, dv] of OFFSETS) {
       const x = pu + du, y = pv + dv;

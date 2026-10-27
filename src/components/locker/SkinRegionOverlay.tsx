@@ -52,7 +52,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     const detach = attachViewerHover(canvas, scene, camera, (hit) => {
       const next = matches(hit) ? { ...dabAt(hit), u: Math.round(hit.uv.x / step) * step, v: Math.round(hit.uv.y / step) * step } : null;
       setHovered((current) => current?.u === next?.u && current?.v === next?.v && current?.radius === next?.radius ? current : next);
-    }, 'crosshair');
+    }, 'crosshair', true);
     if (by !== 'brush') return () => { detach(); setHovered(null); };
     const raycaster = new THREE.Raycaster();
     const round = (value: number) => Math.round(value * 1e5) / 1e5;
@@ -60,7 +60,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     let frame = 0;
     let point = { x: 0, y: 0 };
     const dab = (x: number, y: number) => {
-      const hit = viewerPartAt(canvas, scene, camera, raycaster, x, y);
+      const hit = viewerPartAt(canvas, scene, camera, raycaster, x, y, true);
       if (!active || !matches(hit)) return;
       const { u, v, radius } = dabAt(hit);
       active.dabs = [...active.dabs, { u: round(u), v: round(v), by: 'brush', radius: round(radius), ...(removing() ? { remove: true as const } : {}) }];
@@ -114,11 +114,18 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     const restore = overlayRegion(scene, material, alpha, color);
     return () => { restore(); alpha.dispose(); texture.current = null; invalidate(); };
   }, [scene, material, invalidate]);
-  useEffect(() => {
-    const alpha = texture.current;
-    if (!islands || !alpha) return;
+  // The fill and edge only change with the seeds, so hovering reuses them.
+  const base = useMemo(() => {
+    if (!islands) return null;
     const selected = regionMask(scene, material, seeds, SIZE, SIZE, 0) ?? new Uint8Array(SIZE * SIZE);
     const edge = regionOutline(selected, SIZE, SIZE, 2, rasterizeIslandIds(islands, SIZE, SIZE));
+    const layer = new Uint8Array(SIZE * SIZE);
+    for (let pixel = 0; pixel < layer.length; pixel++) layer[pixel] = edge[pixel] ? EDGE : selected[pixel] ? FILL : 0;
+    return layer;
+  }, [islands, scene, material, seeds]);
+  useEffect(() => {
+    const alpha = texture.current;
+    if (!islands || !base || !alpha) return;
     // The stroke only grows while drawing, so add just its new dabs.
     const live = strokeMask.current;
     if (!stroke.length || stroke.length < live.dabs) { if (live.dabs) live.mask.fill(0); live.dabs = 0; }
@@ -135,13 +142,13 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     }
     const drawing = stroke.length > 0;
     const data = alpha.image.data as Uint8Array;
-    for (let pixel = 0; pixel < selected.length; pixel++) {
-      const value = edge[pixel] ? EDGE : (drawing && live.mask[pixel]) || hint?.[pixel] ? HOVER : selected[pixel] ? FILL : 0;
+    for (let pixel = 0; pixel < base.length; pixel++) {
+      const value = base[pixel] === EDGE ? EDGE : (drawing && live.mask[pixel]) || hint?.[pixel] ? HOVER : base[pixel];
       data[pixel * 4] = data[pixel * 4 + 1] = data[pixel * 4 + 2] = value;
       data[pixel * 4 + 3] = 255;
     }
     alpha.needsUpdate = true;
     invalidate();
-  }, [islands, seeds, hovered, stroke, by, tolerance, scene, material, invalidate]);
+  }, [islands, base, hovered, stroke, by, tolerance, scene, material, invalidate]);
   return null;
 }

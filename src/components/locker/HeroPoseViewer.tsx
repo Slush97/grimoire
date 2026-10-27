@@ -1208,6 +1208,17 @@ export default function HeroPoseViewer({
   const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
   const [spinPaused, setSpinPaused] = useState(() => compact ? false : !initialHeroPreviewFlags().autoRotate);
   const [playback, setPlayback] = useFoundryDraft(`${viewKey}:playback`, z.object({ paused: z.boolean(), speed: z.number().finite().min(0.1).max(4) }), { paused: false, speed: 1 });
+  // Selecting an area holds the pose and the turntable: picking on a moving model misses, and a still
+  // pose lets hover and brush strokes test cached geometry instead of re-skinning it every frame.
+  const holdPose = !!regionSelection;
+  const heldPlayback = useMemo(() => holdPose && !playback.paused ? { ...playback, paused: true } : playback, [holdPose, playback]);
+  useEffect(() => {
+    if (!holdPose) return;
+    const turntable = interaction.current;
+    const paused = turntable.paused;
+    turntable.paused = true;
+    return () => { turntable.paused = paused; };
+  }, [holdPose]);
   const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
@@ -1596,10 +1607,11 @@ export default function HeroPoseViewer({
           </mesh>
         )}
         <group>
-        {onPartPick && <SkinPartPicking model={scene} onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
+        {onPartPick && <SkinPartPicking model={scene} posed={!!regionSelection}
+          onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
         {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} />
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
-        <MovementFxStage preview={movementPreview} scene={scene} paused={playback.paused} speed={playback.speed}
+        <MovementFxStage preview={movementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
             movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
             painting={regionSelection?.picker.by === 'brush'} />}>
@@ -1608,7 +1620,7 @@ export default function HeroPoseViewer({
             heroName={heroName}
             reset={resetView}
             clipName={clipName}
-            playback={playback}
+            playback={heldPlayback}
             seek={seek}
             progressRef={playbackProgressRef}
             scene={scene}
