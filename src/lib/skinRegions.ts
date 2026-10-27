@@ -572,18 +572,22 @@ export function brushDabs(seed: SkinRegionSeed): Array<[number, number, number]>
 }
 
 /**
- * Pack a stroke's dabs into as few seeds as the path limit allows: a stroke is one seed, not one per dab,
- * so a part holds thousands of strokes and the cuts painting makes in other areas stay small too.
+ * Pack neighbouring brush seeds into as few as the path limit allows: a stroke is one seed, not one per
+ * dab, so a part holds thousands of strokes and the cuts painting makes in other areas stay small too.
+ * Only seeds that paint the same way (add or remove, cut by the same area) join, in order, so the
+ * texels never change. Drafts saved with a seed per dab compact the same way.
  */
 export function strokeSeeds(dabs: SkinRegionSeed[], pathLength: number): SkinRegionSeed[] {
   const seeds: SkinRegionSeed[] = [];
   for (const dab of dabs) {
     const last = seeds.at(-1);
-    if (last && dab.by === 'brush' && last.by === 'brush' && !!last.remove === !!dab.remove && (last.path?.length ?? 0) + 3 <= pathLength) {
-      last.path = [...(last.path ?? []), dab.u, dab.v, dab.radius ?? 0];
-    } else seeds.push({ ...dab });
+    const extra = 3 + (dab.path?.length ?? 0);
+    if (last && dab.by === 'brush' && last.by === 'brush' && !!last.remove === !!dab.remove && last.from === dab.from
+      && (last.path?.length ?? 0) + extra <= pathLength) {
+      seeds[seeds.length - 1] = { ...last, path: [...(last.path ?? []), dab.u, dab.v, dab.radius ?? 0, ...(dab.path ?? [])] };
+    } else seeds.push(dab);
   }
-  return seeds;
+  return seeds.length === dabs.length ? dabs : seeds;
 }
 
 export function rasterizeSeed(islands: UvIslands, seed: SkinRegionSeed, width: number, height: number, lab: Float32Array | null): Uint8Array {

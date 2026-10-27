@@ -132,6 +132,15 @@ describe('brush', () => {
     expect(sameSeed(packed[0], { ...packed[0], path: [...packed[0].path!] })).toBe(true);
     expect(sameSeed(packed[0], { ...packed[0], path: packed[0].path!.slice(3) })).toBe(false);
   });
+  it('compacts a draft saved with a seed per dab without changing what it paints', () => {
+    const cut = (u: number, from: string) => ({ u, v: 0.5, by: 'brush' as const, radius: 0.2, remove: true as const, from });
+    const saved = [{ u: 0.5, v: 0.5, by: 'color' as const }, cut(0.05, 'r2'), cut(0.1, 'r2'), cut(0.15, 'r3'), cut(0.2, 'r3')];
+    const compact = strokeSeeds(saved, 765);
+    // Cuts from different areas stay apart, so removing one area still takes back only its own.
+    expect(compact.map((seed) => seed.from ?? null)).toEqual([null, 'r2', 'r3']);
+    expect(rasterizeSeeds(islands, compact, 8, 8, null, 0)).toEqual(rasterizeSeeds(islands, saved, 8, 8, null, 0));
+    expect(strokeSeeds(compact, 765)).toBe(compact);
+  });
 });
 
 describe('fill across seams', () => {

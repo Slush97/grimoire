@@ -16,8 +16,8 @@ import { adjustSkinPixels, hasRegionEdit, hasSkinPartEdit, keepSkinPartEdit, ORI
 import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
-import { isGlobalSkinSource, regionMaskKey } from '../../lib/skinEditSchema';
-import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId, removeRegion } from '../../lib/skinRegions';
+import { isGlobalSkinSource, regionMaskKey, STROKE_PATH_LENGTH } from '../../lib/skinEditSchema';
+import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, newRegionId, removeRegion, strokeSeeds } from '../../lib/skinRegions';
 import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
@@ -276,7 +276,11 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     const material = paintingPart.material;
     const layout = layoutOf(material) ?? undefined;
     const erase = paintTool === 'eraser';
-    const current = edits.find((edit) => edit.material === material)?.regions ?? [];
+    // Older drafts stored a seed per brush dab: pack them first so they do not fill the part.
+    const current = (edits.find((edit) => edit.material === material)?.regions ?? []).map((region) => {
+      const seeds = strokeSeeds(region.seeds, STROKE_PATH_LENGTH);
+      return seeds === region.seeds ? region : { ...region, seeds };
+    });
     // Colors picked on another texture layout keep their seeds and their warning; paint never touches them.
     const live = current.filter((region) => !staleRegion(material, region));
     const finish = paintFinish && paintingPart.finishable ? paintFinish : null;
@@ -292,8 +296,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     if ((!target && !erase ? seeds.length : 0) > MAX_SEEDS
       || live.some((region) => region.seeds.length + (region === target ? seeds.length : sameKind(region) ? removed.length : 0) > MAX_SEEDS)) { setPaintNotice('full'); return; }
     setPaintNotice(null);
-    updateRegions(material, (regions) => {
-      const next = regions.map((region) => staleRegion(material, region) ? region
+    updateRegions(material, () => {
+      const next = current.map((region) => staleRegion(material, region) ? region
         : region.id === target?.id ? { ...region, layout, seeds: [...region.seeds, ...seeds] }
           : sameKind(region) ? { ...region, seeds: [...region.seeds, ...removed] } : region);
       if (owner && !target) next.push({ id: owner, layout, seeds,
