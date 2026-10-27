@@ -18,10 +18,12 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(
 const tab = (text: string) => [...host.querySelectorAll('[role="tab"]')].find((element) => element.textContent === text) as HTMLButtonElement;
 const region: SkinPartRegion = { id: 'r3', seeds: [{ u: 0.5, v: 0.5 }], paint: '#ef4444' };
 
+const button = (text: string) => [...host.querySelectorAll('button')].find((element) => element.textContent === text || element.getAttribute('aria-label') === text) as HTMLButtonElement;
+
 describe('SkinPaintPanel', () => {
   const props = (patch: Partial<ComponentProps<typeof SkinPaintPanel>> = {}): ComponentProps<typeof SkinPaintPanel> => ({
     part: 'Dress', color: '#2dd4bf', tool: 'fill', brushSize: 16, tolerance: 8, areas: [], missed: false, canUndo: false, disabled: false,
-    onColor: vi.fn(), onPattern: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
+    onColor: vi.fn(), onPattern: vi.fn(), onFinish: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
     onEditArea: vi.fn(), onRemoveArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
   });
   it('explains the chosen tool and shows only its setting', () => {
@@ -35,61 +37,42 @@ describe('SkinPaintPanel', () => {
     act(() => root.render(<SkinPaintPanel {...props({ tool: 'eraser' })} />));
     expect(host.textContent).toContain('foundry.skin.paint.eraserHint');
     expect(host.querySelector('input[aria-label="foundry.skin.paint.size"]')).not.toBeNull();
-    // Erasing needs no color picker; a swatch switches back to filling.
     expect(host.querySelector('.react-colorful')).toBeNull();
   });
-  it('reuses a painted color and opens its details', () => {
+  it('lists what is on the part by name, with its own change and remove buttons', () => {
     const value = props({ areas: [region], missed: 'Jacket', canUndo: true });
     act(() => root.render(<SkinPaintPanel {...value} />));
     expect(host.textContent).toContain('foundry.skin.region.otherPart');
-    act(() => (host.querySelector('button[aria-label="foundry.skin.region.areaName:3"]') as HTMLButtonElement).click());
+    expect(host.textContent).toContain('foundry.skin.paint.onPart');
+    // The row names the color in words and picks it to paint more.
+    act(() => [...host.querySelectorAll('li button')][0].dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(value.onColor).toHaveBeenCalledWith('#ef4444');
-    act(() => root.render(<SkinPaintPanel {...value} color="#ef4444" />));
-    act(() => (host.querySelector('button[aria-label="foundry.skin.paint.more"]') as HTMLButtonElement).click());
+    act(() => button('foundry.skin.paint.more').click());
     expect(value.onEditArea).toHaveBeenCalledWith('r3');
-    act(() => (host.querySelector('button[aria-label="common.actions.undo"]') as HTMLButtonElement).click());
-    expect(value.onUndo).toHaveBeenCalled();
-    act(() => (host.querySelector('button[aria-label="foundry.skin.paint.remove"]') as HTMLButtonElement).click());
+    act(() => button('foundry.skin.paint.remove').click());
     expect(value.onRemoveArea).toHaveBeenCalledWith('r3');
+    act(() => button('common.actions.undo').click());
+    expect(value.onUndo).toHaveBeenCalled();
   });
-});
-
-describe('SkinPaintPanel patterns', () => {
-  it('paints with a pattern in one click and shows patterned areas as their pattern', () => {
-    const onPattern = vi.fn(), onColor = vi.fn();
-    const patterned: SkinPartRegion = { id: 'r4', seeds: [{ u: 0.5, v: 0.5 }], pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } };
-    act(() => root.render(<SkinPaintPanel part="Dress" color="#2dd4bf" tool="fill" brushSize={16} tolerance={8} areas={[region, patterned]} missed={false}
-      canUndo={false} disabled={false} onColor={onColor} onPattern={onPattern} onTool={vi.fn()} onBrushSize={vi.fn()} onTolerance={vi.fn()}
-      onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onRemoveArea={vi.fn()} onPreviewArea={vi.fn()} />));
-    act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABELS.holo}"]`) as HTMLButtonElement).click());
-    expect(onPattern).toHaveBeenCalledWith('holo');
-    act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
-    expect(onPattern).toHaveBeenLastCalledWith(null);
-    expect(onColor).toHaveBeenLastCalledWith('#3b82f6');
-    // The patterned area's chip is its pattern, not a plain color.
-    const chip = host.querySelector('button[aria-label="foundry.skin.region.areaName:4"]') as HTMLButtonElement;
-    expect(chip.style.backgroundColor).toBe('');
-    expect((host.querySelector('button[aria-label="foundry.skin.region.areaName:3"]') as HTMLButtonElement).style.backgroundColor).not.toBe('');
-  });
-});
-
-describe('SkinPaintPanel shine', () => {
-  it('paints shine in one click, shows shine areas as balls and greys out on parts without a finish', () => {
-    const onFinish = vi.fn(), onPattern = vi.fn(), onColor = vi.fn();
-    const shiny: SkinPartRegion = { id: 'r5', seeds: [{ u: 0.5, v: 0.5 }], finish: { roughness: 0.18, metalness: 1 } };
-    const render = (finishable: boolean) => act(() => root.render(<SkinPaintPanel part="Dress" color="#2dd4bf" tool="fill" brushSize={16} tolerance={8} areas={[region, shiny]}
-      missed={false} canUndo={false} disabled={false} finishable={finishable} onColor={onColor} onPattern={onPattern} onFinish={onFinish} onTool={vi.fn()}
-      onBrushSize={vi.fn()} onTolerance={vi.fn()} onUndo={vi.fn()} onStartOver={vi.fn()} onDone={vi.fn()} onEditArea={vi.fn()} onRemoveArea={vi.fn()} onPreviewArea={vi.fn()} />));
-    render(true);
-    act(() => (host.querySelector('button[aria-label="foundry.skin.finish.metal"]') as HTMLButtonElement).click());
+  it('paints with a pattern or a shine in one click and keeps shine below the paint', () => {
+    const value = props({ areas: [{ id: 'r5', seeds: [{ u: 0.5, v: 0.5 }], finish: { roughness: 0.18, metalness: 1 } }, region,
+      { id: 'r4', seeds: [{ u: 0.5, v: 0.5 }], pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } }] });
+    act(() => root.render(<SkinPaintPanel {...value} />));
+    act(() => button(TRIPPY_STYLE_LABELS.holo).click());
+    expect(value.onPattern).toHaveBeenLastCalledWith('holo');
+    expect(value.onFinish).toHaveBeenLastCalledWith(null);
+    act(() => button('foundry.skin.paint.shines.metal').click());
     // Only the finish values: a preset name would fail the strict export schema.
-    expect(onFinish).toHaveBeenLastCalledWith({ roughness: 0.18, metalness: 1 });
-    expect(onPattern).toHaveBeenLastCalledWith(null);
-    act(() => (host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement).click());
-    expect(onFinish).toHaveBeenLastCalledWith(null);
-    expect((host.querySelector('button[aria-label="foundry.skin.region.areaName:5"]') as HTMLButtonElement).style.background).toContain('gradient');
-    render(false);
-    expect((host.querySelector('button[aria-label="foundry.skin.finish.metal"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(value.onFinish).toHaveBeenLastCalledWith({ roughness: 0.18, metalness: 1 });
+    expect(value.onPattern).toHaveBeenLastCalledWith(null);
+    act(() => button('foundry.skin.paint.colors.blue').click());
+    expect(value.onColor).toHaveBeenLastCalledWith('#3b82f6');
+    const rows = [...host.querySelectorAll('li')].map((row) => row.textContent);
+    expect(rows).toEqual(['foundry.skin.paint.colors.red', TRIPPY_STYLE_LABELS.camo, 'foundry.skin.paint.shines.metal']);
+  });
+  it('greys out shine on parts without a finish', () => {
+    act(() => root.render(<SkinPaintPanel {...props({ finishable: false })} />));
+    expect(button('foundry.skin.paint.shines.metal').closest('fieldset')?.disabled).toBe(true);
   });
 });
 

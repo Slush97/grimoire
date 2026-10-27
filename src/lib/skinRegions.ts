@@ -1,5 +1,8 @@
 import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
 export { hasRegionEdit, hasRegionLook, isFinishRegion } from './skinColorAdjustments';
+import { colorFamily } from './colorNames';
+import { FINISHES, sameFinish } from './skinFinishes';
+import { TRIPPY_STYLE_LABELS } from './trippy';
 
 /** One triangle list in texture space. `index` null means every three vertices form a triangle. */
 export interface UvGeometry {
@@ -678,4 +681,18 @@ export function newRegionId(existing: SkinPartRegion[]): string {
 /** A region's name, or "Area N" from its id, which stays put when other areas are deleted. */
 export function regionLabel(region: SkinPartRegion, t: (key: string, options?: Record<string, unknown>) => string): string {
   return region.name?.trim() || t('foundry.skin.region.areaName', { index: region.id.replace(/^r/, '') });
+}
+
+const SHINE_NAMES = { glossy: true, metal: true, polished: true };
+
+/** What an area paints with: its own name, else the pattern, the shine or the everyday color name. */
+export function areaName(area: SkinPartRegion, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (area.name?.trim()) return area.name.trim();
+  if (area.pattern) return TRIPPY_STYLE_LABELS[area.pattern.style];
+  if (area.paint) return t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`);
+  if (area.finish) {
+    const preset = FINISHES.find((item) => sameFinish(item, area.finish));
+    return preset && preset.name in SHINE_NAMES ? t(`foundry.skin.paint.shines.${preset.name}`) : preset ? t(`foundry.skin.finish.${preset.name}`) : t('foundry.skin.paint.shine');
+  }
+  return regionLabel(area, t);
 }

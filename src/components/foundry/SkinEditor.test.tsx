@@ -326,9 +326,9 @@ describe('Door Stuck skin recovery', () => {
     expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
   });
   it('lets a failed skin resume return to the default skin', async () => {
-    resume.mockRejectedValueOnce(new Error('Missing skin'));
+    resume.mockRejectedValueOnce(new Error('That skin file is missing.'));
     await mount(); await choose('saved.vpk');
-    expect(host.textContent).toContain('Missing skin');
+    expect(host.textContent).toContain('That skin file is missing.');
     await choose('vanilla'); expect(previewEdits()).toEqual([]);
   });
 });

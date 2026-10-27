@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
-import { ArrowLeft, Brush, Eraser, Palette, PaintBucket, RotateCcw, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeft, Brush, Eraser, Layers, Palette, PaintBucket, RotateCcw, SlidersHorizontal, Sparkles, Trash2, Undo2 } from 'lucide-react';
 import { Button, IconButton, SegmentedControl } from '../common/ui';
 import { Input } from '../common/forms';
 import { AnchoredPopover } from '../common/AnchoredPopover';
@@ -9,7 +9,8 @@ import { SkinColorControls } from './SkinColorControls';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { SkinFinishControls } from './SkinFinishControls';
 import { finishBall, PAINT_FINISHES, sameFinish } from '../../lib/skinFinishes';
-import { isFinishRegion, regionLabel } from '../../lib/skinRegions';
+import { colorFamily } from '../../lib/colorNames';
+import { areaName, isFinishRegion } from '../../lib/skinRegions';
 import { useTrippySwatches } from '../../lib/useTrippySwatches';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
@@ -23,9 +24,10 @@ const SWATCHES = ['#ef4444', '#f97316', '#facc15', '#84cc16', '#2dd4bf', '#3b82f
 const WHEEL = 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)';
 
 /**
- * Coloring-book painting: pick a color, then fill or brush it onto the model. Each color is one area
- * underneath, so there is nothing to select first and nothing to name. The hover preview does the
- * teaching; words stay in tooltips, plus one line until the part has paint.
+ * Coloring-book painting. Three plain steps, top to bottom: pick what to paint with (paint, or a shine
+ * that goes over the paint), paint it on the model, and see what is on the part in the list below.
+ * Each thing in the list is one area underneath, so there is nothing to select first and nothing to
+ * name. The hover preview does the teaching; words stay in tooltips and short labels.
  */
 export function SkinPaintPanel({ part, color, pattern = null, finish = null, finishable = true, tool, brushSize, tolerance, areas, missed, notice = null, isStale = () => false, canUndo, disabled,
   onColor, onPattern, onFinish = () => {}, onTool, onBrushSize, onTolerance, onUndo, onStartOver, onDone, onEditArea, onRemoveArea, onPreviewArea }: {
@@ -53,47 +55,51 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
   const sprites = useTrippySwatches();
   const [customOpen, setCustomOpen] = useState(false);
   const customRef = useRef<HTMLButtonElement>(null);
-  // The chip last clicked in Your colors, which the details and remove buttons act on.
-  const [chosen, setChosen] = useState<string | null>(null);
   const tools = [
     { value: 'fill' as const, icon: PaintBucket, label: t('foundry.skin.paint.fill'), hint: t('foundry.skin.paint.fillHint', { part }) },
     { value: 'brush' as const, icon: Brush, label: t('foundry.skin.paint.brush'), hint: t('foundry.skin.paint.brushHint', { part }) },
     { value: 'eraser' as const, icon: Eraser, label: t('foundry.skin.paint.eraser'), hint: t('foundry.skin.paint.eraserHint', { part }) },
   ];
-  const current = areas.find((area) => area.id === chosen)
-    ?? areas.find((area) => finish ? isFinishRegion(area) && sameFinish(area.finish, finish)
-      : pattern ? area.pattern?.style === pattern && !area.paint : area.paint?.toLowerCase() === color.toLowerCase() && !area.pattern);
-  const pick = (next: { color: string } | { pattern: TrippyStyleName } | { finish: SkinPartFinish }, area: string | null = null) => {
-    if ('finish' in next) { onPattern(null); onFinish(next.finish); }
+  const painting = tool !== 'eraser';
+  // The area the current color, pattern or shine paints into, if it is already on the part.
+  const current = painting ? areas.find((area) => finish ? isFinishRegion(area) && sameFinish(area.finish, finish)
+    : pattern ? area.pattern?.style === pattern && !area.paint : area.paint?.toLowerCase() === color.toLowerCase() && !area.pattern) : undefined;
+  const pick = (next: { color: string } | { pattern: TrippyStyleName } | { finish: SkinPartFinish }) => {
+    if ('finish' in next) { onPattern(null); onFinish({ roughness: next.finish.roughness, metalness: next.finish.metalness }); }
     else {
       onFinish(null);
       if ('pattern' in next) onPattern(next.pattern); else { onPattern(null); onColor(next.color); }
     }
-    setChosen(area);
-    if (tool === 'eraser') onTool('fill');
+    if (!painting) onTool('fill');
   };
-  const painting = tool !== 'eraser';
+  const pickArea = (area: SkinPartRegion) => {
+    if (area.pattern) pick({ pattern: area.pattern.style });
+    else if (area.paint) pick({ color: area.paint });
+    else if (area.finish) pick({ finish: area.finish });
+    else onEditArea(area.id);
+  };
   const custom = !pattern && !finish && !SWATCHES.includes(color.toLowerCase());
   const chip = 'shrink-0 overflow-hidden rounded-sm border border-hl/20 outline-offset-2 aria-pressed:outline aria-pressed:outline-2 aria-pressed:outline-accent';
-  const swatch = (value: string, label: string, pressed: boolean, size = 'h-5 w-5', area: string | null = null) => <button key={area ?? value} type="button" aria-label={label} title={label}
-    aria-pressed={pressed} onClick={() => pick({ color: value }, area)} style={{ backgroundColor: value }} className={`${size} ${chip}`} />;
-  const patternSwatch = (style: TrippyStyleName, label: string, pressed: boolean, size = 'h-5 w-5', area: string | null = null) => <button key={area ?? style} type="button" aria-label={label}
-    title={label} aria-pressed={pressed} onClick={() => pick({ pattern: style }, area)} className={`${size} ${chip}`}>
-    <TrippySpriteSwatch sprite={sprites[style] ?? null} className="h-full w-full" />
-  </button>;
-  const finishSwatch = (value: SkinPartFinish, label: string, pressed: boolean, size = 'h-5 w-5', area: string | null = null) => <button key={area ?? label} type="button"
-    aria-label={label} title={finishable ? label : t('foundry.skin.finishUnsupported')} aria-pressed={pressed} disabled={!finishable}
-    onClick={() => pick({ finish: { roughness: value.roughness, metalness: value.metalness } }, area)} style={{ background: finishBall(value) }} className={`${size} ${chip} rounded-full disabled:opacity-40`} />;
+  // The look of an area or ink, without the button around it.
+  const look = (area: Pick<SkinPartRegion, 'paint' | 'pattern' | 'finish'>, className: string) => area.pattern
+    ? <span className={`${className} overflow-hidden`}><TrippySpriteSwatch sprite={sprites[area.pattern.style] ?? null} className="h-full w-full" /></span>
+    : area.paint ? <span className={className} style={{ backgroundColor: area.paint }} />
+    : area.finish ? <span className={`${className} rounded-full`} style={{ background: finishBall(area.finish) }} />
+    : <span className={`${className} border-dashed`} />;
+  // Ordered like the model shows them: paint first, shine over it.
+  const listed = [...areas.filter((area) => !isFinishRegion(area)), ...areas.filter(isFinishRegion)];
   return <div className="space-y-3">
     <SegmentedControl fill label={t('foundry.skin.paint.tool')} value={tool} onChange={onTool} options={tools.map(({ value, icon: Icon, label, hint }) => ({
       value, title: hint, label: <span className="flex items-center justify-center gap-1.5"><Icon className="h-3.5 w-3.5" aria-hidden />{label}</span>,
     }))} />
     {!areas.length && <p className="text-xs text-text-secondary">{tools.find((item) => item.value === tool)?.hint}</p>}
     <fieldset disabled={disabled} className="space-y-2">
-      <legend className="sr-only">{t('foundry.skin.paint.color')}</legend>
-      {/* Fixed grids: switching between colors, patterns and the eraser never moves anything. */}
+      <legend className="mb-1.5 flex items-center gap-1.5 text-xs text-text-secondary"><Palette className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.paint.paint')}</legend>
+      {/* Fixed grids: switching between colors, patterns, shine and the eraser never moves anything. */}
       <div className="flex justify-between gap-1">
-        {SWATCHES.map((value) => swatch(value, value, painting && !pattern && !finish && color.toLowerCase() === value))}
+        {SWATCHES.map((value) => <button key={value} type="button" aria-label={t(`foundry.skin.paint.colors.${colorFamily(value)}`)} title={t(`foundry.skin.paint.colors.${colorFamily(value)}`)}
+          aria-pressed={painting && !pattern && !finish && color.toLowerCase() === value} onClick={() => pick({ color: value })}
+          style={{ backgroundColor: value }} className={`h-5 w-5 ${chip}`} />)}
         <button ref={customRef} type="button" aria-label={t('foundry.skin.paint.customColor')} title={t('foundry.skin.paint.customColor')}
           aria-pressed={painting && custom} aria-expanded={customOpen} onClick={() => setCustomOpen(!customOpen)}
           className={`relative h-5 w-5 ${chip}`} style={{ background: WHEEL }}>
@@ -101,10 +107,10 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
         </button>
       </div>
       <div className="grid grid-cols-8 justify-items-center gap-1" role="group" aria-label={t('foundry.skin.paint.patterns')}>
-        {TRIPPY_STYLES.map((style) => patternSwatch(style, TRIPPY_STYLE_LABELS[style], painting && pattern === style))}
-      </div>
-      <div className="flex gap-1.5" role="group" aria-label={t('foundry.skin.paint.shine')}>
-        {PAINT_FINISHES.map((value) => finishSwatch(value, t(`foundry.skin.finish.${value.name}`), painting && sameFinish(finish, value)))}
+        {TRIPPY_STYLES.map((style) => <button key={style} type="button" aria-label={TRIPPY_STYLE_LABELS[style]} title={TRIPPY_STYLE_LABELS[style]}
+          aria-pressed={painting && pattern === style} onClick={() => pick({ pattern: style })} className={`h-5 w-5 ${chip}`}>
+          <TrippySpriteSwatch sprite={sprites[style] ?? null} className="h-full w-full" />
+        </button>)}
       </div>
       <AnchoredPopover open={customOpen} onClose={() => setCustomOpen(false)} anchorRef={customRef} width={224} ariaLabel={t('foundry.skin.paint.customColor')}
         className="space-y-2 p-3 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
@@ -112,6 +118,18 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
         <HexColorInput color={color} onChange={(value) => { if (/^#?[0-9a-f]{6}$/i.test(value)) pick({ color: value.startsWith('#') ? value : `#${value}` }); }} prefixed
           aria-label={t('foundry.skin.hex')} className="h-8 w-full rounded-sm border border-border bg-bg-tertiary px-2 text-sm uppercase tabular-nums text-text-primary focus-visible:outline-2 focus-visible:outline-accent" />
       </AnchoredPopover>
+    </fieldset>
+    {/* Shine is a coat over the paint, not another color, so it gets its own row of lit balls with names. */}
+    <fieldset disabled={disabled || !finishable} title={finishable ? undefined : t('foundry.skin.finishUnsupported')} className="disabled:opacity-40">
+      <legend className="mb-1.5 flex items-center gap-1.5 text-xs text-text-secondary"><Sparkles className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.paint.shine')}
+        <span className="text-text-tertiary">{t('foundry.skin.paint.shineOver')}</span></legend>
+      <div className="grid grid-cols-3 gap-1">
+        {PAINT_FINISHES.map((value) => <button key={value.name} type="button" aria-pressed={painting && sameFinish(finish, value)} onClick={() => pick({ finish: value })}
+          className="flex items-center gap-2 rounded-sm border border-transparent px-1.5 py-1 text-xs text-text-secondary hover:bg-hl/5 hover:text-text-primary aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-text-primary">
+          {look({ finish: value }, 'h-5 w-5 shrink-0 border border-hl/20')}
+          <span className="truncate">{t(`foundry.skin.paint.shines.${value.name}`)}</span>
+        </button>)}
+      </div>
     </fieldset>
     <label className="flex items-center gap-2 text-xs text-text-secondary" title={tool === 'fill' ? t('foundry.skin.paint.fillRangeHint') : undefined}>
       <span className="shrink-0">{tool === 'fill' ? t('foundry.skin.paint.fillRange') : t('foundry.skin.paint.size')}</span>
@@ -124,32 +142,30 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
     {notice && <p role="status" className="text-xs text-state-warning">{notice}</p>}
     {missed !== false && <p role="status" className="text-xs text-state-warning">
       {missed ? t('foundry.skin.region.otherPart', { other: missed, part }) : t('foundry.skin.region.otherPartUnknown', { part })}</p>}
-    {areas.length > 0 && <div className="flex items-center gap-1.5" role="group" aria-label={t('foundry.skin.paint.yourColors')}>
-      <span title={t('foundry.skin.paint.yourColors')}><Palette className="h-4 w-4 shrink-0 text-text-tertiary" aria-hidden /></span>
-      <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-        {areas.map((area) => <span key={area.id} className="relative" onPointerEnter={() => onPreviewArea(area.id)} onPointerLeave={() => onPreviewArea(null)}>
-          {/* An area painted with a pattern shows the pattern, so two areas of one color still look different. */}
-          {area.pattern ? patternSwatch(area.pattern.style, regionLabel(area, t), painting && area === current, 'h-6 w-6', area.id)
-            : area.paint ? swatch(area.paint, regionLabel(area, t), painting && area === current, 'h-6 w-6', area.id)
-            : area.finish ? finishSwatch(area.finish, regionLabel(area, t), painting && area === current, 'h-6 w-6', area.id)
-            : <button type="button" aria-label={regionLabel(area, t)} title={regionLabel(area, t)} onClick={() => onEditArea(area.id)}
-              className="h-6 w-6 rounded-sm border border-dashed border-hl/30" />}
-          {isStale(area) && <span role="img" aria-label={t('foundry.skin.paint.stale')} title={t('foundry.skin.paint.stale')}
-            className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-state-warning" />}
-        </span>)}
+    {/* What is on the part: a list, so it never reads as more colors to pick. */}
+    {listed.length > 0 && <section className="border-t border-border pt-3" aria-label={t('foundry.skin.paint.onPart', { part })}>
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-text-secondary">
+        <Layers className="h-3.5 w-3.5" aria-hidden /><span className="min-w-0 flex-1 truncate">{t('foundry.skin.paint.onPart', { part })}</span>
+        <IconButton size="sm" icon={RotateCcw} disabled={disabled} label={t('foundry.skin.paint.startOver')} onClick={onStartOver} />
       </div>
-      <div className="flex shrink-0 gap-1 self-start">
-        <IconButton size="sm" icon={SlidersHorizontal} disabled={disabled || !current}
-          label={current ? t('foundry.skin.paint.more', { area: regionLabel(current, t) }) : t('foundry.skin.paint.moreNone')}
-          onClick={() => { if (current) onEditArea(current.id); }} />
-        <IconButton size="sm" icon={Trash2} disabled={disabled || !current}
-          label={current ? t('foundry.skin.paint.remove', { area: regionLabel(current, t) }) : t('foundry.skin.paint.moreNone')}
-          onClick={() => { if (current) { onRemoveArea(current.id); setChosen(null); } }} />
-      </div>
-    </div>}
+      <ul className="space-y-0.5">
+        {listed.map((area) => {
+          const name = areaName(area, t);
+          return <li key={area.id} className="group flex items-center gap-0.5" onPointerEnter={() => onPreviewArea(area.id)} onPointerLeave={() => onPreviewArea(null)}>
+            <button type="button" aria-pressed={area === current} disabled={disabled} onClick={() => pickArea(area)} title={t('foundry.skin.paint.paintMore', { area: name })}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs text-text-primary hover:bg-hl/5 aria-pressed:bg-accent/15">
+              {look(area, 'h-5 w-5 shrink-0 rounded-sm border border-hl/20')}
+              <span className="min-w-0 flex-1 truncate">{name}</span>
+              {isStale(area) && <span role="img" aria-label={t('foundry.skin.paint.stale')} title={t('foundry.skin.paint.stale')} className="h-2 w-2 shrink-0 rounded-full bg-state-warning" />}
+            </button>
+            <IconButton size="sm" icon={SlidersHorizontal} disabled={disabled} label={t('foundry.skin.paint.more', { area: name })} onClick={() => onEditArea(area.id)} />
+            <IconButton size="sm" icon={Trash2} disabled={disabled} label={t('foundry.skin.paint.remove', { area: name })} onClick={() => onRemoveArea(area.id)} />
+          </li>;
+        })}
+      </ul>
+    </section>}
     <div className="flex items-center gap-1">
       <IconButton size="sm" icon={Undo2} disabled={disabled || !canUndo} aria-keyshortcuts="Control+Z" label={t('common.actions.undo')} onClick={onUndo} />
-      <IconButton size="sm" icon={RotateCcw} disabled={disabled || !areas.length} label={t('foundry.skin.paint.startOver')} onClick={onStartOver} />
       <Button size="sm" className="ml-auto" aria-keyshortcuts="Escape" title={t('foundry.skin.paint.doneShortcut')} onClick={onDone}>{t('foundry.skin.paint.done')}</Button>
     </div>
   </div>;
@@ -161,7 +177,7 @@ export function SkinRegionEditor({ region, stale = false, color, tool, disabled,
   onTool: (tool: 'color' | 'pattern') => void; onChange: (patch: Partial<SkinPartRegion>) => void; onBack: () => void; onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const label = regionLabel(region, t);
+  const label = areaName(region, t);
   return <div className="space-y-3">
     <div className="flex items-center gap-1">
       <IconButton size="sm" icon={ArrowLeft} label={t('foundry.skin.paint.back')} onClick={onBack} />

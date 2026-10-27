@@ -13,7 +13,8 @@ export const PAINT_FINISHES = FINISHES.filter((finish) => ['glossy', 'metal', 'p
 
 /** A ball that reads as the finish without words. Token colors only, so it follows the theme. */
 export function finishBall(finish: SkinPartFinish): string {
-  if (finish.metalness < 0.5) return 'radial-gradient(circle at 32% 28%, var(--color-text-primary) 0 12%, var(--color-text-tertiary) 24%, var(--color-bg-tertiary) 65%)';
+  // Glossy: a dark ball with one crisp highlight. Metal: smooth silver. Chrome: hard mirror bands.
+  if (finish.metalness < 0.5) return 'radial-gradient(circle at 32% 28%, var(--color-text-primary) 0 10%, var(--color-text-tertiary) 14%, var(--color-bg-tertiary) 30% 60%, var(--color-bg-primary))';
   return finish.roughness < 0.1
     ? 'linear-gradient(160deg, var(--color-text-primary) 0 22%, var(--color-bg-primary) 42%, var(--color-text-primary) 58%, var(--color-text-tertiary))'
     : 'radial-gradient(circle at 32% 28%, var(--color-text-primary), var(--color-text-secondary) 35%, var(--color-bg-tertiary) 78%, var(--color-text-tertiary))';
