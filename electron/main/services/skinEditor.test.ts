@@ -207,6 +207,19 @@ describe('skin region export chain', () => {
     expect(glow[glow.indexOf('--vpk') + 1]).toBe(painted[painted.indexOf('--encode-vpk') + 1]);
     expect(glow).toEqual(expect.arrayContaining(['--color', '33ccff', '--animation', 'pulse', '--mask']));
   });
+  it('carves see-through areas before the finish, and lights a whole-part glow without a mask', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, glow: { color: '#ffaa00', animation: 'steady' },
+      regions: [{ id: 'r5', seeds: [{ u: 0.3, v: 0.3 }], surface: { opacity: 0.45 } }],
+    }], regionMasks: { 'coat.vmat|r5': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['workshop surface', 'workshop glow', 'out.vpk']);
+    const [clear, glow] = calls;
+    expect(clear).toEqual(expect.arrayContaining(['--mode', 'translucent', '--opacity', '0.45', '--mask']));
+    expect(glow).not.toContain('--mask');
+    expect(glow[glow.indexOf('--vpk') + 1]).toBe(clear[clear.indexOf('--encode-vpk') + 1]);
+  });
   it('allows one glow per part', () => {
     const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true, glowable: true })) };
     const glow = (id: string) => ({ id, seeds: [{ u: 0.5, v: 0.5 }], glow: { color: '#ffffff', animation: 'steady' as const } });

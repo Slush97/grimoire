@@ -1,7 +1,7 @@
 import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
-export { hasRegionEdit, hasRegionLook, isFinishRegion, isGlowRegion, regionKind } from './skinColorAdjustments';
+export { hasRegionEdit, hasRegionLook, isClearRegion, isFinishRegion, isGlowRegion, regionKind } from './skinColorAdjustments';
 import { colorFamily, PAINT_SWATCHES } from './colorNames';
-import { FINISHES, sameFinish } from './skinFinishes';
+import { CLEAR_PRESETS, FINISHES, sameFinish } from './skinFinishes';
 import { TRIPPY_STYLE_LABELS } from './trippy';
 
 /** One triangle list in texture space. `index` null means every three vertices form a triangle. */
@@ -750,6 +750,10 @@ export function areaName(area: SkinPartRegion, t: (key: string, options?: Record
   // A swatch has an everyday name; a color from the picker shows its code, so two similar ones stay apart.
   if (area.paint) return PAINT_SWATCHES.includes(area.paint.toLowerCase()) ? t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`) : area.paint.toUpperCase();
   if (area.glow) return t(`foundry.skin.paint.glows.${area.glow.animation}`);
+  if (area.surface) {
+    const preset = CLEAR_PRESETS.find((item) => item.opacity === area.surface!.opacity);
+    return preset ? t(`foundry.skin.paint.clears.${preset.name}`) : `${Math.round(area.surface.opacity * 100)}%`;
+  }
   if (area.finish) {
     const preset = FINISHES.find((item) => sameFinish(item, area.finish));
     return preset && preset.name in SHINE_NAMES ? t(`foundry.skin.paint.shines.${preset.name}`) : preset ? t(`foundry.skin.finish.${preset.name}`) : t('foundry.skin.paint.shine');

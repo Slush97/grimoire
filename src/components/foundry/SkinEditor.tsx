@@ -10,6 +10,7 @@ import { SkinColorControls } from './SkinColorControls';
 import { SkinFinishControls } from './SkinFinishControls';
 import { sameFinish } from '../../lib/skinFinishes';
 import { SkinSurfaceControls } from './SkinSurfaceControls';
+import { SkinGlowControls } from './SkinGlowControls';
 import { WorkshopWorkbench } from './WorkshopWorkbench';
 import { SkinPaintPanel, SkinRegionEditor, type PaintTool } from './SkinRegionControls';
 import { adjustSkinPixels, hasRegionEdit, hasSkinPartEdit, keepSkinPartEdit, ORIGINAL_SKIN_COLOR } from '../../lib/skinColorAdjustments';
@@ -17,7 +18,7 @@ import { useAppStore } from '../../stores/appStore';
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from '../../lib/lockerUtils';
 import { editedPartCount, materialBasename } from '../../lib/skinParts';
 import { isGlobalSkinSource, regionMaskKey, STROKE_PATH_LENGTH } from '../../lib/skinEditSchema';
-import { DEFAULT_COLOR_RANGE, hasRegionSelection, isFinishRegion, isGlowRegion, newRegionId, regionKind, removeRegion, compactLegacySeeds } from '../../lib/skinRegions';
+import { DEFAULT_COLOR_RANGE, hasRegionSelection, isClearRegion, isFinishRegion, isGlowRegion, newRegionId, regionKind, removeRegion, compactLegacySeeds } from '../../lib/skinRegions';
 import { Brush } from 'lucide-react';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { RegionBaker } from '../../lib/skinRegionScene';
@@ -188,6 +189,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   // Painting glow in a color; a part has one glow, so painting it again recolors that glow.
   const [paintGlow, setPaintGlow] = useFoundryDraft<SkinPartGlow | null>('skin:paintGlow',
     z.object({ color: z.string().regex(/^#[0-9a-f]{6}$/i), animation: z.enum(['steady', 'pulse', 'rainbow']) }).strict().nullable(), null);
+  // Painting see-through at an opacity.
+  const [paintClear, setPaintClear] = useFoundryDraft<number | null>('skin:paintClear', z.number().min(0).max(1).nullable(), null);
   // Painting shine instead of a color or pattern.
   const [paintFinish, setPaintFinish] = useFoundryDraft<SkinPartFinish | null>('skin:paintFinish',
     z.object({ roughness: z.number().min(0).max(1), metalness: z.number().min(0).max(1) }).strict().nullable(), null);
@@ -286,11 +289,15 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     });
     // Colors picked on another texture layout keep their seeds and their warning; paint never touches them.
     const live = current.filter((region) => !staleRegion(material, region));
-    const glow = paintGlow && paintingPart.glowable ? paintGlow : null;
-    const finish = !glow && paintFinish && paintingPart.finishable ? paintFinish : null;
-    const kind = glow ? 'glow' : finish ? 'shine' : 'look';
+    const glow = paintGlow && paintingPart.glowable && !edits.find((edit) => edit.material === material)?.glow ? paintGlow : null;
+    const clear = !glow && paintClear !== null && paintingPart.surfaceable ? paintClear : null;
+    const finish = !glow && clear === null && paintFinish && paintingPart.finishable ? paintFinish : null;
+    // A blocked glow paints nothing rather than falling back to the color.
+    if (!erase && paintGlow && !glow) return;
+    const kind = glow ? 'glow' : clear !== null ? 'clear' : finish ? 'shine' : 'look';
     const sameKind = (region: SkinPartRegion) => erase || regionKind(region) === kind;
-    const target = erase ? undefined : live.find((region) => glow ? isGlowRegion(region) : finish ? isFinishRegion(region) && sameFinish(region.finish, finish)
+    const target = erase ? undefined : live.find((region) => glow ? isGlowRegion(region) : clear !== null ? isClearRegion(region) && region.surface?.opacity === clear
+      : finish ? isFinishRegion(region) && sameFinish(region.finish, finish)
       : paintPattern ? region.pattern?.style === paintPattern && !region.paint
         : region.paint?.toLowerCase() === paintColor.toLowerCase() && !region.pattern);
     // Cuts in the other areas remember which area made them, so removing it brings back what it covered.
@@ -306,7 +313,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
         : region.id === target?.id ? { ...region, layout, seeds: [...region.seeds, ...seeds], ...(glow ? { glow } : {}) }
           : sameKind(region) ? { ...region, seeds: [...region.seeds, ...removed] } : region);
       if (owner && !target) next.push({ id: owner, layout, seeds,
-        ...(glow ? { glow } : finish ? { finish } : paintPattern ? { pattern: { style: paintPattern, intensity: 1, phase: 0, scroll: 0 } } : { paint: paintColor }) });
+        ...(glow ? { glow } : clear !== null ? { surface: { opacity: clear } } : finish ? { finish } : paintPattern ? { pattern: { style: paintPattern, intensity: 1, phase: 0, scroll: 0 } } : { paint: paintColor }) });
       return next;
     });
   };
@@ -419,7 +426,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             onRegionBaker={setBaker}
             regionSelection={paintingPart && !exporting ? { material: paintingPart.material, seeds: NO_SEEDS,
               picker: { by: paintTool === 'fill' ? 'color' : 'brush', tolerance: pickTolerance, brushSize, remove: paintTool === 'eraser', onStroke: applyPaint,
-                tint: paintTool === 'eraser' || paintPattern || paintFinish || paintGlow?.animation === 'rainbow' ? null : paintGlow?.color ?? paintColor }, onPick: fillAt } : null}
+                tint: paintTool === 'eraser' || paintPattern || paintFinish || paintClear !== null || paintGlow?.animation === 'rainbow' ? null : paintGlow?.color ?? paintColor }, onPick: fillAt } : null}
             regionHighlight={selected && highlightRegion ? { material: selected.material, seeds: highlightRegion.seeds } : null}
             workspaceKey={form.id === 'default' ? draftKey : `${draftKey}:${form.id}`}
             highlightedPart={!exporting && highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
@@ -507,7 +514,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
               label={t(focusMaterial === selected.material ? 'foundry.skin.wholeModel' : 'foundry.skin.focusPart')}
               onClick={() => setFocusMaterial(focusMaterial === selected.material ? null : selected.material)} />
             <IconButton size="sm" icon={RotateCcw} disabled={!selectedEdit || exporting} label={t('foundry.skin.resetPart', { part: nameOf(selected) })}
-              onClick={() => { stopPainting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, regions: undefined }); }} />
+              onClick={() => { stopPainting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, glow: undefined, regions: undefined }); }} />
           </div>
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
           {canPaint && <SegmentedControl fill label={t('foundry.skin.paint.mode')} value={paintingPart ? 'paint' : 'whole'}
@@ -521,7 +528,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             onDelete={() => { updateRegions(selected.material, (current) => removeRegion(current, editedArea.id)); setEditingArea(null); setPreviewRegion(null); }} />
           : paintingPart ? <SkinPaintPanel part={nameOf(selected)} color={paintColor} pattern={paintPattern} onPattern={setPaintPattern}
             finish={paintFinish} onFinish={setPaintFinish} finishable={selected.finishable}
-            glow={paintGlow} onGlow={setPaintGlow} glowable={selected.glowable} tool={paintTool} brushSize={brushSize} tolerance={pickTolerance}
+            glow={paintGlow} onGlow={setPaintGlow} glowable={selected.glowable} glowBlocked={!!selectedEdit?.glow}
+            clear={paintClear} onClear={setPaintClear} surfaceable={selected.surfaceable} tool={paintTool} brushSize={brushSize} tolerance={pickTolerance}
             areas={regions} missed={missedPick} canUndo={history.canUndo} disabled={exporting}
             notice={paintNotice === 'colors' ? t('foundry.skin.paint.tooManyColors') : paintNotice === 'full' ? t('foundry.skin.paint.full') : null}
             isStale={(area) => staleRegion(selected.material, area)}
@@ -533,6 +541,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
           {tool === 'surface' ? <div className="space-y-4">
             {selected.finishable ? <SkinFinishControls value={selectedEdit?.finish} disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting}
               onChange={(finish) => update(selected.material, { finish })} /> : <p className="text-xs text-text-secondary">{t('foundry.skin.finishUnsupported')}</p>}
+            {selected.glowable ? <div className="border-t border-border pt-4"><SkinGlowControls value={selectedEdit?.glow} color={colorOf(selected)}
+              disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting} blockedTitle={regions.some(isGlowRegion) ? t('foundry.skin.glowPainted') : undefined}
+              onChange={(glow) => update(selected.material, { glow })} /></div> : null}
             {selected.surfaceable ? <div className="border-t border-border pt-4"><SkinSurfaceControls value={selectedEdit?.surface}
               disabled={ambiguous(selected) || !!selectedEdit?.hidden || exporting} onChange={(surface) => update(selected.material, { surface })} /></div>
               : <p className="text-xs text-text-secondary">{t('foundry.skin.surfaceUnsupported')}</p>}

@@ -13,16 +13,21 @@ export function hasRegionLook(region: SkinPartRegion): boolean {
 
 /** Whether an area changes anything: its colors, its shine or its glow. */
 export function hasRegionEdit(region: SkinPartRegion): boolean {
-  return hasRegionLook(region) || !!region.finish || !!region.glow;
+  return hasRegionLook(region) || !!region.finish || !!region.glow || !!region.surface;
 }
 
 /**
  * Paint, shine and glow are separate layers: an area competes only with areas of its own kind, so
  * painting shine or glow never wipes the paint under it.
  */
-export type RegionKind = 'look' | 'shine' | 'glow';
+export type RegionKind = 'look' | 'shine' | 'glow' | 'clear';
 export function regionKind(region: SkinPartRegion): RegionKind {
-  return hasRegionLook(region) ? 'look' : region.glow ? 'glow' : region.finish ? 'shine' : 'look';
+  return hasRegionLook(region) ? 'look' : region.glow ? 'glow' : region.finish ? 'shine' : region.surface ? 'clear' : 'look';
+}
+
+/** A see-through area. */
+export function isClearRegion(region: SkinPartRegion): boolean {
+  return regionKind(region) === 'clear';
 }
 
 export function isFinishRegion(region: SkinPartRegion): boolean {
@@ -35,7 +40,7 @@ export function isGlowRegion(region: SkinPartRegion): boolean {
 
 /** Whether the part looks different. A region that only selects an area changes nothing yet. */
 export function hasSkinPartEdit(edit: SkinPartEdit): boolean {
-  return edit.hidden || edit.tint !== null || !!edit.finish || !!edit.surface || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments)
+  return edit.hidden || edit.tint !== null || !!edit.finish || !!edit.surface || !!edit.glow || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments)
     || !!edit.regions?.some(hasRegionEdit);
 }
 

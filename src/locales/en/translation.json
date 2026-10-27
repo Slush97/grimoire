@@ -379,7 +379,7 @@
         "matte": "Matte",
         "satin": "Satin",
         "glossy": "Glossy",
-        "polished": "Polished metal",
+        "polished": "Chrome",
         "metal": "Metal"
       },
       "originalFinishHint": "Uses the original maps and values. Choose a finish to create an override.",
@@ -465,13 +465,22 @@
           "steady": "Glow",
           "pulse": "Pulse",
           "rainbow": "Rainbow"
-        }
+        },
+        "seeThrough": "See-through",
+        "clears": {
+          "hazy": "Hazy",
+          "half": "Half",
+          "faint": "Faint"
+        },
+        "glowWhole": "The whole part already glows. Turn that off to paint glow."
       },
       "errors": {
         "generic": "That did not work. Your changes are still here, so try again. If it keeps happening, restart Grimoire.",
         "diskFull": "Your disk is full. Free up some space, then try again.",
         "fileBusy": "Another program is using the mod files. Close Deadlock or any mod tools, then try again."
-      }
+      },
+      "glowOff": "Off",
+      "glowPainted": "This part already glows where you painted. Remove that glow to light the whole part."
     },
     "draft": {
       "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",

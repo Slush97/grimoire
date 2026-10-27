@@ -23,7 +23,7 @@ const button = (text: string) => [...host.querySelectorAll('button')].find((elem
 describe('SkinPaintPanel', () => {
   const props = (patch: Partial<ComponentProps<typeof SkinPaintPanel>> = {}): ComponentProps<typeof SkinPaintPanel> => ({
     part: 'Dress', color: '#2dd4bf', tool: 'fill', brushSize: 16, tolerance: 8, areas: [], missed: false, canUndo: false, disabled: false,
-    onColor: vi.fn(), onPattern: vi.fn(), onFinish: vi.fn(), onGlow: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
+    onColor: vi.fn(), onPattern: vi.fn(), onFinish: vi.fn(), onGlow: vi.fn(), onClear: vi.fn(), onTool: vi.fn(), onBrushSize: vi.fn(), onTolerance: vi.fn(), onUndo: vi.fn(), onStartOver: vi.fn(), onDone: vi.fn(),
     onEditArea: vi.fn(), onRemoveArea: vi.fn(), onPreviewArea: vi.fn(), ...patch,
   });
   it('explains the chosen tool and shows only its setting', () => {
@@ -79,6 +79,15 @@ describe('SkinPaintPanel', () => {
     expect([...host.querySelectorAll('li')].map((row) => row.textContent)).toEqual(['foundry.skin.paint.colors.red', 'foundry.skin.paint.glows.rainbow']);
     act(() => root.render(<SkinPaintPanel {...props({ glowable: false })} />));
     expect(button('foundry.skin.paint.glows.steady').closest('fieldset')?.disabled).toBe(true);
+  });
+  it('paints see-through and blocks glow while the whole part glows', () => {
+    const value = props({ areas: [{ id: 'r7', seeds: [{ u: 0.5, v: 0.5 }], surface: { opacity: 0.45 } }], glowBlocked: true });
+    act(() => root.render(<SkinPaintPanel {...value} />));
+    act(() => button('foundry.skin.paint.clears.faint').click());
+    expect(value.onClear).toHaveBeenLastCalledWith(0.2);
+    expect(value.onGlow).toHaveBeenLastCalledWith(null);
+    expect(host.querySelector('li')?.textContent).toBe('foundry.skin.paint.clears.half');
+    expect(button('foundry.skin.paint.glows.pulse').closest('fieldset')?.title).toBe('foundry.skin.paint.glowWhole');
   });
   it('greys out shine on parts without a finish', () => {
     act(() => root.render(<SkinPaintPanel {...props({ finishable: false })} />));

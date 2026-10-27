@@ -6,7 +6,7 @@ import { withHeroSkinSource } from './heroPoseModels';
 import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { exportVpkFileName, exportVpkViaDialog } from './foundryExport';
 import { editedPartCount, skinPartLabel, skinTintVector } from '../../../src/lib/skinParts';
-import { hasColorAdjustments, hasRegionEdit, hasRegionLook, ORIGINAL_SKIN_COLOR } from '../../../src/lib/skinColorAdjustments';
+import { hasColorAdjustments, hasRegionEdit, hasRegionLook, ORIGINAL_SKIN_COLOR, regionKind } from '../../../src/lib/skinColorAdjustments';
 import { skinModelForms, type SkinModelForm } from '../../../src/lib/skinModelForms';
 import type { SkinEditInfo, SkinEditSource, SkinEditExport, SkinEditProgress, SkinPart } from '../../../src/types/skinEditor';
 import type { VpkExportResult } from '../../../src/types/foundry';
@@ -194,9 +194,11 @@ export function validateSkinEdits(info: SkinEditInfo, request: SkinEditExport): 
             if (hasRegionLook(region) && !info.parts.some((part) => part.material === edit.material && part.patternable)) throw new Error('This part does not support texture edits.');
             if (region.finish && !info.parts.some((part) => part.material === edit.material && part.finishable)) throw new Error('This part does not support static material finishes.');
             if (region.glow && !info.parts.some((part) => part.material === edit.material && part.glowable)) throw new Error('This part cannot glow.');
+            if (region.surface && !info.parts.some((part) => part.material === edit.material && part.surfaceable)) throw new Error('This part does not support static transparency.');
             if (!request.regionMasks?.[regionMaskKey(edit.material, region.id)]) throw new Error('An edited area has no selection. Reselect it before exporting.');
         }
-        if ((edit.regions ?? []).filter((region) => region.glow).length > 1) throw new Error('A part can only have one glow.');
+        if ((edit.regions ?? []).filter((region) => region.glow).length + Number(!!edit.glow) > 1) throw new Error('A part can only have one glow.');
+        if (!edit.hidden && edit.glow && !info.parts.some((part) => part.material === edit.material && part.glowable)) throw new Error('This part cannot glow.');
         if (edit.hidden && [...materials].some((material) => material !== edit.material && material.toLowerCase().includes(edit.material.toLowerCase()))) {
             throw new Error('This material name also selects another part. Hiding it cannot be exported safely.');
         }
@@ -218,12 +220,13 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
         const visibleRegions = request.edits.flatMap((edit) => edit.hidden ? [] : edit.regions ?? []);
         if ((visibleRegions.some(hasRegionLook) && !await vpkmergeSupportsMask(['trippy-skin']))
             || (visibleRegions.some((region) => region.finish) && !await vpkmergeSupportsMask(['workshop', 'finish']))
-            || (visibleRegions.some((region) => region.glow) && !await vpkmergeSupportsMask(['workshop', 'glow']))) {
+            || (visibleRegions.some((region) => region.glow) && !await vpkmergeSupportsMask(['workshop', 'glow']))
+            || (visibleRegions.some((region) => region.surface) && !await vpkmergeSupportsMask(['workshop', 'surface']))) {
             throw new Error('Editing areas of a part needs a newer vpkmerge than this Grimoire build includes. Update Grimoire, or reset the areas to save.');
         }
         const total = 1 + request.edits.reduce((count, edit) => count + (edit.hidden ? parts.find((part) => part.material === edit.material)?.modelEntries?.length ?? 1
-            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish)
-                + (edit.regions?.filter(hasRegionLook).length ?? 0) + (edit.regions?.filter((region) => region.finish || region.glow).length ?? 0)), 0);
+            : Number(!!edit.pattern || hasColorAdjustments(edit.adjustments) || !!(edit.repaint && edit.tint)) + Number(edit.tint !== null && !edit.repaint) + Number(!!edit.surface) + Number(!!edit.finish) + Number(!!edit.glow)
+                + (edit.regions?.filter((region) => hasRegionEdit(region)).length ?? 0)), 0);
         let completed = 0;
         const advance = () => onProgress?.({ stage: 'build', completed: ++completed, total });
         onProgress?.({ stage: 'build', completed, total });
@@ -305,6 +308,22 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 patternLayers.set(edit.material, layer);
                 advance();
             }
+            // See-through areas next: each carves its opacity into the color alpha the whole-part surface left.
+            for (const edit of request.edits.filter((item) => !item.hidden)) {
+                for (const region of edit.regions?.filter((item) => regionKind(item) === 'clear') ?? []) {
+                    if (!region.surface) continue;
+                    const mask = join(dir, `mask-${layers.length}.png`);
+                    await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
+                    const layer = join(dir, `clear-${layers.length}_dir.vpk`);
+                    const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
+                    await runVpkmerge(['workshop', 'surface', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, '--mode', 'translucent',
+                        '--opacity', String(region.surface.opacity), '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                    await verifyVpkOutput(layer);
+                    layers.push(layer);
+                    patternLayers.set(edit.material, layer);
+                    advance();
+                }
+            }
             // Separate opacity first so finish edits change metalness without changing alpha.
             for (const edit of request.edits.filter((item) => item.finish && !item.hidden)) {
                 if (!edit.finish) continue;
@@ -320,7 +339,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             }
             // Shine areas last: each blends its finish into the textures the previous layers left, inside its mask.
             for (const edit of request.edits.filter((item) => !item.hidden)) {
-                for (const region of edit.regions?.filter((item) => item.finish && !item.glow && !hasRegionLook(item)) ?? []) {
+                for (const region of edit.regions?.filter((item) => regionKind(item) === 'shine') ?? []) {
                     if (!region.finish) continue;
                     const mask = join(dir, `mask-${layers.length}.png`);
                     await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
@@ -336,14 +355,16 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
             }
             // Glow last: it turns on self-illumination with the area as its mask, over every other edit.
             for (const edit of request.edits.filter((item) => !item.hidden)) {
-                const region = edit.regions?.find((item) => item.glow && !hasRegionLook(item));
-                if (!region?.glow) continue;
-                const mask = join(dir, `mask-${layers.length}.png`);
-                await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
+                // A glow area, else the whole part.
+                const region = edit.regions?.find((item) => regionKind(item) === 'glow');
+                const glow = region?.glow ?? edit.glow;
+                if (!glow) continue;
+                const mask = region ? join(dir, `mask-${layers.length}.png`) : null;
+                if (region && mask) await fs.writeFile(mask, Buffer.from(request.regionMasks![regionMaskKey(edit.material, region.id)].split(',')[1], 'base64'));
                 const layer = join(dir, `glow-${layers.length}_dir.vpk`);
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
-                await runVpkmerge(['workshop', 'glow', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, '--mask', mask,
-                    '--color', region.glow.color.slice(1), '--strength', String(GLOW_STRENGTH), '--animation', region.glow.animation, '--encode-vpk', layer], 300000, textureBakeEnv);
+                await runVpkmerge(['workshop', 'glow', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, ...(mask ? ['--mask', mask] : []),
+                    '--color', glow.color.slice(1), '--strength', String(GLOW_STRENGTH), '--animation', glow.animation, '--encode-vpk', layer], 300000, textureBakeEnv);
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);

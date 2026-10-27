@@ -1,16 +1,16 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
-import { ArrowLeft, Brush, Eraser, Layers, Palette, PaintBucket, RotateCcw, SlidersHorizontal, Sparkles, Sun, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeft, Brush, Eraser, Ghost, Layers, Palette, PaintBucket, RotateCcw, SlidersHorizontal, Sparkles, Sun, Trash2, Undo2 } from 'lucide-react';
 import { Button, IconButton, SegmentedControl } from '../common/ui';
 import { Input } from '../common/forms';
 import { AnchoredPopover } from '../common/AnchoredPopover';
 import { SkinColorControls } from './SkinColorControls';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { SkinFinishControls } from './SkinFinishControls';
-import { finishBall, PAINT_FINISHES, sameFinish } from '../../lib/skinFinishes';
+import { CHECKER, CLEAR_PRESETS, finishBall, PAINT_FINISHES, sameFinish } from '../../lib/skinFinishes';
 import { colorFamily, PAINT_SWATCHES } from '../../lib/colorNames';
-import { areaName, isFinishRegion, isGlowRegion, regionKind } from '../../lib/skinRegions';
+import { areaName, isClearRegion, isFinishRegion, isGlowRegion, regionKind } from '../../lib/skinRegions';
 import { useTrippySwatches } from '../../lib/useTrippySwatches';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
@@ -37,7 +37,15 @@ function GlowDot({ glow, className }: { glow: SkinPartGlow; className: string })
  * Each thing in the list is one area underneath, so there is nothing to select first and nothing to
  * name. The hover preview does the teaching; words stay in tooltips and short labels.
  */
-export function SkinPaintPanel({ part, color, pattern = null, finish = null, finishable = true, glow = null, glowable = true, onGlow = () => {}, tool, brushSize, tolerance, areas, missed, notice = null, isStale = () => false, canUndo, disabled,
+/** A checkerboard through a veil: how see-through an area is, without words. */
+function ClearSwatch({ opacity, className }: { opacity: number; className: string }) {
+  return <span className={`${className} relative overflow-hidden`} style={{ background: CHECKER }}>
+    <span className="absolute inset-0 bg-text-primary" style={{ opacity }} />
+  </span>;
+}
+
+export function SkinPaintPanel({ part, color, pattern = null, finish = null, finishable = true, glow = null, glowable = true, glowBlocked = false, onGlow = () => {},
+  clear = null, surfaceable = true, onClear = () => {}, tool, brushSize, tolerance, areas, missed, notice = null, isStale = () => false, canUndo, disabled,
   onColor, onPattern, onFinish = () => {}, onTool, onBrushSize, onTolerance, onUndo, onStartOver, onDone, onEditArea, onRemoveArea, onPreviewArea }: {
   part: string; color: string;
   /** Painting with a pattern instead of a color. */
@@ -49,7 +57,13 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
   /** Painting glow in `color`: one glow per part, so painting it again recolors the part's glow. */
   glow?: SkinPartGlow | null;
   glowable?: boolean;
+  /** The whole part already glows, so a glow area cannot be painted. */
+  glowBlocked?: boolean;
   onGlow?: (glow: SkinPartGlow | null) => void;
+  /** Painting see-through at this opacity. */
+  clear?: number | null;
+  surfaceable?: boolean;
+  onClear?: (opacity: number | null) => void;
   tool: PaintTool; brushSize: number; tolerance: number; areas: SkinPartRegion[];
   /** The part a stroke or click landed on instead, '' when unknown, false when none. */
   missed: string | false;
@@ -74,10 +88,12 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
   ];
   const painting = tool !== 'eraser';
   // The area the current color, pattern or shine paints into, if it is already on the part.
-  const current = painting ? areas.find((area) => glow ? isGlowRegion(area) : finish ? isFinishRegion(area) && sameFinish(area.finish, finish)
+  const current = painting ? areas.find((area) => glow ? isGlowRegion(area) : clear !== null ? isClearRegion(area) && area.surface?.opacity === clear
+    : finish ? isFinishRegion(area) && sameFinish(area.finish, finish)
     : pattern ? area.pattern?.style === pattern && !area.paint : area.paint?.toLowerCase() === color.toLowerCase() && !area.pattern) : undefined;
-  const pick = (next: { color: string } | { pattern: TrippyStyleName } | { finish: SkinPartFinish } | { glow: SkinPartGlow }) => {
+  const pick = (next: { color: string } | { pattern: TrippyStyleName } | { finish: SkinPartFinish } | { glow: SkinPartGlow } | { clear: number }) => {
     onPattern('pattern' in next ? next.pattern : null);
+    onClear('clear' in next ? next.clear : null);
     onFinish('finish' in next ? { roughness: next.finish.roughness, metalness: next.finish.metalness } : null);
     onGlow('glow' in next ? next.glow : null);
     if ('color' in next) onColor(next.color);
@@ -88,20 +104,22 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
     if (area.pattern) pick({ pattern: area.pattern.style });
     else if (area.paint) pick({ color: area.paint });
     else if (area.glow) pick({ glow: area.glow });
+    else if (area.surface) pick({ clear: area.surface.opacity });
     else if (area.finish) pick({ finish: area.finish });
     else onEditArea(area.id);
   };
-  const custom = !pattern && !finish && !glow && !SWATCHES.includes(color.toLowerCase());
+  const custom = !pattern && !finish && !glow && clear === null && !SWATCHES.includes(color.toLowerCase());
   const chip = 'shrink-0 overflow-hidden rounded-sm border border-hl/20 outline-offset-2 aria-pressed:outline aria-pressed:outline-2 aria-pressed:outline-accent';
   // The look of an area or ink, without the button around it.
-  const look = (area: Pick<SkinPartRegion, 'paint' | 'pattern' | 'finish' | 'glow'>, className: string) => area.pattern
+  const look = (area: Pick<SkinPartRegion, 'paint' | 'pattern' | 'finish' | 'glow' | 'surface'>, className: string) => area.pattern
     ? <span className={`${className} overflow-hidden`}><TrippySpriteSwatch sprite={sprites[area.pattern.style] ?? null} className="h-full w-full" /></span>
     : area.paint ? <span className={className} style={{ backgroundColor: area.paint }} />
     : area.glow ? <GlowDot glow={area.glow} className={className} />
+    : area.surface ? <ClearSwatch opacity={area.surface.opacity} className={className} />
     : area.finish ? <span className={`${className} rounded-full`} style={{ background: finishBall(area.finish) }} />
     : <span className={`${className} border-dashed`} />;
   // Ordered like the model shows them: paint first, then shine and glow over it.
-  const order = { look: 0, shine: 1, glow: 2 };
+  const order = { look: 0, shine: 1, glow: 2, clear: 3 };
   const listed = [...areas].sort((a, b) => order[regionKind(a)] - order[regionKind(b)]);
   return <div className="space-y-3">
     <SegmentedControl fill label={t('foundry.skin.paint.tool')} value={tool} onChange={onTool} options={tools.map(({ value, icon: Icon, label, hint }) => ({
@@ -113,7 +131,7 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
       {/* Fixed grids: switching between colors, patterns, shine and the eraser never moves anything. */}
       <div className="flex justify-between gap-1">
         {SWATCHES.map((value) => <button key={value} type="button" aria-label={t(`foundry.skin.paint.colors.${colorFamily(value)}`)} title={t(`foundry.skin.paint.colors.${colorFamily(value)}`)}
-          aria-pressed={painting && !pattern && !finish && !glow && color.toLowerCase() === value} onClick={() => pick({ color: value })}
+          aria-pressed={painting && !pattern && !finish && !glow && clear === null && color.toLowerCase() === value} onClick={() => pick({ color: value })}
           style={{ backgroundColor: value }} className={`h-5 w-5 ${chip}`} />)}
         <button ref={customRef} type="button" aria-label={t('foundry.skin.paint.customColor')} title={t('foundry.skin.paint.customColor')}
           aria-pressed={painting && custom} aria-expanded={customOpen} onClick={() => setCustomOpen(!customOpen)}
@@ -147,7 +165,8 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
       </div>
     </fieldset>
     {/* Glow takes the color picked above. A material has one glow color, so the part has one glow. */}
-    <fieldset disabled={disabled || !glowable} title={glowable ? undefined : t('foundry.skin.paint.glowUnsupported')} className="disabled:opacity-40">
+    <fieldset disabled={disabled || !glowable || glowBlocked} title={!glowable ? t('foundry.skin.paint.glowUnsupported') : glowBlocked ? t('foundry.skin.paint.glowWhole') : undefined}
+      className="disabled:opacity-40">
       <legend className="mb-1.5 flex items-center gap-1.5 text-xs text-text-secondary"><Sun className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.paint.glow')}
         <span className="text-text-tertiary">{t('foundry.skin.paint.glowColor')}</span></legend>
       <div className="grid grid-cols-3 gap-1">
@@ -159,6 +178,16 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
             <span className="truncate">{t(`foundry.skin.paint.glows.${animation}`)}</span>
           </button>;
         })}
+      </div>
+    </fieldset>
+    <fieldset disabled={disabled || !surfaceable} title={surfaceable ? undefined : t('foundry.skin.surfaceUnsupported')} className="disabled:opacity-40">
+      <legend className="mb-1.5 flex items-center gap-1.5 text-xs text-text-secondary"><Ghost className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.paint.seeThrough')}</legend>
+      <div className="grid grid-cols-3 gap-1">
+        {CLEAR_PRESETS.map(({ name, opacity }) => <button key={name} type="button" aria-pressed={painting && clear === opacity} onClick={() => pick({ clear: opacity })}
+          className="flex min-w-0 items-center gap-1.5 rounded-sm border border-transparent px-1 py-1 text-xs text-text-secondary hover:bg-hl/5 hover:text-text-primary aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-text-primary">
+          <ClearSwatch opacity={opacity} className="h-4 w-4 shrink-0 rounded-sm border border-hl/20" />
+          <span className="truncate">{t(`foundry.skin.paint.clears.${name}`)}</span>
+        </button>)}
       </div>
     </fieldset>
     <label className="flex items-center gap-2 text-xs text-text-secondary" title={tool === 'fill' ? t('foundry.skin.paint.fillRangeHint') : undefined}>
@@ -216,7 +245,13 @@ export function SkinRegionEditor({ region, stale = false, color, tool, disabled,
       <IconButton size="sm" icon={Trash2} disabled={disabled} label={t('foundry.skin.region.delete', { area: label })} onClick={onDelete} />
     </div>
     {stale && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.region.staleHint')}</p>}
-    {isGlowRegion(region) && region.glow ? <div className="space-y-3 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
+    {isClearRegion(region) && region.surface ? <label className="block space-y-2 text-xs text-text-secondary">
+      <span className="flex items-center justify-between gap-2"><span>{t('foundry.skin.opacity')}</span>
+        <span className="tabular-nums text-text-primary">{Math.round(region.surface.opacity * 100)}%</span></span>
+      <input type="range" min="0" max="1" step="0.01" aria-label={t('foundry.skin.opacity')} value={region.surface.opacity} disabled={disabled}
+        className="h-7 w-full accent-accent" onChange={(event) => onChange({ surface: { opacity: Number(event.target.value) } })} />
+    </label>
+    : isGlowRegion(region) && region.glow ? <div className="space-y-3 [&_.react-colorful__saturation]:rounded-t-sm [&_.react-colorful__hue]:rounded-b-sm">
       <SegmentedControl fill value={region.glow.animation} onChange={(animation) => onChange({ glow: { ...region.glow!, animation } })}
         options={GLOWS.map((animation) => ({ value: animation, label: t(`foundry.skin.paint.glows.${animation}`) }))} />
       {region.glow.animation !== 'rainbow' && <HexColorPicker color={region.glow.color} onChange={(value) => onChange({ glow: { ...region.glow!, color: value } })} style={{ width: '100%', height: 120 }} />}

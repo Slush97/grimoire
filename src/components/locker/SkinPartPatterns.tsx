@@ -3,8 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
 import { materialBasename } from '../../lib/skinParts';
-import { isSkinSurface } from '../../lib/skinPartPreview';
-import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isFinishRegion, isGlowRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
+import { applySkinTransparency, isSkinSurface } from '../../lib/skinPartPreview';
+import { adjustSkinPixels, hasColorAdjustments, hasRegionLook, isClearRegion, isFinishRegion, isGlowRegion, meanLuminance, ORIGINAL_SKIN_COLOR, repaintSkinPixels } from '../../lib/skinColorAdjustments';
 import { blendRegionPixels } from '../../lib/skinRegions';
 import { regionMask } from '../../lib/skinRegionScene';
 import type { SkinColorAdjustments, SkinPartEdit, SkinPartFinish, SkinPartGlow, SkinPartPattern, SkinPartRegion, SkinRegionSeed } from '../../types/skinEditor';
@@ -249,12 +249,14 @@ const GLOW_PREVIEW = 2.5;
  * A glow area: the area mask as the part's emissive map, in the glow color, pulsing or cycling the
  * same way the exported dynamic expressions do.
  */
-function PartGlow({ scene, material, region, onApplied }: { scene: THREE.Object3D; material: string; region: SkinPartRegion & { glow: SkinPartGlow }; onApplied?: () => void }) {
-  const seedKey = JSON.stringify(region.seeds);
-  const { color, animation } = region.glow;
+function PartGlow({ scene, material, region, glow, onApplied }: { scene: THREE.Object3D; material: string; region: SkinPartRegion | null; glow: SkinPartGlow; onApplied?: () => void }) {
+  // No area: the whole part glows.
+  const seedKey = region ? JSON.stringify(region.seeds) : '';
+  const regionId = region?.id ?? '';
+  const { color, animation } = glow;
   const glowing = useRef<GlowMaterial[]>([]);
   useEffect(() => {
-    const seeds: SkinRegionSeed[] = JSON.parse(seedKey);
+    const seeds: SkinRegionSeed[] | null = seedKey ? JSON.parse(seedKey) : null;
     const restore: Array<() => void> = [];
     const seen = new Set<THREE.Material>();
     scene.traverse((object) => {
@@ -266,10 +268,10 @@ function PartGlow({ scene, material, region, onApplied }: { scene: THREE.Object3
         const sized = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement;
         const scale = sized ? Math.min(1, 1024 / Math.max(size.width, size.height)) : 0;
         const width = sized ? Math.max(1, Math.round(size.width * scale)) : 512, height = sized ? Math.max(1, Math.round(size.height * scale)) : 512;
-        const mask = regionMask(scene, material, seeds, width, height, 2, region.id);
-        if (!mask) continue;
-        const data = new Uint8Array(width * height * 4);
-        for (let index = 0; index < mask.length; index++) { data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = mask[index]; data[index * 4 + 3] = 255; }
+        const mask = seeds ? regionMask(scene, material, seeds, width, height, 2, regionId) : null;
+        if (seeds && !mask) continue;
+        const data = new Uint8Array(width * height * 4).fill(255);
+        if (mask) for (let index = 0; index < mask.length; index++) data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = mask[index];
         const texture = new THREE.DataTexture(data, width, height);
         const map = mat.map;
         texture.flipY = map?.flipY ?? false;
@@ -289,7 +291,7 @@ function PartGlow({ scene, material, region, onApplied }: { scene: THREE.Object3
     });
     onApplied?.();
     return () => { glowing.current = []; restore.forEach((reset) => reset()); };
-  }, [scene, material, region.id, seedKey, color, onApplied]);
+  }, [scene, material, regionId, seedKey, color, onApplied]);
   useFrame(({ clock }) => {
     if (animation === 'steady') return;
     const time = clock.getElapsedTime();
@@ -306,15 +308,66 @@ function PartGlow({ scene, material, region, onApplied }: { scene: THREE.Object3
   return null;
 }
 
+/**
+ * See-through areas: an alpha map that is the area's opacity inside each area and solid elsewhere,
+ * times the whole-part opacity, like the exported color alpha and opacity scale.
+ */
+function PartClear({ scene, material, whole, regions, onApplied }: { scene: THREE.Object3D; material: string; whole?: number; regions: SkinPartRegion[]; onApplied?: () => void }) {
+  const regionKey = JSON.stringify(regions);
+  useEffect(() => {
+    const areas: SkinPartRegion[] = JSON.parse(regionKey);
+    const restore: Array<() => void> = [];
+    const seen = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
+      for (const mat of (Array.isArray(object.material) ? object.material : [object.material]) as Array<THREE.Material & Pick<THREE.MeshStandardMaterial, 'alphaMap' | 'map'>>) {
+        if (seen.has(mat) || materialBasename(mat.name) !== materialBasename(material) || !('alphaMap' in mat)) continue;
+        seen.add(mat);
+        const size: unknown = mat.map?.image;
+        const sized = size instanceof HTMLImageElement || size instanceof ImageBitmap || size instanceof HTMLCanvasElement;
+        const scale = sized ? Math.min(1, 1024 / Math.max(size.width, size.height)) : 0;
+        const width = sized ? Math.max(1, Math.round(size.width * scale)) : 512, height = sized ? Math.max(1, Math.round(size.height * scale)) : 512;
+        const alpha = new Float32Array(width * height).fill(255);
+        for (const area of areas) {
+          if (!area.surface) continue;
+          const mask = regionMask(scene, material, area.seeds, width, height, 2, area.id);
+          if (!mask) continue;
+          for (let index = 0; index < mask.length; index++) alpha[index] *= 1 + (area.surface.opacity - 1) * mask[index] / 255;
+        }
+        const data = new Uint8Array(width * height * 4);
+        for (let index = 0; index < alpha.length; index++) { data[index * 4 + 1] = alpha[index]; data[index * 4 + 3] = 255; }
+        const texture = new THREE.DataTexture(data, width, height);
+        const map = mat.map;
+        texture.flipY = map?.flipY ?? false;
+        texture.wrapS = map?.wrapS ?? THREE.RepeatWrapping; texture.wrapT = map?.wrapT ?? THREE.RepeatWrapping;
+        if (map) { texture.repeat.copy(map.repeat); texture.offset.copy(map.offset); texture.rotation = map.rotation; texture.center.copy(map.center); }
+        texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.generateMipmaps = true;
+        texture.needsUpdate = true;
+        const reset = applySkinTransparency(mat, whole ?? 1);
+        mat.alphaMap = texture;
+        mat.needsUpdate = true;
+        restore.push(() => { mat.alphaMap = null; reset(); texture.dispose(); });
+      }
+    });
+    onApplied?.();
+    return () => restore.forEach((reset) => reset());
+  }, [scene, material, regionKey, whole, onApplied]);
+  return null;
+}
+
 export function SkinPartPatterns({ scene, edits, onError, onPending, onApplied }: { scene: THREE.Object3D; edits: SkinPartEdit[]; onError: () => void;
   onPending?: (material: string, pending: boolean) => void; onApplied?: () => void }) {
   return edits.map((edit) => {
     if (edit.hidden) return null;
+    // Keyed by part so each part's effects keep their state across edits.
     const textured = (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments) || (edit.repaint && edit.tint) || edit.regions?.some(hasRegionLook);
     const shine = edit.regions?.filter(isFinishRegion) ?? [];
     const glow = edit.regions?.find(isGlowRegion);
+    const clear = edit.regions?.filter(isClearRegion) ?? [];
     return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} onApplied={onApplied} /> : null,
       shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} onApplied={onApplied} /> : null,
-      glow?.glow ? <PartGlow key={`${edit.material}:glow`} scene={scene} material={edit.material} region={glow as SkinPartRegion & { glow: SkinPartGlow }} onApplied={onApplied} /> : null];
+      glow?.glow || edit.glow ? <PartGlow key={`${edit.material}:glow`} scene={scene} material={edit.material} region={glow?.glow ? glow : null}
+        glow={(glow?.glow ?? edit.glow)!} onApplied={onApplied} /> : null,
+      clear.length ? <PartClear key={`${edit.material}:clear`} scene={scene} material={edit.material} whole={edit.surface?.opacity} regions={clear} onApplied={onApplied} /> : null];
   });
 }

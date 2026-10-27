@@ -37,6 +37,11 @@ const adjustmentsSchema = z.object({
 /** Numbers in one stroke seed's path: 255 more dabs after its own. */
 export const STROKE_PATH_LENGTH = 765;
 
+const glowSchema = z.object({
+    color: z.string().regex(/^#[a-f0-9]{6}$/i),
+    animation: z.enum(['steady', 'pulse', 'rainbow']),
+}).strict();
+
 export const skinPartRegionSchema = z.object({
     id: z.string().regex(/^[a-z0-9]{1,16}$/),
     name: z.string().max(60).optional(),
@@ -55,10 +60,8 @@ export const skinPartRegionSchema = z.object({
         roughness: z.number().finite().min(0).max(1),
         metalness: z.number().finite().min(0).max(1),
     }).strict().optional(),
-    glow: z.object({
-        color: z.string().regex(/^#[a-f0-9]{6}$/i),
-        animation: z.enum(['steady', 'pulse', 'rainbow']),
-    }).strict().optional(),
+    glow: glowSchema.optional(),
+    surface: z.object({ opacity: z.number().finite().min(0).max(1) }).strict().optional(),
 }).strict();
 
 export const regionMaskSchema = z.string().max(4_000_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/);
@@ -85,6 +88,7 @@ export const skinEditExportSchema = skinEditSourceSchema.extend({
             mode: z.enum(['translucent', 'ghost']),
             opacity: z.number().finite().min(0).max(1),
         }).strict().optional(),
+        glow: glowSchema.optional(),
         regions: z.array(skinPartRegionSchema).max(16).optional(),
     }).strict()).max(256),
     regionMasks: z.record(regionMaskSchema).optional(),

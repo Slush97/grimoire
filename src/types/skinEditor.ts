@@ -43,6 +43,8 @@ export interface SkinPartEdit {
   repaint?: boolean;
   finish?: SkinPartFinish;
   surface?: SkinPartSurface;
+  /** Glow over the whole part. A part has one glow, so this and a painted glow area never coexist. */
+  glow?: SkinPartGlow;
   /** Smaller areas of this part's color texture, each with its own texture edit. Applied in order over the whole-part edit. */
   regions?: SkinPartRegion[];
 }
@@ -81,6 +83,8 @@ export interface SkinPartRegion {
   finish?: SkinPartFinish;
   /** Glow painted onto the area. A material has one glow color, so a part has at most one glow area. */
   glow?: SkinPartGlow;
+  /** See-through painted onto the area: its opacity there, 0 (gone) to 1 (solid). */
+  surface?: { opacity: number };
 }
 
 export type SkinGlowAnimation = 'steady' | 'pulse' | 'rainbow';

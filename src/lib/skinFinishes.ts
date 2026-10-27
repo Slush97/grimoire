@@ -20,5 +20,15 @@ export function finishBall(finish: SkinPartFinish): string {
     : 'radial-gradient(circle at 32% 28%, var(--color-text-primary), var(--color-text-secondary) 35%, var(--color-bg-tertiary) 78%, var(--color-text-tertiary))';
 }
 
+/** See-through presets offered as paint: how solid the area stays. */
+export const CLEAR_PRESETS = [
+  { name: 'hazy', opacity: 0.7 },
+  { name: 'half', opacity: 0.45 },
+  { name: 'faint', opacity: 0.2 },
+] as const;
+
+/** A checkerboard seen through a veil of `opacity`, so the swatch reads as see-through without words. */
+export const CHECKER = 'repeating-conic-gradient(var(--color-text-tertiary) 0 25%, var(--color-bg-primary) 0 50%) 0 0 / 8px 8px';
+
 export const sameFinish = (a: SkinPartFinish | null | undefined, b: SkinPartFinish | null | undefined) =>
   !!a && !!b && a.roughness === b.roughness && a.metalness === b.metalness;
