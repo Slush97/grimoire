@@ -180,7 +180,7 @@ describe('Door Stuck skin recovery', () => {
     await historyKey();
     expect(previewEdits()).toHaveLength(2);
     await historyKey();
-    expect(previewEdits()).toEqual([{ material: 'body.vmat', hidden: false, tint: '#ef4444', pattern: null }]);
+    expect(previewEdits()).toEqual([{ material: 'body.vmat', hidden: false, tint: '#ef4444', pattern: null, repaint: true }]);
   });
   it('locks history during export and compares undo/redo with the most recently saved edits', async () => {
     const dirty = vi.fn();
