@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendRegionPixels, buildUvIslands, floodFillTexels, islandsFingerprint, rasterizeBrush, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
+import { blendRegionPixels, buildUvIslands, floodFillTexels, islandsFingerprint, rasterizeBrush, rasterizeIslandIds, texelsToLab, islandsAt, rasterizeRegion, rasterizeSeeds, regionOutline, resolveRegion, type UvGeometry } from './skinRegions';
 import { hasSkinPartEdit, keepSkinPartEdit } from './skinColorAdjustments';
 
 const geometry: UvGeometry = {
@@ -39,7 +39,7 @@ describe('UV islands', () => {
     expect(islandsAt(islands, 0.2, 0.5)).toHaveLength(1);
   });
   it('fingerprints the texture layout, not the triangle order of anything else', () => {
-    const moved: UvGeometry = { ...geometry, uv: geometry.uv.map((value, index) => index === 2 ? 0.55 : value) };
+    const moved: UvGeometry = { ...geometry, uv: Array.from(geometry.uv, (value, index) => index === 2 ? 0.55 : value) };
     expect(islandsFingerprint(buildUvIslands([geometry]))).toBe(islandsFingerprint(buildUvIslands([geometry])));
     expect(islandsFingerprint(buildUvIslands([geometry]))).not.toBe(islandsFingerprint(buildUvIslands([moved])));
   });
@@ -70,6 +70,14 @@ describe('region masks', () => {
     expect(edge[12]).toBe(0);
     expect(edge[6]).toBe(255);
     expect(edge[0]).toBe(0);
+  });
+  it('draws no outline along a UV seam', () => {
+    // Columns 0-1 are the left island and 2-3 the right one; select the left island only.
+    const islands = buildUvIslands([geometry]);
+    const mask = Uint8Array.from({ length: 16 }, (_, index) => index % 4 < 2 ? 255 : 0);
+    // Column 1 meets the right island across the seam: an edge in texture space, not on the model.
+    expect(regionOutline(mask, 4, 4, 1)[5]).toBe(255);
+    expect(regionOutline(mask, 4, 4, 1, rasterizeIslandIds(islands, 4, 4))[5]).toBe(0);
   });
   it('blends color through the mask and keeps the base alpha', () => {
     const base = Uint8Array.from([100, 100, 100, 7, 100, 100, 100, 9]);

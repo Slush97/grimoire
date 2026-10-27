@@ -139,7 +139,7 @@ export function resolveRegion(islands: UvIslands, seeds: SkinRegionSeed[]): Set<
   return selected;
 }
 
-function fillTriangle(target: Uint8Array, width: number, height: number, t: ArrayLike<number>) {
+function fillTriangle(target: Uint8Array | Int32Array, width: number, height: number, t: ArrayLike<number>, value = 255) {
   const x0 = t[0] * width, y0 = t[1] * height, x1 = t[2] * width, y1 = t[3] * height, x2 = t[4] * width, y2 = t[5] * height;
   const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2))), maxY = Math.min(height - 1, Math.ceil(Math.max(y0, y1, y2)));
   const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxX = Math.min(width - 1, Math.ceil(Math.max(x0, x1, x2)));
@@ -154,7 +154,7 @@ function fillTriangle(target: Uint8Array, width: number, height: number, t: Arra
       const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
       if (w0 < 0) continue;
       const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
-      if (w1 >= 0 && w0 + w1 <= 1) target[row + x] = 255;
+      if (w1 >= 0 && w0 + w1 <= 1) target[row + x] = value;
     }
   }
 }
@@ -191,6 +191,30 @@ function cachedRaster(islands: UvIslands, key: string, width: number, height: nu
     if (oldest !== undefined) cache.delete(oldest);
   }
   return raster;
+}
+
+const idCache = new WeakMap<UvIslands, Map<string, Int32Array>>();
+
+/** Which island each texel belongs to, plus one; 0 where no triangle draws. Shared: do not modify. */
+export function rasterizeIslandIds(islands: UvIslands, width: number, height: number): Int32Array {
+  let cache = idCache.get(islands);
+  if (!cache) { cache = new Map(); idCache.set(islands, cache); }
+  const key = `${width}x${height}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const ids = new Int32Array(width * height);
+  const shifted = new Float32Array(6);
+  for (let triangle = 0; triangle < islands.island.length; triangle++) {
+    const t = islands.triangles.subarray(triangle * 6, triangle * 6 + 6);
+    const spansU = Math.min(t[0], t[2], t[4]) < 0 || Math.max(t[0], t[2], t[4]) > 1;
+    const spansV = Math.min(t[1], t[3], t[5]) < 0 || Math.max(t[1], t[3], t[5]) > 1;
+    for (const du of spansU ? [-1, 0, 1] : [0]) for (const dv of spansV ? [-1, 0, 1] : [0]) {
+      for (let corner = 0; corner < 3; corner++) { shifted[corner * 2] = t[corner * 2] + du; shifted[corner * 2 + 1] = t[corner * 2 + 1] + dv; }
+      fillTriangle(ids, width, height, shifted, islands.island[triangle] + 1);
+    }
+  }
+  cache.set(key, ids);
+  return ids;
 }
 
 /** Every texel some triangle of the material covers. Selections never grow outside it. Shared: do not modify. */
@@ -366,13 +390,19 @@ export function rasterizeRegion(islands: UvIslands, selected: Set<number>, width
   return padding && selected.size ? padMask(mask, rasterizeUsed(islands, width, height), width, height, padding) : mask;
 }
 
-/** Mask texels on the boundary of the selection, for an outline that reads at any fill strength. */
-export function regionOutline(mask: Uint8Array, width: number, height: number, thickness = 1): Uint8Array {
+/**
+ * Mask texels on the boundary of the selection, for an outline that reads at any fill strength. With `ids`
+ * (from `rasterizeIslandIds`), a neighbour in another island is across a UV seam, not outside the
+ * selection on the model, so it draws no edge: a brush stroke over many pieces outlines only its own rim.
+ */
+export function regionOutline(mask: Uint8Array, width: number, height: number, thickness = 1, ids?: Int32Array): Uint8Array {
   let edge = new Uint8Array(mask.length);
+  const outside = (index: number, neighbour: number) => !mask[neighbour] && (!ids || !ids[neighbour] || ids[neighbour] === ids[index]);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const index = y * width + x;
     if (!mask[index]) continue;
-    if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || !mask[index - 1] || !mask[index + 1] || !mask[index - width] || !mask[index + width]) edge[index] = 255;
+    if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || outside(index, index - 1) || outside(index, index + 1)
+      || outside(index, index - width) || outside(index, index + width)) edge[index] = 255;
   }
   for (let pass = 1; pass < thickness; pass++) {
     const next = edge.slice();

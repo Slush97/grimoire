@@ -178,7 +178,8 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const [pickBy, setPickBy] = useFoundryDraft('skin:regionPickBy', z.enum(['piece', 'color', 'brush']), 'color');
   const [brushSize, setBrushSize] = useFoundryDraft('skin:regionBrushSize', z.number().int().min(2).max(120), 16);
   const [pickTolerance, setPickTolerance] = useFoundryDraft('skin:regionColorRange', z.number().int().min(1).max(40), DEFAULT_COLOR_RANGE);
-  const [missedPick, setMissedPick] = useState(false);
+  // The part a selecting click landed on instead of the selected one: its name, '' if unknown, false if none.
+  const [missedPick, setMissedPick] = useState<string | false>(false);
   const [previewRegion, setPreviewRegion] = useState<string | null>(null);
   const [regionTool, setRegionTool] = useState<'color' | 'pattern'>('color');
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
@@ -249,7 +250,9 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   const regions = [...(selectedEdit?.regions ?? []).filter((region) => hasRegionSelection(region) || hasRegionEdit(region) || region.id === selectingRegion?.id),
     ...(selectingRegion && !selectedEdit?.regions?.some((region) => region.id === selectingRegion.id) ? [selectingRegion] : [])];
   const activeRegion = selected ? regions.find((region) => region.id === regionTargets[selected.material]) ?? null : null;
-  const highlightRegion = !selectingRegion && selected ? regions.find((region) => region.id === previewRegion) ?? null : null;
+  // Outline a hovered area, or the open one until it changes something, so the player can see what it covers.
+  const highlightRegion = !selectingRegion && selected ? regions.find((region) => region.id === previewRegion)
+    ?? (activeRegion && !hasRegionEdit(activeRegion) ? activeRegion : null) : null;
   const startSelecting = (material: string, region: string, fresh = false) => {
     setRegionTargets((current) => ({ ...current, [material]: region }));
     setSelecting({ material, region, fresh }); setSelectMode('add'); setMissedPick(false); setHoveredMaterial(null);
@@ -271,7 +274,11 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   };
   const pickRegion = (hit: ViewerPartHit) => {
     if (!selecting || !selectingRegion) return;
-    if (!hit.uv || materialBasename(hit.material) !== materialBasename(selecting.material)) { setMissedPick(true); return; }
+    if (!hit.uv || materialBasename(hit.material) !== materialBasename(selecting.material)) {
+      const other = formParts.find((part) => materialBasename(part.material) === materialBasename(hit.material));
+      setMissedPick(other ? nameOf(other) : '');
+      return;
+    }
     setMissedPick(false);
     if (selectingRegion.seeds.length >= 4096) return;
     const round = (value: number) => Math.round(value * 1e5) / 1e5;
@@ -290,6 +297,18 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     setSelecting(null); setMissedPick(false);
   };
   /** Bake each edited area's export mask from the shown model, or reuse the one baked when its form was left. */
+  // Escape finishes selecting, like Done, unless it is closing something inside a field.
+  const escapeSelecting = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [role="dialog"]'))) return;
+    event.preventDefault();
+    finishSelecting();
+  });
+  const isSelecting = !!selectingRegion;
+  useEffect(() => {
+    if (!isSelecting) return;
+    window.addEventListener('keydown', escapeSelecting);
+    return () => window.removeEventListener('keydown', escapeSelecting);
+  }, [isSelecting]);
   const bakeRegionMasks = async (exported: SkinPartEdit[], required = true) => {
     const masks: Record<string, string> = {};
     for (const edit of exported.filter((item) => !item.hidden)) {
@@ -466,7 +485,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
               onClick={() => { finishSelecting(); update(selected.material, { hidden: false, tint: null, pattern: null, adjustments: undefined, colorize: undefined, repaint: undefined, finish: undefined, surface: undefined, regions: undefined }); }} />
           </div>
           {selectedEdit?.hidden && <p className="text-xs text-text-secondary">{t('foundry.skin.hidden')}</p>}
-          {selected.patternable && !ambiguous(selected) && <SkinRegionTargets regions={regions} active={activeRegion?.id ?? null}
+          {selected.patternable && !ambiguous(selected) && <SkinRegionTargets part={nameOf(selected)} regions={regions} active={activeRegion?.id ?? null}
             disabled={exporting || !!selectedEdit?.hidden || !!selectingRegion}
             onSelect={(id) => setRegionTargets((current) => ({ ...current, [selected.material]: id }))} onAdd={addRegion} onPreview={setPreviewRegion} />}
           {selectingRegion ? <SkinRegionSelecting part={nameOf(selected)} mode={selectMode} by={pickBy} tolerance={pickTolerance} brushSize={brushSize} onBrushSize={setBrushSize}

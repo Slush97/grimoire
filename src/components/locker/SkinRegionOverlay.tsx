@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { rasterizeBrush, regionOutline, rasterizeSeed } from '../../lib/skinRegions';
+import { rasterizeBrush, rasterizeIslandIds, regionOutline, rasterizeSeed } from '../../lib/skinRegions';
 import { materialIslands, materialLab, overlayRegion, regionMask } from '../../lib/skinRegionScene';
 import { materialBasename } from '../../lib/skinParts';
 import { attachViewerHover, viewerPartAt, type ViewerPartHit } from '../../lib/viewerPartPicking';
@@ -118,7 +118,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker }: {
     const alpha = texture.current;
     if (!islands || !alpha) return;
     const selected = regionMask(scene, material, seeds, SIZE, SIZE, 0) ?? new Uint8Array(SIZE * SIZE);
-    const edge = regionOutline(selected, SIZE, SIZE, 2);
+    const edge = regionOutline(selected, SIZE, SIZE, 2, rasterizeIslandIds(islands, SIZE, SIZE));
     // The stroke only grows while drawing, so add just its new dabs.
     const live = strokeMask.current;
     if (!stroke.length || stroke.length < live.dabs) { if (live.dabs) live.mask.fill(0); live.dabs = 0; }

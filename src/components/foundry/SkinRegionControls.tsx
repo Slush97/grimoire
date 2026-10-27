@@ -9,11 +9,16 @@ import { regionLabel } from '../../lib/skinRegions';
 import type { SkinPartRegion } from '../../types/skinEditor';
 
 /** The edit target: the whole part or one of its saved areas. */
-export function SkinRegionTargets({ regions, active, disabled, onSelect, onAdd, onPreview }: {
-  regions: SkinPartRegion[]; active: string | null; disabled: boolean;
+export function SkinRegionTargets({ part, regions, active, disabled, onSelect, onAdd, onPreview }: {
+  part: string; regions: SkinPartRegion[]; active: string | null; disabled: boolean;
   onSelect: (region: string | null) => void; onAdd: () => void; onPreview: (region: string | null) => void;
 }) {
   const { t } = useTranslation();
+  // Until a part has an area, say what one is for: nothing else on screen does.
+  if (!regions.length) return <div className="space-y-2 rounded-sm border border-border bg-bg-tertiary p-2">
+    <p className="text-xs text-text-secondary">{t('foundry.skin.region.intro', { part })}</p>
+    <Button size="sm" variant="secondary" icon={SquareDashedMousePointer} disabled={disabled} onClick={onAdd}>{t('foundry.skin.region.add')}</Button>
+  </div>;
   const chip = (selected: boolean) => `flex min-h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm border px-2 text-xs focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
     selected ? 'border-accent bg-accent/10 text-text-primary' : 'border-border text-text-secondary hover:bg-hl/5'}`;
   return <div role="group" aria-label={t('foundry.skin.region.target')} className="flex flex-wrap items-center gap-1">
@@ -27,13 +32,15 @@ export function SkinRegionTargets({ regions, active, disabled, onSelect, onAdd, 
       <span className="truncate">{regionLabel(region, t)}</span>
       {!hasRegionEdit(region) && <span className="sr-only">{t('foundry.skin.region.unedited')}</span>}
     </button>)}
-    <Button size="sm" variant="ghost" icon={Plus} disabled={disabled || regions.length >= 16} onClick={onAdd}>{t('foundry.skin.region.add')}</Button>
+    <Button size="sm" variant="ghost" icon={Plus} disabled={disabled || regions.length >= 16} onClick={onAdd}>{t('foundry.skin.region.addAnother')}</Button>
   </div>;
 }
 
 /** Replaces the appearance controls while clicks on the model change the selection. */
 export function SkinRegionSelecting({ part, mode, by, tolerance, brushSize, empty, missed, onMode, onBy, onTolerance, onBrushSize, onClear, onDone }: {
-  part: string; mode: 'add' | 'remove'; by: 'piece' | 'color' | 'brush'; tolerance: number; brushSize: number; empty: boolean; missed: boolean;
+  part: string; mode: 'add' | 'remove'; by: 'piece' | 'color' | 'brush'; tolerance: number; brushSize: number; empty: boolean;
+  /** The part a click landed on instead, or '' when it was not a known part. */
+  missed: string | false;
   onMode: (mode: 'add' | 'remove') => void; onBy: (by: 'piece' | 'color' | 'brush') => void; onTolerance: (tolerance: number) => void;
   onBrushSize: (size: number) => void;
   onClear: () => void; onDone: () => void;
@@ -42,35 +49,38 @@ export function SkinRegionSelecting({ part, mode, by, tolerance, brushSize, empt
   return <div className="space-y-3">
     <div className="space-y-1">
       <h5 className="text-sm font-semibold text-text-primary">{t('foundry.skin.region.selectingTitle', { part })}</h5>
-      <p className="text-xs text-text-secondary">{t(by === 'brush' ? 'foundry.skin.region.brushHint' : 'foundry.skin.region.selectingHint')}</p>
     </div>
     <SegmentedControl fill label={t('foundry.skin.region.selectBy')} value={by} onChange={onBy} options={[
-      { value: 'piece', label: t('foundry.skin.region.byPiece'), title: t('foundry.skin.region.byPieceHint') },
-      { value: 'color', label: t('foundry.skin.region.byColor'), title: t('foundry.skin.region.byColorHint') },
-      { value: 'brush', label: t('foundry.skin.region.byBrush'), title: t('foundry.skin.region.byBrushHint') },
+      { value: 'color', label: t('foundry.skin.region.byColor') },
+      { value: 'piece', label: t('foundry.skin.region.byPiece') },
+      { value: 'brush', label: t('foundry.skin.region.byBrush') },
     ]} />
+    <p className="text-xs text-text-secondary">{by === 'brush' ? t('foundry.skin.region.brushHint', { part }) : by === 'color' ? t('foundry.skin.region.colorHint', { part }) : t('foundry.skin.region.pieceHint', { part })}</p>
     {by === 'brush' && <label className="flex items-center gap-2 text-xs text-text-secondary">
       <span className="shrink-0">{t('foundry.skin.region.brushSize')}</span>
       <input type="range" min={2} max={120} value={brushSize} aria-label={t('foundry.skin.region.brushSize')}
         className="h-7 min-w-0 flex-1 accent-accent" onChange={(event) => onBrushSize(Number(event.target.value))} />
       <span className="w-7 text-right tabular-nums">{brushSize}</span>
     </label>}
-    {by === 'color' && <label className="flex items-center gap-2 text-xs text-text-secondary">
-      <span className="shrink-0">{t('foundry.skin.region.colorRange')}</span>
+    {by === 'color' && <label className="block space-y-1 text-xs text-text-secondary">
+      <span>{t('foundry.skin.region.colorRange')}</span>
       <input type="range" min={1} max={40} value={tolerance} aria-label={t('foundry.skin.region.colorRange')}
-        className="h-7 min-w-0 flex-1 accent-accent" onChange={(event) => onTolerance(Number(event.target.value))} />
-      <span className="w-7 text-right tabular-nums">{tolerance}</span>
+        aria-valuetext={String(tolerance)} className="h-7 w-full accent-accent" onChange={(event) => onTolerance(Number(event.target.value))} />
+      <span aria-hidden className="flex justify-between text-2xs text-text-tertiary">
+        <span>{t('foundry.skin.region.rangeClose')}</span><span>{t('foundry.skin.region.rangeLoose')}</span>
+      </span>
     </label>}
     <SegmentedControl fill label={t('foundry.skin.region.selectionMode')} value={mode} onChange={onMode} options={[
       { value: 'add', label: <span className="flex items-center justify-center gap-1.5"><Plus className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.region.addPieces')}</span> },
       { value: 'remove', label: <span className="flex items-center justify-center gap-1.5"><Minus className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.region.removePieces')}</span> },
     ]} />
-    {missed ? <p role="status" className="text-xs text-state-warning">{t('foundry.skin.region.otherPart', { part })}</p>
-      : empty && <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.region.nothingSelected', { part })}</p>}
-    <p className="text-2xs text-text-tertiary">{t('foundry.skin.region.sharedHint')}</p>
+    {missed !== false ? <p role="status" className="text-xs text-state-warning">
+      {missed ? t('foundry.skin.region.otherPart', { other: missed, part }) : t('foundry.skin.region.otherPartUnknown', { part })}</p>
+      : empty && <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.region.nothingSelected')}</p>}
+    {by === 'piece' && <p className="text-2xs text-text-tertiary">{t('foundry.skin.region.sharedHint')}</p>}
     <div className="flex gap-2">
       <Button size="sm" variant="ghost" disabled={empty} onClick={onClear}>{t('foundry.skin.region.clear')}</Button>
-      <Button size="sm" className="flex-1" onClick={onDone}>{t('foundry.skin.region.done')}</Button>
+      <Button size="sm" className="flex-1" aria-keyshortcuts="Escape" title={t('foundry.skin.region.doneShortcut')} onClick={onDone}>{t('foundry.skin.region.done')}</Button>
     </div>
   </div>;
 }
@@ -90,6 +100,7 @@ export function SkinRegionEditor({ region, stale = false, color, tool, disabled,
       <IconButton size="sm" icon={Trash2} disabled={disabled} label={t('foundry.skin.region.delete', { area: label })} onClick={onDelete} />
     </div>
     {stale && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.region.staleHint')}</p>}
+    {!stale && !hasRegionEdit(region) && <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.region.uneditedHint')}</p>}
     <SegmentedControl fill value={tool} onChange={onTool} options={[{ value: 'color', label: t('foundry.skin.color') }, { value: 'pattern', label: t('foundry.skin.pattern') }]} />
     {tool === 'color'
       ? <SkinColorControls paintOnly color={region.paint ?? color} tintable adjustable disabled={disabled}
