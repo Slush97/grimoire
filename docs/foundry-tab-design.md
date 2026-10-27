@@ -278,6 +278,22 @@ this resolves the display name (`Vindicta`, `Mina`) the UI shows.
   through a fuzzy filename / vdata-node mapping; the filename-derived `label` already reads fine,
   so this is a later pass.
 
+## Skin part areas (built)
+
+A skin part is one material, which often covers several garments. Areas let a player paint, pattern or adjust a smaller piece of a part (a cuff, the trim, a panel) without a model edit. Finish and transparency stay whole-part: they are material parameters, and a material tint cannot stop at a texture boundary, so an area's color is always Paint.
+
+**Selecting.** The player picks on the model in one of three ways:
+
+- **Piece:** the UV islands under the click. Islands weld vertices on position and UV, so normal splits do not fragment them. Hero meshes also carry thousands of zero-area triangles stretched across the whole texture; they are skipped, or one click selects most of the atlas.
+- **Similar color:** connected texels within a CIELAB delta E of the clicked color, inside the clicked islands. Hero color maps are dark, and RGB distance treats most dark colors as equal. Atlases pack islands closer than a texel apart, so a fill never crosses into a neighbouring island.
+- **Brush:** texels whose point on the model lies within the brush radius, so a stroke follows the surface across UV seams. While painting, the left button belongs to the brush and the right button turns the model.
+
+**Storage.** An area is a list of seeds: texture points with add or remove, and the tool's tolerance or radius (mesh units, rest pose). Seeds survive resuming a saved skin because they do not depend on mesh or triangle order. A point covering mirrored pieces selects all of them, since they share texels and cannot be edited apart.
+
+**Preview and export.** The viewer rasterizes seeds to a UV mask and blends the area's edit over the whole-part texture edit in the preview canvas. On save, it bakes each edited area's mask (texture size, capped at 2048) and the main process runs `vpkmerge trippy-skin --material ... --mask`, which blends the edit into the isolated color texture and keeps its alpha. Areas apply after the whole-part texture edit and before the material tint, in both paths.
+
+**Limits.** An area is texture-only: it cannot change shape, hide geometry or use another shader. Islands follow the asset's UV seams, which on hero meshes run along quad rows, so Piece can give stepped edges. Similar color or the brush follow what the player sees.
+
 ## Phasing / recommendation
 
 1. **Catalog engine first.** Local pak scan -> cached manifest with thumbnails + sound

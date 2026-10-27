@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Plus, SquareDashedMousePointer, Trash2 } from 'lucide-react';
+import { Minus, Plus, SquareDashedMousePointer, Trash2 } from 'lucide-react';
 import { Button, IconButton, SegmentedControl } from '../common/ui';
 import { Input } from '../common/forms';
 import { SkinColorControls } from './SkinColorControls';
@@ -62,8 +62,8 @@ export function SkinRegionSelecting({ part, mode, by, tolerance, brushSize, empt
       <span className="w-7 text-right tabular-nums">{tolerance}</span>
     </label>}
     <SegmentedControl fill label={t('foundry.skin.region.selectionMode')} value={mode} onChange={onMode} options={[
-      { value: 'add', label: t('foundry.skin.region.addPieces') },
-      { value: 'remove', label: t('foundry.skin.region.removePieces') },
+      { value: 'add', label: <span className="flex items-center justify-center gap-1.5"><Plus className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.region.addPieces')}</span> },
+      { value: 'remove', label: <span className="flex items-center justify-center gap-1.5"><Minus className="h-3.5 w-3.5" aria-hidden />{t('foundry.skin.region.removePieces')}</span> },
     ]} />
     {missed ? <p role="status" className="text-xs text-state-warning">{t('foundry.skin.region.otherPart', { part })}</p>
       : empty && <p role="status" className="text-xs text-text-secondary">{t('foundry.skin.region.nothingSelected', { part })}</p>}
