@@ -322,11 +322,14 @@ export function isLockerManagedMod(mod: Mod): boolean {
 }
 
 /**
- * GameBanana Sound subcategories that aren't per-hero. Killsounds and music
- * stingers play across the whole match, announcer/UI sounds are global UX.
- * These belong on Installed but would just sit in the Locker's "Unassigned"
- * bucket forever (no hero to tag), so we drop them at the eligibility check
- * instead. Lowercased for case-insensitive compare.
+ * GameBanana Sound subcategories that aren't per-hero. Killsounds, music and
+ * match events play across the whole match; item, movement and pack sounds
+ * aren't tied to one hero either. These belong on Installed but would just sit
+ * in the Locker's "Unassigned" bucket forever (no hero to tag), so we drop them
+ * at the eligibility check instead. Other/Misc is left out on purpose: it is
+ * mixed content, and a hero-less one should stay assignable from Unassigned.
+ * 'music' is In-Game Music's old name, still stored on mods installed before
+ * the rename. Lowercased for case-insensitive compare.
  */
 const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
   'killsounds',

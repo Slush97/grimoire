@@ -30,6 +30,18 @@ describe('nameMentionsHero', () => {
     expect(nameMentionsHero('Haze v2', 'Haze')).toBe(true);
   });
 
+  it('matches a possessive written without the apostrophe', () => {
+    expect(nameMentionsHero('Battle over Billys Blasted', 'Billy')).toBe(true);
+    expect(nameMentionsHero('Past the bolted door (over sevens ult)', 'Seven')).toBe(true);
+    expect(nameMentionsHero('Megaera from Hades as drifters voice', 'Drifter')).toBe(true);
+    expect(nameMentionsHero('Seras Victoria theme', 'Victor')).toBe(false);
+  });
+
+  it('matches a name followed by an uncased script', () => {
+    expect(nameMentionsHero('Mina兔女郎', 'Mina')).toBe(true);
+    expect(nameMentionsHero('MinaBunny', 'Mina')).toBe(false);
+  });
+
   it('matches multi-word and symbol names', () => {
     expect(nameMentionsHero('Mo & Krill gold', 'Mo & Krill')).toBe(true);
     expect(nameMentionsHero('Lady Geist crimson', 'Lady Geist')).toBe(true);
