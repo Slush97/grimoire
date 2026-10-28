@@ -24,7 +24,7 @@ describe('Installed window geometry', () => {
     expect(installedPinnedRows(['list-b:one', 'list-a:two', 'removed', 'list-a:one', 'list-a:three'], indices, 4)).toEqual([0, 2, 5]);
   });
 
-  it('reads shared-scroller offsets through layout coordinates, excluding elastic transforms', () => {
+  it('reads shared-scroller offsets through layout coordinates, excluding CSS transforms', () => {
     const scroller = document.createElement('div');
     const section = document.createElement('div');
     const grid = document.createElement('div');
