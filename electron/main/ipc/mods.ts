@@ -20,6 +20,7 @@ import {
     deleteModsUnlocked,
     setModPriority,
     reorderMods,
+    reorderPriorityMods,
     swapModPriority,
     setModsEnabledBatch,
     setModPriorityFolder,
@@ -1054,6 +1055,14 @@ ipcMain.handle(
         return mods.map(enrichMod);
     }
 );
+
+ipcMain.handle('reorder-priority-mods', async (_, orderedIds: string[]): Promise<Mod[]> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) throw new Error('No Deadlock path configured');
+    await migrateIgnoredConflictKeysBeforeRenames(deadlockPath);
+    await reorderPriorityMods(deadlockPath, orderedIds);
+    return (await scanMods(deadlockPath)).map(enrichMod);
+});
 
 // apply-mod-toggle-batch: disable a set then enable a set as one atomic
 // mutation, returning the fresh mod list AND the per-mod failures. Backs the
