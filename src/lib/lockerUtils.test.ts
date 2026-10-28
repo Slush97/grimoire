@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedSound } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -136,6 +136,21 @@ describe('groupModsByCategory', () => {
     const grouped = groupModsByCategory([skin], heroes);
     expect(grouped.map.size).toBe(0);
     expect(grouped.unassigned).toEqual([skin]);
+  });
+});
+
+describe('isLockerManagedMod', () => {
+  const tweak = (categoryName: string, over: Partial<Mod> = {}) =>
+    mod({ id: 'tweak', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Mod', categoryName, ...over });
+
+  it.each(['Quality of Life/Fixes', 'Accessibility', 'Gameplay Modifications'])('keeps %s out of the Locker', (categoryName) => {
+    expect(isLockerManagedMod(tweak(categoryName))).toBe(false);
+  });
+
+  it('keeps a hero-tagged tweak and skin categories', () => {
+    expect(isLockerManagedMod(tweak('Quality of Life/Fixes', { lockerHero: 'Haze' }))).toBe(true);
+    expect(isLockerManagedMod(tweak('Skins'))).toBe(true);
+    expect(isLockerManagedMod(tweak('Other/Misc'))).toBe(true);
   });
 });
 

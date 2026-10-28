@@ -66,7 +66,8 @@ describe('Installed hero resolution agrees with the Locker grouping', () => {
     ['unknown category, no hero', skin('Midnight Skin', { categoryId: 99999, categoryName: 'New Hero Thing' }), undefined],
     ['hero name inside a longer word', skin('Remastered Night Sky', { categoryId: 46154, categoryName: 'Quality of Life/Fixes' }), undefined],
     ['underscored file-style title', skin('goth_vindicta_by_ju', { categoryId: 33154, categoryName: 'Model Replacement' }), 'Vindicta'],
-    ['other root, hero in title', skin('Apollo cooldown timer', { categoryId: 46154, categoryName: 'Quality of Life/Fixes' }), 'Apollo'],
+    ['hero-less category, hero in title', skin('Apollo cooldown timer', { categoryId: 46154, categoryName: 'Quality of Life/Fixes' }), undefined],
+    ['other root, hero in title', skin('Apollo hideout poster', { categoryId: 31713, categoryName: 'HUD' }), 'Apollo'],
     ['global mod, hero in title', skin('Abrams Hideout', { categoryId: 33154, categoryName: 'Model Replacement', globalType: 'hideout' }), undefined],
   ])('%s', (_label, mod, hero) => {
     expect(lockerHero(mod)).toBe(hero);

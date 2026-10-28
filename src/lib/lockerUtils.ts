@@ -323,8 +323,20 @@ export function heroListMissesRoster(heroes: readonly HeroCategory[]): boolean {
 
 type LockerManagedModFields = Pick<
   Mod,
-  'fileName' | 'lockerCosmetics' | 'lockerSounds' | 'lockerHero' | 'sourceSection'
+  'categoryName' | 'fileName' | 'lockerCosmetics' | 'lockerSounds' | 'lockerHero' | 'sourceSection'
 >;
+
+/**
+ * GameBanana Mod categories that never hold a hero skin: fps configs, fixes and
+ * gameplay tweaks (Accessibility is QoL's one subcategory). Without a global
+ * type they would only pile into Unassigned, so like GLOBAL_SOUND_CATEGORIES
+ * they stay on Installed unless the user tags a hero. Lowercased.
+ */
+const HERO_LESS_MOD_CATEGORIES: ReadonlySet<string> = new Set([
+  'quality of life/fixes',
+  'accessibility',
+  'gameplay modifications',
+]);
 
 export function isLockerManagedMod(mod: LockerManagedModFields): boolean {
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
@@ -344,6 +356,7 @@ export function isLockerManagedMod(mod: LockerManagedModFields): boolean {
   // a hero skin, including custom local imports that do not have GameBanana
   // section metadata.
   if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
+  if (!mod.lockerHero && HERO_LESS_MOD_CATEGORIES.has(mod.categoryName?.trim().toLowerCase() ?? '')) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Leftover preset VPKs from the removed Midnight Mina variants feature
