@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { Fragment, useEffect, useEffectEvent, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { previewTrippySprite } from '../../lib/api';
@@ -452,10 +452,10 @@ export function SkinPartPatterns({ scene, edits, onError, onPending, onApplied }
     const shine = edit.regions?.filter(isFinishRegion) ?? [];
     const glow = edit.regions?.find(isGlowRegion);
     const clear = edit.regions?.filter(isClearRegion) ?? [];
-    return [textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} onApplied={onApplied} /> : null,
+    return <Fragment key={edit.material}>{[textured ? <PartTexture key={edit.material} scene={scene} edit={edit} onError={onError} onPending={onPending} onApplied={onApplied} /> : null,
       shine.length ? <PartFinish key={`${edit.material}:finish`} scene={scene} material={edit.material} whole={edit.finish} regions={shine} onApplied={onApplied} /> : null,
       glow?.glow || edit.glow ? <PartGlow key={`${edit.material}:glow`} scene={scene} material={edit.material} region={glow?.glow ? glow : null}
         glow={(glow?.glow ?? edit.glow)!} onApplied={onApplied} /> : null,
-      clear.length ? <PartClear key={`${edit.material}:clear`} scene={scene} material={edit.material} whole={edit.surface?.opacity} regions={clear} onApplied={onApplied} /> : null];
+      clear.length ? <PartClear key={`${edit.material}:clear`} scene={scene} material={edit.material} whole={edit.surface?.opacity} regions={clear} onApplied={onApplied} /> : null]}</Fragment>;
   });
 }

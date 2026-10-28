@@ -121,7 +121,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker, applied = 0 
     };
   }, [islands, by, brushSize, gl, scene, camera, material]);
   const texture = useRef<THREE.DataTexture | null>(null);
-  const strokeMask = useRef({ dabs: 0, mask: new Uint8Array(SIZE * SIZE) });
+  const strokeMask = useRef<{ dabs: number; mask: Uint8Array<ArrayBuffer> } | null>(null);
   const lastFill = useRef<{ islands: unknown; tolerance: number | undefined; texel: number; mask: Uint8Array } | null>(null);
   useEffect(() => {
     const alpha = new THREE.DataTexture(new Uint8Array(SIZE * SIZE * 4), SIZE, SIZE, THREE.RGBAFormat);
@@ -150,7 +150,7 @@ export function SkinRegionOverlay({ scene, material, seeds, picker, applied = 0 
     const alpha = texture.current;
     if (!islands || !base || !alpha) return;
     // The stroke only grows while drawing, so add just its new dabs.
-    const live = strokeMask.current;
+    const live = strokeMask.current ??= { dabs: 0, mask: new Uint8Array(SIZE * SIZE) };
     if (!stroke.length || stroke.length < live.dabs) { if (live.dabs) live.mask.fill(0); live.dabs = 0; }
     for (const seed of stroke.slice(live.dabs)) {
       rasterizeBrush(islands, seed.u, seed.v, seed.radius ?? 0, SIZE, SIZE, live.mask);
