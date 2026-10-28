@@ -534,12 +534,14 @@ export async function detectUnknownModFilters(
         let reachedPageCap = false;
         let pagesFetched = 0;
         const seenFileIds = new Set<number>();
+        const searchedBuckets: SearchBucket[] = [];
 
         for (const bucket of buckets) {
             if (pagesFetched >= MAX_LIVE_SEARCH_PAGES) {
                 reachedPageCap = true;
                 break;
             }
+            searchedBuckets.push(bucket);
             emit({
                 phase: 'searching',
                 message: describeBucket(bucket),
@@ -710,7 +712,7 @@ export async function detectUnknownModFilters(
         }
 
         if (!sawCandidateMods) {
-            return empty('not-found', `No GameBanana candidates with files were returned for ${buckets.map(describeBucket).join('; ')}.`);
+            return empty('not-found', `No GameBanana candidates with files were returned for ${searchedBuckets.map(describeBucket).join('; ')}.`);
         }
 
         const cappedNote = reachedPageCap
@@ -722,7 +724,7 @@ export async function detectUnknownModFilters(
                 'not-found',
                 `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked).${cappedNote} Cached CRC entries: ${getUnknownCrcEntryCount()}.`,
                 {
-                    searchedBuckets: buckets.map(bucketLabel),
+                    searchedBuckets: searchedBuckets.map(bucketLabel),
                     checkedMods,
                     checkedFiles,
                     bytesFetched,
