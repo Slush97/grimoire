@@ -2026,6 +2026,7 @@
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
+      "loadOrderHint": "Drag to set which Global mod wins when files overlap. Top loads first.",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
       "deleteMod": "Delete {{name}}",
       "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started.",

@@ -439,6 +439,7 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  reorderPriorityMods: (orderedIds: string[]) => Promise<void>;
   captureProfileShuffle: () => ProfileShuffle | undefined;
   restoreProfileShuffle: (shuffle: unknown) => void;
   setShuffleOnLaunch: (enabled: boolean) => void;
@@ -981,6 +982,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods({ force: true });
+    }
+  },
+
+  reorderPriorityMods: async (orderedIds: string[]) => {
+    try {
+      const updated = await api.reorderPriorityMods(orderedIds);
+      invalidateModsReads();
+      set((state) => {
+        const mods = reconcileMods(state.mods, updated);
+        return mods === state.mods ? state : { mods };
+      });
+    } catch (err) {
+      if (!isGameRunningModLockError(err)) set({ modsError: String(err) });
       get().loadMods({ force: true });
     }
   },

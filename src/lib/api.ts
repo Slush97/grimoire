@@ -529,6 +529,10 @@ export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
   return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
 }
 
+export async function reorderPriorityMods(orderedIds: string[]): Promise<Mod[]> {
+  return withGameRunningWarning(() => window.electronAPI.reorderPriorityMods(orderedIds));
+}
+
 export async function applyModToggleBatch(
   enableIds: string[],
   disableIds: string[]
