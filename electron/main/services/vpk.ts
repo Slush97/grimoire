@@ -737,6 +737,10 @@ export function extractHeroFromPath(filePath: string): string | null {
 const SOUND_HERO_PATTERNS: RegExp[] = [
     /(?:^|\/)sounds\/abilities\/([a-z0-9_]+)\//i,
     /(?:^|\/)sounds\/heroes\/([a-z0-9_]+)\//i,
+    // Voice lines. Non-hero speakers (announcer, newscaster, spirit_jar) are
+    // not codenames, so they never resolve to a hero.
+    /(?:^|\/)sounds\/vo\/([a-z0-9_]+)\//i,
+    /(?:^|\/)sounds\/player\/footsteps\/([a-z0-9_]+)\//i,
     /(?:^|\/)sounds\/[^/]+\/hero_([a-z0-9_]+)\//i,
     // `soundevents/citadel/hero_<codename>.vsndevts_c` (hero_ prefix on file).
     /(?:^|\/)soundevents\/[^/]*\/hero_([a-z0-9_]+)\.vsndevts/i,
@@ -753,6 +757,14 @@ const SOUND_HERO_PATTERNS: RegExp[] = [
  * rather leave that case to manual tagging than pick the wrong one).
  */
 export function inferHeroFromVpkPaths(paths: string[]): string | null {
+    // Two heroes already make it ambiguous: no point scanning the rest of a
+    // large VPK.
+    const heroes = soundPathHeroes(paths, 2);
+    return heroes.size === 1 ? [...heroes][0] : null;
+}
+
+/** Heroes whose sound paths a VPK touches, scanning until `limit` are seen. */
+function soundPathHeroes(paths: string[], limit: number): Set<string> {
     const heroes = new Set<string>();
     for (const filePath of paths) {
         for (const pattern of SOUND_HERO_PATTERNS) {
@@ -764,11 +776,9 @@ export function inferHeroFromVpkPaths(paths: string[]): string | null {
                 break;
             }
         }
-        // Bail early once we've already seen a conflict: no point scanning
-        // the rest of a large VPK if the answer is already "ambiguous."
-        if (heroes.size > 1) return null;
+        if (heroes.size >= limit) break;
     }
-    return heroes.size === 1 ? [...heroes][0] : null;
+    return heroes;
 }
 
 /**
@@ -830,6 +840,14 @@ const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
 // `sounds/abilities|heroes|vo/<codename>/` (SOUND_HERO_PATTERNS), so this never
 // catches a hero-tied sound.
 const ANNOUNCER_PATTERN = /(?:^|\/)sounds\/mods\//i;
+// Sounds no hero owns: Patron and newscaster VO, the Spirit Urn's lines, world
+// objectives (vaults, Sinner's Sacrifice), shared melee and hit feedback, UI.
+// `sounds/music/` is left out: a stored type would override the Killstreak
+// Music type getEffectiveGlobalType derives from the category.
+const GLOBAL_SFX_PATTERN =
+    /(?:^|\/)sounds\/(?:vo\/(?:announcer|newscaster|spirit_jar)|npc|player\/melee|hit_indicators|gameplay|ambient|ui)\//i;
+// One pack revoicing this many heroes is a global overhaul, not a hero's.
+const GLOBAL_SOUND_PACK_HEROES = 3;
 const SHARED_EFFECT_PATTERN = /^particles\/generic\/.+\.vpcf_c$/i;
 
 /**
@@ -878,7 +896,7 @@ function heroImageHeroes(paths: string[]): Set<string> {
  * an older version, so pattern improvements (e.g. new HUD paths) reach
  * already-installed mods without a manual retag or a metadata migration.
  */
-export const GLOBAL_CLASSIFIER_VERSION = 5;
+export const GLOBAL_CLASSIFIER_VERSION = 6;
 
 export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.length === 0) return null;
@@ -910,6 +928,9 @@ export function classifyGlobalModType(paths: string[]): GlobalModType | null {
 
     if (paths.some((p) => HUD_PATTERN.test(p))) return 'hud';
     if (paths.some((p) => ANNOUNCER_PATTERN.test(p))) return 'announcer';
+    const soundHeroes = soundPathHeroes(paths, GLOBAL_SOUND_PACK_HEROES);
+    if (soundHeroes.size >= GLOBAL_SOUND_PACK_HEROES) return 'announcer';
+    if (soundHeroes.size === 0 && paths.some((p) => GLOBAL_SFX_PATTERN.test(p))) return 'announcer';
     if (paths.some((p) => SHARED_EFFECT_PATTERN.test(p))) return 'effects';
     return null;
 }
