@@ -460,7 +460,7 @@ export interface ApplyTrippySkinResult {
  * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
  * the union.
  */
-export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations';
+export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */

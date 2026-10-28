@@ -406,7 +406,7 @@ export function isAnnouncerSound(mod: GlobalTypeModFields): boolean {
 /**
  * A mod's effective Locker global type. Prefers the persisted globalType (the
  * VPK-path classification, or a manual override set via the Global card's
- * retag menu), then derives 'killstreak-music' from the GameBanana category.
+ * retag menu), then derives types from the GameBanana category.
  *
  * Killstreak music can't be path-classified (a Sound VPK is just `sounds/`),
  * so it's derived here instead of in the main-process classifier. Deriving it
@@ -424,6 +424,9 @@ export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType 
   }
   // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
   if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
+  if (!mod.lockerHero && mod.sourceSection === 'Mod' && mod.categoryName?.trim().toLowerCase() === 'maps') {
+    return 'maps';
+  }
   return undefined;
 }
 
@@ -518,6 +521,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   hud: 'HUD',
   effects: 'Effects',
   animations: 'Animations',
+  maps: 'Maps',
   announcer: 'Announcer / SFX',
   'killstreak-music': 'Killstreak Music',
 };
@@ -525,6 +529,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
   if (type === 'effects') return t('locker.page.effects');
   if (type === 'animations') return t('locker.page.animations');
+  if (type === 'maps') return t('locker.page.maps');
   return GLOBAL_MOD_TYPE_LABELS[type];
 }
 
@@ -537,6 +542,7 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'hud',
   'effects',
   'animations',
+  'maps',
   'announcer',
   'killstreak-music',
 ];
@@ -577,6 +583,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     hud: [],
     effects: [],
     animations: [],
+    maps: [],
     announcer: [],
     'killstreak-music': [],
   };

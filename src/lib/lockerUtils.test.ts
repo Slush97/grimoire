@@ -197,3 +197,21 @@ it('files GameBanana animations in General unless manually reassigned', () => {
   expect(getEffectiveGlobalType({ ...animation, lockerHeroSource: 'manual' })).toBeUndefined();
   expect(getEffectiveGlobalType({ ...animation, globalType: 'hud' })).toBe('hud');
 });
+
+describe('Maps in General', () => {
+  const map = mod({ id: 'map', metaKey: 'pak01_dir.vpk', priority: 1,
+    sourceSection: 'Mod', categoryName: ' Maps ' });
+
+  it('groups existing GameBanana maps under Maps', () => {
+    expect(getEffectiveGlobalType(map)).toBe('maps');
+    expect(groupGlobalMods([map]).maps).toEqual([map]);
+  });
+
+  it('respects explicit assignments and ignores other sections', () => {
+    expect(getEffectiveGlobalType({ ...map, globalType: 'hud' })).toBe('hud');
+    expect(getEffectiveGlobalType({ ...map, lockerHero: 'Haze' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, sourceSection: 'Sound' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, categoryName: 'Minimaps' })).toBeUndefined();
+    expect(getEffectiveGlobalType({ ...map, categoryName: undefined, globalType: 'maps' })).toBe('maps');
+  });
+});

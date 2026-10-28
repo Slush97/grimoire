@@ -288,8 +288,10 @@ export function SkinLoadOrderStrip({
   hideNsfwPreviews = false,
   useHeroPortraitThumbnails = false,
   heroName,
+  hint,
 }: {
   mods: Mod[];
+  hint?: string;
   onReorder: (orderedModIds: string[]) => void | Promise<void>;
   hideNsfwPreviews?: boolean;
   useHeroPortraitThumbnails?: boolean;
@@ -345,7 +347,7 @@ export function SkinLoadOrderStrip({
       <div className="mb-2 px-0.5">
         <div className="text-xs font-semibold text-white">{t('locker.skins.loadOrder')}</div>
         <div className="text-2xs leading-snug text-white/60">
-          {t('locker.skins.loadOrderHint')}
+          {hint ?? t('locker.skins.loadOrderHint')}
         </div>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
