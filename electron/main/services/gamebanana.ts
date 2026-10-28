@@ -635,6 +635,19 @@ export async function fetchCategoryTreeCached(
     return nodes;
 }
 
+/** A category's name from the cached tree. Cache only, never fetches. */
+export function cachedCategoryName(categoryModel: string, categoryId: number): string | undefined {
+    const find = (nodes: GameBananaCategoryNode[]): string | undefined => {
+        for (const node of nodes) {
+            if (node.id === categoryId) return node.name;
+            const inChild = find(node.children ?? []);
+            if (inChild) return inChild;
+        }
+        return undefined;
+    };
+    return find(readCategoryCache(categoryModel)?.nodes ?? []);
+}
+
 function readCategoryCache(
     categoryModel: string
 ): { fetchedAt: number; nodes: GameBananaCategoryNode[] } | null {

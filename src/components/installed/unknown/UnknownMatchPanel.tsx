@@ -6,6 +6,7 @@ import type { Mod, UnknownModDetectionProgress, UnknownModFilterGuess, Associate
 import type { GameBananaMod } from '../../../types/gamebanana';
 import { getModThumbnail } from '../../../types/gamebanana';
 import ModThumbnail from '../../ModThumbnail';
+import { categoryIdFromProfileUrl } from '../../../lib/heroFilter';
 import { globalModTypeLabel } from '../../../lib/lockerUtils';
 import { formatBytes } from '../../../lib/formatBytes';
 import { Button } from '../../common/ui';
@@ -272,7 +273,8 @@ function cachedModToGameBananaMod(m: import('../../../types/electron').CachedMod
     likeCount: m.likeCount,
     viewCount: m.viewCount,
     nsfw: m.isNsfw,
-    rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
+    rootCategory: m.categoryName ? { id: m.categoryId ?? undefined, name: m.categoryName } : undefined,
+    subCategory: m.subCategoryId ? { id: m.subCategoryId, name: '' } : undefined,
     submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
     previewMedia: images || metadata ? { images, metadata } : undefined,
   };
@@ -408,6 +410,8 @@ function UnknownManualSearch({
     if (!selected || linking || disabled) return;
     setLinking(true);
     setSearchError(null);
+    // The deepest category the mod is filed under: a hero for a skin.
+    const category = selected.subCategory ?? selected.rootCategory;
     try {
       await onAssociate(mod, {
         gameBananaId: selected.id,
@@ -415,7 +419,10 @@ function UnknownManualSearch({
         gameBananaFileId: fileId,
         thumbnailUrl: getModThumbnail(selected),
         nsfw: selected.nsfw,
-        categoryName: selected.rootCategory?.name,
+        categoryId: category?.id ?? categoryIdFromProfileUrl(category?.profileUrl),
+        // A catalog subcategory has no name; main names it from the cached tree
+        // and falls back to this root name when that tree is missing.
+        categoryName: category?.name || selected.rootCategory?.name || undefined,
         sourceSection: section,
       });
     } catch (err) {

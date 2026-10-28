@@ -46,6 +46,7 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { cachedCategoryName } from '../services/gamebanana';
 import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { getModById } from '../services/modDatabase';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
@@ -699,13 +700,17 @@ ipcMain.handle(
             throw new Error('A GameBanana mod selection is required');
         }
 
+        const categoryModel = args.sourceSection === 'Sound' ? 'SoundCategory' : 'ModCategory';
         return applyUnknownModMetadata(deadlockPath, modId, {
             modName: args.modName.trim(),
             gameBananaId: args.gameBananaId,
             gameBananaFileId: args.gameBananaFileId,
             thumbnailUrl: args.thumbnailUrl,
             nsfw: !!args.nsfw,
-            categoryName: args.categoryName,
+            categoryId: args.categoryId,
+            categoryName:
+                (args.categoryId !== undefined ? cachedCategoryName(categoryModel, args.categoryId) : undefined) ??
+                args.categoryName,
             sourceSection: args.sourceSection,
         });
     }

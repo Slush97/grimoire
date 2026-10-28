@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import { categoryIdFromProfileUrl, categorySubtreeIds, nameMentionsHero } from './heroFilter';
+import { categoryIdFromProfileUrl, categorySubtreeIds, nameMentionsHero, subcategorySubtreeIds } from './heroFilter';
 
 describe('nameMentionsHero', () => {
   it('does not match a hero inside a longer word', () => {
@@ -28,6 +28,18 @@ describe('nameMentionsHero', () => {
   it('treats a trailing digit as part of a version, not of the name', () => {
     expect(nameMentionsHero('Rem2', 'Rem')).toBe(true);
     expect(nameMentionsHero('Haze v2', 'Haze')).toBe(true);
+  });
+
+  it('matches a possessive written without the apostrophe', () => {
+    expect(nameMentionsHero('Battle over Billys Blasted', 'Billy')).toBe(true);
+    expect(nameMentionsHero('Past the bolted door (over sevens ult)', 'Seven')).toBe(true);
+    expect(nameMentionsHero('Megaera from Hades as drifters voice', 'Drifter')).toBe(true);
+    expect(nameMentionsHero('Seras Victoria theme', 'Victor')).toBe(false);
+  });
+
+  it('matches a name followed by an uncased script', () => {
+    expect(nameMentionsHero('Mina兔女郎', 'Mina')).toBe(true);
+    expect(nameMentionsHero('MinaBunny', 'Mina')).toBe(false);
   });
 
   it('matches multi-word and symbol names', () => {
@@ -80,5 +92,32 @@ describe('categorySubtreeIds', () => {
   it('includes every descendant, since a mod records the deepest category', () => {
     const ratKing = node(49629, [node(49852), node(1, [node(2)])]);
     expect(categorySubtreeIds(ratKing)).toEqual([49629, 49852, 1, 2]);
+  });
+});
+
+describe('subcategorySubtreeIds', () => {
+  const node = (id: number, children?: GameBananaCategoryNode[]): GameBananaCategoryNode => ({
+    id, name: `c${id}`, itemCount: 0, children,
+  });
+  const tree = [
+    node(33154, [node(44206), node(44691, [node(44687), node(44688)])]),
+    node(31713, [node(44745)]),
+    node(37225),
+  ];
+
+  it('is the pick and its descendants for a subcategory', () => {
+    expect(subcategorySubtreeIds(tree, 44206)).toEqual([44206]);
+    expect(subcategorySubtreeIds(tree, 44691)).toEqual([44691, 44687, 44688]);
+    expect(subcategorySubtreeIds(tree, 44687)).toEqual([44687]);
+  });
+
+  it('is undefined for a root, which the catalog scopes by name', () => {
+    expect(subcategorySubtreeIds(tree, 33154)).toBeUndefined();
+    expect(subcategorySubtreeIds(tree, 37225)).toBeUndefined();
+  });
+
+  it('is undefined for an id the tree does not hold', () => {
+    expect(subcategorySubtreeIds(tree, 1)).toBeUndefined();
+    expect(subcategorySubtreeIds([], 44206)).toBeUndefined();
   });
 });

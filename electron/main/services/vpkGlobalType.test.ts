@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyGlobalModType } from './vpk';
+import { classifyGlobalModType, inferHeroFromVpkPaths } from './vpk';
 
 describe('shared movement effects', () => {
     it('files Rainbow Trails and dash/jump/slide particles under General Effects', () => {
@@ -42,5 +42,49 @@ describe('classifyGlobalModType hero images', () => {
             'panorama/images/heroes/backgrounds/vindicta_bg_psd.vtex_c',
         ];
         expect(classifyGlobalModType(paths)).toBe('icons');
+    });
+});
+
+describe('global sounds', () => {
+    it.each([
+        ['Spirit Urn lines', 'sounds/vo/spirit_jar/spirit_jar_idol_delivered_01.vsnd_c'],
+        ['Patron VO', 'sounds/vo/announcer/female_patron/female_patron_match_start_01.vsnd_c'],
+        ['newscaster VO', 'sounds/vo/newscaster/newscaster_headline_01.vsnd_c'],
+        ['vaults', 'sounds/npc/neutrals/vaults/vault_open_01.vsnd_c'],
+        ['shared parry', 'sounds/player/melee/shared/melee_parry_success_01.vsnd_c'],
+        ['hit feedback', 'sounds/hit_indicators/damage_send_crit_01.vsnd_c'],
+        ['UI', 'sounds/ui/ui_shop_purchase_item_01.vsnd_c'],
+    ])('files %s under Announcer / SFX', (_label, path) => {
+        expect(classifyGlobalModType([path, 'soundevents/vo/generated_vo_misc.vsndevts_c'])).toBe('announcer');
+    });
+
+    it('keeps one hero\'s pack with its hero when it also ships shared sounds', () => {
+        expect(classifyGlobalModType([
+            'sounds/abilities/viper/a3_slide/viper_slide_01.vsnd_c',
+            'sounds/gameplay/slide/slide_start_01.vsnd_c',
+            'sounds/ui/ui_menu_click_01.vsnd_c',
+        ])).toBeNull();
+    });
+
+    it('files a pack revoicing three heroes as global, but not two', () => {
+        const emote = (codename: string) => `sounds/vo/${codename}/emote/${codename}_death_01.vsnd_c`;
+        expect(classifyGlobalModType([emote('astro'), emote('bebop'), emote('chrono')])).toBe('announcer');
+        expect(classifyGlobalModType([emote('astro'), emote('bebop')])).toBeNull();
+    });
+
+    it('leaves music to the category-derived Killstreak Music type', () => {
+        expect(classifyGlobalModType(['sounds/music/music_stinger_ks_01.vsnd_c'])).toBeNull();
+    });
+});
+
+describe('inferHeroFromVpkPaths', () => {
+    it('reads the hero from voice lines and footsteps', () => {
+        expect(inferHeroFromVpkPaths(['sounds/vo/drifter/drifter_desperation_power1_01.vsnd_c'])).toBe('Drifter');
+        expect(inferHeroFromVpkPaths(['sounds/player/footsteps/bebop/bebop_footstep_01.vsnd_c'])).toBe('Bebop');
+    });
+
+    it('does not take a non-hero speaker for a hero', () => {
+        expect(inferHeroFromVpkPaths(['sounds/vo/announcer/male_patron/male_patron_01.vsnd_c'])).toBeNull();
+        expect(inferHeroFromVpkPaths(['sounds/vo/spirit_jar/spirit_jar_idol_delivered_01.vsnd_c'])).toBeNull();
     });
 });

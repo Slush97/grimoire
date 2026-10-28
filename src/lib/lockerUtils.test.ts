@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -16,6 +16,7 @@ const skinCategories: GameBananaCategoryNode[] = [{
       ],
     },
     { id: 33301, name: 'Haze', itemCount: 0 },
+    { id: 33340, name: 'Lady Geist', itemCount: 0 },
   ],
 }];
 
@@ -123,12 +124,53 @@ describe('groupModsByCategory', () => {
     expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33325, [skin]]]);
   });
 
+  it('matches a hero alias in the title of a root-filed skin', () => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      name: 'Geist Gothic', categoryId: 33295, categoryName: 'Skins' });
+    expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33340, [skin]]]);
+  });
+
   it('keeps an unknown category visible in Unassigned when no hero matches', () => {
     const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
       name: 'Unknown remodel', categoryId: 99999 });
     const grouped = groupModsByCategory([skin], heroes);
     expect(grouped.map.size).toBe(0);
     expect(grouped.unassigned).toEqual([skin]);
+  });
+});
+
+describe('isLockerManagedMod', () => {
+  const tweak = (categoryName: string, over: Partial<Mod> = {}) =>
+    mod({ id: 'tweak', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Mod', categoryName, ...over });
+
+  it.each(['Quality of Life/Fixes', 'Accessibility', 'Gameplay Modifications'])('keeps %s out of the Locker', (categoryName) => {
+    expect(isLockerManagedMod(tweak(categoryName))).toBe(false);
+  });
+
+  it('keeps a hero-tagged tweak and skin categories', () => {
+    expect(isLockerManagedMod(tweak('Quality of Life/Fixes', { lockerHero: 'Haze' }))).toBe(true);
+    expect(isLockerManagedMod(tweak('Skins'))).toBe(true);
+    expect(isLockerManagedMod(tweak('Other/Misc'))).toBe(true);
+  });
+});
+
+describe('isLockerManagedSound', () => {
+  const sound = (categoryName: string, over: Partial<Mod> = {}) =>
+    mod({ id: 'snd', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Sound', categoryName, ...over });
+
+  it.each(['Killsounds', 'In-Game Music', 'Music', 'Gameplay Events', 'Item Sounds', 'Sound Packs', 'Movement'])(
+    'keeps %s off the per-hero axis',
+    (categoryName) => {
+      expect(isLockerManagedSound(sound(categoryName))).toBe(false);
+    }
+  );
+
+  it.each(['Abilities', 'VOs', 'Weapons', 'Other/Misc'])('keeps %s assignable to a hero', (categoryName) => {
+    expect(isLockerManagedSound(sound(categoryName))).toBe(true);
+  });
+
+  it('keeps a hero-tagged sound whatever its category', () => {
+    expect(isLockerManagedSound(sound('Item Sounds', { lockerHero: 'Seven' }))).toBe(true);
   });
 });
 

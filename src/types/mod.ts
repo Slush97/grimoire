@@ -455,12 +455,11 @@ export interface ApplyTrippySkinResult {
  * alongside the per-hero piles. Most are derived from the VPK file tree by
  * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
  * category labels are unreliable for them. 'announcer' is path-classified from
- * `sounds/mods/` (global SFX / announcer frameworks like QOL Lock) but is ALSO
- * derived from the GameBanana "Announcer" category for sound packs whose VPK is
- * just `sounds/`. The other exception is 'killstreak-music': a Sound mod's VPK
- * is just `sounds/`, so it can't be path-classified, and is instead derived
- * from the GameBanana "Killstreak Music" category (cat 5895) by
- * `getEffectiveGlobalType` in the renderer (src/lib/lockerUtils.ts). Shared
+ * `sounds/mods/` (global SFX / announcer frameworks like QOL Lock). The
+ * exception is 'killstreak-music': a Sound mod's VPK is just `sounds/`, so it
+ * can't be path-classified, and is instead derived from the GameBanana
+ * "Killstreak Music" category (cat 5895) by `getEffectiveGlobalType` in the
+ * renderer (src/lib/lockerUtils.ts). Shared
  * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
  * the union.
  */
@@ -868,6 +867,8 @@ export interface UnknownModCrcMatchResult {
   fileId?: number;
   fileName?: string;
   section?: 'Mod' | 'Sound';
+  /** The matched mod's own deepest category (a hero, for a skin). */
+  categoryId?: number;
   categoryName?: string;
   confidence?: 'exact';
   reason?: string;
@@ -917,6 +918,10 @@ export interface AssociateUnknownModArgs {
   gameBananaFileId?: number;
   thumbnailUrl?: string;
   nsfw?: boolean;
+  /** The mod's own deepest category id (a hero, for a skin). The main process
+   *  names it from the cached category tree, so categoryName is only the
+   *  fallback when that tree has no such id. */
+  categoryId?: number;
   categoryName?: string;
   sourceSection?: 'Mod' | 'Sound';
 }

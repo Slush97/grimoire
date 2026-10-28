@@ -7,6 +7,7 @@ import {
     type GameBananaMod,
     type GameBananaModsResponse,
 } from './gamebanana';
+import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
 import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
 import { carryForwardOriginalIdentity, readEmbeddedAddonInfo } from './vpkIdentity';
 import { readEmbeddedModinfo } from './modinfoFormat';
@@ -113,7 +114,8 @@ interface HeroHint {
 interface CategoryTarget {
     section: 'Mod' | 'Sound';
     categoryId?: number;
-    categoryName: string;
+    // Absent for Sound, which is searched across all of its categories.
+    categoryName?: string;
 }
 
 // Per-file / per-page progress logs fire dozens of times during one search, so
@@ -127,13 +129,20 @@ function debugUnknownCrc(...args: unknown[]): void {
 }
 
 const CANDIDATE_PAGE_SIZE = 50;
-// Cap how many pages of a single bucket one live search will sweep. Without it,
-// a mod that resolves to a broad category (e.g. all Skins, no hero detected)
-// would page through the entire category, each page costing a submissions fetch
-// + bulk metadata + per-file archive probes, and likely trip GameBanana rate
-// limits. Misses are cached as they go, so a later "Retry" resumes where this
-// left off rather than redoing the swept pages.
+// Cap how many candidate pages one live search will sweep, across all its
+// buckets. Without it, a mod that resolves to a broad category (e.g. all Skins,
+// no hero detected) would page through the entire category, each page costing a
+// submissions fetch + bulk metadata + per-file archive probes, and likely trip
+// GameBanana rate limits. Misses are cached as they go, so a later "Retry"
+// resumes where this left off rather than redoing the swept pages.
 const MAX_LIVE_SEARCH_PAGES = 8;
+// The best-scoring bucket plus at most one runner-up. The runner-up draws on the
+// same MAX_LIVE_SEARCH_PAGES budget, so it only gets pages the best bucket did
+// not need and the request count per search never exceeds the single-bucket one.
+const MAX_SEARCH_BUCKETS = 2;
+// A runner-up scoring less than this is path noise, not a second candidate
+// category (the same line the guess's 'medium' confidence draws).
+const MIN_RUNNER_UP_POINTS = 30;
 const LOCAL_FINGERPRINT_CACHE_MAX = 128;
 const CACHE_FINGERPRINT_CONCURRENCY = 8;
 // Concurrent archive probes within one results page. Probes hit CDN download
@@ -143,20 +152,24 @@ const PROBE_CONCURRENCY = 4;
 const CATEGORIES = {
     skins: 33295,
     modelReplacement: 33154,
+    animations: 47611,
     hud: 31713,
     maps: 37225,
     gameplay: 33331,
+    qol: 46154,
     modMisc: 31710,
 } as const;
 
 const CATEGORY_TARGETS = {
     skins: { section: 'Mod', categoryId: CATEGORIES.skins, categoryName: 'Skins' },
     modelReplacement: { section: 'Mod', categoryId: CATEGORIES.modelReplacement, categoryName: 'Model Replacement' },
+    animations: { section: 'Mod', categoryId: CATEGORIES.animations, categoryName: 'Animations' },
     hud: { section: 'Mod', categoryId: CATEGORIES.hud, categoryName: 'HUD' },
     maps: { section: 'Mod', categoryId: CATEGORIES.maps, categoryName: 'Maps' },
-    gameplay: { section: 'Mod', categoryId: CATEGORIES.gameplay, categoryName: 'Gameplay' },
+    gameplay: { section: 'Mod', categoryId: CATEGORIES.gameplay, categoryName: 'Gameplay Modifications' },
+    qol: { section: 'Mod', categoryId: CATEGORIES.qol, categoryName: 'Quality of Life/Fixes' },
     modMisc: { section: 'Mod', categoryId: CATEGORIES.modMisc, categoryName: 'Other/Misc' },
-    soundMisc: { section: 'Sound', categoryName: 'Sounds' },
+    soundMisc: { section: 'Sound' },
 } as const satisfies Record<string, CategoryTarget>;
 
 type CategoryKey = keyof typeof CATEGORY_TARGETS;
@@ -169,10 +182,12 @@ interface CategoryPathRule {
 const CATEGORY_TIE_BREAKERS: CategoryKey[] = [
     'skins',
     'modelReplacement',
+    'animations',
     'hud',
     'soundMisc',
     'maps',
     'gameplay',
+    'qol',
     'modMisc',
 ];
 
@@ -188,7 +203,7 @@ const CATEGORY_PATH_RULES: CategoryPathRule[] = [
     { pattern: /(?:^|\/)particles\//, points: { modelReplacement: 25, modMisc: 15 } },
     { pattern: /(?:^|\/)panorama\/images\/heroes\//, points: { hud: 50, skins: 25 } },
     { pattern: /(?:^|\/)panorama\/images\/hud\/abilities\//, points: { hud: 60, skins: 25 } },
-    { pattern: /(?:^|\/)panorama\//, points: { hud: 90, gameplay: 20 } },
+    { pattern: /(?:^|\/)panorama\//, points: { hud: 90, gameplay: 20, qol: 30 } },
     { pattern: /(?:^|\/)hud\//, points: { hud: 80 } },
     { pattern: /(?:^|\/)maps\//, points: { maps: 120 } },
     { pattern: /(?:^|\/)materials\/skybox\//, points: { maps: 100 } },
@@ -196,7 +211,11 @@ const CATEGORY_PATH_RULES: CategoryPathRule[] = [
     { pattern: /(?:^|\/)scripts\/tagged_sounds\//, points: { soundMisc: 80 } },
     { pattern: /(?:^|\/)soundevents\/hero\//, points: { soundMisc: 80 } },
     { pattern: /(?:^|\/)sounds?\//, points: { soundMisc: 80 } },
-    { pattern: /(?:^|\/)scripts\//, points: { gameplay: 40, modMisc: 20 } },
+    { pattern: /(?:^|\/)scripts\//, points: { gameplay: 40, qol: 30, modMisc: 20 } },
+    // Outscores the model rules (skins/modelReplacement reach 160 per path) so an
+    // animation-only mod lands in Animations, while a skin that merely bundles a
+    // few clips stays in Skins on its meshes and textures.
+    { pattern: /\.(?:vnmskel|vnmclip|vnmgraph|vanmgrph|vanim|vagrp)_c$/, points: { animations: 200 } },
     { pattern: /\.vjs_c$|\.vxml_c$|\.vcss_c$/, points: { hud: 30 } },
 ];
 const MODEL_PATH_PATTERN = /(?:^|\/)(?:models\/|materials\/models\/|materials\/heroes(?:_wip|_staging)?\/|animgraphs\/animgraph2\/hero\/)/;
@@ -513,9 +532,16 @@ export async function detectUnknownModFilters(
         let totalCandidateMods = 0;
         let sawCandidateMods = false;
         let reachedPageCap = false;
+        let pagesFetched = 0;
         const seenFileIds = new Set<number>();
+        const searchedBuckets: SearchBucket[] = [];
 
         for (const bucket of buckets) {
+            if (pagesFetched >= MAX_LIVE_SEARCH_PAGES) {
+                reachedPageCap = true;
+                break;
+            }
+            searchedBuckets.push(bucket);
             emit({
                 phase: 'searching',
                 message: describeBucket(bucket),
@@ -528,9 +554,10 @@ export async function detectUnknownModFilters(
             let page = 1;
             let totalPages = 1;
 
-            while (page <= totalPages && page <= MAX_LIVE_SEARCH_PAGES && !bestMatch) {
+            while (page <= totalPages && pagesFetched < MAX_LIVE_SEARCH_PAGES && !bestMatch) {
                 throwIfAborted(options.signal);
                 const pageResult = await fetchCandidateModsPage(bucket, page, options.signal);
+                pagesFetched++;
                 const perPage = pageResult.perPage || CANDIDATE_PAGE_SIZE;
                 totalCandidateMods += page === 1 ? pageResult.totalCount : 0;
                 totalPages = Math.max(1, Math.ceil((pageResult.totalCount || pageResult.records.length) / perPage));
@@ -676,16 +703,16 @@ export async function detectUnknownModFilters(
                 page++;
             }
 
-            if (!bestMatch && totalPages > MAX_LIVE_SEARCH_PAGES) {
+            if (!bestMatch && page <= totalPages) {
                 reachedPageCap = true;
-                console.log(`[UnknownCrc] Reached the ${MAX_LIVE_SEARCH_PAGES}-page live-search cap for ${bucketLabel(bucket)} (${totalPages} pages total); remaining pages cached on next retry.`);
+                console.log(`[UnknownCrc] Reached the ${MAX_LIVE_SEARCH_PAGES}-page live-search cap in ${bucketLabel(bucket)} (${totalPages} pages total); remaining pages cached on next retry.`);
             }
 
             if (bestMatch) break;
         }
 
         if (!sawCandidateMods) {
-            return empty('not-found', `No GameBanana candidates with files were returned for ${buckets.map(describeBucket).join('; ')}.`);
+            return empty('not-found', `No GameBanana candidates with files were returned for ${searchedBuckets.map(describeBucket).join('; ')}.`);
         }
 
         const cappedNote = reachedPageCap
@@ -697,7 +724,7 @@ export async function detectUnknownModFilters(
                 'not-found',
                 `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked).${cappedNote} Cached CRC entries: ${getUnknownCrcEntryCount()}.`,
                 {
-                    searchedBuckets: buckets.map(bucketLabel),
+                    searchedBuckets: searchedBuckets.map(bucketLabel),
                     checkedMods,
                     checkedFiles,
                     bytesFetched,
@@ -845,7 +872,7 @@ function buildUnknownGuessBase(modId: string, fileName: string, paths: string[])
         heroFileName: hero?.code,
         categoryName: bucket?.categoryName,
         confidence: hero || ranked[0]?.points >= 80 ? 'high' : ranked[0]?.points >= 30 ? 'medium' : 'low',
-        contentHints: ranked.slice(0, 3).map(({ key, points }) => `${CATEGORY_TARGETS[key].categoryName} (${points})`),
+        contentHints: ranked.slice(0, 3).map(({ key, points }) => `${targetLabel(CATEGORY_TARGETS[key])} (${points})`),
         reasons: bucket ? [bucket.label] : ['No strong GameBanana category signal found in the VPK paths.'],
         detectedHeroes: hero ? [{
             name: hero.display,
@@ -998,13 +1025,17 @@ function cacheCandidateFiles(
 
         const mod = modByKey.get(`${result.section}:${result.modId}`);
         if (!mod) continue;
+        // The mod's own deepest category (a hero under Skins), as a download
+        // records it. The search bucket is only where we happened to find it.
+        const category = mod.subCategory ?? mod.rootCategory;
         for (const file of result.files) {
             files.push({
                 fileId: file.id,
                 modId: mod.id,
                 modName: mod.name,
                 section: result.section,
-                categoryName: bucket.categoryName ?? mod.rootCategory?.name ?? null,
+                categoryId: category ? category.id ?? categoryIdFromProfileUrl(category.profileUrl) ?? null : null,
+                categoryName: category?.name ?? null,
                 thumbnailUrl: getThumbnailUrl(mod),
                 nsfw: mod.nsfw,
                 dateModified: mod.dateModified,
@@ -1036,11 +1067,12 @@ function chooseSearchBuckets(paths: string[]): SearchBucket[] {
     }
 
     const seen = new Set<string>();
-    // Unknown search intentionally probes only the best-scoring Browser bucket.
-    // CRC cache hits handle future searches, while one bucket keeps each live
-    // search bounded and avoids hammering GameBanana.
+    // The best-scoring bucket always; a runner-up only when it scores above path
+    // noise (see MAX_SEARCH_BUCKETS). CRC cache hits handle future searches, and
+    // the shared page budget keeps each live search bounded.
     const buckets: SearchBucket[] = [];
-    for (const { key, points } of ranked.slice(0, 1)) {
+    const candidates = ranked.filter(({ points }, index) => index === 0 || points >= MIN_RUNNER_UP_POINTS);
+    for (const { key, points } of candidates.slice(0, MAX_SEARCH_BUCKETS)) {
         const target = resolveCategoryTarget(key, hero);
         const search = searchForTarget(key, hero);
         const bucket = {
@@ -1096,7 +1128,7 @@ function resolveCategoryTarget(key: CategoryKey, hero: HeroHint | null): Categor
         return {
             section: 'Mod',
             categoryId: hero.skinCategoryId,
-            categoryName: `Skins/${hero.display}`,
+            categoryName: hero.display,
         };
     }
     return CATEGORY_TARGETS[key];
@@ -1109,7 +1141,7 @@ function buildBucketLabel(
     hero: HeroHint | null,
     search?: string
 ): string {
-    const prefix = `${target.categoryName} scored ${points} from VPK paths.`;
+    const prefix = `${targetLabel(target)} scored ${points} from VPK paths.`;
     if (key === 'skins' && hero) return `${prefix} Using ${hero.display}'s Skins category.`;
     return search && hero ? `${prefix} Searching ${hero.display}.` : prefix;
 }
@@ -1186,6 +1218,7 @@ function toFoundMatch(
         // Cache rows store section as a plain string; the wire result only
         // carries the two sections the unknown-mod flow understands.
         section: match.section === 'Mod' || match.section === 'Sound' ? match.section : undefined,
+        categoryId: match.categoryId ?? undefined,
         categoryName: match.categoryName ?? undefined,
         confidence: 'exact',
         provenance: 'crc-32',
@@ -1202,6 +1235,10 @@ function toFoundMatch(
 function getThumbnailUrl(mod: GameBananaMod): string | null {
     const thumbnail = mod.previewMedia?.images?.[0];
     return thumbnail ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file || thumbnail.file220}` : null;
+}
+
+function targetLabel(target: CategoryTarget): string {
+    return target.categoryName ?? target.section;
 }
 
 function describeBucket(bucket: SearchBucket): string {

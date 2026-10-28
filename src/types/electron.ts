@@ -699,6 +699,11 @@ export interface SearchLocalModsOptions {
      *  null), so this is what actually scopes a local category filter. Without
      *  it the id comparison matches no rows at all. */
     categoryName?: string;
+    /** A picked subcategory and every descendant, matched against the mod's
+     *  sub-category id (the deepest category it is filed under). Set only when
+     *  the pick is below a root: a root pick still scopes by `categoryName`.
+     *  Without it a subcategory pick widens to its whole root. */
+    categoryIds?: number[];
     /** Hero's category and every descendant. Matched against the mod's
      *  sub-category id, so it is exact. Mod section only. */
     heroCategoryIds?: number[];

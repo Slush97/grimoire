@@ -1,5 +1,6 @@
 import type { Mod, GlobalModType } from '../types/mod';
-import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero } from './lockerUtils';
+import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero, skinTitleHero } from './lockerUtils';
+import { isSkinRootCategory } from './installedCardTaxonomy';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { heroNameForLabel } from './heroNames';
@@ -201,7 +202,7 @@ function modHeroName(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): 
     const inferred = inferHeroFromTitle(mod.name);
     return inferred ? canonicalHeroName(inferred) : null;
   }
-  return null;
+  return skinTitleHero(mod, heroByCategoryId) ?? null;
 }
 
 export function entryHeroNames(entry: ModEntry, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
@@ -223,7 +224,18 @@ export function tagKeyLabel(key: string): string {
   return key;
 }
 
-function modTagKeys(mod: Mod): string[] {
+const SKINS_TAG_KEY = 'cat:Skins';
+
+/** A hero's mod filed under that hero, one of its subcategories, a skin root,
+ *  or nowhere at all, rather than a category of its own (QoL, Gameplay). */
+function isHeroSkin(mod: Mod, category: string | undefined, heroByCategoryId?: ReadonlyMap<number, string>): boolean {
+  if (!category) return true;
+  return !!heroNameFromTag(category) || !!skinCategoryHero(mod, heroByCategoryId) || isSkinRootCategory(category);
+}
+
+/** Mirrors the card taxonomy: a global type stands in for its category, and
+ *  every hero skin is a Skins tag however GameBanana filed it. */
+function modTagKeys(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
   const keys: string[] = [];
   const labels = new Set<string>();
   const add = (key: string) => {
@@ -237,19 +249,26 @@ function modTagKeys(mod: Mod): string[] {
   if (global) add(`global:${global}`);
 
   const section = (mod.sourceSection ?? '').trim();
-  if (section.toLowerCase().includes('sound')) add('section:sound');
+  const isSound = section.toLowerCase().includes('sound');
+  if (isSound) add('section:sound');
 
   const category = mod.categoryName?.trim();
-  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
+  if (!global) {
+    if (!isSound && modHeroName(mod, heroByCategoryId) && isHeroSkin(mod, category, heroByCategoryId)) {
+      add(SKINS_TAG_KEY);
+    } else if (category && !heroNameFromTag(category)) {
+      add(category.toLowerCase() === OTHER_TAG_KEY ? OTHER_TAG_KEY : `cat:${category}`);
+    }
+  }
 
   if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
   if (keys.length === 0) add(OTHER_TAG_KEY);
   return keys;
 }
 
-export function entryTagKeys(entry: ModEntry): string[] {
+export function entryTagKeys(entry: ModEntry, heroByCategoryId?: ReadonlyMap<number, string>): string[] {
   const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
-  return Array.from(new Set(mods.flatMap(modTagKeys)));
+  return Array.from(new Set(mods.flatMap((mod) => modTagKeys(mod, heroByCategoryId))));
 }
 
 export function flattenEntries(entries: ModEntry[]): Mod[] {

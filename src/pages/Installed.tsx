@@ -2629,7 +2629,7 @@ export default function Installed() {
   const entryFacetMeta = useMemo(() => {
     const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
     for (const entry of allEntries) {
-      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry) });
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry, heroByCategoryId) });
     }
     return byKey;
   }, [allEntries, heroByCategoryId]);
@@ -3055,7 +3055,7 @@ export default function Installed() {
   const heroNamesOf = (entry: ModEntry): string[] =>
     entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId);
   const tagKeysOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry, heroByCategoryId);
 
   // Hero and tag buckets are built from allEntries (not the filtered view) so
   // the option lists stay stable as selections change.
@@ -3164,7 +3164,7 @@ export default function Installed() {
     const matchesHeroEntry = (entry: ModEntry) =>
       heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId)).includes(heroFilter);
     const matchesTagEntry = (entry: ModEntry) =>
-      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
+      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry, heroByCategoryId)).some((key) => tagFilter.includes(key));
     // Selecting several lists unions them (same as tags), but the list axis as a
     // whole ANDs with the others.
     const matchesListEntry = (entry: ModEntry) =>

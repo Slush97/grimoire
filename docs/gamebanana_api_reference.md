@@ -12,7 +12,7 @@ Deadlock modding integrations primarily rely on the GameBanana API. Due to the p
 ### ⚠️ Critical Implementation Notes
 - **Empty JSON Responses**: The API frequently returns empty responses (0 bytes) instead of JSON errors. Validating the response body before parsing is mandatory.
 - **Sparse Responses**: List endpoints (Search, Subfeed) return minimal data. Important flags like `_bIsNsfw` are often missing from lists and only appear in Detail requests.
-- **Deadlock Categories**: Native category endpoints often fail for Deadlock. Category data must be extracted from individual mod records (see [Category Discovery](#category-discovery)).
+- **Deadlock Categories**: Categories form a tree per submission type, fetched from `Util/{Model}Category/NestedStructure` (see [Category Discovery](#category-discovery)). List endpoints return a category without its id (see [Schemas](#3-schemas--fields)).
 - **Item Types**: Deadlock content is split between `Mod` (visuals) and `Sound` (audio). You must query BOTH to get all content.
 
 ---
@@ -21,7 +21,7 @@ Deadlock modding integrations primarily rely on the GameBanana API. Due to the p
 **Base URL**: `https://gamebanana.com/apiv11`
 
 ### Verified Item Types for Deadlock
-Based on scanning all **1,579 submissions**:
+The counts below come from a 2024 scan of **1,579 submissions** and are stale. On 2026-10-24 the app's local mirror held 5,427 Mod, 4,676 Sound and 117 Wip rows.
 
 | Item Type | Count | Usage |
 | :--- | ---: | :--- |
@@ -36,8 +36,6 @@ Based on scanning all **1,579 submissions**:
 | **Concept** | 1 | Concept art/ideas. |
 | **Spray** | 1 | Spray images. |
 | **Wip** | 1 | Work in progress. |
-
-> **Note**: If filtering to "actual content" (Mod + Sound + Tool + Script + Spray = **1,452 items**), this closely matches typical mod manager databases.
 
 ### Endpoints
 
@@ -130,61 +128,14 @@ GET https://gamebanana.com/apiv11/Util/Search/Results?_sSearchString=abrams&_idG
 
 ---
 
-## 3. Hero Filtering Limitations
+## 3. Hero Filtering
 
-> [!IMPORTANT]
-> **There are NO hero-specific categories in GameBanana for Deadlock.**
->
-> All hero mods are stored in generic categories like "Skins" or "Model Replacement".
-> The hero association only exists in the mod's **title**, **tags**, or **description**.
+Mod skins have hero categories: Skins (`33295`) has one subcategory per hero, and each hero has its own nested children. Sound and Wip have no hero categories, so a hero there exists only in the **title**, **tags** or **description**. The full tree is in [gamebanana_categories_reference.md](./gamebanana_categories_reference.md).
 
-### Why This Matters
-- You **cannot** filter the Subfeed or Mod/Index by hero
-- You **must** use the Search endpoint to find hero-specific content
-- Even then, search is text-based (matches title + description + tags)
-
-### Hero Filtering Strategies
-
-#### Strategy 1: Search API (Recommended)
-```javascript
-const searchHero = async (heroName) => {
-  const url = `https://gamebanana.com/apiv11/Util/Search/Results?_sSearchString=${heroName}&_idGameRow=20948`;
-  const response = await fetch(url);
-  const data = await response.json();
-  return data._aRecords;
-};
-```
-
-#### Strategy 2: Client-Side Tag Filtering
-If you've already fetched all mods (e.g., from Subfeed), filter locally:
-```javascript
-const filterByHero = (mods, heroName) => {
-  const normalized = heroName.toLowerCase();
-  return mods.filter(mod => {
-    // Check tags
-    const hasTag = mod._aTags?.some(tag => 
-      tag.toLowerCase().includes(normalized)
-    );
-    // Check title
-    const inTitle = mod._sName?.toLowerCase().includes(normalized);
-    return hasTag || inTitle;
-  });
-};
-```
-
-#### Strategy 3: Pre-Index on Sync
-During a full sync, build a local hero-to-mod mapping:
-```javascript
-const heroIndex = {}; // { 'abrams': [modId1, modId2], 'ivy': [...] }
-
-for (const mod of allMods) {
-  const heroes = extractHeroesFromMod(mod);
-  for (const hero of heroes) {
-    if (!heroIndex[hero]) heroIndex[hero] = [];
-    heroIndex[hero].push(mod._idRow);
-  }
-}
-```
+### How the app filters
+- **Mod skins**: by category id. The remote browse sends `_aFilters[Generic_Category]` with the hero's id (the filter includes descendants). The local catalog matches `sub_category_id`, which is real, over the hero's whole subtree.
+- **Sound and Wip**: by title, as a whole-word match (`nameMentionsHero` in `src/lib/heroFilter.ts`).
+- **Search API**: text-based only, see below.
 
 ### What Search Matches
 The Search API matches your query against:
@@ -224,7 +175,9 @@ Core allowed fields available in `_csvProperties` or detail responses.
 | `_idRow` | Int | Unique Mod ID. |
 | `_sName` | String | Title of the mod. |
 | `_sProfileUrl` | String | Full URL to the mod page. |
-| `_aRootCategory` | Object | Contains `_sName`, `_idRow` (Category), `_sIconUrl`. |
+| `_aRootCategory` | Object | Tree root. List endpoints give `_sName`, `_sProfileUrl`, `_sIconUrl` and **no `_idRow`**; the id is only in the URL (`.../cats/{id}`). |
+| `_aSubCategory` | Object / null | Same shape as `_aRootCategory`, for the submission's own category when it is not the root (a hero, or a nested child). `null` when filed directly under the root. |
+| `_aCategory` | Object | Detail endpoints only: the submission's own category, with `_idRow`. |
 | `_aPreviewMedia` | Object | Contains `_aImages` array (screenshots). |
 | `_bIsNsfw` | Boolean | **Crucial**: True if content is mature. *Often missing in List views.* |
 | `_bHasContentRatings` | Boolean | **Proxy**: Reliable indicator of NSFW content in List views where `_bIsNsfw` is null. |
@@ -252,51 +205,19 @@ Fields specific to the Game entity (Deadlock).
 
 ## 4. Category Discovery
 
-### The "Missing Category" Problem
-Querying `GET /Mod/Categories?_aGameRowIds[]=20948` often returns `400 Bad Request` or empty data for Deadlock. You cannot reliably fetch a tree of categories strictly from the API.
+### Fetching the tree
+```http
+GET https://gamebanana.com/apiv11/Util/ModCategory/NestedStructure?_idGameRow=20948
+```
+The same endpoint serves `SoundCategory`, `WipCategory` and `ToolCategory`. `GET /Game/20948/CategoryTree` lists the sections and their category models. Each node has `_idRow`, `_sName`, `_sProfileUrl`, `_nItemCount`, `_sIconUrl`, `_idParentRow` (children only) and `_aChildren`. The app caches Mod, Sound and Wip trees in `category_cache` and refreshes them daily.
 
-### Solution: Extraction Strategy
-Categories must be discovered by parsing the `_aRootCategory` field from mod listings.
+### Category ids on submissions
+List endpoints omit the category id (`_aRootCategory` and `_aSubCategory` carry only name, URL and icon), so the id is parsed from the profile URL (`categoryIdFromProfileUrl`). Detail endpoints return `_aCategory` with `_idRow`. In the local catalog `category_id` is always NULL; `category_name` holds the root name and `sub_category_id` the real subcategory id.
 
-**The Definitive Deadlock Category Map (Verified)**
-*Generated from exhaustive crawl of all 1,579 submissions*
+### Category map
+The current ids, names and hierarchy (8 Mod roots, 11 Sound roots, 4 Wip roots, 44 hero subcategories under Skins) are in [gamebanana_categories_reference.md](./gamebanana_categories_reference.md), verified 2026-10-24.
 
-| ID | Name | Count | Parent Type | Notes |
-| :--- | :--- | ---: | :--- | :--- |
-| `5815` | **Other/Misc** | 468 | Sound | **Largest bucket** - misc audio. |
-| `33295` | **Skins** | 454 | Mod | Hero skins (Primary). |
-| `5842` | **Music** | 226 | Sound | Soundtrack replacements. |
-| `31713` | **HUD** | 98 | Mod | UI/Reticle changes. |
-| `33154` | **Model Replacement** | 95 | Mod | Model swaps. |
-| `31710` | **Other/Misc** | 71 | Mod | Generic mods. |
-| `3366` | **Other/Misc** | 57 | Mod | Legacy misc. |
-| `3807` | **Skins** | 41 | Mod | Secondary skins (Legacy). |
-| `2114` | **Other/Misc** | 22 | Mod | |
-| `5843` | **Killsounds** | 14 | Sound | Audio on kill. |
-| `5895` | **Killstreak Music** | 9 | Sound | Audio on streaks. |
-| `33331` | **Gameplay Modifications** | 6 | Mod | Scripts/gameplay tweaks. |
-| `37225` | **Maps** | 4 | Mod | Level edits. |
-| `5546` | **Other/Misc** | 3 | Sound | |
-| `1932` | **Modding** | 3 | Tool | Modding tools/resources. |
-| `2957` | **Other/Misc** | 2 | Mod | |
-| `3616` | **Other/Misc** | 2 | Mod | |
-| `2855` | **Maps** | 1 | Mod | Secondary maps category. |
-| `804` | **Other/Misc** | 1 | Mod | |
-| `5262` | **Other/Misc** | 1 | Sound | |
-| `1922` | **Other/Misc** | 1 | Mod | |
-
-### Hero Identification
-Deadlock does **NOT** use sub-categories for heroes. Instead, heroes are identified via the `_aTags` array.
-
-**Known Hero Tags** (extracted from 131 unique tags):
-- `character: lash`, `character: drifter`
-- `geist`, `ivy`, `hades`, `viscous`, `yamato`, `mcginnis`
-- `mo & krill`, `mo and krill`, `mo&krill`
-- `hero: mo & krill`
-
-> **Implementation**: Parse `_aTags` and match against a known hero list to categorize mods by character.
-
-*Note: The app should dynamically build its category filter list based on what it sees in the feed to handle new categories automatically.*
+*Note: the app builds its category filter list from the fetched trees, so a new category needs no code change.*
 
 ---
 
