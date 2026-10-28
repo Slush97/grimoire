@@ -1077,6 +1077,7 @@ export interface ElectronAPI {
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
+    reorderPriorityMods: (orderedIds: string[]) => Promise<Mod[]>;
     applyModToggleBatch: (
         enableIds: string[],
         disableIds: string[]

@@ -22,7 +22,7 @@ function mod(id: string, overrides: Partial<Mod> = {}): Mod {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('installed lists', () => {
-  it('supports overlapping lists and collects unlisted entries last without changing entry order', () => {
+  it('uses each list order and collects unlisted entries last without changing load order', () => {
     const entries = buildModEntries([mod('b'), mod('a'), mod('c'), mod('d')]);
     const folders = buildInstalledListGroups(entries, [
       { id: 'skins', name: 'Skins', keys: ['sha256:a', 'sha256:b'] },
@@ -31,14 +31,14 @@ describe('installed lists', () => {
     ]);
     expect(folders.map((folder) => [folder.id, folder.entries.map((entry) => entry.key)]))
       .toEqual([
-        ['skins', [entries[0].key, entries[1].key]],
+        ['skins', [entries[1].key, entries[0].key]],
         ['wip', [entries[1].key]],
         ['missing', []],
         [UNLISTED_GROUP_ID, [entries[2].key, entries[3].key]],
       ]);
     expect(entries.map((entry) => entry.kind === 'single' && entry.mod.id)).toEqual(['b', 'a', 'c', 'd']);
     expect(listSelectionEntries(folders, new Set([UNLISTED_GROUP_ID])).flatMap((entry) => entry.ids))
-      .toEqual(['b', 'a', 'a']);
+      .toEqual(['a', 'b', 'a']);
   });
 
   it('puts every entry in the unlisted group when there are no lists, and omits it when empty', () => {
@@ -61,7 +61,14 @@ describe('installed lists', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].entries).toHaveLength(2);
     expect(listSelectionEntries(groups, new Set()).flatMap((entry) => entry.ids))
-      .toEqual(['disabled', 'alternative', 'default']);
+      .toEqual(['alternative', 'default', 'disabled']);
+  });
+
+  it('keeps unlisted display order separate and appends new mods', () => {
+    const entries = buildModEntries([mod('a'), mod('b'), mod('c')]);
+    const groups = buildInstalledListGroups(entries, [], ['sha256:missing', 'sha256:b', 'sha256:a']);
+    expect(groups[0].entries.map(entry => entry.key)).toEqual([entries[1].key, entries[0].key, entries[2].key]);
+    expect(entries.map(entry => entry.key)).toEqual(buildModEntries([mod('a'), mod('b'), mod('c')]).map(entry => entry.key));
   });
 
   it('uses the clicked occurrence as the range anchor and excludes collapsed folders', () => {
@@ -82,6 +89,14 @@ describe('installed lists', () => {
 });
 
 describe('list preferences', () => {
+  it('normalizes and persists the independent unlisted order', () => {
+    const storage = new Map([[INSTALLED_LIST_PREFS_KEY, JSON.stringify({ view: 'lists', collapsed: [], unlistedOrder: ['sha256:b', 1, '', 'sha256:a', 'sha256:b'] })]]);
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) });
+    const preferences = readInstalledListPreferences();
+    expect(preferences.unlistedOrder).toEqual(['sha256:b', 'sha256:a']);
+    writeInstalledListPreferences(preferences);
+    expect(readInstalledListPreferences()).toEqual(preferences);
+  });
   it('round-trips the view and collapsed list IDs', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {

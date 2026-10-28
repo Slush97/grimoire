@@ -88,7 +88,7 @@ export function Modal({
     useEffect(() => {
         if (!open || !dismissable) return;
         const onKey = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
+            if (e.key !== 'Escape' || e.defaultPrevented) return;
             // A dialog stacked above this one owns the keyboard; letting the
             // lower handler run too would close both on a single Escape.
             if (!isTopmost()) return;

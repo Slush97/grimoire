@@ -112,14 +112,14 @@ const IBL_FACES = [
   getAssetPath('/ibl/nz.hdr'),
 ];
 
-// UnrealBloomPass starting params. Threshold is in LINEAR space, so it mainly catches
-// the capped self-illum (peak ~ selfIllumCap) and the brightest speculars, not the
-// whole hero. All three are calibration knobs - tune against a glowing hero.
+// Bloom starting params. Threshold is in LINEAR HDR space and applies to the whole
+// frame, so it catches the capped self-illum (peak ~ selfIllumCap) and stacked
+// additive particles, not lit body surfaces. All three are calibration knobs.
 const BLOOM_INTENSITY = 1;
 const BLOOM_RADIUS = 0.5;
-// Authored sprite cards can saturate before blending. A threshold above one
-// excludes those effects and subdued emissive eyes from selective bloom.
-const BLOOM_THRESHOLD = 0.85;
+// Lit cloth and skin stay below one; a single saturated sprite card reaches one,
+// so only additive stacks and authored self radiance bloom.
+const BLOOM_THRESHOLD = 1;
 
 // Full preview effects start enabled; explicit saved switches take precedence.
 const RELEASE_RENDER_FLAGS = FULL_EFFECTS_PREVIEW_DEFAULTS;

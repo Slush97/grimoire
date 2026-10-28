@@ -17,6 +17,7 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
 import { UnassignedModTagSelect } from '../components/locker/UnassignedModTagSelect';
 import GlobalModPicker from '../components/locker/GlobalModPicker';
 import CursorPackPane, { CursorImportButton } from '../components/locker/CursorPackPane';
@@ -50,7 +51,6 @@ import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
 import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { RevealImage } from '../components/common/RevealImage';
 import {
   FAVORITE_HEROES_KEY,
@@ -271,7 +271,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, reorderPriorityMods, deleteMods, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, setShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore(useShallow((s) => ({
       settings: s.settings,
       mods: s.mods,
@@ -281,6 +281,7 @@ export default function Locker() {
       loadMods: s.loadMods,
       toggleMod: s.toggleMod,
       reorderMods: s.reorderMods,
+      reorderPriorityMods: s.reorderPriorityMods,
       deleteMods: s.deleteMods,
       setModPriorityFolder: s.setModPriorityFolder,
       setBrowseUi: s.setBrowseUi,
@@ -369,7 +370,6 @@ export default function Locker() {
     }
   }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(lockerScrollRef);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
   const heroTypeaheadRef = useRef(heroTypeahead);
   const heroTypeaheadFadeTimerRef = useRef<number | null>(null);
@@ -563,7 +563,7 @@ export default function Locker() {
   // belongs in that hero's pile, it just also wins every collision. This list
   // only feeds the General view's Global tab.
   const priorityMods = useMemo(
-    () => mods.filter((m) => m.priorityMod).sort((a, b) => a.name.localeCompare(b.name)),
+    () => mods.filter((m) => m.priorityMod).sort((a, b) => modLoadOrder(a) - modLoadOrder(b)),
     [mods]
   );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
@@ -1364,7 +1364,10 @@ export default function Locker() {
           {viewMode === 'gallery' &&
             unassignedSkins.length + unassignedSounds.length > 0 && (
               <button
-                onClick={() => setViewMode('list')}
+                onClick={() => {
+                  setViewMode('list');
+                  lockerScrollRef.current?.scrollTo({ top: 0 });
+                }}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
                 title={t('locker.page.switchToListViewToSeeUnassigned')}
               >
@@ -1411,6 +1414,66 @@ export default function Locker() {
           />
         </div>
       </div>
+
+      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
+        <div className="space-y-3">
+          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
+          <p className="text-xs text-text-secondary -mt-1">
+            {t('locker.page.unassignedDescription')}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
+              const mod = skin.primary;
+              const subtitle =
+                skin.variants.length > 1
+                  ? t('locker.page.fileCount', { count: skin.variants.length })
+                  : mod.fileName;
+              const isSound = mod.sourceSection === 'Sound';
+
+              return (
+                <div
+                  key={skin.key}
+                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
+                >
+                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
+                    <ModThumbnail
+                      src={mod.thumbnailUrl}
+                      alt={mod.name}
+                      nsfw={mod.nsfw}
+                      hideNsfw={shouldBlurNsfw(settings)}
+                      className="w-full h-full"
+                      fallback={
+                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
+                          {t('locker.page.noPreview')}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="font-medium truncate" title={mod.name}>
+                      {mod.name}
+                    </div>
+                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
+                      {isSound ? t('locker.page.sound') : ''}
+                      {subtitle}
+                    </div>
+                    <UnassignedModTagSelect
+                      name={mod.name}
+                      heroes={tagHeroOptions}
+                      onTagHero={async (hero) => {
+                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
+                      }}
+                      onTagGeneral={async (type) => {
+                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -1511,66 +1574,6 @@ export default function Locker() {
           ))}
         </div>
       )}
-
-      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
-        <div className="space-y-3">
-          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
-          <p className="text-xs text-text-secondary -mt-1">
-            {t('locker.page.unassignedDescription')}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
-              const mod = skin.primary;
-              const subtitle =
-                skin.variants.length > 1
-                  ? t('locker.page.fileCount', { count: skin.variants.length })
-                  : mod.fileName;
-              const isSound = mod.sourceSection === 'Sound';
-
-              return (
-                <div
-                  key={skin.key}
-                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
-                >
-                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-                    <ModThumbnail
-                      src={mod.thumbnailUrl}
-                      alt={mod.name}
-                      nsfw={mod.nsfw}
-                      hideNsfw={shouldBlurNsfw(settings)}
-                      className="w-full h-full"
-                      fallback={
-                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                          {t('locker.page.noPreview')}
-                        </div>
-                      }
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="font-medium truncate" title={mod.name}>
-                      {mod.name}
-                    </div>
-                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
-                      {isSound ? t('locker.page.sound') : ''}
-                      {subtitle}
-                    </div>
-                    <UnassignedModTagSelect
-                      name={mod.name}
-                      heroes={tagHeroOptions}
-                      onTagHero={async (hero) => {
-                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
-                      }}
-                      onTagGeneral={async (type) => {
-                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
 
       {overlayHero && (
@@ -1651,6 +1654,7 @@ export default function Locker() {
             onImportSoul={() => setSoulImportOpen(true)}
             onImportUrn={() => setUrnImportOpen(true)}
             priorityMods={priorityMods}
+            onReorderPriorityMods={reorderPriorityMods}
             onAddGlobal={() => setGlobalPickerOpen(true)}
             onRemoveGlobal={(modId) => setModPriorityFolder(modId, false)}
             shuffleArmed={shuffleOnLaunch}
@@ -1926,6 +1930,7 @@ interface LockerGlobalViewProps {
   onImportUrn: () => void;
   /** Mods living in the citadel/grimoire priority root (the "Global" tab). */
   priorityMods: Mod[];
+  onReorderPriorityMods: (ids: string[]) => void | Promise<void>;
   /** Open the picker that adds installed mods to Global. */
   onAddGlobal: () => void;
   /** Move a mod back out of the priority root. */
@@ -1965,7 +1970,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onReorderPriorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   // Every tab is selectable, empty or not. We still default the landing tab to
@@ -2399,6 +2404,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   </button>
                 )}
               </div>
+              {isPriorityTab && (
+                <SkinLoadOrderStrip mods={priorityMods} onReorder={onReorderPriorityMods}
+                  hideNsfwPreviews={hideNsfw} hint={t('locker.global.loadOrderHint')} />
+              )}
               {activeType === CURSOR_TAB ? (
                 <CursorPackPane />
               ) : activeMods.length === 0 && isPropContainer ? (
