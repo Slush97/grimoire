@@ -254,3 +254,19 @@ describe('isLockerManagedSound', () => {
   });
 });
 
+
+describe('isLockerManagedMod', () => {
+  const tweak = (categoryName: string, over: Partial<Mod> = {}) =>
+    mod({ id: 'tweak', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Mod', categoryName, ...over });
+
+  it.each(['Quality of Life/Fixes', 'Accessibility', 'Gameplay Modifications'])('keeps %s out of the Locker', (categoryName) => {
+    expect(isLockerManagedMod(tweak(categoryName))).toBe(false);
+  });
+
+  it('keeps a hero-tagged tweak and skin categories', () => {
+    expect(isLockerManagedMod(tweak('Quality of Life/Fixes', { lockerHero: 'Haze' }))).toBe(true);
+    expect(isLockerManagedMod(tweak('Skins'))).toBe(true);
+    expect(isLockerManagedMod(tweak('Other/Misc'))).toBe(true);
+  });
+});
+
