@@ -15,7 +15,7 @@ export function installedRowEstimate(width: number, viewMode: InstalledWindowVie
   return Math.max(75, Math.max(0, width - 18) * 9 / 16 + 75);
 }
 
-/** Read layout coordinates so elastic transforms do not change the offset. */
+/** Read layout coordinates so CSS transforms do not change the offset. */
 function layoutTop(element: HTMLElement): number {
   let top = element.offsetTop;
   let parent = element.offsetParent;
