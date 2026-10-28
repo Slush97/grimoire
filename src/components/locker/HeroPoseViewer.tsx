@@ -55,7 +55,10 @@ import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
-import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture } from '../../types/skinEditor';
+import { SkinRegionOverlay, type RegionPicker } from './SkinRegionOverlay';
+import { regionBaker, type RegionBaker } from '../../lib/skinRegionScene';
+import type { ViewerPartHit } from '../../lib/viewerPartPicking';
+import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
 import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
@@ -551,11 +554,15 @@ export function RiggedModel({
 
 /** Mouse orbit + zoom, damped. Auto-rotation lives on the model group so the
  *  controls don't fight it; dragging just reorients the camera. */
-export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement }: {
+/** While painting, the primary button belongs to the brush: the right button turns and the middle button pans. */
+const PAINT_MOUSE_BUTTONS = { MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+
+export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement, painting = false }: {
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
   savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
   focusMaterial?: string | null;
   movement?: Pick<MovementViewerPreview, 'kind' | 'loop'>;
+  painting?: boolean;
 }) {
   const motionClock = useContext(MovementClock);
   const { camera, gl, size: viewportSize } = useThree();
@@ -688,6 +695,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   return (
     <DreiOrbitControls
       ref={controlsRef}
+      mouseButtons={painting ? PAINT_MOUSE_BUTTONS : undefined}
       enableDamping
       enablePan
       enableZoom={false}
@@ -1152,6 +1160,9 @@ export default function HeroPoseViewer({
   onPartTextures,
   onPartPick,
   onPreviewCapture,
+  regionSelection = null,
+  regionHighlight = null,
+  onRegionBaker,
   compact = false,
   active = true,
   workspaceKey,
@@ -1174,6 +1185,12 @@ export default function HeroPoseViewer({
   onPartTextures?: (textures: Record<string, SkinPartTexture>) => void;
   onPartPick?: (material: string) => void;
   onPreviewCapture?: (capture: (() => Promise<string>) | null) => void;
+  /** Selecting an area: clicks report texture points instead of picking a part, and the selection is drawn on the model. */
+  regionSelection?: { material: string; seeds: SkinRegionSeed[]; picker: RegionPicker; onPick: (hit: ViewerPartHit) => void } | null;
+  /** A saved area to outline without changing what clicks do. */
+  regionHighlight?: { material: string; seeds: SkinRegionSeed[] } | null;
+  /** Bakes a region's export mask from the loaded model. Resolves null when the material is not in this model. */
+  onRegionBaker?: (baker: RegionBaker | null) => void;
   compact?: boolean;
   active?: boolean;
   workspaceKey?: string;
@@ -1191,6 +1208,17 @@ export default function HeroPoseViewer({
   const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
   const [spinPaused, setSpinPaused] = useState(() => compact ? false : !initialHeroPreviewFlags().autoRotate);
   const [playback, setPlayback] = useFoundryDraft(`${viewKey}:playback`, z.object({ paused: z.boolean(), speed: z.number().finite().min(0.1).max(4) }), { paused: false, speed: 1 });
+  // Selecting an area holds the pose and the turntable: picking on a moving model misses, and a still
+  // pose lets hover and brush strokes test cached geometry instead of re-skinning it every frame.
+  const holdPose = !!regionSelection;
+  const heldPlayback = useMemo(() => holdPose && !playback.paused ? { ...playback, paused: true } : playback, [holdPose, playback]);
+  useEffect(() => {
+    if (!holdPose) return;
+    const turntable = interaction.current;
+    const paused = turntable.paused;
+    turntable.paused = true;
+    return () => { turntable.paused = paused; };
+  }, [holdPose]);
   const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
@@ -1208,6 +1236,9 @@ export default function HeroPoseViewer({
   const pendingTextures = useRef(new Set<string>());
   const textureFailed = useRef(false);
   const partPatternFailed = useCallback(() => { textureFailed.current = true; setViewerError(t('foundry.skin.patternPreviewFailed')); }, [t]);
+  // Counts edits landing on the model, so a finished paint stroke stays drawn until its paint shows.
+  const [partEditsApplied, setPartEditsApplied] = useState(0);
+  const partEditApplied = useCallback(() => setPartEditsApplied((count) => count + 1), []);
   const partTexturePending = useCallback((material: string, pending: boolean) => {
     if (pending) { pendingTextures.current.add(material); textureFailed.current = false; }
     else pendingTextures.current.delete(material);
@@ -1217,6 +1248,11 @@ export default function HeroPoseViewer({
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!scene || !onRegionBaker) return;
+    onRegionBaker(regionBaker(scene));
+    return () => onRegionBaker(null);
+  }, [scene, onRegionBaker]);
   useEffect(() => {
     if (!scene || !onPreviewCapture) return;
     let active = true;
@@ -1574,16 +1610,20 @@ export default function HeroPoseViewer({
           </mesh>
         )}
         <group>
-        {onPartPick && <SkinPartPicking model={scene} onPick={onPartPick} />}
-        <MovementFxStage preview={movementPreview} scene={scene} paused={playback.paused} speed={playback.speed}
+        {onPartPick && <SkinPartPicking model={scene} posed={!!regionSelection}
+          onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
+        {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} applied={partEditsApplied} />
+          : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
+        <MovementFxStage preview={movementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
-            movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView} />}>
+            movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
+            painting={regionSelection?.picker.by === 'brush'} />}>
         {rigged ? (
           <RiggedModel
             heroName={heroName}
             reset={resetView}
             clipName={clipName}
-            playback={playback}
+            playback={heldPlayback}
             seek={seek}
             progressRef={playbackProgressRef}
             scene={scene}
@@ -1623,7 +1663,7 @@ export default function HeroPoseViewer({
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
         <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />
-        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} />
+        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} onApplied={partEditApplied} />
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect

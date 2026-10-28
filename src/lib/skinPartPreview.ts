@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isClearRegion, isFinishRegion } from './skinColorAdjustments';
 import { editForMaterial, materialBasename } from './skinParts';
 import { getMorphic } from './source2NprMaterial';
 import { TRANSLUCENT_OVERLAY_RENDER_ORDER } from './source2Preview/types';
@@ -26,7 +27,7 @@ function numericUniform(material: THREE.Material, name: string): { value: number
   return matches(uniform) ? uniform : null;
 }
 
-function applySkinTransparency(material: THREE.Material, opacity: number): () => void {
+export function applySkinTransparency(material: THREE.Material, opacity: number): () => void {
   const before = { transparent: material.transparent, opacity: material.opacity, blending: material.blending,
     depthTest: material.depthTest, depthWrite: material.depthWrite, alphaTest: material.alphaTest };
   material.transparent = true;
@@ -68,7 +69,7 @@ export function applySkinPartEdits(scene: THREE.Object3D, edits: SkinPartEdit[],
   scene.traverse((object) => {
     if (!(object instanceof THREE.Mesh) || object.userData.skinPartHighlight) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
-    if (materials.some((material) => editForMaterial(material.name, edits)?.surface)) {
+    if (materials.some((material) => { const edit = editForMaterial(material.name, edits); return edit?.surface || edit?.regions?.some(isClearRegion); })) {
       const previous = object.renderOrder;
       object.renderOrder = Math.max(previous, TRANSLUCENT_OVERLAY_RENDER_ORDER);
       restore.push(() => { object.renderOrder = previous; });
@@ -80,8 +81,9 @@ export function applySkinPartEdits(scene: THREE.Object3D, edits: SkinPartEdit[],
       const visible = material.visible;
       material.visible = visible && !edit?.hidden;
       restore.push(() => { material.visible = visible; });
-      if (edit?.surface) restore.push(applySkinTransparency(material, edit.surface.opacity));
-      if (edit?.finish && 'roughness' in material && 'metalness' in material
+      // See-through areas own the part's transparency, whole-part opacity included.
+      if (edit?.surface && !edit.regions?.some(isClearRegion)) restore.push(applySkinTransparency(material, edit.surface.opacity));
+      if (edit?.finish && !edit.regions?.some(isFinishRegion) && 'roughness' in material && 'metalness' in material
         && 'roughnessMap' in material && 'metalnessMap' in material) {
         const previous = { roughness: material.roughness, metalness: material.metalness,
           roughnessMap: material.roughnessMap, metalnessMap: material.metalnessMap };

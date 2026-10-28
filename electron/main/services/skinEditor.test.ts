@@ -139,6 +139,101 @@ describe('skin transparency export chain', () => {
   });
 });
 
+describe('skin region export chain', () => {
+  const key = '8'.repeat(64);
+  const mask = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const region = { id: 'r1', seeds: [{ u: 0.25, v: 0.5 }], paint: '#3366ff' };
+  const setup = () => {
+    vi.mocked(runVpkmerge).mockClear();
+    vi.mocked(withHeroSkinSource).mockImplementation(async (_path, _hero, _sources, action) => action({
+      vpk: 'skin.vpk', base: 'game.vpk', entry: 'model.vmdl_c', fingerprint: key,
+    }));
+    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args[0] === 'model'
+      ? JSON.stringify({ draw_calls: [{ material: 'coat.vmat', vertex_count: 3 }] })
+      : args[0] === 'texture-info' ? JSON.stringify({ width: 512, height: 512 })
+      : args.at(-1) === '--help' ? '  --mask <PNG>  Limit the edit to the white area of this UV mask PNG'
+      : JSON.stringify({ m_shaderName: 'pbr.vfx', m_vectorParams: [],
+        m_textureParams: [{ m_name: 'g_tColor', m_pValue: 'coat.vtex' }, { m_name: 'g_tSelfIllumMask', m_pValue: 'mask.vtex' }] }));
+  };
+  // First: a supported check is cached for the session, an unsupported one is not.
+  it('explains when the bundled vpkmerge cannot edit areas', async () => {
+    setup();
+    const supported = vi.mocked(runVpkmergeStdout).getMockImplementation()!;
+    vi.mocked(runVpkmergeStdout).mockImplementation(async (args) => args.at(-1) === '--help' ? '  --material <VMAT>' : supported(args));
+    await expect(buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, regions: [region],
+    }], regionMasks: { 'coat.vmat|r1': mask } }, 'out.vpk')).rejects.toThrow('newer vpkmerge');
+    expect(vi.mocked(runVpkmerge)).not.toHaveBeenCalled();
+  });
+  it('paints regions over the whole-part texture and under the material tint', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: '#ff8800', adjustments: { hue: 20, saturation: 1, brightness: 1 },
+      regions: [region, { id: 'r2', seeds: [{ u: 0.1, v: 0.1 }] }],
+    }], regionMasks: { 'coat.vmat|r1': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0])).toEqual(['trippy-skin', 'trippy-skin', 'vmat', 'out.vpk']);
+    const outputOf = (args: string[]) => args[args.indexOf('--encode-vpk') + 1];
+    const [whole, painted, tint] = calls;
+    expect(whole).not.toContain('--mask');
+    expect(painted[painted.indexOf('--vpk') + 1]).toBe(outputOf(whole));
+    expect(painted).toEqual(expect.arrayContaining(['--repaint', '3366ff', '--scroll', '0', '--hue-shift', '0', '--mask']));
+    expect(tint[tint.indexOf('--vpk') + 1]).toBe(outputOf(painted));
+  });
+  it('stacks shine areas on the whole-part finish, after every color layer', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, finish: { roughness: 0.5, metalness: 0 },
+      regions: [region, { id: 'r3', seeds: [{ u: 0.7, v: 0.2 }], finish: { roughness: 0.18, metalness: 1 } }],
+    }], regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r3': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['trippy-skin', 'workshop finish', 'workshop finish', 'out.vpk']);
+    const outputOf = (args: string[]) => args[args.indexOf('--encode-vpk') + 1];
+    const [, whole, shine] = calls;
+    expect(whole).not.toContain('--mask');
+    // The shine reads the whole-part finish first, so it blends into that finish instead of replacing it.
+    expect(shine[shine.indexOf('--vpk') + 1]).toBe(outputOf(whole));
+    expect(shine).toEqual(expect.arrayContaining(['--roughness', '0.18', '--metalness', '1', '--mask']));
+  });
+  it('turns on glow last, with the glow area as its mask', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null,
+      regions: [region, { id: 'r4', seeds: [{ u: 0.3, v: 0.3 }], glow: { color: '#33ccff', animation: 'pulse', strength: 12, speed: 2, paintColors: true } }],
+    }], regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r4': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['trippy-skin', 'workshop glow', 'out.vpk']);
+    const [painted, glow] = calls;
+    expect(glow[glow.indexOf('--vpk') + 1]).toBe(painted[painted.indexOf('--encode-vpk') + 1]);
+    // Drafts saved before the cap glow no brighter than 8.
+    expect(glow).toEqual(expect.arrayContaining(['--color', '33ccff', '--animation', 'pulse', '--mask', '--strength', '8', '--speed', '2', '--paint-colors']));
+  });
+  it('carves see-through areas before the finish, and lights a whole-part glow without a mask', async () => {
+    setup();
+    await buildSkinEditVpk('game', { heroName: 'Abrams', skinSources: [], fingerprint: key, edits: [{
+      material: 'coat.vmat', hidden: false, tint: null, glow: { color: '#ffaa00', animation: 'steady' },
+      regions: [{ id: 'r5', seeds: [{ u: 0.3, v: 0.3 }], surface: { opacity: 0.45 } }],
+    }], regionMasks: { 'coat.vmat|r5': mask } }, 'out.vpk');
+    const calls = vi.mocked(runVpkmerge).mock.calls.map(([args]) => args);
+    expect(calls.map((args) => args[0] === 'workshop' ? args.slice(0, 2).join(' ') : args[0])).toEqual(['workshop surface', 'workshop glow', 'out.vpk']);
+    const [clear, glow] = calls;
+    expect(clear).toEqual(expect.arrayContaining(['--mode', 'translucent', '--opacity', '0.45', '--mask']));
+    expect(glow).not.toContain('--mask');
+    expect(glow[glow.indexOf('--vpk') + 1]).toBe(clear[clear.indexOf('--encode-vpk') + 1]);
+  });
+  it('allows one glow per part', () => {
+    const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true, glowable: true })) };
+    const glow = (id: string) => ({ id, seeds: [{ u: 0.5, v: 0.5 }], glow: { color: '#ffffff', animation: 'steady' as const } });
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, regions: [glow('r1'), glow('r2')] }],
+      regionMasks: { 'coat.vmat|r1': mask, 'coat.vmat|r2': mask } })).toThrow('one glow');
+  });
+  it('rejects an edited region without a baked mask', () => {
+    const editable = { ...info, parts: info.parts.map((part) => ({ ...part, tintable: true, patternable: true })) };
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: null, regions: [region] }] })).toThrow('no selection');
+    expect(() => validateSkinEdits(editable, { ...source, edits: [{ material: 'coat.vmat', hidden: false, tint: '#ffffff', regions: [{ id: 'r2', seeds: [] }] }] })).not.toThrow();
+  });
+});
+
 describe('skin inspection cache', () => {
   it('allows static pbr opacity and excludes cutouts, expression-driven alpha and unsupported shaders', async () => {
     vi.mocked(withHeroSkinSource).mockImplementation(async (_path, _hero, _sources, action) => action({

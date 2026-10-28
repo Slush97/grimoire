@@ -20,6 +20,8 @@ export interface SkinPart {
   tintable: boolean;
   patternable: boolean;
   finishable?: boolean;
+  /** Whether the material can take painted glow: pbr.vfx with a color texture and no animated self-illumination. */
+  glowable?: boolean;
   surfaceable?: boolean;
   textureSize?: { width: number; height: number };
 }
@@ -41,6 +43,61 @@ export interface SkinPartEdit {
   repaint?: boolean;
   finish?: SkinPartFinish;
   surface?: SkinPartSurface;
+  /** Glow over the whole part. A part has one glow, so this and a painted glow area never coexist. */
+  glow?: SkinPartGlow;
+  /** Smaller areas of this part's color texture, each with its own texture edit. Applied in order over the whole-part edit. */
+  regions?: SkinPartRegion[];
+}
+
+/**
+ * A texture point. The region takes (or, with `remove`, drops) every UV island covering it; with
+ * `by: 'color'` the connected texels whose color is within `tolerance` (CIELAB delta E) of the point's;
+ * with `by: 'brush'` the texels whose point on the model is within `radius` (mesh units) of it.
+ */
+export interface SkinRegionSeed {
+  u: number;
+  v: number;
+  remove?: true;
+  by?: 'color' | 'brush';
+  tolerance?: number;
+  radius?: number;
+  /** The rest of a brush stroke after this seed's own dab, as flat (u, v, radius) triples: one seed per stroke, not per dab. */
+  path?: number[];
+  /** The area whose paint cut this remove seed. Removing that area takes the cut back, so what was under it shows again. */
+  from?: string;
+}
+
+export interface SkinPartRegion {
+  id: string;
+  /** Optional: an unnamed region is still saved. */
+  name?: string;
+  seeds: SkinRegionSeed[];
+  /** Fingerprint of the texture layout the seeds were picked on. A different layout needs a new selection. */
+  layout?: string;
+  /** Paint color. Regions always paint: a material tint cannot stop at a texture boundary. */
+  paint?: string | null;
+  adjustments?: SkinColorAdjustments;
+  /** Region patterns never scroll: scrolling moves the whole material. */
+  pattern?: SkinPartPattern | null;
+  /** Shine painted onto the area. A finish area keeps the colors under it, so it never has paint or a pattern. */
+  finish?: SkinPartFinish;
+  /** Glow painted onto the area. A material has one glow color, so a part has at most one glow area. */
+  glow?: SkinPartGlow;
+  /** See-through painted onto the area: its opacity there, 0 (gone) to 1 (solid). */
+  surface?: { opacity: number };
+}
+
+export type SkinGlowAnimation = 'steady' | 'pulse' | 'rainbow';
+
+export interface SkinPartGlow {
+  color: string;
+  animation: SkinGlowAnimation;
+  /** Self-illumination scale; 4 when unset. */
+  strength?: number;
+  /** Pulse and rainbow speed; 1 (about a two second pulse) when unset. */
+  speed?: number;
+  /** Glow in the part's own texture colors instead of `color`. */
+  paintColors?: boolean;
 }
 
 export interface SkinPartSurface {
@@ -78,6 +135,8 @@ export interface SkinPartPattern {
 export interface SkinEditExport extends SkinEditSource {
   fingerprint: string;
   edits: SkinPartEdit[];
+  /** White-on-black PNG data URLs keyed `material|regionId`, baked by the viewer for each edited region. */
+  regionMasks?: Record<string, string>;
 }
 
 export interface SkinEditSave extends SkinEditExport {

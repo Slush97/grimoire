@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit, repaintSkinPixels } from './skinColorAdjustments';
+import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit, meanLuminance, repaintSkinPixels } from './skinColorAdjustments';
 import { skinEditExportSchema, skinEditSaveSchema } from './skinEditSchema';
 
 describe('skin texture adjustment', () => {
-  it('paints black and light pixels white while retaining shading and packed alpha', () => {
+  it('paints around the picked color, keeping shading and packed alpha, exactly like vpkmerge', () => {
+    // Same texels and expected bytes as vpkmerge's repaint_lifts_dark_pixels_keeps_detail_and_alpha.
     const pixels = new Uint8Array([0, 0, 0, 17, 128, 128, 128, 128, 255, 255, 255, 239]);
-    repaintSkinPixels(pixels, '#ffffff');
-    expect([...pixels]).toEqual([166, 166, 166, 17, 211, 211, 211, 128, 255, 255, 255, 239]);
+    repaintSkinPixels(pixels, '#c86432');
+    expect([...pixels]).toEqual([150, 75, 37, 17, 200, 100, 50, 128, 250, 125, 62, 239]);
     repaintSkinPixels(pixels, '#000000');
     expect([...pixels]).toEqual([0, 0, 0, 17, 0, 0, 0, 128, 0, 0, 0, 239]);
+  });
+  it('gives a dark area the picked color, not a darker one', () => {
+    const pixels = new Uint8Array([30, 30, 30, 255, 30, 30, 30, 255, 0, 0, 0, 255]);
+    repaintSkinPixels(pixels, '#ef4444', meanLuminance(pixels, new Uint8Array([255, 255, 0])));
+    expect([...pixels.slice(0, 8)]).toEqual([239, 68, 68, 255, 239, 68, 68, 255]);
   });
   it('keeps neutral pixels exact, shifts hues, and preserves every alpha byte', () => {
     const pixels = new Uint8Array([255, 0, 0, 19, 0, 255, 0, 128, 80, 80, 80, 0]);

@@ -379,7 +379,7 @@
         "matte": "Matte",
         "satin": "Satin",
         "glossy": "Glossy",
-        "polished": "Polished metal",
+        "polished": "Chrome",
         "metal": "Metal"
       },
       "originalFinishHint": "Uses the original maps and values. Choose a finish to create an override.",
@@ -396,7 +396,97 @@
       "changedAcrossForms_one": "{{count}} change across {{forms}} forms",
       "changedAcrossForms_other": "{{count}} changes across {{forms}} forms",
       "changedInForm_one": "{{count}} change in {{form}}",
-      "changedInForm_other": "{{count}} changes in {{form}}"
+      "changedInForm_other": "{{count}} changes in {{form}}",
+      "region": {
+        "areaName": "Color {{index}}",
+        "otherPart": "That is {{other}}. This paint only goes on {{part}}.",
+        "name": "Area name",
+        "delete": "Delete {{area}}",
+        "maskUnavailable": "An edited area could not be read from the preview. Show its form in the preview, then try again.",
+        "stale": "An edited area was selected on a different version of this skin. Change its selection before saving.",
+        "staleHint": "This area was selected on a different version of this skin, so it may cover the wrong pixels. Change its selection.",
+        "otherPartUnknown": "That is not {{part}}. This paint only goes on {{part}}.",
+        "maskOtherForm": "Show the {{form}} form in the preview once so its painted areas can be saved, then save again."
+      },
+      "paint": {
+        "mode": "How to color",
+        "wholePart": "Whole part",
+        "paintOn": "Paint on it",
+        "fillHint": "Click {{part}} to fill a spot with your color.",
+        "brushHint": "Drag over {{part}} to paint. Right-drag turns the model.",
+        "eraserHint": "Drag over paint to remove it. Right-drag turns the model.",
+        "tool": "Tool",
+        "fill": "Fill",
+        "brush": "Brush",
+        "eraser": "Eraser",
+        "fillRange": "Reach",
+        "size": "Size",
+        "startOver": "Start over",
+        "done": "Done",
+        "doneShortcut": "Done painting (Esc)",
+        "more": "Change {{area}}",
+        "back": "Back to painting",
+        "tooManyColors": "One part can have up to 16 colors. Pick one from Your colors to keep painting.",
+        "full": "This part holds as much paint as it can. Erase some or start over to keep painting.",
+        "stale": "Paint again",
+        "fillRangeHint": "Low fills only the exact color you click. High also fills similar colors.",
+        "colorCount_one": "{{count}} painted color",
+        "colorCount_other": "{{count}} painted colors",
+        "patterns": "Patterns",
+        "customColor": "Any color",
+        "remove": "Remove {{area}}",
+        "shine": "Shine",
+        "paint": "Paint",
+        "shineOver": "goes over paint",
+        "onPart": "On {{part}}",
+        "paintMore": "Paint more {{area}}",
+        "colors": {
+          "red": "Red",
+          "orange": "Orange",
+          "brown": "Brown",
+          "yellow": "Yellow",
+          "green": "Green",
+          "teal": "Teal",
+          "blue": "Blue",
+          "purple": "Purple",
+          "pink": "Pink",
+          "white": "White",
+          "gray": "Gray",
+          "black": "Black"
+        },
+        "shines": {
+          "glossy": "Glossy",
+          "metal": "Metal",
+          "polished": "Chrome"
+        },
+        "glow": "Glow",
+        "glowColor": "in your color",
+        "glowUnsupported": "This part can't glow.",
+        "glows": {
+          "steady": "Glow",
+          "pulse": "Pulse",
+          "rainbow": "Rainbow"
+        },
+        "seeThrough": "See-through",
+        "clears": {
+          "hazy": "Hazy",
+          "half": "Half",
+          "faint": "Faint"
+        },
+        "glowWhole": "The whole part already glows. Turn that off to paint glow."
+      },
+      "errors": {
+        "generic": "That did not work. Your changes are still here, so try again. If it keeps happening, restart Grimoire.",
+        "diskFull": "Your disk is full. Free up some space, then try again.",
+        "fileBusy": "Another program is using the mod files. Close Deadlock or any mod tools, then try again."
+      },
+      "glowOff": "Off",
+      "glowPainted": "This part already glows where you painted. Remove that glow to light the whole part.",
+      "glow": {
+        "strength": "Brightness",
+        "speed": "Speed",
+        "paintColors": "Glow in paint colors"
+      }
     },
     "draft": {
       "audioRestored": "Audio selection and edits restored. Pick the same file again to audition it.",
