@@ -725,6 +725,7 @@ export function extractHeroFromPath(filePath: string): string | null {
 }
 
 const INSTALLED_HERO_PATH_PATTERNS: ReadonlyArray<{ pattern: RegExp; sound?: boolean }> = [
+    { pattern: /(?:^|\/)sounds\/player\/footsteps\/([a-z0-9_]+)\//, sound: true },
     { pattern: /(?:^|\/)(?:models|materials(?:\/models)?)\/heroes(?:_wip|_staging)?\/(?:hero_)?([a-z0-9_]+)(?:\/|\.)/ },
     { pattern: /(?:^|\/)particles\/(?:heroes(?:_wip|_staging)?|abilities|weapon_fx)\/([a-z0-9_]+)(?:\/|\.)/ },
     { pattern: /(?:^|\/)scripts\/heroes(?:_wip|_staging)?\/(?:hero_)?([a-z0-9_]+)(?:\/|\.)/ },
