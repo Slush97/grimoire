@@ -1364,7 +1364,10 @@ export default function Locker() {
           {viewMode === 'gallery' &&
             unassignedSkins.length + unassignedSounds.length > 0 && (
               <button
-                onClick={() => setViewMode('list')}
+                onClick={() => {
+                  setViewMode('list');
+                  lockerScrollRef.current?.scrollTo({ top: 0 });
+                }}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
                 title={t('locker.page.switchToListViewToSeeUnassigned')}
               >
@@ -1411,6 +1414,66 @@ export default function Locker() {
           />
         </div>
       </div>
+
+      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
+        <div className="space-y-3">
+          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
+          <p className="text-xs text-text-secondary -mt-1">
+            {t('locker.page.unassignedDescription')}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
+              const mod = skin.primary;
+              const subtitle =
+                skin.variants.length > 1
+                  ? t('locker.page.fileCount', { count: skin.variants.length })
+                  : mod.fileName;
+              const isSound = mod.sourceSection === 'Sound';
+
+              return (
+                <div
+                  key={skin.key}
+                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
+                >
+                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
+                    <ModThumbnail
+                      src={mod.thumbnailUrl}
+                      alt={mod.name}
+                      nsfw={mod.nsfw}
+                      hideNsfw={shouldBlurNsfw(settings)}
+                      className="w-full h-full"
+                      fallback={
+                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
+                          {t('locker.page.noPreview')}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="font-medium truncate" title={mod.name}>
+                      {mod.name}
+                    </div>
+                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
+                      {isSound ? t('locker.page.sound') : ''}
+                      {subtitle}
+                    </div>
+                    <UnassignedModTagSelect
+                      name={mod.name}
+                      heroes={tagHeroOptions}
+                      onTagHero={async (hero) => {
+                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
+                      }}
+                      onTagGeneral={async (type) => {
+                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -1509,66 +1572,6 @@ export default function Locker() {
               hideNsfwPreviews={shouldBlurNsfw(settings)}
             />
           ))}
-        </div>
-      )}
-
-      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
-        <div className="space-y-3">
-          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
-          <p className="text-xs text-text-secondary -mt-1">
-            {t('locker.page.unassignedDescription')}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
-              const mod = skin.primary;
-              const subtitle =
-                skin.variants.length > 1
-                  ? t('locker.page.fileCount', { count: skin.variants.length })
-                  : mod.fileName;
-              const isSound = mod.sourceSection === 'Sound';
-
-              return (
-                <div
-                  key={skin.key}
-                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
-                >
-                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-                    <ModThumbnail
-                      src={mod.thumbnailUrl}
-                      alt={mod.name}
-                      nsfw={mod.nsfw}
-                      hideNsfw={shouldBlurNsfw(settings)}
-                      className="w-full h-full"
-                      fallback={
-                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                          {t('locker.page.noPreview')}
-                        </div>
-                      }
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="font-medium truncate" title={mod.name}>
-                      {mod.name}
-                    </div>
-                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
-                      {isSound ? t('locker.page.sound') : ''}
-                      {subtitle}
-                    </div>
-                    <UnassignedModTagSelect
-                      name={mod.name}
-                      heroes={tagHeroOptions}
-                      onTagHero={async (hero) => {
-                        for (const variant of skin.variants) await tagModHero(variant.id, hero);
-                      }}
-                      onTagGeneral={async (type) => {
-                        for (const variant of skin.variants) await tagModGlobalType(variant.id, type);
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
     </div>
