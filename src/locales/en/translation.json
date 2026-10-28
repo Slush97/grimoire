@@ -2487,6 +2487,7 @@
       "tagAsHeroNamed": "Assign {{name}} to a hero or General category",
       "generalCategory": "General / {{category}}",
       "effects": "Effects",
+      "maps": "Maps",
       "heroNotFound": "Hero Not Found",
       "backToLocker": "Back to Locker",
       "back": "Back",
