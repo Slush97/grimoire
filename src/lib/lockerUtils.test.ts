@@ -189,6 +189,15 @@ describe('countLockerSkins', () => {
 });
 
 
+it('files GameBanana animations in General unless manually reassigned', () => {
+  const animation = mod({ id: 'animation', metaKey: 'pak01_dir.vpk', priority: 1,
+    sourceSection: 'Mod', categoryName: 'Animations', lockerHero: 'Haze', lockerHeroSource: 'download-title' });
+  expect(groupGlobalMods([animation]).animations).toEqual([animation]);
+  expect(getEffectiveGlobalType({ ...animation, lockerHeroSource: undefined })).toBe('animations');
+  expect(getEffectiveGlobalType({ ...animation, lockerHeroSource: 'manual' })).toBeUndefined();
+  expect(getEffectiveGlobalType({ ...animation, globalType: 'hud' })).toBe('hud');
+});
+
 describe('Maps in General', () => {
   const map = mod({ id: 'map', metaKey: 'pak01_dir.vpk', priority: 1,
     sourceSection: 'Mod', categoryName: ' Maps ' });

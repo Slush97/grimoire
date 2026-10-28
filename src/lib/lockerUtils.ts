@@ -376,7 +376,7 @@ const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
  */
 /** Minimal mod shape the global-type helpers read. Lets card components pass a
  *  structural subset of Mod (e.g. ModCardProps['mod']) without the full type. */
-type GlobalTypeModFields = Pick<Mod, 'globalType' | 'lockerHero' | 'sourceSection' | 'categoryName'>;
+type GlobalTypeModFields = Pick<Mod, 'globalType' | 'lockerHero' | 'lockerHeroSource' | 'sourceSection' | 'categoryName'>;
 
 export function isKillstreakMusicSound(mod: GlobalTypeModFields): boolean {
   return (
@@ -417,6 +417,11 @@ export function isAnnouncerSound(mod: GlobalTypeModFields): boolean {
 export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType | undefined {
   if (mod.globalType) return mod.globalType;
   if (isKillstreakMusicSound(mod)) return 'killstreak-music';
+  // An inferred hero is common for animation packs; only a manual hero tag wins.
+  if (mod.sourceSection === 'Mod' && mod.categoryName?.trim().toLowerCase() === 'animations' &&
+      mod.lockerHeroSource !== 'manual') {
+    return 'animations';
+  }
   // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
   if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
   if (!mod.lockerHero && mod.sourceSection === 'Mod' && mod.categoryName?.trim().toLowerCase() === 'maps') {
@@ -515,6 +520,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   icons: 'Icon Packs',
   hud: 'HUD',
   effects: 'Effects',
+  animations: 'Animations',
   maps: 'Maps',
   announcer: 'Announcer / SFX',
   'killstreak-music': 'Killstreak Music',
@@ -522,6 +528,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
 
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
   if (type === 'effects') return t('locker.page.effects');
+  if (type === 'animations') return t('locker.page.animations');
   if (type === 'maps') return t('locker.page.maps');
   return GLOBAL_MOD_TYPE_LABELS[type];
 }
@@ -534,6 +541,7 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'icons',
   'hud',
   'effects',
+  'animations',
   'maps',
   'announcer',
   'killstreak-music',
@@ -574,6 +582,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     icons: [],
     hud: [],
     effects: [],
+    animations: [],
     maps: [],
     announcer: [],
     'killstreak-music': [],

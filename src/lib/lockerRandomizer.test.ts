@@ -1232,3 +1232,17 @@ describe('readStoredShuffleVariants', () => {
     );
   });
 });
+
+
+it('keeps a hero animation enabled while shuffling that hero\'s skins', () => {
+  const heroList = [{ id: 33311, name: 'Haze', count: 0 }];
+  const animation = mod({ id: 'animation', name: 'Haze Animation Redux', sourceSection: 'Mod',
+    categoryName: 'Animations', lockerHero: 'Haze', lockerHeroSource: 'download-title', enabled: true });
+  const skin = mod({ id: 'skin', sourceSection: 'Mod', categoryName: 'Haze', categoryId: 33311, enabled: true });
+  const other = mod({ id: 'other', sourceSection: 'Mod', categoryName: 'Haze', categoryId: 33311 });
+  const plan = planLaunchShuffle({ mods: [animation, skin, other], heroList,
+    included: new Set([shufflePoolKey(skin), shufflePoolKey(other)]), rng: fixedRng(0.99) });
+  expect(shuffleGroupKind(animation, { heroList })).toBe('bucket');
+  expect(plan.enableIds).toEqual(['other']);
+  expect(plan.disableIds).toEqual(['skin']);
+});
