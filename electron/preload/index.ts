@@ -249,6 +249,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resumeSkinEdit: (source) => ipcRenderer.invoke('foundry:resumeSkinEdit', source),
     exportSkinEdits: (request) => ipcRenderer.invoke('foundry:exportSkinEdits', request),
     saveSkinEdits: (request) => ipcRenderer.invoke('foundry:saveSkinEdits', request),
+    onSkinEditProgress: (callback) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: import('../../src/types/skinEditor').SkinEditProgress) => callback(progress);
+        ipcRenderer.on('foundry:skinEditProgress', handler);
+        return () => ipcRenderer.removeListener('foundry:skinEditProgress', handler);
+    },
     loadHideoutScene: () => ipcRenderer.invoke('viewer:hideout'),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
         ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey),

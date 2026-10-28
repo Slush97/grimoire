@@ -991,6 +991,7 @@ export interface ElectronAPI {
     resumeSkinEdit: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditResume>;
     exportSkinEdits: (request: import('./skinEditor').SkinEditExport) => Promise<import('./foundry').VpkExportResult>;
     saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
+    onSkinEditProgress: (callback: (progress: import('./skinEditor').SkinEditProgress) => void) => () => void;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
     getHeroPoseInfo: (
         heroName: string,

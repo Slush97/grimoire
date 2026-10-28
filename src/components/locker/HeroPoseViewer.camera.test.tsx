@@ -28,6 +28,35 @@ beforeAll(() => {
 });
 
 describe('hero preview camera fitting', () => {
+  it('consumes zoom wheel input before the parent model picker can raycast it', async () => {
+    const model = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial());
+    let state!: RootState;
+    let wheel: EventListener | undefined;
+    function Figure() {
+      const current = useThree();
+      useLayoutEffect(() => {
+        state = current;
+        Object.assign(current.gl.domElement, { setAttribute: vi.fn(),
+          addEventListener: (type: string, handler: EventListener) => { if (type === 'wheel') wheel = handler; },
+          removeEventListener: vi.fn(),
+        });
+      }, [current]);
+      return <><primitive object={model} /><Controls interaction={{ current: { dragging: false, paused: true } }}
+        reset={0} label="camera" model={model} fitKey="hero" /></>;
+    }
+    const renderer = await ReactThreeTestRenderer.create(<Figure />);
+    try {
+      await renderer.advanceFrames(1, 1 / 60);
+      const before = state.camera.position.length();
+      const event = Object.assign(new Event('wheel', { bubbles: true, cancelable: true }), { deltaY: -120, deltaMode: 0 });
+      vi.spyOn(event, 'preventDefault');
+      vi.spyOn(event, 'stopPropagation');
+      wheel!(event);
+      expect(state.camera.position.length()).toBeLessThan(before);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(event.stopPropagation).toHaveBeenCalledOnce();
+    } finally { await renderer.unmount(); }
+  });
   it('fits the whole dash path when reset at either end, including in a narrow preview', async () => {
     const model = new THREE.Mesh(new THREE.BoxGeometry(1, 2, .5), new THREE.MeshStandardMaterial());
     const clock = { current: 0 };

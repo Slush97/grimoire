@@ -12,7 +12,7 @@ import { getModMetadata, setModMetadataWithHash, removeModMetadata } from './met
 import { resolveVpkIdentity } from './vpkIdentity';
 import { notifyModChanges } from './modChangeObservation';
 import { resolveSkinEditSources, sameSkinEditTarget, skinEditTarget, skinOverlayLoadOrder, type ResolvedSkinEditSources } from './skinOverlay';
-import type { SkinEditResume, SkinEditSaveResult, SkinEditSource } from '../../../src/types/skinEditor';
+import type { SkinEditProgress, SkinEditResume, SkinEditSaveResult, SkinEditSource } from '../../../src/types/skinEditor';
 import type { HeroPoseSkinSource } from '../../../src/types/portrait';
 
 /** Swaps any skin-editor overlay in `requested` for the installed skins it was made from. Global skins never match. */
@@ -40,7 +40,7 @@ export async function resumeSkinEdit(deadlockPath: string, input: SkinEditSource
     };
 }
 
-export async function saveSkinEdits(deadlockPath: string, input: unknown): Promise<SkinEditSaveResult> {
+export async function saveSkinEdits(deadlockPath: string, input: unknown, onProgress?: (progress: SkinEditProgress) => void): Promise<SkinEditSaveResult> {
     const request = skinEditSaveSchema.parse(input);
     const { name, thumbnailDataUrl, ...editRequest } = request;
     // An overlay named as a source is resumed: build from its own sources and replace it.
@@ -49,7 +49,8 @@ export async function saveSkinEdits(deadlockPath: string, input: unknown): Promi
     const dir = await fs.mkdtemp(join(tmpdir(), 'grimoire-skin-save-'));
     try {
         const out = join(dir, 'skin_dir.vpk');
-        const entry = await buildSkinEditVpk(deadlockPath, { ...editRequest, skinSources: resolved.skinSources }, out);
+        const entry = await buildSkinEditVpk(deadlockPath, { ...editRequest, skinSources: resolved.skinSources }, out, onProgress);
+        onProgress?.({ stage: 'install' });
         await assertVpkSafety(out, { context: 'installation', name });
         const saved = await runExclusiveModMutation(async () => {
             const before = await scanMods(deadlockPath);

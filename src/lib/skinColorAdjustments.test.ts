@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit } from './skinColorAdjustments';
+import { adjustSkinPixels, ORIGINAL_SKIN_COLOR, hasSkinPartEdit, repaintSkinPixels } from './skinColorAdjustments';
 import { skinEditExportSchema, skinEditSaveSchema } from './skinEditSchema';
 
 describe('skin texture adjustment', () => {
+  it('paints black and light pixels white while retaining shading and packed alpha', () => {
+    const pixels = new Uint8Array([0, 0, 0, 17, 128, 128, 128, 128, 255, 255, 255, 239]);
+    repaintSkinPixels(pixels, '#ffffff');
+    expect([...pixels]).toEqual([166, 166, 166, 17, 211, 211, 211, 128, 255, 255, 255, 239]);
+    repaintSkinPixels(pixels, '#000000');
+    expect([...pixels]).toEqual([0, 0, 0, 17, 0, 0, 0, 128, 0, 0, 0, 239]);
+  });
   it('keeps neutral pixels exact, shifts hues, and preserves every alpha byte', () => {
     const pixels = new Uint8Array([255, 0, 0, 19, 0, 255, 0, 128, 80, 80, 80, 0]);
     const original = pixels.slice();
@@ -22,5 +29,15 @@ describe('skin texture adjustment', () => {
     const source = { heroName: 'Abrams', skinSources: [], fingerprint: 'a'.repeat(64), edits: [{ material: 'coat.vmat', hidden: false, tint: null, adjustments: { hue: 181, saturation: 1, brightness: 1 } }] };
     expect(skinEditExportSchema.safeParse(source).success).toBe(false);
     expect(skinEditSaveSchema.safeParse({ ...source, edits: [], name: ' ' }).success).toBe(false);
+  });
+  it('retains a transparency-only edit and validates its mode and opacity at the IPC boundary', () => {
+    const edit = { material: 'gun.vmat', hidden: false, tint: null, surface: { mode: 'ghost', opacity: 0.35 } };
+    const source = { heroName: 'Abrams', skinSources: [], fingerprint: 'a'.repeat(64), edits: [edit] };
+    expect(skinEditExportSchema.parse(source).edits[0].surface).toEqual(edit.surface);
+    expect(hasSkinPartEdit({ ...edit, surface: { mode: 'ghost', opacity: 0 } })).toBe(true);
+    for (const opacity of [-0.1, 1.1, NaN, Infinity]) {
+      expect(skinEditExportSchema.safeParse({ ...source, edits: [{ ...edit, surface: { mode: 'ghost', opacity } }] }).success).toBe(false);
+    }
+    expect(skinEditExportSchema.safeParse({ ...source, edits: [{ ...edit, surface: { mode: 'glass', opacity: 0.35 } }] }).success).toBe(false);
   });
 });

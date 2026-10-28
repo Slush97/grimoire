@@ -7,7 +7,17 @@ export function hasColorAdjustments(value: SkinColorAdjustments | undefined): bo
 }
 
 export function hasSkinPartEdit(edit: SkinPartEdit): boolean {
-  return edit.hidden || edit.tint !== null || !!edit.finish || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments);
+  return edit.hidden || edit.tint !== null || !!edit.finish || !!edit.surface || (edit.pattern?.intensity ?? 0) > 0 || hasColorAdjustments(edit.adjustments);
+}
+
+/** Paint the entire color texture while keeping some of its light and dark detail. */
+export function repaintSkinPixels(pixels: Uint8ClampedArray | Uint8Array, hex: string): void {
+  const target = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+  for (let i = 0; i < pixels.length; i += 4) {
+    const luminance = (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255;
+    const shade = 0.65 + 0.35 * luminance;
+    for (let channel = 0; channel < 3; channel++) pixels[i + channel] = Math.round(target[channel] * shade);
+  }
 }
 
 export function adjustSkinPixels(pixels: Uint8ClampedArray | Uint8Array, value: SkinColorAdjustments): void {

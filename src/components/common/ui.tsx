@@ -350,7 +350,7 @@ export function Toggle({ id, checked, onChange, label, description, className = 
     if (!visible) return null;
     return (
         <label id={id} className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
-            <div className="relative shrink-0 mt-0.5">
+            <div className="relative shrink-0">
                 <input
                     type="checkbox"
                     className="peer sr-only"
@@ -367,7 +367,8 @@ export function Toggle({ id, checked, onChange, label, description, className = 
                 />
             </div>
             <div>
-                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors">{label}</span>}
+                {/* The first line matches the switch height and trims to cap height, so the letters sit on the switch's center. */}
+                {label && <span className="flex min-h-6 items-center text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors"><span className="text-trim-cap">{label}</span></span>}
                 {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
             </div>
         </label>
@@ -542,6 +543,8 @@ export function ModalHeader({
 interface SegmentOption<T extends string> {
     value: T;
     label: ReactNode;
+    /** Hover tooltip for the segment. */
+    title?: string;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -588,6 +591,7 @@ export function SegmentedControl<T extends string>({
                         type="button"
                         role="tab"
                         aria-selected={active}
+                        title={opt.title}
                         tabIndex={active ? 0 : -1}
                         disabled={disabled}
                         onClick={() => !disabled && onChange(opt.value)}

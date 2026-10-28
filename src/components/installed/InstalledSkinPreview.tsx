@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
+import { useHeroCategoryStore } from '../../stores/heroCategoryStore';
 import { installedSkinPreviewTarget } from '../../lib/installedSkinTarget';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import type { SkinEditSource } from '../../types/skinEditor';
@@ -23,6 +24,7 @@ export default function InstalledSkinPreview({ hideNsfw }: { hideNsfw: boolean }
 function PreviewCache({ hideNsfw }: { hideNsfw: boolean }) {
   const { t } = useTranslation();
   const mods = useAppStore((state) => state.mods);
+  const heroByCategoryId = useHeroCategoryStore(state => state.heroByCategoryId);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [cached, setCached] = useState<Preview[]>([]);
   const cachedKeys = useRef(new Set<string>());
@@ -38,7 +40,7 @@ function PreviewCache({ hideNsfw }: { hideNsfw: boolean }) {
       if (!alt || !anchor || dismissed) return;
       const mod = mods.find((item) => item.metaKey === anchor?.dataset.modPreviewKey);
       if (!mod || (hideNsfw && mod.nsfw)) return;
-      const target = installedSkinPreviewTarget(mod, mods);
+      const target = installedSkinPreviewTarget(mod, mods, heroByCategoryId);
       if (!target) return;
       const rect = anchor.getBoundingClientRect();
       const width = Math.min(320, window.innerWidth - 24), height = Math.min(360, window.innerHeight - 24);
@@ -82,7 +84,7 @@ function PreviewCache({ hideNsfw }: { hideNsfw: boolean }) {
       window.removeEventListener('resize', close);
       window.removeEventListener('contextmenu', close);
     };
-  }, [mods, hideNsfw]);
+  }, [mods, hideNsfw, heroByCategoryId]);
   return createPortal(<>{cached.map(item => <aside key={item.key} hidden={item.key !== preview?.key}
     aria-label={t('installed.card.preview3d', { name: item.name })}
     className="pointer-events-none fixed z-50 overflow-hidden rounded-sm border border-border bg-bg-secondary shadow-xl"
