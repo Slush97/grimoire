@@ -355,3 +355,32 @@ A log of the load-bearing decisions made while planning Grimoire Social. Each en
 | ADR-014 | Account deletion: hard-delete user, soft-delete profiles | Accepted |
 | ADR-015 | Shared types via Zod schemas package | Accepted |
 | ADR-016 | Owner-only PATCH for title + description on profiles | Accepted |
+| ADR-017 | Replace published profile contents while preserving ID and likes | Accepted |
+
+---
+
+## ADR-017: Replace published profile contents while preserving ID and likes
+
+**Date:** 2026-10-25
+**Status:** Accepted. Supersedes ADR-016's requirement to unpublish and republish mod changes.
+
+**Context.** Republishing a revised mod profile changes its link and loses its
+likes. Owners need to maintain the existing post as their local profile changes.
+
+**Decision.** Add owner-only `PUT /v1/profiles/:id/contents`, requiring a share
+code and accepting optional title and description edits in the same write.
+Validate the portable profile and recompute all derived metadata. Content
+replacement shares the publish cooldown from ADR-004. Text-only PATCH stays
+unchanged. Preserve ID, likes, featured status, and original publication date;
+advance `updated_at` and return the full profile for immediate cache updates.
+
+**Consequences.** Likes apply to a post that its owner can revise. The edit
+dialog explains that likes and the link remain and previews the replacement
+mod list and omitted mods before saving. Existing imports remain local
+snapshots. The backend and shared types must land before the desktop release.
+The separate endpoint makes older Workers reject content updates rather than
+silently ignoring an unfamiliar field on the text-only PATCH.
+
+**Alternatives considered.** Reset likes after each content change (loses the
+post's standing); create a new post for every revision (breaks the stable link);
+version history and automatic subscriber updates (outside this change's scope).

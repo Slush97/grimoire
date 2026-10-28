@@ -75,8 +75,22 @@ try {
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('installedModLists')));
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await settle();
+  // Installed windows its cards, so an offscreen card has no node until the page scrolls to it.
+  async function mount(locator) {
+    for (let top = 0; !(await locator.count()); top += 400) {
+      const end = await page.evaluate(top => {
+        const scroller = document.querySelector('[data-mod-list]').closest('.overflow-y-auto');
+        scroller.scrollTop = top;
+        return top > scroller.scrollHeight;
+      }, top);
+      assert.ok(!end, 'card never mounted');
+      await settle();
+    }
+    return locator;
+  }
   const pickups = [];
   async function dragItem(activator, target, { cancel = false, screenshot = false, position, memberIndex = 0 } = {}) {
+    await mount(activator);
     const movingCard = await activator.getAttribute('data-mod-drag-surface') !== null;
     await activator.scrollIntoViewIfNeeded();
     await activator.hover();
@@ -205,14 +219,14 @@ try {
   await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowLeft', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
   await settle();
   assert.deepEqual((await stored()).find(list => list.id === 'skins').keys, savedSkins);
-  await card(':unlisted').focus();
+  await (await mount(card(':unlisted'))).focus();
   await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowLeft', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
   await settle();
   const unlistedOrder = await page.evaluate(() => JSON.parse(localStorage.getItem('installedListView')).unlistedOrder);
   assert.equal(unlistedOrder.at(-2), key);
   assert.deepEqual(await page.evaluate(() => window.electronAPI.getMods()), baseline);
   console.log('PASS pointer and keyboard sorting, cancellation, persisted order, unlisted order, and insertion between cards');
-  await card(':unlisted').focus();
+  await (await mount(card(':unlisted'))).focus();
   await page.keyboard.press('Space', { delay: 30 }); await page.keyboard.press('ArrowUp', { delay: 30 }); await page.keyboard.press('Space', { delay: 30 });
   await settle();
   assert.deepEqual((await stored()).find(list => list.id === 'testing').keys, [key]);

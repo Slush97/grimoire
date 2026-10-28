@@ -1126,14 +1126,7 @@ export default function Locker() {
   // on the same hero (textures + weapons + voice) is a valid workflow; the
   // Locker reflects what's enabled rather than enforcing one-at-a-time. Real
   // conflicts surface on the Conflicts page.
-  const setActiveSkin = async (heroId: number, modId: string) => {
-    const skins = heroMods.map.get(heroId) ?? [];
-    const sounds = heroSounds.map.get(heroId) ?? [];
-    if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return false;
-    return toggleMod(modId);
-  };
-
-  const toggleHeroVariant = async (heroId: number, modId: string) => {
+  const toggleHeroMod = async (heroId: number, modId: string) => {
     const skins = heroMods.map.get(heroId) ?? [];
     const sounds = heroSounds.map.get(heroId) ?? [];
     if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return false;
@@ -1221,17 +1214,16 @@ export default function Locker() {
     const target = mods.find((m) => m.id === modId);
     if (!target) return false;
     const targetType = getEffectiveGlobalType(target);
-    if (!isPropContainerType(targetType)) {
-      return toggleMod(modId);
-    }
-    if (target.enabled) {
+    if (target.enabled || !isPropContainerType(targetType)) {
       return toggleMod(modId);
     }
     const active = mods.filter(
       (m) =>
         m.id !== modId && m.enabled && getEffectiveGlobalType(m) === targetType
     );
-    for (const m of active) await toggleMod(m.id);
+    for (const mod of active) {
+      if (!await toggleMod(mod.id)) return false;
+    }
     return toggleMod(modId);
   };
 
@@ -1498,8 +1490,8 @@ export default function Locker() {
               typeaheadClassName={heroTypeaheadCardState(hero.id)}
               onToggleExpanded={() => toggleHeroExpanded(hero.id)}
               onBrowseSkins={() => openHeroInBrowse(hero)}
-              onSelect={(modId) => setActiveSkin(hero.id, modId)}
-              onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
+              onSelect={(modId) => toggleHeroMod(hero.id, modId)}
+              onToggleVariant={(modId) => toggleHeroMod(hero.id, modId)}
               onRequestDelete={requestDeleteMods}
               includedSkinKeys={shuffleIncluded}
               onToggleShuffleIncluded={toggleShuffleIncluded}
@@ -1608,8 +1600,8 @@ export default function Locker() {
                   : [...prev, overlayHero.id]
               )
             }
-            onSelect={(modId) => setActiveSkin(overlayHero.id, modId)}
-            onToggleVariant={(modId) => toggleHeroVariant(overlayHero.id, modId)}
+            onSelect={(modId) => toggleHeroMod(overlayHero.id, modId)}
+            onToggleVariant={(modId) => toggleHeroMod(overlayHero.id, modId)}
             onReorderSkins={(orderedModIds) => reorderHeroSkins(overlayHero.id, orderedModIds)}
             onRequestDeleteSkin={requestDeleteMods}
             hideNsfwPreviews={shouldBlurNsfw(settings)}

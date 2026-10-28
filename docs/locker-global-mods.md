@@ -101,6 +101,15 @@ per-hero reorder and an `applyProfile` from demoting a Global mod. As a
 consequence, Global survives profile switches (`priorityMod` is not carried in
 the portable profile format, same as `globalType`).
 
+Mods enabled when Deadlock starts keep their slots until the game exits. The
+Installed cards, variant picker, and Locker load-order strip disable their
+reorder controls using the existing game-session snapshot. Mods enabled later
+remain movable, provided the reorder leaves the loaded mods in place. The main
+process still checks every affected file before moving anything, including when
+the game starts during a drag. Modded and vanilla launches keep their snapshots
+through the launch grace period. Single-slot General selections stop if the
+previous mod cannot be disabled, so a loaded mod never leaves two picks active.
+
 **Placement changes are failure-atomic.** Destination allocation happens before
 metadata changes. Moving into Global renames first and stamps the destination
 key afterward; if the app stops between those steps, the priority-root scan

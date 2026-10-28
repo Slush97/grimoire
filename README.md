@@ -149,21 +149,14 @@ Releases also publish [build provenance attestations](https://docs.github.com/en
 that tie each artifact back to the exact commit and workflow run that
 produced it; verify with `gh attestation verify <file> --owner Slush97`.
 
-Windows installers are not yet code-signed, so SmartScreen will show an
-"Unknown Publisher" warning on first run: click **More info → Run
-anyway** to proceed. Free Authenticode signing through the SignPath
-Foundation OSS program is being pursued.
-
-## **PENDING** Code signing policy
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-- Committers and reviewers: [Slush97](https://github.com/Slush97)
-- Approvers: [Slush97](https://github.com/Slush97)
-
-The full policy, including what gets signed and how, is at
-[grimoiremods.com/code-signing](https://grimoiremods.com/code-signing). Privacy:
-[what Grimoire sends and to whom](https://grimoiremods.com/docs/privacy).
+Windows builds are signed with Azure Artifact Signing since v1.34.0, and
+the publisher shows up as **Eliott Humes**. CI signs them in the same
+GitHub Actions run that builds them, and nothing built locally gets
+signed. SmartScreen can still warn about a new release for a while: if
+it names Eliott Humes, click **More info → Run anyway**. The full policy
+is at [grimoiremods.com/code-signing](https://grimoiremods.com/code-signing),
+and [what Grimoire sends and to whom](https://grimoiremods.com/docs/privacy)
+covers privacy.
 
 ## License
 

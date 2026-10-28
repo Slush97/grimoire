@@ -97,11 +97,14 @@ async function renameWithRetry(from: string, to: string, attempts = 5): Promise<
  * Chunks go first and a partial failure is rolled back. The safety snapshot
  * moves with the bytes, so every rename of a managed VPK goes through here.
  */
-async function renameVpkSet(from: string, to: string): Promise<void> {
+async function renameVpkSet(from: string, to: string, chunkNames?: string[], toChunkNames?: string[]): Promise<void> {
     const stem = basename(from).slice(0, -'_dir.vpk'.length);
     const toStem = join(dirname(to), basename(to).slice(0, -'_dir.vpk'.length));
-    const moves = findChunkSiblingNames(basename(from), await fs.readdir(dirname(from)))
-        .map((chunk): [string, string] => [join(dirname(from), chunk), toStem + chunk.slice(stem.length)]);
+    const chunks = chunkNames ?? findChunkSiblingNames(basename(from), await fs.readdir(dirname(from)));
+    const moves = chunks.map((chunk, index): [string, string] => [
+        join(dirname(from), chunk),
+        toChunkNames ? join(dirname(to), toChunkNames[index]) : toStem + chunk.slice(stem.length),
+    ]);
     moves.push([from, to]);
     const done: Array<[string, string]> = [];
     try {
@@ -110,7 +113,7 @@ async function renameVpkSet(from: string, to: string): Promise<void> {
             done.push(move);
         }
     } catch (err) {
-        for (const [source, destination] of done.reverse()) await fs.rename(destination, source).catch(() => {});
+        for (const [source, destination] of done.reverse()) await renameWithRetry(destination, source).catch(() => {});
         throw err;
     }
     moveSafetySnapshot(from, to);
@@ -122,23 +125,46 @@ async function renameVpkSet(from: string, to: string): Promise<void> {
  * folder, then to its final name, so slot swaps and cross-folder moves never
  * land on a set that has not left yet. Any failure moves every set back.
  */
-async function renameVpkSetsViaTemp(moves: Array<{ from: string; to: string }>): Promise<void> {
+async function renameVpkSetsViaTemp(
+    moves: Array<{ from: string; to: string }>,
+    listings = new Map<string, string[]>()
+): Promise<void> {
     const tmpId = randomBytes(4).toString('hex');
-    const steps = moves.map(({ from, to }, i) => ({ from, to, tmp: join(dirname(to), `tmp${tmpId}_${i}_${basename(to)}`) }));
+    // A mutation holds the folder lock throughout both phases. Capture each
+    // set's chunk names once, then reuse that plan for placement and rollback
+    // instead of listing a directory on every individual set rename.
+    const steps: Array<{ from: string; to: string; tmp: string; chunks: string[]; tmpChunks: string[]; toChunks: string[] }> = [];
+    for (const [i, { from, to }] of moves.entries()) {
+        const folder = dirname(from);
+        let entries = listings.get(folder);
+        if (!entries) {
+            entries = await fs.readdir(folder);
+            listings.set(folder, entries);
+        }
+        const stem = basename(from).slice(0, -'_dir.vpk'.length);
+        const chunks = findChunkSiblingNames(basename(from), entries);
+        const tmp = join(dirname(to), `tmp${tmpId}_${i}_${basename(to)}`);
+        const atDestination = (path: string) => chunks.map(chunk =>
+            basename(path).slice(0, -'_dir.vpk'.length) + chunk.slice(stem.length)
+        );
+        steps.push({ from, to, tmp, chunks, tmpChunks: atDestination(tmp), toChunks: atDestination(to) });
+    }
     const staged: typeof steps = [];
     const placed: typeof steps = [];
     try {
         for (const step of steps) {
-            await renameVpkSet(step.from, step.tmp);
+            await renameVpkSet(step.from, step.tmp, step.chunks);
             staged.push(step);
         }
         for (const step of steps) {
-            await renameVpkSet(step.tmp, step.to);
+            await renameVpkSet(step.tmp, step.to, step.tmpChunks);
             placed.push(step);
         }
     } catch (err) {
-        for (const step of placed.reverse()) await renameVpkSet(step.to, step.tmp).catch(() => {});
-        for (const step of staged.reverse()) await renameVpkSet(step.tmp, step.from).catch(() => {});
+        for (const step of placed.reverse()) await renameVpkSet(step.to, step.tmp, step.toChunks).catch(() => {});
+        // Restore the exact original spelling, even when a chunk's stem used
+        // different casing from its directory VPK on a case-sensitive volume.
+        for (const step of staged.reverse()) await renameVpkSet(step.tmp, step.from, step.tmpChunks, step.chunks).catch(() => {});
         throw err;
     }
 }
@@ -385,21 +411,25 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
         return mods;
     }
 
-    const entries = await fs.readdir(folder);
     const trace = modTraceEnabled();
+    const entries = (await fs.readdir(folder)).filter((entry) =>
+        // Chunks and unrelated files never produce mods. Diagnostics and trace
+        // still inspect them so unreadable files and stale artifacts stay visible.
+        diagnostics || trace || isDeadlockModVpk(entry)
+    );
 
-    for (const entry of entries) {
+    const scanEntry = async (entry: string): Promise<Mod | undefined> => {
         const fullPath = join(folder, entry);
 
         // Reserved priority slots (pak01-pak04 in citadel/grimoire) are the
         // Locker's own managed VPKs. They are keyed by synthetic metadata keys
         // (locker:cards and friends), so surfacing them here would invent
         // phantom user mods for artifacts the user never installed.
-        if (!diagnostics && isReservedPriorityVpkPath(fullPath)) continue;
+        if (!diagnostics && isReservedPriorityVpkPath(fullPath)) return;
 
         try {
             const stats = await fs.stat(fullPath);
-            if (!stats.isFile()) continue;
+            if (!stats.isFile()) return;
 
             if (!isDeadlockModVpk(entry)) {
                 // A .vpk that doesn't end in _dir.vpk is on disk but invisible to
@@ -416,13 +446,13 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
                         modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
                     }
                 }
-                continue;
+                return;
             }
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
             const metaKey = metaKeyFor(fullPath);
 
-            mods.push({
+            return {
                 id: generateModId(metaKey),
                 name: extractModName(entry),
                 fileName: entry,
@@ -432,12 +462,24 @@ async function scanFolder(folder: string, enabled: boolean, diagnostics = false)
                 priority,
                 size: stats.size,
                 installedAt: stats.mtime.toISOString(),
-            });
+            };
         } catch (err) {
             if (diagnostics) throw err;
             // Skip files we can't read (surfaced under trace: an unreadable VPK
             // is another way a mod silently drops out of the list).
             if (trace) modTrace(`scanFolder ${basename(folder)}: unreadable "${entry}": ${String(err)}`);
+        }
+    };
+
+    // Bound filesystem work per folder rather than issuing one request per mod
+    // at once. Consume each batch in directory order even if stats finish out of
+    // order, including the first failure reported by a diagnostic scan.
+    const batchSize = 8;
+    for (let start = 0; start < entries.length; start += batchSize) {
+        const results = await Promise.allSettled(entries.slice(start, start + batchSize).map(scanEntry));
+        for (const result of results) {
+            if (result.status === 'rejected') throw result.reason;
+            if (result.value) mods.push(result.value);
         }
     }
 
@@ -572,8 +614,10 @@ let lastUntrustedPathWarned: string | null = null;
  *
  * Skipped while a Launch Vanilla stash exists: user mods are parked outside the
  * scan roots, so the folders are not evidence of what is installed.
+ * Returns the repaired inventory for immediate reuse inside the same mutation
+ * lock. It becomes stale as soon as another operation changes the folders.
  */
-export async function healModFolders(deadlockPath: string): Promise<void> {
+export async function healModFolders(deadlockPath: string): Promise<Mod[] | undefined> {
     if (await readStash()) return;
 
     const { addonsPath, enabledRoots, disabledPath } = peekModFolders(deadlockPath);
@@ -628,6 +672,7 @@ export async function healModFolders(deadlockPath: string): Promise<void> {
             console.error('[Metadata] Orphan prune failed:', err);
         }
     }
+    return mods;
 }
 
 /** healModFolders as its own mutation batch, for startup: leftovers from a
@@ -1114,7 +1159,7 @@ export interface ModMutationOptions {
     exemptFromVanillaWindow?: boolean;
     healPath?: string;
 }
-function withModMutationLock<T>(fn: () => Promise<T>, opts: ModMutationOptions = {}): Promise<T> {
+function withModMutationLock<T>(fn: (healedMods?: Mod[]) => Promise<T>, opts: ModMutationOptions = {}): Promise<T> {
     const settings = loadSettings();
     const activePath = getActiveDeadlockPath(settings);
     // Compute the game-running state once per locked batch and park it for the
@@ -1131,8 +1176,8 @@ function withModMutationLock<T>(fn: () => Promise<T>, opts: ModMutationOptions =
         }
         await beginModMutationRunningScope();
         try {
-            if (opts.healPath) await healModFolders(opts.healPath);
-            return await fn();
+            const healedMods = opts.healPath ? await healModFolders(opts.healPath) : undefined;
+            return await fn(healedMods);
         } finally {
             endModMutationRunningScope();
             notifyModChanges();
@@ -1526,13 +1571,15 @@ async function setModPriorityImpl(
  * cross-folder moves and slot swaps collision-free; metadata migrates with each.
  */
 export function reorderMods(deadlockPath: string, orderedIds: string[]): Promise<void> {
-    return withModMutationLock(async () => { await reorderModsImpl(deadlockPath, orderedIds); }, { healPath: deadlockPath });
+    return withModMutationLock(async (mods) => { await reorderModsImpl(deadlockPath, orderedIds, mods); }, { healPath: deadlockPath });
 }
 
 // Unlocked: callers that already hold the mutation queue (swapModPriority) call
 // this directly; the exported reorderMods wraps it in the lock.
-async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<Map<string, string>> {
-    const allMods = await scanMods(deadlockPath);
+async function reorderModsImpl(deadlockPath: string, orderedIds: string[], inventory?: Mod[]): Promise<Map<string, string>> {
+    // Only direct callers that have not mutated since their scan may supply an
+    // inventory. Unlocked batch callers scan again after any preceding changes.
+    const allMods = inventory ?? await scanMods(deadlockPath);
     await syncRunningGameModSnapshotFromMods(allMods);
     const modById = new Map(allMods.map((m) => [m.id, m]));
 
@@ -1620,7 +1667,7 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
     if (assignments.length === 0) return new Map();
     assertCanMoveLoadedGameMods(assignments.map(({ mod }) => mod));
 
-    await renameVpkSetsViaTemp(assignments.map(({ mod, toPath }) => ({ from: mod.path, to: toPath })));
+    await renameVpkSetsViaTemp(assignments.map(({ mod, toPath }) => ({ from: mod.path, to: toPath })), listings);
 
     const migrations = assignments.map(({ mod, toPath }) => ({ from: mod.metaKey, to: metaKeyFor(toPath) }));
     migrateModMetadata(migrations);
@@ -1673,7 +1720,7 @@ async function swapModPriorityImpl(
     const orderedIds = enabled.map((m) => m.id);
     [orderedIds[aIdx], orderedIds[bIdx]] = [orderedIds[bIdx], orderedIds[aIdx]];
     // reorderModsImpl (unlocked): we already hold the mutation queue here.
-    await reorderModsImpl(deadlockPath, orderedIds);
+    await reorderModsImpl(deadlockPath, orderedIds, mods);
 }
 
 /**

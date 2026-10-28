@@ -8,7 +8,7 @@ import { inferHeroFromTitle } from '../lib/lockerUtils';
 import { shouldBlurNsfw } from '../lib/appSettings';
 import { Button, Card, IconButton, Tag } from './common/ui';
 import { useModSafetyStore } from '../stores/modSafetyStore';
-import { useAppStore } from '../stores/appStore';
+import { invalidateModsReads, useAppStore } from '../stores/appStore';
 import type { ModSafetyReport, ModSafetySnapshot } from '../types/modSafety';
 import { hasNewSafetyReview, pendingSafetyKeys, safetyReviewRows, scriptOnlySafetyRows, type SafetyReviewRow as ReviewRow } from '../lib/modSafetyReview';
 
@@ -254,6 +254,7 @@ export function ModSafetySection() {
         .catch(() => setError({ key: row.key, text: t('modSafety.failed') }));
     const review = async (row: ReviewRow, id: string) => {
         const updated = await window.electronAPI.reviewModSafety(id, row.report.fingerprint);
+        invalidateModsReads();
         useAppStore.setState(state => ({ mods: state.mods.map(m => m.id === id
             ? { ...m, id: updated.id, path: updated.path, fileName: updated.fileName,
                 metaKey: updated.metaKey, enabled: updated.enabled, priority: updated.priority, safety: updated.safety } : m) }));

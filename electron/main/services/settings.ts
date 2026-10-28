@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, statSync } from 'fs';
 import { dirname } from 'path';
 import { getSettingsPath } from '../utils/paths';
 
@@ -116,18 +116,38 @@ function migrateNsfwContentMode(
     return (browseMode ?? 'show') === 'show' && blur === false ? 'show' : 'blur';
 }
 
+interface SettingsCacheEntry {
+    path: string;
+    mtimeMs: number;
+    ctimeMs: number;
+    size: number;
+    ino: number;
+    settings: AppSettings;
+}
+
+// Metadata lookups also load settings to choose the normal/dev sidecar. Check
+// the file fingerprint, but only read, parse and normalize changed settings.
+// Callers receive a copy so unsaved edits cannot change the cached preferences.
+let settingsCache: SettingsCacheEntry | null = null;
+
 /**
  * Load settings from disk
  * If settings are corrupted, resets to defaults and logs warning (P2 fix #21)
  */
-export function loadSettings(): AppSettings {
+function readSettings(): AppSettings {
     const path = getSettingsPath();
 
-    if (!existsSync(path)) {
-        return { ...DEFAULT_SETTINGS };
-    }
-
     try {
+        const stat = statSync(path, { throwIfNoEntry: false });
+        if (!stat) {
+            settingsCache = null;
+            return DEFAULT_SETTINGS;
+        }
+        if (settingsCache && settingsCache.path === path &&
+            settingsCache.mtimeMs === stat.mtimeMs && settingsCache.ctimeMs === stat.ctimeMs &&
+            settingsCache.size === stat.size && settingsCache.ino === stat.ino) {
+            return settingsCache.settings;
+        }
         const content = readFileSync(path, 'utf-8');
         const {
             hideNsfwPreviews,
@@ -135,7 +155,7 @@ export function loadSettings(): AppSettings {
             installedHideNsfwPreviews,
             ...settings
         } = JSON.parse(content) as Partial<AppSettings> & LegacyNsfwSettings;
-        return {
+        const normalized: AppSettings = {
             ...DEFAULT_SETTINGS,
             ...settings,
             updateChannel: settings.updateChannel === 'nightly' ? 'nightly' : 'stable',
@@ -151,10 +171,25 @@ export function loadSettings(): AppSettings {
                 (settings as { experimentalVpkTagging?: boolean }).experimentalVpkTagging ??
                 DEFAULT_SETTINGS.experimentalVpkImprinting,
         };
+        settingsCache = {
+            path, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, size: stat.size, ino: stat.ino,
+            settings: normalized,
+        };
+        return normalized;
     } catch (error) {
+        settingsCache = null;
         console.warn('[Settings] Failed to load settings, resetting to defaults:', error);
-        return { ...DEFAULT_SETTINGS };
+        return DEFAULT_SETTINGS;
     }
+}
+
+export function loadSettings(): AppSettings {
+    return structuredClone(readSettings());
+}
+
+/** The per-mod metadata hot path only needs this primitive, not a settings copy. */
+export function isDevModeEnabled(): boolean {
+    return readSettings().devMode;
 }
 
 /**
@@ -175,6 +210,9 @@ export function getActiveDeadlockPath(settings: AppSettings = loadSettings()): s
  * Uses write-to-temp-then-rename pattern to prevent corruption on crash
  */
 export function saveSettings(settings: AppSettings): void {
+    // Invalidate before I/O, including failed writes. Never retain edits that
+    // have not been persisted, or skip normalization after a successful save.
+    settingsCache = null;
     const path = getSettingsPath();
     const tempPath = `${path}.tmp`;
     const dir = dirname(path);

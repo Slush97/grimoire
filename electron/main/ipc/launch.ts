@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import type { GameRunningStatus } from '../../../src/types/electron';
 import { getActiveDeadlockPath, loadSettings } from '../services/settings';
 import {
     launchModded,
@@ -25,6 +26,7 @@ import {
     captureLoadedGameMods,
     clearLoadedGameMods,
     hasRunningGameModSnapshot,
+    getLoadedGameModIds,
     markLaunchGrace,
     syncKnownRunningGameModSnapshot,
 } from '../services/gameSessionMods';
@@ -69,6 +71,7 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
             onRestoreComplete: emitRestore,
             beforeLaunch: () => {
                 captureEmptyGameMods();
+                markLaunchGrace();
                 recordVanillaCrashLaunch(deadlockPath);
             },
         });
@@ -78,19 +81,14 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
     }
 });
 
-ipcMain.handle('get-game-running-status', async (): Promise<{ running: boolean }> => {
+ipcMain.handle('get-game-running-status', async (): Promise<GameRunningStatus> => {
     const running = await isDeadlockRunning();
-    if (!running) {
-        clearLoadedGameMods();
-        return { running: false };
+    const deadlockPath = running ? getActiveDeadlockPath() : null;
+    const mods = deadlockPath && !hasRunningGameModSnapshot() ? await scanMods(deadlockPath) : [];
+    if (!running || deadlockPath) {
+        syncKnownRunningGameModSnapshot(running, mods);
     }
-    const deadlockPath = getActiveDeadlockPath();
-    if (!deadlockPath) {
-        return { running: true };
-    }
-    const mods = hasRunningGameModSnapshot() ? [] : await scanMods(deadlockPath);
-    syncKnownRunningGameModSnapshot(true, mods);
-    return { running: true };
+    return { running, lockedModIds: getLoadedGameModIds() };
 });
 
 ipcMain.handle('stop-game', async (): Promise<StopDeadlockResult & {

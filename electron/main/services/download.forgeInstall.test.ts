@@ -17,6 +17,7 @@ vi.mock('electron', () => ({
 vi.mock('./settings', async importOriginal => ({
     ...(await importOriginal<typeof import('./settings')>()),
     loadSettings: () => h.settings,
+    isDevModeEnabled: () => h.settings.devMode,
     getActiveDeadlockPath: (settings = h.settings) => settings.devMode ? settings.devDeadlockPath : settings.deadlockPath,
 }));
 vi.mock('./devMods', () => ({ isCopyingModsToDev: () => h.copying }));

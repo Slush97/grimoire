@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type CollisionDetection, type KeyboardCoordinateGetter } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
@@ -11,19 +11,20 @@ import { installedListEntryKey, UNLISTED_GROUP_ID, type InstalledListGroup } fro
 import { entryDisabledPreferenceKey, entryName, type ModEntry } from '../../lib/modEntries';
 import { buildListDragItems, canDropListItem, listDropId, listDropSlotIndex, listGroupRendered, listHeaderDragId, listPointerIndex, listSlotId, type ListDropPosition, type ModListDrag } from '../../lib/modListDrag';
 import { InstalledListAddCard, InstalledListDropSlot, InstalledListEntryDrag, type ListArrivalPoint } from './InstalledListEntryDrag';
-import { InstalledListDragBoxContext, type ListDragBox } from './listDragBox';
+import { InstalledVirtualGrid } from './InstalledVirtualGrid';
 
 interface GridProps {
   gridClassName: string;
   gridStyle?: CSSProperties;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  viewMode: 'grid' | 'compact' | 'list';
+  revealEntryKey?: string | null;
   renderEntry: (entry: ModEntry, occurrenceKey: string) => ReactNode;
-  rows: boolean;
 }
 interface ListGroupsProps extends GridProps {
   groups: readonly InstalledListGroup[];
   collapsed: ReadonlySet<string>;
   showEmpty: boolean;
-  mountLimit: number;
   onToggle: (id: string) => void;
   onManage: (id?: string) => void;
   onMove: (key: string, sourceId: string, targetId: string, beforeKey: string | null) => void;
@@ -32,8 +33,9 @@ interface ListGroupsProps extends GridProps {
   pauseUpdates: boolean;
 }
 interface Arrival { key: string; targetId: string; from: ListArrivalPoint | null }
+type ListItem = ModEntry | { kind: 'slot'; key: string };
 
-// DOM order follows the slot; sortable supplies the displaced cards' transitions.
+// Item order follows the slot; sortable supplies the displaced cards' transitions.
 const projectedSortingStrategy = () => null;
 
 function pointerPosition(groupId: string, point: { x: number; y: number }, current: ListDropPosition | null): ListDropPosition {
@@ -44,12 +46,18 @@ function pointerPosition(groupId: string, point: { x: number; y: number }, curre
   const x = point.x - bounds.left;
   const y = point.y - bounds.top;
   if (x < 0 || x > bounds.width || y < 0 || y > bounds.height) return append;
+  // Virtual cells carry the layout box; the cards inside them carry sortable transforms.
+  const box = (node: HTMLElement) => {
+    const rect = (node.closest<HTMLElement>('[data-installed-window-key]') ?? node).getBoundingClientRect();
+    return { left: rect.left - bounds.left, top: rect.top - bounds.top, width: rect.width, height: rect.height };
+  };
   const slot = grid.querySelector<HTMLElement>('[data-list-drop-slot]');
-  if (slot && x >= slot.offsetLeft && x <= slot.offsetLeft + slot.offsetWidth && y >= slot.offsetTop && y <= slot.offsetTop + slot.offsetHeight) {
+  const slotBox = slot && box(slot);
+  if (slotBox && x >= slotBox.left && x <= slotBox.left + slotBox.width && y >= slotBox.top && y <= slotBox.top + slotBox.height) {
     return current?.groupId === groupId ? current : append;
   }
-  const cards = [...grid.querySelectorAll<HTMLElement>(':scope > [data-list-member-key]')].filter(node => !node.hasAttribute('data-list-drag-source'));
-  const index = listPointerIndex(cards.map(node => ({ left: node.offsetLeft, top: node.offsetTop, width: node.offsetWidth, height: node.offsetHeight })), { x, y }, grid.dataset.listRows === 'true');
+  const cards = [...grid.querySelectorAll<HTMLElement>('[data-list-member-key]:not([data-list-drag-source])')];
+  const index = listPointerIndex(cards.map(box), { x, y }, grid.dataset.listRows === 'true');
   return { groupId, beforeKey: cards[index]?.dataset.listMemberKey ?? null };
 }
 
@@ -66,15 +74,14 @@ function ListHeaderGrip({ group, disabled, onManage }: {
     {...attributes} {...listeners} />;
 }
 
-function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDisabled, active, dragBox, placement, arrival, gridClassName, gridStyle, renderEntry, rows }: GridProps & {
+function ListSection({ group, collapsed, onToggle, onManage, dragDisabled, active, dragHeight, placement, arrival, gridClassName, gridStyle, scrollRef, viewMode, revealEntryKey, renderEntry }: GridProps & {
   group: InstalledListGroup;
   collapsed: boolean;
-  mountLimit: number;
   onToggle: () => void;
   onManage: (id?: string) => void;
   dragDisabled: boolean;
   active: ModListDrag | null;
-  dragBox: ListDragBox | null;
+  dragHeight: number;
   placement: ListDropPosition | null;
   arrival: Arrival | null;
 }) {
@@ -97,30 +104,29 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
   const landed = arrival?.targetId === group.id;
   const incomingKey = landed ? arrival.key : null;
   const arrivalFrom = landed ? arrival.from : null;
-  const cards = useMemo(() => group.entries.slice(0, mountLimit).map((entry) => {
-    const occurrence = installedListEntryKey(group.id, entry);
-    return <InstalledListEntryDrag key={occurrence} id={occurrence} entry={entry} disabled={dragDisabled}
-      arriving={incomingKey === entryDisabledPreferenceKey(entry)} arrivalFrom={arrivalFrom}>
-      {renderEntry(entry, occurrence)}
-    </InstalledListEntryDrag>;
-  }), [group.entries, group.id, mountLimit, dragDisabled, incomingKey, arrivalFrom, renderEntry]);
   const source = active?.kind === 'entry' && active.sourceId === group.id ? active : null;
-  const sourceKey = source ? installedListEntryKey(group.id, source.entry) : null;
   const sourceIndex = source ? group.entries.findIndex(entry => entry.key === source.entry.key) : -1;
   const originalBefore = sourceIndex < 0 ? null : group.entries[sourceIndex + 1];
   const beforeKey = placement?.groupId === group.id ? placement.beforeKey : originalBefore ? entryDisabledPreferenceKey(originalBefore) : null;
   // Every destination reserves one slot so moving it cannot shift other list headers.
   const slotIndex = active?.kind === 'entry' && (source || !group.entries.some(entry => entryDisabledPreferenceKey(entry) === entryDisabledPreferenceKey(active.entry)))
     ? listDropSlotIndex(group.entries, active.entry, beforeKey) : null;
-  const slot = slotIndex === null ? null : <InstalledListDropSlot key={listSlotId(group.id)} groupId={group.id} index={slotIndex}
-    height={group.entries.length ? dragBox?.height || 160 : Math.min(dragBox?.height || 160, 72)} over={!!over} />;
-  const visibleCards = sourceKey ? cards.filter(card => card.key !== sourceKey) : cards;
-  const displayedCards = slot ? [...visibleCards.slice(0, slotIndex ?? 0), slot, ...visibleCards.slice(slotIndex ?? 0)] : visibleCards;
-  const sortableItems = useMemo(() => {
-    const ids = group.entries.slice(0, mountLimit).map(entry => installedListEntryKey(group.id, entry)).filter(id => id !== sourceKey);
-    if (slotIndex !== null) ids.splice(slotIndex, 0, listSlotId(group.id));
-    return ids;
-  }, [group.entries, group.id, mountLimit, sourceKey, slotIndex]);
+  const sourceEntry = sourceIndex < 0 ? null : group.entries[sourceIndex];
+  const items = useMemo<readonly ListItem[]>(() => {
+    if (slotIndex === null) return group.entries;
+    const rest = sourceEntry ? group.entries.filter(entry => entry !== sourceEntry) : group.entries;
+    return [...rest.slice(0, slotIndex), sourceEntry ?? { kind: 'slot', key: listSlotId(group.id) }, ...rest.slice(slotIndex)];
+  }, [group.entries, group.id, sourceEntry, slotIndex]);
+  const itemKey = useCallback((item: ListItem) => item.kind === 'slot' ? item.key : installedListEntryKey(group.id, item), [group.id]);
+  const sortableItems = useMemo(() => items.map(itemKey), [items, itemKey]);
+  const slotHeight = group.entries.length ? dragHeight || 160 : Math.min(dragHeight || 160, 72);
+  const renderItem = (item: ListItem, renderContent: boolean) => item.kind === 'slot'
+    ? <InstalledListDropSlot groupId={group.id} index={slotIndex ?? 0} height={slotHeight} over={!!over} />
+    : <InstalledListEntryDrag id={itemKey(item)} entry={item} disabled={dragDisabled}
+      arriving={incomingKey === entryDisabledPreferenceKey(item)} arrivalFrom={arrivalFrom}
+      slot={item === sourceEntry && slotIndex !== null ? { groupId: group.id, index: slotIndex, over: !!over } : null}>
+      {renderContent && renderEntry(item, itemKey(item))}
+    </InstalledListEntryDrag>;
   return <section ref={setNodeRef} data-mod-list={group.id} data-drop-active={over || undefined} data-drop-complete={landed || undefined}
     className={'rounded-sm ' + (over ? 'outline outline-2 outline-offset-4 outline-accent' : '')}>
     <div className="group/list-header flex items-center gap-2">
@@ -146,22 +152,33 @@ function ListSection({ group, collapsed, mountLimit, onToggle, onManage, dragDis
     </div>
     <div id={contentId} hidden={collapsed}>
       {!collapsed && <div className="pb-4">
-        {group.entries.length > 0 || slot || isList ? <SortableContext items={sortableItems} strategy={projectedSortingStrategy}>
-          <div ref={gridRef} data-list-grid data-list-rows={rows} className={'relative ' + gridClassName} style={gridStyle}>
-            {displayedCards}
-            {sourceKey && cards.find(card => card.key === sourceKey)}
-            {group.entries.length === 0 && !slot && <InstalledListAddCard label={t('installed.lists.addMods')} disabled={dragDisabled} onClick={() => onManage(group.id)} />}
-          </div>
+        {items.length > 0 || isList ? <SortableContext items={sortableItems} strategy={projectedSortingStrategy}>
+          {group.entries.length > 0 ? <div ref={gridRef} data-list-grid data-list-rows={viewMode === 'list'}>
+            <InstalledVirtualGrid
+              entries={items}
+              scrollRef={scrollRef}
+              gridClassName={gridClassName}
+              gridStyle={gridStyle}
+              viewMode={viewMode}
+              revealEntryKey={revealEntryKey}
+              draggingKey={slotIndex === null ? null : sortableItems[slotIndex]}
+              getEntryKey={itemKey}
+              renderEntry={renderItem}
+            />
+          </div> : <div ref={gridRef} data-list-grid data-list-rows={viewMode === 'list'} className={gridClassName} style={gridStyle}>
+            {items.length > 0 ? renderItem(items[0], true)
+              : <InstalledListAddCard label={t('installed.lists.addMods')} disabled={dragDisabled} onClick={() => onManage(group.id)} />}
+          </div>}
         </SortableContext> : <div className="h-8" />}
       </div>}
     </div>
   </section>;
 }
 
-function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onToggle, onManage, onMove, onReorder, dragDisabled, gridClassName, gridStyle, renderEntry, rows }: ListGroupsProps) {
+function InstalledListGroupsView({ groups, collapsed, showEmpty, onToggle, onManage, onMove, onReorder, dragDisabled, gridClassName, gridStyle, scrollRef, viewMode, revealEntryKey, renderEntry }: ListGroupsProps) {
   const { t } = useTranslation();
   const [active, setActive] = useState<ModListDrag | null>(null);
-  const [dragBox, setDragBox] = useState<ListDragBox | null>(null);
+  const [dragHeight, setDragHeight] = useState(0);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const [placement, setPlacement] = useState<ListDropPosition | null>(null);
@@ -242,12 +259,6 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
   const emptyState = groups.some((group) => group.id !== UNLISTED_GROUP_ID) ? null : <EmptyState icon={List}
     title={t('installed.lists.emptyTitle')} description={t('installed.lists.emptyHint')}
     action={<Button variant="secondary" onClick={() => onManage()}>{t('installed.lists.manageTitle')}</Button>} className="py-12" />;
-  const mountLimits = new Map<string, number>();
-  let remaining = mountLimit;
-  for (const group of visibleGroups) {
-    mountLimits.set(group.id, remaining);
-    if (!collapsed.has(group.id)) remaining = Math.max(0, remaining - group.entries.length);
-  }
   return <DndContext sensors={sensors} collisionDetection={collisionDetection}
     accessibility={{
       screenReaderInstructions: { draggable: t('installed.lists.dragCardInstructions') },
@@ -273,7 +284,7 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
       const drag = dragItems.get(String(item.id)) ?? null;
       setActive(drag);
       const node = document.querySelector<HTMLElement>('[data-list-drag-id="' + window.CSS.escape(String(item.id)) + '"]');
-      setDragBox(node ? { left: node.offsetLeft, top: node.offsetTop, width: node.offsetWidth, height: node.offsetHeight } : null);
+      setDragHeight(node?.offsetHeight ?? 0);
       setArrival(null);
       const groupId = drag?.kind === 'entry' ? drag.sourceId : drag?.id;
       const entries = groups.find(group => group.id === groupId)?.entries ?? [];
@@ -311,16 +322,15 @@ function InstalledListGroupsView({ groups, collapsed, showEmpty, mountLimit, onT
       pointerTarget.current = null;
       updatePlacement(null);
     }}>
-    <InstalledListDragBoxContext.Provider value={dragBox}>
     <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{positionAnnouncement}</div>
     {emptyState}
     {visibleGroups.length === 0 && !emptyState ? <p className="py-8 text-center text-sm text-text-secondary">{t('installed.lists.noMatches')}</p>
       : <div className="divide-y divide-border">
         {visibleGroups.map((group) => <ListSection key={group.id} group={group} collapsed={collapsed.has(group.id)}
-          mountLimit={mountLimits.get(group.id) ?? 0} onToggle={() => onToggle(group.id)} onManage={onManage}
-          dragDisabled={dragDisabled} active={active} dragBox={dragBox} placement={placement} arrival={arrival} gridClassName={gridClassName} gridStyle={gridStyle} renderEntry={renderEntry} rows={rows} />)}
+          onToggle={() => onToggle(group.id)} onManage={onManage} dragDisabled={dragDisabled} active={active}
+          dragHeight={dragHeight} placement={placement} arrival={arrival} gridClassName={gridClassName} gridStyle={gridStyle}
+          scrollRef={scrollRef} viewMode={viewMode} revealEntryKey={revealEntryKey} renderEntry={renderEntry} />)}
       </div>}
-    </InstalledListDragBoxContext.Provider>
     {createPortal(<DragOverlay adjustScale={false} zIndex={30} dropAnimation={arrival || reducedMotion ? null : { duration: 180 }}
       style={{ pointerEvents: 'none', ...(active?.kind === 'list' ? { width: 220 } : {}) }}>
       {active && <div inert aria-hidden data-list-drag-preview className="mod-list-drag-preview rounded-xl shadow-2xl ring-1 ring-accent/30">

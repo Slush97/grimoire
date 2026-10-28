@@ -456,7 +456,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   // Grid: overlay card. Image fills card, info overlaid at bottom
   if (cardDesign === 'readable') {
     return (
-      <BrowseArtParallaxCard>
+      <BrowseArtParallaxCard suppressHoverIntentRef={suppressHoverIntentRef}>
         <ReadableBrowseModCard
           mod={mod}
           installed={installed}
@@ -486,7 +486,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
 
   const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
-    <BrowseArtParallaxCard>
+    <BrowseArtParallaxCard suppressHoverIntentRef={suppressHoverIntentRef}>
       <div
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}

@@ -100,7 +100,7 @@
     "raw-palette": 3
   },
   "src/components/locker/HeroSkinsPanel.tsx": {
-    "em-dash": 4
+    "em-dash": 3
   },
   "src/components/locker/HeroSoundPicker.tsx": {
     "raw-palette": 3
@@ -135,9 +135,6 @@
   },
   "src/components/sidebar/surfaceArt.tsx": {
     "raw-palette": 2
-  },
-  "src/components/social/EditProfileDialog.tsx": {
-    "raw-palette": 5
   },
   "src/components/social/MyPublishedSection.tsx": {
     "raw-palette": 4

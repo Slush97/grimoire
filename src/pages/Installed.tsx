@@ -1,5 +1,6 @@
-import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
@@ -112,6 +113,10 @@ import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
 import { entryCardShell } from '../components/installed/entryCardShell';
 import { isModCardDragTarget } from '../components/installed/cardDragSurface';
+import { useInstalledScrollActivity } from '../components/installed/useInstalledScrollActivity';
+import { InstalledVirtualGrid } from '../components/installed/InstalledVirtualGrid';
+import { useInstalledScrollRestoration } from '../components/installed/useInstalledScrollRestoration';
+import { useInstalledEntryReveal } from '../components/installed/useInstalledEntryReveal';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -212,11 +217,6 @@ type DragDraftOrder = {
 
 const DROP_STATE_RESET_DELAY_MS = 160;
 
-// Cards mounted synchronously during the navigation commit; covers a tall
-// viewport's worth in the densest grid. The rest of the library mounts in a
-// deferred render one frame later (see gridWarm).
-const INITIAL_MOUNT_COUNT = 40;
-
 /** Electron prefixes ipcRenderer.invoke rejections with the channel name;
  *  strip it so toasts show only the main-process message. */
 function toastErrorMessage(err: unknown): string {
@@ -234,8 +234,9 @@ function toastErrorMessage(err: unknown): string {
  */
 const SortableEntryCard = memo(function SortableEntryCard({
   sortableDisabled,
+  renderContent = true,
   ...cardProps
-}: { sortableDisabled: boolean } & InstalledEntryCardProps) {
+}: { sortableDisabled: boolean; renderContent?: boolean } & InstalledEntryCardProps) {
   const {
     attributes,
     listeners,
@@ -248,7 +249,8 @@ const SortableEntryCard = memo(function SortableEntryCard({
   const shell = entryCardShell(cardProps.viewMode === 'list');
   const style: CSSProperties = {
     ...shell.style,
-    transform: CSS.Transform.toString(transform),
+    ...(!renderContent ? { height: '100%' } : {}),
+    transform: sortableDisabled ? undefined : CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
     zIndex: isDragging ? 1 : undefined,
@@ -258,6 +260,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
     <div
       ref={setNodeRef}
       data-installed-entry-key={cardProps.entry.key}
+      aria-hidden={!renderContent || undefined}
       className={`${shell.className} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...(sortableDisabled ? {} : attributes)}
@@ -266,7 +269,7 @@ const SortableEntryCard = memo(function SortableEntryCard({
         if (isModCardDragTarget(event.target, event.currentTarget)) listeners?.onPointerDown?.(event);
       }}
     >
-      <InstalledEntryCard {...cardProps} />
+      {renderContent && <InstalledEntryCard {...cardProps} />}
     </div>
   );
 }, sameEntryCardProps);
@@ -634,6 +637,7 @@ export default function Installed() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const loadedGameModIds = useAppStore((state) => state.loadedGameModIds);
   const {
     settings,
     mods,
@@ -1360,7 +1364,6 @@ export default function Installed() {
     setSortMode('priority');
     setEnabledCollapsed(false);
     setDisabledCollapsed(false);
-    setGridWarm(true);
   }, [requirementRevealId]);
   const [compatibilityOpen, setCompatibilityOpen] = useState(false);
   const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
@@ -1368,52 +1371,13 @@ export default function Installed() {
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   useElasticOverscroll(installedScrollRef);
-  const latestInstalledScrollTopRef = useRef(
-    installedPageScrollTop || useAppStore.getState().installedScrollTop
+  useInstalledScrollActivity(installedScrollRef);
+  useInstalledScrollRestoration(
+    installedScrollRef,
+    installedPageScrollTop || useAppStore.getState().installedScrollTop,
+    (offset) => { installedPageScrollTop = offset; },
+    setInstalledScrollTop,
   );
-
-  // Two-phase grid mount. The route transition's commit used to create all
-  // card subtrees at once: content-visibility skips their layout/paint, but
-  // DOM creation alone for a 200+ mod library blocked ~100ms inside the
-  // navigation commit, which also holds back the sidebar highlight and the
-  // page swap. Mount one viewport's worth synchronously; the rest lands in a
-  // low-priority render one frame after first paint.
-  const [gridWarm, setGridWarm] = useState(false);
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      startTransition(() => setGridWarm(true));
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useLayoutEffect(() => {
-    const restoreScroll = () => {
-      const container = installedScrollRef.current;
-      const target = installedPageScrollTop || useAppStore.getState().installedScrollTop;
-      if (!container || target <= 0) return;
-      container.scrollTop = target;
-      latestInstalledScrollTopRef.current = target;
-    };
-    restoreScroll();
-    const frame = window.requestAnimationFrame(restoreScroll);
-    return () => window.cancelAnimationFrame(frame);
-    // gridWarm: the saved offset may exceed phase 1's scrollHeight, so restore
-    // again once the full list is mounted.
-  }, [modsLoading, mods.length, gridWarm]);
-
-  useEffect(() => {
-    const container = installedScrollRef.current;
-    if (!container) return;
-    const onScroll = () => {
-      latestInstalledScrollTopRef.current = container.scrollTop;
-      installedPageScrollTop = container.scrollTop;
-    };
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      setInstalledScrollTop(latestInstalledScrollTopRef.current);
-    };
-  }, [setInstalledScrollTop]);
 
   const openModDetails = async (m: typeof mods[number]) => {
     if (!m.gameBananaId) return;
@@ -2494,6 +2458,9 @@ export default function Installed() {
     }
   };
 
+  const isEntryOrderLocked = (entry: ModEntry) =>
+    flattenEntries([entry]).some((mod) => isModLoadedInGame(mod, loadedGameModIds));
+
   /**
    * Reorder a variant relative to one of its picker-siblings. Used by both
    * the chevron up/down buttons and the picker's drag-and-drop. Returns
@@ -3316,6 +3283,20 @@ export default function Installed() {
     );
   }, []);
 
+  const expandEntryLists = useStableCallback((entry: ModEntry) => {
+    if (!listsView) return;
+    const reveal = new Set(buildInstalledListGroups([entry], modLists)
+      .filter((list) => list.entries.length > 0).map((list) => list.id));
+    const collapsed = listPreferences.collapsed.filter((key) => !reveal.has(key));
+    if (collapsed.length !== listPreferences.collapsed.length) {
+      updateListPreferences({ ...listPreferences, collapsed });
+    }
+    setSearchListState((current) => {
+      const collapsed = current.collapsed.filter((key) => !reveal.has(key));
+      return collapsed.length === current.collapsed.length ? current : { ...current, collapsed };
+    });
+  });
+
   const openUpdateMenuMod = (modId: string) => {
     const entry = findEntryForModId(allEntries, modId);
     if (!entry) return;
@@ -3325,57 +3306,40 @@ export default function Installed() {
       setStatusSel(['enabled', 'disabled']);
       setHeroFilter('all');
       setTagFilter([]);
-    setRequirementsOnly(false);
+      setRequirementsOnly(false);
       setListFilter([]);
     }
     if (isEntryEnabled(entry)) setEnabledCollapsed(false);
     else setDisabledCollapsed(false);
-    if (listsView) {
-      const reveal = new Set(buildInstalledListGroups([entry], modLists).filter((list) => list.entries.length > 0).map((list) => list.id));
-      updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => !reveal.has(key)) });
-      setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => !reveal.has(key)) }));
-    }
-    setGridWarm(true);
+    expandEntryLists(entry);
     setUpdateMenuTargetId(modId);
   };
 
-  useLayoutEffect(() => {
-    if (!requirementRevealId) return;
-    const entry = findEntryForModId(allEntries, requirementRevealId);
-    if (!entry) return;
-    const card = installedScrollRef.current?.querySelector<HTMLElement>(
-      `[data-installed-entry-key="${window.CSS.escape(entry.key)}"]`,
-    );
-    if (!card) return;
-    card.scrollIntoView({ block: 'center' });
+  const requirementRevealEntry = requirementRevealId
+    ? findEntryForModId(allEntries, requirementRevealId) : undefined;
+  const updateRevealEntry = updateMenuTargetId
+    ? findEntryForModId(allEntries, updateMenuTargetId) : undefined;
+  const revealEntryKey = updateRevealEntry?.key ?? requirementRevealEntry?.key ?? null;
+  useEffect(() => {
+    if (requirementRevealEntry) expandEntryLists(requirementRevealEntry);
+  }, [requirementRevealEntry, expandEntryLists]);
+  useEffect(() => {
+    if (updateMenuTargetId && !updateRevealEntry) setUpdateMenuTargetId(null);
+  }, [updateMenuTargetId, updateRevealEntry]);
+
+  useInstalledEntryReveal(installedScrollRef, requirementRevealEntry?.key ?? null, (card) => {
     const remove = () => card.classList.remove('ring-2', 'ring-accent');
     card.classList.add('ring-2', 'ring-accent');
     window.setTimeout(remove, 2500);
     navigate(location.pathname, { replace: true, state: null });
-  }, [requirementRevealId, allEntries, visibleEnabled, visibleDisabled, gridWarm, findEntryForModId, navigate, location.pathname]);
+  });
 
-  // Reveal the card after filters and section expansion have committed, then
-  // open exactly the view its normal click uses. Re-align after skipped layout.
-  useLayoutEffect(() => {
-    if (!updateMenuTargetId) return;
-    const entry = findEntryForModId(allEntries, updateMenuTargetId);
-    if (!entry) {
-      setUpdateMenuTargetId(null);
-      return;
-    }
-    const card = installedScrollRef.current?.querySelector<HTMLElement>(
-      `[data-installed-entry-key="${window.CSS.escape(entry.key)}"]`
-    );
-    if (!card) return;
-    card.scrollIntoView({ block: 'center' });
-    const frame = window.requestAnimationFrame(() => {
-      card.scrollIntoView({ block: 'center' });
-      if (entry.kind === 'group') openEntryPicker(entry.groupKey);
-      else openEntryDetails(entry.mod);
-      setUpdateMenuTargetId(null);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [updateMenuTargetId, allEntries, visibleEnabled, visibleDisabled, enabledCollapsed, disabledCollapsed, gridWarm, findEntryForModId, openEntryPicker, openEntryDetails]);
+  useInstalledEntryReveal(installedScrollRef, updateRevealEntry?.key ?? null, () => {
+    if (!updateRevealEntry) return;
+    if (updateRevealEntry.kind === 'group') openEntryPicker(updateRevealEntry.groupKey);
+    else openEntryDetails(updateRevealEntry.mod);
+    setUpdateMenuTargetId(null);
+  });
 
   const previewEnabled = useMemo(
     () => previewEntriesForDrag(visibleEnabled, 'enabled', dragDraftOrder),
@@ -3424,6 +3388,10 @@ export default function Installed() {
 
     const sourceEntry = entries[oldIndex];
     const targetEntry = entries[newIndex];
+    if (isReorderBlocked(entries, oldIndex, newIndex, isEntryOrderLocked)) {
+      resetDragState();
+      return;
+    }
     const draftKeys = arrayMove(entries.map((entry) => entry.key), oldIndex, newIndex);
     setDragDraftOrder({ section, keys: draftKeys });
     dropCommitPendingRef.current = true;
@@ -3554,7 +3522,7 @@ export default function Installed() {
     onTagGlobal: tagEntryGlobal,
     onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
-    onCommitPriority: listsView ? undefined : commitEntryPriority,
+    onCommitPriority: listsView || isEntryOrderLocked(entry) ? undefined : commitEntryPriority,
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
     occurrenceKey,
@@ -3582,7 +3550,7 @@ export default function Installed() {
     const sectionSortable =
       sortableEnabled && !(section === 'disabled' && disabledAlphabetical);
     const activeEntry = draggingSection === section
-      ? entries.find((entry) => entry.key === draggingKey)
+      ? entries.find((entry) => entry.key === draggingKey && !isEntryOrderLocked(entry))
       : undefined;
     return (
       <DndContext
@@ -3598,15 +3566,24 @@ export default function Installed() {
           items={section === 'enabled' ? enabledSortableKeys : disabledSortableKeys}
           strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
         >
-          <div className={gridClasses} style={gridStyle}>
-            {(gridWarm ? entries : entries.slice(0, INITIAL_MOUNT_COUNT)).map((entry) => (
+          <InstalledVirtualGrid
+            entries={entries}
+            scrollRef={installedScrollRef}
+            gridClassName={gridClasses}
+            gridStyle={gridStyle}
+            viewMode={viewMode}
+            revealEntryKey={revealEntryKey}
+            dragging={draggingSection === section && draggingKey !== null}
+            draggingKey={draggingSection === section ? draggingKey : null}
+            renderEntry={(entry, renderContent) => (
               <SortableEntryCard
                 key={entry.key}
-                sortableDisabled={!sectionSortable}
+                sortableDisabled={!sectionSortable || isEntryOrderLocked(entry)}
+                renderContent={renderContent}
                 {...cardPropsFor(entry)}
               />
-            ))}
-          </div>
+            )}
+          />
         </SortableContext>
         {createPortal(
           <DragOverlay zIndex={40} className="pointer-events-none">
@@ -4266,9 +4243,10 @@ export default function Installed() {
         }}
         onReorder={(id, targetId) => commitModLists(reorderList(modLists, id, targetId))}
         gridClassName={gridClasses}
-        rows={layout === 'list'}
         gridStyle={gridStyle}
-        mountLimit={gridWarm ? Infinity : INITIAL_MOUNT_COUNT}
+        scrollRef={installedScrollRef}
+        viewMode={viewMode}
+        revealEntryKey={revealEntryKey}
         renderEntry={(entry, occurrence) => <StaticEntryCard {...cardPropsFor(entry, occurrence)} />}
       />}
       {!listsView && (visibleEnabled.length > 0 || (!searchNeedle && !filtersActive)) && (
@@ -4280,7 +4258,7 @@ export default function Installed() {
             onToggle={() => setEnabledCollapsed((collapsed) => !collapsed)}
             actions={<InstalledProfilesMenu onApplied={handleProfileApplied} />}
           >
-            {visibleEnabled.length > 0 && renderSortableSection('enabled')}
+            {() => visibleEnabled.length > 0 && renderSortableSection('enabled')}
           </InstalledSection>
         </div>
       )}
@@ -4312,7 +4290,7 @@ export default function Installed() {
             </button>
           }
         >
-          {renderSortableSection('disabled')}
+          {() => renderSortableSection('disabled')}
         </InstalledSection>
       )}
 
