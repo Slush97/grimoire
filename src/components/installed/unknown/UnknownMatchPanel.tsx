@@ -420,7 +420,9 @@ function UnknownManualSearch({
         thumbnailUrl: getModThumbnail(selected),
         nsfw: selected.nsfw,
         categoryId: category?.id ?? categoryIdFromProfileUrl(category?.profileUrl),
-        categoryName: category?.name || undefined,
+        // A catalog subcategory has no name; main names it from the cached tree
+        // and falls back to this root name when that tree is missing.
+        categoryName: category?.name || selected.rootCategory?.name || undefined,
         sourceSection: section,
       });
     } catch (err) {

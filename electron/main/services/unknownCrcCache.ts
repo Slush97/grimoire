@@ -201,9 +201,12 @@ function ensureCrcEntrySourceColumns(database: Database.Database): void {
     }
     if (!fileColumns.has('category_id')) {
         database.exec('ALTER TABLE crc_files ADD COLUMN category_id INTEGER');
-        // Rows before this column stored the search bucket's label ("Skins/Mina",
-        // "Gameplay", "Sounds"), not the mod's own category.
-        database.exec('UPDATE crc_files SET category_name = NULL');
+        // Rows before this column could store a made-up bucket label instead of
+        // a category ("Skins/Mina", "Gameplay", "Sounds"). The other buckets
+        // stored real root names, which are kept: cached rows are never refetched.
+        database.exec(
+            "UPDATE crc_files SET category_name = NULL WHERE category_name IN ('Gameplay', 'Sounds') OR category_name LIKE 'Skins/%'"
+        );
     }
 }
 
