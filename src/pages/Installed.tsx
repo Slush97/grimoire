@@ -66,7 +66,6 @@ import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
 import { useHeroCategoryStore } from '../stores/heroCategoryStore';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
@@ -112,6 +111,7 @@ import { updateCheckCache } from '../lib/updateCheckCache';
 import { visibleInstalledMods } from '../lib/visibleMods';
 import { sameEntryCardProps } from '../components/installed/sameEntryCardProps';
 import { entryCardShell } from '../components/installed/entryCardShell';
+import { isModCardDragTarget } from '../components/installed/cardDragSurface';
 import { useInstalledScrollActivity } from '../components/installed/useInstalledScrollActivity';
 import { InstalledVirtualGrid } from '../components/installed/InstalledVirtualGrid';
 import { useInstalledScrollRestoration } from '../components/installed/useInstalledScrollRestoration';
@@ -136,7 +136,11 @@ import {
   deleteList,
   readStoredModLists,
   renameList,
+  reorderList,
   setListIcon,
+  setListMembership,
+  moveListMembership,
+  positionListKey,
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
@@ -151,7 +155,7 @@ import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../comp
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
 import { InstalledListControls, InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
-import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, type InstalledListView } from '../lib/installedListGroups';
+import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, UNLISTED_GROUP_ID, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
@@ -260,6 +264,9 @@ const SortableEntryCard = memo(function SortableEntryCard({
       style={style}
       {...(sortableDisabled ? {} : attributes)}
       {...(sortableDisabled ? {} : listeners)}
+      onPointerDown={sortableDisabled ? undefined : (event) => {
+        if (isModCardDragTarget(event.target, event.currentTarget)) listeners?.onPointerDown?.(event);
+      }}
     >
       {renderContent && <InstalledEntryCard {...cardProps} />}
     </div>
@@ -707,7 +714,7 @@ export default function Installed() {
   }, []);
   // Entry the "New list" dialog was opened from, so creating also files it.
   const [creatingList, setCreatingList] = useState<{ keys: string[]; modName?: string } | null>(null);
-  const [managingLists, setManagingLists] = useState(false);
+  const [managingLists, setManagingLists] = useState<boolean | string>(false);
   const [listPreferences, setListPreferences] = useState(readInstalledListPreferences);
   const [searchListState, setSearchListState] = useState<{ query: string; collapsed: string[] }>({ query: '', collapsed: [] });
   const listsView = listPreferences.view === 'lists';
@@ -1363,7 +1370,6 @@ export default function Installed() {
   const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
-  useElasticOverscroll(installedScrollRef);
   useInstalledScrollActivity(installedScrollRef);
   useInstalledScrollRestoration(
     installedScrollRef,
@@ -2756,16 +2762,16 @@ export default function Installed() {
   // Filing is add-only for exactly that reason: a toggle here would un-file a
   // mod that is already in the list whose name was typed.
   // With nothing to file (Manage's create box), a taken name changes nothing,
-  // so it reports false and the dialog says the name is in use.
-  const createModList = useStableCallback((name: string, keys: readonly string[]): boolean => {
+  // so it reports null and the dialog says the name is in use.
+  const createModList = useStableCallback((name: string, keys: readonly string[]): string | null => {
     const { lists, id } = createList(modLists, name, keys);
     const existing = modLists.find((list) => list.id === id);
-    if (!id || (existing && keys.length === 0)) return false;
+    if (!id || (existing && keys.length === 0)) return null;
     commitModLists(lists);
     updateListPreferences({ ...listPreferences, collapsed: listPreferences.collapsed.filter((key) => key !== id) });
     setSearchListState((current) => ({ ...current, collapsed: current.collapsed.filter((key) => key !== id) }));
     showToast(keys.length > 0 ? t('installed.lists.addedTo', { name: existing?.name ?? name }) : t('installed.lists.created', { name }), { tone: 'success' });
-    return true;
+    return id;
   });
   const renameModList = useStableCallback((id: string, name: string) => {
     // renameList no-ops on a rejected name (blank, or taken by another list)
@@ -3207,7 +3213,7 @@ export default function Installed() {
     return { visibleEnabled, visibleDisabled };
   }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
-  const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists), [visibleEnabled, visibleDisabled, modLists]);
+  const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists, listPreferences.unlistedOrder), [visibleEnabled, visibleDisabled, modLists, listPreferences.unlistedOrder]);
   const activeCollapsedLists = searchNeedle
     ? new Set(searchListState.query === searchNeedle ? searchListState.collapsed : []) : collapsedLists;
   const visibleSelection = listsView
@@ -4219,7 +4225,22 @@ export default function Installed() {
         collapsed={activeCollapsedLists}
         showEmpty={!searchNeedle && !filtersActive}
         onToggle={toggleList}
-        onManage={() => setManagingLists(true)}
+        onManage={(id) => setManagingLists(id ?? true)}
+        dragDisabled={selectMode || shiftHeld || !!bulkProgress}
+        pauseUpdates={!!managingLists}
+        onMove={(key, sourceId, targetId, beforeKey) => {
+          commitModLists(moveListMembership(modLists, {
+            key, fromListId: sourceId === UNLISTED_GROUP_ID ? null : sourceId,
+            toListId: targetId === UNLISTED_GROUP_ID ? null : targetId, beforeKey,
+          }));
+          if (targetId === UNLISTED_GROUP_ID) {
+            const completeGroups = searchNeedle || filtersActive
+              ? buildInstalledListGroups([...enabledEntries, ...disabledEntries], modLists, listPreferences.unlistedOrder) : listGroups;
+            const keys = [...new Set([...(listPreferences.unlistedOrder ?? []), ...(completeGroups.find(group => group.id === UNLISTED_GROUP_ID)?.entries.map(entryDisabledPreferenceKey) ?? [])])];
+            updateListPreferences({ ...listPreferences, unlistedOrder: positionListKey(keys, key, beforeKey) });
+          }
+        }}
+        onReorder={(id, targetId) => commitModLists(reorderList(modLists, id, targetId))}
         gridClassName={gridClasses}
         gridStyle={gridStyle}
         scrollRef={installedScrollRef}
@@ -4326,12 +4347,17 @@ export default function Installed() {
       {managingLists && (
         <ManageModListsModal
           lists={modLists}
+          entries={allEntries}
+          hideNsfw={installedHideNsfwPreviews}
+          initialListId={typeof managingLists === 'string' ? managingLists : undefined}
+          onMembership={(id, key, member) => commitModLists(setListMembership(modLists, id, key, member))}
           onCreate={(name) => createModList(name, [])}
           counts={listCounts}
           onClose={() => {
             if (!bulkProgress) setManagingLists(false);
           }}
           onRename={renameModList}
+          onReorder={(id, overId) => commitModLists(reorderList(modLists, id, overId))}
           onIcon={(id, icon) => commitModLists(setListIcon(modLists, id, icon))}
           onDelete={deleteModList}
           onSetEnabled={setModListEnabled}
