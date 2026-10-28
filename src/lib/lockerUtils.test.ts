@@ -16,6 +16,7 @@ const skinCategories: GameBananaCategoryNode[] = [{
       ],
     },
     { id: 33301, name: 'Haze', itemCount: 0 },
+    { id: 33340, name: 'Lady Geist', itemCount: 0 },
   ],
 }];
 
@@ -123,6 +124,12 @@ describe('groupModsByCategory', () => {
     expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33325, [skin]]]);
   });
 
+  it('matches a hero alias in the title of a root-filed skin', () => {
+    const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
+      name: 'Geist Gothic', categoryId: 33295, categoryName: 'Skins' });
+    expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33340, [skin]]]);
+  });
+
   it('keeps an unknown category visible in Unassigned when no hero matches', () => {
     const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
       name: 'Unknown remodel', categoryId: 99999 });
@@ -136,7 +143,7 @@ describe('isLockerManagedSound', () => {
   const sound = (categoryName: string, over: Partial<Mod> = {}) =>
     mod({ id: 'snd', metaKey: 'pak01_dir.vpk', priority: 1, sourceSection: 'Sound', categoryName, ...over });
 
-  it.each(['Killsounds', 'In-Game Music', 'Gameplay Events', 'Item Sounds', 'Sound Packs', 'Movement'])(
+  it.each(['Killsounds', 'In-Game Music', 'Music', 'Gameplay Events', 'Item Sounds', 'Sound Packs', 'Movement'])(
     'keeps %s off the per-hero axis',
     (categoryName) => {
       expect(isLockerManagedSound(sound(categoryName))).toBe(false);

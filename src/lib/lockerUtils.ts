@@ -361,11 +361,13 @@ export function isLockerManagedMod(mod: LockerManagedModFields): boolean {
  * in the Locker's "Unassigned" bucket forever (no hero to tag), so we drop them
  * at the eligibility check instead. Other/Misc is left out on purpose: it is
  * mixed content, and a hero-less one should stay assignable from Unassigned.
- * Lowercased for case-insensitive compare.
+ * 'music' is In-Game Music's old name, still stored on mods installed before
+ * the rename. Lowercased for case-insensitive compare.
  */
 const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
   'killsounds',
   'in-game music',
+  'music',
   'gameplay events',
   'item sounds',
   'sound packs',
@@ -660,8 +662,9 @@ export function groupModsByCategory(mods: Mod[], heroList?: readonly HeroCategor
     //    "Skins"-parent branch used to do; broadened to also fire when there's
     //    no categoryId at all (sound mods, custom imports).
     if (!categoryId) {
-      const heroName = heroNamedInTitle(mod.name, heroNameToId.keys());
-      if (heroName) categoryId = heroNameToId.get(heroName);
+      // Canonical names, so aliases ("geist", "greytalon") match as on Installed.
+      const heroName = heroNamedInTitle(mod.name, heroList?.map((hero) => hero.name) ?? []);
+      if (heroName) categoryId = heroNameToId.get(heroName.toLowerCase());
     }
 
     if (!categoryId) {
