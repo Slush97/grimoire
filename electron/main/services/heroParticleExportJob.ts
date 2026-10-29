@@ -16,6 +16,10 @@ export interface HeroParticleExportJob {
     clips: string[];
 }
 
+export type HeroParticleWorkerRequest =
+    | { kind: 'export'; job: HeroParticleExportJob }
+    | { kind: 'video'; deadlockPath: string };
+
 export async function exportHeroParticleJob(job: HeroParticleExportJob): Promise<number> {
     await fs.mkdir(job.outDir, { recursive: true });
     const scratch = await fs.mkdtemp(join(job.outDir, '.scratch-'));

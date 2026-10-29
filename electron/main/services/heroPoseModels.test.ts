@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   handle: vi.fn(),
   fetch: vi.fn<(url: string) => Promise<Response>>(),
   particles: vi.fn(),
+  resources: new Map<string, unknown>(),
 }));
 vi.mock('electron', () => ({
   app: { getPath: () => h.userData, isPackaged: true },
@@ -30,6 +31,13 @@ vi.mock('./deadlock', () => ({
 }));
 
 vi.mock('./heroAnimationMetadata', () => ({ readHeroAnimationMetadata: async () => new Map() }));
+vi.mock('./vpk', async importOriginal => {
+  const original = await importOriginal<typeof import('./vpk')>();
+  return { ...original,
+    parseVpkDirectoryCached: (path: string) => h.resources.size ? [...h.resources.keys()] : original.parseVpkDirectoryCached(path),
+    vpkHasEntry: (path: string, entry: string) => h.resources.has(entry) || original.vpkHasEntry(path, entry),
+  };
+});
 import { choosePreviewClips, exportHeroEffect, getHeroEffectInfo, exportRiggedHeroPose, getRiggedHeroPose, registerHeroPoseProtocol, sweepHeroPoseCache } from './heroPoseModels';
 
 const container = resolve('.codex-run', 'hero-preview-tests');
@@ -37,6 +45,23 @@ const clips = JSON.stringify([{ name: 'primary_stand_idle', frameCount: 31, fps:
 const argument = (args: string[], name: string) => args[args.indexOf(name) + 1];
 const game = () => join(h.userData, 'game-install');
 const cacheDir = (key: string) => join(h.userData, 'hero-poses', key.toLowerCase().replace(/[^a-zA-Z0-9_-]+/g, '_'));
+
+function rigGlb(animated: boolean, compatible = true, duration = 1): Buffer {
+  const nodes = [{ name: 'root_motion', children: [1] }, { name: compatible ? 'pelvis' : 'other_pelvis' }];
+  const data = JSON.stringify({ nodes, accessors: [{ max: [duration] }], animations: animated ? [{ samplers: [{ input: 0 }], channels: [0, 1].map((node) => ({ target: { node } })) }] : [] });
+  const json = Buffer.from(data.padEnd(Math.ceil(data.length / 4) * 4, ' '));
+  const glb = Buffer.alloc(20 + json.length);
+  glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8);
+  glb.writeUInt32LE(json.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); json.copy(glb, 20);
+  return glb;
+}
+
+async function skinFixture() {
+  const dir = join(game(), 'game', 'citadel', 'addons');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(join(dir, 'skin_dir.vpk'), 'selected skin');
+  return [{ metaKey: 'skin_dir.vpk', priority: 0 }];
+}
 
 describe('animation menu exports', () => {
   const clip = (name: string, frames = 100) => ({ name, frameCount: frames, fps: 30, durationSeconds: frames / 30, looping: true, default: false });
@@ -86,6 +111,7 @@ describe('mounted ambient particle textures', () => {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  h.resources.clear();
   await fs.mkdir(container, { recursive: true });
   h.userData = await fs.mkdtemp(join(container, 'run-'));
   h.run.mockImplementation(async (args) => {
@@ -106,6 +132,102 @@ afterEach(async () => {
 });
 
 describe('rigged preview physics bundle', () => {
+  it('exports an external idle on the base rig and retries an old no-clip marker', async () => {
+    const entry = 'models/heroes_wip/deadpack/deadpack.vmdl_c';
+    const resource = 'models/heroes_wip/deadpack/clips/ui_shop.vnmclip_c';
+    h.resources.set(entry, {});
+    h.resources.set(resource, { m_nNumFrames: 61, m_flDuration: 2, m_bIsAdditive: false,
+      m_rootMotion: { m_flAverageLinearVelocity: 0, m_flAverageAngularVelocityRadians: 0 } });
+    h.stdout.mockImplementation(async args => args[1] === 'clips' ? '[]' : args[0] === 'soundevents'
+      ? JSON.stringify(h.resources.get(args[1]) ?? null) : 'null');
+    h.run.mockImplementation(async args => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop')));
+    const dir = cacheDir('Deadman Danny::vanilla');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(join(dir, '.rigged-no-clips'), '23.x1');
+    const info = await exportRiggedHeroPose(game(), 'Deadman Danny');
+    expect(info).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+    expect(h.run.mock.calls.find(([args]) => args[1] === 'export')?.[0]).toContain('--no-anim');
+    const donor = h.run.mock.calls.find(([args]) => args[1] === 'motions' && args.includes(`ui_shop=${resource}`))?.[0];
+    expect(donor).toContain(entry);
+    expect(donor?.filter(arg => arg === '--vpk')).toHaveLength(1);
+    expect((await getRiggedHeroPose(game(), 'Deadman Danny')).hasModel).toBe(true);
+    expect(await fs.stat(join(dir, '.rigged-no-clips')).catch(() => null)).toBeNull();
+  });
+
+  it('takes the base rig motions when the skin rig is refused', async () => {
+    const sources = await skinFixture();
+    const entry = 'models/heroes_wip/deadpack/deadpack.vmdl_c';
+    const resource = 'models/heroes_wip/deadpack/clips/ui_shop.vnmclip_c';
+    h.resources.set(entry, {});
+    h.resources.set(resource, { m_nNumFrames: 61, m_flDuration: 2, m_bIsAdditive: false,
+      m_rootMotion: { m_flAverageLinearVelocity: 0, m_flAverageAngularVelocityRadians: 0 } });
+    h.stdout.mockImplementation(async args => args[1] === 'clips' ? '[]' : args[0] === 'soundevents'
+      ? JSON.stringify(h.resources.get(args[1]) ?? null) : 'null');
+    h.run.mockImplementation(async (args) => {
+      if (args[0] === 'workshop' && args.filter(arg => arg === '--vpk').length > 1) throw new Error('Motion does not match the selected rig');
+      await fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop'));
+    });
+    const info = await exportRiggedHeroPose(game(), 'Deadman Danny', sources);
+    expect(info).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+    const donors = h.run.mock.calls.filter(([args]) => args[0] === 'workshop' && argument(args, '--out').endsWith('.animation-donor.glb'));
+    expect(donors.map(([args]) => args.filter(arg => arg === '--vpk').length)).toEqual([2, 1]);
+    expect(argument(donors[1][0], '--vpk')).toBe(join(game(), 'game', 'citadel', 'pak01_dir.vpk'));
+  });
+
+  it('rejects a donor whose animation duration cannot play in the viewer', async () => {
+    const sources = await skinFixture();
+    h.run.mockImplementation(async args => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop', true, 0.001)));
+    expect((await exportRiggedHeroPose(game(), 'Lash', sources)).hasModel).toBe(false);
+  });
+
+  it('resolves the live entry for heroes selected by codename', async () => {
+    const sources = await skinFixture();
+    h.stdout.mockImplementation(async (args) => args[1] === 'clips' ? clips
+      : args[1] === 'live-materials' ? JSON.stringify([{ model_entry: 'models/heroes_wip/other/other.vmdl_c' }]) : 'null');
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop')));
+    expect((await exportRiggedHeroPose(game(), 'Other', sources)).hasAnimationFallback).toBe(true);
+    expect(h.run.mock.calls.find(([args]) => args[0] === 'workshop')![0]).toContain('models/heroes_wip/other/other.vmdl_c');
+  });
+
+  it.each([false, true])('recovers base animations when a skin has unrelated clips: %s', async (unrelated) => {
+    const sources = await skinFixture();
+    h.stdout.mockImplementation(async (args) => args[1] === 'clips'
+      ? unrelated && argument(args, '--vpk').endsWith('skin_dir.vpk') ? '[]' : clips
+      : 'null');
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop')));
+    const info = await exportRiggedHeroPose(game(), 'Lash', sources);
+    expect(info).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+    expect(info.key).toContain('skin_dir.vpk');
+    if (unrelated) expect(h.run.mock.calls.find(([args]) => args[0] === 'model')![0]).toContain('--no-anim');
+    const donor = h.run.mock.calls.find(([args]) => args[0] === 'workshop' && argument(args, '--out').endsWith('.animation-donor.glb'))![0];
+    expect(argument(donor, '--vpk')).toBe(join(game(), 'game', 'citadel', 'pak01_dir.vpk'));
+    expect(donor).toContain('primary_stand_idle=legacy:primary_stand_idle');
+    expect(await getRiggedHeroPose(game(), 'Lash', sources)).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+    await fs.unlink(join(cacheDir(info.key), 'animation-fallback.glb'));
+    expect((await getRiggedHeroPose(game(), 'Lash', sources)).hasModel).toBe(false);
+  });
+
+  it('refuses an incompatible animation donor and leaves static fallback available', async () => {
+    const sources = await skinFixture();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop', args[0] === 'workshop')));
+    const info = await exportRiggedHeroPose(game(), 'Lash', sources);
+    expect(info.hasModel).toBe(false);
+    expect(await fs.stat(join(cacheDir(info.key), 'animation-fallback.glb')).catch(() => null)).toBeNull();
+    expect(await fs.stat(join(cacheDir(info.key), '.animation-donor.glb')).catch(() => null)).toBeNull();
+  });
+
+  it('retries transient donor failures instead of recording them as clipless', async () => {
+    const sources = await skinFixture();
+    h.run.mockImplementation(async (args) => {
+      if (args[0] === 'workshop') throw new Error('donor interrupted');
+      await fs.writeFile(argument(args, '--out'), rigGlb(false));
+    });
+    await expect(exportRiggedHeroPose(game(), 'Lash', sources)).rejects.toThrow('donor interrupted');
+    h.run.mockImplementation(async (args) => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop')));
+    expect((await exportRiggedHeroPose(game(), 'Lash', sources)).hasModel).toBe(true);
+  });
+
   it('extracts physics using the successful mesh selector', async () => {
     const write = h.run.getMockImplementation()!;
     h.run.mockImplementation(async (args) => {
