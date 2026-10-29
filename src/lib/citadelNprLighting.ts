@@ -107,6 +107,7 @@ export function citadelNprUniforms(enabled: boolean): Record<string, THREE.IUnif
     uCitadelExposure: { value: 1.3 },
     uCitadelOoNormalization: { value: directLightNormalization() },
     uCitadelAmbientFit: { value: new THREE.Vector4(0, 0, 0, 1) },
+    uCitadelEnvironmentCeiling: { value: 32 },
     uCitadelHemiOctNormals: { value: 0 },
     uCitadelSelfIllumFresnel: { value: new THREE.Vector4(1, 1, 1, 5) },
     uCitadelSelfIllumFresnelRange: { value: new THREE.Vector2(0, 1) },
@@ -134,6 +135,7 @@ uniform float uCitadelLighting;
 uniform float uCitadelExposure;
 uniform float uCitadelOoNormalization;
 uniform vec4 uCitadelAmbientFit;
+uniform float uCitadelEnvironmentCeiling;
 uniform float uCitadelHemiOctNormals;
 uniform vec4 uCitadelSelfIllumFresnel;
 uniform vec2 uCitadelSelfIllumFresnelRange;

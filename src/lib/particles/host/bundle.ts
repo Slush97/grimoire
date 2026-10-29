@@ -9,10 +9,11 @@ import type { ParticleTextureInfo } from '../render/sheet';
 import type { SerializedSnapshot } from '../snapshotResource';
 
 /** Bump with any change to the bundle's shape or contents. */
-export const PARTICLE_BUNDLE_VERSION = 6;
+export const PARTICLE_BUNDLE_VERSION = 7;
 
 /** Where the game itself says a hero plays an effect, which decides how the effect is bound. */
 export type AmbientEffectSourceKind =
+  | 'map-entity'
   /** The model's keyvalues: `particle_cfg_list` (system and control point configuration). */
   | 'model-particle-cfg'
   /** The model's keyvalues: `particles_list` (system, attachment type and point), as VRF's CreateModelParticles reads it. */
@@ -112,7 +113,7 @@ export interface ParticleBundle {
   textures: Record<string, BundleTexture>;
   /** The models C_OP_RenderModels draws, by particleResourceKey of their path. */
   models?: Record<string, SerializedModelMesh>;
-  /** The override materials those renderers name, by particleResourceKey of their path. */
+  /** Model draw materials and renderer overrides, by particleResourceKey of their path. */
   materials?: Record<string, ParticleMaterialData>;
   model: SerializedParticleModel;
   attachments: BundleAttachment[];

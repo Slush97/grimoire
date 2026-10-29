@@ -3,8 +3,22 @@ import type { MovementFxChoice } from './movementFx';
 
 const PREFIX = 'grimoire.foundry.draft.v1:';
 
+/** Drafts belong to the active game install (the dev copy while dev mode is on). */
+export function foundryDraftScope(settings: { devMode?: boolean; devDeadlockPath?: string | null; deadlockPath?: string | null } | null | undefined): string {
+  return settings?.devMode && settings.devDeadlockPath ? settings.devDeadlockPath : settings?.deadlockPath ?? '';
+}
+
 export function foundryDraftKey(scope: string, key: string): string {
   return `${PREFIX}${JSON.stringify([scope, key])}`;
+}
+
+/** The scope and key of a storage key made by foundryDraftKey, or null for any other key. */
+export function parseFoundryDraftKey(storageKey: string): { scope: string; key: string } | null {
+  if (!storageKey.startsWith(PREFIX)) return null;
+  try {
+    const parsed: unknown = JSON.parse(storageKey.slice(PREFIX.length));
+    return Array.isArray(parsed) && parsed.length === 2 && typeof parsed[0] === 'string' && typeof parsed[1] === 'string' ? { scope: parsed[0], key: parsed[1] } : null;
+  } catch { return null; }
 }
 
 export function readFoundryDraft<T>(storage: Pick<Storage, 'getItem'>, key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): T | undefined {

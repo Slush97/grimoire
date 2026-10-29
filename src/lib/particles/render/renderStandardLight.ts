@@ -44,6 +44,7 @@ const MINIMUM_TRAIL_DISTANCE = 1.1920929e-7;
 
 export class RenderStandardLight extends ParticleLightRenderer {
   private readonly lightType: number;
+  private readonly castShadows: boolean;
   private readonly attenuationStyle: number;
   private readonly intensity: NumberProvider;
   private readonly theta: NumberProvider;
@@ -76,7 +77,7 @@ export class RenderStandardLight extends ParticleLightRenderer {
     this.falloffLinearity = parse.numberProvider('m_flFalloffLinearity', new LiteralNumberProvider(0));
     this.fiftyPercentFalloff = parse.numberProvider('m_flFiftyPercentFalloff', new LiteralNumberProvider(0.5));
     this.zeroPercentFalloff = parse.numberProvider('m_flZeroPercentFalloff', new LiteralNumberProvider(1));
-    parse.boolean('m_bCastShadows', false);
+    this.castShadows = parse.boolean('m_bCastShadows', false);
     parse.boolean('m_bRenderDiffuse', true);
     parse.boolean('m_bRenderSpecular', true);
     this.reverseOrder = parse.boolean('m_bReverseOrder', false);
@@ -236,6 +237,10 @@ export class RenderStandardLight extends ParticleLightRenderer {
         fallOff: LIGHT_FALL_OFF,
         position: new THREE.Vector3(lightPosition.x, lightPosition.y, lightPosition.z),
         direction: new THREE.Vector3(direction.x, direction.y, direction.z),
+        left: new THREE.Vector3(rotation[1].x, rotation[1].y, rotation[1].z),
+        up: new THREE.Vector3(rotation[2].x, rotation[2].y, rotation[2].z),
+        cookie: null,
+        castShadows: this.castShadows,
         tubeHalfLength,
       };
     }

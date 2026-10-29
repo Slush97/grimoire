@@ -4,6 +4,8 @@
 
 /** One draw of a model: a triangle list in model space, Source units. */
 export interface ParticleModelPrimitive {
+  /** The draw's own compiled material path, before a renderer applies an override. */
+  material?: string | null;
   positions: Float32Array;
   normals: Float32Array | null;
   /** UV1, two floats per vertex. */
@@ -54,6 +56,7 @@ export function particleResourceKey(path: string): string {
 
 /** A primitive as JSON carries it: every array as base64 of its little-endian bytes. */
 export interface SerializedModelPrimitive {
+  material?: string | null;
   positions: string;
   normals: string | null;
   uvs: string | null;
@@ -91,6 +94,7 @@ export function serializeModelMesh(mesh: ParticleModelMesh): SerializedModelMesh
   return {
     ...mesh,
     primitives: mesh.primitives.map((primitive) => ({
+      material: primitive.material ?? null,
       positions: encode(primitive.positions)!,
       normals: encode(primitive.normals),
       uvs: encode(primitive.uvs),
@@ -107,6 +111,7 @@ export function deserializeModelMesh(mesh: SerializedModelMesh): ParticleModelMe
     primitives: mesh.primitives.map((primitive) => {
       const indexBytes = primitive.indices === null ? null : fromBase64(primitive.indices);
       return {
+        material: primitive.material ?? null,
         positions: floats(primitive.positions)!,
         normals: floats(primitive.normals),
         uvs: floats(primitive.uvs),

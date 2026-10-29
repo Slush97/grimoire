@@ -250,6 +250,9 @@ export abstract class ParticleSpritecardRenderer extends ParticleFunctionRendere
       defines,
       uniforms: this.uniforms,
       side: THREE.DoubleSide,
+      // VRF disables culling and draws each card once. Three's two-pass transparency is
+      // for closed meshes; cards and ribbons have the same shader on both faces.
+      forceSinglePass: true,
       toneMapped: false,
       fog: false,
     });
@@ -273,6 +276,10 @@ export abstract class ParticleSpritecardRenderer extends ParticleFunctionRendere
 
   override get wantsSceneDepth(): boolean {
     return this.featheringMode !== ParticleDepthFeatheringMode.PARTICLE_DEPTH_FEATHERING_OFF;
+  }
+
+  override get requiresSceneDepth(): boolean {
+    return this.featheringMode === ParticleDepthFeatheringMode.PARTICLE_DEPTH_FEATHERING_ON_REQUIRED;
   }
 
   override get wantsSceneColor(): boolean {

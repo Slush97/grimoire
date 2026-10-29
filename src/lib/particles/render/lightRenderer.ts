@@ -32,6 +32,13 @@ export interface ParticleLightState {
   position: THREE.Vector3;
   /** The unit direction a spot light points (the transform's first row). */
   direction: THREE.Vector3;
+  /** The transform's second and third rows: with `direction`, the frame a spherical cookie maps in. */
+  left: THREE.Vector3;
+  up: THREE.Vector3;
+  /** The light's cookie texture path, or null for none. */
+  cookie: string | null;
+  /** Whether the light casts dynamic shadows (m_bCastShadows). */
+  castShadows: boolean;
   /** Half the length of a capsule's tube, 0 for a point. */
   tubeHalfLength: number;
 }
@@ -55,6 +62,12 @@ export class ParticleLightPool {
 
   /** Scales light intensities from Source units to the viewer's, set by the renderer each frame. */
   viewerUnitsPerSourceUnit = 1;
+
+  /** Whether slots get three.js lights; off for a host that lights from `states` itself. */
+  threeLights = true;
+
+  /** Whether a new three.js light starts hidden, marked `userData.awaitingPrograms`, for the host to show. */
+  deferNewLights = false;
 
   constructor(spot: boolean) {
     this.spot = spot;
@@ -113,6 +126,10 @@ export class ParticleLightPool {
 
   /** Puts every light where its slot says, and turns off those not in use. */
   apply(): void {
+    if (!this.threeLights) {
+      return;
+    }
+
     for (const slot of this.slots) {
       if (slot.light === null) {
         if (!slot.inUse) {
@@ -121,6 +138,10 @@ export class ParticleLightPool {
 
         slot.light = this.spot ? new THREE.SpotLight() : new THREE.PointLight();
         slot.light.decay = 2;
+        if (this.deferNewLights) {
+          slot.light.visible = false;
+          slot.light.userData.awaitingPrograms = true;
+        }
         this.group.add(slot.light);
 
         if (slot.light instanceof THREE.SpotLight) {
@@ -213,6 +234,20 @@ export abstract class ParticleLightRenderer extends ParticleFunctionRenderer {
   /** The lights in use, in Source space, for hosts that light by other means than three.js lights. */
   get lightStates(): ParticleLightState[] {
     return this.lights.states;
+  }
+
+  /** Places no three.js lights: the host lights the scene from `lightStates` itself. Call before the first draw. */
+  useHostLighting(): void {
+    this.lights.threeLights = false;
+  }
+
+  /**
+   * Keeps each new three.js light hidden (`userData.awaitingPrograms`) until the host shows it. A light
+   * changes the light count every lit program in the scene is keyed on, so showing it at once links
+   * all of them again on the next draw. Call before the first draw.
+   */
+  deferNewLights(): void {
+    this.lights.deferNewLights = true;
   }
 
   override hide(): void {

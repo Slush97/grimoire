@@ -62,6 +62,8 @@ export const SOURCE2_PREVIEW_TEXTURE_SLOTS = [
   'g_tMasks1',
   'g_tTintMask',
   'g_tPacked1',
+  // environment_blend's world overlay color, projected in world space.
+  'g_tColorWorldOverlay',
 ] as const;
 
 /**
@@ -1714,8 +1716,8 @@ export const NPR_PATCH_MAP: CSMPatchMap = {
             vec3 citadelEnv = textureCubeUV(envMap, envMapRotation * citadelR, citadelRoughness).rgb * envMapIntensity;
             float citadelNdotV = clamp(dot(citadelN, citadelV), 0.0, 1.0);
             vec2 citadelFab = citadelEnvBrdf(citadelRoughness, citadelNdotV);
-            float citadelProbe = max(dot(vec4(citadelN, 1.0), uCitadelAmbientFit), 1e-5);
-            float citadelRatio = min(dot(citadelAmb.rgb, CITADEL_LUMA) / citadelProbe, 32.0);
+            float citadelProbe = dot(vec4(citadelN, 1.0), uCitadelAmbientFit);
+            float citadelRatio = citadelProbe > 0.0 ? min(dot(citadelAmb.rgb, CITADEL_LUMA) / citadelProbe, uCitadelEnvironmentCeiling) : 1.0;
             float citadelSpecOcc = clamp(pow(citadelNdotV + citadelAo, citadelA) - 1.0 + citadelAo, 0.0, 1.0);
             citadelIbl = mix(vec3(citadelFab.y), vec3(citadelFab.x + citadelFab.y), citadelF0) * citadelEnv * citadelRatio * noSpec * citadelSpecOcc;
           #endif
