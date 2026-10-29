@@ -97,15 +97,19 @@ size. Standard and Omni2 light renderers become three.js lights that light the h
 draw comes after the hero's translucent meshes, in VRF's order within the tree. Feathering renderers
 (Graves, Rem) read the opaque scene's depth from a depth-only pass (`sceneDepth.ts`) without
 particles, translucent meshes, background or shadow maps. Refracting renderers (the heavy melee swing
-and impact) read a copy of the opaque scene (`sceneColor.ts`).
+and impact) read a copy of the opaque scene (`sceneColor.ts`). The engine path keeps authored HDR
+self-illum masks, saturation and dynamic expression values instead of the legacy preview's mask
+shaping, saturation multiplier and emission cap.
 
 ### Post process and bloom
 
 With engine particles on, the viewer draws through the ported Source 2 post process
-(`PARTICLE_RUNTIME_POST_PIPELINE`) with `basepostprocess_deadlock.vpost`: its bloom, exposure bias,
-pre-scale and white point. The viewer's lights are calibrated against its preview curve, so the
-exposure scalar is the one that shows mid grey as the preview does (`exposureForDisplay`). Turning
-the viewer's bloom off drops the volume's bloom.
+(`PARTICLE_RUNTIME_POST_PIPELINE`). Studio and transparent views use `caldera.vpost`, which the
+hero shop and hero container maps name. Hideout and Midtown keep `basepostprocess_deadlock.vpost`.
+Exposure comes from the preset (the shop and hideout volumes give scalar 1). Bloom is drawn only when
+both the viewer's switch and the game's `setting.r_post_bloom` allow it. The game value is read from
+the active Steam account's `video.txt` (falling back to the game cfg) on every request, cache hits
+included, without rebuilding the bundle.
 
 ### Movement previews (effect timelines)
 
