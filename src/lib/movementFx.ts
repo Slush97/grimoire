@@ -26,3 +26,11 @@ export type MovementFxSaveRequest = z.infer<typeof movementFxSaveSchema>;
 export const movementFxPreviewSchema = z.object({ choice: movementFxSchema, heroName: z.string().min(1).max(100) }).strict();
 export type MovementFxPreviewRequest = z.infer<typeof movementFxPreviewSchema>;
 export interface MovementFxPreview { key: string; descriptor: FxDescriptor; textureBaseUrl: string }
+/** The faithful runtime's preview of a movement effect on one hero (see previewMovementEngine). */
+export interface MovementEnginePreview {
+  key: string;
+  data: import('./movementGameData').MovementGameData;
+  /** The particle bundle (src/lib/particles/host/bundle.ts) and its texture directory, over grimoire-hero:. */
+  bundleUrl: string;
+  textureBaseUrl: string;
+}

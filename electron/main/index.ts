@@ -124,6 +124,7 @@ import { initUpdater, checkForUpdates, getInstallSource } from './services/updat
 import { runStartupRecovery } from './ipc/launch';
 import './ipc/modSafety';
 import { loadSettings, saveSettings, type AppSettings } from './services/settings';
+import { prebuildHideoutScene } from './services/hideoutScene';
 import {
     configureForgeBridge,
     requestForgeEnable,
@@ -543,7 +544,8 @@ if (!gotTheLock) {
                         ...details.responseHeaders,
                         'Content-Security-Policy': [
                             "default-src 'self'; " +
-                            "script-src 'self'; " +
+                            // Meshopt's bundled decoder uses WebAssembly, not JS eval.
+                            "script-src 'self' 'wasm-unsafe-eval'; " +
                             "style-src 'self' 'unsafe-inline'; " +
                             "font-src 'self'; " +
                             // `grimoire-foundry:` serves Foundry's cached texture
@@ -616,6 +618,13 @@ if (!gotTheLock) {
         // we're on Linux without a real secret store: ADR-011). Its check
         // calls the Social server, so it waits until Social is turned on.
         if (loadSettings().experimentalSocial) void hydrateSocialSession();
+
+        // Rebuild the hideout scene cache after a game update, at low priority,
+        // so the viewer finds it ready. Waits out the startup work first.
+        setTimeout(() => {
+            const deadlockPath = getConfiguredDeadlockPath();
+            if (deadlockPath) void prebuildHideoutScene(deadlockPath, { everyone: loadSettings().experimentalHideoutDefault }).catch((error: unknown) => console.warn('[hideout] Prebuild failed:', error));
+        }, 30000);
 
         // Resume the opt-in match-salt contributor across restarts.
         if (loadSettings().contributeMatchSalts) {

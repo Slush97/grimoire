@@ -66,6 +66,7 @@ export interface HeroPoseSkinSource {
  * to a vanilla pose, which changes it.
  */
 export interface HeroPoseInfo {
+  hasAnimationFallback?: boolean;
   hasMovement?: boolean;
   hasModel: boolean;
   mtimeMs: number | null;
@@ -78,4 +79,14 @@ export interface HeroEffectInfo {
   hasEffect: boolean;
   key: string;
   entry: string | null;
+}
+
+/** A hero's particle bundle for the faithful particle runtime. */
+export interface HeroParticleBundleInfo {
+  hasBundle: boolean;
+  key: string;
+  /** How many effects discovery found. */
+  effects: number;
+  /** The native video.txt post-bloom switch, refreshed even on a bundle cache hit. */
+  postBloomEnabled?: boolean;
 }

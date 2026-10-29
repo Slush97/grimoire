@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { viewerAmbientCube, VIEWER_GROUND_COLOR, VIEWER_SKY_COLOR, VIEWER_HEMISPHERE_INTENSITY } from './viewerAmbientLight';
+import { viewerAmbientCube, viewerLightScale, VIEWER_GROUND_COLOR, VIEWER_SKY_COLOR, VIEWER_HEMISPHERE_INTENSITY } from './viewerAmbientLight';
 
 describe('viewer diffuse environment', () => {
+  it('keeps artificial light display energy fixed as NPR scene exposure changes', () => {
+    for (const intensity of [1.4, 1.2, 2.2, 1.8, 1.5, 1.1, 1.6]) {
+      const studio = intensity * viewerLightScale(1.3) * 1.3;
+      const midtown = intensity * viewerLightScale(1.6) * 1.6;
+      expect(studio).toBeCloseTo(intensity * 0.2849333991, 10);
+      expect(midtown).toBeCloseTo(studio, 12);
+    }
+  });
   it('does not add an outdoor hemisphere to the captured hideout lighting', () => {
     expect(viewerAmbientCube(new THREE.SphericalHarmonics3(), 1, false).every((face) => face.length() === 0)).toBe(true);
     const sh = new THREE.SphericalHarmonics3();

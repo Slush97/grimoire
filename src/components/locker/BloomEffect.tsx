@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from 'react';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing';
-import { Effect, ToneMappingMode } from 'postprocessing';
+import { Effect, ToneMappingMode, type Pass } from 'postprocessing';
+import { DEADLOCK_BASE_POST, type PostPipeline, type SourcePostSettings } from '../../lib/particles/render/post';
+import { SourcePostPass } from '../../lib/particles/render/post/sourcePostPass';
 import { DEADLOCK_TONE_SHADER } from './heroViewerTone';
 
 /**
@@ -25,16 +28,69 @@ export interface BloomParams {
   /** Luminance threshold (linear HDR): only pixels brighter than this bloom. */
   threshold: number;
   deadlockExposure?: number;
+  /**
+   * 'preview' keeps the viewer's own bloom and tone curve. 'source2' runs ValveResourceFormat's post
+   * process with the host's sourceSettings (its bloom, exposure bias, 2.8 pre-scale and
+   * white point), for the particle runtime: see src/lib/particles/render/README.md.
+   */
+  pipeline?: PostPipeline;
+  /** The host scene's authored post volume. Independent of the particle system being drawn. */
+  sourceSettings?: SourcePostSettings;
+  /** The game's r_post_bloom switch. The viewer's switch may disable bloom further. */
+  sourceBloomEnabled?: boolean;
+  /** An authored host exposure, shared with its material shaders. */
+  sceneExposure?: number;
+  colorCorrection?: { lut: THREE.Data3DTexture; weight: number } | null;
+  /** A linear HDR pass the source2 pipeline runs before its tonemap, such as map fog. */
+  sourceScenePass?: Pass | null;
 }
 
-export function BloomEffect({ intensity, radius, threshold, deadlockExposure }: BloomParams) {
+// The viewer benchmark switches passes off to measure them.
+const benchComposer = import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1'
+  ? (composer: unknown) => { if (composer) Object.assign(window, { __grimoireComposer: composer }); } : undefined;
+
+export function BloomEffect({ intensity, radius, threshold, deadlockExposure, pipeline = 'preview', sourceSettings = DEADLOCK_BASE_POST, sourceBloomEnabled = true, sceneExposure, colorCorrection = null, sourceScenePass = null }: BloomParams) {
   const tone = useMemo(() => new Effect('DeadlockTone', DEADLOCK_TONE_SHADER, {
     uniforms: new Map([['previewExposure', new THREE.Uniform(deadlockExposure ?? 1)]]),
   }), [deadlockExposure]);
   useEffect(() => () => tone.dispose(), [tone]);
 
+  // Switching bloom off drops the volume's bloom
+  const sourceBloom = intensity > 0 && sourceBloomEnabled;
+  // NPR ambient normalization divides by this same scene exposure. Matching an
+  // older display curve here cancels the authored post bias and breaks that pair.
+  // A map scene supplies its own authored exposure.
+  const sourceExposure = sceneExposure ?? deadlockExposure ?? 1;
+  const sourceVolume = useMemo(() => ({ ...sourceSettings, exposure: sourceExposure }), [sourceSettings, sourceExposure]);
+  const sourcePost = useMemo(
+    () => (pipeline === 'source2' ? new SourcePostPass({ ...sourceVolume, bloom: sourceBloom ? sourceVolume.bloom : null }) : null),
+    [pipeline, sourceBloom, sourceVolume],
+  );
+  useEffect(() => () => sourcePost?.dispose(), [sourcePost]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- The postprocessor owns mutable GPU resources.
+    if (sourcePost) sourcePost.post.colorCorrection = colorCorrection;
+  }, [sourcePost, colorCorrection]);
+
+  // What the Source 2 post shows the frame through, for passes that copy the scene (sceneColor.ts)
+  const getThree = useThree((state) => state.get);
+  useEffect(() => {
+    const { userData } = getThree().scene;
+    userData.sourcePostSettings = sourcePost ? sourceVolume : undefined;
+    return () => { delete userData.sourcePostSettings; };
+  }, [getThree, sourcePost, sourceVolume]);
+
+  if (sourcePost !== null) {
+    return (
+      <EffectComposer ref={benchComposer} key={sourceScenePass ? 'source2-scene' : 'source2'} multisampling={4} frameBufferType={THREE.HalfFloatType}>
+        {sourceScenePass && <primitive object={sourceScenePass} />}
+        <primitive object={sourcePost} />
+      </EffectComposer>
+    );
+  }
+
   return (
-    <EffectComposer multisampling={4} frameBufferType={THREE.HalfFloatType}>
+    <EffectComposer ref={benchComposer} multisampling={4} frameBufferType={THREE.HalfFloatType}>
       {/* Keep the effect graph stable: removing bloom can strand the tone pass
           offscreen after a composer rebuild. Zero intensity preserves live frames. */}
       <Bloom

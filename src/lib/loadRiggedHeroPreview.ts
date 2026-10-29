@@ -33,12 +33,24 @@ export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean
   const version = info.mtimeMs ?? 0;
   // Resolve both before mounting the mixer: cloth calibration needs the bind
   // pose, and a fallback export's physics must follow its returned cache key.
+  // The base animations, when the skin lacks its own, load alongside the model.
+  const fallbackLoad = info.hasAnimationFallback ? loadGltfPreview(`${base}/animation-fallback.glb?v=${version}`) : null;
+  void fallbackLoad?.catch(() => {});
   const [gltf, clothModel, attachments] = await Promise.all([
     loadGltfPreview(`${base}/model-rigged.glb?v=${version}`, { imageBitmaps: true }),
     physics ? loadClothSidecar(`${base}/cloth-rigged.json?v=${version}`) : null,
     loadAttachments(`${base}/attachments.json?v=${version}`),
   ]);
   gltf.scene.userData.grimoireAttachments = attachments;
+  if (fallbackLoad) {
+    const fallback = await fallbackLoad;
+    // Base-only helper bones can be absent from a skin. Compatibility was
+    // checked at export; keep only tracks that can bind to this scene.
+    for (const clip of fallback.animations) {
+      clip.tracks = clip.tracks.filter((track) => !!gltf.scene.getObjectByName(track.name.slice(0, track.name.lastIndexOf('.'))));
+    }
+    gltf.animations.push(...fallback.animations);
+  }
   if (movement && info.hasMovement) {
     const motions = await loadGltfPreview(`${base}/movement.glb?v=${version}`);
     gltf.animations.push(...motions.animations);

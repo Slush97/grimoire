@@ -259,7 +259,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                     '--scale', String(pattern?.style === 'moo' ? pattern.scale ?? 1 : 1),
                     ...(edit.repaint && edit.tint ? ['--repaint', edit.tint.slice(1)] : []),
                     ...(pattern?.colors ? ['--palette', pattern.colors.join(',')] : []),
-                    '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness), '--encode-vpk', layer], 300000, textureBakeEnv);
+                    '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness), '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);
@@ -280,7 +280,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                         ...(region.paint ? ['--repaint', region.paint.slice(1)] : []),
                         ...(pattern?.colors ? ['--palette', pattern.colors.join(',')] : []),
                         '--hue-shift', String(color.hue), '--saturation', String(color.saturation), '--brightness', String(color.brightness),
-                        '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                        '--mask', mask, '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                     await verifyVpkOutput(layer);
                     layers.push(layer);
                     patternLayers.set(edit.material, layer);
@@ -304,7 +304,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const layer = join(dir, `surface-${layers.length}_dir.vpk`);
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                 await runVpkmerge(['workshop', 'surface', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material,
-                    '--mode', edit.surface.mode, '--opacity', String(edit.surface.opacity), '--encode-vpk', layer], 300000, textureBakeEnv);
+                    '--mode', edit.surface.mode, '--opacity', String(edit.surface.opacity), '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);
@@ -319,7 +319,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                     const layer = join(dir, `clear-${layers.length}_dir.vpk`);
                     const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                     await runVpkmerge(['workshop', 'surface', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, '--mode', 'translucent',
-                        '--opacity', String(region.surface.opacity), '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                        '--opacity', String(region.surface.opacity), '--mask', mask, '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                     await verifyVpkOutput(layer);
                     layers.push(layer);
                     patternLayers.set(edit.material, layer);
@@ -332,7 +332,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const layer = join(dir, `finish-${layers.length}_dir.vpk`);
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                 await runVpkmerge(['workshop', 'finish', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material,
-                    '--roughness', String(edit.finish.roughness), '--metalness', String(edit.finish.metalness), '--encode-vpk', layer], 300000, textureBakeEnv);
+                    '--roughness', String(edit.finish.roughness), '--metalness', String(edit.finish.metalness), '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 // Shine areas read this layer's material and masks, so they stack on the whole-part finish.
@@ -348,7 +348,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                     const layer = join(dir, `shine-${layers.length}_dir.vpk`);
                     const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                     await runVpkmerge(['workshop', 'finish', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material,
-                        '--roughness', String(region.finish.roughness), '--metalness', String(region.finish.metalness), '--mask', mask, '--encode-vpk', layer], 300000, textureBakeEnv);
+                        '--roughness', String(region.finish.roughness), '--metalness', String(region.finish.metalness), '--mask', mask, '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                     await verifyVpkOutput(layer);
                     layers.push(layer);
                     patternLayers.set(edit.material, layer);
@@ -367,7 +367,7 @@ export async function buildSkinEditVpk(deadlockPath: string, input: SkinEditExpo
                 const paks = [...new Set([patternLayers.get(edit.material) ?? source.vpk, ...layers.slice().reverse(), source.vpk, source.base])];
                 await runVpkmerge(['workshop', 'glow', ...paks.flatMap((pak) => ['--vpk', pak]), '--entry', edit.material, ...(mask ? ['--mask', mask] : []),
                     '--color', glow.color.slice(1), '--strength', String(glowStrength(glow.strength)), '--animation', glow.animation,
-                    '--speed', String(glow.speed ?? 1), ...(glow.paintColors ? ['--paint-colors'] : []), '--encode-vpk', layer], 300000, textureBakeEnv);
+                    '--speed', String(glow.speed ?? 1), ...(glow.paintColors ? ['--paint-colors'] : []), '--encode-vpk', layer], 300000, { env: textureBakeEnv });
                 await verifyVpkOutput(layer);
                 layers.push(layer);
                 patternLayers.set(edit.material, layer);

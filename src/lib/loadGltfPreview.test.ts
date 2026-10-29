@@ -10,9 +10,11 @@ const source2Mock = vi.hoisted(() => ({
   resolveMorphicTextures: vi.fn(),
 }));
 
+const sceneMock = vi.hoisted(() => ({ next: null as unknown }));
+
 function fakeGltf(): GLTF {
   return {
-    scene: {},
+    scene: sceneMock.next ?? new THREE.Group(),
     scenes: [],
     cameras: [],
     animations: [],
@@ -25,6 +27,10 @@ function fakeGltf(): GLTF {
 vi.mock('three/examples/jsm/loaders/GLTFLoader.js', () => ({
   GLTFLoader: class {
     private plugins: ((parser: GLTFParser) => { name: string })[] = [];
+
+    setMeshoptDecoder(): this {
+      return this;
+    }
 
     register(callback: (parser: GLTFParser) => { name: string }): this {
       this.plugins.push(callback);
@@ -82,6 +88,26 @@ describe('loadGltfPreview texture decoding', () => {
 
     expect(loaderMock.textureLoaders).toEqual(['image-bitmap-loader']);
     expect(source2Mock.resolveMorphicTextures).toHaveBeenCalledWith(gltf);
+  });
+
+  it('samples every material texture anisotropically, like the game', async () => {
+    const map = new THREE.Texture();
+    const metalRough = new THREE.Texture();
+    const scene = new THREE.Group();
+    scene.add(new THREE.Mesh(new THREE.BufferGeometry(), [
+      new THREE.MeshStandardMaterial({ map }),
+      new THREE.MeshStandardMaterial({ metalnessMap: metalRough, roughnessMap: metalRough }),
+    ]));
+    sceneMock.next = scene;
+    try {
+      const { parseGltfPreview, PREVIEW_TEXTURE_ANISOTROPY } = await import('./loadGltfPreview');
+      await parseGltfPreview(new ArrayBuffer(4));
+      expect(PREVIEW_TEXTURE_ANISOTROPY).toBeGreaterThan(1);
+      expect(map.anisotropy).toBe(PREVIEW_TEXTURE_ANISOTROPY);
+      expect(metalRough.anisotropy).toBe(PREVIEW_TEXTURE_ANISOTROPY);
+    } finally {
+      sceneMock.next = null;
+    }
   });
 
   it('rejects a failed GLB request', async () => {

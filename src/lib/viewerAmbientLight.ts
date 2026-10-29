@@ -1,14 +1,24 @@
 import * as THREE from 'three';
+import type { Source2ProbeLighting } from './source2ProbeVolume';
 import { LightProbeGenerator } from 'three/examples/jsm/lights/LightProbeGenerator.js';
 
 export type NprAmbientCube = readonly [THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3];
-export type ViewerAmbientProbe = { kind: 'pending' } | { kind: 'fallback' } | { kind: 'ready'; sh: THREE.SphericalHarmonics3 };
+export type ViewerAmbientProbe = { kind: 'map'; lighting: Source2ProbeLighting; primaryDirection: THREE.Vector3 } | { kind: 'pending' } | { kind: 'fallback' } | { kind: 'ready'; sh: THREE.SphericalHarmonics3 };
 
 export const VIEWER_SKY_COLOR = new THREE.Color(96 / 255, 135 / 255, 183 / 255);
 export const VIEWER_GROUND_COLOR = new THREE.Color(0.32, 0.25, 0.2);
 export const VIEWER_HEMISPHERE_INTENSITY = 1.5;
-/** `scene.environmentIntensity` per lighting preset; the ambient cube scales its probe to match. */
+/** Raw rig intensities; the diffuse cube retains these as its NPR normalization reference. */
 export const VIEWER_ENVIRONMENT_INTENSITY = { midtown: 1.6, studio: 1.1 } as const;
+
+/** Radiance anchor of the studio rig before the display exposure correction.
+ * This calibrates artificial lights, not the game-normalized NPR bounce, emission
+ * or post exposure. See docs/hero-viewer-fidelity.md, "Ambient light normalization". */
+const VIEWER_RIG_EXPOSURE = 0.2849333991;
+
+export function viewerLightScale(exposure: number): number {
+  return VIEWER_RIG_EXPOSURE / exposure;
+}
 
 /** Diffuse irradiance in world-space +X, -X, +Y, -Y, +Z, -Z order. */
 export function viewerAmbientCube(sh: THREE.SphericalHarmonics3, intensity: number, includeHemisphere = true): NprAmbientCube {

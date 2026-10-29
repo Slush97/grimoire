@@ -9,7 +9,7 @@ import type { SkinEditProgress, SkinPartEdit } from '../../types/skinEditor';
 import { SILVER_TRANSFORMED_MODEL } from '../../lib/skinModelForms';
 
 vi.mock('react-i18next', () => ({ initReactI18next: { type: '3rdParty', init: () => {} }, useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../locker/HeroPoseViewer', () => ({ default: function Preview({ heroName, partEdits, highlightedPart, onPreviewCapture }: {
+vi.mock('../locker/LockerViewerHost', () => ({ SharedHeroViewer: function Preview({ heroName, partEdits, highlightedPart, onPreviewCapture }: {
   heroName: string; partEdits: SkinPartEdit[]; highlightedPart: string | null; onPreviewCapture: (capture: (() => Promise<string>) | null) => void;
 }) {
   useEffect(() => { onPreviewCapture(async () => 'data:image/webp;base64,UklGRg=='); return () => onPreviewCapture(null); }, [onPreviewCapture]);

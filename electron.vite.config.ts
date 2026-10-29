@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => {
                     'electron-log',
                     '@grimoire/social-types',
                     'zod',
+                    'meshoptimizer',
                     '@xhayper/discord-rpc',
                 ],
             },
@@ -80,6 +81,8 @@ export default defineConfig(({ mode }) => {
                 input: {
                     index: resolve(__dirname, 'electron/main/index.ts'),
                     vpkSafetyWorker: resolve(__dirname, 'electron/main/services/vpkSafetyWorker.ts'),
+                    heroParticleWorker: resolve(__dirname, 'electron/main/services/heroParticleWorker.ts'),
+                    hideoutBundleWorker: resolve(__dirname, 'electron/main/services/hideoutBundleWorker.ts'),
                 },
             },
         },

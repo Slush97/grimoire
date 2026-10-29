@@ -1208,6 +1208,10 @@ export interface AppSettings {
    *  since Valve closed the CEF file:// read it was built against. When off,
    *  every safety gate passes without reading the archive. */
   experimentalModSafety: boolean;
+  /** Opt-in: the 3D viewer opens on the hideout once its scene cache is built
+   *  for the current game, and the cache builds in the background for every
+   *  player. A hero's own scene choice still wins. Off by default. */
+  experimentalHideoutDefault: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use
