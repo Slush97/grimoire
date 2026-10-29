@@ -19,6 +19,8 @@ interface Props {
   paused: boolean;
   speed: number;
   progressRef: RefObject<HeroPlaybackProgress>;
+  /** Holds the timeline while the screen still shows the previous model, so both agree. */
+  frozen?: boolean;
   onSeek: (value: number) => void;
   spinPaused: boolean;
   cloth: boolean;
@@ -26,6 +28,7 @@ interface Props {
   particles: boolean;
   /** The faithful Source 2 particle runtime in place of the curated overlay. */
   sourceParticles: boolean;
+  fullResolutionFog: boolean;
   scene: HeroViewerScene;
   wireframe: boolean;
   onWireframe: (value: boolean) => void;
@@ -40,6 +43,7 @@ interface Props {
   onBloom: (value: boolean) => void;
   onParticles: (value: boolean) => void;
   onSourceParticles: (value: boolean) => void;
+  onFullResolutionFog: (value: boolean) => void;
   onScene: (value: HeroViewerScene) => void;
   onReset: () => void;
   onScreenshot: () => void;
@@ -49,18 +53,25 @@ interface Props {
   onGif: () => void;
 }
 
-function AnimationTimeline({ progressRef, onSeek }: Pick<Props, 'progressRef' | 'onSeek'>) {
+function AnimationTimeline({ progressRef, frozen = false, onSeek }: Pick<Props, 'progressRef' | 'frozen' | 'onSeek'>) {
   const { t } = useTranslation();
   const [position, setPosition] = useState<HeroPlaybackProgress>({ time: 0, duration: 0 });
   useEffect(() => {
     // Only this small control samples playback, keeping React out of the scene's
     // per-frame animation path. Unmounting the controls stops the timer.
-    const timer = window.setInterval(() => {
+    if (frozen) return;
+    const sample = () => {
       const { time, duration } = progressRef.current;
       setPosition((old) => old.time === time && old.duration === duration ? old : { time, duration });
-    }, 100);
-    return () => window.clearInterval(timer);
-  }, [progressRef]);
+    };
+    // At once on release, so the timeline turns over with the model rather than a tick later
+    const first = requestAnimationFrame(sample);
+    const timer = window.setInterval(sample, 100);
+    return () => {
+      cancelAnimationFrame(first);
+      window.clearInterval(timer);
+    };
+  }, [progressRef, frozen]);
   return (
     <div className="flex items-center gap-2">
       <input type="range" min={0} max={position.duration || 1} step={0.01}
@@ -132,6 +143,7 @@ export function HeroViewerToolbar(p: Props) {
             <Toggle label={t('locker.pose.bloom')} checked={p.bloom} onChange={p.onBloom} />
             <Toggle label={t('locker.pose.particles')} checked={p.particles} onChange={p.onParticles} />
             <Toggle label={t('locker.pose.sourceParticles')} checked={p.sourceParticles} disabled={!p.particles} onChange={p.onSourceParticles} />
+            {p.scene === 'hideout' && <Toggle label={t('locker.pose.fullResolutionFog')} checked={p.fullResolutionFog} onChange={p.onFullResolutionFog} />}
             <Toggle label={t('locker.pose.wireframe')} checked={p.wireframe} onChange={p.onWireframe} />
           </div>
         </div>
@@ -141,7 +153,7 @@ export function HeroViewerToolbar(p: Props) {
       <div className="pointer-events-auto w-80 max-w-full rounded-sm border border-hl/10 bg-bg-secondary/95 backdrop-blur-sm">
         {p.animated && !p.actionPreview && p.clips.length > 0 && (
           <div className="px-2 pt-1">
-            <AnimationTimeline progressRef={p.progressRef} onSeek={p.onSeek} />
+            <AnimationTimeline progressRef={p.progressRef} frozen={p.frozen} onSeek={p.onSeek} />
           </div>
         )}
         <div className="flex flex-nowrap items-center justify-between gap-1 p-1">

@@ -7,6 +7,9 @@ export interface HeroPreviewFlags extends HeroPoseDevFlags {
   /** Run particles through the faithful Source 2 simulation instead of the curated overlay. On by default;
    *  turning it off falls back to the curated overlay. */
   sourceParticles: boolean;
+  /** March the hideout's fog at every pixel instead of at half resolution. Off by default: it costs
+   *  about 6 ms a frame at 2560 by 1440 and differs only along depth edges. */
+  fullResolutionFog: boolean;
 }
 
 export const FULL_EFFECTS_PREVIEW_DEFAULTS: HeroPreviewFlags = {
@@ -14,6 +17,7 @@ export const FULL_EFFECTS_PREVIEW_DEFAULTS: HeroPreviewFlags = {
   nprDebug: false, matDebug: false,
   autoRotate: false,
   sourceParticles: true,
+  fullResolutionFog: false,
 };
 
 // Legacy preview keys were also populated by the old opt-in developer controls.
@@ -35,6 +39,7 @@ export function initialHeroPreviewFlags(): HeroPreviewFlags {
     effects: read('effects', true, true), bloom: read('bloom', true, true),
     autoRotate: read('autoRotate', false, true),
     sourceParticles: read('sourceParticles', true, true),
+    fullResolutionFog: read('fullResolutionFog', false, true),
     nprDebug: read('nprDebug', false), matDebug: read('matDebug', false),
   };
 }

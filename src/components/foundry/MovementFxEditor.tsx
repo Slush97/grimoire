@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
 import { Download, Upload, RotateCcw } from 'lucide-react';
 import { Button, IconButton, SegmentedControl, Toggle } from '../common/ui';
 import { Input } from '../common/forms';
-import { ErrorBoundary } from '../common/ErrorBoundary';
+import { SharedHeroViewer } from '../locker/LockerViewerHost';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { movementFxSchema, type MovementFxChoice, type MovementFxPreview } from '../../lib/movementFx';
 import { movementFxThumbnail } from '../../lib/movementFxThumbnail';
@@ -13,7 +13,6 @@ import { useAppStore } from '../../stores/appStore';
 import type { HeroPoseSkinSource } from '../../types/portrait';
 import { WorkshopWorkbench } from './WorkshopWorkbench';
 
-const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const EMOJIS = ['😈', '💀', '😭', '🔥', '🗿', '🤡', '💩', '✨', '❤️', '👀', '🦅', '🐀', '🍌', '🗣️'];
 
 function emojiStamp(emoji: string): string {
@@ -95,11 +94,9 @@ function MovementSession({ kind, heroName, skinSources }: { kind: MovementFxChoi
   };
   return <div className="space-y-3">
     <WorkshopWorkbench preview={<>
-          <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}>
-            <HeroPoseViewer heroName={heroName} skinSources={skinSources} workspaceKey={`movement:${heroName}`}
-              initialScene="studio" initialBackground="none"
-              movementPreview={preview ? { ...preview.value, kind, revision: replay, loop, request: { choice: preview.choice, heroName } } : undefined} />
-          </Suspense></ErrorBoundary>
+          <SharedHeroViewer heroName={heroName} skinSources={skinSources} workspaceKey={`movement:${heroName}`}
+            initialScene="studio" initialBackground="none"
+            movementPreview={preview ? { ...preview.value, kind, revision: replay, loop, request: { choice: preview.choice, heroName } } : undefined} />
           {!current && !previewError && <p role="status" className="absolute left-3 top-3 rounded-sm bg-bg-secondary px-2 py-1 text-xs text-text-secondary">{t('foundry.movement.updating')}</p>}
         </>}
         previewFooter={<>

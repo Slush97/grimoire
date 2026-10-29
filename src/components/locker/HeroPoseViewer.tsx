@@ -29,8 +29,12 @@ import { CitadelRimDepth } from '../../lib/citadelRimDepth';
 import { loadCitadelGlassNoise } from '../../lib/citadelGlassNoise';
 import { canRenderAuthoredShell, citadelOutlineMesh, hasAuthoredShellMarker, hasCitadelNprOutline } from '../../lib/citadelNprOutline';
 import { FULL_EFFECTS_PREVIEW_DEFAULTS, heroPresentationStorageKey, initialHeroPreviewFlags } from './heroViewerDefaults';
-import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
+import { heroPreviewBounds, normalizeHeroPreview, type HeroPreviewNormalization } from '../../lib/heroPreviewBounds';
+import { HIDEOUT_ROOM_LAYER, type RoomClearance } from '../../lib/hideoutClearance';
+import { HIDEOUT_FOV, hideoutFraming } from '../../lib/hideoutFraming';
 import { skinPartBounds } from '../../lib/skinPartBounds';
+import { installFastSkinnedBounds } from '../../lib/skinnedBounds';
+import { heroModelBytes, type HeroModelBytes } from '../../lib/heroModelBytes';
 import { Loader2 } from 'lucide-react';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -63,14 +67,23 @@ import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
 import { DEADLOCK_HERO_POST, DEADLOCK_BASE_POST, PARTICLE_RUNTIME_POST_PIPELINE } from '../../lib/particles/render/post';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
-import { HideoutScene } from './HideoutScene';
+import { Source2MapPost } from './Source2MapPost';
+import { HideoutScene, HideoutHeroLighting, type HideoutStatus } from './HideoutScene';
+import { useViewerCrossfade } from './useViewerCrossfade';
+import { Skeleton } from '../common/Skeleton';
+import { preloadHideout } from '../../lib/hideoutPreload';
+import { hideoutWarmingProgress, roomStageProgress } from '../../lib/hideoutProgress';
+import { ProgressBar } from '../common/ui';
+import { useAppStore } from '../../stores/appStore';
+import { heroViewerSceneSchema, hideoutReadyNow, migrateViewerScene, openingViewerScene, ownViewerSceneDraft, refreshHideoutReady, viewerSceneDraft, type ViewerSceneSurface } from '../../lib/hideoutDefault';
+import { foundryDraftScope } from '../../lib/foundryDrafts';
 import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
 import { SkinRegionOverlay, type RegionPicker } from './SkinRegionOverlay';
 import { regionBaker, type RegionBaker } from '../../lib/skinRegionScene';
 import type { ViewerPartHit } from '../../lib/viewerPartPicking';
-import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
+import type { SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
 import { heroAnimationPlayback, heroShowcaseAnimation, preferredHeroAnimation } from '../../lib/heroAnimationCatalog';
@@ -87,6 +100,7 @@ import {
   summarizeNprScene,
   applySource2MaterialHints,
   getMorphic,
+  DEFAULT_NPR_TUNING,
   flag,
   type NprWrapResult,
   type MorphicExtras,
@@ -181,7 +195,7 @@ const COMPACT_LEVA_THEME = {
 function writePreviewFlag(name: string, value: boolean): void {
   if (typeof window !== 'undefined') {
     const key = name.replace('grimoire.preview.', '');
-    const presentation = ['animated', 'cloth', 'effects', 'bloom', 'autoRotate', 'sourceParticles'].includes(key);
+    const presentation = ['animated', 'cloth', 'effects', 'bloom', 'autoRotate', 'sourceParticles', 'fullResolutionFog'].includes(key);
     window.localStorage.setItem(presentation ? heroPresentationStorageKey(key) : name, value ? '1' : '0');
   }
 }
@@ -209,6 +223,12 @@ interface SourceParticleMount {
   textureBaseUrl: string;
 }
 
+// How long the hideout stays loaded, hidden, after another scene is chosen.
+const HIDEOUT_RESIDENT_MS = 5 * 60_000;
+// How long a hero ready before its room waits under the placeholder. A warm room draws its saved
+// frame in about a second and its real geometry in three to four; a cold program cache takes up to ten.
+const ROOM_WAIT_MS = 12_000;
+
 // Turntable rotation rate (rad/s). The spin pauses while the user holds (orbits)
 // the model with the mouse.
 const SPIN_SPEED = 0.25;
@@ -221,6 +241,10 @@ const viewerEvents: typeof events = (store) => {
   if (manager.handlers) manager.handlers.onWheel = () => {};
   return manager;
 };
+
+// Part picking on a click only. A raycast walks every skinned triangle (about 0.1 s on large heroes),
+// and R3F's onClick raycasts on every pointerdown and pointerup, so each camera drag stalled on release.
+// Checking the pointer travel first means a drag never raycasts.
 
 function meshUrlFor(key: string, mtimeMs: number | null): string {
   // The key contains `::` (and a `/` for overflow skins), which a standard
@@ -293,7 +317,21 @@ function pickIdleClip(clips: THREE.AnimationClip[], heroName?: string): THREE.An
  *  the turntable pauses while `dragging`. A mutable ref so it updates without
  *  re-rendering. */
 export type TurntableInteraction = { dragging: boolean; paused: boolean };
-const normalizedScenes = new WeakMap<THREE.Object3D, { scale: number; center: THREE.Vector3; bounds: THREE.Box3 }>();
+const normalizedScenes = new WeakMap<THREE.Object3D, HeroPreviewNormalization>();
+
+/** Scale, center and ground that fit a hero to the same height, from its rest pose when `bindPose`
+ *  (a rig, so the figure does not breathe or drift as its clip plays). Computed once per model. */
+function heroNormalization(scene: THREE.Object3D, bindPose: boolean): HeroPreviewNormalization {
+  const cached = normalizedScenes.get(scene);
+  if (cached) return cached;
+  if (bindPose) scene.traverse((obj) => {
+    const s = obj as THREE.SkinnedMesh;
+    if (s.isSkinnedMesh && s.skeleton) s.skeleton.pose();
+  });
+  const result = normalizeHeroPreview(scene);
+  normalizedScenes.set(scene, result);
+  return result;
+}
 
 type ViewerText = (key: string, options?: Record<string, unknown>) => string;
 
@@ -362,21 +400,7 @@ export function PosedModel({
 
   // Normalize by the largest dimension so every hero fills the frame the same
   // regardless of native model scale, and recenter on the origin.
-  const norm = useMemo(() => {
-    const cached = normalizedScenes.get(scene);
-    if (cached) return cached;
-    scene.updateWorldMatrix(true, true);
-    const box = heroPreviewBounds(scene);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const scale = maxDim > 0 ? 2.0 / maxDim : 1;
-    const result = { scale, center, bounds: box.clone().applyMatrix4(scene.matrixWorld.clone().invert()) };
-    normalizedScenes.set(scene, result);
-    return result;
-  }, [scene]);
+  const norm = useMemo(() => heroNormalization(scene, false), [scene]);
 
   // Per-vertex COLOR multiply where present (skin tone / accents render flat
   // white without it); see enableVertexColors.
@@ -454,25 +478,7 @@ export function RiggedModel({
   // Normalize from the BIND/rest pose, once. Force the skeleton to bind pose and
   // flush world matrices first so the AABB is the true rest extent and does not
   // change frame to frame.
-  const norm = useMemo(() => {
-    const cached = normalizedScenes.get(scene);
-    if (cached) return cached;
-    scene.traverse((obj) => {
-      const s = obj as THREE.SkinnedMesh;
-      if (s.isSkinnedMesh && s.skeleton) s.skeleton.pose();
-    });
-    scene.updateWorldMatrix(true, true);
-    const box = heroPreviewBounds(scene);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const scale = maxDim > 0 ? 2.0 / maxDim : 1;
-    const result = { scale, center, bounds: box.clone().applyMatrix4(scene.matrixWorld.clone().invert()) };
-    normalizedScenes.set(scene, result);
-    return result;
-  }, [scene]);
+  const norm = useMemo(() => heroNormalization(scene, true), [scene]);
 
   useEffect(() => {
     enableVertexColors(scene);
@@ -639,16 +645,33 @@ export function RiggedModel({
 /** While painting, the primary button belongs to the brush: the right button turns and the middle button pans. */
 const PAINT_MOUSE_BUTTONS = { MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
 
-export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement, painting = false }: {
+export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement, painting = false, hideout = false }: {
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
   savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
   focusMaterial?: string | null;
   movement?: Pick<MovementViewerPreview, 'kind' | 'loop' | 'engine'>;
   painting?: boolean;
+  /** Frames the hero for the hideout room and keeps the camera inside it. */
+  hideout?: boolean;
 }) {
   const motionClock = useContext(MovementClock);
-  const { camera, gl, size: viewportSize } = useThree();
+  const { camera, gl, scene, size: viewportSize } = useThree();
   const controlsRef = useRef<ComponentRef<typeof DreiOrbitControls> | null>(null);
+  // In the hideout the camera stays inside the room: its distance from the orbit target is
+  // capped by the room's clearance, measured again whenever the target moves. Its field is fixed
+  // at the fit, never while orbiting.
+  useFrame(() => {
+    const clearance = scene.userData.hideoutClearance as RoomClearance | undefined;
+    const controls = controlsRef.current;
+    if (!hideout || !clearance || !controls) return;
+    if (!clearance.measured(controls.target, 0.2)) clearance.measure(gl, scene, controls.target, controls.maxDistance * 1.5, HIDEOUT_ROOM_LAYER);
+    const offset = camera.position.clone().sub(controls.target);
+    const length = offset.length();
+    if (length === 0) return;
+    const near = (camera as THREE.PerspectiveCamera).near ?? 0.1;
+    const allowed = Math.max(near * 2, clearance.distance(offset.clone().divideScalar(length)) - near * 3);
+    if (length > allowed) camera.position.copy(controls.target).addScaledVector(offset, allowed / length);
+  });
   const pendingFit = useRef(true);
   const restoreView = useRef(savedView);
   const cameraCommit = useMemo(() => deferredCommit<ViewerCameraDraft>(view => onViewChange?.(view)), [onViewChange]);
@@ -668,7 +691,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   }, [camera, cameraCommit]);
   useEffect(() => {
     pendingFit.current = true;
-  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, movement?.engine]);
+  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, movement?.engine, hideout]);
   // Fit after the mounted figure has updated its pose and wrapper transforms.
   // OrbitControls can mount after this component's effects, so retry until its
   // ref is ready and keep the fitted target under imperative control.
@@ -680,9 +703,18 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
     // not updateWorldMatrix. Without this pass the first bounds include the
     // normalization wrapper twice; later rendered frames hide the mistake.
     model.updateMatrixWorld(true);
-    const partBounds = focusMaterial ? skinPartBounds(model, focusMaterial) : null;
-    const bounds = partBounds && !partBounds.isEmpty() ? partBounds : heroPreviewBounds(model, normalizedScenes.get(model)?.bounds);
-    if (bounds.isEmpty()) return;
+    // The bounds follow the pose of the frame they are taken in. A model shown again (the viewer keeps
+    // recent ones) reuses its first bounds, so it is framed exactly as when it was first loaded.
+    const fitted = (model.userData.previewFitBounds ??= {}) as Record<string, number[]>;
+    const fitId = JSON.stringify([fitKey, focusMaterial ?? null, reset]);
+    let bounds: THREE.Box3;
+    if (fitted[fitId] && !movement) bounds = new THREE.Box3().setFromArray(fitted[fitId]);
+    else {
+      const partBounds = focusMaterial ? skinPartBounds(model, focusMaterial) : null;
+      bounds = partBounds && !partBounds.isEmpty() ? partBounds : heroPreviewBounds(model, normalizedScenes.get(model)?.bounds);
+      if (bounds.isEmpty()) return;
+      if (!movement) fitted[fitId] = [...bounds.min.toArray(), ...bounds.max.toArray()];
+    }
     if (movement?.kind === 'dash' && movement.engine) {
       // The hero stays in place and the trail streams behind it: leave the same room the travel had
       bounds.expandByVector(new THREE.Vector3(MOVEMENT_DISTANCE / 2 + .35, .05, .05));
@@ -692,15 +724,18 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
       bounds.translate(new THREE.Vector3(halfTravel - frame.distance, 0, 0));
       bounds.expandByVector(new THREE.Vector3(halfTravel + .35, .05, .05));
     }
-    const center = bounds.getCenter(new THREE.Vector3());
+    let center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     const perspective = camera as THREE.PerspectiveCamera;
-    const tangent = Math.tan(THREE.MathUtils.degToRad(perspective.fov ?? 40) / 2);
+    // One field per fit: the hideout's wider lens shows the room around the hero.
+    const fov = hideout ? HIDEOUT_FOV : PREVIEW_CAMERA.fov;
+    const tangent = Math.tan(THREE.MathUtils.degToRad(fov) / 2);
     const minimum = focusMaterial ? 0.08 : 1.6;
-    perspective.near = focusMaterial ? 0.005 : 0.1;
+    Object.assign(perspective, { fov, near: focusMaterial ? 0.005 : 0.1 });
     perspective.updateProjectionMatrix();
-    const distance = Math.max(minimum, Math.max(size.y / 2 / tangent,
-      size.x / 2 / tangent / Math.max(0.001, perspective.aspect ?? 1)) * 1.2 + size.z / 2);
+    let distance = Math.max(size.y / 2 / tangent, size.x / 2 / tangent / Math.max(0.001, perspective.aspect ?? 1)) * 1.2 + size.z / 2;
+    if (hideout && !focusMaterial && !movement) ({ target: center, distance } = hideoutFraming(bounds, fov, perspective.aspect ?? 1));
+    distance = Math.max(minimum, distance);
     camera.position.copy(center).add(new THREE.Vector3(0, 0, distance));
     controls.target.copy(center);
     controls.minDistance = minimum;
@@ -781,6 +816,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
     <DreiOrbitControls
       ref={controlsRef}
       mouseButtons={painting ? PAINT_MOUSE_BUTTONS : undefined}
+      makeDefault
       enableDamping
       enablePan
       enableZoom={false}
@@ -995,6 +1031,7 @@ function NprMaterials({
   citadel,
   exposure,
   ambientCube,
+  mapProbe,
   ambientTarget,
   partEdits,
   authoredEmission,
@@ -1014,6 +1051,7 @@ function NprMaterials({
   /** Display exposure; the faithful ambient targets are divided by it. */
   exposure: number;
   ambientCube: NprAmbientCube | null;
+  mapProbe: Extract<ViewerAmbientProbe, { kind: 'map' }> | null;
   ambientTarget: number;
   partEdits: SkinPartEdit[];
   authoredEmission: boolean;
@@ -1238,18 +1276,21 @@ function NprMaterials({
   useEffect(() => {
     if (!enabled) return;
     buildsRef.current.forEach(({ uniforms }) => {
-      uniforms.uNprAmbientCubeOn.value = ambientCube ? 1 : 0;
+      uniforms.uNprAmbientCubeOn.value = ambientCube || mapProbe ? 1 : 0;
+      if (uniforms.uKeyDir) uniforms.uKeyDir.value.copy(mapProbe ? mapProbe.primaryDirection : DEFAULT_NPR_TUNING.keyDir);
       if (ambientCube) uniforms.uNprAmbientCube.value = ambientCube.map((value) => value.clone());
       uniforms.uNprExposure.value.set(ambientTarget * Math.PI, NPR_EXPOSURE_RETAINED);
       if (uniforms.uCitadelLighting) {
         uniforms.uCitadelLighting.value = citadel ? 1 : 0;
         uniforms.uCitadelExposure.value = exposure;
+        uniforms.uCitadelEnvironmentCeiling.value = mapProbe ? 1 : 32;
         // Game ambient and light units carry no 1/PI; the probe cube is irradiance.
-        if (ambientCube) uniforms.uCitadelAmbientFit.value.copy(ambientLuminanceFit(ambientCube)).multiplyScalar(1 / Math.PI);
+        if (mapProbe) uniforms.uCitadelAmbientFit.value.copy(mapProbe.lighting.normalization);
+        else if (ambientCube) uniforms.uCitadelAmbientFit.value.copy(ambientLuminanceFit(ambientCube)).multiplyScalar(1 / Math.PI);
         else uniforms.uCitadelAmbientFit.value.set(0, 0, 0, 1);
       }
     });
-  }, [ambientCube, ambientTarget, citadel, exposure, enabled, scene, unified, source2Active]);
+  }, [ambientCube, mapProbe, ambientTarget, citadel, exposure, enabled, scene, unified, source2Active]);
 
   return null;
 }
@@ -1305,28 +1346,132 @@ function Source2MaterialHints({
 
 const q = (x: number): number => Math.round(x * 100) / 100;
 
-export default function HeroPoseViewer({
-  heroName,
-  skinSources = [],
-  fallbackSkinMetaKey,
-  trippyPreview,
-  partEdits = [],
-  highlightedPart = null,
-  focusMaterial = null,
-  onPartColors,
-  onPartTextures,
-  onPartPick,
-  onPreviewCapture,
-  regionSelection = null,
-  regionHighlight = null,
-  onRegionBaker,
-  compact = false,
-  active = true,
-  workspaceKey,
-  movementPreview,
-  initialScene = 'midtown',
-  initialBackground = 'broadway',
-}: {
+/** A loaded hero model and what was loaded with it. */
+interface LoadedModel {
+  /** The export it came from, including its modification time. */
+  cacheKey: string;
+  scene: THREE.Object3D;
+  clips: THREE.AnimationClip[];
+  clothModel: ClothModel | null;
+  rigged: boolean;
+  bytes: HeroModelBytes;
+}
+
+const NO_CLIPS: THREE.AnimationClip[] = [];
+
+/** A small spinner in the corner, only once a model change takes long enough to notice. */
+/** How long a hero switch keeps the previous hero on screen before the placeholder takes over. */
+const SLOW_SWITCH_MS = 1000;
+
+/** Whether a hideout has drawn in this session. Only the first load (or a cache build) is slow
+ *  enough to explain; later ones come from memory or a warm cache. */
+let hideoutWarmed = false;
+
+/** `progress` from 0 to 1, or null for a stage that reports none. */
+function HideoutWarmingIndicator({ progress }: { progress: number | null }) {
+  const { t } = useTranslation();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), 600);
+    return () => clearTimeout(timer);
+  }, []);
+  return shown ? (
+    <div aria-hidden className="pointer-events-none absolute left-3 top-3 flex w-36 animate-fade-in flex-col gap-1 rounded-sm border border-border bg-bg-secondary/80 px-2 py-1.5 text-2xs text-text-secondary">
+      <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />{t('locker.pose.hideoutWarming')}</span>
+      <ProgressBar value={progress ?? 0} max={1} indeterminate={progress === null} />
+    </div>
+  ) : null;
+}
+
+function SlowChangeIndicator() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), 400);
+    return () => clearTimeout(timer);
+  }, []);
+  return shown ? <Loader2 aria-hidden className="pointer-events-none absolute right-3 top-3 h-4 w-4 animate-spin text-white/60" /> : null;
+}
+
+/** Estimated GPU memory the viewer's hero models may hold, the one on screen included. A measured
+ *  hero takes 25 to 145 MB (see docs/hideout-viewer.md), so this keeps three heavy heroes or
+ *  about six light ones. The driver's real growth runs up to 1.6 times the estimate. */
+const MODEL_CACHE_BUDGET = 512 * 1024 * 1024;
+
+/** Half on an integrated GPU, which takes its memory from the system's, and less again with little
+ *  system memory (deviceMemory reports RAM in GB, rounded and capped at 8). */
+function modelCacheBudget(context: WebGLRenderingContext | WebGL2RenderingContext): number {
+  let budget = MODEL_CACHE_BUDGET;
+  try {
+    const info = context.getExtension('WEBGL_debug_renderer_info');
+    const renderer = String(info ? context.getParameter(info.UNMASKED_RENDERER_WEBGL) : context.getParameter(context.RENDERER));
+    if (/intel|apple|radeon\(tm\) graphics|radeon graphics|vega \d|mali|adreno/i.test(renderer)) budget /= 2;
+  } catch { budget /= 2; }
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return memory && memory < 8 ? budget * memory / 8 : budget;
+}
+
+/** Frees the least recently shown kept models until they fit the budget beside `onScreen` bytes. */
+function trimModels(recent: Map<string, LoadedModel>, onScreen: number, budget: number): void {
+  let total = onScreen;
+  for (const model of recent.values()) total += model.bytes.gpu;
+  for (const [key, old] of recent) {
+    if (total <= budget) break;
+    recent.delete(key);
+    total -= old.bytes.gpu;
+    disposeScene(old.scene);
+  }
+}
+
+/** Keeps a model that left the screen for a later switch back, most recent last, within the
+ *  budget. Every viewer component restores what it changed on the model when the model leaves,
+ *  so a kept model shows exactly as a fresh load. */
+function retireModel(recent: Map<string, LoadedModel>, model: LoadedModel, budget: number): void {
+  // Back to the state a fresh load is shown in: the rest pose heroNormalization left, no bounds.
+  model.scene.traverse((object) => {
+    const mesh = object as THREE.SkinnedMesh;
+    if (!mesh.isSkinnedMesh) return;
+    mesh.skeleton?.pose();
+    // three computes these again when it next needs them.
+    Object.assign(mesh, { boundingBox: null, boundingSphere: null });
+  });
+  model.scene.updateWorldMatrix(true, true);
+  const previous = recent.get(model.cacheKey);
+  if (previous && previous.scene !== model.scene) disposeScene(previous.scene);
+  recent.delete(model.cacheKey);
+  recent.set(model.cacheKey, model);
+  trimModels(recent, 0, budget);
+}
+
+/** Links a new model's programs with the parallel compile extension before it first draws. A first
+ *  draw would link them synchronously, stalling the canvas (and a loaded room) for seconds. Both
+ *  post pipelines render the scene into a half-float target, so that is the state compiled for. */
+function HeroPrecompile({ model, onReady }: { model: THREE.Object3D; onReady: (model: THREE.Object3D) => void }) {
+  const { gl, camera } = useThree();
+  const getThree = useThree((state) => state.get);
+  useEffect(() => {
+    let cancelled = false;
+    // Outline shells, added by the material builders, skin the same vertices for frustum culling.
+    installFastSkinnedBounds(model);
+    const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    const previous = gl.getRenderTarget();
+    let ready: Promise<unknown>;
+    try {
+      gl.setRenderTarget(target);
+      ready = gl.compileAsync(model, camera, getThree().scene);
+    } catch (error) {
+      ready = Promise.reject(error);
+    } finally {
+      gl.setRenderTarget(previous);
+      target.dispose();
+    }
+    // A failed compile draws anyway, where the error is reported as before.
+    void ready.catch(() => {}).then(() => { if (!cancelled) onReady(model); });
+    return () => { cancelled = true; };
+  }, [gl, camera, getThree, model, onReady]);
+  return null;
+}
+
+export interface HeroPoseViewerProps {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
   skinSources?: HeroPoseSkinSource[];
@@ -1353,15 +1498,82 @@ export default function HeroPoseViewer({
   workspaceKey?: string;
   movementPreview?: MovementViewerPreview;
   initialScene?: HeroViewerScene;
+  /** Which scene choice this viewer remembers and opens on, unless `initialScene` fixes one. */
+  sceneSurface?: ViewerSceneSurface;
   initialBackground?: ViewerBackground;
-}) {
+  /** The hero the viewer shows, which trails `heroName` while the next hero loads. */
+  onShownHeroChange?: (hero: string) => void;
+}
+
+export default function HeroPoseViewer({
+  heroName,
+  skinSources = [],
+  fallbackSkinMetaKey,
+  trippyPreview,
+  partEdits = [],
+  highlightedPart = null,
+  focusMaterial = null,
+  onPartColors,
+  onPartTextures,
+  onPartPick,
+  onPreviewCapture,
+  regionSelection = null,
+  regionHighlight = null,
+  onRegionBaker,
+  compact = false,
+  active = true,
+  workspaceKey,
+  movementPreview,
+  initialScene,
+  sceneSurface = 'preview',
+  initialBackground = 'broadway',
+  onShownHeroChange,
+}: HeroPoseViewerProps) {
   const { t } = useTranslation();
   const viewKey = `${workspaceKey ?? `viewer:${heroName}`}:view`;
-  const [scene, setScene] = useState<THREE.Object3D | null>(null);
-  const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
-  const [rigged, setRigged] = useState(false);
-  const [animationStatus, setAnimationStatus] = useState<'base' | 'unavailable' | null>(null);
-  const [clothModel, setClothModel] = useState<ClothModel | null>(null);
+  // The model on screen and the hero and stack it was loaded for. A new hero leaves the previous
+  // model on screen, playing as before, until its own model is ready to swap in behind a crossfade.
+  const loadKey = JSON.stringify([heroName, skinSources.map((source) => `${source.priority}:${source.metaKey}`), fallbackSkinMetaKey ?? null]);
+  const [loaded, setLoaded] = useState<{ key: string; heroName: string; skinSources: HeroPoseSkinSource[]; model: LoadedModel } | null>(null);
+  const current = loaded?.key === loadKey;
+  const loadedModel = loaded?.model ?? null;
+  const scene = loadedModel?.scene ?? null;
+  const shownHero = loaded?.heroName ?? heroName;
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const crossfade = useViewerCrossfade();
+  const attachCrossfade = useCallback((element: HTMLCanvasElement | null) => crossfade.attach(element), [crossfade]);
+  // Models shown before, kept loaded so switching back to a hero is immediate (see retireModel).
+  const recentModels = useRef(new Map<string, LoadedModel>());
+  // Set from the renderer once the canvas exists, before any model is kept.
+  const modelBudget = useRef(MODEL_CACHE_BUDGET / 2);
+  const released = useRef(false);
+  // A new model draws once its programs are linked, off the render loop.
+  const [revealed, setRevealed] = useState<THREE.Object3D | null>(null);
+  const heroReady = useCallback((model: THREE.Object3D) => { setRevealed(model); crossfade.revealSoon(); }, [crossfade]);
+  // A new hero that takes longer than SLOW_SWITCH_MS (a first open exports it) gives way to the
+  // placeholder rather than leaving the previous hero up under the new one's name. It stays until the
+  // new model has drawn, and the swap then needs no crossfade.
+  const [slowSwitch, setSlowSwitch] = useState(false);
+  const otherHero = loaded !== null && loaded.heroName !== heroName;
+  useEffect(() => {
+    if (!otherHero) return;
+    const timer = setTimeout(() => setSlowSwitch(true), SLOW_SWITCH_MS);
+    return () => clearTimeout(timer);
+  }, [otherHero, heroName]);
+  if (slowSwitch && !otherHero && (scene === null || revealed === scene)) setSlowSwitch(false);
+  const placeholderUp = useRef(false);
+  placeholderUp.current = slowSwitch;
+  // Until the swapped-in model draws, the screen still shows the previous one (or the placeholder).
+  const settling = slowSwitch || (scene !== null && revealed !== scene);
+  // The hero whose model last drew: the crossfade keeps the previous frame up until the next one has.
+  const [drawnHero, setDrawnHero] = useState<string | null>(null);
+  if (loaded && scene !== null && revealed === scene && drawnHero !== loaded.heroName) setDrawnHero(loaded.heroName);
+  const displayedHero = slowSwitch ? heroName : drawnHero ?? heroName;
+  useEffect(() => { onShownHeroChange?.(displayedHero); }, [displayedHero, onShownHeroChange]);
+  const clips = loadedModel?.clips ?? NO_CLIPS;
+  const rigged = loadedModel?.rigged ?? false;
+  const clothModel = loadedModel?.clothModel ?? null;
+  const [animationUnavailable, setAnimationUnavailable] = useState(false);
   const [generating, setGenerating] = useState(false);
   const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
   const [spinPaused, setSpinPaused] = useState(() => compact ? false : !initialHeroPreviewFlags().autoRotate);
@@ -1369,7 +1581,10 @@ export default function HeroPoseViewer({
   // Selecting an area holds the pose and the turntable: picking on a moving model misses, and a still
   // pose lets hover and brush strokes test cached geometry instead of re-skinning it every frame.
   const holdPose = !!regionSelection;
-  const heldPlayback = useMemo(() => holdPose && !playback.paused ? { ...playback, paused: true } : playback, [holdPose, playback]);
+  // The outgoing model also holds still while the next one loads, leaving the frame time to its load.
+  const switching = loaded !== null && !current;
+  const holdPlayback = holdPose || switching;
+  const heldPlayback = useMemo(() => holdPlayback && !playback.paused ? { ...playback, paused: true } : playback, [holdPlayback, playback]);
   useEffect(() => {
     if (!holdPose) return;
     const turntable = interaction.current;
@@ -1378,18 +1593,100 @@ export default function HeroPoseViewer({
     return () => { turntable.paused = paused; };
   }, [holdPose]);
   const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
+  // The model on screen keeps its clip until the next hero's model replaces it.
+  const [shownClip, setShownClip] = useState(clipName);
+  if (current && shownClip !== clipName) setShownClip(clipName);
+  const playingClip = current ? clipName : shownClip;
   const [seek, setSeek] = useState<HeroPlaybackSeek>({ time: 0, revision: 0 });
   const playbackProgressRef = useRef<HeroPlaybackProgress>({ time: 0, duration: 0 });
-  const [storedScene, setViewerScene] = useFoundryDraft<HeroViewerScene>(`${viewKey}:scene`, z.enum(['midtown', 'studio', 'transparent', 'hideout']), initialScene);
-  const viewerScene = compact ? 'studio' : storedScene;
+  const hideoutDefault = useAppStore((state) => state.settings?.experimentalHideoutDefault === true);
+  // Fixed for this open: the hideout cache finishing mid-view never swaps the scene. A viewer shared
+  // between pages takes each page's fixed scene as it changes.
+  const [openingScene] = useState(() => openingViewerScene(undefined, 'midtown', hideoutDefault, hideoutReadyNow()));
+  const defaultScene = initialScene ?? (sceneSurface === 'doorStuck' ? 'hideout' : openingScene);
+  useEffect(() => { if (hideoutDefault) refreshHideoutReady(); }, [hideoutDefault]);
+  // One scene per surface, the last one chosen there. A viewer with a fixed opening scene keeps its own.
+  const draftScope = useAppStore((state) => foundryDraftScope(state.settings));
+  useState(() => {
+    if (initialScene) return;
+    try { migrateViewerScene(localStorage, draftScope, viewKey); } catch { /* Storage may be unavailable. */ }
+  });
+  const [storedScene, setViewerScene] = useFoundryDraft<HeroViewerScene>(initialScene ? ownViewerSceneDraft(viewKey) : viewerSceneDraft(sceneSurface), heroViewerSceneSchema, defaultScene);
+  const chosenScene = compact ? 'studio' : storedScene;
+  const wantsHideout = chosenScene === 'hideout';
+  // A first hideout open builds its cache, which takes tens of seconds. Studio shows meanwhile; the
+  // hideout takes over, loading as any first open does, unless another scene was chosen.
+  const [hideoutCache, setHideoutCache] = useState<'unknown' | 'building' | 'ready'>(() => hideoutReadyNow() ? 'ready' : 'unknown');
+  useEffect(() => {
+    if (!wantsHideout || hideoutCache !== 'unknown') return;
+    let cancelled = false;
+    void Promise.resolve().then(() => window.electronAPI.isHideoutSceneReady()).then((ready) => { if (!cancelled) setHideoutCache(ready ? 'ready' : 'building'); },
+      () => { if (!cancelled) setHideoutCache('ready'); });
+    return () => { cancelled = true; };
+  }, [wantsHideout, hideoutCache]);
+  const buildingHideout = wantsHideout && hideoutCache === 'building';
+  // What the first hideout wait has done so far: the cache build's stages, then the room's load marks.
+  const [hideoutBuilt, setHideoutBuilt] = useState(false);
+  const [buildProgress, setBuildProgress] = useState<number | null>(null);
+  useEffect(() => {
+    if (!buildingHideout) return;
+    let live = true;
+    const poll = () => void Promise.resolve().then(() => window.electronAPI.getHideoutBuildProgress())
+      .then((value) => { if (live) setBuildProgress(value); }, () => {});
+    poll();
+    const timer = setInterval(poll, 500);
+    return () => { live = false; clearInterval(timer); };
+  }, [buildingHideout]);
+  const [roomProgress, setRoomProgress] = useState(0);
+  const roomLoadStage = useCallback((stage: string) => setRoomProgress((done) => Math.max(done, roomStageProgress(stage))), []);
+  useEffect(() => {
+    if (hideoutCache !== 'building') return;
+    // A failed build lets the hideout show its own failure. Studio gives way behind its last frame.
+    void window.electronAPI.loadHideoutScene().catch(() => {}).finally(() => {
+      crossfade.cover();
+      setHideoutBuilt(true);
+      setHideoutCache('ready');
+      crossfade.revealSoon();
+    });
+  }, [hideoutCache, crossfade]);
+  const viewerScene = buildingHideout ? 'studio' : chosenScene;
+  // The room stays loaded for a while after another scene is chosen, so coming back is instant.
+  const [hideoutResident, setHideoutResident] = useState(wantsHideout);
+  if (wantsHideout && !hideoutResident) setHideoutResident(true);
+  useEffect(() => {
+    if (wantsHideout || !hideoutResident) return;
+    const timer = setTimeout(() => setHideoutResident(false), HIDEOUT_RESIDENT_MS);
+    return () => clearTimeout(timer);
+  }, [wantsHideout, hideoutResident]);
+  // The hideout's metadata and lighting start loading before the canvas mounts, unless the room is still loaded.
+  const roomLoaded = useRef(false);
+  useEffect(() => {
+    if (viewerScene === 'hideout' && !roomLoaded.current) preloadHideout(viewKey);
+    roomLoaded.current = viewerScene === 'hideout' || hideoutResident;
+  }, [viewerScene, viewKey, hideoutResident]);
+  // Whether the room, its saved frame or the real one, has drawn since it loaded. Until then the
+  // hideout keeps its placeholder up, so the hero and the room appear together.
+  const [roomShown, setRoomShown] = useState(false);
+  if (roomShown && !hideoutResident) setRoomShown(false);
+  const snapshotShown = useCallback(() => setRoomShown(true), []);
+  const hideoutWarm = hideoutWarmed || roomShown;
+  useEffect(() => { if (roomShown) hideoutWarmed = true; }, [roomShown]);
+  // The room's arrival, behind the frame before it.
+  const roomArrive = useCallback(() => { crossfade.cover(); crossfade.revealSoon(); setRoomShown(true); }, [crossfade]);
+  const chooseScene = useCallback((value: HeroViewerScene) => {
+    crossfade.cover();
+    setViewerScene(value);
+    crossfade.revealSoon();
+  }, [crossfade, setViewerScene]);
   const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
   // Display exposure for the Deadlock tone curve; the game-faithful ambient divides by it.
-  const previewExposure = compact || viewerScene === 'midtown' ? 1.6 : 1.3;
-  const lightScale = viewerLightScale(previewExposure);
   const [wireframe, setWireframe] = useState(false);
   const [cameraView, , saveCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
-  const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
+  const [hideoutStatus, setHideoutStatus] = useState<HideoutStatus>({ kind: 'loading' });
+  const hideoutInfo = hideoutStatus.kind === 'failed' ? undefined : hideoutStatus.info;
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
+  const previewExposure = viewerScene === 'hideout' ? hideoutInfo?.exposure ?? 1 : compact || viewerScene === 'midtown' ? 1.6 : 1.3;
+  const lightScale = viewerLightScale(previewExposure);
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
     ? viewerAmbientCube(ambientProbe.sh, VIEWER_ENVIRONMENT_INTENSITY[lighting], viewerScene !== 'hideout') : null, [ambientProbe, lighting, viewerScene]);
   const [resetView, setResetView] = useState(0);
@@ -1408,7 +1705,6 @@ export default function HeroPoseViewer({
   const backdropError = backdrop.errorKey === 'locker.pose.backgroundTooLarge'
     ? t('locker.pose.backgroundTooLarge') : backdrop.errorKey ? t('locker.pose.backgroundFailed') : null;
   const viewerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!scene || !onRegionBaker) return;
     onRegionBaker(regionBaker(scene));
@@ -1440,6 +1736,27 @@ export default function HeroPoseViewer({
     return () => { active = false; onPreviewCapture(null); };
   }, [scene, onPreviewCapture]);
   const [failed, setFailed] = useState(false);
+  const waitingForRoom = viewerScene === 'hideout' && !roomShown && hideoutStatus.kind !== 'failed';
+  const [roomWaitOver, setRoomWaitOver] = useState(false);
+  if (roomWaitOver && !waitingForRoom) setRoomWaitOver(false);
+  useEffect(() => {
+    if (!waitingForRoom) return;
+    const timer = setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [waitingForRoom]);
+  // The canvas mounts with the first model and then outlives model changes.
+  const [canvasMounted, setCanvasMounted] = useState(false);
+  if (scene && !canvasMounted) setCanvasMounted(true);
+  // A loaded room keeps the last hero's scale and ground while the next hero loads.
+  const [roomPlacement, setRoomPlacement] = useState({ scale: 1, ground: -1.02 });
+  const sceneNormalization = scene ? normalizedScenes.get(scene) : undefined;
+  // A clip that lowers the hero's floor contact (the export records how far) raises the floor with it.
+  const groundClip = rigged ? clips.find((clip) => clip.name === playingClip) ?? pickIdleClip(clips, shownHero) : null;
+  const clipFloor = typeof groundClip?.userData.grimoireFloor === 'number' ? groundClip.userData.grimoireFloor : 0;
+  const ground = sceneNormalization ? sceneNormalization.ground + sceneNormalization.scale * clipFloor : roomPlacement.ground;
+  if (sceneNormalization && (sceneNormalization.scale !== roomPlacement.scale || ground !== roomPlacement.ground)) {
+    setRoomPlacement({ scale: sceneNormalization.scale, ground });
+  }
   const [effect, setEffect] = useState<EffectMount | null>(null);
   const [effectUnavailable, setEffectUnavailable] = useState(false);
   const activeDescriptor = movementPreview?.descriptor ?? effect?.descriptor;
@@ -1470,7 +1787,9 @@ export default function HeroPoseViewer({
   const sourceParticlesEnabled = !compact && devFlags.effects && devFlags.sourceParticles && !movementPreview;
   const effectPreviewEnabled = !compact && devFlags.effects && !devFlags.sourceParticles && !movementPreview;
   const clipNamesKey = clips.map((clip) => clip.name).join('|');
-  const sourceParticlesKey = `${heroName}|${sourceKey}|${clipNamesKey}`;
+  // Follows the model on screen, so its particles stay with it until the next model swaps in.
+  const sourceParticlesKey = `${loaded?.key ?? ''}|${clipNamesKey}`;
+  const particleTarget = loaded ? { heroName: loaded.heroName, skinSources: loaded.skinSources } : null;
   const particleModelReady = scene !== null;
   const [loadedSourceParticles, setLoadedSourceParticles] = useState<{ key: string; mount: SourceParticleMount | null; postBloomEnabled: boolean } | null>(null);
   const sourceParticles = sourceParticlesEnabled && loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.mount : null;
@@ -1567,17 +1886,19 @@ export default function HeroPoseViewer({
   }, [trippyKey]);
 
   useEffect(() => {
-    // The caller remounts this component (via a hero+skin `key`) when the
-    // selection changes, so initial state is already fresh here.
+    // A new hero or skin stack replaces the model in the same canvas: the
+    // renderer, the scene and its post stay, and so does a loaded hideout.
     let cancelled = false;
     setFailed(false);
-    setScene(null);
-    setClips([]);
-    setSeek((s) => ({ time: 0, revision: s.revision + 1 }));
-    playbackProgressRef.current = { time: 0, duration: 0 };
-    setRigged(false);
-    setAnimationStatus(null);
-    setClothModel(null);
+    setViewerError(null);
+    // Swaps the model in behind the current frame, which fades out once the new model draws.
+    const show = (model: LoadedModel) => {
+      if (!placeholderUp.current) crossfade.cover();
+      // The timeline is held until the new model draws (`settling`), by when its rig has written its own
+      // progress; resetting it here would show zeros under the previous model's frame.
+      setSeek((s) => ({ time: 0, revision: s.revision + 1 }));
+      setLoaded({ key: loadKey, heroName, skinSources, model });
+    };
 
     (async () => {
       try {
@@ -1594,23 +1915,30 @@ export default function HeroPoseViewer({
               setGenerating(false);
             }
             if (rig.hasModel) {
-              const { gltf, clothModel } = await loadRiggedHeroPreview(rig, features.clothPreviewEnabled, !!movementKind);
-              if (cancelled) {
-                disposeScene(gltf.scene);
-                return;
+              const cacheKey = JSON.stringify(['rigged', rig.key, rig.mtimeMs, features.clothPreviewEnabled, !!movementKind]);
+              let model = recentModels.current.get(cacheKey);
+              if (model) recentModels.current.delete(cacheKey);
+              else {
+                const { gltf, clothModel } = await loadRiggedHeroPreview(rig, features.clothPreviewEnabled, !!movementKind);
+                if (cancelled) {
+                  disposeScene(gltf.scene);
+                  return;
+                }
+                if (!pickIdleClip(gltf.animations ?? [], heroName)) {
+                  disposeScene(gltf.scene);
+                  throw new Error('Rigged preview GLB has no animated clip.');
+                }
+                installFastSkinnedBounds(gltf.scene);
+                // Known before the first frame, so a loaded room takes this hero's scale with it.
+                heroNormalization(gltf.scene, true);
+                const clips = (gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
+                model = { cacheKey, scene: gltf.scene, clothModel, clips, rigged: true, bytes: heroModelBytes(gltf.scene, clips) };
               }
-              const clip = pickIdleClip(gltf.animations ?? [], heroName);
-              if (!clip) {
-                disposeScene(gltf.scene);
-                throw new Error('Rigged preview GLB has no animated clip.');
-              }
-              setClips((gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001));
-              setClipName((current) => gltf.animations.some((candidate) => candidate.name === current
-                && Number.isFinite(candidate.duration) && candidate.duration > 0.001) ? current : clip.name);
-              setRigged(true);
-              setAnimationStatus(rig.hasAnimationFallback ? 'base' : null);
-              setClothModel(clothModel);
-              setScene(gltf.scene);
+              const modelClips = model.clips;
+              const clip = pickIdleClip(modelClips, heroName);
+              setClipName((name) => modelClips.some((candidate) => candidate.name === name) ? name : clip?.name ?? '');
+              setAnimationUnavailable(false);
+              show(model);
               return; // rigged path won.
             }
           } catch (error) {
@@ -1618,7 +1946,7 @@ export default function HeroPoseViewer({
             // Rigged export/load failed; fall through to the static pose path.
             setGenerating(false);
           }
-          if (!cancelled) setAnimationStatus('unavailable');
+          if (!cancelled) setAnimationUnavailable(true);
         }
 
         // --- Attempt 2: static --pose glb (the default). ---
@@ -1631,22 +1959,26 @@ export default function HeroPoseViewer({
           setGenerating(false);
         }
         if (!info.hasModel) {
-          if (!cancelled) setFailed(true);
+          if (!cancelled) { setLoaded(null); setFailed(true); }
           return;
         }
-        const url = meshUrlFor(info.key, info.mtimeMs);
-        const gltf = await loadGltfPreview(url, { imageBitmaps: true });
-        if (cancelled) {
-          disposeScene(gltf.scene);
-          return;
+        const cacheKey = JSON.stringify(['static', info.key, info.mtimeMs]);
+        let model = recentModels.current.get(cacheKey);
+        if (model) recentModels.current.delete(cacheKey);
+        else {
+          const gltf = await loadGltfPreview(meshUrlFor(info.key, info.mtimeMs), { imageBitmaps: true });
+          if (cancelled) {
+            disposeScene(gltf.scene);
+            return;
+          }
+          heroNormalization(gltf.scene, false);
+          model = { cacheKey, scene: gltf.scene, clips: [], clothModel: null, rigged: false, bytes: heroModelBytes(gltf.scene) };
         }
-        setRigged(false);
-        setClips([]);
-        setClothModel(null); // static path has no skeleton; nothing to simulate.
-        setScene(gltf.scene);
+        show(model);
       } catch {
         if (!cancelled) {
           setGenerating(false);
+          setLoaded(null);
           setFailed(true);
         }
       }
@@ -1673,9 +2005,26 @@ export default function HeroPoseViewer({
   // loader cleanup left a frame where the still-mounted Canvas re-uploaded
   // textures whose ImageBitmaps were already closed.
   useEffect(() => {
-    if (!scene) return;
-    return () => disposeScene(scene);
-  }, [scene]);
+    if (!loadedModel) return;
+    const recent = recentModels.current;
+    // A large new model can push older ones out; it stays itself, whatever its size.
+    trimModels(recent, loadedModel.bytes.gpu, modelBudget.current);
+    if (import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1') Object.assign(window, { __grimoireHeroModels: { current: loadedModel, recent } });
+    return () => {
+      if (released.current) disposeScene(loadedModel.scene);
+      else retireModel(recent, loadedModel, modelBudget.current);
+    };
+  }, [loadedModel]);
+  // Declared after the effect above, so on unmount the model on screen is kept first, then all go.
+  useEffect(() => {
+    const recent = recentModels.current;
+    released.current = false;
+    return () => {
+      released.current = true;
+      for (const model of recent.values()) disposeScene(model.scene);
+      recent.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!scene || !features.nprDebugEnabled) return;
@@ -1727,7 +2076,8 @@ export default function HeroPoseViewer({
     let cancelled = false;
     (async () => {
       try {
-        const info = await exportHeroParticles(heroName, skinSources, clipNamesKey ? clipNamesKey.split('|') : []);
+        if (!particleTarget) return;
+        const info = await exportHeroParticles(particleTarget.heroName, particleTarget.skinSources, clipNamesKey ? clipNamesKey.split('|') : []);
         if (cancelled) return;
         const postBloomEnabled = info.postBloomEnabled ?? true;
         if (!info.hasBundle) {
@@ -1757,11 +2107,11 @@ export default function HeroPoseViewer({
       actionPreview={!!movementPreview}
       animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)} clip={clipName}
       paused={playback.paused} speed={playback.speed} spinPaused={spinPaused}
-      progressRef={playbackProgressRef} onSeek={(time) => {
+      progressRef={playbackProgressRef} frozen={settling} onSeek={(time) => {
         setPlayback((p) => ({ ...p, paused: true }));
         setSeek((s) => ({ time, revision: s.revision + 1 }));
       }}
-      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} sourceParticles={devFlags.sourceParticles} scene={viewerScene}
+      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} sourceParticles={devFlags.sourceParticles} fullResolutionFog={devFlags.fullResolutionFog} scene={viewerScene}
       backdropControls={<ViewerBackdropControls hasImage={!!backdrop.texture} loading={backdrop.loading}
         preset={backdrop.preset} onPreset={(value) => {
           if (value !== 'none' && viewerScene === 'transparent') setViewerScene('studio');
@@ -1771,8 +2121,7 @@ export default function HeroPoseViewer({
           if (viewerScene === 'transparent') setViewerScene('studio');
           void backdrop.choose(file);
         }} onClear={backdrop.clear} />}
-      status={viewerError ?? backdropError ?? (animationStatus === 'base' ? t('locker.pose.baseAnimations')
-        : animationStatus === 'unavailable' ? t('locker.pose.animationUnavailable') : null)}
+      status={viewerError ?? backdropError ?? (animationUnavailable ? t('locker.pose.animationUnavailable') : null)}
       onAnimated={(v) => {
         writePreviewFlag('grimoire.preview.animated', v);
         if (!v) {
@@ -1792,8 +2141,9 @@ export default function HeroPoseViewer({
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
       onSourceParticles={(v) => setDevFlag('sourceParticles', 'grimoire.preview.sourceParticles', v)}
+      onFullResolutionFog={(v) => setDevFlag('fullResolutionFog', 'grimoire.preview.fullResolutionFog', v)}
       wireframe={wireframe} onWireframe={setWireframe}
-      onScene={setViewerScene} onReset={() => { saveCameraView(null); setResetView((v) => v + 1); }}
+      onScene={chooseScene} onReset={() => { saveCameraView(null); setResetView((v) => v + 1); }}
       onScreenshot={() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -1816,6 +2166,7 @@ export default function HeroPoseViewer({
   return (
     <div ref={viewerRef}
       data-lighting-probe={ambientProbe.kind}
+      data-viewer-scene={viewerScene}
       data-particle-availability={sourceParticlesEnabled
         ? loadedSourceParticles?.key === sourceParticlesKey ? sourceParticles ? 'ready' : 'unavailable' : 'pending'
         : partialEffect ? 'partial' : activeDescriptor ? 'ready' : effectUnavailable ? 'unavailable' : 'pending'}
@@ -1823,13 +2174,23 @@ export default function HeroPoseViewer({
       data-animation-availability={scene ? rigged ? 'ready' : 'unavailable' : 'pending'}
       data-cloth-availability={scene ? clothModel ? 'ready' : 'unavailable' : 'pending'}
       className={`absolute inset-0 ${viewerScene === 'transparent' ? '' : 'bg-bg-secondary'}`}>
-      {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
-        <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
-      ) : <Canvas
+      {canvasMounted && <Canvas
+        // Fades in over the placeholder; later changes crossfade (useViewerCrossfade).
+        className="animate-fade-in"
         events={viewerEvents}
-        frameloop={compact && !active ? 'never' : 'always'}
+        frameloop={active ? 'always' : 'never'}
         shadows={{ type: THREE.PCFShadowMap }}
-        onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
+        onCreated={(state) => {
+          canvasRef.current = state.gl.domElement;
+          crossfade.track(state.gl.domElement);
+          modelBudget.current = modelCacheBudget(state.gl.getContext());
+          // A lost context takes every uploaded resource with it: kept models would upload again.
+          state.gl.domElement.addEventListener('webglcontextlost', () => {
+            for (const model of recentModels.current.values()) disposeScene(model.scene);
+            recentModels.current.clear();
+          });
+          if (import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1') Object.assign(window, { __grimoireViewer: state });
+        }}
         camera={PREVIEW_CAMERA}
         dpr={compact ? 1 : [1, 2]}
         gl={{
@@ -1844,10 +2205,9 @@ export default function HeroPoseViewer({
             that just shapes the form on top of the environment. Every preset
             except the hideout (which brings its own map lighting), Midtown
             included, reflects the studio room, and the NPR ambient probe
-            samples that same room. Keep the raw diffuse probe as the NPR
-            normalization reference; calibrate artificial radiance at the rig. */}
+            samples that same room so diffuse and reflections agree. */}
         {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting] * lightScale} studio={!compact} onProbe={setAmbientProbe} />}
-        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY * lightScale]} />
+        {viewerScene !== 'hideout' && <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, VIEWER_HEMISPHERE_INTENSITY * lightScale]} />}
         {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={(compact || viewerScene === 'midtown' ? 2.2 : 1.4) * lightScale}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
@@ -1858,20 +2218,20 @@ export default function HeroPoseViewer({
             <shadowMaterial transparent opacity={0.25} />
           </mesh>
         )}
-        <group>
+        {scene && <group visible={revealed === scene}>
         {onPartPick && <SkinPartPicking model={scene} posed={!!regionSelection}
           onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
         {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} applied={partEditsApplied} />
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
         <MovementFxStage preview={stagedMovementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
-          controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
+          controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={playingClip} focusMaterial={focusMaterial} hideout={viewerScene === 'hideout'}
             movement={stagedMovementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
             painting={regionSelection?.picker.by === 'brush'} />}>
         {rigged ? (
           <RiggedModel
-            heroName={heroName}
+            heroName={shownHero}
             reset={resetView}
-            clipName={clipName}
+            clipName={playingClip}
             playback={heldPlayback}
             seek={seek}
             progressRef={playbackProgressRef}
@@ -1888,7 +2248,7 @@ export default function HeroPoseViewer({
           <PosedModel reset={resetView} scene={scene} interaction={interaction} />
         )}
         </MovementFxStage>
-        </group>
+        </group>}
         {scene && <Source2DrawState scene={scene} debug={features.nprDebugEnabled} />}
         {features.source2ShaderHintsEnabled && scene && (
           <Source2MaterialHints
@@ -1909,16 +2269,20 @@ export default function HeroPoseViewer({
             citadel={features.citadelEnabled}
             exposure={previewExposure}
             ambientCube={ambientCube}
+            mapProbe={viewerScene === 'hideout' && ambientProbe.kind === 'map' ? ambientProbe : null}
             ambientTarget={compact ? 0.7 : NPR_AMBIENT_TARGET[lighting]}
             partEdits={partEdits}
-            authoredEmission={sourceParticlesEnabled}
+            authoredEmission={sourceParticlesEnabled || viewerScene === 'hideout'}
           />
         )}
-        {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
-        <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />
-        <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} onApplied={partEditApplied} />
-        {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
-        {scene && (
+        {trippySprite && scene && <TrippyPaint scene={scene} sprite={trippySprite} />}
+        {scene && <SkinPartPreview scene={scene} edits={partEdits} wireframe={wireframe} highlight={highlightedPart} onColors={onPartColors} onTextures={onPartTextures} />}
+        {scene && <SkinPartPatterns scene={scene} edits={partEdits} onError={partPatternFailed} onPending={partTexturePending} onApplied={partEditApplied} />}
+        {viewerScene === 'hideout' && <HideoutHeroLighting model={scene} probe={ambientProbe} revision={`${features.unifiedEnabled}:${features.nprMaterialsEnabled}:${features.source2ShaderHintsEnabled}`} />}
+        {hideoutResident && !buildingHideout && <HideoutScene active={viewerScene === 'hideout'} postprocess snapshotHint={viewKey} scale={roomPlacement.scale} floor={roomPlacement.ground}
+          onStatus={setHideoutStatus} onProbe={setAmbientProbe} onRoomArrive={roomArrive} onSnapshotShown={snapshotShown} onLoadStage={hideoutWarm ? undefined : roomLoadStage} />}
+        {viewerScene === 'hideout' && hideoutInfo && <Source2MapPost info={hideoutInfo} bloom={features.bloomEnabled} halfResolutionFog={!devFlags.fullResolutionFog} />}
+        {viewerScene !== 'hideout' && (
           <BloomEffect
             deadlockExposure={previewExposure}
             intensity={features.bloomEnabled ? bloomParams.intensity : 0}
@@ -1929,16 +2293,37 @@ export default function HeroPoseViewer({
             sourceBloomEnabled={loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.postBloomEnabled : true}
           />
         )}
+        {/* Last, so the material builders above have run on the model it compiles. */}
+        {scene && <HeroPrecompile model={scene} onReady={heroReady} />}
       </Canvas>}
-      {!compact && toolbar}
-      {viewerScene === 'hideout' && (
-        <div className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
-          {hideoutStatus.kind === 'ready' ? <details>
-            <summary className="cursor-pointer">{t('locker.pose.hideoutPreview')}</summary>
-            <p className="mt-2">{t('locker.pose.hideoutApproximation')}
-              {hideoutStatus.info.failures.length + hideoutStatus.failedLoads > 0 && <> {t('locker.pose.hideoutMissing', { count: hideoutStatus.info.failures.length + hideoutStatus.failedLoads })}</>}</p>
-          </details> : <p role="status">{t(hideoutStatus.kind === 'loading' ? 'locker.pose.hideoutLoading' : 'locker.pose.hideoutFailed')}</p>}
+      {/* The last frame before a change, fading out once the change has drawn (useViewerCrossfade). */}
+      <canvas ref={attachCrossfade} hidden aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
+      {slowSwitch && !failed && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-in bg-bg-secondary">
+          <Skeleton className="absolute inset-0 opacity-60" rounded="none" />
         </div>
+      )}
+      {/* The placeholder, which fades out in place once the viewer has something to show. */}
+      {!failed && (!canvasMounted || waitingForRoom && !roomWaitOver) ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-bg-secondary">
+          <Skeleton className="absolute inset-0 opacity-60" rounded="none" />
+        </div>
+      ) : !failed && <div aria-hidden className="pointer-events-none absolute inset-0 animate-fade-out bg-bg-secondary" />}
+      {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} />
+        : canvasMounted && !current && <SlowChangeIndicator />}
+      <p role="status" className="sr-only">
+        {failed ? null : !current ? (generating ? t(skinSources.length > 1 ? 'locker.pose.posingWithMods' : 'locker.pose.posing', { hero: heroName, count: skinSources.length })
+          : t('locker.pose.loadingHero', { hero: heroName }))
+          : buildingHideout ? t('locker.pose.hideoutBuilding')
+          : viewerScene === 'hideout' && hideoutStatus.kind === 'loading' ? t('locker.pose.hideoutLoading') : null}
+      </p>
+      {!compact && toolbar}
+      {!hideoutWarm && (buildingHideout || waitingForRoom) && <HideoutWarmingIndicator
+        progress={hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress })} />}
+      {viewerScene === 'hideout' && hideoutStatus.kind === 'failed' && (
+        <p role="alert" className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
+          {t('locker.pose.hideoutFailed')}
+        </p>
       )}
       {import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer-debug') && (
         <DevViewerControls

@@ -11,6 +11,7 @@ import { BundleTextureSource } from './bundleTextures';
 import { type ParticleDrawLayer, createParticleDrawLayer } from './particleDrawLayer';
 import { SceneColorPass } from './sceneColor';
 import { SceneDepthPass } from './sceneDepth';
+import { ParticleProgramWarmup } from './particleProgramWarmup';
 import { ParticleField } from '../../../lib/particles/enums';
 import type { ParticleSystemSimulation } from '../../../lib/particles/simulation';
 import { getMorphic, isTrueGlassMaterial } from '../../../lib/source2NprMaterial';
@@ -29,7 +30,7 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
   clipName?: string;
   progressRef?: RefObject<HeroPlaybackProgress>;
 }) {
-  const state = useRef<{ host: HeroParticleHost; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer> } | null>(null);
+  const state = useRef<{ host: HeroParticleHost; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer>; warmup: ParticleProgramWarmup } | null>(null);
   const depthPass = useRef<SceneDepthPass | null>(null);
   const colorPass = useRef<SceneColorPass | null>(null);
 
@@ -48,10 +49,13 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
       }
     });
     const models = bundleModelSource(bundle);
+    const warmup = new ParticleProgramWarmup();
     const layers = new Map<ParticleEffectHost, ParticleDrawLayer>();
     const host = new HeroParticleHost(bundle, {
       added(effectHost) {
         const layer = createParticleDrawLayer(effectHost.simulation, textures, models, beforeTransmission);
+        for (const light of layer.lights) light.deferNewLights();
+        warmup.track(layer.object3d);
         layers.set(effectHost, layer);
         group.add(layer.object3d);
         return layer.addControlPointDefaults;
@@ -70,9 +74,10 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
     const byName = new Map<string, THREE.Object3D>();
     frame.traverse((object) => { if (object.name) byName.set(object.name.toLowerCase(), object); });
     const bones = host.boneNames.map((name) => byName.get(name.toLowerCase()) ?? byName.get(THREE.PropertyBinding.sanitizeNodeName(name).toLowerCase()));
-    state.current = { host, frame, group, bones, layers };
+    state.current = { host, frame, group, bones, layers, warmup };
 
     return () => {
+      warmup.dispose();
       host.dispose();
       frame.remove(group);
       textures.dispose();
@@ -93,7 +98,7 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
   useFrame((three, delta) => {
     const current = state.current;
     if (!current) return;
-    const { host, frame, group, bones, layers } = current;
+    const { host, frame, group, bones, layers, warmup } = current;
 
     // Bones in the Source frame: the frame's world inverse, then each bone's world
     frame.updateWorldMatrix(true, true);
@@ -132,6 +137,7 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
       layer.setScene(depth, color);
       layer.update(three.camera, size, uptime.current);
     }
+    warmup.update(three.gl, three.scene, three.camera, group);
 
     if (import.meta.env.DEV) publishScreenBounds(three.gl.domElement, three.camera, group, host);
   });

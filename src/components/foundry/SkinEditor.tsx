@@ -1,10 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Eye, EyeOff, RotateCcw, Download, Focus, Undo2, Redo2 } from 'lucide-react';
 import { Button, IconButton, ProgressBar, SegmentedControl } from '../common/ui';
 import { Input, Select } from '../common/forms';
-import { ErrorBoundary } from '../common/ErrorBoundary';
+import { SharedHeroViewer } from '../locker/LockerViewerHost';
 import { SkinPatternPicker } from './SkinPatternPicker';
 import { SkinColorControls } from './SkinColorControls';
 import { SkinFinishControls } from './SkinFinishControls';
@@ -33,7 +33,6 @@ import type { SkinEditInfo, SkinEditProgress, SkinEditResume, SkinPart, SkinPart
 /** Export masks follow the texture, capped so a 4K map does not ship a 16 MP mask. */
 const MASK_EDGE = 2048;
 
-const HeroPoseViewer = lazy(() => import('../locker/HeroPoseViewer'));
 const NO_SOURCES: HeroPoseSkinSource[] = [];
 const NO_EDITS: SkinPartEdit[] = [];
 const NO_SEEDS: SkinRegionSeed[] = [];
@@ -427,8 +426,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
     {unsupportedSurface && <p role="status" className="text-xs text-state-warning">{t('foundry.skin.ghostUnsupported')}</p>}
     <WorkshopWorkbench preview={
         !formAvailable ? <p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.formUnavailable', { form: t(form.labelKey) })}</p>
-        : <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}>
-          <HeroPoseViewer key={form.id} heroName={form.previewHero} skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits}
+        : <SharedHeroViewer heroName={form.previewHero} sceneSurface="doorStuck" skinSources={sources} partEdits={comparison === 'original' ? NO_EDITS : edits}
             focusMaterial={formParts.some((part) => part.material === focusMaterial) ? focusMaterial : null}
             onPreviewCapture={receiveCapture}
             onRegionBaker={setBaker}
@@ -439,7 +437,6 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
             workspaceKey={form.id === 'default' ? draftKey : `${draftKey}:${form.id}`}
             highlightedPart={!exporting && highlightedPart && !ambiguous(highlightedPart) ? highlightedPart.material : null}
             onPartColors={setColors} onPartTextures={setTextures} onPartPick={(name) => { const part = formParts.find((part) => materialBasename(part.material) === materialBasename(name)); if (part) setSelectedMaterial(part.material); }} />
-        </Suspense></ErrorBoundary>
       }
       previewFooter={forms.length > 1 ? <>
         <span className="text-xs text-text-secondary">{t('foundry.skin.form')}</span>

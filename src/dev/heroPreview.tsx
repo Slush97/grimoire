@@ -94,6 +94,8 @@ async function cacheCases(): Promise<PreviewCase[]> {
 
 /** grimoire-hero://m/<key>/<file> as the dev server serves it. */
 function localUrl(byKey: ReadonlyMap<string, PreviewCase>, url: string): string | null {
+  const scene = /^grimoire-hero:\/\/s\/[a-f0-9]{24}\/((?:cookies\/|particles\/(?:tex\/)?)?[^/?]+)$/.exec(url);
+  if (scene) return `/@viewer-scene/${scene[1]}`;
   const movement = /^grimoire-hero:\/\/f\/([a-f0-9]{64})\/([^?]+)/.exec(url);
   if (movement) return `/@movement/${movement[1]}/${movement[2]}`;
   const match = /^grimoire-hero:\/\/m\/([^/?]+)\/([^?]+)/.exec(url);
@@ -121,6 +123,9 @@ async function main() {
 
   const api = {
     getHeroShaderNoise: async () => '/.codex-run/shader-noise/textures/dev/blue_noise_256.png',
+    loadHideoutScene: async () => (await fetchAsset('/@viewer-scene/scene.json')).json(),
+    // The served scene is built already.
+    isHideoutSceneReady: async () => true,
     getHeroPoseInfo: async (hero: string) => info(hero, false),
     exportHeroPose: async (hero: string) => info(hero, false),
     getRiggedHeroPose: async (hero: string) => info(hero, true),
@@ -135,7 +140,7 @@ async function main() {
     },
     previewMovementEngine: async ({ heroName }: { heroName: string }) =>
       (await fetchAsset(`/@movement/${movementKey}/engine/${heroDirOf(heroName)}/preview.json`)).json() as Promise<MovementEnginePreview>,
-  } satisfies Pick<Window['electronAPI'], 'getHeroShaderNoise' | 'getHeroPoseInfo' | 'exportHeroPose' | 'getRiggedHeroPose' | 'exportRiggedHeroPose' | 'getHeroEffectInfo' | 'exportHeroParticles'>
+  } satisfies Pick<Window['electronAPI'], 'getHeroShaderNoise' | 'loadHideoutScene' | 'isHideoutSceneReady' | 'getHeroPoseInfo' | 'exportHeroPose' | 'getRiggedHeroPose' | 'exportRiggedHeroPose' | 'getHeroEffectInfo' | 'exportHeroParticles'>
     & Record<'previewMovementEngine', (request: { heroName: string }) => Promise<MovementEnginePreview>>;
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: api });
 
