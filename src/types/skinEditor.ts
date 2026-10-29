@@ -1,5 +1,7 @@
 import type { HeroPoseSkinSource } from './portrait';
 import type { TrippyStyleName } from './mod';
+import type { z } from 'zod';
+import type { mapProbesSchema, mapPostSchema, mapLutSchema, mapLightDistributionSchema, mapSkySchema, mapFogSchema } from '../lib/source2MapData';
 
 export interface SkinEditSource {
   heroName: string;
@@ -177,6 +179,9 @@ export interface SkinEditResume {
 }
 
 export interface HideoutInstance {
+  opacity?: number;
+  /** A skinned model of its own (not in the bundle) that loops this clip. */
+  animation?: { clip: string };
   model: string;
   primitive: number | null;
   matrix: number[];
@@ -184,19 +189,56 @@ export interface HideoutInstance {
 }
 
 export interface HideoutSceneInfo {
+  particles: import('../lib/mapParticles').MapParticleScene;
+  primaryLightDirection: [number, number, number];
+  probes: z.infer<typeof mapProbesSchema>;
+  post: z.infer<typeof mapPostSchema> | null;
+  lut: z.infer<typeof mapLutSchema>;
+  sky?: z.infer<typeof mapSkySchema>;
+  fog?: z.infer<typeof mapFogSchema>;
+  /** The precomputed shadow atlas the fog lights' `fogShadowTiles` index, as a one-slice R16 volume. */
+  fogShadows?: { file: 'fog-shadows.bin' };
   key: string;
   anchor: [number, number, number];
   heading: number;
+  bundle: { file: 'models.glb'; models: number; materials: number; images: number; textures: number; bytes: number };
   instances: HideoutInstance[];
   failures: string[];
   omissions: string[];
-  lighting: { kind: 'baked'; file: 'irradiance.hdr'; uvScale: [number, number] } | { kind: 'unavailable' };
+  exposure: number;
+  tonemap: Source2MapTonemap | null;
+  reflection: { kind: 'cubemap'; file: 'reflection.bin'; slice: number } | { kind: 'unavailable' };
+  lighting: { kind: 'baked'; file: 'irradiance.hdr'; uvScale: [number, number];
+    encoding: { kind: 'dc' } | { kind: 'sh2-luminance'; direction: 'direction.png'; shadows: 'shadows.png' } } | { kind: 'unavailable' };
   lights: HideoutLight[];
 }
 
+export interface Source2MapTonemap {
+  exposureBias: number;
+  shoulder: number;
+  linear: number;
+  angle: number;
+  toe: number;
+  toeNumerator: number;
+  toeDenominator: number;
+  white: number;
+}
+
 export interface HideoutLight {
+  distribution: z.infer<typeof mapLightDistributionSchema>;
   position: [number, number, number];
   color: [number, number, number];
   candela: number;
   range: number;
+  shadowChannel: number | null;
+  /** The light's fogstrength when its fog mode lets it light the volumetric fog. */
+  fogStrength?: number;
+  /** Cache file of the light's cookie, an sRGB image projected through a barn light. */
+  cookie?: string;
+  /** A baked light that only lights the fog: its surface light is in the lightmap. */
+  fogOnly?: true;
+  /** Source matrix whose unit cube is the only volume the light reaches (its precomputed OBB). */
+  bounds?: number[];
+  /** A fog light's baked shadow tiles in `fogShadows`, (width, height, x, y) in atlas uv; one per cube face for an omni. */
+  fogShadowTiles?: [number, number, number, number][];
 }

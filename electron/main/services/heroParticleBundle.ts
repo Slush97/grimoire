@@ -29,7 +29,7 @@ export const BUNDLE_TEXTURE_DIRNAME = 'tex';
 
 const LIMITS = {
     systems: 160,
-    textures: 64,
+    textures: 128,
     models: 8,
     snapshotBytes: 4 * 1024 * 1024,
     textureBytes: 64 * 1024 * 1024,
@@ -38,7 +38,7 @@ const LIMITS = {
 
 const SYSTEM_PATH = /^particles\/[a-zA-Z0-9_./-]+\.vpcf$/;
 const SNAPSHOT_PATH = /^particles\/[a-zA-Z0-9_./-]+\.vsnap$/;
-const TEXTURE_PATH = /^materials\/[a-zA-Z0-9_./-]+\.vtex$/;
+const TEXTURE_PATH = /^(?:materials|models)\/[a-zA-Z0-9_./-]+\.vtex$/;
 const MODEL_PATH = /^models\/[a-zA-Z0-9_./-]+\.vmdl$/;
 const MATERIAL_PATH = /^(?:materials|models)\/[a-zA-Z0-9_./-]+\.vmat$/;
 
@@ -87,6 +87,8 @@ function rendererTextures(definition: KVObject): string[] {
 }
 
 export interface ExportBundleOptions {
+    /** World effects have no bound model. Supply their empty world binding explicitly. */
+    modelBinding?: Awaited<ReturnType<typeof readParticleModel>>;
     hero: string;
     /** The directory the bundle is written to; its `tex/` is replaced. */
     outDir: string;
@@ -103,9 +105,12 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
 
     // Model metadata and the mip capability do not depend on the particle tree. Start them while
     // definitions decode, rather than making the texture export wait for all of these CLI calls.
-    const modelBytes = stack.read(discovery.modelEntry);
-    if (!modelBytes) throw new Error(`${discovery.modelEntry} is not in any mounted package.`);
-    const modelResult = readParticleModel(modelBytes, (resource) => stack.decodeLoose(resource), (path) => stack.decode(path));
+    const modelResult = (async () => {
+        if (options.modelBinding) return options.modelBinding;
+        const modelBytes = stack.read(discovery.modelEntry);
+        if (!modelBytes) throw new Error(`${discovery.modelEntry} is not in any mounted package.`);
+        return readParticleModel(modelBytes, (resource) => stack.decodeLoose(resource), (path) => stack.decode(path));
+    })();
     // Observe a failure immediately, including while another export stage is still awaiting a CLI.
     const modelReady = modelResult.then((value) => ({ value }), (error: unknown) => ({ error }));
     const mipSupport = stack.supportsMips();
@@ -171,12 +176,15 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
         }
     }
 
-    // The particle models and their override materials, whose textures join the renderers'
+    // Model draw materials and overrides share the same decode and texture export path.
     const models: Record<string, SerializedModelMesh> = {};
     const materials: Record<string, ParticleMaterialData> = {};
     for (const path of [...modelPaths].slice(0, LIMITS.models)) {
         try {
             models[particleResourceKey(path)] = serializeModelMesh(await exportParticleModelMesh(stack, options.vpkmerge, `${path}_c`, join(options.outDir, '.models')));
+            for (const primitive of models[particleResourceKey(path)].primitives) {
+                if (primitive.material && MATERIAL_PATH.test(primitive.material) && !primitive.material.includes('..')) materialPaths.add(primitive.material);
+            }
         } catch (error) {
             diagnostics.push({ kind: 'missing-model', message: `${path}: ${String(error)}` });
         }
@@ -192,7 +200,11 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
         const material = readParticleMaterial(data);
         materials[particleResourceKey(path)] = material;
         for (const texture of Object.values(material.textureParams)) {
-            if (!TEXTURE_PATH.test(texture) || texture.includes('..') || textureOwners.has(texture) || textureOwners.size >= LIMITS.textures) continue;
+            if (!TEXTURE_PATH.test(texture) || texture.includes('..') || textureOwners.has(texture)) continue;
+            if (textureOwners.size >= LIMITS.textures) {
+                diagnostics.push({ kind: 'limit', message: `${texture}: the bundle holds at most ${LIMITS.textures} textures.` });
+                continue;
+            }
             const owner = stack.owner(`${texture}_c`);
             if (owner) textureOwners.set(texture, owner);
             else diagnostics.push({ kind: 'missing-texture', message: `${texture} is not in any mounted package.` });

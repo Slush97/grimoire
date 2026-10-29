@@ -994,6 +994,12 @@ export interface ElectronAPI {
     saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
     onSkinEditProgress: (callback: (progress: import('./skinEditor').SkinEditProgress) => void) => () => void;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
+    /** Whether the hideout scene cache for the current game build is complete. */
+    isHideoutSceneReady: () => Promise<boolean>;
+    /** How far the running hideout cache build has come, from 0 to 1, or null when none runs. */
+    getHideoutBuildProgress: () => Promise<number | null>;
+    /** Saves a room frame next to the hideout scene cache `key`, served back at `grimoire-hero://s/<key>/snapshots/<name>`. */
+    saveHideoutSnapshot: (key: string, name: string, bytes: Uint8Array) => Promise<void>;
     getHeroShaderNoise: () => Promise<string>;
     getHeroPoseInfo: (
         heroName: string,

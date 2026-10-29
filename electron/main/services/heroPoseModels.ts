@@ -1509,8 +1509,15 @@ export function registerHeroPoseProtocol(): void {
                 return file ? net.fetch(pathToFileURL(file).toString()) : new Response(null, { status: 404 });
             }
             if (url.hostname === 's') {
-                const sceneFile = hideoutCacheFile(key, parts[1] ?? '');
-                return sceneFile ? net.fetch(pathToFileURL(sceneFile).toString()) : new Response(null, { status: 404 });
+                const name = parts.slice(1).join('/');
+                const sceneFile = hideoutCacheFile(key, name);
+                if (!sceneFile) return new Response(null, { status: 404 });
+                if (name.startsWith('snapshots/')) {
+                    const now = new Date();
+                    // A missing snapshot is the normal first-open case, not an error to log.
+                    try { await fs.utimes(sceneFile, now, now); } catch { return new Response(null, { status: 204 }); }
+                }
+                return net.fetch(pathToFileURL(sceneFile).toString());
             }
             // The trailing segment(s) name what's served: the static `model.glb`
             // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the
