@@ -2,20 +2,36 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { ParticleEffect } from './ParticleEffect';
-import type { MovementFxPreview, MovementFxChoice } from '../../lib/movementFx';
+import type { MovementFxPreview, MovementFxChoice, MovementFxPreviewRequest } from '../../lib/movementFx';
 import { movementFrame, MOVEMENT_DISTANCE } from '../../lib/movementMotion';
 import { MovementClock } from '../../lib/movementClock';
+import type { ParticleBundle } from '../../lib/particles/host/bundle';
+import type { EffectTimeline } from '../../lib/particles/host/effectTimeline';
+
+/** The faithful runtime's staging of a movement preview: the hero's bundle and the timeline it plays. */
+export interface MovementEngineMount {
+  bundle: ParticleBundle;
+  textureBaseUrl: string;
+  timeline: EffectTimeline;
+}
 
 export interface MovementViewerPreview extends MovementFxPreview {
   kind: MovementFxChoice['kind']; revision: number; loop: boolean;
+  /** What the engine preview is built from, when the viewer may run it ("Engine particles"). */
+  request?: MovementFxPreviewRequest;
+  /** The engine preview, once loaded: the rig plays the timeline's clips and the runtime its effects. */
+  engine?: MovementEngineMount;
 }
 
 /** Moves the actor independently of the emitters' history: old particles stay
- * where they spawned rather than being dragged along with the hero. */
+ * where they spawned rather than being dragged along with the hero. With the
+ * engine preview the actor stays put and turns to the timeline's view; the
+ * particle world moves instead (see TimelineParticleLayer). */
 export function MovementFxStage({ preview, scene, paused, speed, children, controls }: {
   preview?: MovementViewerPreview; scene: THREE.Object3D; paused: boolean; speed: number; children: ReactNode; controls?: ReactNode;
 }) {
-  const source = preview?.descriptor, kind = preview?.kind;
+  const engine = preview?.engine;
+  const source = engine ? undefined : preview?.descriptor, kind = preview?.kind;
   const descriptor = useMemo(() => {
     if (!source) return null;
     const duration = kind === 'dash' ? .45 : .55;
@@ -40,15 +56,21 @@ export function MovementFxStage({ preview, scene, paused, speed, children, contr
   useEffect(() => {
     elapsed.current = 0; cycle.current = 0;
     if (actor.current) {
-      actor.current.position.set(kind === 'dash' ? -MOVEMENT_DISTANCE / 2 : 0, 0, 0);
-      actor.current.rotation.y = kind === 'dash' ? Math.PI / 2 : 0;
+      actor.current.position.set(kind === 'dash' && !engine ? -MOVEMENT_DISTANCE / 2 : 0, 0, 0);
+      actor.current.rotation.y = engine ? engine.timeline.yaw : kind === 'dash' ? Math.PI / 2 : 0;
       actor.current.updateMatrixWorld(true);
     }
-  }, [kind, preview?.key, preview?.revision]);
+  }, [kind, preview?.key, preview?.revision, engine]);
   useFrame((_, delta) => {
     if (effects.current && scene.parent) effects.current.scale.copy(scene.parent.getWorldScale(scale.current));
     if (!preview || !actor.current || paused) return;
     elapsed.current += Math.min(delta, 0.1) * speed;
+    if (engine) {
+      actor.current.position.set(0, 0, 0);
+      actor.current.rotation.y = engine.timeline.yaw;
+      actor.current.updateMatrixWorld(true);
+      return;
+    }
     const frame = movementFrame(preview.kind, elapsed.current, preview.loop);
     const round = frame.cycle;
     if (round !== cycle.current) { cycle.current = round; setGeneration((value) => value + 1); }

@@ -1,10 +1,19 @@
 import type { HeroPoseDevFlags } from './heroPoseRenderFeatures';
 
-export interface HeroPreviewFlags extends HeroPoseDevFlags { animated: boolean; effects: boolean; autoRotate: boolean }
+export interface HeroPreviewFlags extends HeroPoseDevFlags {
+  animated: boolean;
+  effects: boolean;
+  autoRotate: boolean;
+  /** Run particles through the faithful Source 2 simulation instead of the curated overlay. On by default;
+   *  turning it off falls back to the curated overlay. */
+  sourceParticles: boolean;
+}
+
 export const FULL_EFFECTS_PREVIEW_DEFAULTS: HeroPreviewFlags = {
   unified: true, celV2: true, animated: true, cloth: true, effects: true, bloom: true,
   nprDebug: false, matDebug: false,
   autoRotate: false,
+  sourceParticles: true,
 };
 
 // Legacy preview keys were also populated by the old opt-in developer controls.
@@ -25,6 +34,7 @@ export function initialHeroPreviewFlags(): HeroPreviewFlags {
     animated: read('animated', true, true), cloth: read('cloth', true, true),
     effects: read('effects', true, true), bloom: read('bloom', true, true),
     autoRotate: read('autoRotate', false, true),
+    sourceParticles: read('sourceParticles', true, true),
     nprDebug: read('nprDebug', false), matDebug: read('matDebug', false),
   };
 }
