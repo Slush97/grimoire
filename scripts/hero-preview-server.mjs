@@ -34,6 +34,7 @@ const cacheDir = resolve(option('--cache', defaultCache));
 const particlesDir = resolve(option('--particles', join(root, '.codex-run', 'hero-particles')));
 // Movement previews from scripts/export-movement-preview.ts, at /@movement/
 const movementDir = resolve(option('--movement', join(root, '.codex-run', 'movement-preview', 'bakes')));
+const sceneDir = option('--scene', '') ? resolve(option('--scene', '')) : null;
 const port = Number(option('--port', '5183'));
 const videoPath = option('--video', join(process.env.DEADLOCK_PATH ?? 'C:/Program Files (x86)/Steam/steamapps/common/Deadlock', 'game/citadel/cfg/video.txt'));
 const sourceRef = option('--source-ref', '');
@@ -85,9 +86,12 @@ const server = await createServer({
       configureServer(vite) {
         vite.middlewares.use(async (request, response, next) => {
           const path = decodeURIComponent((request.url ?? '').split('?')[0]);
+          if (path === '/favicon.ico') { response.statusCode = 204; response.end(); return; }
           if (path === '/@hero-cache/index.json') {
             response.setHeader('Content-Type', 'application/json');
             response.end(JSON.stringify(await cacheIndex()));
+          } else if (sceneDir && path.startsWith('/@viewer-scene/')) {
+            send(response, sceneDir, path.slice('/@viewer-scene/'.length));
           } else if (path.startsWith('/@hero-cache/')) {
             send(response, cacheDir, path.slice('/@hero-cache/'.length));
           } else if (path.startsWith('/@movement/')) {

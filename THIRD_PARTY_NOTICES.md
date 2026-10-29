@@ -9,6 +9,11 @@ its particle renderers, spritecard shaders and post process at the same commit. 
 names the source file it came from. `tools/particle-oracle/` and `tools/particle-render-oracle/`
 (dev-only, not shipped) build against the same commit.
 
+`src/lib/source2ProbeVolume.ts` and `src/lib/source2DynamicLights.ts` adapt the
+LPV, light distribution and barn-light calculations from `lighting.lpv.slang`,
+`envmap_data.slang`, `lighting.barn.slang` and `SceneLight.cs` at that commit.
+`tools/hideout-oracle/` builds its fixed-camera reference against the same source.
+
 The MIT License (MIT)
 
 Copyright (c) 2015 ValveResourceFormat Contributors
