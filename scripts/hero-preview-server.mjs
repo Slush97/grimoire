@@ -1,6 +1,7 @@
 // Dev-only server for hero-preview.html (the production hero viewer outside Electron).
 //
 // usage: node scripts/hero-preview-server.mjs [--port 5183] [--cache <hero-poses dir>]
+//        [--particles <bundle dir>] [--source-ref <commit>]
 //
 // Serves the app's own hero pose cache in place at /@hero-cache/ (default: the Electron userData
 // hero-poses of a Windows, macOS or Linux install), with /@hero-cache/index.json listing each vanilla
@@ -14,6 +15,8 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import { createServer } from 'vite';
+import { readHeroPostBloom } from '../electron/main/services/heroParticleVideo.ts';
+import { sourceRefPlugin } from './lib/sourceRef.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
@@ -28,10 +31,12 @@ const defaultCache = process.platform === 'win32'
     ? join(homedir(), 'Library', 'Application Support', 'grimoire', 'hero-poses')
     : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'grimoire', 'hero-poses');
 const cacheDir = resolve(option('--cache', defaultCache));
-const particlesDir = join(root, '.codex-run', 'hero-particles');
+const particlesDir = resolve(option('--particles', join(root, '.codex-run', 'hero-particles')));
 // Movement previews from scripts/export-movement-preview.ts, at /@movement/
 const movementDir = resolve(option('--movement', join(root, '.codex-run', 'movement-preview', 'bakes')));
 const port = Number(option('--port', '5183'));
+const videoPath = option('--video', join(process.env.DEADLOCK_PATH ?? 'C:/Program Files (x86)/Steam/steamapps/common/Deadlock', 'game/citadel/cfg/video.txt'));
+const sourceRef = option('--source-ref', '');
 
 // Display names by the cache's sanitized lowercase key (heroPoseModels.sanitize over `<hero>::vanilla`)
 const codenameSource = await fs.readFile(join(root, 'electron/main/services/heroCodenames.ts'), 'utf8');
@@ -54,13 +59,14 @@ function send(response, base, relative) {
 
 async function cacheIndex() {
   const entries = [];
+  const postBloomEnabled = await readHeroPostBloom(videoPath);
   for (const name of await fs.readdir(cacheDir).catch(() => [])) {
     const label = labelByDir.get(name);
     if (!label) continue;
     const files = await fs.readdir(join(cacheDir, name)).catch(() => []);
     const stat = await fs.stat(join(cacheDir, name, 'model-rigged.glb')).catch(() => null);
     const particles = existsSync(join(particlesDir, label.replace(/[^a-zA-Z0-9_-]+/g, '_'), 'bundle.json'));
-    entries.push({ name, label, files, mtimeMs: stat ? Math.round(stat.mtimeMs) : 0, particles });
+    entries.push({ name, label, files, mtimeMs: stat ? Math.round(stat.mtimeMs) : 0, particles, postBloomEnabled });
   }
   return entries.sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -72,6 +78,7 @@ const server = await createServer({
   cacheDir: join(root, '.codex-run', 'vite-hero-preview'),
   optimizeDeps: { entries: ['hero-preview.html'] },
   plugins: [
+    sourceRefPlugin(root, sourceRef),
     tailwindcss(),
     {
       name: 'hero-preview-assets',
