@@ -37,8 +37,10 @@ interface PreviewCase {
   exportedAt: number | null;
   hasEffect: boolean;
   hasParticles: boolean;
+  postBloomEnabled?: boolean;
   /** Whether the case has the movement preview's clips (movement.glb). */
   hasMovement?: boolean;
+  hasAnimationFallback: boolean;
 }
 
 const params = new URLSearchParams(location.search);
@@ -67,12 +69,13 @@ async function stagedCases(): Promise<PreviewCase[]> {
       exportedAt: Date.parse(metadata.exportedAt),
       hasEffect: true,
       hasParticles: false,
+      hasAnimationFallback: false,
     };
   }));
 }
 
 async function cacheCases(): Promise<PreviewCase[]> {
-  const index: { name: string; label: string; files: string[]; mtimeMs: number; particles: boolean }[] =
+  const index: { name: string; label: string; files: string[]; mtimeMs: number; particles: boolean; postBloomEnabled?: boolean }[] =
     await fetchAsset('/@hero-cache/index.json').then((response) => response.json());
   return index.map((item) => ({
     name: item.name,
@@ -83,7 +86,9 @@ async function cacheCases(): Promise<PreviewCase[]> {
     exportedAt: item.mtimeMs,
     hasEffect: item.files.includes('effect.json'),
     hasParticles: item.particles,
+    postBloomEnabled: item.postBloomEnabled,
     hasMovement: item.files.includes('movement.glb'),
+    hasAnimationFallback: item.files.includes('animation-fallback.glb'),
   }));
 }
 
@@ -110,10 +115,12 @@ async function main() {
   const byHero = new Map(prepared.map((item) => [item.label, item]));
   const info = (hero: string, rigged: boolean) => {
     const item = byHero.get(hero);
-    return { key: item?.name ?? '', hasModel: !!(rigged ? item?.rigged : item?.posed), hasMovement: !!item?.hasMovement, mtimeMs: item?.exportedAt ?? null };
+    return { key: item?.name ?? '', hasModel: !!(rigged ? item?.rigged : item?.posed), hasMovement: !!item?.hasMovement, mtimeMs: item?.exportedAt ?? null,
+      hasAnimationFallback: rigged && !!item?.hasAnimationFallback };
   };
 
   const api = {
+    getHeroShaderNoise: async () => '/.codex-run/shader-noise/textures/dev/blue_noise_256.png',
     getHeroPoseInfo: async (hero: string) => info(hero, false),
     exportHeroPose: async (hero: string) => info(hero, false),
     getRiggedHeroPose: async (hero: string) => info(hero, true),
@@ -124,11 +131,11 @@ async function main() {
     },
     exportHeroParticles: async (hero: string) => {
       const item = byHero.get(hero);
-      return { key: item?.name ?? '', hasBundle: !!item?.hasParticles, effects: item?.hasParticles ? 1 : 0 };
+      return { key: item?.name ?? '', hasBundle: !!item?.hasParticles, effects: item?.hasParticles ? 1 : 0, postBloomEnabled: item?.postBloomEnabled };
     },
     previewMovementEngine: async ({ heroName }: { heroName: string }) =>
       (await fetchAsset(`/@movement/${movementKey}/engine/${heroDirOf(heroName)}/preview.json`)).json() as Promise<MovementEnginePreview>,
-  } satisfies Pick<Window['electronAPI'], 'getHeroPoseInfo' | 'exportHeroPose' | 'getRiggedHeroPose' | 'exportRiggedHeroPose' | 'getHeroEffectInfo' | 'exportHeroParticles'>
+  } satisfies Pick<Window['electronAPI'], 'getHeroShaderNoise' | 'getHeroPoseInfo' | 'exportHeroPose' | 'getRiggedHeroPose' | 'exportRiggedHeroPose' | 'getHeroEffectInfo' | 'exportHeroParticles'>
     & Record<'previewMovementEngine', (request: { heroName: string }) => Promise<MovementEnginePreview>>;
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: api });
 

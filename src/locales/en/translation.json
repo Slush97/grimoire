@@ -2553,6 +2553,7 @@
       "particlesPartial": "Some particle effects are unsupported.",
       "particlesUnavailable": "No supported ambient particle preview is available for this hero.",
       "animationUnavailable": "An animated preview is unavailable for this model.",
+        "baseAnimations": "Using base animations",
       "clipLabels": {
         "idle": "Idle",
         "relaxedIdle": "Relaxed idle",
