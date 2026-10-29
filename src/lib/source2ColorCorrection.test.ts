@@ -9,6 +9,7 @@ import {
   unwrapNprBase, wrapMaterialWithNpr, type MorphicExtras,
 } from './source2NprMaterial';
 import { buildDeadlockMaterial } from './deadlockMaterial';
+import { SOURCE2_EXTRAS_VERSION } from './source2ExtrasVersion';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const v = (r: number, g: number, b: number) => new THREE.Vector3(r, g, b);
@@ -53,11 +54,14 @@ describe('MatrixColorCorrect2', () => {
 
 describe('morphic v2 tint compatibility', () => {
   it.each([
-    ['missing schema', { schema_version: undefined }], ['future schema', { schema_version: 3 }],
+    ['missing schema', { schema_version: undefined }], ['future schema', { schema_version: SOURCE2_EXTRAS_VERSION + 1 }],
     ['other shader', { shader: 'complex.vfx' }],
     ['dynamic tint', { dynamic_params: { g_vColorTint1: { source: 'time()', decompiled: true, byte_len: 4, attributes: [], hash: 'test' } } }],
   ])('does not reinterpret %s', (_name, extra) => {
     expect(source2TintPlan(morphic(extra), new THREE.Color().setRGB(0.5, 0.25, 1)).ownsExportedFactor).toBe(false);
+  });
+  it.each([2, 3])('owns the raw exported factor of schema v%i', (schema_version) => {
+    expect(source2TintPlan(morphic({ schema_version }), new THREE.Color().setRGB(0.5, 0.25, 1)).ownsExportedFactor).toBe(true);
   });
   it('supports mod2x and the luminance-preserving tint matrix without another transfer', () => {
     const factor = new THREE.Color().setRGB(0.5, 0.25, 1);

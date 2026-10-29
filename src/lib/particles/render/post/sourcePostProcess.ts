@@ -113,6 +113,23 @@ export const DEADLOCK_BASE_POST: SourcePostSettings = {
   fullScreenGamma: 2.2,
 };
 
+/**
+ * postprocessing/caldera.vpost, the master post_processing_volume in
+ * maps/ui/hero_shop/necro_shop/entities/default_ents.vents and maps/ui/hero_container.
+ * This is the inspect portrait preset. The hideout volume uses DEADLOCK_BASE_POST instead.
+ */
+export const DEADLOCK_HERO_POST: SourcePostSettings = {
+  tonemap: { ...VRF_DEFAULT_TONEMAP, whitePoint: 3.9996 },
+  bloom: {
+    ...VRF_DEFAULT_BLOOM,
+    addBloomStrength: 0.888,
+    bloomThreshold: 4,
+    bloomThresholdWidth: 0.999,
+  },
+  exposure: 1,
+  fullScreenGamma: 2.2,
+};
+
 /** The settings a decoded `.vpost` holds (m_toneMapParams, m_bloomParams), on top of `base`. */
 export function postSettingsFromVpost(vpost: KVObject, base: SourcePostSettings = { tonemap: VRF_DEFAULT_TONEMAP, bloom: null, exposure: 1, fullScreenGamma: 2.2 }): SourcePostSettings {
   const number = (object: KVObject, key: string) => (typeof object[key] === 'number' ? (object[key] as number) : 0);

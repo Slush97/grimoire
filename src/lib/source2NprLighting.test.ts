@@ -63,22 +63,22 @@ describe('NPR scalar lighting', () => {
 });
 
 describe('NPR material eligibility', () => {
-  const cases: { label: string; morphic: MorphicExtras; enabled: number }[] = [
-    { label: 'opaque NPR', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } }, enabled: 1 },
-    { label: 'glass', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_GLASS: 1 } }, enabled: 0 },
-    { label: 'translucent', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_TRANSLUCENT: 1 } }, enabled: 0 },
-    { label: 'additive', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_ADDITIVE_BLEND: 1 } }, enabled: 0 },
-    { label: 'non NPR', morphic: { shader: 'pbr.vfx' }, enabled: 0 },
-    { label: 'unlit', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_UNLIT: 1 } }, enabled: 0 },
+  const cases: { label: string; morphic: MorphicExtras; enabled: number; classic: number }[] = [
+    { label: 'opaque NPR', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } }, enabled: 1, classic: 1 },
+    { label: 'glass', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_GLASS: 1 } }, enabled: 1, classic: 0 },
+    { label: 'translucent', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_TRANSLUCENT: 1 } }, enabled: 1, classic: 0 },
+    { label: 'additive', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_ADDITIVE_BLEND: 1 } }, enabled: 1, classic: 0 },
+    { label: 'non NPR', morphic: { shader: 'pbr.vfx' }, enabled: 0, classic: 0 },
+    { label: 'unlit', morphic: { shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_UNLIT: 1 } }, enabled: 0, classic: 0 },
   ];
-  it.each(cases)('keeps $label eligibility consistent between material builders', ({ morphic, enabled }) => {
+  it.each(cases)('uses the supported $label path in each material builder', ({ morphic, enabled, classic }) => {
     const base = new THREE.MeshStandardMaterial();
     base.userData.morphic = morphic;
     const built = buildDeadlockMaterial(base);
     expect(built.uniforms.uNprLighting.value).toBe(enabled);
     const legacy = wrapMaterialWithNpr(base);
     if (legacy) {
-      expect(legacy.uniforms.uNprLighting.value).toBe(enabled);
+      expect(legacy.uniforms.uNprLighting.value).toBe(classic);
       legacy.material.dispose();
       legacy.ownedTextures.forEach((texture) => texture.dispose());
     }

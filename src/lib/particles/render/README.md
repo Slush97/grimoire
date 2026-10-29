@@ -170,10 +170,15 @@ within 1/255.
   runtime on passes `PARTICLE_RUNTIME_POST_PIPELINE` (from `post/`), so the old particle path keeps
   the old look.
 
-Visible change with `'source2'`: VRF's exposure is a host scalar (auto exposure on maps), so the
-viewer's preview exposure is converted to the one that shows mid grey as the preview curve does
-(`exposureForDisplay`). Shadows and mid tones then stay within a level or two; highlights roll off
-softer, since VRF's white point is 2^3.9996 rather than 3.9996 (linear 1.0 shows at 191 instead of
-198, 2.0 at 226 instead of 239). The bloom is the vpost's (add 0.5, threshold 1, wide weights)
-instead of the library's mipmap bloom, and the vignette VRF does not draw is not drawn. Without a
-blue noise texture there is no dither.
+`BloomEffect.sourceSettings` selects the host scene's volume. Studio and transparent views use
+`DEADLOCK_HERO_POST`, decoded from `postprocessing/caldera.vpost`. The master volumes in
+`maps/ui/hero_shop/necro_shop` and `maps/ui/hero_container` name it. Its bloom threshold is 4 and the
+five weights are equal. The actual hero-select map names `hero_select.vpost`, while `dl_hideout`
+names `basepostprocess_deadlock.vpost`. A preset's filename does not establish that it belongs to
+every hero view.
+
+The Source 2 host uses the preset's exposure. The hero shop and hideout volumes enable exposure with
+minimum and maximum log exposure both 0, giving scalar 1. Anchoring the old preview curve instead
+reduced the inspect preset to 0.4356, darkening the horn beneath its additive effects. Tonemap and
+bloom still follow VRF; the viewer's lighting remains an approximation of the map lighting. The
+vignette VRF does not draw is not drawn. Without a blue noise texture there is no dither.

@@ -305,6 +305,23 @@ describe('buildDeadlockMaterial detail textures', () => {
 });
 
 describe('buildDeadlockMaterial glass and translucency state', () => {
+  const blendFlags: NonNullable<MorphicExtras['ints']>[] = [
+    { F_GLASS: 1, F_SELF_ILLUM: 1 },
+    { F_TRANSLUCENT: 1, F_ADDITIVE_BLEND: 1, F_SELF_ILLUM: 1 },
+    { F_TRANSLUCENT: 1, F_ADVANCED_TRANSLUCENCY: 1 },
+  ];
+  it.each(blendFlags)('uses authored NPR shading across supported blend states %j', (flags) => {
+    const base = materialWithMorphic({ shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, ...flags },
+      floats: { g_flSelfIllumScale1: 0.02, g_flCloakBlurAmount: 0.007, g_flAlphaAnglePower1: -2.5 },
+      resolvedTextures: { g_tSelfIllumMask: texture(4) } });
+    const result = buildDeadlockMaterial(base);
+    expect(result.uniforms.uCitadelLighting.value).toBe(1);
+    expect(result.uniforms.uNprLighting.value).toBe(1);
+    expect(result.uniforms.uCitadelSelfIllumOn.value).toBe('F_SELF_ILLUM' in flags ? 1 : 0);
+    expect(result.uniforms.uCitadelSelfIllumScale.value).toBe(0.02);
+    expect(result.uniforms.uCitadelAlphaAngle.value).toBe(-2.5);
+    result.dispose();
+  });
   it('retains authored blurred-volume roughness without changing its blur or sharp-glass defaults', () => {
     const base = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 },
       floats: { g_flCloakBlurAmount: 0.007 } });
@@ -315,13 +332,13 @@ describe('buildDeadlockMaterial glass and translucency state', () => {
     expect(base.roughness).toBe(1);
     result.dispose();
   });
-  it('keeps rough glass glossy in the preview without changing opaque surfaces or the cached base', () => {
+  it('retains authored glass roughness without changing opaque surfaces or the cached base', () => {
     const glassBase = physicalMaterialWithMorphic({ shader: 'pbr.vfx', ints: { F_GLASS: 1 } });
     glassBase.roughness = 1;
     const opaqueBase = materialWithMorphic({ shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1 } });
     opaqueBase.roughness = 1;
     const glass = buildDeadlockMaterial(glassBase), opaque = buildDeadlockMaterial(opaqueBase);
-    expect((glass.material as THREE.MeshPhysicalMaterial).roughness).toBe(0.18);
+    expect((glass.material as THREE.MeshPhysicalMaterial).roughness).toBe(1);
     expect((opaque.material as THREE.MeshStandardMaterial).roughness).toBe(1);
     expect(glassBase.roughness).toBe(1);
     glass.dispose(); opaque.dispose();
@@ -400,7 +417,7 @@ describe('buildDeadlockMaterial glass and translucency state', () => {
 
     expect(material.transparent).toBe(true);
     expect(material.depthWrite).toBe(true);
-    expect(material.opacity).toBe(0.62);
+    expect(material.opacity).toBe(1);
     expect(alphaMap).toBeTruthy();
     expect(alphaMap).not.toBe(sourceAlt);
     expect(alphaMap?.image).toBe(sourceAlt.image);
@@ -443,7 +460,7 @@ describe('buildDeadlockMaterial glass and translucency state', () => {
     result.dispose();
   });
 
-  it('does not bind placeholder glass masks as transmission maps', () => {
+  it('binds constant glass masks as transmission data', () => {
     const base = materialWithMorphic({
       shader: 'pbr.vfx',
       ints: {
@@ -459,11 +476,13 @@ describe('buildDeadlockMaterial glass and translucency state', () => {
     const material = result.material as THREE.MeshPhysicalMaterial;
 
     expect(material.transmission).toBeGreaterThan(0);
-    expect(material.transmissionMap).toBeNull();
+    expect(material.transmissionMap?.image).toBe(base.userData.morphic.resolvedTextures.g_tGlass.image);
+    expect(result.uniforms.uCitadelGlass.value).toBe(1);
+    expect(result.uniforms.uCitadelGlassBlur.value.toArray()).toEqual([0, 1, 1]);
     result.dispose();
   });
 
-  it('clears inherited physical transmission maps for rejected glass masks', () => {
+  it('replaces inherited physical transmission maps with authored constant masks', () => {
     const inheritedGlass = texture(16);
     const base = physicalMaterialWithMorphic({
       shader: 'pbr.vfx',
@@ -483,7 +502,8 @@ describe('buildDeadlockMaterial glass and translucency state', () => {
 
     expect(material.isMeshPhysicalMaterial).toBe(true);
     expect(material.transmission).toBeGreaterThan(0);
-    expect(material.transmissionMap).toBeNull();
+    expect(material.transmissionMap).not.toBe(inheritedGlass);
+    expect(material.transmissionMap?.image).toBe(base.userData.morphic.resolvedTextures.g_tGlass.image);
     expect(result.ownedTextures).not.toContain(inheritedGlass);
     result.dispose();
   });
@@ -817,6 +837,22 @@ describe('buildDeadlockMaterial self-illum placeholder gate (Yamato shogun_body 
 });
 
 describe('buildDeadlockMaterial jitter uniforms (vindicta_glow breathing)', () => {
+  it('uses the authored horn expression and mask in the HDR host', () => {
+    const horn = buildDeadlockMaterial(materialWithMorphic({
+      shader: 'pbr.vfx', ints: { F_USE_NPR_LIGHTING: 1, F_SELF_ILLUM: 1 },
+      floats: { g_flSelfIllumScale1: 10 },
+      dynamic_params: { g_flSelfIllumScale1: dynamicExpr('2 * sin(3 * time()) + 2') },
+      resolvedTextures: { g_tSelfIllumMask: texture(64) }, self_illum_valid: true,
+    }), undefined, null, 'authored');
+    const scale = Number(horn.uniforms.uSelfIllumScale.value);
+    expect(scale * Number(horn.uniforms.uSelfIllumPulse.value)).toBeCloseTo(2);
+    expect(scale * horn.selfIllumPulseFn!(Math.PI / 6)).toBeCloseTo(4);
+    expect(scale * horn.selfIllumPulseFn!(Math.PI / 2)).toBeCloseTo(0);
+    expect(horn.uniforms.uSelfIllumMaskShaping.value).toBe(0);
+    expect(horn.uniforms.uSelfIllumSat.value).toBe(1);
+    expect(horn.uniforms.uSelfIllumCap.value).toBeGreaterThan(4);
+    horn.dispose();
+  });
   it('drives F_JITTER_VERTICES from VMAT speeds and amplitudes without requiring a real mask', () => {
     const glow = buildDeadlockMaterial(
       materialWithMorphic({
