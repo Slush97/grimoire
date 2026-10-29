@@ -79,3 +79,11 @@ export interface HeroEffectInfo {
   key: string;
   entry: string | null;
 }
+
+/** A hero's particle bundle for the faithful particle runtime. */
+export interface HeroParticleBundleInfo {
+  hasBundle: boolean;
+  key: string;
+  /** How many effects discovery found. */
+  effects: number;
+}

@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { useFoundryDraft } from '../../lib/useFoundryDraft';
 import { deferredCommit } from '../../lib/deferredCommit';
 import { viewerCameraSchema, type ViewerCameraDraft } from '../../lib/viewerDraftSchema';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, events, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls as DreiOrbitControls } from '@react-three/drei';
 import { Leva, folder, useControls } from 'leva';
 import * as THREE from 'three';
@@ -36,13 +36,20 @@ import {
   exportRiggedHeroPose,
   getHeroEffectInfo,
   exportHeroEffect,
+  exportHeroParticles,
   previewTrippySprite,
 } from '../../lib/api';
 import { disposeTexture, loadGltfPreview, materialTextures } from '../../lib/loadGltfPreview';
 import { prepareSource2VertexColors } from '../../lib/source2VertexColors';
 import { loadRiggedHeroPreview } from '../../lib/loadRiggedHeroPreview';
 import { ParticleEffect } from './ParticleEffect';
+import { SourceParticleLayer } from './sourceParticles/SourceParticleLayer';
+import type { ParticleBundle } from '../../lib/particles/host/bundle';
+import type { MovementEnginePreview } from '../../lib/movementFx';
+import { buildMovementTimeline } from '../../lib/movementStaging';
 import { MovementFxStage, type MovementViewerPreview } from './MovementFxStage';
+import { TimelineParticleLayer } from './sourceParticles/TimelineParticleLayer';
+import { clipWeightsAt, configurationAttachment, timelineTime } from '../../lib/particles/host/effectTimeline';
 import { MovementClock } from '../../lib/movementClock';
 import { movementFrame, MOVEMENT_DISTANCE } from '../../lib/movementMotion';
 import { fxPreviewIssues, type FxDescriptor } from './fxDescriptor';
@@ -50,6 +57,7 @@ import { particleAttachmentIssues } from './particleAttachment';
 import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
+import { PARTICLE_RUNTIME_POST_PIPELINE } from '../../lib/particles/render/post';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
@@ -169,7 +177,7 @@ const COMPACT_LEVA_THEME = {
 function writePreviewFlag(name: string, value: boolean): void {
   if (typeof window !== 'undefined') {
     const key = name.replace('grimoire.preview.', '');
-    const presentation = ['animated', 'cloth', 'effects', 'bloom', 'autoRotate'].includes(key);
+    const presentation = ['animated', 'cloth', 'effects', 'bloom', 'autoRotate', 'sourceParticles'].includes(key);
     window.localStorage.setItem(presentation ? heroPresentationStorageKey(key) : name, value ? '1' : '0');
   }
 }
@@ -183,10 +191,32 @@ function effectTextureBaseUrl(key: string): string {
   return `${HERO_POSE_SCHEME}://m/${encodeURIComponent(key)}/effect-tex/`;
 }
 
+function particleBundleUrl(key: string): string {
+  return `${HERO_POSE_SCHEME}://m/${encodeURIComponent(key)}/particles/bundle.json`;
+}
+
+function particleTextureBaseUrl(key: string): string {
+  return `${HERO_POSE_SCHEME}://m/${encodeURIComponent(key)}/particles/tex/`;
+}
+
+/** A hero particle bundle for the faithful runtime, and where its textures are served. */
+interface SourceParticleMount {
+  bundle: ParticleBundle;
+  textureBaseUrl: string;
+}
+
 // Turntable rotation rate (rad/s). The spin pauses while the user holds (orbits)
 // the model with the mouse.
 const SPIN_SPEED = 0.25;
 const PREVIEW_CAMERA = { position: [0, 0, 3.2] as [number, number, number], fov: 40 };
+
+// Zoom is a DOM camera control. R3F otherwise raycasts every skinned triangle on every wheel event,
+// even though this viewer has no mesh wheel handler. Keep click picking when the caller requests it.
+const viewerEvents: typeof events = (store) => {
+  const manager = events(store);
+  if (manager.handlers) manager.handlers.onWheel = () => {};
+  return manager;
+};
 
 function meshUrlFor(key: string, mtimeMs: number | null): string {
   // The key contains `::` (and a `/` for overflow skins), which a standard
@@ -383,6 +413,7 @@ export function RiggedModel({
   clothModel,
   clothEnabled,
   effect,
+  sourceParticles,
   clipName,
   playback,
   seek,
@@ -391,6 +422,7 @@ export function RiggedModel({
   movementPreview,
 }: {
   heroName?: string;
+  sourceParticles?: SourceParticleMount | null;
   clipName: string;
   playback: { paused: boolean; speed: number };
   seek?: HeroPlaybackSeek;
@@ -408,8 +440,10 @@ export function RiggedModel({
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const motionClock = useContext(MovementClock);
   const movementEnabled = !!movementPreview;
+  const movementEngine = movementPreview?.engine;
   const movementActions = useRef(new Map<string, THREE.AnimationAction>());
   const sampledMotionTime = useRef(0);
+  const timelineTimeRef = useRef(0);
   const movementResetKey = movementPreview ? `${movementPreview.key}:${movementPreview.revision}` : '';
   const selectedClip = useMemo(() => clips.find((c) => c.name === clipName) ?? pickIdleClip(clips, heroName), [clips, clipName, heroName]);
 
@@ -464,6 +498,19 @@ export function RiggedModel({
     }
     const mixer = new THREE.AnimationMixer(scene);
     mixerRef.current = mixer;
+    if (movementEnabled && movementEngine) {
+      // The timeline's clips over the idle pose, weighted and timed by the timeline every frame
+      const standing = clips.find((candidate) => candidate.name === 'movement_standing') ?? pickIdleClip(clips, heroName);
+      const actions = new Map<string, THREE.AnimationAction>();
+      if (standing) actions.set('standing', mixer.clipAction(standing).setEffectiveWeight(1).play());
+      for (const name of new Set(movementEngine.timeline.clips.map((segment) => segment.clip))) {
+        const candidate = clips.find((c) => c.name === name);
+        if (candidate) actions.set(name, mixer.clipAction(candidate).setEffectiveWeight(0).play());
+      }
+      movementActions.current = actions;
+      mixer.update(0);
+      return () => { mixer.stopAllAction(); mixer.uncacheRoot(scene); mixerRef.current = null; movementActions.current.clear(); };
+    }
     if (movementEnabled) {
       const standing = clips.find((candidate) => candidate.name === 'movement_standing') ?? pickIdleClip(clips, heroName);
       const actions = new Map<string, THREE.AnimationAction>();
@@ -501,12 +548,33 @@ export function RiggedModel({
       mixerRef.current = null;
     };
   // A bind-pose reset also invalidates the mixer's cached property values.
-  }, [scene, selectedClip, seek, progressRef, heroName, clips, movementEnabled, movementResetKey]);
+  }, [scene, selectedClip, seek, progressRef, heroName, clips, movementEnabled, movementResetKey, movementEngine]);
 
   // The cloth driver restores the clean pose before advancing animation. With
   // physics disabled it advances the mixer directly at the render frame rate.
   useFrame((_, delta) => {
-    if (movementPreview && motionClock) {
+    if (movementPreview && motionClock && movementEngine) {
+      if (!playback.paused) clothStep(Math.min(delta, 0.1) * clampPlaybackSpeed(playback.speed), (dt) => {
+        sampledMotionTime.current = Math.min(motionClock.current, sampledMotionTime.current + dt);
+        const time = timelineTime(movementEngine.timeline, sampledMotionTime.current, movementPreview.loop);
+        timelineTimeRef.current = time;
+        const weights = clipWeightsAt(movementEngine.timeline, time);
+        const actions = movementActions.current;
+        for (const { clip, weight, time: clipTime } of weights.clips) {
+          const action = actions.get(clip);
+          if (!action) continue;
+          action.enabled = true;
+          action.setEffectiveWeight(weight);
+          action.time = Math.max(0, Math.min(action.getClip().duration - 1e-6, clipTime));
+        }
+        const idle = actions.get('standing');
+        // Clips the hero lacks leave their weight to the idle pose
+        const missing = weights.clips.filter(({ clip }) => !actions.has(clip)).reduce((sum, { weight }) => sum + weight, 0);
+        if (idle) { idle.enabled = true; idle.setEffectiveWeight(weights.idle + missing); idle.time = time % idle.getClip().duration; }
+        mixerRef.current?.update(0);
+        scene.updateMatrixWorld(true);
+      });
+    } else if (movementPreview && motionClock) {
       if (!playback.paused) clothStep(Math.min(delta, 0.1) * clampPlaybackSpeed(playback.speed), (dt) => {
         sampledMotionTime.current = Math.min(motionClock.current, sampledMotionTime.current + dt);
         const f = movementFrame(movementPreview.kind, sampledMotionTime.current, movementPreview.loop);
@@ -547,6 +615,14 @@ export function RiggedModel({
         {effect && (
           <ParticleEffect key={`${clipName}:${seek?.revision ?? 0}`} descriptor={effect.descriptor} textureBaseUrl={effect.baseUrl} model={scene} playback={playback} />
         )}
+        {movementEngine && (
+          <TimelineParticleLayer key={movementResetKey} bundle={movementEngine.bundle} textureBaseUrl={movementEngine.textureBaseUrl}
+            timeline={movementEngine.timeline} model={scene} playback={playback} timeRef={timelineTimeRef} />
+        )}
+        {sourceParticles && (
+          <SourceParticleLayer key={seek?.revision ?? 0} bundle={sourceParticles.bundle} textureBaseUrl={sourceParticles.textureBaseUrl} model={scene}
+            playback={playback} clipName={selectedClip?.name} progressRef={progressRef} />
+        )}
       </group>
     </group>
   );
@@ -561,7 +637,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
   savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
   focusMaterial?: string | null;
-  movement?: Pick<MovementViewerPreview, 'kind' | 'loop'>;
+  movement?: Pick<MovementViewerPreview, 'kind' | 'loop' | 'engine'>;
   painting?: boolean;
 }) {
   const motionClock = useContext(MovementClock);
@@ -586,7 +662,7 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
   }, [camera, cameraCommit]);
   useEffect(() => {
     pendingFit.current = true;
-  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop]);
+  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, movement?.engine]);
   // Fit after the mounted figure has updated its pose and wrapper transforms.
   // OrbitControls can mount after this component's effects, so retry until its
   // ref is ready and keep the fitted target under imperative control.
@@ -601,7 +677,10 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
     const partBounds = focusMaterial ? skinPartBounds(model, focusMaterial) : null;
     const bounds = partBounds && !partBounds.isEmpty() ? partBounds : heroPreviewBounds(model, normalizedScenes.get(model)?.bounds);
     if (bounds.isEmpty()) return;
-    if (movement?.kind === 'dash' && motionClock) {
+    if (movement?.kind === 'dash' && movement.engine) {
+      // The hero stays in place and the trail streams behind it: leave the same room the travel had
+      bounds.expandByVector(new THREE.Vector3(MOVEMENT_DISTANCE / 2 + .35, .05, .05));
+    } else if (movement?.kind === 'dash' && motionClock) {
       const frame = movementFrame(movement.kind, motionClock.current, movement.loop);
       const halfTravel = MOVEMENT_DISTANCE / 2;
       bounds.translate(new THREE.Vector3(halfTravel - frame.distance, 0, 0));
@@ -1306,7 +1385,52 @@ export default function HeroPoseViewer({
     ...(compact ? { animated: false, cloth: false, effects: false, bloom: false } : {}),
     ...(movementPreview ? { animated: true } : {}),
   };
-  const effectPreviewEnabled = !compact && devFlags.effects && !movementPreview;
+  const sourceParticlesEnabled = !compact && devFlags.effects && devFlags.sourceParticles && !movementPreview;
+  const effectPreviewEnabled = !compact && devFlags.effects && !devFlags.sourceParticles && !movementPreview;
+  const clipNamesKey = clips.map((clip) => clip.name).join('|');
+  const sourceParticlesKey = `${heroName}|${sourceKey}|${clipNamesKey}`;
+  const particleModelReady = scene !== null;
+  const [loadedSourceParticles, setLoadedSourceParticles] = useState<{ key: string; mount: SourceParticleMount | null } | null>(null);
+  const sourceParticles = sourceParticlesEnabled && loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.mount : null;
+
+  // A movement preview on the faithful runtime: the hero's clips and the game's data stage the effects
+  const movementEngineEnabled = !compact && devFlags.effects && devFlags.sourceParticles && !!movementPreview?.request;
+  const movementEngineKey = movementPreview?.request ? `${movementPreview.key}|${movementPreview.request.heroName}` : '';
+  const [loadedMovementEngine, setLoadedMovementEngine] = useState<{ key: string; preview: MovementEnginePreview; bundle: ParticleBundle } | null>(null);
+  const movementEngine = useMemo(() => {
+    const kind = movementPreview?.kind;
+    if (!movementEngineEnabled || !kind || loadedMovementEngine?.key !== movementEngineKey) return undefined;
+    const { preview, bundle } = loadedMovementEngine;
+    const timeline = buildMovementTimeline({
+      kind,
+      data: preview.data,
+      clipDurations: new Map(clips.filter((clip) => clip.name.startsWith('movement_')).map((clip) => [clip.name, clip.duration])),
+      fallbackMeleeAttachment: configurationAttachment(bundle, preview.data.melee?.holdBegin ?? null, 1),
+    });
+    return timeline ? { bundle, textureBaseUrl: preview.textureBaseUrl, timeline } : undefined;
+  }, [movementEngineEnabled, movementPreview?.kind, loadedMovementEngine, movementEngineKey, clips]);
+  const stagedMovementPreview = useMemo(() => movementPreview && movementEngine ? { ...movementPreview, engine: movementEngine } : movementPreview,
+    [movementPreview, movementEngine]);
+  const movementRequest = movementPreview?.request;
+  useEffect(() => {
+    if (!movementEngineEnabled || !movementRequest) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const preview = await window.electronAPI.previewMovementEngine(movementRequest);
+        const res = await fetch(preview.bundleUrl);
+        if (!res.ok) return;
+        const bundle = (await res.json()) as ParticleBundle;
+        if (!cancelled) setLoadedMovementEngine({ key: movementEngineKey, preview, bundle });
+      } catch (error) {
+        // The engine preview is optional; the curated overlay stays
+        console.warn('[HeroPoseViewer] movement engine preview unavailable:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+    // movementEngineKey covers the request
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movementEngineKey, movementEngineEnabled]);
 
   // The pose GLB has no weapon mesh, so a weapons-only paint has nothing to show
   // here, and intensity 0 is "no paint". Otherwise fetch the pattern as an
@@ -1508,6 +1632,38 @@ export default function HeroPoseViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroName, sourceKey, effectPreviewEnabled]);
 
+  // The faithful particle runtime: the hero's own effects found in game data, exported on demand with
+  // the events of the clips this rig plays.
+  useEffect(() => {
+    // Clips arrive with the model. Exporting before that starts an empty-clip export, then cancels
+    // its consumer and exports the same directory again when the rig arrives.
+    if (!sourceParticlesEnabled || !particleModelReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await exportHeroParticles(heroName, skinSources, clipNamesKey ? clipNamesKey.split('|') : []);
+        if (cancelled) return;
+        if (!info.hasBundle) {
+          setLoadedSourceParticles({ key: sourceParticlesKey, mount: null });
+          return;
+        }
+        const res = await fetch(particleBundleUrl(info.key));
+        if (!res.ok) throw new Error(`${res.status} ${res.url}`);
+        const bundle = (await res.json()) as ParticleBundle;
+        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: { bundle, textureBaseUrl: particleTextureBaseUrl(info.key) } });
+      } catch (error) {
+        // Particles are a non-essential overlay; a failure leaves the plain pose.
+        console.warn('[HeroPoseViewer] particle bundle unavailable:', error);
+        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // sourceKey covers the stack; parent renders may allocate an equivalent array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceParticlesKey, sourceParticlesEnabled, particleModelReady]);
+
   const toolbar = (
     <HeroViewerToolbar
       heroName={heroName}
@@ -1518,7 +1674,7 @@ export default function HeroPoseViewer({
         setPlayback((p) => ({ ...p, paused: true }));
         setSeek((s) => ({ time, revision: s.revision + 1 }));
       }}
-      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} scene={viewerScene}
+      cloth={devFlags.cloth} bloom={devFlags.bloom} particles={devFlags.effects} sourceParticles={devFlags.sourceParticles} scene={viewerScene}
       backdropControls={<ViewerBackdropControls hasImage={!!backdrop.texture} loading={backdrop.loading}
         preset={backdrop.preset} onPreset={(value) => {
           if (value !== 'none' && viewerScene === 'transparent') setViewerScene('studio');
@@ -1547,6 +1703,7 @@ export default function HeroPoseViewer({
       onCloth={(v) => setDevFlag('cloth', 'grimoire.preview.cloth', v)}
       onBloom={(v) => setDevFlag('bloom', 'grimoire.preview.bloom', v)}
       onParticles={(v) => setDevFlag('effects', 'grimoire.preview.effects', v)}
+      onSourceParticles={(v) => setDevFlag('sourceParticles', 'grimoire.preview.sourceParticles', v)}
       wireframe={wireframe} onWireframe={setWireframe}
       onScene={setViewerScene} onReset={() => { saveCameraView(null); setResetView((v) => v + 1); }}
       onScreenshot={() => {
@@ -1571,7 +1728,9 @@ export default function HeroPoseViewer({
   return (
     <div ref={viewerRef}
       data-lighting-probe={ambientProbe.kind}
-      data-particle-availability={partialEffect ? 'partial' : activeDescriptor ? 'ready' : effectUnavailable ? 'unavailable' : 'pending'}
+      data-particle-availability={sourceParticlesEnabled
+        ? loadedSourceParticles?.key === sourceParticlesKey ? sourceParticles ? 'ready' : 'unavailable' : 'pending'
+        : partialEffect ? 'partial' : activeDescriptor ? 'ready' : effectUnavailable ? 'unavailable' : 'pending'}
       data-movement-effect={movementPreview?.kind}
       data-animation-availability={scene ? rigged ? 'ready' : 'unavailable' : 'pending'}
       data-cloth-availability={scene ? clothModel ? 'ready' : 'unavailable' : 'pending'}
@@ -1579,6 +1738,7 @@ export default function HeroPoseViewer({
       {failed ? <HeroPoseFailureState message={t('locker.pose.cannotPose')} /> : !scene ? (
         <HeroPoseLoadingState generating={generating} heroName={heroName} skinSourceCount={skinSources.length} t={t} />
       ) : <Canvas
+        events={viewerEvents}
         frameloop={compact && !active ? 'never' : 'always'}
         shadows={{ type: THREE.PCFShadowMap }}
         onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
@@ -1614,9 +1774,9 @@ export default function HeroPoseViewer({
           onPick={regionSelection ? (_material, hit) => { if (regionSelection.picker.by !== 'brush') regionSelection.onPick(hit); } : onPartPick} />}
         {regionSelection ? <SkinRegionOverlay scene={scene} material={regionSelection.material} seeds={regionSelection.seeds} picker={regionSelection.picker} applied={partEditsApplied} />
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
-        <MovementFxStage preview={movementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
+        <MovementFxStage preview={stagedMovementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={clipName} focusMaterial={focusMaterial}
-            movement={movementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
+            movement={stagedMovementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
             painting={regionSelection?.picker.by === 'brush'} />}>
         {rigged ? (
           <RiggedModel
@@ -1632,7 +1792,8 @@ export default function HeroPoseViewer({
             clothModel={clothModel}
             clothEnabled={features.clothPreviewEnabled}
             effect={effectPreviewEnabled ? effect : null}
-            movementPreview={movementPreview}
+            sourceParticles={sourceParticles}
+            movementPreview={stagedMovementPreview}
           />
         ) : (
           <PosedModel reset={resetView} scene={scene} interaction={interaction} />
@@ -1671,6 +1832,7 @@ export default function HeroPoseViewer({
             intensity={features.bloomEnabled ? bloomParams.intensity : 0}
             radius={import.meta.env.DEV ? bloomParams.radius : BLOOM_RADIUS}
             threshold={import.meta.env.DEV ? bloomParams.threshold : BLOOM_THRESHOLD}
+            pipeline={sourceParticlesEnabled || movementEngine ? PARTICLE_RUNTIME_POST_PIPELINE : 'preview'}
           />
         )}
       </Canvas>}

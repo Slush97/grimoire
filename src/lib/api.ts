@@ -16,6 +16,7 @@ import type {
   HeroPoseInfo,
   HeroPoseSkinSource,
   HeroEffectInfo,
+  HeroParticleBundleInfo,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -374,6 +375,10 @@ export async function getHeroEffectInfo(heroName: string, skinSources?: HeroPose
 /** Build (or refresh) a hero's ambient FX bundle via the bundled vpkmerge. */
 export async function exportHeroEffect(heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroEffectInfo> {
   return window.electronAPI.exportHeroEffect(heroName, skinSources);
+}
+
+export async function exportHeroParticles(heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]): Promise<HeroParticleBundleInfo> {
+  return window.electronAPI.exportHeroParticles(heroName, skinSources, clips);
 }
 
 export async function applyHeroSound(
