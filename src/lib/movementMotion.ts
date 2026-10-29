@@ -43,7 +43,7 @@ export function selectMovementClips(paths: readonly string[], entry: string, ali
   if (!idle) return [];
   const dir = idle.slice(0, idle.lastIndexOf('/') + 1);
   return [['standing', idle], ...[
-    { action: 'charge', names: ['melee_start'] }, { action: 'punch', names: ['melee_hit'] },
+    { action: 'charge', names: ['melee_start'] }, { action: 'lunge', names: ['melee_dash'] }, { action: 'punch', names: ['melee_hit'] },
     { action: 'dash', names: ['dash_air_forward', 'air_dash_forward', 'primary_airdash', 'dash_ground', 'ground_dash'] },
     { action: 'dashBack', names: ['dash_air_back', 'air_dash_back', 'dash_air_backward', 'primary_airdash_back', 'primary_airdash_bkward', 'dash_ground_back'] },
   ].flatMap(({ action, names }): [string, string][] => {

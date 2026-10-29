@@ -2531,6 +2531,7 @@
       "cameraHint": "Drag to orbit, scroll to zoom. WASD or arrows orbit, Shift pans, Q/E zoom, R resets.",
       "bloom": "Bloom",
       "particles": "Particles",
+      "sourceParticles": "Engine particles",
       "resetView": "Reset view (R)",
       "screenshot": "Save screenshot",
       "fullscreen": "Enter fullscreen",
@@ -2552,6 +2553,7 @@
       "particlesPartial": "Some particle effects are unsupported.",
       "particlesUnavailable": "No supported ambient particle preview is available for this hero.",
       "animationUnavailable": "An animated preview is unavailable for this model.",
+        "baseAnimations": "Using base animations",
       "clipLabels": {
         "idle": "Idle",
         "relaxedIdle": "Relaxed idle",

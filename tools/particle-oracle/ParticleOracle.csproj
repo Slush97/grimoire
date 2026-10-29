@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Keep build output out of the source tree. -->
+    <BaseOutputPath>..\..\.codex-run\particle-oracle\bin\</BaseOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\.codex-run\vrf-src\ValveResourceFormat\ValveResourceFormat.csproj" />
+  </ItemGroup>
+</Project>

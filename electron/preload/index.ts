@@ -240,10 +240,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
         ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
+    getHeroShaderNoise: () => ipcRenderer.invoke('get-hero-shader-noise'),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     getSkinEditInfo: (source) => ipcRenderer.invoke('foundry:skinEditInfo', source),
     previewMovementFx: (request) => ipcRenderer.invoke('foundry:previewMovementFx', request),
+    previewMovementEngine: (request) => ipcRenderer.invoke('foundry:previewMovementEngine', request),
     exportMovementFx: (choice) => ipcRenderer.invoke('foundry:exportMovementFx', choice),
     saveMovementFx: (request) => ipcRenderer.invoke('foundry:saveMovementFx', request),
     resumeSkinEdit: (source) => ipcRenderer.invoke('foundry:resumeSkinEdit', source),
@@ -265,6 +267,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-hero-effect-info', heroName, skinSources),
     exportHeroEffect: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('export-hero-effect', heroName, skinSources),
+    exportHeroParticles: (heroName: string, skinSources?: unknown[], clips?: string[]) =>
+        ipcRenderer.invoke('export-hero-particles', heroName, skinSources, clips),
     getPreviewCacheSize: () =>
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>

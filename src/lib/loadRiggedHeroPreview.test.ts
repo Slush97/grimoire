@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { AnimationClip, AnimationMixer, Bone, VectorKeyframeTrack } from 'three';
 import { loadGltfPreview } from './loadGltfPreview';
 import { loadRiggedHeroPreview } from './loadRiggedHeroPreview';
 
@@ -30,6 +31,28 @@ afterEach(() => {
 });
 
 describe('loadRiggedHeroPreview', () => {
+  it('loads a recovered animation bundle for the selected skin', async () => {
+    const gltf = await prepareModel();
+    const fallback = await new GLTFLoader().parseAsync(JSON.stringify({ asset: { version: '2.0' }, scenes: [{ nodes: [] }], scene: 0 }), '');
+    const pelvis = new Bone();
+    pelvis.name = 'pelvis';
+    gltf.scene.add(pelvis);
+    fallback.animations.push(new AnimationClip('primary_stand_idle', 1, [
+      new VectorKeyframeTrack('pelvis.position', [0, 1], [0, 0, 0, 0, 2, 0]),
+      new VectorKeyframeTrack('attachWorld.position', [0, 1], [0, 0, 0, 0, 1, 0]),
+    ]));
+    vi.mocked(loadGltfPreview).mockResolvedValueOnce(gltf).mockResolvedValueOnce(fallback);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])));
+    await loadRiggedHeroPreview({ ...info, hasAnimationFallback: true }, false);
+    expect(loadGltfPreview).toHaveBeenLastCalledWith(expect.stringContaining('/animation-fallback.glb?v=42'));
+    expect(gltf.animations[0].tracks.map((track) => track.name)).toEqual(['pelvis.position']);
+    const mixer = new AnimationMixer(gltf.scene);
+    mixer.clipAction(gltf.animations[0]).play();
+    mixer.update(0.5);
+    expect(pelvis.position.y).toBeCloseTo(1);
+    mixer.stopAllAction();
+    mixer.uncacheRoot(gltf.scene);
+  });
   it('waits for matching physics before returning a scene that can start animation', async () => {
     const gltf = await prepareModel();
     let complete!: (response: Response) => void;

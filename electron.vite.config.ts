@@ -80,6 +80,7 @@ export default defineConfig(({ mode }) => {
                 input: {
                     index: resolve(__dirname, 'electron/main/index.ts'),
                     vpkSafetyWorker: resolve(__dirname, 'electron/main/services/vpkSafetyWorker.ts'),
+                    heroParticleWorker: resolve(__dirname, 'electron/main/services/heroParticleWorker.ts'),
                 },
             },
         },

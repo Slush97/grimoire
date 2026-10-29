@@ -22,7 +22,7 @@ import { exportFoundryAsset } from '../services/foundryAssetExport';
 import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
 import { loadHideoutScene } from '../services/hideoutScene';
 import { resumeSkinEdit, saveSkinEdits } from '../services/saveSkinEdits';
-import { previewMovementFx, exportMovementFx, saveMovementFx } from '../services/movementFx';
+import { previewMovementFx, previewMovementEngine, exportMovementFx, saveMovementFx } from '../services/movementFx';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -55,6 +55,7 @@ ipcMain.handle('foundry:saveSkinEdits', (event, input: unknown) => saveSkinEdits
 }));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
 ipcMain.handle('foundry:previewMovementFx', (_event, input: unknown) => previewMovementFx(requireDeadlockPath(), input));
+ipcMain.handle('foundry:previewMovementEngine', (_event, input: unknown) => previewMovementEngine(requireDeadlockPath(), input));
 ipcMain.handle('foundry:exportMovementFx', (_event, input: unknown) => exportMovementFx(requireDeadlockPath(), input));
 ipcMain.handle('foundry:saveMovementFx', (_event, input: unknown) => saveMovementFx(requireDeadlockPath(), input));
 

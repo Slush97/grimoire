@@ -24,6 +24,8 @@ interface Props {
   cloth: boolean;
   bloom: boolean;
   particles: boolean;
+  /** The faithful Source 2 particle runtime in place of the curated overlay. */
+  sourceParticles: boolean;
   scene: HeroViewerScene;
   wireframe: boolean;
   onWireframe: (value: boolean) => void;
@@ -37,6 +39,7 @@ interface Props {
   onCloth: (value: boolean) => void;
   onBloom: (value: boolean) => void;
   onParticles: (value: boolean) => void;
+  onSourceParticles: (value: boolean) => void;
   onScene: (value: HeroViewerScene) => void;
   onReset: () => void;
   onScreenshot: () => void;
@@ -128,6 +131,7 @@ export function HeroViewerToolbar(p: Props) {
             <Toggle label={t('locker.pose.physics')} checked={p.cloth} onChange={p.onCloth} />
             <Toggle label={t('locker.pose.bloom')} checked={p.bloom} onChange={p.onBloom} />
             <Toggle label={t('locker.pose.particles')} checked={p.particles} onChange={p.onParticles} />
+            <Toggle label={t('locker.pose.sourceParticles')} checked={p.sourceParticles} disabled={!p.particles} onChange={p.onSourceParticles} />
             <Toggle label={t('locker.pose.wireframe')} checked={p.wireframe} onChange={p.onWireframe} />
           </div>
         </div>
