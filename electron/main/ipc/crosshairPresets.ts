@@ -1,4 +1,4 @@
-import { ipcMain, app } from 'electron';
+import { ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 // Wire types are single-sourced in src/types/electron.ts; re-exported to
@@ -7,47 +7,12 @@ import type { CrosshairSettings, CrosshairPreset } from '../../../src/types/elec
 import {
     generateCrosshairCommands,
     normalizeCrosshairSettings,
+    parseHeroSettingsCrosshair,
     parseMachineConvarsCrosshair,
 } from '../../../src/lib/crosshair';
 import { getManualAutoexecCommands, readAutoexec, writeAutoexec, getAutoexecPath } from '../services/autoexec';
+import { loadPresetsData, savePresetsData } from '../services/crosshairPresets';
 export type { CrosshairSettings, CrosshairPreset };
-
-interface PresetsData {
-    presets: CrosshairPreset[];
-    activePresetId: string | null;
-}
-
-const PRESETS_FILE = path.join(app.getPath('userData'), 'crosshair-presets.json');
-
-function loadPresetsData(): PresetsData {
-    try {
-        if (fs.existsSync(PRESETS_FILE)) {
-            const data = fs.readFileSync(PRESETS_FILE, 'utf-8');
-            const parsed = JSON.parse(data) as PresetsData;
-            // Migrate legacy presets (pre outline system) to the full settings
-            // shape so the renderer only ever sees current-model settings.
-            return {
-                presets: (parsed.presets || []).map(p => ({
-                    ...p,
-                    settings: normalizeCrosshairSettings(p.settings),
-                })),
-                activePresetId: parsed.activePresetId ?? null,
-            };
-        }
-    } catch (error) {
-        console.error('[CrosshairPresets] Error loading presets:', error);
-    }
-    return { presets: [], activePresetId: null };
-}
-
-function savePresetsData(data: PresetsData): void {
-    try {
-        fs.writeFileSync(PRESETS_FILE, JSON.stringify(data, null, 2));
-    } catch (error) {
-        console.error('[CrosshairPresets] Error saving presets:', error);
-        throw error;
-    }
-}
 
 function generateId(): string {
     return `preset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -173,11 +138,8 @@ ipcMain.handle('crosshair:createAutoexec', async (_event, gamePath: string) => {
     const content = `// Deadlock autoexec.cfg
 // Created by Deadlock Mod Manager
 //
-// This file is executed when you start the game.
+// Deadlock runs this file at every launch, no launch option needed.
 // Add your custom commands below.
-//
-// TIP: Make sure to add "+exec autoexec" to your Steam launch options:
-// Right-click Deadlock in Steam > Properties > Launch Options > add: +exec autoexec
 
 `;
 
@@ -186,28 +148,31 @@ ipcMain.handle('crosshair:createAutoexec', async (_event, gamePath: string) => {
     return { success: true, path: autoexecPath };
 });
 
-// Import the player's live in-game crosshair from machine_convars.vcfg (the
-// KV file where the game persists settings changed in its own UI)
+// Import the player's live in-game crosshair. The game keeps it in
+// citadel_hero_settings.lst now (it writes a copy into the game folder on
+// exit); machine_convars.vcfg is where older builds kept it.
 ipcMain.handle('crosshair:importFromGame', async (_event, gamePath: string) => {
     if (!gamePath) {
         return { found: false, settings: null };
     }
 
-    const vcfgPath = path.join(gamePath, 'game', 'citadel', 'cfg', 'machine_convars.vcfg');
-    if (!fs.existsSync(vcfgPath)) {
-        return { found: false, settings: null };
-    }
-
-    try {
-        const partial = parseMachineConvarsCrosshair(fs.readFileSync(vcfgPath, 'utf-8'));
-        if (Object.keys(partial).length === 0) {
-            return { found: false, settings: null };
+    const sources: Array<[string, (content: string) => Partial<CrosshairSettings>]> = [
+        ['citadel_hero_settings.lst', parseHeroSettingsCrosshair],
+        ['machine_convars.vcfg', parseMachineConvarsCrosshair],
+    ];
+    for (const [file, parse] of sources) {
+        const filePath = path.join(gamePath, 'game', 'citadel', 'cfg', file);
+        if (!fs.existsSync(filePath)) continue;
+        try {
+            const partial = parse(fs.readFileSync(filePath, 'utf-8'));
+            if (Object.keys(partial).length > 0) {
+                return { found: true, settings: normalizeCrosshairSettings(partial) };
+            }
+        } catch (error) {
+            console.error(`[CrosshairPresets] Error reading ${file}:`, error);
         }
-        return { found: true, settings: normalizeCrosshairSettings(partial) };
-    } catch (error) {
-        console.error('[CrosshairPresets] Error reading machine_convars.vcfg:', error);
-        return { found: false, settings: null };
     }
+    return { found: false, settings: null };
 });
 
 // Get autoexec commands (non-crosshair)
