@@ -1569,6 +1569,7 @@
       "sort": "Sort",
       "loadOrder": "Load order",
       "recentlyAdded": "Recently added",
+      "sizeLargest": "Size (largest first)",
       "source": "Source",
       "gamebanana": "GameBanana",
       "local": "Local",

@@ -169,6 +169,11 @@ export function entryInstalledAt(entry: ModEntry): string {
   );
 }
 
+/** Bytes on disk across every file the card stands for (the size it shows). */
+export function entrySize(entry: ModEntry): number {
+  return entry.kind === 'single' ? entry.mod.size : entry.totalSize;
+}
+
 /** Whether membership/name are user-managed. Explicit local identity wins over
  * adopted GameBanana provenance, matching variantGroupKey and the main process. */
 export function entryIsLocal(entry: ModEntry): boolean {
