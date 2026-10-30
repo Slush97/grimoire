@@ -175,7 +175,7 @@ import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/inst
 import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
 import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 import { InstalledSkeleton } from '../components/installed/InstalledSkeleton';
-import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entrySize, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -867,9 +867,9 @@ export default function Installed() {
       imprintMountedRef.current = false;
     };
   }, []);
-  const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name'>(() => {
+  const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name' | 'size'>(() => {
     const stored = localStorage.getItem('installedSortMode');
-    return stored === 'recent' || stored === 'name' ? stored : 'priority';
+    return stored === 'recent' || stored === 'name' || stored === 'size' ? stored : 'priority';
   });
   // Source + status are independent toggles (both on = no filter). Source
   // persists; status resets per session like the type selection.
@@ -3186,6 +3186,9 @@ export default function Installed() {
       if (sortMode === 'recent') {
         return [...entries].sort((a, b) => entryInstalledAt(b).localeCompare(entryInstalledAt(a)));
       }
+      if (sortMode === 'size') {
+        return [...entries].sort((a, b) => entrySize(b) - entrySize(a));
+      }
       return entries; // 'priority' (already in load order).
     };
     const visibleEnabled = statusSel.includes('enabled')
@@ -3197,11 +3200,13 @@ export default function Installed() {
     );
     // A-Z drops the saved drag order (that's the point of asking for it) but
     // keeps the pinned band: the star's promise is "pins it to the top", so
-    // favorites sort A-Z among themselves, then everything else does.
+    // favorites sort A-Z among themselves, then everything else does. A top-bar
+    // sort drops it too: one drag saves every disabled key, so keeping it would
+    // leave the section ignoring the sort the user just picked.
     const visibleDisabled = statusSel.includes('disabled')
       ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
           favorites: disabledFavorites,
-          manualOrder: disabledAlphabetical ? [] : disabledOrder,
+          manualOrder: disabledAlphabetical || sortMode !== 'priority' ? [] : disabledOrder,
           keyOf: entryDisabledPreferenceKey,
           fallback: disabledAlphabetical
             ? (left, right) =>
@@ -3866,6 +3871,7 @@ export default function Installed() {
                       ['priority', t('installed.filters.loadOrder')],
                       ['recent', t('installed.filters.recentlyAdded')],
                       ['name', t('browse.sort.nameAZ')],
+                      ['size', t('installed.filters.sizeLargest')],
                     ] as const).map(([value, label]) => (
                       <button
                         key={value}
