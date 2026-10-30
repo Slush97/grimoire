@@ -144,6 +144,83 @@ async function precompileInPlace(gl: THREE.WebGLRenderer, scene: THREE.Scene, ca
   await ready;
 }
 
+/** A frame's share, in milliseconds, of the room's assembly and texture uploads while the hero is on screen. */
+const SLICE_MS = 10;
+
+const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+/** Uploads the room's textures ahead of its first frame, a slice per frame, so that frame does not
+ *  upload (and mipmap) hundreds of them at once. `extra` names those only a shader patch samples. */
+async function uploadRoomTextures(gl: THREE.WebGLRenderer, room: THREE.Object3D, extra: (THREE.Texture | null | undefined)[], cancelled: () => boolean): Promise<void> {
+  const textures = new Set<THREE.Texture>();
+  for (const texture of extra) if (texture) textures.add(texture);
+  room.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) materialTextures(material).forEach(texture => textures.add(texture));
+  });
+  let slice = performance.now();
+  for (const texture of textures) {
+    if (texture.isRenderTargetTexture) continue;
+    if (performance.now() - slice > SLICE_MS) {
+      await nextFrame();
+      if (cancelled()) return;
+      slice = performance.now();
+    }
+    gl.initTexture(texture);
+  }
+}
+
+/** The layer warm-up draws see: the batch, and every light, so the light state (and with it each
+ *  program) matches the room's real frames. */
+const WARM_LAYER = 28;
+
+/** Draws the room once before it shows, a batch of meshes per frame into a 1 by 1 target. A mesh's
+ *  first draw uploads its buffers and leaves the driver to finish its program for the bound state; the
+ *  whole room doing that in its first frame held the GPU process, and with it every window, for
+ *  seconds. A read-back after each batch waits for that work, so batches grow only while it is cheap. */
+async function warmRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, room: THREE.Object3D, cancelled: () => boolean): Promise<void> {
+  const meshes: THREE.Mesh[] = [];
+  room.traverse(object => { if (object instanceof THREE.Mesh && object.visible) meshes.push(object); });
+  // The format the post pipeline's scene pass draws into (BloomEffect's composer): drivers can redo a
+  // program's work for another target format.
+  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const pixel = new Uint16Array(4);
+  let size = 4;
+  try {
+    for (let next = 0; next < meshes.length;) {
+      const started = performance.now();
+      const batch = meshes.slice(next, next + size);
+      next += batch.length;
+      const culled = batch.map(mesh => mesh.frustumCulled);
+      const layers = camera.layers.mask, previous = gl.getRenderTarget(), shadows = gl.shadowMap.autoUpdate;
+      const lights: THREE.Object3D[] = [];
+      scene.add(room);
+      try {
+        scene.traverse(object => { if ((object as THREE.Light).isLight && !object.layers.isEnabled(WARM_LAYER)) { object.layers.enable(WARM_LAYER); lights.push(object); } });
+        batch.forEach(mesh => { mesh.layers.enable(WARM_LAYER); mesh.frustumCulled = false; });
+        camera.layers.set(WARM_LAYER);
+        gl.shadowMap.autoUpdate = false;
+        gl.setRenderTarget(target);
+        gl.render(scene, camera);
+        gl.readRenderTargetPixels(target, 0, 0, 1, 1, pixel);
+      } finally {
+        gl.setRenderTarget(previous);
+        gl.shadowMap.autoUpdate = shadows;
+        camera.layers.mask = layers;
+        batch.forEach((mesh, index) => { mesh.layers.disable(WARM_LAYER); mesh.frustumCulled = culled[index]; });
+        lights.forEach(light => light.layers.disable(WARM_LAYER));
+        room.removeFromParent();
+      }
+      const spent = performance.now() - started;
+      size = spent < SLICE_MS / 2 ? size * 2 : spent > SLICE_MS ? Math.max(1, size >> 1) : size;
+      await nextFrame();
+      if (cancelled()) return;
+    }
+  } finally {
+    target.dispose();
+  }
+}
+
 export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, onSnapshotShown, onLoadStage, postprocess = false, snapshotHint, active = true }: {
   scale: number; floor: number; postprocess?: boolean;
   /** Names this viewer's saved room frame (see HideoutSnapshot). Post-processed scenes only. */
@@ -260,7 +337,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const shown = wrapper.current;
       if (cancelled || !shown) return;
-      void precompileInPlace(gl, viewerScene, camera, shown, postprocess).catch(() => {}).finally(() => {
+      void precompileInPlace(gl, viewerScene, camera, shown, postprocess).catch(() => {})
+        .then(() => cancelled ? undefined : uploadRoomTextures(gl, shown, [], () => cancelled)).finally(() => {
         done = true;
         if (cancelled) return;
         arrival.current.onRoomArrive?.();
@@ -553,7 +631,13 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
         });
         root.add(holder);
       };
+      let slice = performance.now();
       for (const instance of info.instances) {
+        if (performance.now() - slice > SLICE_MS) {
+          await nextFrame();
+          if (cancelled) return;
+          slice = performance.now();
+        }
         const animatedModel = instance.animation ? animatedModels.get(instance.model) : undefined;
         const source = instance.animation ? animatedModel?.scene : loaded.get(instance.model);
         if (!source) { failedLoads++; continue; }
@@ -643,10 +727,11 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
         probeRoom.scale.setScalar(placement.current.scale);
         probeRoom.position.set(0, placement.current.floor, 0);
         probeScene.updateMatrixWorld(true);
-        measured.measure(gl, probeScene, new THREE.Vector3(), reach, layer);
+        return measured.measureAsync(gl, probeScene, new THREE.Vector3(), reach, layer);
       };
       try {
-        measureRoom(HIDEOUT_ROOM_LAYER);
+        await measureRoom(HIDEOUT_ROOM_LAYER);
+        if (cancelled) return;
         const shift = hideoutCenteringShift(measured.distance(new THREE.Vector3(0, 0, 1)), measured.distance(new THREE.Vector3(0, 0, -1)));
         if (shift !== 0) {
           const shifted = new THREE.Vector3(0, placement.current.floor, -shift).applyMatrix4(sourceFromViewer);
@@ -655,7 +740,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
           applyPlacement(placement.current.scale, placement.current.floor);
         }
         mark('roomCentered');
-        measureRoom(SOURCE2_PARTICLE_SHADOW_LAYER);
+        await measureRoom(SOURCE2_PARTICLE_SHADOW_LAYER);
+        if (cancelled) return;
         // The spawn stands about half an inch above the floor surface. The straight-down distance
         // from the hero puts the surface itself under its feet; a larger gap is something else under
         // the hero, not the floor, and is left alone.
@@ -683,6 +769,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
       if (activeRef.current) await precompileWithRoom(gl, viewerScene, camera, oriented, postprocess);
       else uncompiled.current = true;
       mark('compiled');
+      if (activeRef.current) await uploadRoomTextures(gl, oriented, [direction, shadows, roomCookies?.texture], () => cancelled);
+      if (activeRef.current && postprocess && !cancelled) await warmRoom(gl, viewerScene, camera, oriented, () => cancelled);
       if (import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1') viewerScene.userData.source2MapTimings = { ...marks,
         metadataMs: metadataReady - started, resourcesMs: resourcesReady - metadataReady,
         materialsMs: materialsReady - resourcesReady, compileMs: performance.now() - materialsReady,
@@ -727,8 +815,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
   return <>
     {active && postprocess && snapshotHint && snapshotSource && <HideoutSnapshot sceneKey={snapshotSource.key} bytes={snapshotSource.bytes} hint={snapshotHint} scale={scale} floor={floor} room={group ? room : null} onShown={onSnapshotShown} />}
     {group && <group ref={wrapper} scale={scale} position={[0, floor, 0]} visible={active && !compiling}><primitive object={group} />
-      {particleScene && <HideoutParticleLayer info={particleScene.info} parent={particleScene.root} lights={particleScene.lights} active={active} />}
-      {particleScene && <HideoutWorldCards parent={particleScene.root} />}
+      {particleScene && <HideoutParticleLayer info={particleScene.info} parent={particleScene.root} lights={particleScene.lights} active={active} postprocess={postprocess} />}
+      {particleScene && <HideoutWorldCards parent={particleScene.root} postprocess={postprocess} />}
     </group>}
   </>;
 }

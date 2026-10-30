@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { HideoutSceneInfo } from '../../types/skinEditor';
 import type { ParticleBundle } from '../../lib/particles/host/bundle';
@@ -14,12 +14,14 @@ import { createParticleDrawLayer, type ParticleDrawLayer } from './sourceParticl
 import { SceneDepthPass } from './sourceParticles/sceneDepth';
 import { SceneColorPass } from './sourceParticles/sceneColor';
 import type { Source2ParticleLights } from '../../lib/source2DynamicLights';
+import { precompileHidden } from '../../lib/viewerPrecompile';
 
 /** Map-authored particles run in the same Source frame as the room, outside the hero rig. Their
  *  lights shine through the map's light model (`lights`), not as three.js lights. */
-export function HideoutParticleLayer({ info, parent, lights, active = true }: { info: HideoutSceneInfo; parent: THREE.Group; lights: Source2ParticleLights;
+export function HideoutParticleLayer({ info, parent, lights, active = true, postprocess }: { info: HideoutSceneInfo; parent: THREE.Group; lights: Source2ParticleLights;
   /** False pauses the simulation while the room is hidden. */
-  active?: boolean }) {
+  active?: boolean; postprocess: boolean }) {
+  const { gl, scene, camera: viewCamera } = useThree();
   const current = useRef<{
     group: THREE.Group; textures: BundleTextureSource;
     systems: { entity: HideoutSceneInfo['particles']['entities'][number]; simulation: ParticleSystemSimulation; layer: ParticleDrawLayer }[];
@@ -75,8 +77,10 @@ export function HideoutParticleLayer({ info, parent, lights, active = true }: { 
       }
       group.userData.failures = failures;
       group.userData.bundleDiagnostics = bundle.diagnostics;
-      group.userData.ready = true;
-    }).catch(error => { if (!cancelled) { group.userData.failures = [String(error)]; group.userData.ready = true; } });
+      // Shown once their shaders have linked; the simulations wait with it.
+      return precompileHidden(gl, scene, viewCamera, [group], postprocess);
+    }).then(() => { if (!cancelled) group.userData.ready = true; },
+      error => { if (!cancelled) { group.userData.failures = [String(error)]; group.userData.ready = true; } });
     return () => {
       cancelled = true;
       lights.update([]);
@@ -88,7 +92,7 @@ export function HideoutParticleLayer({ info, parent, lights, active = true }: { 
       }
       current.current = null;
     };
-  }, [info, parent, lights]);
+  }, [info, parent, lights, gl, scene, viewCamera, postprocess]);
   const inverse = useRef(new THREE.Matrix4()), camera = useRef(new THREE.Vector3()), viewport = useRef(new THREE.Vector2());
   const frustum = useRef(new THREE.Frustum()), projection = useRef(new THREE.Matrix4()), bounds = useRef(new THREE.Box3());
   useFrame((three, delta) => {

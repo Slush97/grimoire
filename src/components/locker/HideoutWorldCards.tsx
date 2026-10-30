@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SOURCE_TO_GLTF, hideoutDrawTint, hideoutGammaTint } from '../../lib/hideoutTransform';
 import { getMorphic } from '../../lib/source2NprMaterial';
@@ -9,8 +9,10 @@ import { DEADLOCK_GAME_SETTINGS, ParticleRendererContext } from '../../lib/parti
 import { VTexFormat } from '../../lib/particles/render/sheet';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../lib/source2Preview/types';
 import { viewFromCamera } from '../../lib/particles/render/view';
+import { precompileHidden } from '../../lib/viewerPrecompile';
 
-export function HideoutWorldCards({ parent }: { parent: THREE.Group }) {
+export function HideoutWorldCards({ parent, postprocess }: { parent: THREE.Group; postprocess: boolean }) {
+  const { gl, scene, camera } = useThree();
   const current = useRef<{ context: ParticleRendererContext; mesh: THREE.Mesh; materials: ModelMaterial[]; restore: () => void }[]>([]);
   const sourceToViewer = useRef(new THREE.Matrix4()), viewerToSource = useRef(new THREE.Matrix4()), modelToSource = useRef(new THREE.Matrix4());
   useEffect(() => {
@@ -55,11 +57,12 @@ export function HideoutWorldCards({ parent }: { parent: THREE.Group }) {
       object.material = Array.isArray(original) ? replacements : replacements[0];
       current.current.push({ context, mesh: object, materials, restore: () => { object.material = original; object.renderOrder = order; } });
     });
+    void precompileHidden(gl, scene, camera, current.current.map(entry => entry.mesh), postprocess);
     return () => {
       for (const entry of current.current) { entry.restore(); entry.materials.forEach(material => material.dispose()); entry.context.dispose(); }
       current.current = [];
     };
-  }, [parent]);
+  }, [parent, gl, scene, camera, postprocess]);
   useFrame(({ camera, clock }) => {
     if (!current.current.length) return;
     parent.updateWorldMatrix(true, false);
