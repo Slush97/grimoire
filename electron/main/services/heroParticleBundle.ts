@@ -86,6 +86,24 @@ function rendererTextures(definition: KVObject): string[] {
     return [...found];
 }
 
+/** vpkmerge processes in flight at once, as readParticleModel decodes mesh blocks. */
+const VPKMERGE_CONCURRENCY = 8;
+/** Textures per `panorama dump`. */
+const DUMP_CHUNK = 24;
+
+/** Runs `run` for each key, VPKMERGE_CONCURRENCY at a time, and keys the results. */
+async function runEach<T>(keys: readonly string[], run: (key: string) => Promise<T>): Promise<Map<string, T>> {
+    const results = new Map<string, T>();
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(VPKMERGE_CONCURRENCY, keys.length) }, async () => {
+        while (next < keys.length) {
+            const key = keys[next++];
+            results.set(key, await run(key));
+        }
+    }));
+    return results;
+}
+
 export interface ExportBundleOptions {
     /** World effects have no bound model. Supply their empty world binding explicitly. */
     modelBinding?: Awaited<ReturnType<typeof readParticleModel>>;
@@ -123,57 +141,68 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
         });
     }
 
-    // Every definition in each root's tree, breadth first
-    const queue = discovery.effects.map((effect) => ({ path: bundleSystemKey(effect.system), depth: 0 }));
-    while (queue.length > 0) {
-        const { path, depth } = queue.shift()!;
-        if (path in systems || !SYSTEM_PATH.test(path) || path.includes('..')) continue;
-        if (Object.keys(systems).length >= LIMITS.systems || depth > LIMITS.depth) {
-            diagnostics.push({ kind: 'limit', message: `Skipped ${path}: the bundle holds at most ${LIMITS.systems} systems ${LIMITS.depth} levels deep.` });
-            continue;
-        }
-        const decoded = await stack.decodeWithFormat(`${path}_c`);
-        if (!decoded) {
-            diagnostics.push({ kind: 'missing-system', message: `${path} is not in any mounted package.` });
-            continue;
-        }
-        if (decoded.data._class !== 'CParticleSystemDefinition') {
-            diagnostics.push({ kind: 'missing-system', message: `${path} is not a particle system definition.` });
-            continue;
-        }
-        systems[path] = { data: decoded.data, format: decoded.format };
-
-        for (const child of (getArray(decoded.data, 'm_Children') ?? []).filter(isCollection)) {
-            const ref = getString(child, 'm_ChildRef');
-            if (ref) queue.push({ path: bundleSystemKey(ref), depth: depth + 1 });
-        }
-
-        const snapshotPath = getString(decoded.data, 'm_hSnapshot')?.replace(/\\/g, '/');
-        if (snapshotPath && !(snapshotPath in snapshots)) {
-            if (!SNAPSHOT_PATH.test(snapshotPath) || snapshotPath.includes('..')) {
-                diagnostics.push({ kind: 'missing-snapshot', message: `${path} names an invalid snapshot path.` });
-            } else {
-                const bytes = stack.read(`${snapshotPath}_c`);
-                const data = bytes && bytes.length <= LIMITS.snapshotBytes ? await stack.decode(`${snapshotPath}_c`) : null;
-                if (bytes && data) snapshots[snapshotPath] = serializeSnapshot(readSnapshotResource(bytes, data));
-                else diagnostics.push({ kind: 'missing-snapshot', message: `${snapshotPath} is unavailable or exceeds ${LIMITS.snapshotBytes} bytes.` });
-            }
-        }
-
-        const named = rendererModels(decoded.data);
-        named.models.forEach((path) => modelPaths.add(path));
-        named.materials.forEach((path) => materialPaths.add(path));
-
-        for (const texture of rendererTextures(decoded.data)) {
-            if (textureOwners.has(texture)) continue;
-            if (textureOwners.size >= LIMITS.textures) {
-                diagnostics.push({ kind: 'limit', message: `Skipped ${texture}: the bundle holds at most ${LIMITS.textures} textures.` });
+    // Every definition in each root's tree, breadth first. A level's definitions and snapshots decode
+    // together (each read is a vpkmerge process), then apply in queue order.
+    let level = discovery.effects.map((effect) => ({ path: bundleSystemKey(effect.system), depth: 0 }));
+    while (level.length > 0) {
+        const wanted = level.filter(({ path, depth }) => !(path in systems) && SYSTEM_PATH.test(path) && !path.includes('..') && depth <= LIMITS.depth);
+        const decodedLevel = await runEach([...new Set(wanted.map(({ path }) => path))], (path) => stack.decodeWithFormat(`${path}_c`));
+        const next: typeof level = [];
+        const snapshotPaths = new Map<string, Buffer | null>();
+        for (const { path, depth } of level) {
+            if (path in systems || !SYSTEM_PATH.test(path) || path.includes('..')) continue;
+            if (Object.keys(systems).length >= LIMITS.systems || depth > LIMITS.depth) {
+                diagnostics.push({ kind: 'limit', message: `Skipped ${path}: the bundle holds at most ${LIMITS.systems} systems ${LIMITS.depth} levels deep.` });
                 continue;
             }
-            const owner = stack.owner(`${texture}_c`);
-            if (owner) textureOwners.set(texture, owner);
-            else diagnostics.push({ kind: 'missing-texture', message: `${texture} is not in any mounted package.` });
+            const decoded = decodedLevel.get(path);
+            if (!decoded) {
+                diagnostics.push({ kind: 'missing-system', message: `${path} is not in any mounted package.` });
+                continue;
+            }
+            if (decoded.data._class !== 'CParticleSystemDefinition') {
+                diagnostics.push({ kind: 'missing-system', message: `${path} is not a particle system definition.` });
+                continue;
+            }
+            systems[path] = { data: decoded.data, format: decoded.format };
+
+            for (const child of (getArray(decoded.data, 'm_Children') ?? []).filter(isCollection)) {
+                const ref = getString(child, 'm_ChildRef');
+                if (ref) next.push({ path: bundleSystemKey(ref), depth: depth + 1 });
+            }
+
+            const snapshotPath = getString(decoded.data, 'm_hSnapshot')?.replace(/\\/g, '/');
+            if (snapshotPath && !(snapshotPath in snapshots) && !snapshotPaths.has(snapshotPath)) {
+                if (!SNAPSHOT_PATH.test(snapshotPath) || snapshotPath.includes('..')) {
+                    diagnostics.push({ kind: 'missing-snapshot', message: `${path} names an invalid snapshot path.` });
+                } else {
+                    snapshotPaths.set(snapshotPath, stack.read(`${snapshotPath}_c`));
+                }
+            }
+
+            const named = rendererModels(decoded.data);
+            named.models.forEach((path) => modelPaths.add(path));
+            named.materials.forEach((path) => materialPaths.add(path));
+
+            for (const texture of rendererTextures(decoded.data)) {
+                if (textureOwners.has(texture)) continue;
+                if (textureOwners.size >= LIMITS.textures) {
+                    diagnostics.push({ kind: 'limit', message: `Skipped ${texture}: the bundle holds at most ${LIMITS.textures} textures.` });
+                    continue;
+                }
+                const owner = stack.owner(`${texture}_c`);
+                if (owner) textureOwners.set(texture, owner);
+                else diagnostics.push({ kind: 'missing-texture', message: `${texture} is not in any mounted package.` });
+            }
         }
+        const readable = [...snapshotPaths].filter(([, bytes]) => bytes && bytes.length <= LIMITS.snapshotBytes).map(([path]) => path);
+        const snapshotData = await runEach(readable, (path) => stack.decode(`${path}_c`));
+        for (const [snapshotPath, bytes] of snapshotPaths) {
+            const data = snapshotData.get(snapshotPath);
+            if (bytes && data) snapshots[snapshotPath] = serializeSnapshot(readSnapshotResource(bytes, data));
+            else diagnostics.push({ kind: 'missing-snapshot', message: `${snapshotPath} is unavailable or exceeds ${LIMITS.snapshotBytes} bytes.` });
+        }
+        level = next;
     }
 
     // Model draw materials and overrides share the same decode and texture export path.
@@ -191,8 +220,9 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
     }
     if (modelPaths.size > LIMITS.models) diagnostics.push({ kind: 'limit', message: `Skipped ${modelPaths.size - LIMITS.models} particle models: the bundle holds at most ${LIMITS.models}.` });
     await fs.rm(join(options.outDir, '.models'), { recursive: true, force: true });
+    const decodedMaterials = await runEach([...materialPaths], (path) => stack.decode(`${path}_c`).catch(() => null));
     for (const path of materialPaths) {
-        const data = await stack.decode(`${path}_c`).catch(() => null);
+        const data = decodedMaterials.get(path);
         if (!data) {
             diagnostics.push({ kind: 'missing-model', message: `${path} is not in any mounted package.` });
             continue;
@@ -226,10 +256,16 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
     for (const [texture, owner] of textureOwners) byOwner.set(owner, [...(byOwner.get(owner) ?? []), texture]);
     const scratch = await fs.mkdtemp(join(options.outDir, 'decode-'));
     try {
-        for (const [owner, group] of byOwner) {
-            const decodedDir = join(scratch, String([...byOwner.keys()].indexOf(owner)));
-            await options.vpkmerge.stdout(['panorama', 'dump', '--vpk', owner, '--out-dir', decodedDir, ...(withMips ? ['--mips'] : []),
+        // A dump decodes on one core, so each package's textures split across dumps that run at once.
+        const chunks = [...byOwner].flatMap(([owner, group]) => Array.from({ length: Math.ceil(group.length / DUMP_CHUNK) },
+            (_, i) => ({ owner, group: group.slice(i * DUMP_CHUNK, (i + 1) * DUMP_CHUNK) })));
+        await runEach(chunks.map((_, index) => String(index)), (index) => {
+            const { owner, group } = chunks[Number(index)];
+            return options.vpkmerge.stdout(['panorama', 'dump', '--vpk', owner, '--out-dir', join(scratch, index), ...(withMips ? ['--mips'] : []),
                 ...group.flatMap((texture) => ['--prefix', `${texture}_c`])]);
+        });
+        for (const [index, { group }] of chunks.entries()) {
+            const decodedDir = join(scratch, String(index));
             for (const texture of group) {
                 const bytes = stack.read(`${texture}_c`);
                 const info = bytes && bytes.length <= LIMITS.textureBytes ? readParticleTextureInfo(bytes) : null;

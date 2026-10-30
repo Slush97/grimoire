@@ -5,8 +5,8 @@ const ROOM_STAGE_END: Readonly<Record<string, number>> = {
   bundleFetched: 0.3, bundleParsed: 0.55, instancesReady: 0.58, materialsReady: 0.6, compiled: 0.9,
 };
 
-/** A cache build is about 35 s of exporting, and the room then loads for about 9 s. */
-const BUILD_SHARE = 0.8;
+/** A cache build is about 9 s of exporting, and the room then loads for about as long. */
+const BUILD_SHARE = 0.5;
 
 export function roomStageProgress(stage: string): number {
   return ROOM_STAGE_END[stage] ?? 0;
