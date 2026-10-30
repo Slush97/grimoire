@@ -664,7 +664,7 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
     const clearance = scene.userData.hideoutClearance as RoomClearance | undefined;
     const controls = controlsRef.current;
     if (!hideout || !clearance || !controls) return;
-    if (!clearance.measured(controls.target, 0.2)) clearance.measure(gl, scene, controls.target, controls.maxDistance * 1.5, HIDEOUT_ROOM_LAYER);
+    if (!clearance.measured(controls.target, 0.2)) void clearance.measureAsync(gl, scene, controls.target, controls.maxDistance * 1.5, HIDEOUT_ROOM_LAYER);
     const offset = camera.position.clone().sub(controls.target);
     const length = offset.length();
     if (length === 0) return;
