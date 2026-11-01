@@ -1283,7 +1283,6 @@ function NprMaterials({
       if (uniforms.uCitadelLighting) {
         uniforms.uCitadelLighting.value = citadel ? 1 : 0;
         uniforms.uCitadelExposure.value = exposure;
-        uniforms.uCitadelEnvironmentCeiling.value = mapProbe ? 1 : 32;
         // Game ambient and light units carry no 1/PI; the probe cube is irradiance.
         if (mapProbe) uniforms.uCitadelAmbientFit.value.copy(mapProbe.lighting.normalization);
         else if (ambientCube) uniforms.uCitadelAmbientFit.value.copy(ambientLuminanceFit(ambientCube)).multiplyScalar(1 / Math.PI);
@@ -2281,7 +2280,7 @@ export default function HeroPoseViewer({
         {viewerScene === 'hideout' && <HideoutHeroLighting model={scene} probe={ambientProbe} revision={`${features.unifiedEnabled}:${features.nprMaterialsEnabled}:${features.source2ShaderHintsEnabled}`} />}
         {hideoutResident && !buildingHideout && <HideoutScene active={viewerScene === 'hideout'} postprocess snapshotHint={viewKey} scale={roomPlacement.scale} floor={roomPlacement.ground}
           onStatus={setHideoutStatus} onProbe={setAmbientProbe} onRoomArrive={roomArrive} onSnapshotShown={snapshotShown} onLoadStage={hideoutWarm ? undefined : roomLoadStage} />}
-        {viewerScene === 'hideout' && hideoutInfo && <Source2MapPost info={hideoutInfo} bloom={features.bloomEnabled} halfResolutionFog={!devFlags.fullResolutionFog} />}
+        {viewerScene === 'hideout' && hideoutInfo && <Source2MapPost info={hideoutInfo} bloom={features.bloomEnabled && (loadedSourceParticles?.key !== sourceParticlesKey || loadedSourceParticles.postBloomEnabled)} halfResolutionFog={!devFlags.fullResolutionFog} />}
         {viewerScene !== 'hideout' && (
           <BloomEffect
             deadlockExposure={previewExposure}

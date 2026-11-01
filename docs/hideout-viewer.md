@@ -63,7 +63,9 @@ Measurement tools are in [tools/hideout-oracle](../tools/hideout-oracle/README.m
   ambient samples the probe volume, so the camera side matters: NPR ambient
   samples toward the camera, and the viewer camera sits behind the spawned
   player (spawn yaw plus 180 degrees) as the game's third-person camera does.
-- The map's cubemap reflection gain is capped at one for NPR heroes and props.
+- The map's cubemap reflection gain is capped at one for NPR props. Heroes keep
+  the shared ceiling of 32: this room's reflection needs a gain near 27 to match
+  the ambient level, and at one a metallic hero material renders almost black.
 - Particle lights (the fire, candles) go through the map light model with cone,
   cookie and an octahedral shadow atlas of 2 by 2 tiles in one sampler.
   Lightmapped surfaces read that shadow; probe-lit props near a particle light
