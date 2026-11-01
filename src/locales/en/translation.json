@@ -1427,11 +1427,7 @@
       "searchPlaceholder": "Search installed...",
       "clearSearch": "Clear search",
       "clearFilters": "Clear filters",
-      "sortAndFilter": "Sort and filter",
-      "sortAndFilterHint": "Sort and filter installed mods",
       "sort": "Sort",
-      "loadOrder": "Load order",
-      "recentlyAdded": "Recently added",
       "source": "Source",
       "gamebanana": "GameBanana",
       "local": "Local",
@@ -1439,7 +1435,13 @@
       "enabled": "Enabled",
       "hero": "Hero",
       "tags": "Tags",
-      "lists": "Lists"
+      "lists": "Lists",
+      "allTags": "All Tags",
+      "heroCount_one": "{{count}} Hero",
+      "heroCount_other": "{{count}} Heroes",
+      "tagCount_one": "{{count}} Tag",
+      "tagCount_other": "{{count}} Tags",
+      "excludingTag": "Exclude {{name}}"
     },
     "lists": {
       "menuTrigger": "Add to list",
@@ -1459,7 +1461,6 @@
       "enabling": "Enabling {{done}}/{{total}}...",
       "disabling": "Disabling {{done}}/{{total}}...",
       "view": "Lists",
-      "allMods": "All mods",
       "viewLists": "Lists",
       "addTo": "Add selected to list",
       "removeFrom": "Remove selected from list",
@@ -1489,7 +1490,8 @@
         "star": "Star",
         "shield": "Shield",
         "palette": "Colors"
-      }
+      },
+      "defaultView": "Default"
     },
     "profiles": {
       "trigger": "Profiles",
@@ -1521,59 +1523,34 @@
       "disabled_other": "Disabled",
       "sortAlphabetical": "A-Z",
       "sortAlphabeticalHint": "Sort disabled mods A to Z. Pinned mods stay on top.",
-      "sortCustomHint": "Back to your own order (pinned first, then how you arranged them)."
+      "sortCustomHint": "Back to your own order (pinned first, then how you arranged them).",
+      "sortToolbarActiveHint": "Choose Load Order in Filters to use this control."
     },
     "view": {
-      "viewOptions": "View options",
-      "styleAndCardSize": "Style and card size",
-      "style": "Style",
       "cardSize": "Card size",
       "cardSizeHint": "Card size (drag to the small end for compact cards)",
       "cardSizeGridOnly": "Card size applies to grid view."
     },
     "status": {
       "conflictCount_one": "{{count}} conflict",
-      "conflictCount_other": "{{count}} conflicts",
-      "issues_one": "{{count}} issue",
-      "issues_other": "{{count}} issues"
+      "conflictCount_other": "{{count}} conflicts"
     },
     "outdatedData": {
-      "button_one": "{{count}} outdated mod",
-      "button_other": "{{count}} outdated mods",
-      "buttonHint": "Enabled mods that ship an old copy of a game data file and remove what Valve added since",
-      "title_one": "{{count}} enabled mod ships outdated game data",
-      "title_other": "{{count}} enabled mods ship outdated game data",
-      "message": "Each of these replaces a whole game data file with an old copy, so anything Valve added after the mod was built is gone in game: new heroes, abilities, stats. Disable them until the author updates.",
       "removes_one": "Removes {{count}} game field from {{file}}",
       "removes_other": "Removes {{count}} game fields from {{file}}",
       "disable": "Disable",
-      "disableAll_one": "Disable it",
-      "disableAll_other": "Disable all {{count}}",
       "enabledToast_one": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game field Valve added since is removed in game.",
       "enabledToast_other": "{{name}} ships an old {{file}}. While it is enabled, {{count}} game fields Valve added since are removed in game."
     },
     "staleModels": {
-      "button_one": "{{count}} mod needs a camera fix",
-      "button_other": "{{count}} mods need a camera fix",
-      "buttonHint": "Hero models built before Deadlock moved the camera and aim points",
-      "title_one": "{{count}} mod needs a camera fix",
-      "title_other": "{{count}} mods need a camera fix",
-      "message": "These mods have outdated or missing camera data, which can break the camera during play or transformation. Fix restores missing camera data from the game and updates old camera and aim points. Custom models and textures stay intact.",
       "model_one": "{{file}}: {{count}} camera repair",
       "model_other": "{{file}}: {{count}} camera repairs",
-      "fix": "Fix",
-      "fixAll_one": "Fix it",
-      "fixAll_other": "Fix all {{count}}",
       "healed_one": "Fixed {{count}} mod",
       "healed_other": "Fixed {{count}} mods",
-      "progress": "Fixing {{name}}…",
       "progressCount": "Fixing {{name}} ({{current}} of {{total}})",
       "failed": "Couldn't fix {{name}}: {{error}}"
     },
     "unknown": {
-      "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
-      "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
-      "fixButton": "Fix unknown ({{count}})",
       "checkingCrcCache": "Checking local CRC cache...",
       "noCachedMatch": "No cached match found. Queued for online search.",
       "missingMetadata": "Matched mod is missing GameBanana metadata",
@@ -1774,19 +1751,15 @@
       "deselectNamed": "Deselect {{name}}",
       "selectNamed": "Select {{name}}",
       "conflict": "Conflict",
-      "outdatedData": "Outdated data",
       "outdatedDataTitle_one": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} field added to Deadlock since the mod was built is removed in game: {{sample}}",
       "outdatedDataTitle_other": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} fields added to Deadlock since the mod was built are removed in game, starting with: {{sample}}",
-      "staleModel": "Old camera",
-      "staleModelTitle": "Its hero model ({{files}}) predates Deadlock's camera change, so the camera can sit in the wrong spot. Fix it from the camera fix button at the top of Installed.",
+      "staleModelTitle": "Its hero model ({{files}}) predates Deadlock's camera change, so the camera can sit in the wrong spot. Fix it from Issues on Installed.",
       "unknown": "Unknown",
       "unknownTitle": "This local mod has no saved GameBanana or custom metadata",
       "updateAvailableTitle": "A newer version is available on GameBanana",
       "mergedTitle_one": "Merged from {{count}} mod. Open details to unmerge.",
       "mergedTitle_other": "Merged from {{count}} mods. Open details to unmerge.",
       "mergedBadge": "Merged · {{count}}",
-      "staleSourcesBadge_one": "{{count}} source outdated",
-      "staleSourcesBadge_other": "{{count}} sources outdated",
       "staleSourcesTitle_one": "{{count}} merged source has a newer version on GameBanana. Unmerge to update it.",
       "staleSourcesTitle_other": "{{count}} merged sources have newer versions on GameBanana. Unmerge to update them.",
       "noFilesEnabled": "No files enabled",
@@ -1895,13 +1868,9 @@
       "updateRestoreGlobalFailed": "Could not safely preserve the Global local variant group during this update"
     },
     "repairs": {
-      "button": "Repair mods",
-      "title": "Repair mods after game updates",
-      "description": "Check enabled mods for missing game data, names, footstep sounds and supported skeleton changes. Repairs keep existing mod values. Custom rigs and animation overrides may need an update from the author.",
       "backupNote": "Each repaired mod is backed up first. Close Deadlock before repairing mods it has loaded.",
       "checking": "Checking enabled mods against your installed game...",
       "failed": "Couldn't repair mods: {{error}}",
-      "empty": "No supported repairs found. This check does not cover every way a mod can break.",
       "repair": "Repair",
       "unchanged": "No repairs were applied. The mod or its dependencies may have changed.",
       "repaired_one": "Repaired {{count}} file",
@@ -1915,6 +1884,48 @@
       "unsupported": "Left unchanged. This difference needs another repair or an author update.",
       "details": "Details",
       "backups": "Show original backup"
+    },
+    "options": {
+      "title": "Options",
+      "library": "Library",
+      "transfer": "Transfer"
+    },
+    "issues": {
+      "title": "Issues",
+      "empty": "No known issues need attention.",
+      "camera": "Camera data",
+      "unknown": "Unknown mod",
+      "requirements": "Requirements",
+      "identify": "Identify",
+      "review": "Review",
+      "cameraAll": "Fix all cameras",
+      "disableAll": "Disable mods with outdated data",
+      "scopeChanged": "The active installation changed. Reopen Issues before continuing.",
+      "fixCamera": "Fix camera",
+      "filter": "Filter issues",
+      "all": "All issues",
+      "compatibility": "Compatibility",
+      "outdated": "Outdated data",
+      "noFilterMatch": "No mods have this issue."
+    },
+    "tags": {
+      "title": "Custom Tags",
+      "edit": "Edit Tags",
+      "create": "Create Tag",
+      "createPlaceholder": "New tag name",
+      "rename": "Rename {{name}}",
+      "renameLabel": "Tag Name",
+      "duplicateName": "A tag with this name already exists.",
+      "failed": "Could not update tags: {{error}}",
+      "includeHint": "Include {{name}}",
+      "clearFilter": "Clear {{name}} filter"
+    },
+    "sort": {
+      "heroAZ": "Hero (A-Z)",
+      "nameAZ": "Name (A-Z)",
+      "loadOrder": "Load Order",
+      "recentlyAdded": "Recently Added",
+      "recentlyUpdated": "Recently Updated"
     }
   },
   "locker": {
@@ -3068,10 +3079,11 @@
       "submit": "Search"
     },
     "import": {
-      "gamebanana": "GameBanana",
-      "gamebananaHint": "Collection URL or a batch of item links",
-      "grimoireProfile": "Grimoire Profile",
-      "grimoireProfileHint": "Share code or .modprofile.json from the Profiles tab"
+      "pasteHint": "Paste GameBanana links, a collection URL, or a Grimoire profile code or JSON.",
+      "placeholder": "GameBanana links, collection URL, mp1: profile code, or profile JSON",
+      "inputLabel": "Links or profile",
+      "preview": "Preview",
+      "invalidInput": "Paste a GameBanana collection URL, mod links, or a Grimoire profile code or JSON."
     },
     "refreshFromGameBanana": "Refresh from GameBanana",
     "viewOptions": {
@@ -3591,7 +3603,7 @@
     "pickManagerFolder": "Choose the {{source}} folder",
     "chooseManagerFolder": "Choose {{source}} folder…",
     "pickBundle": "Open a mod-interchange.json",
-    "openBundle": "Import from file…",
+    "openBundle": "Import",
     "exportFile": "export file",
     "importTitle": "Import from {{source}}",
     "stepDescription": {
@@ -3660,7 +3672,7 @@
     "linkedCount_one": "Linked {{count}} mod to GameBanana",
     "linkedCount_other": "Linked {{count}} mods to GameBanana",
     "importFailed": "Import failed: {{error}}",
-    "exportMenu": "Export for other mod managers",
+    "exportMenu": "Export",
     "exportHint": "Save your mods, profiles and crosshairs as a bundle Deadlock Mod Manager and other managers can import",
     "exportTitle": "Export for other mod managers",
     "exportDescription": "Saves a mod-interchange bundle other mod managers can import.",
@@ -3672,7 +3684,9 @@
     "openFolder": "Open folder",
     "chooseFolderAndExport": "Choose folder and export",
     "exportPickFolder": "Choose where to save the export",
-    "exportFailed": "Export failed: {{error}}"
+    "exportFailed": "Export failed: {{error}}",
+    "chooseDmmFolder": "Choose DMM Folder",
+    "dmmShortName": "DMM"
   },
   "crashAdvisory": {
     "badge": "Possible crash cause",
@@ -3726,7 +3740,6 @@
     "installTitle": "Before you install",
     "mustBeOff": "Keep this mod turned off.",
     "title": "Requirements",
-    "toolbarHint": "Requirements: {{count}} to check",
     "loadOrder": "Load order",
     "orderHint": "The top mod wins if both change the same thing.",
     "locateOrder": "Show in Installed",

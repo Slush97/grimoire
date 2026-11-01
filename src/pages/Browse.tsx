@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Search,
+  Check,
   Loader2,
   Eye,
   EyeClosed,
@@ -20,7 +21,6 @@ import {
   ChevronDown,
   ChevronRight,
   UsersRound,
-  Upload,
   Maximize2,
   PanelRight,
 } from 'lucide-react';
@@ -386,6 +386,7 @@ function BrowseViewOptionControl<T extends string>({
 }
 
 export default function Browse() {
+  const addedRadioName = useId();
   const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const loadSettings = useAppStore((s) => s.loadSettings);
@@ -579,9 +580,7 @@ export default function Browse() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
-  const [importProfileOpen, setImportProfileOpen] = useState(false);
-  const [importMenuOpen, setImportMenuOpen] = useState(false);
-  const importMenuRef = useRef<HTMLDivElement>(null);
+  const [importProfileInput, setImportProfileInput] = useState<string | null>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
@@ -691,7 +690,6 @@ export default function Browse() {
   // alone would read every click inside the panel as an outside click.
   const closeFilters = useCallback(() => setFiltersOpen(false), [setFiltersOpen]);
 
-  const closeImportMenu = useCallback(() => setImportMenuOpen(false), [setImportMenuOpen]);
 
   // Same as the filters panel: dismissal is AnchoredPopover's job now.
   const closeViewMenu = useCallback(() => setViewMenuOpen(false), [setViewMenuOpen]);
@@ -2449,18 +2447,13 @@ export default function Browse() {
           start/stop never re-renders this (large) component. */}
       <div className="flex-1 min-w-0 h-full overflow-y-auto" ref={scrollContainerRef}>
       {/* Header: artist banner in artist mode, otherwise the search/filter row. */}
-      {/* Solid by default. A solid bg-primary band would read as a flat patch
-          over an active background glow, so only then does it go translucent.
-          The transparent-sidebar option repaints the same fixed app background
-          inside the band. That preserves the corner glow at its viewport
-          position while hiding content that scrolls beneath the sticky header. */}
+      {/* Match Installed's translucent toolbar and fixed app background when
+          the transparent-sidebar option is enabled. */}
       <div
         className={`sticky top-0 z-40 px-4 py-3 sm:px-6 border-b border-border ${
           settings?.sidebarTransparent
             ? 'app-background-fixed'
-            : settings?.backgroundGradient
-              ? 'bg-bg-primary/80 backdrop-blur-md'
-              : 'bg-bg-primary'
+            : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
         }`}
       >
         {artistMode && submitter ? (
@@ -2539,61 +2532,15 @@ export default function Browse() {
               )}
             </button>
 
-            {/* Import menu: GameBanana content or portable profile. */}
-            <div className="relative flex-shrink-0" ref={importMenuRef}>
-              <button
-                type="button"
-                onClick={() => setImportMenuOpen((v) => !v)}
-                aria-haspopup="menu"
-                aria-expanded={importMenuOpen}
-                className="h-10 flex items-center justify-center gap-1 pl-2.5 pr-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                title={t('profiles.actions.import')}
-              >
-                <Library className="w-5 h-5" />
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-
-              <AnchoredPopover
-                open={importMenuOpen}
-                onClose={closeImportMenu}
-                anchorRef={importMenuRef}
-                width={288}
-                role="menu"
-                ariaLabel={t('profiles.actions.import')}
-                className="p-3"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setImportMenuOpen(false);
-                    setCollectionModalOpen(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
-                >
-                  <Library className="w-4 h-4 text-text-secondary shrink-0" />
-                  <div className="flex flex-col min-w-0">
-                    <span>{t('browse.import.gamebanana')}</span>
-                    <span className="text-2xs text-text-secondary truncate">{t('browse.import.gamebananaHint')}</span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setImportMenuOpen(false);
-                    setImportProfileOpen(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
-                >
-                  <Upload className="w-4 h-4 text-text-secondary shrink-0" />
-                  <div className="flex flex-col min-w-0">
-                    <span>{t('browse.import.grimoireProfile')}</span>
-                    <span className="text-2xs text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
-                  </div>
-                </button>
-              </AnchoredPopover>
-            </div>
+            <button
+              type="button"
+              onClick={() => setCollectionModalOpen(true)}
+              className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              title={t('profiles.actions.import')}
+              aria-label={t('profiles.actions.import')}
+            >
+              <Library className="w-5 h-5" aria-hidden />
+            </button>
 
             <div className="relative flex-shrink-0" ref={viewMenuRef}>
               <button
@@ -2736,7 +2683,7 @@ export default function Browse() {
                     aria-haspopup="dialog"
                     aria-expanded={filtersOpen}
                     title={t('browse.filters.title')}
-                    className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm text-text-primary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${hasActiveFilters ? 'border-accent/40 bg-accent/10 hover:border-accent/60 hover:bg-accent/20' : 'border-border bg-bg-secondary hover:bg-bg-tertiary'}`}
                   >
                     <Funnel className="w-4 h-4" />
                     <span className="@max-[760px]:hidden">{t('browse.filters.title')}</span>
@@ -2897,19 +2844,23 @@ export default function Browse() {
                           disabled and say why. */}
                       <div className="block">
                         <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                        <DropdownSelect
-                          ariaLabel={t('browse.filters.filterByDateAdded')}
-                          value={addedWithin}
-                          disabled={!hasLocalCache}
-                          onChange={(value) => setAddedWithin(value as BrowseTimeRange)}
-                          options={[
+                        <div role="radiogroup" aria-label={t('browse.filters.filterByDateAdded')}
+                          className="space-y-1 rounded-lg border border-border bg-bg-secondary p-1">
+                          {[
                             { value: 'all', label: t('browse.filters.anyTime') },
                             { value: 'today', label: t('browse.filters.today') },
                             { value: 'week', label: t('browse.filters.thisWeek') },
                             { value: 'month', label: t('browse.filters.thisMonth') },
                             { value: 'custom', label: t('browse.filters.customRange') },
-                          ]}
-                        />
+                          ].map(option => <label key={option.value}
+                            className={`flex h-8 items-center justify-between gap-3 rounded-md px-2 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${hasLocalCache ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} ${addedWithin === option.value ? 'bg-bg-tertiary text-text-primary' : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}`}>
+                            <input type="radio" className="sr-only" name={addedRadioName} value={option.value}
+                              checked={addedWithin === option.value} disabled={!hasLocalCache}
+                              onChange={() => setAddedWithin(option.value as BrowseTimeRange)} />
+                            <span>{option.label}</span>
+                            {addedWithin === option.value && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                          </label>)}
+                        </div>
                         {!hasLocalCache && (
                           <p className="mt-2 rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-2xs text-text-secondary">
                             {catalogSyncing
@@ -3111,14 +3062,16 @@ export default function Browse() {
           queuedIds={queuedModIds}
           activeDeadlockPath={activeDeadlockPath}
           onClose={() => setCollectionModalOpen(false)}
+          onImportProfile={input => { setCollectionModalOpen(false); setImportProfileInput(input); }}
         />
       )}
 
-      {importProfileOpen && (
+      {importProfileInput !== null && (
         <ImportProfileDialog
           activeDeadlockPath={activeDeadlockPath}
           hideNsfwPreviews={browseBlurNsfwPreviews}
-          onClose={() => setImportProfileOpen(false)}
+          initialInput={importProfileInput}
+          onClose={() => setImportProfileInput(null)}
           onImported={() => { void loadMods(); }}
         />
       )}

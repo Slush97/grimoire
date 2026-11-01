@@ -6,8 +6,11 @@ import { ModCard } from './ModCard';
 import { HERO_NAMES_SORTED } from '../../lib/lockerUtils';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { buildCategoryPaths } from '../../lib/categoryPaths';
-import type { Mod } from '../../types/mod';
+import type { AppSettings, Mod } from '../../types/mod';
 import * as imageActions from '../../lib/imageActions';
+import { useAppStore } from '../../stores/appStore';
+import { useInstalledTagsStore } from '../../stores/installedTagsStore';
+import { getInstallationScope } from '../../lib/appSettings';
 
 const translate = vi.hoisted(() => vi.fn((key: string) => key));
 vi.mock('react-i18next', () => ({
@@ -21,10 +24,13 @@ describe('installed card menu mounting', () => {
   let host: HTMLDivElement;
   let root: Root;
   let input: ComponentProps<typeof ModCard>;
+  let previousSettings: AppSettings | null;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    previousSettings = useAppStore.getState().settings;
     useCategoryStore.setState({ heroByCategoryId: new Map(), heroNames: [], pathsByModel: {} });
+    useInstalledTagsStore.setState({ byScope: {} });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
@@ -40,6 +46,7 @@ describe('installed card menu mounting', () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    useAppStore.setState({ settings: previousSettings });
     host.remove();
     vi.restoreAllMocks();
   });
@@ -108,6 +115,60 @@ describe('installed card menu mounting', () => {
     const visibleLabels = [...host.querySelectorAll('span')].filter(node =>
       node.childElementCount === 0 && node.textContent === 'Solomon' && !node.classList.contains('sr-only'));
     expect(visibleLabels).toHaveLength(0);
+  });
+
+  it('assigns a custom tag from the context menu and immediately renders it on the card', async () => {
+    const settings = { deadlockPath: '/game', devDeadlockPath: '/dev', devMode: false } as AppSettings;
+    useAppStore.setState({ settings });
+    const scope = getInstallationScope(settings)!;
+    useInstalledTagsStore.setState({ byScope: { [scope]: [{ id: 'saved', name: 'Saved mods', keys: [] }] } });
+    input = { ...input, mod: { ...input.mod, gameBananaId: 17, metaKey: 'test.vpk' } };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.textContent).not.toContain('Saved mods');
+    await openMenu('context');
+    const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')]
+      .find(item => item.textContent === 'installed.tags.title')!;
+    await act(async () => {
+      trigger.focus();
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    const checkbox = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
+      .find(item => item.textContent === 'Saved mods')!;
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+    await act(async () => checkbox.click());
+    expect(useInstalledTagsStore.getState().byScope[scope][0].keys).toEqual(['Mod:gamebanana:17']);
+    expect(host.querySelector('[data-fitting-tags]')?.textContent).toContain('Saved mods');
+    expect(input.onToggle).not.toHaveBeenCalled();
+    expect(input.onTagLocker).not.toHaveBeenCalled();
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('places repair icons before hero and category tags in %s cards', async viewMode => {
+    input = { ...input, viewMode, mod: { ...input.mod, lockerHeroes: ['Abrams'], categoryName: 'Skins',
+      outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
+      staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
+    } };
+    await act(async () => root.render(<ModCard {...input} />));
+    const issues = host.querySelector<HTMLElement>('[data-issue-stack]')!;
+    const heroes = host.querySelector('[data-hero-stack]')!;
+    expect(issues.style.width).toBe('44px');
+    expect(issues.querySelectorAll('svg')).toHaveLength(2);
+    expect(issues.querySelector('.lucide-file-warning')).not.toBeNull();
+    expect(issues.querySelector('.lucide-camera-off')).not.toBeNull();
+    for (const icon of issues.querySelectorAll('svg')) {
+      expect(icon.classList.contains('h-4')).toBe(true);
+      expect(icon.classList.contains('w-4')).toBe(true);
+      expect(icon.parentElement?.classList.contains('h-[22px]')).toBe(true);
+      expect(icon.parentElement?.classList.contains('w-[22px]')).toBe(true);
+      expect(icon.parentElement?.classList.contains('items-center')).toBe(true);
+      expect(icon.parentElement?.classList.contains('justify-center')).toBe(true);
+    }
+    expect(issues.nextElementSibling).toBe(heroes);
+    expect(issues.title).toContain('installed.card.outdatedDataTitle');
+    expect(issues.title).toContain('installed.card.staleModelTitle');
+    expect(host.textContent).not.toContain('installed.card.outdatedData');
+    expect(host.textContent).not.toContain('installed.card.staleModel');
+    await act(async () => root.render(<ModCard {...input} mod={{ ...input.mod, outdatedVdata: [], staleModels: [] }} />));
+    expect(host.querySelector('[data-issue-stack]')).toBeNull();
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {

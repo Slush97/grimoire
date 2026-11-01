@@ -12,6 +12,7 @@ import {
     type ReactElement,
     type ReactNode,
     type Ref,
+    type RefObject,
     type SelectHTMLAttributes,
     type TextareaHTMLAttributes,
 } from 'react';
@@ -124,6 +125,7 @@ export interface DropdownSelectOption {
     icon?: ReactNode;
     muted?: boolean;
     disabled?: boolean;
+    ariaLabel?: string;
 }
 
 export interface DropdownSelectSearchConfig {
@@ -131,10 +133,22 @@ export interface DropdownSelectSearchConfig {
     placeholder: string;
     getEmptyMessage: (query: string) => string;
     clearLabel: string;
+    /** An editable picker can reuse the input to create options. */
+    onSubmit?: (value: string) => void;
+    filterOptions?: boolean;
+    maxLength?: number;
+    value?: string;
+    onChange?: (value: string) => void;
+    inputRef?: RefObject<HTMLInputElement | null>;
+    disabled?: boolean;
+    actions?: ReactNode;
+    message?: ReactNode;
 }
 
 export interface DropdownSelectProps {
     value: string;
+    /** When supplied, options toggle independently and the menu stays open. */
+    values?: readonly string[];
     options: readonly DropdownSelectOption[];
     onChange: (value: string) => void;
     ariaLabel: string;
@@ -144,8 +158,16 @@ export interface DropdownSelectProps {
     /** Keep a toolbar select's content width and secondary surface. */
     variant?: 'default' | 'toolbar';
     icon?: LucideIcon;
+    /** Optional leading content, such as a compact stack of selected hero icons. */
+    leading?: ReactNode;
     search?: DropdownSelectSearchConfig;
     disabled?: boolean;
+    active?: boolean;
+    displayLabel?: string;
+    renderOption?: (option: DropdownSelectOption, selected: boolean) => ReactNode;
+    optionActions?: (option: DropdownSelectOption) => ReactNode;
+    onOptionContextMenu?: (value: string) => void;
+    onClose?: () => void;
 }
 
 const LISTBOX_GAP = 4;
@@ -156,6 +178,7 @@ const MIN_DOWNWARD_SPACE = 160;
 
 export function DropdownSelect({
     value,
+    values,
     options,
     onChange,
     ariaLabel,
@@ -164,44 +187,59 @@ export function DropdownSelect({
     size = 'md',
     variant = 'default',
     icon: Icon,
+    leading,
     search,
     disabled = false,
+    active = false,
+    displayLabel,
+    renderOption,
+    optionActions,
+    onOptionContextMenu,
+    onClose,
 }: DropdownSelectProps) {
     const toolbar = variant === 'toolbar';
     const [open, setOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [internalSearchQuery, setInternalSearchQuery] = useState('');
+    const searchQuery = search?.value ?? internalSearchQuery;
+    const onSearchChange = search?.onChange;
+    const setSearchQuery = useCallback((value: string) => {
+        setInternalSearchQuery(value);
+        onSearchChange?.(value);
+    }, [onSearchChange]);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
-    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const fallbackSearchInputRef = useRef<HTMLInputElement | null>(null);
+    const searchInputRef = search?.inputRef ?? fallbackSearchInputRef;
     const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
     const typeaheadRef = useRef('');
     const typeaheadTimerRef = useRef<number | null>(null);
     const pendingFocusIndexRef = useRef<number | null>(null);
     const selected = useMemo(
-        () => options.find((option) => option.value === value),
-        [options, value]
+        () => options.find((option) => option.value === (values ? values[0] : value)),
+        [options, value, values]
     );
     const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
     const visibleOptions = useMemo(() => {
-        if (!search || !normalizedSearchQuery) return options;
+        if (!search || search.filterOptions === false || !normalizedSearchQuery) return options;
 
         return options.filter((option) =>
             option.label.toLocaleLowerCase().includes(normalizedSearchQuery)
         );
     }, [normalizedSearchQuery, options, search]);
     const selectedIndex = useMemo(() => {
-        const index = visibleOptions.findIndex((option) => option.value === value && !option.disabled);
+        const index = visibleOptions.findIndex((option) => (values ? values.includes(option.value) : option.value === value) && !option.disabled);
         return index >= 0 ? index : visibleOptions.findIndex((option) => !option.disabled);
-    }, [value, visibleOptions]);
+    }, [value, values, visibleOptions]);
     const searchEnabled = search !== undefined;
     const closeSelect = useCallback(() => {
         setOpen(false);
         setSearchQuery('');
-    }, []);
+        onClose?.();
+    }, [onClose, setSearchQuery]);
     if (disabled && open) {
         setOpen(false);
-        setSearchQuery('');
+        setInternalSearchQuery('');
     }
 
     useEffect(() => {
@@ -275,6 +313,7 @@ export function DropdownSelect({
     useEffect(() => {
         if (!open) return;
         window.requestAnimationFrame(() => {
+            if (listRef.current?.contains(document.activeElement)) return;
             if (searchEnabled) {
                 searchInputRef.current?.focus();
                 return;
@@ -285,7 +324,7 @@ export function DropdownSelect({
             const nextIndex = (focusIndex + visibleOptions.length) % visibleOptions.length;
             optionRefs.current[nextIndex]?.focus();
         });
-    }, [open, searchEnabled, selectedIndex, visibleOptions.length]);
+    }, [open, searchEnabled, searchInputRef, selectedIndex, visibleOptions.length]);
 
     useEffect(() => {
         return () => {
@@ -298,6 +337,7 @@ export function DropdownSelect({
     const selectOption = (optionValue: string) => {
         if (options.find((option) => option.value === optionValue)?.disabled) return;
         onChange(optionValue);
+        if (values) return;
         closeSelect();
         window.requestAnimationFrame(() => buttonRef.current?.focus());
     };
@@ -385,7 +425,7 @@ export function DropdownSelect({
         if (isTypeaheadKey(event)) {
             if (searchEnabled) {
                 event.preventDefault();
-                setSearchQuery((current) => `${current}${event.key}`);
+                setSearchQuery(`${searchQuery}${event.key}`);
                 window.requestAnimationFrame(() => searchInputRef.current?.focus());
                 return;
             }
@@ -420,6 +460,14 @@ export function DropdownSelect({
 
     const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         switch (event.key) {
+            case 'Enter':
+                if (search?.onSubmit && searchQuery.trim()) {
+                    event.preventDefault();
+                    if (search.disabled) return;
+                    search.onSubmit(searchQuery.trim());
+                    if (search.value === undefined) setSearchQuery('');
+                }
+                break;
             case 'ArrowDown':
                 event.preventDefault();
                 focusOption(0);
@@ -462,7 +510,7 @@ export function DropdownSelect({
                 ref={buttonRef}
                 type="button"
                 aria-label={ariaLabel}
-                aria-haspopup="listbox"
+                aria-haspopup={optionActions ? 'dialog' : 'listbox'}
                 aria-expanded={open}
                 disabled={disabled}
                 onClick={() => {
@@ -470,12 +518,13 @@ export function DropdownSelect({
                     else setOpen(true);
                 }}
                 onKeyDown={handleButtonKeyDown}
-                className={`${heightClass} border border-border text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${toolbar ? 'px-3 bg-bg-secondary rounded-lg hover:bg-bg-tertiary transition-colors' : 'w-full px-2.5 bg-bg-tertiary rounded-md hover:border-accent/60 disabled:hover:border-border'}`}
+                className={`${heightClass} border text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${active ? 'border-accent/40 bg-accent/10' : `border-border ${toolbar ? 'bg-bg-secondary' : 'bg-bg-tertiary'}`} ${toolbar ? 'px-3 rounded-lg hover:bg-bg-tertiary transition-colors' : 'w-full px-2.5 rounded-md hover:border-accent/60 disabled:hover:border-border'}`}
             >
                 <span className="flex min-w-0 flex-1 items-center gap-2">
-                    {Icon ? <Icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" /> : selected?.icon}
+                    {leading !== undefined ? <span className="inline-flex shrink-0 items-center">{leading}</span>
+                        : Icon ? <Icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" /> : selected?.icon}
                     <span className={`min-w-0 flex-1 text-left truncate ${selected?.muted ? 'text-text-secondary' : ''}`}>
-                        {selected?.label ?? placeholder}
+                        {displayLabel ?? selected?.label ?? placeholder}
                     </span>
                 </span>
                 <ChevronDown className={`flex-shrink-0 ${toolbar ? 'h-3.5 w-3.5' : 'h-4 w-4 text-text-secondary'}`} aria-hidden="true" />
@@ -484,6 +533,8 @@ export function DropdownSelect({
             {open && createPortal(
                 <div
                     ref={listRef}
+                    role={optionActions ? 'dialog' : undefined}
+                    aria-label={optionActions ? ariaLabel : undefined}
                     // The listbox is portaled outside any popover containing this select.
                     // Keep its mouse gesture inside this logical boundary so an ancestor's
                     // window-level outside-click listener cannot unmount us before click.
@@ -498,7 +549,8 @@ export function DropdownSelect({
                 >
                     {search && (
                         <div className="border-b border-border p-2">
-                            <div className="relative">
+                          <div className="flex items-center gap-2">
+                            <div className="relative min-w-0 flex-1">
                                 <Search
                                     className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary"
                                     aria-hidden="true"
@@ -506,9 +558,11 @@ export function DropdownSelect({
                                 <input
                                     ref={searchInputRef}
                                     type="text"
-                                    role="searchbox"
+                                    role={search.onSubmit ? 'textbox' : 'searchbox'}
                                     aria-label={search.ariaLabel}
                                     placeholder={search.placeholder}
+                                    maxLength={search.maxLength}
+                                    disabled={search.disabled}
                                     value={searchQuery}
                                     onChange={(event) => setSearchQuery(event.target.value)}
                                     onKeyDown={handleSearchKeyDown}
@@ -520,37 +574,51 @@ export function DropdownSelect({
                                         aria-label={search.clearLabel}
                                         title={search.clearLabel}
                                         onClick={clearSearch}
+                                        disabled={search.disabled}
                                         className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-text-tertiary hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
                                         <X className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                 )}
                             </div>
+                            {search.actions}
+                          </div>
+                          {search.message}
                         </div>
                     )}
 
                     <div
-                        role="listbox"
+                        role={optionActions ? 'group' : 'listbox'}
                         aria-label={ariaLabel}
+                        aria-multiselectable={values && !optionActions ? true : undefined}
                         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                     >
                         {visibleOptions.map((option, index) => {
-                            const active = option.value === value;
+                            const active = values ? values.includes(option.value) : option.value === value;
+                            const content = renderOption ? renderOption(option, active) : <span className="flex min-w-0 flex-1 items-center gap-2">
+                                {option.icon}
+                                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                            </span>;
                             return (
-                                <button
-                                    key={option.value}
+                                <div key={option.value} className="flex items-center">
+                                {optionActions && option.disabled ? <span className="flex h-8 min-w-0 flex-1 items-center px-2.5 text-xs text-text-primary">{content}</span> : <button
                                     ref={(node) => {
                                         optionRefs.current[index] = node;
                                     }}
                                     type="button"
                                     role="option"
                                     aria-selected={active}
+                                    aria-label={option.ariaLabel}
                                     disabled={option.disabled}
                                     onClick={() => {
                                         selectOption(option.value);
                                     }}
                                     onKeyDown={(event) => handleOptionKeyDown(event, option.value, index)}
-                                    className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
+                                    onContextMenu={onOptionContextMenu ? event => {
+                                        event.preventDefault();
+                                        onOptionContextMenu(option.value);
+                                    } : undefined}
+                                    className={`min-w-0 flex-1 h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
                                         active
                                             ? 'bg-accent/15 text-text-primary'
                                             : option.muted
@@ -558,11 +626,10 @@ export function DropdownSelect({
                                                 : 'text-text-primary hover:bg-bg-tertiary'
                                     }`}
                                 >
-                                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                                        {option.icon}
-                                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                                    </span>
-                                </button>
+                                    {content}
+                                </button>}
+                                {optionActions?.(option)}
+                                </div>
                             );
                         })}
 

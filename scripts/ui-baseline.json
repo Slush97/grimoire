@@ -75,8 +75,7 @@
     "raw-palette": 2
   },
   "src/components/installed/ModCard.tsx": {
-    "raw-palette": 5,
-    "em-dash": 1
+    "raw-palette": 2
   },
   "src/components/installed/unknown/UnknownFileList.tsx": {
     "raw-palette": 2
@@ -199,7 +198,6 @@
     "em-dash": 1
   },
   "src/pages/Installed.tsx": {
-    "focus-ring": 2,
     "em-dash": 8
   },
   "src/pages/Locker.tsx": {

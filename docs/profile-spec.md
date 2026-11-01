@@ -10,6 +10,11 @@ The format was first implemented in [Grimoire](https://github.com/Slush97/grimoi
 * Share code prefix: `mp1:`
 * MIME type (proposed): `application/vnd.modprofile+json`
 
+In Grimoire, Browse's **Import** button opens one input for GameBanana links,
+collection URLs, `mp1:` profile codes, or profile JSON. Profile input opens the
+existing profile preview and confirmation flow. A profile JSON file can also be
+loaded from that input. Detecting its type does not install anything.
+
 ## Goals
 
 1. Round-trip a user's mod loadout (which mods, which variants, what order, enabled state) between machines and between mod managers.

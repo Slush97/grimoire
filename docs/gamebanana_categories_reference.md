@@ -87,9 +87,36 @@ Installed cards and filter facets share `installedCardTaxonomy.ts` and the categ
 - Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to five hero icons are visible; from six heroes onward, four icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
 - Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
+- CameraOff and FileWarning indicators precede the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with the stack capped at 44px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
 - When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
 - Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
+
+Installed's Hero selector supports several heroes, matching any selected hero.
+Selected heroes share the cards' 66px overlapping stack, showing up to eight
+icons before an overflow urn. Its tooltip lists every selected hero.
+Its Tags selector includes tags on left-click (green plus) and excludes them on
+right-click (red minus). A card must match an included tag when any are selected,
+and must not match any excluded tag. Either click clears a tag that is already
+included or excluded. The selector's search can be switched to
+edit mode to create, rename, or delete custom tags. The edit toggle sits beside
+the input; renaming uses that same input and Enter to save, with an X to cancel.
+Custom tags appear first during editing. GameBanana categories and
+local General classifications remain read-only. Assign custom tags through the
+card's Custom Tags submenu. These user preferences reuse the list catalogue
+operations and are saved separately per installation and normal/developer mode.
+Grouping and splitting retain their membership through the existing stable-key
+mapping; no category data is rewritten.
+
+Installed sorting lives inside Filters. Hero (A-Z) uses the first alphabetic
+resolved hero, puts entries without heroes last, and breaks hero ties by load
+order. Recently Updated uses the latest local replacement completion time across
+variants, then Recently Added. Older installations without a recorded update
+time fall back to Recently Added. Manual disabled-card ordering applies only to
+Load Order; the other sort modes take precedence while retaining favorites.
+Filters also contains the Default/Lists view switch and list management, even
+when no custom lists exist. Its Source, Status, and view segments use neutral
+selection colors; selected hero and tag dropdown triggers retain accent hints.
 
 ## Installed hero detection
 

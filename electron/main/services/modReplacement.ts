@@ -244,6 +244,8 @@ export function queueModReplacement(
                 const fresh = (await readReplacementMods(deadlockPath)).filter((mod) =>
                     sameSection(mod) && mod.gameBananaId === args.modId && mod.gameBananaFileId === args.fileId,
                 );
+                const updatedAt = new Date().toISOString();
+                for (const mod of fresh) setModMetadata(mod.metaKey, { updatedAt });
                 return restoreReplacementVpkState(fresh, enabled, global, {
                     setGlobal: async (id) => { await setModPriorityFolderUnlocked(deadlockPath, id, true); },
                     enable: async (id) => { await enableModUnlocked(deadlockPath, id); },

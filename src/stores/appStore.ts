@@ -2,7 +2,8 @@ import { profileShuffleSchema, type ProfileShuffle } from '../lib/profileShuffle
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, DeleteModEntry, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, getInstallationScope } from '../lib/appSettings';
+import { useInstalledTagsStore } from './installedTagsStore';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
@@ -1194,7 +1195,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLocalVariantGroup: async (modIds, target) => {
     try {
       const before = get().mods;
+      const tagScope = getInstallationScope(get().settings);
       const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
+      if (tagScope && tagScope === getInstallationScope(get().settings)) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
       const plans = stablePreferencePlans(before, mods);
       const migrated = migrateStoredStableKeyPreferences(
         plans.preferencePlan,

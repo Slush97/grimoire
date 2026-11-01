@@ -51,7 +51,7 @@ describe('crash badges on installed cards', () => {
     return input;
   };
   const updateAction = () => [...host.querySelectorAll('button')]
-    .find(button => button.textContent?.startsWith('mergedContents.updateSources'));
+    .find(button => button.textContent === 'profiles.actions.update');
   const openMenu = async () => {
     await act(async () => host.querySelector('div')
       ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
@@ -61,21 +61,26 @@ describe('crash badges on installed cards', () => {
   it.each(['grid', 'compact', 'list'] as const)('opens merge updates without toggling the mod in %s', async view => {
     const input = mergedCard(view);
     await act(async () => root.render(<ModCard {...input} staleSourceCount={3} updatableSourceCount={2} />));
-    expect(updateAction()?.textContent).toBe('mergedContents.updateSources:2');
+    expect(updateAction()?.textContent).toBe('profiles.actions.update');
+    expect(updateAction()?.className).not.toContain('hover:');
+    expect(updateAction()?.className).toContain('inline-flex');
+    expect(updateAction()?.className).toContain('focus-visible:outline-2');
+    expect(updateAction()?.querySelector('[title]')?.getAttribute('title')).toBe('mergedContents.staleSourcesUpdatable:2\ninstalled.card.staleSourcesTitle:1');
     await act(async () => updateAction()?.click());
     expect(onOpenDetails).toHaveBeenCalledOnce();
     expect(onToggle).not.toHaveBeenCalled();
     await act(async () => root.render(<ModCard {...input} staleSourceCount={0} updatableSourceCount={0} />));
-    expect(host.textContent).not.toContain('mergedContents.updateSources');
+    expect(updateAction()).toBeUndefined();
   });
 
   it.each(['grid', 'compact', 'list'] as const)('offers no update action for outdated sources that cannot resolve in %s', async view => {
     const input = mergedCard(view);
     await act(async () => root.render(<ModCard {...input} staleSourceCount={2} updatableSourceCount={0} />));
     expect(updateAction()).toBeUndefined();
-    const badge = [...host.querySelectorAll('span, div')].find(node => node.textContent === 'installed.card.staleSourcesBadge:2');
+    const badge = host.querySelector('[title="installed.card.staleSourcesTitle:2"]');
     expect(badge).toBeDefined();
-    expect(badge?.closest('button')?.textContent ?? '').not.toContain('installed.card.staleSourcesBadge');
+    expect(badge?.textContent).toBe('profiles.actions.update');
+    expect(badge?.closest('button')).toBeNull();
     expect(badge?.closest('[title]')?.getAttribute('title')).toBe('installed.card.staleSourcesTitle:2');
   });
 
@@ -130,8 +135,8 @@ describe('crash badges on installed cards', () => {
       expect(badge, `mask ${mask}, enabled ${enabled}`).not.toBeNull();
       expect(badge!.disabled).toBe(false);
       expect(badge!.closest('button')?.parentElement?.closest('button')).toBeNull();
-      if (mask & 2) expect(host.textContent).toContain('installed.card.outdatedData');
-      expect(host.textContent?.includes('installed.card.staleModel'), `mask ${mask}`).toBe(!!(mask & 32));
+      expect(!!host.querySelector('[data-issue-stack] .lucide-file-warning'), `mask ${mask}`).toBe(!!(mask & 2));
+      expect(!!host.querySelector('[data-issue-stack] .lucide-camera-off'), `mask ${mask}`).toBe(!!(mask & 32));
       if (mask & 4) expect(host.querySelector('[title="modSafety.viewFindings"]') ?? host.querySelector('[aria-label^="modSafety.needsReview"]')).not.toBeNull();
       await act(async () => badge!.click());
       expect(useCrashAdvisoryStore.getState().detailId).toBe(finding.id);

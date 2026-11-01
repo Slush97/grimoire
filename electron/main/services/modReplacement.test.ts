@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DownloadModArgs } from '../../../src/types/electron';
 import type { Mod as FilesystemMod } from './mods';
 import type { ModMetadata } from './metadata';
@@ -81,6 +81,8 @@ vi.mock('./mods', () => ({
 import { queueModReplacement as queueReplacementTask, readReplacementMods, toLocalVariantGroupMember } from './modReplacement';
 
 const args = { modId: 7, fileId: 20, fileName: 'fresh.zip' };
+const completedAt = '2026-10-27T17:00:00.000Z';
+const previousUpdate = '2026-10-19T12:00:00.000Z';
 const mod = (id: string, options: Partial<FilesystemMod> = {}): FilesystemMod => ({
     id,
     metaKey: `${id}.vpk`,
@@ -145,6 +147,8 @@ async function run(index = 0, install: () => void = () => { add('fresh', { gameB
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(completedAt));
     state.mods = [];
     state.metadata.clear();
     state.jobs = [];
@@ -194,6 +198,8 @@ beforeEach(() => {
         state.events.push('imprint');
     });
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('local variant comparison metadata', () => {
     it.each([['Solomon', 'Solomon'], ['The Doorman', 'Doorman'], ['Future Hero', 'Future Hero']])(
@@ -257,7 +263,7 @@ describe('queued mod replacements', () => {
     });
 
     it('backs up the predecessor and restores Global then enabled state under one mutation lock', async () => {
-        add('old', { priorityMod: true }, { enabled: true });
+        add('old', { priorityMod: true, updatedAt: previousUpdate }, { enabled: true });
         const queued = queueModReplacement('/game', args, ['old'], null);
         await run();
         await expect(queued).resolves.toEqual({ installedVpks: ['fresh.vpk'] });
@@ -265,6 +271,7 @@ describe('queued mod replacements', () => {
         expect(state.events).toEqual(['lock', 'delete', 'global', 'enable', 'unlock']);
         expect(state.mods).toMatchObject([{ id: 'enabled-fresh', enabled: true }]);
         expect(state.metadata.get('enabled-fresh.vpk')?.priorityMod).toBe(true);
+        expect(state.metadata.get('enabled-fresh.vpk')?.updatedAt).toBe(completedAt);
     });
 
     it('keeps a replacement disabled when the old version was disabled', async () => {
@@ -278,13 +285,16 @@ describe('queued mod replacements', () => {
 
     it('promotes an installed successor only after its safety gate passes', async () => {
         add('old', {}, { enabled: true });
-        add('fresh', { gameBananaFileId: 20 });
+        add('fresh', { gameBananaFileId: 20, updatedAt: previousUpdate });
+        add('unrelated', { gameBananaId: 99, gameBananaFileId: 20, updatedAt: previousUpdate });
         const queued = queueModReplacement('/game', args, ['old'], null, { promoteExisting: true });
         await run();
         await queued;
         expect(mocks.safety).toHaveBeenCalledWith('/game', ['fresh'], expect.any(AbortSignal));
         expect(state.events).toEqual(['safety', 'lock', 'delete', 'enable', 'unlock']);
-        expect(state.mods).toHaveLength(1);
+        expect(state.mods).toHaveLength(2);
+        expect(state.metadata.get('enabled-fresh.vpk')?.updatedAt).toBe(completedAt);
+        expect(state.metadata.get('unrelated.vpk')?.updatedAt).toBe(previousUpdate);
     });
 
     it.each([false, true])('preserves successor-specific detection during replacement (promotion: %s)', async (promoteExisting) => {
@@ -379,8 +389,8 @@ describe('queued mod replacements', () => {
     });
 
     it('preserves the source if a promoted successor fails its safety gate', async () => {
-        add('old');
-        add('fresh', { gameBananaFileId: 20 });
+        add('old', { updatedAt: previousUpdate });
+        add('fresh', { gameBananaFileId: 20, updatedAt: previousUpdate });
         mocks.safety.mockRejectedValueOnce(new Error('unsafe'));
         const queued = queueModReplacement('/game', args, ['old'], null, { promoteExisting: true });
         const check = expect(queued).rejects.toThrow('unsafe');
@@ -388,6 +398,7 @@ describe('queued mod replacements', () => {
         await check;
         expect(mocks.delete).not.toHaveBeenCalled();
         expect(state.backups).toEqual([]);
+        expect([...state.metadata.values()].map(metadata => metadata.updatedAt)).toEqual([previousUpdate, previousUpdate]);
     });
 
     it('does not delete anything if the replacement was not installed', async () => {
@@ -473,6 +484,7 @@ describe('queued mod replacements', () => {
         await check;
         expect(mocks.enable).not.toHaveBeenCalled();
         expect(state.mods).toHaveLength(2);
+        expect(state.metadata.get('fresh.vpk')?.updatedAt).toBeUndefined();
     });
 
     it('stops without enabling the new version when retaining the old backup fails', async () => {
@@ -484,6 +496,7 @@ describe('queued mod replacements', () => {
         await check;
         expect(mocks.enable).not.toHaveBeenCalled();
         expect(state.mods).toHaveLength(2);
+        expect(state.metadata.get('fresh.vpk')?.updatedAt).toBeUndefined();
     });
 
     it('restores local group identity before deleting its source and refreshes the embed after unlocking', async () => {
@@ -546,6 +559,8 @@ describe('queued mod replacements', () => {
         await check;
         expect(state.mods.map((item) => item.id)).toEqual(['fresh']);
         expect(state.backups).toEqual(['old.vpk']);
+        // The payload was updated even though restoring its enabled state failed.
+        expect(state.metadata.get('fresh.vpk')?.updatedAt).toBe(completedAt);
     });
 
     it.each(['path', 'mode'] as const)('rejects a changed %s before starting a queued update', async (change) => {

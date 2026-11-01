@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
-import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink } from 'lucide-react';
+import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
 import { useCategoryStore } from '../../stores/categoryStore';
+import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
+import { getInstallationScope } from '../../lib/appSettings';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
@@ -27,7 +29,7 @@ import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
-import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, FittingTagList, MetaTextChip } from './chips';
+import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MetaTextChip } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -63,6 +65,7 @@ interface ModCardProps {
     categoryName?: string;
     nsfw?: boolean;
     gameBananaId?: number;
+    sha256?: string;
     localGroupId?: string;
     isUnknown?: boolean;
     lockerHero?: string;
@@ -478,33 +481,6 @@ function EditableModTitle({
   );
 }
 
-function OutdatedVdataTag({ outdated, enabled, variant }: { outdated?: Mod['outdatedVdata']; enabled: boolean; variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  if (!outdated?.length) return null;
-  const title = outdated
-    .map((v) => t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') }))
-    .join('\n\n');
-  return (
-    <Tag tone={enabled ? 'danger' : 'warning'} variant={variant} icon={FileWarning} title={title}>
-      {t('installed.card.outdatedData')}
-    </Tag>
-  );
-}
-
-/** `models/heroes_wip/werewolf/werewolf.vmdl_c` reads as `werewolf.vmdl`. */
-const modelFileName = (entry: string) => entry.slice(entry.lastIndexOf('/') + 1).replace(/_c$/, '');
-
-function StaleModelTag({ models, variant }: { models?: Mod['staleModels']; variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  if (!models?.length) return null;
-  return (
-    <Tag tone="warning" variant={variant} icon={Camera}
-      title={t('installed.card.staleModelTitle', { files: models.map((m) => modelFileName(m.entry)).join(', ') })}>
-      {t('installed.card.staleModel')}
-    </Tag>
-  );
-}
-
 function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
   staleCount: number;
   updatableCount: number;
@@ -512,26 +488,22 @@ function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
   variant: 'overlay' | 'inline';
 }) {
   const { t } = useTranslation();
-  if (onOpen && updatableCount > 0) {
-    return (
-      <button type="button" data-card-action="true" onClick={(event) => {
-        event.stopPropagation();
-        onOpen();
-      }} className="rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-2 focus-visible:outline-accent">
-        <Tag tone="update" variant={variant} icon={Download}
-          title={t('mergedContents.staleSourcesUpdatable', { count: updatableCount })}>
-          {t('mergedContents.updateSources', { count: updatableCount })}
-        </Tag>
-      </button>
-    );
-  }
-  if (staleCount === 0) return null;
-  return (
-    <Tag tone="update" variant={variant} icon={Download}
-      title={t('installed.card.staleSourcesTitle', { count: staleCount })}>
-      {t('installed.card.staleSourcesBadge', { count: staleCount })}
-    </Tag>
-  );
+  if (staleCount === 0 && updatableCount === 0) return null;
+  const manualCount = Math.max(0, staleCount - updatableCount);
+  const title = [
+    updatableCount > 0 && t('mergedContents.staleSourcesUpdatable', { count: updatableCount }),
+    manualCount > 0 && t('installed.card.staleSourcesTitle', { count: manualCount }),
+  ].filter(Boolean).join('\n');
+  const tag = <Tag tone="update" variant={variant} icon={Download} className="uppercase tracking-wide"
+    title={title}>
+    {t('profiles.actions.update')}
+  </Tag>;
+  return onOpen && updatableCount > 0 ? (
+    <button type="button" data-card-action="true" onClick={(event) => {
+      event.stopPropagation();
+      onOpen();
+    }} className="inline-flex rounded-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-accent">{tag}</button>
+  ) : tag;
 }
 
 function ModListRowContent({
@@ -639,16 +611,15 @@ function ModListRowContent({
           className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary"
           onRename={onRenameLocal}
         />
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
           <RequirementWarning mod={mod} />
-          <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
-          <StaleModelTag models={mod.staleModels} variant="inline" />
           <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
             onOpen={onOpenDetails} variant="inline" />
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+          <RepairIssueIcons outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels} />
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -761,7 +732,11 @@ export function ModCard({
   const heroNames = useCategoryStore((state) => state.heroNames);
   const pathsByModel = useCategoryStore((state) => state.pathsByModel);
   const taxonomyContext = useMemo(() => ({ heroByCategoryId, heroNames, pathsByModel }), [heroByCategoryId, heroNames, pathsByModel]);
-  const cardTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
+  const tagScope = useAppStore(state => getInstallationScope(state.settings));
+  const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const assignedCustomTags = customTagsForMods(customTags, group?.variants ?? [mod]);
+  const baseTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
+  const cardTaxonomy = { ...baseTaxonomy, tags: [...new Set([...baseTaxonomy.tags, ...assignedCustomTags.map(tag => tag.name)])] };
   const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
@@ -1075,6 +1050,13 @@ export function ModCard({
           onCreateNew={onCreateList}
         />
       )}
+      {tagScope && customTags.length > 0 && <MenuSub>
+        <MenuSubTrigger icon={TagIcon}>{t('installed.tags.title')}</MenuSubTrigger>
+        <MenuSubContent className="max-h-72 overflow-y-auto">
+          {customTags.map(tag => <MenuCheckboxItem key={tag.id} checked={assignedCustomTags.some(assigned => assigned.id === tag.id)}
+            onCheckedChange={() => useInstalledTagsStore.getState().toggle(tagScope, tag.id, mod)}>{tag.name}</MenuCheckboxItem>)}
+        </MenuSubContent>
+      </MenuSub>}
       {onToggleFavorite && (
         <MenuItem icon={Star} onSelect={onToggleFavorite}>
           {favoriteMenuLabel}
@@ -1433,8 +1415,6 @@ export function ModCard({
                   {t('installed.card.conflict')}
                 </Tag>
               )}
-              <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="overlay" />
-              <StaleModelTag models={mod.staleModels} variant="overlay" />
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"
@@ -1510,6 +1490,7 @@ export function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
+              <RepairIssueIcons outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels} />
               <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} />
             </div>
 

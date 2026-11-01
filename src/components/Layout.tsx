@@ -35,6 +35,7 @@ import ImportCustomModsModal from './ImportCustomModsModal';
 import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
 import { RequirementsHost } from './requirements/RequirementsHost';
+import { InstalledIssuesController } from './installed/InstalledIssuesController';
 import { useElasticOverscroll } from '../lib/useElasticOverscroll';
 
 export default function Layout() {
@@ -432,6 +433,7 @@ export default function Layout() {
           onSubmittingChange={setBatchImportBusy}
         />
       )}
+      <InstalledIssuesController />
       <RequirementsHost />
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>

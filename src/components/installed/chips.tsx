@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpToLine } from 'lucide-react';
+import { ArrowUpToLine, CameraOff, FileWarning } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
+import type { Mod } from '../../types/mod';
 import soulUrn from '../../assets/soul-urn.png';
 
 /** Stand-in for PriorityEditor on Global (priority-root) cards. They load
@@ -32,28 +33,57 @@ export function MetaTextChip({ label, className, title }: { label: string; class
   return <span className={className} title={title ?? label}><ChipText>{label}</ChipText></span>;
 }
 
-/** Earlier heroes paint in front; the overflow urn stays behind every hero. */
-export function HeroIconStack({ heroes }: { heroes: readonly string[] }) {
-  if (heroes.length === 0) return null;
-  const icons = heroes.length > 5 ? [...heroes.slice(0, 4), null] : heroes;
+function OverlappingIcons({ items, maxWidth, title, ...attributes }: {
+  items: { id: string; content: ReactNode; title?: string }[];
+  maxWidth: number;
+  title: string;
+} & HTMLAttributes<HTMLSpanElement>) {
+  if (items.length === 0) return null;
   return (
     <span
       role="img"
-      aria-label={heroes.join(', ')}
-      title={heroes.join(', ')}
+      aria-label={title}
+      title={title}
       className="relative isolate inline-block h-[22px] min-w-[22px]"
-      style={{ width: Math.min(66, heroes.length * 22) }}
-      data-hero-stack
+      style={{ width: Math.min(maxWidth, items.length * 22) }}
+      {...attributes}
     >
-      {icons.map((hero, index) => (
-        <span key={hero ?? 'overflow'} className="absolute top-0 w-[22px]" style={{ left: icons.length === 1 ? 0 : `calc((100% - 22px) * ${index / (icons.length - 1)})` }}>
-          {hero !== null ? <HeroTagLabel heroName={hero} iconClassName="h-[22px] w-[22px]" iconOnly /> : (
-            <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className="block h-[22px] w-[22px] object-contain grayscale brightness-50 opacity-70" />
-          )}
+      {items.map((item, index) => (
+        <span key={item.id} title={item.title} className="absolute top-0 w-[22px]" style={{ left: items.length === 1 ? 0 : `calc((100% - 22px) * ${index / (items.length - 1)})` }}>
+          {item.content}
         </span>
       )).reverse()}
     </span>
   );
+}
+
+/** Earlier heroes paint in front; the overflow urn stays behind every hero. */
+export function HeroIconStack({ heroes, maxVisible = 5 }: { heroes: readonly string[]; maxVisible?: number }) {
+  const icons = heroes.length > maxVisible ? [...heroes.slice(0, maxVisible - 1), null] : heroes;
+  return <OverlappingIcons data-hero-stack maxWidth={66} title={heroes.join(', ')} items={icons.map(hero => ({
+    id: hero ?? 'overflow',
+    content: hero !== null ? <HeroTagLabel heroName={hero} iconClassName="h-[22px] w-[22px]" iconOnly /> : (
+      <img src={soulUrn} alt="" aria-hidden="true" draggable={false} className="block h-[22px] w-[22px] object-contain grayscale brightness-50 opacity-70" />
+    ),
+  }))} />;
+}
+
+export function RepairIssueIcons({ outdated, enabled, models }: {
+  outdated?: Mod['outdatedVdata']; enabled: boolean; models?: Mod['staleModels'];
+}) {
+  const { t } = useTranslation();
+  const items = [];
+  if (outdated?.length) items.push({
+    id: 'data',
+    title: outdated.map(v => t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') })).join('\n\n'),
+    content: <span className="flex h-[22px] w-[22px] items-center justify-center"><FileWarning aria-hidden className={`h-4 w-4 ${enabled ? 'text-state-danger' : 'text-state-warning'}`} /></span>,
+  });
+  if (models?.length) items.push({
+    id: 'camera',
+    title: t('installed.card.staleModelTitle', { files: models.map(m => m.entry.slice(m.entry.lastIndexOf('/') + 1).replace(/_c$/, '')).join(', ') }),
+    content: <span className="flex h-[22px] w-[22px] items-center justify-center"><CameraOff aria-hidden className="h-4 w-4 text-state-warning" /></span>,
+  });
+  return <OverlappingIcons data-issue-stack maxWidth={44} title={items.map(item => item.title).join('\n\n')} items={items} />;
 }
 
 /** Fit a prefix of the ordered labels, reserving the exact overflow-chip width. */
