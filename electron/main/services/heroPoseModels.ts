@@ -384,7 +384,8 @@ function versionFile(key: string): string {
 // v29: also when it holds the hero off the floor (Rem's seat, Danny's flight), and
 // record each clip's floor offset (Doorman's lowered shop idle).
 // v30: a skin without clip files plays the game's clips, not the stale copies in its model.
-const RIGGED_PIPELINE_VERSION = '30';
+// v31: a graph pose that leaves the hero lying flat yields to the standing idle (Viscous).
+const RIGGED_PIPELINE_VERSION = '31';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';

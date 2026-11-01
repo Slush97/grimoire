@@ -3,7 +3,7 @@ import { clipFloorOffset, parseGlb, stagesPose } from './heroStagedPose';
 
 /** A standing figure: root, a pelvis 1 unit up, a head at 2, and a prop bone
  * held beside the pelvis. Every bone carries skinned weight. */
-function glb(animation?: { node: number; values: number[] }, standing?: { node: number; values: number[] }): Buffer {
+function glb(animation?: { node: number; values: number[]; path?: string }, standing?: { node: number; values: number[] }): Buffer {
     const floats: number[] = [];
     const accessors: object[] = [];
     const views: object[] = [];
@@ -18,10 +18,10 @@ function glb(animation?: { node: number; values: number[] }, standing?: { node: 
     const position = add([0, 0, 0, 0, 1, 0, 0, 2, 0, 0.3, 1, 0], 'VEC3');
     const joints = add([0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0], 'VEC4');
     const weights = add([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 'VEC4');
-    const clip = (name: string, motion: { node: number; values: number[] }) => {
+    const clip = (name: string, motion: { node: number; values: number[]; path?: string }) => {
         const input = add([0, 1], 'SCALAR');
-        const output = add(motion.values, 'VEC3');
-        return { name, samplers: [{ input, output, interpolation: 'LINEAR' }], channels: [{ sampler: 0, target: { node: motion.node, path: 'translation' } }] };
+        const output = add(motion.values, motion.path === 'rotation' ? 'VEC4' : 'VEC3');
+        return { name, samplers: [{ input, output, interpolation: 'LINEAR' }], channels: [{ sampler: 0, target: { node: motion.node, path: motion.path ?? 'translation' } }] };
     };
     const animations = [...animation ? [clip('pose', animation)] : [], ...standing ? [clip('standing', standing)] : []];
     // Joint indices above are stored as floats; the reader accepts any component type.
@@ -76,6 +76,18 @@ describe('floor-staged UI poses', () => {
         expect(check([0, 0.5, 0, 0, 0.4, 0], 0)).toBe(true);
         // A hop that comes back down stands on the floor.
         expect(check([0, 0.5, 0, 0, 0, 0], 0)).toBe(false);
+    });
+    it('flags a clip that leaves the whole figure lying flat', () => {
+        // A clip made for another skeleton: its root turn, without the pelvis track that undoes it.
+        const flat = { node: 0, path: 'rotation', values: [0, 0, 0.7071, 0.7071, 0, 0, 0.7071, 0.7071] };
+        expect(stagesPose(parseGlb(glb())!, parseGlb(glb(flat))!, 'pose')).toBe(true);
+    });
+    it('keeps a hero that crouches or leans', () => {
+        const lean = { node: 0, path: 'rotation', values: [0, 0, 0.2588, 0.9659, 0, 0, 0.2588, 0.9659] };
+        expect(stagesPose(parseGlb(glb())!, parseGlb(glb(lean))!, 'pose')).toBe(false);
+        // Falling over and getting back up is an animation, not a pose.
+        const fall = { node: 0, path: 'rotation', values: [0, 0, 0.7071, 0.7071, 0, 0, 0, 1] };
+        expect(stagesPose(parseGlb(glb())!, parseGlb(glb(fall))!, 'pose')).toBe(false);
     });
     it('does not flag a hero that hovers as high in its standing idle', () => {
         const model = parseGlb(glb())!;

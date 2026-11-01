@@ -44,6 +44,8 @@ const CONTACT_ABOVE = 0.05;
 const LIFT_FRACTION = 0.08;
 /** Bones moved this far below their rest height (a fraction of hero height) are hidden, not standing. */
 const HIDE_FRACTION = 0.25;
+/** A clip that never stands the body this tall (a fraction of its rest height) leaves it lying flat. */
+const FLAT_FRACTION = 0.5;
 /** Floor offsets within this fraction of hero height are noise. */
 const FLOOR_TOLERANCE = 0.005;
 const SAMPLES = 8;
@@ -243,6 +245,19 @@ function partOnFloor({ parent, joints, weighted, restWorld, height, sample }: Cl
 }
 
 /**
+ * The body never stands at even half its rest height over the whole clip. A hero can borrow a
+ * skeleton its own rig does not fully match (Viscous plays Kelvin's idle, and Kelvin's skeleton
+ * has no pelvis): the clip resets the root's axis turn, nothing undoes it, and he lies on his back.
+ */
+function liesFlat({ weighted, height, sample }: ClipSampler): boolean {
+    for (let k = 0; k <= SAMPLES; k++) {
+        const heights = [...weighted].flatMap((index) => sample(k)[index]?.[1] ?? []);
+        if (heights.length && Math.max(...heights) - Math.min(...heights) >= FLAT_FRACTION * height) return false;
+    }
+    return true;
+}
+
+/**
  * How far the clip moves the hero's floor contact from where the rest pose has it, in model
  * units: the lowest that the bones resting on the floor in the rest pose (soles, toes, a grounded
  * prop) come relative to their rest heights, over the whole clip. A Source model stands on its
@@ -279,7 +294,7 @@ function floorOffset({ weighted, restWorld, height, sample }: ClipSampler): numb
 export function stagesPose(model: Glb, animation: Glb, clipName: string, standing?: string): boolean {
     const sampler = clipSampler(model, animation, clipName);
     if (!sampler) return false;
-    if (partOnFloor(sampler)) return true;
+    if (partOnFloor(sampler) || liesFlat(sampler)) return true;
     const offset = floorOffset(sampler);
     const reference = standing ? clipSampler(model, animation, standing) : null;
     const hover = reference ? Math.max(0, floorOffset(reference) ?? 0) : 0;

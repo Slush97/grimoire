@@ -161,7 +161,10 @@ samples the graph clip on the exported skeleton:
   within 10% of height above the floor marks a part laid on the floor (Graves' spectral hand);
 - a clip that keeps every floor contact more than 8% of height above where the standing idle
   has them holds the hero off the floor (Rem's seat). Comparing against the standing idle keeps
-  heroes that hover in every pose (Solomon, Deadman Danny) on their graph pose.
+  heroes that hover in every pose (Solomon, Deadman Danny) on their graph pose;
+- a clip that never stands the body at half its rest height leaves the hero lying flat. Viscous
+  borrows Kelvin's skeleton and idle, and that skeleton has no pelvis, so the clip's root turn
+  goes uncorrected. He is the only one of the 38 models with a UI graph to lose core bones this way.
 
 Floor contacts are bones resting near the origin in the rest pose. Bones sent far below are an
 authored hide and do not count. When a pose is staged the standing idle becomes the default
