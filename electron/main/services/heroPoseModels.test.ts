@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   fetch: vi.fn<(url: string) => Promise<Response>>(),
   particles: vi.fn(),
   resources: new Map<string, unknown>(),
+  skinPaths: null as string[] | null,
 }));
 vi.mock('electron', () => ({
   app: { getPath: () => h.userData, isPackaged: true },
@@ -34,7 +35,8 @@ vi.mock('./heroAnimationMetadata', () => ({ readHeroAnimationMetadata: async () 
 vi.mock('./vpk', async importOriginal => {
   const original = await importOriginal<typeof import('./vpk')>();
   return { ...original,
-    parseVpkDirectoryCached: (path: string) => h.resources.size ? [...h.resources.keys()] : original.parseVpkDirectoryCached(path),
+    parseVpkDirectoryCached: (path: string) => h.skinPaths && path.endsWith('skin_dir.vpk') ? h.skinPaths
+      : h.resources.size ? [...h.resources.keys()] : original.parseVpkDirectoryCached(path),
     vpkHasEntry: (path: string, entry: string) => h.resources.has(entry) || original.vpkHasEntry(path, entry),
   };
 });
@@ -112,6 +114,7 @@ describe('mounted ambient particle textures', () => {
 beforeEach(async () => {
   vi.resetAllMocks();
   h.resources.clear();
+  h.skinPaths = null;
   await fs.mkdir(container, { recursive: true });
   h.userData = await fs.mkdtemp(join(container, 'run-'));
   h.run.mockImplementation(async (args) => {
@@ -172,6 +175,37 @@ describe('rigged preview physics bundle', () => {
     const donors = h.run.mock.calls.filter(([args]) => args[0] === 'workshop' && argument(args, '--out').endsWith('.animation-donor.glb'));
     expect(donors.map(([args]) => args.filter(arg => arg === '--vpk').length)).toEqual([2, 1]);
     expect(argument(donors[1][0], '--vpk')).toBe(join(game(), 'game', 'citadel', 'pak01_dir.vpk'));
+  });
+
+  describe('a skin that ships a model but no clip files', () => {
+    const entry = 'models/heroes_wip/deadpack/deadpack.vmdl_c';
+    const resource = 'models/heroes_wip/deadpack/clips/ui_shop.vnmclip_c';
+    const donors = () => h.run.mock.calls.filter(([args]) => args[0] === 'workshop' && argument(args, '--out').endsWith('.animation-donor.glb'));
+    const pak01 = () => join(game(), 'game', 'citadel', 'pak01_dir.vpk');
+    beforeEach(() => {
+      h.resources.set(entry, {});
+      h.resources.set(resource, { m_nNumFrames: 61, m_flDuration: 2, m_bIsAdditive: false,
+        m_rootMotion: { m_flAverageLinearVelocity: 0, m_flAverageAngularVelocityRadians: 0 } });
+      h.skinPaths = [entry];
+      h.stdout.mockImplementation(async args => args[1] === 'clips' ? '[]' : args[0] === 'soundevents'
+        ? JSON.stringify(h.resources.get(args[1]) ?? null) : 'null');
+    });
+    it('plays the clips the game plays, not the copies baked into its model', async () => {
+      h.run.mockImplementation(async args => fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop')));
+      const info = await exportRiggedHeroPose(game(), 'Deadman Danny', await skinFixture());
+      expect(info).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+      expect(donors().map(([args]) => args.filter(arg => arg === '--vpk').length)).toEqual([1]);
+      expect(argument(donors()[0][0], '--vpk')).toBe(pak01());
+    });
+    it('still uses the skin when the game cannot supply the motions', async () => {
+      h.run.mockImplementation(async (args) => {
+        if (args[0] === 'workshop' && args.filter(arg => arg === '--vpk').length === 1) throw new Error('Clip not found');
+        await fs.writeFile(argument(args, '--out'), rigGlb(args[0] === 'workshop'));
+      });
+      const info = await exportRiggedHeroPose(game(), 'Deadman Danny', await skinFixture());
+      expect(info).toMatchObject({ hasModel: true, hasAnimationFallback: true });
+      expect(donors().map(([args]) => args.filter(arg => arg === '--vpk').length)).toEqual([1, 2]);
+    });
   });
 
   it('rejects a donor whose animation duration cannot play in the viewer', async () => {
