@@ -238,7 +238,7 @@ async function sceneSource(deadlockPath: string): Promise<{ map: string; base: s
     const base = join(citadel, 'pak01_dir.vpk');
     const [mapStat, baseStat, version, binary] = await Promise.all([fs.stat(map), fs.stat(base), vpkmergeVersion(), fs.stat(vpkmergeBinaryPath())]);
     // Game updates and exporter changes alter this key: it is the cache's fingerprint.
-    const key = createHash('sha256').update(`hideout-v22:${version}:${binary.size}:${binary.mtimeMs}:${map}:${mapStat.size}:${mapStat.mtimeMs}:${baseStat.size}:${baseStat.mtimeMs}`).digest('hex').slice(0, 24);
+    const key = createHash('sha256').update(`hideout-v23:${version}:${binary.size}:${binary.mtimeMs}:${map}:${mapStat.size}:${mapStat.mtimeMs}:${baseStat.size}:${baseStat.mtimeMs}`).digest('hex').slice(0, 24);
     return { map, base, key };
 }
 
@@ -528,7 +528,8 @@ async function build(map: string, base: string, key: string, priority: BuildPrio
             // Overrides index ordinary scene objects, not aggregate fragments. Preserve order for VRF's precedence.
             const overrides = index < node.m_sceneObjects.length ? node.m_materialOverrides.filter(item => item.m_nSceneObjectIndex === index)
                 .map(item => ({ meshIndex: item.m_nSubSceneObject, drawCallIndex: item.m_nDrawCallIndex, material: item.m_pMaterial })) : [];
-            const model = await exportModel(entry, undefined, undefined, overrides);
+            // A world object never animates, so a rigged model (the Halloween pizza) bakes like any other static prop.
+            const model = await exportModel(entry, 'ref', undefined, overrides);
             if (!model) continue;
             const tint = object.m_vTintColor;
             const instance: HideoutInstance = { model, primitive: null, matrix: sourceMatrix(object.m_vTransform),

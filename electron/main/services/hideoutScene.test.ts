@@ -4,8 +4,8 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 const h = vi.hoisted(() => ({ userData: '', binary: '', version: 'vpkmerge 0.25.0', failing: new Set<string>(), exported: [] as string[], overrides: false,
-  props: false, clipExports: [] as string[][],
-  requests: [] as { entry: string; out: string; materialOverrides?: { meshIndex: number; drawCallIndex: number; material: string }[] }[] }));
+  props: false, clipExports: [] as string[][], rigged: new Set<string>(),
+  requests: [] as { entry: string; out: string; pose?: string; materialOverrides?: { meshIndex: number; drawCallIndex: number; material: string }[] }[] }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 vi.mock('./modMerger', async () => {
   const { writeFileSync: write, readFileSync: read } = await import('fs');
@@ -14,11 +14,12 @@ vi.mock('./modMerger', async () => {
     'maps/dl_hideout/ents.vents_c': { m_entityKeyValues: [{ keyValues3Data: { values: { classname: 'info_team_spawn', targetname: 'player_spawn', origin: [1, 2, 3] } } }] },
     'maps/dl_hideout/node000.vwnod_c': { m_sceneObjects: [{ m_renderableModel: 'models/a.vmdl' }, { m_renderableModel: 'models/b.vmdl' }], m_aggregateSceneObjects: [] },
   };
-  const exportOne = (entry: string, out: string, animated = false) => {
+  const exportOne = (entry: string, out: string, animated = false, skinned = false) => {
       h.exported.push(entry);
       if (h.failing.has(entry)) throw new Error('export failed');
       const json = Buffer.from(animated
         ? '{"asset":{"version":"2.0"},"scenes":[{"nodes":[]}],"accessors":[{"max":[4.8]}],"animations":[{"samplers":[{"input":0}]}]}'
+        : skinned ? '{"asset":{"version":"2.0"},"scenes":[{"nodes":[]}],"skins":[{"joints":[0]}]}'
         : '{"asset":{"version":"2.0"},"scenes":[{"nodes":[]}]} ');
       const padded = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4, 0x20)]);
       const glb = Buffer.alloc(28 + padded.length);
@@ -37,9 +38,10 @@ vi.mock('./modMerger', async () => {
       if (args[0] === '--version') return `${h.version}\n`;
       if (args.includes('--help')) return '';
       if (args[0] === 'model' && args[1] === 'export-scene') {
-        const requests: { entry: string; out: string }[] = JSON.parse(read(args[args.indexOf('--manifest') + 1], 'utf8'));
+        const requests: { entry: string; out: string; pose?: string }[] = JSON.parse(read(args[args.indexOf('--manifest') + 1], 'utf8'));
         h.requests.push(...requests);
-        return JSON.stringify(requests.map(request => { try { exportOne(request.entry, request.out); return null; } catch { return 'export failed'; } }));
+        // Like the real exporter, an unposed rigged model keeps its skin and a pose bakes it away.
+        return JSON.stringify(requests.map(request => { try { exportOne(request.entry, request.out, false, h.rigged.has(request.entry) && !request.pose); return null; } catch { return 'export failed'; } }));
       }
       if (h.props && args[1] === 'maps/dl_hideout/ents.vents_c') return JSON.stringify({ m_entityKeyValues: [
         { keyValues3Data: { values: { classname: 'info_team_spawn', targetname: 'player_spawn', origin: [1, 2, 3] } } },
@@ -157,6 +159,17 @@ describe('hideout scene cache', () => {
       expect(h.requests[0].materialOverrides).toBeUndefined();
       expect(h.requests[1].materialOverrides).toEqual([{ meshIndex: 1, drawCallIndex: 2, material: 'models/effects/steam.vmat' }]);
     } finally { h.overrides = false; }
+  });
+
+  it('bakes a rigged world model so it can join the static bundle', async () => {
+    h.rigged.add('models/a.vmdl_c');
+    writeFileSync(h.binary, 'rigged world model exporter');
+    const { loadHideoutScene } = await import('./hideoutScene');
+    try {
+      const scene = await loadHideoutScene(dl);
+      expect(scene.bundle.models).toBe(2);
+      expect(scene.instances).toHaveLength(2);
+    } finally { h.rigged.clear(); }
   });
 });
 
