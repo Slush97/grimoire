@@ -60,7 +60,7 @@ describe('morphic v2 tint compatibility', () => {
   ])('does not reinterpret %s', (_name, extra) => {
     expect(source2TintPlan(morphic(extra), new THREE.Color().setRGB(0.5, 0.25, 1)).ownsExportedFactor).toBe(false);
   });
-  it.each([2, 3])('owns the raw exported factor of schema v%i', (schema_version) => {
+  it.each([2, 3, 4])('owns the raw exported factor of schema v%i', (schema_version) => {
     expect(source2TintPlan(morphic({ schema_version }), new THREE.Color().setRGB(0.5, 0.25, 1)).ownsExportedFactor).toBe(true);
   });
   it('supports mod2x and the luminance-preserving tint matrix without another transfer', () => {
