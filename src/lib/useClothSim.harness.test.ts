@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import type { ClothModel, ClothNode } from './feModel';
 import { parseFeModel } from './feModel';
@@ -662,6 +662,49 @@ describe('createClothSimHarness', () => {
     for (const run of runs.slice(1)) {
       run.forEach((value, index) => expect(value).toBeCloseTo(runs[0][index], 8));
     }
+  });
+
+  it('keeps cloth steady and animation on pace through frames over the budget', () => {
+    // Graves' idle under a recording: a soft goal-damped cloth on a slowly moving body, mostly
+    // 60 fps with a slow frame now and then, each substep costly enough to reach the budget.
+    const model = syntheticClothModel();
+    model.goalDampedSpringIntegrators = [0b11];
+    model.extraIterations = 18;
+    model.extraGoalIterations = 12;
+    for (const entry of model.nodes.slice(1)) Object.assign(entry, { gravity: 360, damping: 0, animForce: 0.008, animVertex: 0.008 });
+    const frameTime = (frame: number) => (frame % 7 === 6 ? 2 : 1) / 60;
+    const run = (budgetMs?: number) => {
+      const { root, anchor } = syntheticRoot();
+      const tip = root.children[2];
+      const harness = createClothSimHarness(root, model, { budgetMs });
+      let clock = 0;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => (clock += 1.35));
+      let time = 0;
+      const offset = new THREE.Vector3();
+      const history: THREE.Vector3[] = [];
+      let peak = 0;
+      for (let frame = 0; frame < 360; frame++) {
+        harness.step(frameTime(frame), (dt) => {
+          time += dt;
+          anchor.position.x = 0.1 * Math.sin(2 * Math.PI * time);
+        });
+        // The tip's motion, free of how far the body itself moved over a longer frame.
+        offset.subVectors(tip.position, anchor.position);
+        history.push(offset.clone());
+        if (frame >= 120) {
+          const [before, previous] = history.slice(-3);
+          peak = Math.max(peak, offset.clone().sub(previous).sub(previous.clone().sub(before)).length());
+        }
+      }
+      now.mockRestore();
+      return { peak, time };
+    };
+    const steady = run();
+    const budgeted = run(8);
+    expect(steady.peak).toBeGreaterThan(0);
+    expect(budgeted.peak).toBeLessThan(steady.peak * 3);
+    // Animation time never falls behind a slow frame this short.
+    expect(budgeted.time).toBeCloseTo(steady.time, 6);
   });
 
   it('accumulates short frames, ignores invalid time and treats a suspended tab as paused', () => {

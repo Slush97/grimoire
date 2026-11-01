@@ -188,10 +188,10 @@ export const defaultClothTuning = {
 export const CLOTH_TIMESTEP = 1 / 120;
 const MAX_CLOTH_STEPS_PER_FRAME = 12;
 // Wall-clock time the viewer gives the cloth per frame. A heavy rig catching up after a slow
-// frame stops here with one longer substep, instead of the frame rate collapsing.
+// frame stops here and lets the animation catch up alone, instead of the frame rate collapsing.
 const CLOTH_FRAME_BUDGET_MS = 8;
-// The longest substep a frame over budget takes, four of the usual.
-const MAX_CLOTH_SUBSTEP = 4 * CLOTH_TIMESTEP;
+// The most animation time a frame over budget advances at once, four of the usual.
+const MAX_CLOTH_CATCH_UP = 4 * CLOTH_TIMESTEP;
 const CLOTH_RESUME_GAP = 0.25;
 const MIN_TIMESTEP_HISTORY_RATIO = 0.25;
 // Legacy exports without integrator selectors keep the preview damping fallback.
@@ -1703,17 +1703,18 @@ function stepClothRuntime(
   const collideAfterConstraints = ((rt.model.dynamicNodeFlags ?? 0) & 0x2000) !== 0;
   const started = budgetMs === undefined ? 0 : performance.now();
   for (let step = 0; step < count; step++) {
-    // A substep that would run past the budget is the frame's last and takes the frame's remaining
-    // time, up to MAX_CLOTH_SUBSTEP: the rest is dropped, not carried, since a slow frame that ran
-    // more substeps would make the next frame slower still. Animation and cloth keep their pace
-    // unless a single substep costs more than the whole budget.
+    // A substep that would run past the budget is the frame's last. The animation takes the frame's
+    // remaining time, up to MAX_CLOTH_CATCH_UP, and the cloth skips it: the rest is dropped, not
+    // carried, since a slow frame that ran more substeps would make the next frame slower still.
+    // The solver itself always steps by CLOTH_TIMESTEP: one longer step scales the Verlet velocity
+    // by the step ratio and kicks the cloth, a visible bob on every slow frame of a heavy rig.
     const stepStarted = budgetMs === undefined ? 0 : performance.now();
     const last = step === count - 1 || (budgetMs !== undefined && stepStarted - started + rt.substepMs > budgetMs);
-    const dt = last ? Math.min((count - step) * CLOTH_TIMESTEP, MAX_CLOTH_SUBSTEP) : CLOTH_TIMESTEP;
     restoreAnimationPose(rt);
-    animate?.(dt);
+    animate?.(last ? Math.min((count - step) * CLOTH_TIMESTEP, MAX_CLOTH_CATCH_UP) : CLOTH_TIMESTEP);
     refreshTargets(root, rt);
     updateAnimatedRodLengths(rt);
+    const dt = CLOTH_TIMESTEP;
     warmStartRuntime(rt, dt);
     for (const node of rt.nodes) node.lastSolvedPos.copy(node.pos);
     if (mode === 'targets') {
@@ -1825,13 +1826,13 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
 export function createClothSimHarness(
   root: THREE.Object3D,
   femodel: ClothModel,
-  options: { mode?: 'simulation' | 'targets' } = {},
+  options: { mode?: 'simulation' | 'targets'; budgetMs?: number } = {},
 ): ClothSimHarness {
   const rt = buildRuntime(root, femodel);
   if (!rt) throw new Error('createClothSimHarness requires at least three matched cloth nodes');
   return {
     step(delta: number, animate?: (delta: number) => void): ClothHarnessMetrics {
-      stepClothRuntime(root, rt, delta, animate, options.mode);
+      stepClothRuntime(root, rt, delta, animate, options.mode, options.budgetMs);
       return collectClothHarnessMetrics(rt);
     },
     metrics(): ClothHarnessMetrics {
