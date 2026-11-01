@@ -15,5 +15,7 @@
  * metallic-roughness texture's blue channel, its roughness (normal-map blue) in
  * green, keep small constant AO textures as occlusionTexture, and record the
  * color texture's VTEX reflectivity in `texture_reflectivity`.
+ *
+ * v4: adds `source_material`, the resource path of the material. Nothing else changes.
  */
-export const SOURCE2_EXTRAS_VERSION = 3;
+export const SOURCE2_EXTRAS_VERSION = 4;

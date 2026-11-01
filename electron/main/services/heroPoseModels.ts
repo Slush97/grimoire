@@ -383,7 +383,8 @@ function versionFile(key: string): string {
 // graph pose stages part of the hero on the floor (Graves' shop hand).
 // v29: also when it holds the hero off the floor (Rem's seat, Danny's flight), and
 // record each clip's floor offset (Doorman's lowered shop idle).
-const RIGGED_PIPELINE_VERSION = '29';
+// v30: a skin without clip files plays the game's clips, not the stale copies in its model.
+const RIGGED_PIPELINE_VERSION = '30';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -460,15 +461,22 @@ async function recoverSkinAnimations(vpk: string, base: string, selector: string
     if (!bounded.length) return false;
     const args = ['--entry', modelEntry, ...bounded.flatMap((clip) => ['--clip', `${clip.name}=${clip.resource}`])];
     try {
-        const packages = useBaseAnimations || clips.every(clip => clip.resource.startsWith('legacy:')) ? [base] : [...new Set([vpk, base])];
-        try {
-            await runVpkmerge(['workshop', 'motions', ...packages.flatMap(path => ['--vpk', path]), ...args, '--out', donor]);
-        } catch (error) {
-            // vpkmerge measures a skin's rig against the clips with its cloth bones counted, so a
-            // skin that adds cloth fails there. The base rig's motions bind to it by bone name,
-            // which the check below verifies.
-            if (packages.length === 1) throw error;
-            await runVpkmerge(['workshop', 'motions', '--vpk', base, ...args, '--out', donor]);
+        const baseOnly = useBaseAnimations || vpk === base || clips.every(clip => clip.resource.startsWith('legacy:'));
+        // The game plays clip files through its animation graph. Copies baked into a skin's model are
+        // never played and go stale (Graves Shirt's idle predates the game hiding her jar), so a skin
+        // without clip files of its own takes its motions from the game.
+        const skinHasClipFiles = parseVpkDirectoryCached(vpk)?.some(path => path.endsWith('.vnmclip_c')) ?? true;
+        // vpkmerge measures a skin's rig against the clips with its cloth bones counted, so a
+        // skin that adds cloth fails there. The base rig's motions bind to it by bone name,
+        // which the check below verifies.
+        const attempts = baseOnly ? [[base]] : skinHasClipFiles ? [[vpk, base], [base]] : [[base], [vpk, base]];
+        for (const [attempt, packages] of attempts.entries()) {
+            try {
+                await runVpkmerge(['workshop', 'motions', ...packages.flatMap(path => ['--vpk', path]), ...args, '--out', donor]);
+                break;
+            } catch (error) {
+                if (attempt === attempts.length - 1) throw error;
+            }
         }
         if ((await glbAnimationCount(donor) ?? 0) === 0) return false;
         if (!compatibleHeroAnimationRig(await readGlbJson(join(dir, RIGGED_MODEL_FILENAME)), await readGlbJson(donor))) {
