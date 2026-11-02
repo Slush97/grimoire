@@ -123,7 +123,7 @@ import './ipc/modInterchange';
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
 import './ipc/modSafety';
-import { loadSettings, saveSettings, type AppSettings } from './services/settings';
+import { loadSettings, saveSettings } from './services/settings';
 import {
     configureForgeBridge,
     requestForgeEnable,
@@ -137,6 +137,13 @@ import { backfillMissingMetadataHashes, recoverPrunedIdentities } from './servic
 import { backfillImprintedFlags } from './services/imprintMods';
 import { destroyDiscordRpc } from './services/discordRpc';
 import { startSaltIngest } from './services/saltIngest';
+import {
+    MIN_WINDOW_HEIGHT,
+    MIN_WINDOW_WIDTH,
+    centerInWorkArea,
+    isTitleBarReachable,
+    resolveInitialBounds,
+} from './services/windowBounds';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -240,59 +247,23 @@ async function runStartupMetadataMaintenance(): Promise<void> {
     }
 }
 
-const DEFAULT_WINDOW_WIDTH = 1280;
-const DEFAULT_WINDOW_HEIGHT = 800;
-const MIN_WINDOW_WIDTH = 900;
-const MIN_WINDOW_HEIGHT = 600;
-
-/**
- * Resolve the saved window rectangle into safe constructor bounds. We only
- * honour a saved position when it still lands on a connected display: on some
- * multi-monitor Linux/Wayland setups the OS otherwise placed the window on the
- * wrong screen at the wrong size, and a stale x/y from an unplugged monitor
- * would strand the window offscreen. When the saved spot is gone (or nothing
- * was saved yet) we omit x/y so Electron centers on the primary display.
- */
-function resolveInitialBounds(saved: AppSettings['windowBounds']): {
-    width: number;
-    height: number;
-    x?: number;
-    y?: number;
-    isMaximized: boolean;
-} {
-    if (!saved) {
-        return { width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT, isMaximized: false };
-    }
-
-    const width = Math.max(MIN_WINDOW_WIDTH, Math.round(saved.width) || DEFAULT_WINDOW_WIDTH);
-    const height = Math.max(MIN_WINDOW_HEIGHT, Math.round(saved.height) || DEFAULT_WINDOW_HEIGHT);
-
-    // Only restore the position if the saved rectangle visibly overlaps some
-    // display's work area; otherwise the monitor it was on is gone.
-    let x: number | undefined;
-    let y: number | undefined;
-    if (typeof saved.x === 'number' && typeof saved.y === 'number') {
-        const onScreen = screen.getAllDisplays().some((display) => {
-            const wa = display.workArea;
-            return (
-                saved.x! < wa.x + wa.width &&
-                saved.x! + width > wa.x &&
-                saved.y! < wa.y + wa.height &&
-                saved.y! + height > wa.y
-            );
-        });
-        if (onScreen) {
-            x = Math.round(saved.x);
-            y = Math.round(saved.y);
-        }
-    }
-
-    return { width, height, x, y, isMaximized: !!saved.isMaximized };
-}
-
 function createWindow(): void {
     const settings = loadSettings();
-    const initial = resolveInitialBounds(settings.windowBounds);
+    const displays = screen.getAllDisplays();
+    const initial = resolveInitialBounds(settings.windowBounds, displays.map((d) => d.workArea));
+    // One line per launch so a "window is invisible" report can be read off the
+    // log: what was saved, what we did with it, and what Windows says is there.
+    console.log('[Window] startup bounds:', JSON.stringify({
+        saved: settings.windowBounds ?? null,
+        position: settings.windowBounds ? (initial.x !== undefined ? 'honoured' : 'dropped') : 'none saved',
+        initial,
+        displays: displays.map((d) => ({
+            id: d.id,
+            bounds: d.bounds,
+            workArea: d.workArea,
+            scaleFactor: d.scaleFactor,
+        })),
+    }));
     mainWindow = new BrowserWindow({
         width: initial.width,
         height: initial.height,
@@ -324,10 +295,32 @@ function createWindow(): void {
     // Auto-hiding still lets Alt open the native menu instead of a mod preview.
     if (process.platform !== 'darwin') mainWindow.removeMenu();
 
-    // Show window when ready to prevent white screen flash
+    // Show window when ready to prevent white screen flash. If the renderer
+    // never paints, show it anyway after a few seconds: a visible broken
+    // window beats an invisible process the user can only kill.
+    let revealed = false;
+    const reveal = () => {
+        if (revealed || !mainWindow || mainWindow.isDestroyed()) return;
+        revealed = true;
+        if (initial.isMaximized) mainWindow.maximize();
+        mainWindow.show();
+    };
+    const revealFallback = setTimeout(() => {
+        if (revealed) return;
+        console.warn('[Window] ready-to-show did not fire within 5s, showing the window anyway');
+        reveal();
+    }, 5000);
     mainWindow.once('ready-to-show', () => {
-        if (initial.isMaximized) mainWindow?.maximize();
-        mainWindow?.show();
+        clearTimeout(revealFallback);
+        reveal();
+    });
+    mainWindow.once('closed', () => clearTimeout(revealFallback));
+
+    mainWindow.webContents.on('unresponsive', () => {
+        console.warn('[Window] renderer became unresponsive');
+    });
+    mainWindow.webContents.on('responsive', () => {
+        console.log('[Window] renderer is responsive again');
     });
 
     // Persist position and size so the app reopens where the user left it.
@@ -459,6 +452,29 @@ function createWindow(): void {
     }
 }
 
+/**
+ * Move the window onto the display under the cursor when it is on another
+ * display or its title bar is out of reach there. The user just clicked a
+ * shortcut, so they can see that display; the one the window is on may be a
+ * switched-off TV, a dummy plug or a virtual display that startup can't tell
+ * apart from a real monitor. The move/resize listeners persist the new bounds.
+ */
+function bringWindowToCursorDisplay(win: BrowserWindow): void {
+    if (!win.isVisible()) win.show();
+
+    const target = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const current = win.getBounds();
+    const onTarget = screen.getDisplayMatching(current).id === target.id;
+    if (onTarget && isTitleBarReachable(current, [target.workArea])) return;
+
+    const wasMaximized = win.isMaximized();
+    if (wasMaximized) win.unmaximize();
+    const next = centerInWorkArea(win.getNormalBounds(), target.workArea);
+    console.log('[Window] relaunch moved the window to display', target.id, JSON.stringify({ from: current, to: next }));
+    win.setBounds(next);
+    if (wasMaximized) win.maximize();
+}
+
 // Register the `grimoire:` URL scheme so Windows hands `grimoire:...` URLs to
 // this app. The packaged NSIS installer also writes registry entries via the
 // `protocols:` block in electron-builder.yml, but the runtime call covers
@@ -484,13 +500,18 @@ if (!gotTheLock) {
     app.quit();
 } else {
     app.on('second-instance', (_event, argv) => {
-        // Focus the main window if a second instance is attempted
+        const url = findGrimoireUrlInArgv(argv);
+
+        // Focus the main window if a second instance is attempted. A plain
+        // relaunch is what a user does when they can't see the window, so that
+        // also pulls it onto the display they launched from. Protocol URLs come
+        // from the browser and must not move it.
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
+            if (!url) bringWindowToCursorDisplay(mainWindow);
             mainWindow.focus();
         }
 
-        const url = findGrimoireUrlInArgv(argv);
         if (url) {
             if (isGrimoireAuthUrl(url)) {
                 void handleProtocolAuthCallback(url);
@@ -505,6 +526,14 @@ if (!gotTheLock) {
                 }
             }
         }
+    });
+
+    // Local log only: makes a renderer or GPU crash visible in the next report.
+    app.on('render-process-gone', (_event, _webContents, details) => {
+        console.error('[Main] render process gone:', details.reason, 'exitCode', details.exitCode);
+    });
+    app.on('child-process-gone', (_event, details) => {
+        console.error('[Main] child process gone:', details.type, details.name ?? '', details.reason, 'exitCode', details.exitCode);
     });
 
     app.whenReady().then(() => {

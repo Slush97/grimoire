@@ -173,15 +173,16 @@ jobs:
           fi
 
       # electron-builder signs the app exe, vpkmerge.exe, the unpacked 7za.exe
-      # copies, the uninstaller, the installer and the portable exe. Fail if
-      # any of them came out unsigned, and print the subject so the exact CN is
-      # on record for AZURE_SIGNING_PUBLISHER.
+      # copies, the uninstaller, the installer, the portable exe and whatever
+      # win.signExts adds. Fail if any exe, DLL or native module came out
+      # unsigned, and print the subject so the exact CN is on record for
+      # AZURE_SIGNING_PUBLISHER.
       - name: Verify Windows signatures
         if: matrix.platform == 'win' && vars.AZURE_SIGNING_ACCOUNT != ''
         working-directory: grimoire
         shell: pwsh
         run: |
-          $sigs = Get-ChildItem release -Recurse -Filter *.exe | Get-AuthenticodeSignature
+          $sigs = Get-ChildItem release -Recurse -File -Include *.exe, *.dll, *.node | Get-AuthenticodeSignature
           $sigs | Format-Table Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } }, Path -AutoSize -Wrap
           if ($sigs | Where-Object Status -ne 'Valid') { exit 1 }
 
