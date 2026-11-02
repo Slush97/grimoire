@@ -22,8 +22,12 @@ import * as THREE from 'three';
 import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { captureViewerAmbient, viewerAmbientCube, VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR,
-  VIEWER_HEMISPHERE_INTENSITY, VIEWER_ENVIRONMENT_INTENSITY, type NprAmbientCube, type ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
+  VIEWER_HEMISPHERE_INTENSITY, VIEWER_ENVIRONMENT_INTENSITY, viewerLightScale, type NprAmbientCube, type ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
 import { NPR_AMBIENT_TARGET, NPR_EXPOSURE_RETAINED } from '../../lib/source2NprLighting';
+import { ambientLuminanceFit } from '../../lib/citadelNprLighting';
+import { CitadelRimDepth } from '../../lib/citadelRimDepth';
+import { loadCitadelGlassNoise } from '../../lib/citadelGlassNoise';
+import { canRenderAuthoredShell, citadelOutlineMesh, hasAuthoredShellMarker, hasCitadelNprOutline } from '../../lib/citadelNprOutline';
 import { FULL_EFFECTS_PREVIEW_DEFAULTS, heroPresentationStorageKey, initialHeroPreviewFlags } from './heroViewerDefaults';
 import { heroPreviewBounds } from '../../lib/heroPreviewBounds';
 import { skinPartBounds } from '../../lib/skinPartBounds';
@@ -57,7 +61,7 @@ import { particleAttachmentIssues } from './particleAttachment';
 import { useClothSim } from '../../lib/useClothSim';
 import type { ClothModel } from '../../lib/feModel';
 import { BloomEffect } from './BloomEffect';
-import { PARTICLE_RUNTIME_POST_PIPELINE } from '../../lib/particles/render/post';
+import { DEADLOCK_HERO_POST, DEADLOCK_BASE_POST, PARTICLE_RUNTIME_POST_PIPELINE } from '../../lib/particles/render/post';
 import { HeroViewerToolbar, type HeroViewerScene } from './HeroViewerToolbar';
 import { HideoutScene } from './HideoutScene';
 import { SkinPartPreview } from './SkinPartPreview';
@@ -69,7 +73,7 @@ import type { ViewerPartHit } from '../../lib/viewerPartPicking';
 import type { HideoutSceneInfo, SkinPartEdit, SkinPartTexture, SkinRegionSeed } from '../../types/skinEditor';
 import { editForMaterial } from '../../lib/skinParts';
 import { source2TintMatrix } from '../../lib/source2ColorCorrection';
-import { heroAnimationRecipe, preferredHeroAnimationName } from '../../lib/heroAnimationCatalog';
+import { heroAnimationPlayback, heroShowcaseAnimation, preferredHeroAnimation } from '../../lib/heroAnimationCatalog';
 import { ViewerBackdrop, ViewerBackdropControls } from './ViewerBackdrop';
 import { useViewerBackdrop } from '../../lib/useViewerBackdrop';
 import type { ViewerBackground } from '../../lib/viewerBackgrounds';
@@ -282,8 +286,7 @@ function enableVertexColors(scene: THREE.Object3D): void {
 /** Prefer an idle loop from the exported animation menu. */
 function pickIdleClip(clips: THREE.AnimationClip[], heroName?: string): THREE.AnimationClip | null {
   const valid = clips.filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
-  const name = preferredHeroAnimationName(valid.map((c) => c.name), heroName);
-  return valid.find((c) => c.name === name) ?? null;
+  return preferredHeroAnimation(valid, heroName) ?? null;
 }
 
 /** Shared pointer-interaction state between OrbitControls and the model group:
@@ -362,7 +365,8 @@ export function PosedModel({
   const norm = useMemo(() => {
     const cached = normalizedScenes.get(scene);
     if (cached) return cached;
-    const box = new THREE.Box3().setFromObject(scene);
+    scene.updateWorldMatrix(true, true);
+    const box = heroPreviewBounds(scene);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
@@ -458,7 +462,7 @@ export function RiggedModel({
       if (s.isSkinnedMesh && s.skeleton) s.skeleton.pose();
     });
     scene.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(scene);
+    const box = heroPreviewBounds(scene);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
@@ -531,14 +535,16 @@ export function RiggedModel({
       return () => { mixer.stopAllAction(); mixer.uncacheRoot(scene); mixerRef.current = null; movementActions.current.clear(); };
     }
     const action = mixer.clipAction(clip);
-    const hold = heroAnimationRecipe(clip.name, heroName)?.playback === 'hold';
+    const hold = heroAnimationPlayback(clip, heroName) === 'hold';
     action.setLoop(hold ? THREE.LoopOnce : THREE.LoopRepeat, hold ? 1 : Infinity);
     action.clampWhenFinished = hold;
+    const actionSpeed = heroShowcaseAnimation(clip)?.speed ?? 1;
+    action.setEffectiveTimeScale(actionSpeed);
     action.reset().play();
     const time = clampAnimationTime(seek?.time ?? 0, clip.duration);
     // Repeat actions wrap at duration. Sample just inside the end so dragging
     // the timeline to its last position shows the final pose, not time zero.
-    mixer.setTime(hold ? time : Math.min(time, Math.max(0, clip.duration - 1e-7)));
+    mixer.setTime((hold ? time : Math.min(time, Math.max(0, clip.duration - 1e-7))) / actionSpeed);
     if (progressRef) progressRef.current = { time, duration: clip.duration };
     return () => {
       action.stop();
@@ -986,9 +992,12 @@ function NprMaterials({
   unified,
   source2Active,
   celV2,
+  citadel,
+  exposure,
   ambientCube,
   ambientTarget,
   partEdits,
+  authoredEmission,
 }: {
   scene: THREE.Object3D;
   enabled: boolean;
@@ -1000,9 +1009,14 @@ function NprMaterials({
   /** Forces legacy wraps to rebuild after the mutating Source2 hint pass changes. */
   source2Active: boolean;
   celV2: boolean;
+  /** Game-faithful lighting (see citadelNprLighting.ts) instead of the classic look. */
+  citadel: boolean;
+  /** Display exposure; the faithful ambient targets are divided by it. */
+  exposure: number;
   ambientCube: NprAmbientCube | null;
   ambientTarget: number;
   partEdits: SkinPartEdit[];
+  authoredEmission: boolean;
 }) {
   // Live handle to the builds so the tint effect + uTime ticker can poke uniforms
   // without a rebuild. Both paths expose { material, uniforms } so the per-frame /
@@ -1034,12 +1048,43 @@ function NprMaterials({
     const disposers: Array<() => void> = [];
     const restore: Array<() => void> = [];
 
+    const shells: Array<[THREE.Mesh, THREE.Mesh]> = [];
+    const outlineBuilds = new Map<THREE.Material, DeadlockMaterialResult>();
+    const authoredBuilds = new Map<THREE.Material, DeadlockMaterialResult>();
+    const skipOutline = new THREE.MeshBasicMaterial({ visible: false });
+    disposers.push(() => skipOutline.dispose());
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       const skinned = obj as THREE.SkinnedMesh;
       if (!mesh.isMesh && !skinned.isSkinnedMesh) return;
 
-      const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const list = Array.isArray(mesh.material) ? [...mesh.material] : [mesh.material];
+      const authoredShell = hasAuthoredShellMarker(mesh);
+      if (authoredShell) {
+        // Loader hides every marked primitive. Only this supported path reveals it.
+        if (!unified || !citadel || !canRenderAuthoredShell(mesh)) return;
+        const visible = mesh.visible;
+        const raycast = mesh.raycast;
+        mesh.visible = true;
+        mesh.raycast = () => {};
+        restore.push(() => { mesh.visible = visible; mesh.raycast = raycast; });
+      }
+      if (unified && citadel && !authoredShell) {
+        const outlined = list.map((mat) => {
+          if (!hasCitadelNprOutline(mat)) return skipOutline;
+          let built = outlineBuilds.get(mat);
+          if (!built) {
+            built = buildDeadlockMaterial(mat, undefined, tint, authoredEmission ? 'authored' : 'preview', 'outline');
+            outlineBuilds.set(mat, built);
+            builds.set(built.material, built);
+            disposers.push(built.dispose);
+          }
+          return built.material;
+        });
+        if (outlined.some((mat) => mat !== skipOutline)) {
+          shells.push([mesh, citadelOutlineMesh(mesh, Array.isArray(mesh.material) ? outlined : outlined[0])]);
+        }
+      }
       list.forEach((mat, i) => {
         if (!mat) return;
         // NPR materials always; on the unified path also non-NPR self-illum
@@ -1049,18 +1094,19 @@ function NprMaterials({
         // wraps an owned clone, so per-pass dedup is handled by the builds map.
         if (!unified && (mat as { __csm?: unknown }).__csm) return;
 
-        let b = builds.get(mat);
+        let b = authoredShell ? authoredBuilds.get(mat) : builds.get(mat);
         if (!b) {
           if (unified) {
             // ONE pass: state + CSM on an owned clone; base is never mutated.
-            const built: DeadlockMaterialResult = buildDeadlockMaterial(mat, undefined, tint);
+            const built: DeadlockMaterialResult = buildDeadlockMaterial(mat, undefined, tint, authoredEmission ? 'authored' : 'preview', authoredShell ? 'authored-shell' : 'surface');
             built.uniforms.uCelV2.value = celV2 ? 1.0 : 0.0;
             b = {
               material: built.material,
               uniforms: built.uniforms,
               selfIllumPulseFn: built.selfIllumPulseFn,
             };
-            builds.set(mat, b);
+            if (authoredShell) authoredBuilds.set(mat, built);
+            builds.set(authoredShell ? built.material : mat, b);
             disposers.push(built.dispose);
           } else {
             const built: NprWrapResult | null = wrapMaterialWithNpr(mat, undefined, tint);
@@ -1094,9 +1140,23 @@ function NprMaterials({
       });
     });
 
+    for (const [mesh, shell] of shells) mesh.add(shell);
+    restore.push(() => { for (const [mesh, shell] of shells) mesh.remove(shell); });
+    let active = true;
+    if ([...builds.values()].some((build) => build.uniforms.uCitadelGlass.value > 0.5
+      && build.uniforms.uCitadelGlassNoiseAmount.value > 0)) {
+      void loadCitadelGlassNoise().then((texture) => {
+        if (!active) return;
+        for (const build of builds.values()) {
+          build.uniforms.uCitadelGlassNoiseMap.value = texture;
+          build.uniforms.uCitadelGlassNoiseReady.value = 1;
+        }
+      }).catch((error: unknown) => { console.warn('[HeroPoseViewer] glass noise unavailable:', error); });
+    }
     buildsRef.current = builds;
 
     return () => {
+      active = false;
       // Restore the original mesh.material references first, then dispose only what
       // this effect created. The parent loader effect's disposeScene then disposes
       // the restored originals, so there is no double-free.
@@ -1108,7 +1168,18 @@ function NprMaterials({
     // `tint` is intentionally excluded: the separate effect below applies it by
     // mutating uniforms, so a recolor never tears down and rebuilds the builds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, enabled, unified, source2Active]);
+  }, [scene, enabled, unified, source2Active, authoredEmission, citadel]);
+
+  // The game keeps rim light only on silhouettes, tested against scene depth.
+  // Rendered after the pose and cloth updates of this frame (later subscriber).
+  const { gl, camera } = useThree();
+  const rimDepth = useMemo(() => new CitadelRimDepth(), []);
+  useEffect(() => () => rimDepth.dispose(), [rimDepth]);
+  useFrame(() => {
+    if (!enabled || !citadel || buildsRef.current.size === 0) return;
+    rimDepth.render(gl, scene, camera);
+    buildsRef.current.forEach((b) => rimDepth.bind(b.uniforms, camera));
+  });
 
   // Drive uTime for the self-illum UV scroll (viscous_head's liquid glow).
   useFrame((state) => {
@@ -1170,8 +1241,15 @@ function NprMaterials({
       uniforms.uNprAmbientCubeOn.value = ambientCube ? 1 : 0;
       if (ambientCube) uniforms.uNprAmbientCube.value = ambientCube.map((value) => value.clone());
       uniforms.uNprExposure.value.set(ambientTarget * Math.PI, NPR_EXPOSURE_RETAINED);
+      if (uniforms.uCitadelLighting) {
+        uniforms.uCitadelLighting.value = citadel ? 1 : 0;
+        uniforms.uCitadelExposure.value = exposure;
+        // Game ambient and light units carry no 1/PI; the probe cube is irradiance.
+        if (ambientCube) uniforms.uCitadelAmbientFit.value.copy(ambientLuminanceFit(ambientCube)).multiplyScalar(1 / Math.PI);
+        else uniforms.uCitadelAmbientFit.value.set(0, 0, 0, 1);
+      }
     });
-  }, [ambientCube, ambientTarget, enabled, scene, unified, source2Active]);
+  }, [ambientCube, ambientTarget, citadel, exposure, enabled, scene, unified, source2Active]);
 
   return null;
 }
@@ -1282,6 +1360,7 @@ export default function HeroPoseViewer({
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
   const [rigged, setRigged] = useState(false);
+  const [animationStatus, setAnimationStatus] = useState<'base' | 'unavailable' | null>(null);
   const [clothModel, setClothModel] = useState<ClothModel | null>(null);
   const [generating, setGenerating] = useState(false);
   const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
@@ -1304,6 +1383,9 @@ export default function HeroPoseViewer({
   const [storedScene, setViewerScene] = useFoundryDraft<HeroViewerScene>(`${viewKey}:scene`, z.enum(['midtown', 'studio', 'transparent', 'hideout']), initialScene);
   const viewerScene = compact ? 'studio' : storedScene;
   const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
+  // Display exposure for the Deadlock tone curve; the game-faithful ambient divides by it.
+  const previewExposure = compact || viewerScene === 'midtown' ? 1.6 : 1.3;
+  const lightScale = viewerLightScale(previewExposure);
   const [wireframe, setWireframe] = useState(false);
   const [cameraView, , saveCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
   const [hideoutStatus, setHideoutStatus] = useState<{ kind: 'loading' } | { kind: 'ready'; info: HideoutSceneInfo; failedLoads: number } | { kind: 'failed' }>({ kind: 'loading' });
@@ -1390,7 +1472,7 @@ export default function HeroPoseViewer({
   const clipNamesKey = clips.map((clip) => clip.name).join('|');
   const sourceParticlesKey = `${heroName}|${sourceKey}|${clipNamesKey}`;
   const particleModelReady = scene !== null;
-  const [loadedSourceParticles, setLoadedSourceParticles] = useState<{ key: string; mount: SourceParticleMount | null } | null>(null);
+  const [loadedSourceParticles, setLoadedSourceParticles] = useState<{ key: string; mount: SourceParticleMount | null; postBloomEnabled: boolean } | null>(null);
   const sourceParticles = sourceParticlesEnabled && loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.mount : null;
 
   // A movement preview on the faithful runtime: the hero's clips and the game's data stage the effects
@@ -1494,6 +1576,7 @@ export default function HeroPoseViewer({
     setSeek((s) => ({ time: 0, revision: s.revision + 1 }));
     playbackProgressRef.current = { time: 0, duration: 0 };
     setRigged(false);
+    setAnimationStatus(null);
     setClothModel(null);
 
     (async () => {
@@ -1525,14 +1608,17 @@ export default function HeroPoseViewer({
               setClipName((current) => gltf.animations.some((candidate) => candidate.name === current
                 && Number.isFinite(candidate.duration) && candidate.duration > 0.001) ? current : clip.name);
               setRigged(true);
+              setAnimationStatus(rig.hasAnimationFallback ? 'base' : null);
               setClothModel(clothModel);
               setScene(gltf.scene);
               return; // rigged path won.
             }
-          } catch {
+          } catch (error) {
+            console.warn('[HeroPoseViewer] animated preview unavailable:', heroName, error);
             // Rigged export/load failed; fall through to the static pose path.
             setGenerating(false);
           }
+          if (!cancelled) setAnimationStatus('unavailable');
         }
 
         // --- Attempt 2: static --pose glb (the default). ---
@@ -1643,18 +1729,19 @@ export default function HeroPoseViewer({
       try {
         const info = await exportHeroParticles(heroName, skinSources, clipNamesKey ? clipNamesKey.split('|') : []);
         if (cancelled) return;
+        const postBloomEnabled = info.postBloomEnabled ?? true;
         if (!info.hasBundle) {
-          setLoadedSourceParticles({ key: sourceParticlesKey, mount: null });
+          setLoadedSourceParticles({ key: sourceParticlesKey, mount: null, postBloomEnabled });
           return;
         }
         const res = await fetch(particleBundleUrl(info.key));
         if (!res.ok) throw new Error(`${res.status} ${res.url}`);
         const bundle = (await res.json()) as ParticleBundle;
-        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: { bundle, textureBaseUrl: particleTextureBaseUrl(info.key) } });
+        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: { bundle, textureBaseUrl: particleTextureBaseUrl(info.key) }, postBloomEnabled });
       } catch (error) {
         // Particles are a non-essential overlay; a failure leaves the plain pose.
         console.warn('[HeroPoseViewer] particle bundle unavailable:', error);
-        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: null });
+        if (!cancelled) setLoadedSourceParticles({ key: sourceParticlesKey, mount: null, postBloomEnabled: true });
       }
     })();
     return () => {
@@ -1684,7 +1771,8 @@ export default function HeroPoseViewer({
           if (viewerScene === 'transparent') setViewerScene('studio');
           void backdrop.choose(file);
         }} onClear={backdrop.clear} />}
-      status={viewerError ?? backdropError}
+      status={viewerError ?? backdropError ?? (animationStatus === 'base' ? t('locker.pose.baseAnimations')
+        : animationStatus === 'unavailable' ? t('locker.pose.animationUnavailable') : null)}
       onAnimated={(v) => {
         writePreviewFlag('grimoire.preview.animated', v);
         if (!v) {
@@ -1756,13 +1844,14 @@ export default function HeroPoseViewer({
             that just shapes the form on top of the environment. Every preset
             except the hideout (which brings its own map lighting), Midtown
             included, reflects the studio room, and the NPR ambient probe
-            samples that same room so diffuse and reflections agree. */}
-        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting]} studio={!compact} onProbe={setAmbientProbe} />}
-        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY]} />
-        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={compact || viewerScene === 'midtown' ? 2.2 : 1.4}
+            samples that same room. Keep the raw diffuse probe as the NPR
+            normalization reference; calibrate artificial radiance at the rig. */}
+        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting] * lightScale} studio={!compact} onProbe={setAmbientProbe} />}
+        <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, viewerScene === 'hideout' ? 0.2 : VIEWER_HEMISPHERE_INTENSITY * lightScale]} />
+        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={(compact || viewerScene === 'midtown' ? 2.2 : 1.4) * lightScale}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
-        <directionalLight position={compact ? [3, 2, 3] : [3, 2, -3]} intensity={compact ? 1.8 : 1.2} color={compact ? new THREE.Color(1, 1, 1) : new THREE.Color(0.65, 0.78, 1)} /></>}
+        <directionalLight position={compact ? [3, 2, 3] : [3, 2, -3]} intensity={(compact ? 1.8 : 1.2) * lightScale} color={compact ? new THREE.Color(1, 1, 1) : new THREE.Color(0.65, 0.78, 1)} /></>}
         {viewerScene !== 'transparent' && viewerScene !== 'hideout' && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.02, 0]} receiveShadow>
             <planeGeometry args={[20, 20]} />
@@ -1817,9 +1906,12 @@ export default function HeroPoseViewer({
             unified={features.unifiedEnabled}
             source2Active={features.source2ShaderHintsEnabled}
             celV2={features.celV2Enabled}
+            citadel={features.citadelEnabled}
+            exposure={previewExposure}
             ambientCube={ambientCube}
             ambientTarget={compact ? 0.7 : NPR_AMBIENT_TARGET[lighting]}
             partEdits={partEdits}
+            authoredEmission={sourceParticlesEnabled}
           />
         )}
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
@@ -1828,11 +1920,13 @@ export default function HeroPoseViewer({
         {viewerScene === 'hideout' && <HideoutScene scale={normalizedScenes.get(scene)?.scale ?? 1} floor={-1.02} onStatus={setHideoutStatus} onProbe={setAmbientProbe} />}
         {scene && (
           <BloomEffect
-            deadlockExposure={compact || viewerScene === 'midtown' ? 1.6 : 1.3}
+            deadlockExposure={previewExposure}
             intensity={features.bloomEnabled ? bloomParams.intensity : 0}
             radius={import.meta.env.DEV ? bloomParams.radius : BLOOM_RADIUS}
             threshold={import.meta.env.DEV ? bloomParams.threshold : BLOOM_THRESHOLD}
             pipeline={sourceParticlesEnabled || movementEngine ? PARTICLE_RUNTIME_POST_PIPELINE : 'preview'}
+            sourceSettings={viewerScene === 'studio' || viewerScene === 'transparent' ? DEADLOCK_HERO_POST : DEADLOCK_BASE_POST}
+            sourceBloomEnabled={loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.postBloomEnabled : true}
           />
         )}
       </Canvas>}
@@ -1881,6 +1975,10 @@ function DevViewerControls({
       'Cel v2': {
         value: devFlags.celV2,
         onChange: (value: boolean) => setDevFlag('celV2', 'grimoire.preview.celV2', value),
+      },
+      'Game lighting': {
+        value: devFlags.citadel !== false,
+        onChange: (value: boolean) => setDevFlag('citadel', 'grimoire.preview.citadel', value),
       },
       FX: {
         value: devFlags.effects,

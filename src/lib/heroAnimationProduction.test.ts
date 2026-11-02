@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HERO_ANIMATION_RECIPES, heroAnimationRecipe, preferredHeroAnimationName, selectHeroAnimations, type HeroAnimationInfo } from './heroAnimationCatalog';
 
-// Installed production hero definitions and exact-model clip inventory, 2026-10-01.
+// Legacy fallback inventory from 2026-10-01, used when no complete UI state is available.
 const production: [string, string, number, number][] = [
   ['Infernus', 'shop_menu_base', 87, 30.0],
   ['Seven', 'primary_stand_idle', 79, 24.0],
@@ -49,15 +49,15 @@ const production: [string, string, number, number][] = [
   ['Baba', 'outofcombat_stand_idle', 121, 30.0],
 ];
 
-describe('explicit production showcase coverage', () => {
-  it('covers all 44 production heroes without a generic-name fallback', () => {
+describe('legacy production showcase fallbacks', () => {
+  it('keeps reviewed fallback coverage for all 44 production heroes', () => {
     expect(production).toHaveLength(44);
     for (const [hero, name] of production) {
       expect(HERO_ANIMATION_RECIPES[hero]?.[0].names).toContain(name);
     }
   });
 
-  it.each(production)('%s selects its installed default before graph fragments', (hero, name, frameCount, fps) => {
+  it.each(production)('%s selects its legacy fallback when UI graph data is unavailable', (hero, name, frameCount, fps) => {
     const make = (clipName: string): HeroAnimationInfo => ({ name: clipName, frameCount, fps,
       durationSeconds: (frameCount - 1) / fps, looping: false, default: false });
     const clips = [make('respawn_countdown_idle'), make('aim_idle'), make(name), make('flinch_melee_mid_add')];
@@ -67,7 +67,7 @@ describe('explicit production showcase coverage', () => {
     expect(selectHeroAnimations([{ ...make(name), additive: true }], hero)).toEqual([]);
   });
 
-  it('holds the independently measured discontinuous production idles', () => {
+  it('retains measured hold behavior for legacy fallback clips', () => {
     expect(heroAnimationRecipe('shop_menu_base', 'Infernus')?.playback).toBe('hold');
     expect(heroAnimationRecipe('primary_stand_idle', 'Calico')?.playback).toBe('hold');
     expect(heroAnimationRecipe('primary_idle', 'Billy')?.playback).toBe('hold');

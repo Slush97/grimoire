@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MorphicExtras } from './source2NprMaterial';
+import { SOURCE2_EXTRAS_VERSION } from './source2ExtrasVersion';
 
 // MatrixColorCorrect2's scale/rotate/saturate/unscale construction reduces to
 // squared, normalized Rec. 709 weights. Keep this distinct from display luma.
@@ -39,19 +40,21 @@ export function source2TintMatrix(tint: THREE.Color, mode: number): THREE.Matrix
 export interface Source2TintPlan {
   matrix: THREE.Matrix3;
   offset: THREE.Vector3;
-  /** Only a proven morphic v2 exported factor may be removed from the GLTF base. */
+  /** Only a proven morphic v2+ exported factor may be removed from the GLTF base. */
   ownsExportedFactor: boolean;
   linearTint: THREE.Color;
 }
 
-/** vpkmerge v0.19.1 writes the raw sRGB g_vColorTint1 into a linear glTF factor.
- * Match both schema and value, so arbitrary GLBs, future schemas and independently
+/** vpkmerge v0.19.1 writes the raw sRGB g_vColorTint1 into a linear glTF factor, and
+ * schema v3 keeps that factor unchanged. Match both schema and value, so arbitrary
+ * GLBs, schemas newer than SOURCE2_EXTRAS_VERSION and independently
  * edited factors are untouched. A factor already decoded by a newer exporter is
  * accepted without decoding that factor again. Dynamic tint stays on its fallback.
  */
 export function source2TintPlan(morphic: MorphicExtras, factor: THREE.Color): Source2TintPlan {
   const raw = morphic.vectors?.g_vColorTint1;
-  const valid = morphic.schema_version === 2 && morphic.shader.toLowerCase() === 'pbr.vfx' &&
+  const schema = morphic.schema_version ?? 0;
+  const valid = schema >= 2 && schema <= SOURCE2_EXTRAS_VERSION && morphic.shader.toLowerCase() === 'pbr.vfx' &&
     !morphic.dynamic_params?.g_vColorTint1 && raw && raw.length >= 3 && raw.slice(0, 3).every(Number.isFinite);
   const linearTint = valid ? new THREE.Color().setRGB(raw[0], raw[1], raw[2]).convertSRGBToLinear() : new THREE.Color(1, 1, 1);
   const matches = (values: number[]) => Math.abs(factor.r - values[0]) < 1e-6 &&

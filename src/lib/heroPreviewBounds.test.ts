@@ -3,6 +3,19 @@ import * as THREE from 'three';
 import { heroPreviewBounds } from './heroPreviewBounds';
 
 describe('animated hero framing', () => {
+  it('excludes authored and generated shells from both initial and animated framing', () => {
+    const model = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20));
+    shell.userData.morphic_shell = { version: 1, role: 'authored_shell' };
+    const generated = new THREE.Mesh(new THREE.BoxGeometry(30, 30, 30));
+    generated.userData.citadelNprOutline = true;
+    model.add(body, shell, generated); model.updateMatrixWorld(true);
+    const bind = new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
+    expect(heroPreviewBounds(model).equals(bind)).toBe(true);
+    expect(heroPreviewBounds(model, bind).equals(bind)).toBe(true);
+    body.geometry.dispose(); shell.geometry.dispose(); generated.geometry.dispose();
+  });
   it('fits body and normal weapon motion through normalized parents, excluding offscreen hide transforms', () => {
     const wrapper = new THREE.Group(); wrapper.scale.setScalar(0.5); wrapper.position.set(0, -1, 0);
     const model = new THREE.Group(); wrapper.add(model);

@@ -994,6 +994,7 @@ export interface ElectronAPI {
     saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
     onSkinEditProgress: (callback: (progress: import('./skinEditor').SkinEditProgress) => void) => () => void;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
+    getHeroShaderNoise: () => Promise<string>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]

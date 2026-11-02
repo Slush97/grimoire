@@ -2,6 +2,7 @@
 
 export {
   DEADLOCK_BASE_POST,
+  DEADLOCK_HERO_POST,
   VRF_DEFAULT_BLOOM,
   VRF_DEFAULT_TONEMAP,
   SourcePostProcess,

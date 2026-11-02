@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { getActiveDeadlockPath } from '../services/settings';
 import { getHeroPortraits } from '../services/heroPortraits';
+import { getHeroShaderNoise } from '../services/heroShaderNoise';
 import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
 import {
     getCustomCardSlots,
@@ -32,6 +33,12 @@ import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/mods.ts). */
+ipcMain.handle('get-hero-shader-noise', async (): Promise<string> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) throw new Error('No Deadlock path configured');
+    return getHeroShaderNoise(deadlockPath);
+});
+
 ipcMain.handle(
     'get-hero-portraits',
     async (_, heroName: string): Promise<HeroPortrait[]> => {

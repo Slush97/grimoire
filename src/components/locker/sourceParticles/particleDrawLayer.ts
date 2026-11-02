@@ -1,12 +1,13 @@
 // What draws one effect host's simulation: the three.js port of VRF's particle renderers
 // (src/lib/particles/render/), one ParticleSystemRenderer per effect tree.
 
-import type * as THREE from 'three';
+import * as THREE from 'three';
+import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../../lib/source2Preview';
 import type { ControlPointDefaults } from '../../../lib/particles/controlPointDefaults';
 import { ParticleSystemRenderer, type ParticleSceneDepth } from '../../../lib/particles/render';
 import type { ParticleModelSource } from '../../../lib/particles/render/particleModels';
 import type { ParticleSystemSimulation } from '../../../lib/particles/simulation';
-import type { BundleTextureSource } from './bundleTextures';
+import type { ParticleTextureSource } from '../../../lib/particles/render/textures';
 
 export interface ParticleDrawLayer {
   /** Drawn in Source space; parent it under the Source-to-viewer frame. */
@@ -28,7 +29,7 @@ export interface ParticleDrawLayer {
  * Builds the drawing layer for a simulation; call before the simulation starts, as VRF builds its
  * renderers: they tell the simulation which fields they read and which sheet times its sequences.
  */
-export function createParticleDrawLayer(simulation: ParticleSystemSimulation, textures: BundleTextureSource, models?: ParticleModelSource): ParticleDrawLayer {
+export function createParticleDrawLayer(simulation: ParticleSystemSimulation, textures: ParticleTextureSource, models?: ParticleModelSource, beforeTransmission = false): ParticleDrawLayer {
   const renderer = new ParticleSystemRenderer(simulation, textures, { models });
   const renderers = renderer.renderers;
 
@@ -37,7 +38,18 @@ export function createParticleDrawLayer(simulation: ParticleSystemSimulation, te
   // the whole effect against the model by their bounds' centres, and the hero's own effects sit in
   // front of its centre (hands, weapon, head). The translucent meshes they meet are glow shells
   // (Infernus' arm and head, the Doorman's key).
-  for (const object of renderer.object3d.children) object.renderOrder += 1;
+  for (const object of renderer.object3d.children) {
+    object.renderOrder += beforeTransmission ? ADDITIVE_OVERLAY_RENDER_ORDER + 1 : 1;
+    if (beforeTransmission) object.traverse((draw) => {
+      if (!(draw instanceof THREE.Mesh)) return;
+      for (const material of Array.isArray(draw.material) ? draw.material : [draw.material]) {
+        // Queue selection and blend state are independent. Preserve each
+        // renderer's premultiplied/custom blend, depth test and depth writes.
+        // Three copies only the opaque queue before drawing transmissive meshes.
+        material.transparent = false;
+      }
+    });
+  }
 
   return {
     object3d: renderer.object3d,

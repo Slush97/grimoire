@@ -12,6 +12,36 @@ export interface HeroAnimationInfo {
   transition?: boolean;
   rootMotion?: boolean;
   standalone?: boolean;
+  showcase?: HeroShowcaseAnimation;
+}
+
+export interface HeroShowcaseAnimation {
+  graph: string;
+  state: 'shop' | 'heroSelect';
+  playback: 'loop' | 'hold';
+  speed?: number;
+}
+
+/** GLTFLoader preserves animation extras as userData. */
+export function heroShowcaseAnimation(clip: { userData?: Record<string, unknown> }): HeroShowcaseAnimation | undefined {
+  const value = clip.userData?.grimoireShowcase;
+  if (!value || typeof value !== 'object' || !('graph' in value) || typeof value.graph !== 'string'
+    || !('state' in value) || (value.state !== 'shop' && value.state !== 'heroSelect')
+    || !('playback' in value) || (value.playback !== 'loop' && value.playback !== 'hold')
+    || ('speed' in value && (typeof value.speed !== 'number' || !Number.isFinite(value.speed) || value.speed <= 0))) return undefined;
+  return { graph: value.graph, state: value.state, playback: value.playback,
+    ...('speed' in value && typeof value.speed === 'number' ? { speed: value.speed } : {}) };
+}
+
+/** The export marks a standing idle as the default when the graph pose is staged. */
+export function preferredHeroAnimation<T extends { name: string; userData?: Record<string, unknown> }>(clips: readonly T[], heroName?: string): T | undefined {
+  return clips.find(clip => clip.userData?.grimoireDefault === true)
+    ?? clips.find(clip => heroShowcaseAnimation(clip))
+    ?? clips.find(clip => clip.name === preferredHeroAnimationName(clips.map(c => c.name), heroName));
+}
+
+export function heroAnimationPlayback(clip: { name: string; userData?: Record<string, unknown> }, heroName?: string): 'loop' | 'hold' {
+  return heroShowcaseAnimation(clip)?.playback ?? heroAnimationRecipe(clip.name, heroName)?.playback ?? 'loop';
 }
 
 export type HeroAnimationAction = 'idle' | 'relaxedIdle' | 'heroPose' | 'running' | 'reload' | 'dash' | 'heavyMelee';
@@ -23,8 +53,8 @@ export interface HeroAnimationRecipe {
 
 const recipe = (action: HeroAnimationAction, names: readonly string[], playback: 'loop' | 'hold' = 'loop'): HeroAnimationRecipe => ({ action, names, playback });
 
-/** Reviewed legacy sequences, informed by the installed hero UI graphs.
- * These are whole actions, not a reconstruction of gameplay graph layers.
+/** Legacy idle fallbacks and reviewed secondary actions.
+ * A usable compiled UI graph default takes priority over these recipes.
  * See docs/hero-animation-selection.md for source and render limitations. */
 export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimationRecipe[]>> = {
   // Exported from the installed Lash model and rendered as complete full-body actions.
@@ -74,7 +104,7 @@ export const HERO_ANIMATION_RECIPES: Readonly<Record<string, readonly HeroAnimat
   'Baba': [recipe('relaxedIdle', ['outofcombat_stand_idle'])],
 };
 
-const STANDING_IDLE = ['primary_stand_idle', 'weapon_stand_idle', 'stand_idle', 'idle_stand', 'idle'] as const;
+const STANDING_IDLE = ['primary_stand_idle', 'primary_idle', 'weapon_stand_idle', 'stand_idle', 'idle_stand', 'idle'] as const;
 const RELAXED_IDLE = ['primary_ooc_stand_idle', 'out_of_combat_stand_idle', 'ooc_stand_idle'] as const;
 
 /** Positive compiled metadata wins over a previously reviewed sequence name. */
@@ -94,18 +124,32 @@ export function heroAnimationRecipe(name: string, heroName?: string): HeroAnimat
     ?? (/^(?:ui_hero_pose|hero_pose|ui_hero_select|ui_main_menu)$/.test(name) ? recipe('heroPose', [name]) : undefined);
 }
 
-/** Unknown assets require explicit standalone metadata; raw category matches
- * are not sufficient to establish a complete action. */
+/** Compiled UI states establish defaults. Unknown remaining actions require
+ * explicit standalone metadata, not raw category matches. */
 export function selectHeroAnimations(clips: readonly HeroAnimationInfo[], heroName?: string): HeroAnimationInfo[] {
   const safe = clips.filter(isStandaloneHeroAnimation);
   const byName = new Map(safe.map((c) => [c.name, c]));
   const recipes = HERO_ANIMATION_RECIPES[heroName ?? ''] ?? [recipe('idle', STANDING_IDLE), recipe('relaxedIdle', RELAXED_IDLE), recipe('heroPose', ['hero_pose', 'ui_hero_pose'])];
   const selected: HeroAnimationInfo[] = [];
   let frames = 0;
+  const showcase = safe.filter(c => c.showcase && c.frameCount <= 2400)
+    .sort((a, b) => Number(a.showcase?.state !== 'shop') - Number(b.showcase?.state !== 'shop'))[0];
+  if (showcase) { selected.push(showcase); frames += showcase.frameCount; }
+  // With a graph default, export one standing idle beside it. The export keeps
+  // it only if the graph pose turns out to be staged for the game's UI scene.
+  let fallback = false;
   for (const r of recipes) {
+    const idle = r.action === 'idle' || r.action === 'relaxedIdle';
+    if (showcase && idle && fallback) continue;
     const clip = r.names.map((name) => byName.get(name)).find((c) => c && !selected.some((old) => old.name === c.name));
     if (!clip || frames + clip.frameCount > 10000) continue;
     selected.push(clip); frames += clip.frameCount;
+    if (showcase && idle) fallback = true;
+  }
+  // A hero's own recipes may name no standing idle (Rem's names only its shop pose).
+  if (showcase && !fallback) {
+    const clip = [...STANDING_IDLE, ...RELAXED_IDLE].map((name) => byName.get(name)).find((c) => c && !selected.some((old) => old.name === c.name));
+    if (clip && frames + clip.frameCount <= 10000) { selected.push(clip); frames += clip.frameCount; }
   }
   // A reviewed default may disappear from a skin or game update. Try only a
   // complete neutral fallback, never the longest remaining gameplay layer.
@@ -118,6 +162,12 @@ export function selectHeroAnimations(clips: readonly HeroAnimationInfo[], heroNa
     selected.push(clip); frames += clip.frameCount;
   }
   return selected;
+}
+
+/** The standing idle exported beside a graph default, if any. */
+export function showcaseFallback<T extends HeroAnimationInfo>(clips: readonly T[], heroName?: string): T | undefined {
+  return clips.find((clip) => !clip.showcase
+    && ['idle', 'relaxedIdle'].includes(heroAnimationRecipe(clip.name, heroName)?.action ?? ''));
 }
 
 export function preferredHeroAnimationName(names: readonly string[], heroName?: string): string | undefined {

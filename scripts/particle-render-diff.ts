@@ -33,7 +33,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const game = process.env.DEADLOCK_GAME ?? 'C:/Program Files (x86)/Steam/steamapps/common/Deadlock/game';
 const paks = [join(game, 'citadel/pak01_dir.vpk'), join(game, 'core/pak01_dir.vpk')];
 const corpus = process.env.PARTICLE_CORPUS ?? join(root, '.codex-run/fx-corpus/json');
-const oracleExe = join(root, '.codex-run/particle-render-oracle/bin/Release/net10.0/Source2Viewer.exe');
+const oracleExe = process.env.PARTICLE_RENDER_ORACLE ?? join(root, '.codex-run/particle-render-oracle/bin/Release/net10.0/Source2Viewer.exe');
 const vpkmerge =
   process.env.VPKMERGE ??
   [join(root, 'resources/vpkmerge/vpkmerge.exe'), join(root, 'resources/vpkmerge/vpkmerge-windows-x86_64.exe'), join(root, 'resources/vpkmerge/vpkmerge-linux-x86_64')].find(existsSync)!;

@@ -240,6 +240,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
         ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
+    getHeroShaderNoise: () => ipcRenderer.invoke('get-hero-shader-noise'),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     getSkinEditInfo: (source) => ipcRenderer.invoke('foundry:skinEditInfo', source),

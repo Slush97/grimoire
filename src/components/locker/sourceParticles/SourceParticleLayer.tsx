@@ -13,6 +13,7 @@ import { SceneColorPass } from './sceneColor';
 import { SceneDepthPass } from './sceneDepth';
 import { ParticleField } from '../../../lib/particles/enums';
 import type { ParticleSystemSimulation } from '../../../lib/particles/simulation';
+import { getMorphic, isTrueGlassMaterial } from '../../../lib/source2NprMaterial';
 
 /**
  * Runs a hero's bundled particle effects with the faithful Source 2 simulation on the animated rig.
@@ -38,11 +39,19 @@ export function SourceParticleLayer({ bundle, textureBaseUrl, model, playback, c
     group.name = 'source particles';
     frame.add(group);
     const textures = new BundleTextureSource(bundle, textureBaseUrl);
+    let beforeTransmission = false;
+    model.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        const morphic = getMorphic(material);
+        if (morphic && isTrueGlassMaterial(morphic, material)) beforeTransmission = true;
+      }
+    });
     const models = bundleModelSource(bundle);
     const layers = new Map<ParticleEffectHost, ParticleDrawLayer>();
     const host = new HeroParticleHost(bundle, {
       added(effectHost) {
-        const layer = createParticleDrawLayer(effectHost.simulation, textures, models);
+        const layer = createParticleDrawLayer(effectHost.simulation, textures, models, beforeTransmission);
         layers.set(effectHost, layer);
         group.add(layer.object3d);
         return layer.addControlPointDefaults;
