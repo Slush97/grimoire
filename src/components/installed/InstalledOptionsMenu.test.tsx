@@ -37,7 +37,7 @@ describe('Installed options menu', () => {
 
   it('keeps view controls open and respects the caller’s card size range and list mode', async () => {
     await render(); await open();
-    await act(async () => button('conflicts.view.list').click());
+    await act(async () => button('browse.viewOptions.list').click());
     expect(props.onLayoutChange).toHaveBeenCalledExactlyOnceWith('list');
     expect(button('installed.options.title').getAttribute('aria-expanded')).toBe('true');
     const slider = document.querySelector<HTMLInputElement>('input[type="range"]')!;

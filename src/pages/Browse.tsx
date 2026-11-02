@@ -24,7 +24,6 @@ import {
   Maximize2,
   PanelRight,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import {
   browseMods,
   getModDetails,
@@ -67,7 +66,7 @@ import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { DropdownSelect, Input } from '../components/common/forms';
 import { AnchoredPopover } from '../components/common/AnchoredPopover';
-import { Button } from '../components/common/ui';
+import { Button, ViewOptionControl } from '../components/common/ui';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { checkQuickInstallRequirements } from '../stores/requirementsStore';
@@ -321,67 +320,6 @@ function toastModActionError(err: unknown) {
     .replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
   if (USER_CANCELLED_MESSAGES.has(detail)) return;
   showToast(detail, { tone: 'error', duration: 7000 });
-}
-
-function BrowseViewOptionControl<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  value: T;
-  options: readonly { value: T; label: React.ReactNode; icon?: LucideIcon }[];
-  onChange: (value: T) => void;
-  disabled?: boolean;
-}) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const move = (from: number, dir: -1 | 1) => {
-    if (disabled) return;
-    const next = (from + dir + options.length) % options.length;
-    onChange(options[next].value);
-    refs.current[next]?.focus();
-  };
-
-  return (
-    <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-[3px]" role="tablist" aria-label={label}>
-      {options.map((option, i) => {
-        const Icon = option.icon;
-        const active = option.value === value;
-        return (
-          <button
-            key={option.value}
-            ref={(el) => { refs.current[i] = el; }}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            tabIndex={active ? 0 : -1}
-            disabled={disabled}
-            onClick={() => !disabled && onChange(option.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                e.preventDefault();
-                move(i, 1);
-              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                e.preventDefault();
-                move(i, -1);
-              }
-            }}
-            className={`flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${
-              active
-                ? 'bg-bg-tertiary text-text-primary'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
-            <span className="min-w-0 translate-y-px truncate">{option.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 export default function Browse() {
@@ -2565,7 +2503,7 @@ export default function Browse() {
                 <div className={BROWSE_MENU_SECTIONS_CLASS}>
                   <div>
                     <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                    <BrowseViewOptionControl<BrowseLayout>
+                    <ViewOptionControl<BrowseLayout>
                       label={t('browse.viewOptions.layout')}
                       value={layout}
                       onChange={setLayout}
@@ -2599,7 +2537,7 @@ export default function Browse() {
 
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <BrowseViewOptionControl<BrowseCardDesign>
+                      <ViewOptionControl<BrowseCardDesign>
                         disabled={layout === 'list'}
                         label={t('browse.viewOptions.cardDesign')}
                         value={browseCardDesign}
@@ -2614,7 +2552,7 @@ export default function Browse() {
 
                   <div>
                     <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                    <BrowseViewOptionControl<BrowseDetailsView>
+                    <ViewOptionControl<BrowseDetailsView>
                       label={t('browse.viewOptions.modDetailsView')}
                       value={browseDetailsView}
                       onChange={setBrowseDetailsView}
@@ -2775,7 +2713,7 @@ export default function Browse() {
                       <div className="space-y-3">
                         <div className="block">
                           <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.nsfwContent')}</span>
-                          <BrowseViewOptionControl<BrowseContentMode>
+                          <ViewOptionControl<BrowseContentMode>
                             label={t('browse.viewOptions.nsfwContent')}
                             value={onlyNsfw ? 'only' : nsfwContentMode}
                             onChange={setBrowseContentMode}
@@ -2790,7 +2728,7 @@ export default function Browse() {
 
                         <div className="block">
                           <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.viewOptions.outdatedContent')}</span>
-                          <BrowseViewOptionControl<'show' | 'hide'>
+                          <ViewOptionControl<'show' | 'hide'>
                             label={t('browse.viewOptions.outdatedContent')}
                             value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
                             onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}

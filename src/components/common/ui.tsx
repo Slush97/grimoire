@@ -549,6 +549,68 @@ export function ModalHeader({
 // styles (underline vs pill) collapse to one.
 // ============================================================================
 
+/** Joined single-selection tabs for Browse and Installed view options. */
+export function ViewOptionControl<T extends string>({
+    label,
+    value,
+    options,
+    onChange,
+    disabled = false,
+}: {
+    label: string;
+    value: T;
+    options: readonly { value: T; label: ReactNode; icon?: LucideIcon }[];
+    onChange: (value: T) => void;
+    disabled?: boolean;
+}) {
+    const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    const move = (from: number, dir: -1 | 1) => {
+        if (disabled) return;
+        const next = (from + dir + options.length) % options.length;
+        onChange(options[next].value);
+        refs.current[next]?.focus();
+    };
+
+    return (
+        <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-[3px]" role="tablist" aria-label={label}>
+            {options.map((option, i) => {
+                const Icon = option.icon;
+                const active = option.value === value;
+                return (
+                    <button
+                        key={option.value}
+                        ref={(el) => { refs.current[i] = el; }}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        tabIndex={active ? 0 : -1}
+                        disabled={disabled}
+                        onClick={() => !disabled && onChange(option.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                move(i, 1);
+                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                move(i, -1);
+                            }
+                        }}
+                        className={`flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${
+                            active
+                                ? 'bg-bg-tertiary text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary'
+                        }`}
+                    >
+                        {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+                        <span className="min-w-0 translate-y-px truncate">{option.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
 interface SegmentOption<T extends string> {
     value: T;
     label: ReactNode;

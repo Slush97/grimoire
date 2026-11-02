@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ClipboardList, Fingerprint, Grid2x2, Grid3x3, LayoutGrid, List, SlidersHorizontal, SquareDashedX, Wand2, type LucideIcon } from 'lucide-react';
 import { AnchoredPopover } from '../common/AnchoredPopover';
-import { Button, MultiSelectSegments } from '../common/ui';
+import { Button, ViewOptionControl } from '../common/ui';
 import { InterchangeImportHost, InterchangeTransferActions } from '../interchange/ImportSourceMenu';
 
 export interface InstalledOptionsMenuProps {
@@ -63,12 +63,11 @@ export function InstalledOptionsMenu({
         <div className="space-y-3">
           <div>
             <div className="mb-1.5 text-xs font-medium text-text-secondary">{t('common.view')}</div>
-            <MultiSelectSegments<'grid' | 'list'> label={t('common.view')} selected={[layout]}
-              tone="neutral"
-              multiselectable={false} onToggle={onLayoutChange} className="w-full" itemClassName="h-8 flex-1 px-2 text-xs"
+            <ViewOptionControl<'grid' | 'list'> label={t('common.view')} value={layout}
+              onChange={onLayoutChange}
               options={[
-                { value: 'grid', label: t('conflicts.view.grid'), icon: LayoutGrid },
-                { value: 'list', label: t('conflicts.view.list'), icon: List },
+                { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
+                { value: 'list', label: t('browse.viewOptions.list'), icon: List },
               ]} />
           </div>
           <div className={layout === 'list' ? 'opacity-45' : undefined}>
