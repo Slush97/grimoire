@@ -5,6 +5,9 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { decodeHideoutSnapshot, encodeHideoutSnapshot, hideoutSnapshotMatches, hideoutSnapshotName, HIDEOUT_SNAPSHOT_VERSION,
   type HideoutSnapshot as Snapshot, type HideoutSnapshotHeader } from '../../lib/hideoutSnapshot';
 
+/** The saved frame's mesh, found by name while the room compiles (HideoutScene). */
+export const HIDEOUT_SNAPSHOT_NAME = 'hideout snapshot';
+
 /** Only the room and the scene's lights are on this layer while a snapshot is drawn. */
 const CAPTURE_LAYER = 31;
 /** The camera must rest this long before the room is captured, so an orbit
@@ -45,7 +48,7 @@ void main() {
     depthTest: true, depthWrite: true, depthFunc: THREE.AlwaysDepth, toneMapped: false,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = 'hideout snapshot';
+  mesh.name = HIDEOUT_SNAPSHOT_NAME;
   mesh.frustumCulled = false;
   mesh.renderOrder = -1e9;
   return mesh;

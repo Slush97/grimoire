@@ -16,7 +16,7 @@ import type { ViewerAmbientProbe } from '../../lib/viewerAmbientLight';
 import { applySource2Lightmap, applySource2MapProbe, applySource2MapTonemap, source2MapProbeTarget } from '../../lib/source2Lightmap';
 import { claimHideoutLoad } from '../../lib/hideoutPreload';
 import { HideoutParticleLayer } from './HideoutParticleLayer';
-import { HideoutSnapshot, type HideoutRoom } from './HideoutSnapshot';
+import { HIDEOUT_SNAPSHOT_NAME, HideoutSnapshot, type HideoutRoom } from './HideoutSnapshot';
 import { createSource2Sky, loadSource2SkyCube } from '../../lib/source2Atmosphere';
 import { HideoutWorldCards } from './HideoutWorldCards';
 import { isWorldParticleCard } from '../../lib/mapParticleMaterial';
@@ -104,6 +104,27 @@ export type HideoutStatus = { kind: 'loading'; info?: HideoutSceneInfo } | { kin
  * under the hero that the room closes by moving its floor onto the hero's. */
 const HIDEOUT_FLOOR_SNAP = 0.05;
 
+/** White vertex colors for a prop that has none. Vertex colors split a program in two, and a program's
+ *  first draw is the room's largest cost, so every NPR prop reads them: white multiplies to nothing. */
+function whiteVertexColors(geometry: THREE.BufferGeometry): void {
+  if (geometry.hasAttribute('color')) return;
+  const { count } = geometry.getAttribute('position');
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(count * 4).fill(255), 4, true));
+}
+
+/** Takes the saved room frame out of a compile, until the returned call puts it back. Three keys every
+ *  program on the scene's light count, even for a material that ignores lights, and compile prepares
+ *  every material in the scene. Compiled with the room's lights, the saved frame would draw a new
+ *  program the next frame, and that first use waits behind the whole room's link queue: seconds, for a
+ *  tiny shader, with this thread blocked. It keeps the program it has. */
+function asideSavedFrame(scene: THREE.Scene): () => void {
+  const mesh = scene.getObjectByName(HIDEOUT_SNAPSHOT_NAME);
+  const parent = mesh?.parent;
+  if (!mesh || !parent) return () => {};
+  mesh.removeFromParent();
+  return () => { parent.add(mesh); };
+}
+
 /** Link every program the first room frame needs, off the render loop. Three
  *  keys programs on the scene's lights and on whether a render target is bound
  *  (output color space and tone mapping), so compiling the room alone, with no
@@ -112,6 +133,7 @@ const HIDEOUT_FLOOR_SNAP = 0.05;
 async function precompileWithRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, room: THREE.Object3D, postprocess: boolean): Promise<void> {
   const target = postprocess ? new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }) : null;
   const previous = gl.getRenderTarget();
+  const restore = asideSavedFrame(scene);
   scene.add(room);
   let ready: Promise<unknown>;
   try {
@@ -120,6 +142,7 @@ async function precompileWithRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, c
   } finally {
     gl.setRenderTarget(previous);
     room.removeFromParent();
+    restore();
     target?.dispose();
   }
   await ready;
@@ -131,6 +154,7 @@ async function precompileInPlace(gl: THREE.WebGLRenderer, scene: THREE.Scene, ca
   const target = postprocess ? new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }) : null;
   const previous = gl.getRenderTarget();
   const visible = wrapper.visible;
+  const restore = asideSavedFrame(scene);
   wrapper.visible = true;
   let ready: Promise<unknown>;
   try {
@@ -139,6 +163,7 @@ async function precompileInPlace(gl: THREE.WebGLRenderer, scene: THREE.Scene, ca
   } finally {
     gl.setRenderTarget(previous);
     wrapper.visible = visible;
+    restore();
     target?.dispose();
   }
   await ready;
@@ -174,20 +199,43 @@ async function uploadRoomTextures(gl: THREE.WebGLRenderer, room: THREE.Object3D,
  *  program) matches the room's real frames. */
 const WARM_LAYER = 28;
 
-/** Draws the room once before it shows, a batch of meshes per frame into a 1 by 1 target. A mesh's
- *  first draw uploads its buffers and leaves the driver to finish its program for the bound state; the
- *  whole room doing that in its first frame held the GPU process, and with it every window, for
- *  seconds. A read-back after each batch waits for that work, so batches grow only while it is cheap. */
+/** A warm-up batch holds the GPU process, and with it every window, so it waits for a lull this long
+ *  in the user's input instead of landing on a drag or a scroll. The saved frame covers the wait. */
+const WARM_IDLE_MS = 200;
+/** The longest a batch waits for that lull, so a long drag still gets its room. */
+const WARM_WAIT_MS = 500;
+const INPUT_EVENTS = ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const;
+
+/** Draws one mesh of each program before the room shows, a batch per frame into a 1 by 1 target. A
+ *  program's first draw leaves the driver to finish it for the bound state, up to 400 ms where every
+ *  later draw with it takes a millisecond, and the room's whole set in one frame held the GPU process,
+ *  and with it every window, for seconds. A read-back after each batch waits for that work without
+ *  stalling this thread, and batches grow only while it is cheap. */
 async function warmRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, room: THREE.Object3D, cancelled: () => boolean): Promise<void> {
-  const meshes: THREE.Mesh[] = [];
-  room.traverse(object => { if (object instanceof THREE.Mesh && object.visible) meshes.push(object); });
+  const programs = new Map<unknown, THREE.Mesh>();
+  room.traverse(object => {
+    if (!(object instanceof THREE.Mesh) || !object.visible) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      const program = (gl.properties.get(material) as { currentProgram?: unknown }).currentProgram ?? material;
+      if (!programs.has(program)) programs.set(program, object);
+    }
+  });
+  const meshes = [...programs.values()];
   // The format the post pipeline's scene pass draws into (BloomEffect's composer): drivers can redo a
   // program's work for another target format.
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   const pixel = new Uint16Array(4);
   let size = 4;
+  let lastInput = Number.NEGATIVE_INFINITY;
+  const onInput = () => { lastInput = performance.now(); };
+  for (const type of INPUT_EVENTS) window.addEventListener(type, onInput, { capture: true, passive: true });
   try {
     for (let next = 0; next < meshes.length;) {
+      const asked = performance.now();
+      while (performance.now() - lastInput < WARM_IDLE_MS && performance.now() - asked < WARM_WAIT_MS) {
+        await nextFrame();
+        if (cancelled()) return;
+      }
       const started = performance.now();
       const batch = meshes.slice(next, next + size);
       next += batch.length;
@@ -202,7 +250,6 @@ async function warmRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THR
         gl.shadowMap.autoUpdate = false;
         gl.setRenderTarget(target);
         gl.render(scene, camera);
-        gl.readRenderTargetPixels(target, 0, 0, 1, 1, pixel);
       } finally {
         gl.setRenderTarget(previous);
         gl.shadowMap.autoUpdate = shadows;
@@ -211,12 +258,15 @@ async function warmRoom(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THR
         lights.forEach(light => light.layers.disable(WARM_LAYER));
         room.removeFromParent();
       }
+      await gl.readRenderTargetPixelsAsync(target, 0, 0, 1, 1, pixel).catch(() => {});
+      if (cancelled()) return;
       const spent = performance.now() - started;
       size = spent < SLICE_MS / 2 ? size * 2 : spent > SLICE_MS ? Math.max(1, size >> 1) : size;
       await nextFrame();
       if (cancelled()) return;
     }
   } finally {
+    for (const type of INPUT_EVENTS) window.removeEventListener(type, onInput, { capture: true });
     target.dispose();
   }
 }
@@ -559,6 +609,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
           // The draw call's own tint and alpha (the chimney breast's red), when the exporter wrote them.
           const drawTint = hideoutDrawTint(object.geometry.userData.morphic_tint);
           const prepare = (original: THREE.Material) => {
+            const npr = getMorphic(original)?.shader === 'pbr.vfx' && !isWorldParticleCard(original) && !object.geometry.hasAttribute('uv3');
+            if (npr) whiteVertexColors(object.geometry);
             const key = `${original.uuid}:${instance.tint.join(',')}:${drawTint?.join(',') ?? ''}:${object.geometry.hasAttribute('uv3')}:${instance.opacity ?? 1}`;
             const cached = preparedMaterials.get(key);
             if (cached) return cached;
@@ -597,7 +649,8 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
                 if (direction) applySource2Lightmap(material, { direction, heading: info.heading, exposure: info.exposure,
                   reflections: true, linearOutput: postprocess });
               }
-              if (morphic?.shader === 'pbr.vfx' && !isWorldParticleCard(material) && !object.geometry.hasAttribute('uv3')) {
+              if (npr) {
+                material.vertexColors = true;
                 const built = buildDeadlockMaterial(material, undefined, null, 'authored');
                 materialBuilds.push(built.dispose);
                 material = built.material;
@@ -771,6 +824,7 @@ export function HideoutScene({ scale, floor, onStatus, onProbe, onRoomArrive, on
       mark('compiled');
       if (activeRef.current) await uploadRoomTextures(gl, oriented, [direction, shadows, roomCookies?.texture], () => cancelled);
       if (activeRef.current && postprocess && !cancelled) await warmRoom(gl, viewerScene, camera, oriented, () => cancelled);
+      mark('warmed');
       if (import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1') viewerScene.userData.source2MapTimings = { ...marks,
         metadataMs: metadataReady - started, resourcesMs: resourcesReady - metadataReady,
         materialsMs: materialsReady - resourcesReady, compileMs: performance.now() - materialsReady,

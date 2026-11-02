@@ -84,6 +84,7 @@ uniform vec3 source2VolumeSize[SOURCE2_VOLUME_COUNT];
 uniform vec3 source2VolumeOffset[SOURCE2_VOLUME_COUNT];
 uniform vec3 source2VolumeFade[SOURCE2_VOLUME_COUNT];
 uniform vec3 source2ProbeAtlasSize;
+uniform int source2VolumeLimit;
 vec3 source2SourceCube[6];
 vec3 source2ViewerCube[6];
 vec4 source2ProbeShadow;
@@ -107,7 +108,7 @@ void source2SampleProbes(vec3 worldPosition) {
   source2ProbeShadow = vec4(0.0);
   float coverage = 0.0;
   vec3 position = (source2MapFromViewer * vec4(worldPosition, 1.0)).xyz;
-  for (int volume = 0; volume < SOURCE2_VOLUME_COUNT; volume++) {
+  for (int volume = 0; volume < source2VolumeLimit; volume++) {
     vec3 local = (source2VolumeFromMap[volume] * vec4(position, 1.0)).xyz;
     vec3 edge = min(local, 1.0 - local);
     vec3 fade = clamp(edge * source2VolumeFade[volume], 0.0, 1.0);
@@ -152,6 +153,7 @@ export function applySource2ProbeVolume(material: THREE.Material, lighting: Sour
     source2VolumeOffset: { value: volumes.map(volume => new THREE.Vector3(...volume.offset)) },
     source2VolumeFade: { value: volumes.map(volume => volumeSize(volume).divide(new THREE.Vector3(...volume.fade).max(new THREE.Vector3(1e-10, 1e-10, 1e-10)))) },
     source2ProbeAtlasSize: { value: new THREE.Vector3(image.width, image.height, image.depth / 6) },
+    source2VolumeLimit: { value: volumes.length },
   };
   material.onBeforeCompile = (shader, renderer) => {
     compile.call(material, shader, renderer);
