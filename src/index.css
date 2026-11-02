@@ -652,19 +652,27 @@ body {
 /* Category/NSFW chips float over the thumbnail and fade in on card hover
    (and keyboard focus), keeping the text body short. */
 .browse-readable-card-chips {
-  opacity: 0;
+  --browse-chip-opacity: 0;
+}
+
+.browse-readable-card-chips [data-browse-chip] {
+  opacity: var(--browse-chip-opacity);
   transition: opacity 160ms ease;
+}
+
+.browse-readable-card-chips [data-always-visible='true'] {
+  opacity: 1;
 }
 
 .group:hover .browse-readable-card-chips,
 .group:focus-visible .browse-readable-card-chips,
 .group:focus-within .browse-readable-card-chips {
-  opacity: 1;
+  --browse-chip-opacity: 1;
 }
 
 /* Suppressed during fast scroll, like the other hover affordances. */
 .browse-is-scrolling .group:hover .browse-readable-card-chips {
-  opacity: 0;
+  --browse-chip-opacity: 0;
 }
 
 .browse-sound-placeholder::before {

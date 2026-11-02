@@ -1146,6 +1146,8 @@ export interface AppSettings {
   nsfwContentMode: NsfwContentMode;
   /** Reveal blurred mod thumbnails while their card is hovered. Off by default. */
   revealNsfwOnHover: boolean;
+  /** Keep Browse's 18+ tags visible without hovering over the card. */
+  browseAlwaysShowNsfwTag: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
   /** GameBanana submitters whose Mods, Sounds, and WiPs are excluded from

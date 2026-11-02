@@ -35,10 +35,12 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
-function BrowseReadableChipBadge({ chip, onImage = false, wrap = false }: { chip: BrowseReadableChip; onImage?: boolean; wrap?: boolean }) {
+function BrowseReadableChipBadge({ chip, onImage = false, wrap = false, alwaysVisible = false }: { chip: BrowseReadableChip; onImage?: boolean; wrap?: boolean; alwaysVisible?: boolean }) {
   return (
     <span
       title={chip.label}
+      data-browse-chip
+      data-always-visible={alwaysVisible || undefined}
       className={`inline-flex min-h-6 shrink-0 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${wrap ? 'max-w-full whitespace-normal break-words py-1' : 'h-6 whitespace-nowrap'} ${readableChipTone(
         chip.tone,
         onImage
@@ -73,6 +75,7 @@ function BrowseReadableChipOverflow({ chips, onImage }: { chips: BrowseReadableC
     <>
       <button
         ref={anchorRef}
+        data-browse-chip
         type="button"
         title={labels}
         aria-label={labels}
@@ -116,11 +119,13 @@ export function BrowseReadableChipRow({
   availableWidth,
   maxVisible = BROWSE_READABLE_MAX_VISIBLE_CHIPS,
   onImage = false,
+  alwaysShowNsfwTag = false,
 }: {
   chips: BrowseReadableChip[];
   availableWidth: number;
   maxVisible?: number;
   onImage?: boolean;
+  alwaysShowNsfwTag?: boolean;
 }) {
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
@@ -135,7 +140,8 @@ export function BrowseReadableChipRow({
     const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
     const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
 
-    if (usedWidth + gapBefore + chipWidth + overflowReserve > rowWidth) break;
+    const alwaysVisible = alwaysShowNsfwTag && chip.label === '18+';
+    if (!alwaysVisible && usedWidth + gapBefore + chipWidth + overflowReserve > rowWidth) break;
 
     visibleChips.push(chip);
     usedWidth += gapBefore + chipWidth;
@@ -148,7 +154,8 @@ export function BrowseReadableChipRow({
   return (
     <div className="flex h-6 min-w-0 items-start gap-[clamp(5px,2.1429cqw,7px)] overflow-visible">
       {visibleChips.map((chip, index) => (
-        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} onImage={onImage} />
+        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} onImage={onImage}
+          alwaysVisible={alwaysShowNsfwTag && chip.label === '18+'} />
       ))}
       {hiddenChips.length > 0 && (
         <BrowseReadableChipOverflow chips={hiddenChips} onImage={onImage} />

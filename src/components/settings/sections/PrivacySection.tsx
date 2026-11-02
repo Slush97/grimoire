@@ -129,6 +129,13 @@ export default function PrivacySection() {
             description={t('settings.privacy.revealNsfwOnHoverDescription')}
           />
 
+          <Toggle
+            checked={settings?.browseAlwaysShowNsfwTag ?? false}
+            onChange={(checked) => settings && saveSettings({ ...settings, browseAlwaysShowNsfwTag: checked })}
+            label={t('settings.privacy.alwaysShowNsfwTag')}
+            description={t('settings.privacy.alwaysShowNsfwTagDescription')}
+          />
+
           <div className="h-px bg-hl/5" />
 
           <div>

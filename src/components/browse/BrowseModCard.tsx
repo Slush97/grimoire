@@ -72,6 +72,7 @@ function ReadableBrowseModCard({
 }: ModCardProps & { taxonomy: ReturnType<typeof getBrowseCardTaxonomy> }) {
   const { t } = useTranslation();
   const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
+  const alwaysShowNsfwTag = useAppStore((state) => state.settings?.browseAlwaysShowNsfwTag ?? false);
   const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
@@ -185,6 +186,7 @@ function ReadableBrowseModCard({
                 chips={chips}
                 availableWidth={chipRowWidth}
                 maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
+                alwaysShowNsfwTag={alwaysShowNsfwTag}
                 onImage
               />
             </div>
