@@ -121,6 +121,28 @@ describe('prepared hideout bundle', () => {
         expect(original).toEqual(copy);
     });
 
+    it('stands a rigged prop in its bind pose, without its skeleton', async () => {
+        const binary = Buffer.alloc(96);
+        binary.writeFloatLE(1, 0);
+        const rigged = glb({ asset: { version: '2.0' }, scenes: [{ nodes: [0, 1] }], nodes: [{ name: 'base' }, { name: 'pepperoni', mesh: 0, skin: 0 }],
+            buffers: [{ byteLength: binary.length }],
+            bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 12 }, { buffer: 0, byteOffset: 12, byteLength: 4 },
+                { buffer: 0, byteOffset: 16, byteLength: 16 }, { buffer: 0, byteOffset: 32, byteLength: 64 }],
+            accessors: [{ bufferView: 0, componentType: 5126, count: 1, type: 'VEC3', min: [1, 0, 0], max: [1, 0, 0] },
+                { bufferView: 1, componentType: 5121, count: 1, type: 'VEC4' }, { bufferView: 2, componentType: 5126, count: 1, type: 'VEC4' },
+                { bufferView: 3, componentType: 5126, count: 1, type: 'MAT4' }],
+            meshes: [{ primitives: [{ attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2 } }] }],
+            skins: [{ joints: [0], inverseBindMatrices: 3 }], animations: [{ channels: [], samplers: [] }],
+        }, binary);
+        const { bytes } = createHideoutBundle([{ name: 'rigged.glb', bytes: rigged }]);
+        const loaded = await new GLTFLoader().parseAsync(Uint8Array.from(bytes).buffer, '');
+        const meshes: THREE.Mesh[] = [];
+        loaded.scene.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
+        expect(meshes).toHaveLength(1);
+        expect(meshes[0]).not.toBeInstanceOf(THREE.SkinnedMesh);
+        expect(Object.keys(meshes[0].geometry.attributes)).toEqual(['position']);
+    });
+
     it('rejects malformed input rather than writing a partially indexed bundle', () => {
         expect(() => createHideoutBundle([{ name: 'broken.glb', bytes: Buffer.alloc(20) }])).toThrow('Invalid static scene GLB');
     });

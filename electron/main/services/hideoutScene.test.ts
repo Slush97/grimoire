@@ -80,15 +80,22 @@ describe('hideout scene cache', () => {
     writeFileSync(join(dl, 'game', 'citadel', 'pak01_dir.vpk'), 'base');
   });
 
-  it('retries a failed model export on the next load and reuses the models that exported', async () => {
-    const { loadHideoutScene } = await import('./hideoutScene');
+  it('keeps a failed export for the session, then retries it on open and reuses the models that exported', async () => {
+    const { loadHideoutScene: load } = await import('./hideoutScene');
     h.failing.add('models/b.vmdl_c');
-    const first = await loadHideoutScene(dl);
+    const first = await load(dl);
     expect(first.failures).toEqual(['models/b.vmdl_c']);
     expect(first.instances).toHaveLength(1);
 
     h.failing.clear();
     h.exported = [];
+    expect((await load(dl)).failures).toEqual(['models/b.vmdl_c']);
+    expect(h.exported).toEqual([]);
+
+    vi.resetModules();
+    const { loadHideoutScene, prebuildHideoutScene } = await import('./hideoutScene');
+    await prebuildHideoutScene(dl);
+    expect(h.exported).toEqual([]);
     const second = await loadHideoutScene(dl);
     expect(h.exported).toEqual(['models/b.vmdl_c']);
     expect(second.failures).toEqual([]);

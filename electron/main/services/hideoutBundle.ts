@@ -23,14 +23,18 @@ const documentSchema = z.object({
     materials: z.array(materialSchema).default([]),
     meshes: z.array(z.object({ primitives: z.array(z.object({ attributes: z.record(index), indices: index.optional(),
         material: index.optional(), targets: z.array(z.record(index)).optional() }).passthrough()) }).passthrough()).default([]),
-    nodes: z.array(z.object({ mesh: index.optional(), children: z.array(index).optional() }).passthrough()).default([]),
+    nodes: z.array(z.object({ mesh: index.optional(), children: z.array(index).optional(), skin: index.optional() }).passthrough()).default([]),
     scenes: z.array(z.object({ nodes: z.array(index).default([]) })).default([{ nodes: [] }]),
     scene: index.default(0), extensionsUsed: z.array(z.string()).default([]), extensionsRequired: z.array(z.string()).default([]),
-    skins: z.array(z.never()).default([]), animations: z.array(z.never()).default([]),
+    // A model in this bundle stands in its bind pose: looping props export on their own. Rigs still reach
+    // it from props the game animates some other way (the pizza pickups, on one joint), and are dropped.
+    skins: z.array(z.unknown()).default([]), animations: z.array(z.unknown()).default([]),
 });
 type Document = z.infer<typeof documentSchema>;
 type Accessor = Document['accessors'][number];
 type Material = z.infer<typeof materialSchema>;
+
+const RIG_ATTRIBUTE = /^(?:JOINTS|WEIGHTS)_\d+$/;
 
 function parseGlb(bytes: Buffer): { document: Document; binary: Buffer } {
     if (bytes.length < 28 || bytes.toString('ascii', 0, 4) !== 'glTF' || bytes.readUInt32LE(4) !== 2 || bytes.readUInt32LE(8) !== bytes.length) throw new Error('Invalid static scene GLB.');
@@ -268,7 +272,8 @@ export function createHideoutBundle(models: { name: string; bytes: Buffer }[]): 
             meshes.push({ ...mesh, primitives: mesh.primitives.map(primitive => {
                 const paint = primitive.material !== undefined && source.materials[primitive.material]?.extras?.morphic?.shader.startsWith('environment_');
                 return { ...primitive,
-                    attributes: Object.fromEntries(Object.entries(primitive.attributes).map(([semantic, i]) => [semantic, addAccessor(i, semantic === 'COLOR_0' && !!paint)])),
+                    attributes: Object.fromEntries(Object.entries(primitive.attributes).filter(([semantic]) => !RIG_ATTRIBUTE.test(semantic))
+                        .map(([semantic, i]) => [semantic, addAccessor(i, semantic === 'COLOR_0' && !!paint)])),
                     ...(primitive.indices === undefined ? {} : { indices: addAccessor(primitive.indices) }),
                     ...(primitive.material === undefined ? {} : { material: mapped(materialMap, primitive.material) }),
                     ...(primitive.targets ? { targets: primitive.targets.map(target => Object.fromEntries(Object.entries(target).map(([semantic, i]) => [semantic, addAccessor(i)]))) } : {}),
@@ -277,7 +282,7 @@ export function createHideoutBundle(models: { name: string; bytes: Buffer }[]): 
             return result;
         });
         const nodeOffset = nodes.length;
-        for (const node of source.nodes) nodes.push({ ...node,
+        for (const { skin: _skin, ...node } of source.nodes) nodes.push({ ...node,
             ...(node.mesh === undefined ? {} : { mesh: mapped(meshMap, node.mesh) }),
             ...(node.children ? { children: node.children.map(i => {
                 if (!source.nodes[i]) throw new Error('Missing static scene child node.');

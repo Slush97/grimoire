@@ -9,7 +9,7 @@ describe('hideout warming progress', () => {
     expect(hideoutWarmingProgress({ building: false, built: true, build: null, room: 1 })).toBe(1);
   });
   it('fills the whole bar with the room when no build ran', () => {
-    expect(hideoutWarmingProgress({ building: false, built: false, build: null, room: roomStageProgress('compiled') })).toBe(0.9);
+    expect(hideoutWarmingProgress({ building: false, built: false, build: null, room: roomStageProgress('compiled') })).toBe(0.7);
   });
   it('reports no position for a build without progress', () => {
     expect(hideoutWarmingProgress({ building: true, built: false, build: null, room: 0 })).toBeNull();

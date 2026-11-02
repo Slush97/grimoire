@@ -1,12 +1,12 @@
 /** How far the room's first load has come by each of HideoutScene's load marks, from the measured
- *  warm breakdown in docs/hideout-viewer.md (about 4 s to the room frame; GPU programs link last). */
+ *  warm breakdown in docs/hideout-viewer.md. Programs link, then each one's first draw takes the rest. */
 const ROOM_STAGE_END: Readonly<Record<string, number>> = {
   reflectionReady: 0.25, probesDecoded: 0.25, lightmapDecoded: 0.25, lightmapMasksDecoded: 0.25, skyDecoded: 0.25,
-  bundleFetched: 0.3, bundleParsed: 0.55, instancesReady: 0.58, materialsReady: 0.6, compiled: 0.9,
+  bundleFetched: 0.3, bundleParsed: 0.55, instancesReady: 0.58, materialsReady: 0.6, compiled: 0.7, warmed: 0.97,
 };
 
-/** A cache build is about 35 s of exporting, and the room then loads for about 9 s. */
-const BUILD_SHARE = 0.8;
+/** A cache build is about 9 s of exporting, and the room then loads for about as long. */
+const BUILD_SHARE = 0.5;
 
 export function roomStageProgress(stage: string): number {
   return ROOM_STAGE_END[stage] ?? 0;
