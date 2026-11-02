@@ -31,10 +31,13 @@ export function InstalledTagSelect({ options, included, excluded, onInclude, onE
   const byKey = useMemo(() => new Map(options.map(option => [option.key, option])), [options]);
   const orderedOptions = editing ? [...options.filter(option => option.custom), ...options.filter(option => !option.custom)] : options;
   const selected = [...included, ...excluded];
+  const selectionSummary = [
+    included.length > 0 ? `+${included.length}` : '',
+    excluded.length > 0 ? `-${excluded.length}` : '',
+  ].filter(Boolean).join('/');
   const displayLabel = selected.length === 1
-    ? excluded.length === 1 ? t('installed.filters.excludingTag', { name: byKey.get(excluded[0])?.label ?? excluded[0] })
-      : byKey.get(included[0])?.label ?? t('installed.filters.allTags')
-    : selected.length > 1 ? t('installed.filters.tagCount', { count: selected.length }) : t('installed.filters.allTags');
+    ? t('installed.filters.signedTag', { sign: excluded.length === 1 ? '-' : '+', name: byKey.get(selected[0])?.label ?? selected[0] })
+    : selected.length > 1 ? t('installed.filters.tagSelectionCount', { count: selected.length, selection: selectionSummary }) : t('installed.filters.allTags');
 
   useLayoutEffect(() => {
     if (!editing) return;

@@ -1580,9 +1580,9 @@
       "allTags": "All Tags",
       "heroCount_one": "{{count}} Hero",
       "heroCount_other": "{{count}} Heroes",
-      "tagCount_one": "{{count}} Tag",
-      "tagCount_other": "{{count}} Tags",
-      "excludingTag": "Exclude {{name}}"
+      "tagSelectionCount_one": "{{selection}} Tag",
+      "tagSelectionCount_other": "{{selection}} Tags",
+      "signedTag": "{{sign}} {{name}}"
     },
     "lists": {
       "menuTrigger": "Add to list",
@@ -2080,7 +2080,7 @@
       "title": "Custom Tags",
       "edit": "Edit Tags",
       "create": "Create Tag",
-      "createPlaceholder": "New tag name",
+      "createPlaceholder": "New tag...",
       "rename": "Rename {{name}}",
       "renameLabel": "Tag Name",
       "duplicateName": "A tag with this name already exists.",

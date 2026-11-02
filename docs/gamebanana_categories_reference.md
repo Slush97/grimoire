@@ -98,9 +98,12 @@ icons before an overflow urn. Its tooltip lists every selected hero.
 Its Tags selector includes tags on left-click (green plus) and excludes them on
 right-click (red minus). A card must match an included tag when any are selected,
 and must not match any excluded tag. Either click clears a tag that is already
-included or excluded. The selector's search can be switched to
-edit mode to create, rename, or delete custom tags. The edit toggle sits beside
-the input; renaming uses that same input and Enter to save, with an X to cancel.
+included or excluded. The trigger shows a single tag as `+ HUD` or `- HUD`.
+Multiple selections show separate counts, such as `+2/-1 Tags`, with empty sides
+and their separator omitted.
+The selector's search can be switched to edit mode to create, rename, or delete
+custom tags. The edit toggle sits beside the input; renaming uses that same input
+and Enter to save, with an X to cancel.
 Custom tags appear first during editing. GameBanana categories and
 local General classifications remain read-only. Assign custom tags through the
 card's Custom Tags submenu. These user preferences reuse the list catalogue
