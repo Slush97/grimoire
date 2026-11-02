@@ -40,7 +40,7 @@ describe('cached Installed requirement warnings', () => {
     expect(read).not.toHaveBeenCalled();
     expect(select(local, [local, localBase], {}, {
       [requirementFileKey(local)]: ['a.vtex_c'], [requirementFileKey(localBase)]: ['a.vtex_c', 'a.vmdl_c'],
-    })).toMatchObject({ label: 'orderWarning', warning: true });
+    })).toMatchObject({ label: 'orderWarning', warning: false });
   });
 
   it('reuses source calculations across remounted cards and keeps results stable after unrelated updates', () => {
@@ -72,7 +72,7 @@ describe('cached Installed requirement warnings', () => {
   it.each(['on', 'unknown'] as const)('preserves order warnings for enabled or unknown required state %s', state => {
     const select = createRequirementWarningCache();
     const files = { [requirementFileKey(overlay)]: ['a.vtex_c'], [requirementFileKey(base)]: ['a.vtex_c', 'a.vmdl_c'] };
-    expect(select(overlay, [base, overlay], { 'Mod:100': snapshot([{ ...required, state }]) }, files)).toMatchObject({ label: 'orderWarning', warning: true });
+    expect(select(overlay, [base, overlay], { 'Mod:100': snapshot([{ ...required, state }]) }, files)).toMatchObject({ label: 'orderWarning', warning: false });
     expect(select(overlay, [base, overlay], { 'Mod:100': snapshot([{ ...required, state: 'off' }]) }, files)).toMatchObject({ label: 'review', warning: true });
     expect(select(overlay, [overlay], { 'Mod:100': snapshot([{ ...required, state: 'off' }]) }, files)).toMatchObject({ label: 'title', warning: false });
   });
@@ -88,7 +88,7 @@ describe('cached Installed requirement warnings', () => {
       [requirementFileKey(base)]: ['a.vtex_c', 'a.vmdl_c'],
     };
 
-    expect(select(overlay, mods, snapshots, files)).toMatchObject({ label: 'orderWarning', warning: true });
+    expect(select(overlay, mods, snapshots, files)).toMatchObject({ label: 'orderWarning', warning: false });
     expect(select(earlierVariant, mods, snapshots, files)).toMatchObject({ label: 'title', warning: false });
     expect(select(overlay, mods, snapshots, { ...files, [requirementFileKey(overlay)]: ['different.vtex_c'] }))
       .toMatchObject({ label: 'title', warning: false });
@@ -102,10 +102,17 @@ describe('cached Installed requirement warnings', () => {
     expect(select(merged, [merged, { ...base, enabled: false }], sources, {})).toMatchObject({ source: { section: 'Sound', id: 300 }, label: 'missing', warning: true });
   });
 
-  it('does not show a badge for unavailable, empty or optional-only requirements', () => {
+  it('does not show an icon for unavailable or empty requirements', () => {
     const select = createRequirementWarningCache();
-    for (const requirements of [{ status: 'unavailable', checkedAt: 1 } as const, snapshot([]), snapshot([{ ...required, importance: 'optional' }])]) {
+    for (const requirements of [{ status: 'unavailable', checkedAt: 1 } as const, snapshot([])]) {
       expect(select(overlay, [overlay], { 'Mod:100': requirements }, {})).toBeNull();
     }
+  });
+
+  it.each(['optional', 'recommended'] as const)('keeps %s-only requirements available without warning', importance => {
+    const select = createRequirementWarningCache();
+    const sources = { 'Mod:100': snapshot([{ ...required, importance }]) };
+    expect(select(overlay, [overlay], sources, {})).toMatchObject({ label: 'title', warning: false });
+    expect(select(overlay, [overlay, { ...base, enabled: false }], sources, {})).toMatchObject({ label: 'title', warning: false });
   });
 });

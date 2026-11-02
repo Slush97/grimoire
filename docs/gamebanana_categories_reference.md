@@ -75,6 +75,23 @@ Match category names to the app's supported hero names and aliases to render her
 
 Mod details place the category tags above Files. Requirements share one compact card below current and archived files, before the artist information. Their thumbnails and names open the linked mod's details. Required and Recommended tags sit beside the existing actions; downloads remain in the linked mod's file section.
 
+Enabling an installed mod with required dependencies opens a confirmation with
+**Enable all**, **Only this**, and **Disable**. Disabling a dependency used by
+enabled mods offers **Disable all**, **Only this**, and **Enable**. The compact
+list includes thumbnails, requirement importance, and checkboxes that immediately
+enable or disable individual installed mods. Missing requirements stay visible
+with disabled checkboxes and links to their details. Required dependencies and
+enabled dependents are followed transitively, with cycle protection; optional
+dependencies never trigger a confirmation. Another enabled variant can satisfy
+the same requirement without disabling its dependents.
+
+**View requirements** in a mod's context menu opens the same list with
+**Enable all** and **Disable all** actions. It also lists enabled mods that require
+this mod, marking them as **Requires this mod**. The requirements icon also opens it.
+Required dependency problems on an enabled mod use a yellow icon; disabled mods
+and optional-only requirements use light gray. Requirements do not appear in
+the Installed **Issues** menu.
+
 For Browse Mod hero filters, include the hero category and all descendant IDs so nested categories still match. Browse Sound and Wip filtering uses catalog title matching where their trees do not provide equivalent hero categories. Browse card title matching also uses the cached category tree's hero roster and existing aliases, so it recognizes additions beyond the bundled roster without per-card requests. Explicit hero categories take precedence over titles.
 
 Browse title matching accepts `Deadman` or `Danny` for Deadman Danny, `Harrow` for Nurse Harrow, and both `Rat King` and `RatKing`. These are whole-name matches, so unrelated words such as `harrowing` do not identify a hero.
@@ -87,7 +104,7 @@ Installed cards and filter facets share `installedCardTaxonomy.ts` and the categ
 - Installed cards use 22px hero icons in a stack capped at 66px. Earlier heroes overlap in front of later heroes. Up to five hero icons are visible; from six heroes onward, four icons and a shadowed Soul Urn represent the group. The urn shares the overlapping slots and always sits behind every hero. The stack's mouse tooltip lists every hero separated by commas. The reusable 64px urn asset keeps its original colors; only this overflow treatment darkens it with CSS.
 - Card category tags run from the representative file's leaf toward its ancestors, with deeper categories before parents and custom fallback labels last. Their single 22px-high line fits as many tags as the available width allows, reserving the measured width of a `+n` chip whose mouse tooltip lists the remaining labels. Filter tag sets and counts are unchanged.
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
-- CameraOff and FileWarning indicators precede the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with the stack capped at 44px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
+- CameraOff, FileWarning, and requirements indicators share one overlapping stack before the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with their shared stack currently capped at 110px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
 - When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
 - Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.

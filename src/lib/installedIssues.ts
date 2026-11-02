@@ -1,17 +1,12 @@
 import type { Mod } from '../types/mod';
-import type { ModRequirementSnapshot } from '../types/gamebanana';
 import type { CompatibilityReview } from './modCompatibility';
 export { getInstallationScope as installedIssuesScope } from './appSettings';
 import { buildModEntries, entryPrimaryMod } from './modEntries';
 import { visibleInstalledMods } from './visibleMods';
-import { matchRequirement, requirementKey, requirementSnapshot, type RequirementSource } from './modRequirements';
-import { requirementWarningAssessment } from './requirementWarningCache';
-import type { RequirementFileLists } from './requirementLoadOrder';
 
 interface IssueBase { key: string; modId: string }
 export type InstalledIssue = IssueBase & (
   | { kind: 'camera' | 'data' | 'unknown' }
-  | { kind: 'requirements'; source: RequirementSource }
   | { kind: 'compatibility'; report: CompatibilityReview }
 );
 export interface InstalledIssueGroup {
@@ -53,8 +48,6 @@ export function installedIssueModIdentity(mod: Mod): string {
 
 export function collectInstalledIssueGroups(
   mods: readonly Mod[],
-  snapshots: Readonly<Record<string, ModRequirementSnapshot>>,
-  files: RequirementFileLists,
   reports: readonly CompatibilityReview[] = [],
 ): InstalledIssueGroup[] {
   const groups: InstalledIssueGroup[] = [];
@@ -69,17 +62,6 @@ export function collectInstalledIssueGroups(
       if (mod.staleModels?.length) add('camera', mod.staleModels.map(model => [model.entry, [...model.attachments].sort()]).sort());
       if (mod.enabled && mod.outdatedVdata?.length) add('data', mod.outdatedVdata.map(data => [data.entry, data.missing, [...data.sample].sort()]).sort());
       if (mod.isUnknown) add('unknown', null);
-      const assessment = requirementWarningAssessment(mod, mods, snapshots, files);
-      const snapshot = assessment?.warning ? requirementSnapshot(assessment.source, mods, snapshots) : undefined;
-      if (assessment && snapshot?.status === 'loaded') {
-        const detail = snapshot.items.filter(item => item.importance === 'required').map(item => [
-          item.sha256 ?? item.url ?? item.name, item.state, matchRequirement(item, mods).state,
-        ]).sort();
-        issues.push({
-          key: JSON.stringify([payload, 'requirements', 'localModId' in assessment.source ? payload : requirementKey(assessment.source), assessment.label, detail]),
-          modId: mod.id, kind: 'requirements', source: { ...assessment.source, name: mod.name, requirements: snapshot },
-        });
-      }
       const report = reportById.get(mod.id);
       if (report && (report.kind === 'failed' || report.findings.length > 0)) issues.push({
         key: JSON.stringify([payload, 'compatibility', report.kind === 'failed' ? report.error : report.findings]),

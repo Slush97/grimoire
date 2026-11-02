@@ -2063,9 +2063,7 @@
       "empty": "No known issues need attention.",
       "camera": "Camera data",
       "unknown": "Unknown mod",
-      "requirements": "Requirements",
       "identify": "Identify",
-      "review": "Review",
       "cameraAll": "Fix all cameras",
       "disableAll": "Disable mods with outdated data",
       "scopeChanged": "The active installation changed. Reopen Issues before continuing.",
@@ -3944,6 +3942,21 @@
     "install": "Install",
     "cancel": "Cancel",
     "manual": "Check the mod page for instructions.",
-    "otherGame": "This mod is for a different game."
+    "otherGame": "This mod is for a different game.",
+    "enableTitle": "Enable with requirements?",
+    "disableTitle": "Disable a required mod?",
+    "manageTitle": "View requirements",
+    "enableHint": "Enable this mod together with its required mods, or choose which mods to enable below.",
+    "disableHint": "Other enabled mods require this one. Disable them together or change individual mods below.",
+    "manageHint": "Manage this mod and its requirements. Open missing mods to install them.",
+    "enableAll": "Enable all",
+    "disableAll": "Disable all",
+    "onlyThis": "Only this",
+    "disable": "Disable",
+    "toggleNamed": "Toggle {{name}}",
+    "notInstalled": "Not installed",
+    "none": "No requirements are listed for this mod.",
+    "changeFailed": "Some mods could not be changed. Check their current state and try again.",
+    "requiredBy": "Requires this mod"
   }
 }

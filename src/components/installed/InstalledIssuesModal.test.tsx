@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstalledIssuesModal } from './InstalledIssuesModal';
 import { useAppStore } from '../../stores/appStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
-import { useRequirementOrderStore } from '../../stores/requirementOrderStore';
 import { useInstalledIssuesStore } from '../../stores/installedIssuesStore';
 import { useToastStore } from '../../stores/toastStore';
 import { collectInstalledIssueGroups, installedIssuesScope } from '../../lib/installedIssues';
@@ -47,14 +46,12 @@ describe('Installed issues dialog', () => {
   let props: ComponentProps<typeof InstalledIssuesModal>;
   const close = vi.fn();
   const identify = vi.fn();
-  const reviewRequirements = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     useAppStore.setState({ settings, mods: [], modsLoaded: true });
     useRequirementsStore.setState({ snapshots: {}, targets: [], review: null });
-    useRequirementOrderStore.setState({ files: {}, fixing: false });
     useInstalledIssuesStore.setState({
       scope: installedIssuesScope(settings), open: true, busy: false,
       hasUnread: false, hasUnreadOutdated: false, currentIds: new Set(), unreadIds: new Set(), outdatedIds: new Set(), sessions: {},
@@ -68,7 +65,7 @@ describe('Installed issues dialog', () => {
     document.body.append(host);
     root = createRoot(host);
     mounted = true;
-    props = { open: true, onClose: close, mods: [], onIdentifyUnknown: identify, onReviewRequirements: reviewRequirements };
+    props = { open: true, onClose: close, mods: [], onIdentifyUnknown: identify };
   });
 
   afterEach(() => {
@@ -98,7 +95,7 @@ describe('Installed issues dialog', () => {
     });
   };
 
-  it('groups camera, data, dependency and unknown actions under the Installed entry', async () => {
+  it('groups camera, data and unknown actions without requirement findings', async () => {
     const first = camera('a', { gameBananaId: 11, variantLabel: 'Camera variant' });
     const second = data('b', { gameBananaId: 11, variantLabel: 'Data variant', isUnknown: true });
     useRequirementsStore.setState({ snapshots: { 'Mod:11': { status: 'loaded', checkedAt: 1, items: [
@@ -111,7 +108,8 @@ describe('Installed issues dialog', () => {
     expect(buttons('installed.issues.fixCamera')).toHaveLength(1);
     expect(buttons('installed.outdatedData.disable')).toHaveLength(1);
     expect(buttons('installed.issues.identify')).toHaveLength(1);
-    expect(buttons('installed.issues.review')).toHaveLength(2);
+    expect(buttons('installed.issues.review')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('installed.issues.requirements');
     expect(document.querySelector('button button')).toBeNull();
     expect(reviewModCompatibility).toHaveBeenCalledOnce();
   });
@@ -324,18 +322,12 @@ describe('Installed issues dialog', () => {
     expect(useAppStore.getState().mods.every(candidate => !candidate.enabled)).toBe(true);
   });
 
-  it('closes before opening the existing requirement review and unknown-file flows', async () => {
+  it('closes before opening the existing unknown-file flow', async () => {
     const owner = mod('a', { gameBananaId: 11, isUnknown: true });
-    useRequirementsStore.setState({ snapshots: { 'Mod:11': { status: 'loaded', checkedAt: 1, items: [
-      { name: 'Base', url: 'https://gamebanana.com/mods/99', state: 'on', importance: 'required' },
-    ] } } });
     await render([owner]);
-    await act(async () => button('installed.issues.review').click());
-    expect(reviewRequirements).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 11, section: 'Mod', name: owner.name }));
-    expect(close.mock.invocationCallOrder[0]).toBeLessThan(reviewRequirements.mock.invocationCallOrder[0]);
     await act(async () => button('installed.issues.identify').click());
     expect(identify).toHaveBeenCalledExactlyOnceWith([owner]);
-    expect(close.mock.invocationCallOrder[1]).toBeLessThan(identify.mock.invocationCallOrder[0]);
+    expect(close.mock.invocationCallOrder[0]).toBeLessThan(identify.mock.invocationCallOrder[0]);
   });
 
   it('stops a camera batch after a mode switch and ignores the old installation results', async () => {
@@ -361,12 +353,12 @@ describe('Installed issues dialog', () => {
     vi.mocked(healModAttachments).mockReturnValueOnce(pending.promise);
     await render([camera('a'), camera('b')]);
     const store = useInstalledIssuesStore.getState();
-    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups(props.mods, {}, {}));
+    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups(props.mods));
     await act(async () => button('installed.issues.cameraAll').click());
     await act(async () => root.unmount());
     mounted = false;
     expect(useInstalledIssuesStore.getState()).toMatchObject({ open: false, busy: true });
-    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups([...props.mods, camera('c')], {}, {}));
+    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups([...props.mods, camera('c')]));
     expect(useInstalledIssuesStore.getState().unreadIds.size).toBe(1);
     await act(async () => pending.resolve(1));
     expect(healModAttachments).toHaveBeenCalledExactlyOnceWith('a');
@@ -379,11 +371,11 @@ describe('Installed issues dialog', () => {
   it('closes its shared visibility on unmount so later findings remain unread', async () => {
     await render([camera('a')]);
     const store = useInstalledIssuesStore.getState();
-    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups(props.mods, {}, {}));
+    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups(props.mods));
     await act(async () => root.unmount());
     mounted = false;
     expect(useInstalledIssuesStore.getState().open).toBe(false);
-    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups([...props.mods, camera('b')], {}, {}));
+    store.receive(installedIssuesScope(settings), collectInstalledIssueGroups([...props.mods, camera('b')]));
     expect(useInstalledIssuesStore.getState().unreadIds.size).toBe(1);
   });
 

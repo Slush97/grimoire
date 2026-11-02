@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Camera, CameraOff, CircleHelp, FileWarning, Info, Link2, PowerOff, Wrench } from 'lucide-react';
+import { Camera, CameraOff, CircleHelp, FileWarning, Info, PowerOff, Wrench } from 'lucide-react';
 import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { Button, ModalHeader, ProgressBar, Tag } from '../common/ui';
 import { Select } from '../common/forms';
@@ -9,11 +9,8 @@ import { getActiveDeadlockPath, shouldBlurNsfw } from '../../lib/appSettings';
 import { healModAttachments, isGameRunningModLockError, repairModCompatibility, revealPath, reviewModCompatibility } from '../../lib/api';
 import { collectInstalledIssueGroups, installedIssueModIdentity, installedIssueModsAtPath, installedIssuesScope, type InstalledIssue } from '../../lib/installedIssues';
 import type { CompatibilityFinding, CompatibilityReview } from '../../lib/modCompatibility';
-import type { RequirementSource } from '../../lib/modRequirements';
 import type { Mod } from '../../types/mod';
 import { useAppStore } from '../../stores/appStore';
-import { useRequirementsStore } from '../../stores/requirementsStore';
-import { useRequirementOrderStore } from '../../stores/requirementOrderStore';
 import { useInstalledIssuesStore } from '../../stores/installedIssuesStore';
 import { showToast } from '../../stores/toastStore';
 
@@ -22,7 +19,6 @@ interface InstalledIssuesModalProps {
   onClose: () => void;
   mods: Mod[];
   onIdentifyUnknown: (mods: Mod[]) => void;
-  onReviewRequirements: (source: RequirementSource) => void;
 }
 type ReviewState = { scope: string | null } & ({ kind: 'loading' } | { kind: 'failed'; error: string } | { kind: 'ready'; reports: CompatibilityReview[] });
 type Operation = { kind: 'camera' | 'repair' | 'disable'; modId: string; name: string; done: number; total: number };
@@ -47,12 +43,10 @@ function CompatibilityFindingRow({ finding }: { finding: CompatibilityFinding })
   </li>;
 }
 
-export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, onReviewRequirements }: InstalledIssuesModalProps) {
+export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown }: InstalledIssuesModalProps) {
   const { t } = useTranslation();
   const settings = useAppStore(state => state.settings);
   const loaded = useAppStore(state => state.modsLoaded);
-  const snapshots = useRequirementsStore(state => state.snapshots);
-  const files = useRequirementOrderStore(state => state.files);
   const scope = installedIssuesScope(settings);
   const path = getActiveDeadlockPath(settings);
   const activeMods = useMemo(() => installedIssueModsAtPath(mods, path), [mods, path]);
@@ -68,8 +62,7 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
   const backups = backupState.scope === scope ? backupState.paths : [];
   const currentReview = review.scope === scope ? review : null;
   const reports = currentReview?.kind === 'ready' ? currentReview.reports : EMPTY_REPORTS;
-  const groups = useMemo(() => collectInstalledIssueGroups(activeMods, snapshots, files,
-    reports), [activeMods, snapshots, files, reports]);
+  const groups = useMemo(() => collectInstalledIssueGroups(activeMods, reports), [activeMods, reports]);
   const filteredGroups = useMemo(() => issueFilter === 'all' ? groups : groups
     .map(group => ({ ...group, issues: group.issues.filter(issue => issue.kind === issueFilter) }))
     .filter(group => group.issues.length > 0), [groups, issueFilter]);
@@ -178,10 +171,6 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
   const close = () => {
     if (!busyRef.current) { setReview({ kind: 'loading', scope }); setIssueFilter('all'); onClose(); }
   };
-  const reviewRequirements = (source: RequirementSource) => {
-    if (busyRef.current || !isCurrent(scope)) return;
-    close(); onReviewRequirements(source);
-  };
   const identify = (target: Mod) => {
     if (busyRef.current || !scope || !isCurrent(scope)) return;
     const mod = resolveCurrent(target, scope);
@@ -202,7 +191,6 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
     { value: 'data', label: t('installed.issues.outdated') },
     { value: 'compatibility', label: t('installed.issues.compatibility') },
     { value: 'unknown', label: t('installed.issues.unknown') },
-    { value: 'requirements', label: t('installed.issues.requirements') },
   ];
 
   return <Modal open={open} onClose={close} size="xl" labelledBy="installed-issues-title" dismissable={!busy} panelClassName="flex max-h-[85vh] flex-col">
@@ -254,7 +242,6 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
               const camera = issues.some(issue => issue.kind === 'camera');
               const data = issues.some(issue => issue.kind === 'data');
               const unknown = issues.some(issue => issue.kind === 'unknown');
-              const requirements = issues.filter((issue): issue is Extract<InstalledIssue, { kind: 'requirements' }> => issue.kind === 'requirements');
               const compatibility = issues.find((issue): issue is Extract<InstalledIssue, { kind: 'compatibility' }> => issue.kind === 'compatibility')?.report;
               const repairable = compatibility?.kind === 'checked' && compatibility.findings.some(finding => finding.status === 'repairable');
               return <li key={`${installedIssueModIdentity(mod)}:${mod.id}`} className="space-y-2 border-t border-border pt-3">
@@ -264,7 +251,6 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
                 <div className="flex flex-wrap items-center gap-1.5">
                   {camera && <Tag tone="warning" icon={CameraOff}>{t('installed.issues.camera')}</Tag>}
                   {data && <Tag tone="danger" icon={FileWarning}>{t('installed.issues.outdated')}</Tag>}
-                  {requirements.length > 0 && <Tag icon={Link2}>{t('installed.issues.requirements')}</Tag>}
                   {unknown && <Tag icon={CircleHelp}>{t('installed.issues.unknown')}</Tag>}
                   {compatibility && <Tag icon={Wrench}>{t('installed.issues.compatibility')}</Tag>}
                 </div>
@@ -290,8 +276,6 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown, o
                     onClick={() => void run('repair', [mod])}>{t('installed.repairs.repair')}</Button>}
                   {data && <Button size="sm" variant="secondary" icon={PowerOff} disabled={busy}
                     onClick={() => void run('disable', [mod])}>{t('installed.outdatedData.disable')}</Button>}
-                  {requirements.map(issue => <Button key={issue.key} size="sm" variant="secondary" icon={Link2} disabled={busy}
-                    onClick={() => reviewRequirements(issue.source)}>{t('installed.issues.review')}</Button>)}
                   {unknown && <Button size="sm" variant="secondary" icon={CircleHelp} disabled={busy}
                     onClick={() => identify(mod)}>{t('installed.issues.identify')}</Button>}
                 </div>

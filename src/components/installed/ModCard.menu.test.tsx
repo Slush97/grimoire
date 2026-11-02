@@ -11,6 +11,7 @@ import * as imageActions from '../../lib/imageActions';
 import { useAppStore } from '../../stores/appStore';
 import { useInstalledTagsStore } from '../../stores/installedTagsStore';
 import { getInstallationScope } from '../../lib/appSettings';
+import { useRequirementsStore } from '../../stores/requirementsStore';
 
 const translate = vi.hoisted(() => vi.fn((key: string) => key));
 vi.mock('react-i18next', () => ({
@@ -25,10 +26,15 @@ describe('installed card menu mounting', () => {
   let root: Root;
   let input: ComponentProps<typeof ModCard>;
   let previousSettings: AppSettings | null;
+  let previousMods: Mod[];
 
   beforeEach(() => {
     vi.clearAllMocks();
     previousSettings = useAppStore.getState().settings;
+    previousMods = useAppStore.getState().mods;
+    useAppStore.setState({ mods: [] });
+    useRequirementsStore.getState().finishToggle();
+    useRequirementsStore.setState({ snapshots: {} });
     useCategoryStore.setState({ heroByCategoryId: new Map(), heroNames: [], pathsByModel: {} });
     useInstalledTagsStore.setState({ byScope: {} });
     host = document.createElement('div');
@@ -46,7 +52,8 @@ describe('installed card menu mounting', () => {
 
   afterEach(() => {
     act(() => root.unmount());
-    useAppStore.setState({ settings: previousSettings });
+    useAppStore.setState({ settings: previousSettings, mods: previousMods });
+    useRequirementsStore.getState().finishToggle();
     host.remove();
     vi.restoreAllMocks();
   });
@@ -169,6 +176,59 @@ describe('installed card menu mounting', () => {
     expect(host.textContent).not.toContain('installed.card.staleModel');
     await act(async () => root.render(<ModCard {...input} mod={{ ...input.mod, outdatedVdata: [], staleModels: [] }} />));
     expect(host.querySelector('[data-issue-stack]')).toBeNull();
+  });
+
+  it.each(['grid', 'compact', 'list'] as const)('groups the requirements icon with repair icons before taxonomy in %s cards', async viewMode => {
+    input = { ...input, viewMode, mod: { ...input.mod, gameBananaId: 1, lockerHeroes: ['Abrams'], categoryName: 'Skins',
+      outdatedVdata: [{ entry: 'scripts/heroes.vdata_c', missing: 1, sample: ['field'] }],
+      staleModels: [{ entry: 'models/hero.vmdl_c', attachments: ['aim'] }],
+    } };
+    useAppStore.setState({ mods: [input.mod as Mod] });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, {
+      status: 'loaded', checkedAt: 1, items: [{ name: 'Required base', importance: 'required', state: 'on', url: 'https://gamebanana.com/mods/999' }],
+    });
+    await act(async () => root.render(<ModCard {...input} />));
+    const requirements = host.querySelector<HTMLButtonElement>('[data-requirement-warning]')!;
+    const issues = host.querySelector<HTMLElement>('[data-issue-stack]')!;
+    const heroes = host.querySelector('[data-hero-stack]')!;
+    expect(host.querySelectorAll('[data-requirement-warning]')).toHaveLength(1);
+    expect(issues.contains(requirements)).toBe(true);
+    expect(issues.nextElementSibling).toBe(heroes);
+    expect(issues.style.width).toBe('66px');
+    expect(issues.querySelectorAll('svg')).toHaveLength(3);
+    expect(issues.getAttribute('role')).toBe('group');
+    expect(requirements.querySelector('svg')).not.toBeNull();
+    expect(requirements.className).toContain('text-state-warning');
+    expect(requirements.textContent).toBe('');
+    expect(host.textContent).not.toContain('requirements.missing');
+    expect(host.textContent).not.toContain('requirements.title');
+    await act(async () => requirements.click());
+    expect(useRequirementsStore.getState().toggleReview).toMatchObject({ mode: 'manage', mod: input.mod });
+    await act(async () => root.render(<ModCard {...input} mod={{ ...input.mod, outdatedVdata: [], staleModels: [] }} />));
+    const requirementsOnly = host.querySelector<HTMLElement>('[data-issue-stack]')!;
+    expect(requirementsOnly.style.width).toBe('22px');
+    expect(requirementsOnly.querySelectorAll('svg')).toHaveLength(1);
+  });
+
+  it.each(['context', 'dropdown'] as const)('opens requirement management from the %s menu', async kind => {
+    input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
+    useAppStore.setState({ mods: [input.mod as Mod] });
+    vi.spyOn(useRequirementsStore.getState(), 'load').mockResolvedValue();
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu(kind);
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find(element => element.textContent === 'requirements.manageTitle')!;
+    expect(item).toBeDefined();
+    await act(async () => item.click());
+    expect(useRequirementsStore.getState().toggleReview).toMatchObject({ mode: 'manage', mod: input.mod });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('omits requirement management for local mods without declared dependencies', async () => {
+    await act(async () => root.render(<ModCard {...input} />));
+    await openMenu('context');
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .some(element => element.textContent === 'requirements.manageTitle')).toBe(false);
   });
 
   it.each(['grid', 'compact', 'list'] as const)('shows every grouped hero and puts additional %s tags in a mouse tooltip', async viewMode => {

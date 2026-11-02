@@ -13,7 +13,7 @@ interface SourceAssessment {
   snapshot: ModRequirementSnapshot | undefined;
   source: RequirementRef;
   loaded: boolean;
-  required: boolean;
+  hasItems: boolean;
   missing: boolean;
   disabled: boolean;
   issues: boolean;
@@ -66,29 +66,29 @@ export function createRequirementWarningCache() {
         ))
       ))) return cached;
       const loaded = snapshot?.status === 'loaded';
-      let required = false, missing = false, disabled = false, issues = false;
+      let missing = false, disabled = false, issues = false;
       if (loaded) for (const item of snapshot.items) {
-        required ||= item.importance === 'required';
+        if (item.importance !== 'required') continue;
         const { state } = matchRequirement(item, mods);
         missing ||= state === 'missing';
         disabled ||= state === 'disabled';
         issues ||= state === 'missing' || state === 'disabled' || state === 'manual';
       }
       const result: SourceAssessment = {
-        source, snapshot, loaded, required, missing, disabled, issues,
+        source, snapshot, loaded, hasItems: loaded && snapshot.items.length > 0, missing, disabled, issues,
         orderWarnings: new Set(requirementOrderIssues(source, snapshot, mods, files).map(issue => issue.overlay.id)),
       };
       library.sources.set(key, result);
       return result;
     });
     const orderSource = sources.find(source => source.orderWarnings.has(mod.id));
-    const source = sources.find(source => 'localModId' in source.source) ??
-      (mod.enabled ? sources.find(source => source.issues) : undefined) ?? orderSource ?? sources.find(source => source.loaded && source.required);
+    const source = (mod.enabled ? sources.find(source => source.issues) : undefined) ??
+      orderSource ?? sources.find(source => source.loaded && source.hasItems);
     const issues = !!mod.enabled && !!source?.issues;
     const next: RequirementWarningAssessment | null = source?.loaded ? {
       source: source.source,
       label: issues && source.missing ? 'missing' : issues && source.disabled ? 'disabled' : orderSource ? 'orderWarning' : issues ? 'review' : 'title',
-      warning: issues || !!orderSource,
+      warning: issues,
     } : null;
     const previous = card.result;
     if (!(previous && next && requirementKey(previous.source) === requirementKey(next.source) && previous.label === next.label && previous.warning === next.warning)) card.result = next;

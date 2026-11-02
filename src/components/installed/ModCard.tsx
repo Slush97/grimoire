@@ -5,6 +5,9 @@ import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus,
 import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
+import { useRequirementsStore } from '../../stores/requirementsStore';
+import { modRequirementRefs } from '../../lib/modRequirements';
+import { modRestoreKey } from '../../lib/soloRestore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
 import { useCategoryStore } from '../../stores/categoryStore';
 import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
@@ -66,6 +69,7 @@ interface ModCardProps {
     nsfw?: boolean;
     gameBananaId?: number;
     sha256?: string;
+    skinEdit?: Mod['skinEdit'];
     localGroupId?: string;
     isUnknown?: boolean;
     lockerHero?: string;
@@ -618,12 +622,13 @@ function ModListRowContent({
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
-          <RequirementWarning mod={mod} />
           <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
             onOpen={onOpenDetails} variant="inline" />
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
-          <RepairIssueIcons outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels} />
+          <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
+            outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
+            requirement={{ icon, title }} />}</RequirementWarning>
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -1013,6 +1018,19 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
+      {(modRequirementRefs(mod).length > 0 || !!mod.skinEdit?.sources.length) && (
+        <MenuItem icon={Link2} onSelect={() => {
+          const mods = useAppStore.getState().mods;
+          const owner = mods.find(candidate => candidate.id === mod.id);
+          if (!owner) return;
+          const key = modRestoreKey(owner);
+          void useRequirementsStore.getState().load(mods.flatMap(modRequirementRefs)).then(() => {
+            const current = useAppStore.getState().mods;
+            const owner = current.find(candidate => modRestoreKey(candidate) === key);
+            if (owner) useRequirementsStore.getState().manage(owner, current);
+          });
+        }}>{t('requirements.manageTitle')}</MenuItem>
+      )}
       {mod.merged && updatableSourceCount > 0 && onOpenDetails && (
         <MenuItem icon={Download} onSelect={onOpenDetails}>
           {t('mergedContents.updateSources', { count: updatableSourceCount })}
@@ -1401,7 +1419,6 @@ export function ModCard({
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
               {!selectMode && <CrashAdvisoryBadge variant="overlay" modIds={mod.crashModIds ?? [mod.id]} />}
-              {!selectMode && <RequirementWarning mod={mod} variant="overlay" />}
               {mod.nsfw && (
                 <Tag
                   tone="danger"
@@ -1497,7 +1514,9 @@ export function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
-              <RepairIssueIcons outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels} />
+              <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
+                outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
+                requirement={selectMode ? undefined : { icon, title }} />}</RequirementWarning>
               <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} />
             </div>
 

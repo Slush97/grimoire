@@ -14,6 +14,7 @@ import {
   setModLockerHero,
 } from '../lib/api';
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
+import { modRestoreKey } from '../lib/soloRestore';
 import { getAssetPath } from '../lib/assetPath';
 import { shakeElement } from '../lib/shakeElement';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
@@ -1225,9 +1226,11 @@ export default function Locker() {
         m.id !== modId && m.enabled && getEffectiveGlobalType(m) === targetType
     );
     for (const mod of active) {
-      if (!await toggleMod(mod.id)) return false;
+      const current = useAppStore.getState().mods.find(candidate => modRestoreKey(candidate) === modRestoreKey(mod));
+      if (current?.enabled && !await toggleMod(current.id)) return false;
     }
-    return toggleMod(modId);
+    const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === modRestoreKey(target));
+    return current ? current.enabled || toggleMod(current.id) : false;
   };
 
   // Sorted hero name list for the "tag as hero" dropdown on Unassigned cards.

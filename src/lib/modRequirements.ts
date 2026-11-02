@@ -108,3 +108,83 @@ export function modRequirementRefs(mod: Pick<Mod, 'gameBananaId' | 'sourceSectio
     ...(mod.merged?.sources ?? []).flatMap(s => s.gameBananaId ? [{ id: s.gameBananaId, section: s.section ?? 'Mod' }] : []),
   ].filter(target => ['Mod', 'Sound', 'Wip'].includes(target.section));
 }
+
+export interface InstalledModRequirement { item: ModRequirement; matches: RequirementMatch[] }
+
+/** Include optional entries for management without making them blockers. */
+export function installedModRequirements(
+  mod: RequirementMod,
+  mods: readonly Mod[],
+  snapshots: Readonly<Record<string, ModRequirementSnapshot>>,
+): InstalledModRequirement[] {
+  const local = skinRequirementSource(mod, mods)?.requirements;
+  const sources = [...(local ? [local] : []), ...modRequirementRefs(mod).map(ref => snapshots[requirementKey(ref)])];
+  const rows = new Map<string, InstalledModRequirement>();
+  for (const source of sources) {
+    if (source?.status !== 'loaded') continue;
+    for (const item of source.items) {
+      const target = item.url ? parseGameBananaItemUrl(item.url) : null;
+      const identity = item.sha256 ? `sha256:${item.sha256}` : target ? requirementKey(target) : item.url ?? item.name;
+      const key = JSON.stringify([identity, item.importance, item.state]);
+      if (!rows.has(key)) rows.set(key, { item, matches: matchRequirement({ ...item, importance: 'required' }, mods).matches });
+    }
+  }
+  return [...rows.values()];
+}
+
+/** Resolve required changes against the current inventory, including cycles and
+ * alternative installed files that already satisfy the same listing. */
+export function requiredModClosure(
+  modId: string,
+  mods: readonly Mod[],
+  snapshots: Readonly<Record<string, ModRequirementSnapshot>>,
+  direction: 'dependencies' | 'dependents',
+): string[] {
+  const byId = new Map(mods.map(mod => [mod.id, mod]));
+  if (!byId.has(modId)) return [];
+  const selected = new Set([modId]);
+  const rows = new Map<string, InstalledModRequirement[]>();
+  const required = (mod: Mod) => {
+    let result = rows.get(mod.id);
+    if (!result) {
+      result = installedModRequirements(mod, mods, snapshots).filter(({ item }) => item.importance === 'required' && item.state !== 'off');
+      rows.set(mod.id, result);
+    }
+    return result;
+  };
+  if (direction === 'dependencies') {
+    const queue = [modId];
+    for (let index = 0; index < queue.length; index++) {
+      const mod = byId.get(queue[index])!;
+      for (const { matches } of required(mod)) {
+        // A merged archive can already contain both the owner and its base.
+        if (matches.some(match => match.modId === mod.id)) continue;
+        const enabled = matches.filter(match => match.enabled);
+        const candidates = enabled.length ? enabled : matches.slice(0, 1);
+        for (const match of candidates) {
+          if (selected.has(match.modId)) continue;
+          selected.add(match.modId);
+          queue.push(match.modId);
+        }
+      }
+    }
+  } else {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const mod of mods) {
+        if (!mod.enabled || selected.has(mod.id)) continue;
+        const losesRequirement = required(mod).some(({ matches }) => {
+          const enabled = matches.filter(match => match.enabled);
+          return enabled.some(match => selected.has(match.modId)) && enabled.every(match => selected.has(match.modId));
+        });
+        if (losesRequirement) {
+          selected.add(mod.id);
+          changed = true;
+        }
+      }
+    }
+  }
+  selected.delete(modId);
+  return [...selected];
+}

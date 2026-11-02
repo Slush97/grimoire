@@ -1,7 +1,7 @@
 # Mod repairs
 
-Use **Issues** on Installed to review known camera, game-data, unknown-mod and
-requirement problems. Each Installed entry appears once, with findings and
+Use **Issues** on Installed to review known camera, game-data and unknown-mod
+problems. Each Installed entry appears once, with findings and
 actions for its affected files in a responsive card grid. Filter by issue type
 to show matching findings and variants; filter counts refer to mod cards.
 Technical details stay expandable, and bulk camera/data actions sit beside the
@@ -17,11 +17,12 @@ recover the original mod. Keep Deadlock closed while repairing loaded mods.
 
 Camera **Fix camera** and **Fix all cameras** use the existing attachment repair,
 including disabled mods. Outdated enabled game-data files retain their
-**Disable** actions alongside any available repair. Requirement review
-and unknown-mod identification open their existing workflows.
+**Disable** actions alongside any available repair. Unknown-mod identification
+opens its existing workflow. Requirements are managed separately from each
+mod's icon, context menu, or enable/disable confirmation.
 
 The Issues toolbar button turns red for new outdated-game-data findings and
-yellow for other new findings from existing inventory and requirement checks.
+yellow for other new findings from existing inventory checks.
 Opening it acknowledges those findings for the current
 app session. Navigation does not reset acknowledgement; a new or recurring
 finding does. Normal and developer installations keep independent session state.

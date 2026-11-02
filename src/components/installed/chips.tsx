@@ -68,11 +68,12 @@ export function HeroIconStack({ heroes, maxVisible = 5 }: { heroes: readonly str
   }))} />;
 }
 
-export function RepairIssueIcons({ outdated, enabled, models }: {
+export function RepairIssueIcons({ outdated, enabled, models, requirement }: {
   outdated?: Mod['outdatedVdata']; enabled: boolean; models?: Mod['staleModels'];
+  requirement?: { icon: ReactNode; title: string };
 }) {
   const { t } = useTranslation();
-  const items = [];
+  const items: { id: string; title: string; content: ReactNode }[] = [];
   if (outdated?.length) items.push({
     id: 'data',
     title: outdated.map(v => t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') })).join('\n\n'),
@@ -83,7 +84,9 @@ export function RepairIssueIcons({ outdated, enabled, models }: {
     title: t('installed.card.staleModelTitle', { files: models.map(m => m.entry.slice(m.entry.lastIndexOf('/') + 1).replace(/_c$/, '')).join(', ') }),
     content: <span className="flex h-[22px] w-[22px] items-center justify-center"><CameraOff aria-hidden className="h-4 w-4 text-state-warning" /></span>,
   });
-  return <OverlappingIcons data-issue-stack maxWidth={44} title={items.map(item => item.title).join('\n\n')} items={items} />;
+  if (requirement?.icon) items.push({ id: 'requirements', title: requirement.title, content: requirement.icon });
+  return <OverlappingIcons data-issue-stack role={requirement?.icon ? 'group' : 'img'} maxWidth={110}
+    title={items.map(item => item.title).join('\n\n')} items={items} />;
 }
 
 /** Fit a prefix of the ordered labels, reserving the exact overflow-chip width. */

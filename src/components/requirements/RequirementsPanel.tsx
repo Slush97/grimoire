@@ -11,10 +11,12 @@ import { useAppStore } from '../../stores/appStore';
 import { showToast } from '../../stores/toastStore';
 import type { GameBananaItemRef, ModRequirement } from '../../types/gamebanana';
 import type { CachedMod } from '../../types/electron';
+import type { Mod } from '../../types/mod';
 import ModThumbnail from '../ModThumbnail';
 import { shouldBlurNsfw } from '../../lib/appSettings';
+import { modRestoreKey } from '../../lib/soloRestore';
 
-function RequirementIdentity({ item, target }: { item: ModRequirement; target: GameBananaItemRef | null }) {
+export function RequirementIdentity({ item, target, installedMod }: { item: ModRequirement; target: GameBananaItemRef | null; installedMod?: Mod }) {
   const { t } = useTranslation();
   const [cached, setCached] = useState<CachedMod | null>(null);
   const settings = useAppStore(state => state.settings);
@@ -31,10 +33,11 @@ function RequirementIdentity({ item, target }: { item: ModRequirement; target: G
   const open = target ? () => useRequirementsStore.getState().openTarget(target)
     : item.url ? () => window.open(item.url, '_blank', 'noopener,noreferrer') : undefined;
   const label = t(target ? 'requirements.view' : 'requirements.openLink');
-  const thumbnail = cached?.thumbnailUrl ? <ModThumbnail src={cached.thumbnailUrl} alt="" nsfw={cached.isNsfw}
+  const thumbnailUrl = installedMod?.thumbnailUrl ?? cached?.thumbnailUrl;
+  const thumbnail = thumbnailUrl ? <ModThumbnail src={thumbnailUrl} alt="" nsfw={installedMod?.nsfw ?? cached?.isNsfw}
     hideNsfw={shouldBlurNsfw(settings)} className="h-10 w-10 overflow-hidden rounded-sm" width={40} height={40} enableImageContextMenu={false} />
     : <span className="flex h-10 w-10 items-center justify-center rounded-sm bg-hl/5 text-text-muted"><Link2 className="h-4 w-4" /></span>;
-  const name = <span className="min-w-0 break-words">{cached?.name ?? item.name}</span>;
+  const name = <span className="min-w-0 break-words">{installedMod?.name ?? cached?.name ?? item.name}</span>;
   return <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
     {open ? <button type="button" aria-label={label} onClick={open}
       className="peer/thumbnail shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-accent">{thumbnail}</button>
@@ -96,7 +99,10 @@ export function RequirementsPanel({ source, onLocate }: { source: RequirementSou
       const enable = async () => {
         if (!disabled) return;
         setBusy(true);
-        try { await useAppStore.getState().toggleMod(disabled.modId); }
+        try {
+          const mod = useAppStore.getState().mods.find(mod => mod.id === disabled.modId);
+          if (mod) await useAppStore.getState().setModEnabledStates([{ key: modRestoreKey(mod), enabled: true }]);
+        }
         catch (error) { showToast(String(error), { tone: 'error' }); }
         finally { setBusy(false); }
       };

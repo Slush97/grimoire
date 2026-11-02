@@ -69,7 +69,6 @@ import {
 } from '../lib/mergeSourceUpdate';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { useInstalledRequirements } from '../components/requirements/useInstalledRequirements';
-import { useRequirementsStore } from '../stores/requirementsStore';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -1982,7 +1981,10 @@ export default function Installed() {
   const runBulkToggle = async (targets: Mod[], verb: 'Enabling' | 'Disabling') => {
     setBulkProgress({ verb, done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
-      const ok = await toggleMod(targets[i].id);
+      const key = modRestoreKey(targets[i]);
+      const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === key);
+      const enabled = verb === 'Enabling';
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id) : false;
       setBulkProgress({ verb, done: i + 1, total: targets.length });
       // Stop the batch as soon as we hit the 99-enabled cap rather than firing
       // a failing enable for every remaining selection.
@@ -2360,7 +2362,8 @@ export default function Installed() {
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
     const targets = group.variants.filter((v) => v.enabled !== enabled);
     for (const v of targets) {
-      const ok = await toggleMod(v.id);
+      const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === modRestoreKey(v));
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id) : false;
       if (!ok) {
         return false;
       }
@@ -3801,8 +3804,7 @@ export default function Installed() {
       )}
 
       <InstalledIssuesModal open={issuesOpen} onClose={() => setIssuesOpen(false)} mods={mods}
-        onIdentifyUnknown={targets => openBulkUnknownFix(targets)}
-        onReviewRequirements={source => useRequirementsStore.getState().inspect(source)} />
+        onIdentifyUnknown={targets => openBulkUnknownFix(targets)} />
 
       <DeleteModsModal
         target={modToDelete}
