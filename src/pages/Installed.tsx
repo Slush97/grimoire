@@ -3633,9 +3633,9 @@ export default function Installed() {
               tagFilter={tagFilter} onTagChange={setTagFilter} excludedTagFilter={excludedTagFilter} onExcludedTagChange={setExcludedTagFilter} tagOptions={tagOptions}
               onCreateTag={createCustomTag} onRenameTag={renameCustomTag} onDeleteTag={deleteCustomTag}
               listFilter={listFilter} onListChange={setListFilter} listOptions={listFilterOptions}
-              onManageLists={() => setManagingLists(true)} active={filtersActive || sortActive || listsView}
+              onManageLists={() => setManagingLists(true)} active={filtersActive || listsView}
               onReset={() => {
-                setSortMode('priority'); setListView('all');
+                setListView('all');
                 setSourceSel(['gamebanana', 'local']); setStatusSel(['enabled', 'disabled']);
                 setHeroFilter([]); setTagFilter([]); setExcludedTagFilter([]); setListFilter([]);
               }} />

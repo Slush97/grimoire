@@ -35,10 +35,10 @@ describe('Installed filter menu', () => {
       excludedTagFilter={excluded} onExcludedTagChange={setExcluded} onCreateTag={vi.fn()} onRenameTag={vi.fn()} onDeleteTag={vi.fn()}
       listFilter={lists} listOptions={emptyLists ? [] : [{ key: 'empty', label: 'Empty list', count: 0 }]} onListChange={setLists}
       onManageLists={changed.manage}
-      active={sort !== 'priority' || view !== 'all' || sourceSel.length !== 2 || statusSel.length !== 2 || hero.length > 0 || tags.length > 0 || excluded.length > 0 || lists.length > 0}
+      active={view !== 'all' || sourceSel.length !== 2 || statusSel.length !== 2 || hero.length > 0 || tags.length > 0 || excluded.length > 0 || lists.length > 0}
       onReset={() => {
         changed.reset(); setSourceSel(['gamebanana', 'local']); setStatusSel(['enabled', 'disabled']);
-        setHero([]); setTags([]); setExcluded([]); setLists([]); setSort('priority'); setView('all');
+        setHero([]); setTags([]); setExcluded([]); setLists([]); setView('all');
       }} />;
   }
   const trigger = () => host.querySelector<HTMLButtonElement>('button')!;
@@ -92,8 +92,14 @@ describe('Installed filter menu', () => {
     expect(radios[3].checked).toBe(true);
     expect(radios[3].parentElement?.className).toContain('bg-bg-tertiary');
     expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(trigger().className).toContain('bg-bg-secondary');
+    expect(button('browse.filters.clearAll')).toBeUndefined();
+    act(() => tabs('source')[0].click());
+    expect(trigger().className).toContain('border-accent/40');
     act(() => button('browse.filters.clearAll').click());
-    expect(radios[0].checked).toBe(true);
+    expect(radios[3].checked).toBe(true);
+    expect(trigger().className).toContain('bg-bg-secondary');
+    expect(button('browse.filters.clearAll')).toBeUndefined();
   });
 
   it('combines Default/Lists modes with list filtering and management', () => {

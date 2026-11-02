@@ -111,6 +111,8 @@ mapping; no category data is rewritten.
 Installed sorting lives inside Filters. Hero (A-Z) uses the first alphabetic
 resolved hero, puts entries without heroes last, and breaks hero ties by load
 order. Recently Added uses the newest install time across variants.
+Sort choices do not activate the Filters button or its Clear all action.
+Clearing filters preserves the selected sort.
 Manual disabled-card ordering applies only to
 Load Order; the other sort modes take precedence while retaining favorites.
 Filters also contains the Default/Lists view switch and list management, even
