@@ -59,8 +59,9 @@ describe('shared authored spritecards', () => {
     try {
       expect(result.material.uniforms.addSelf.value).toBe(4);
       const shader = result.material.fragmentShader;
-      expect(shader.indexOf('rgb*=addSelf;')).toBeGreaterThan(shader.indexOf('rgb=clamp(rgb,0.0,1.0);'));
-      expect(shader).toContain('float alpha=smoothstep(0.0,1.0,accum.a)*vAlpha;');
+      expect(shader.indexOf('rgb*=addSelf;')).toBeGreaterThan(shader.indexOf('rgb=saturateHue(rgb);'));
+      expect(shader).not.toContain('rgb=clamp(rgb,0.0,1.0);');
+      expect(shader).toContain('float alpha=clamp(accum.a,0.0,1.0)*vAlpha;');
     } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
   });
   it('keeps lookup RGB-alpha inside the incoming radial coverage and accepts a fifth RGB-only additive glow', () => {
@@ -77,7 +78,6 @@ describe('shared authored spritecards', () => {
       expect(shader).toContain('t2.a=t2.a*dot(t2.rgb,vec3(.299,.587,.114));');
       expect(shader).toContain('t4.a=0.0;');
       expect(shader).toContain('accum+t4');
-      expect(result.material.userData.previewBloom).toBe(true);
     } finally { result.material.dispose(); result.textures.forEach(t => t.dispose()); }
   });
   it('preserves RGB when subtracting an alpha-only erosion mask and keeps mirrored UVs', () => {

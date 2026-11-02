@@ -2,8 +2,10 @@ import { Children, Fragment, isValidElement, useEffect, useRef, useState, type R
 import { Check, Loader2, X, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Tx from '../translation/Tx';
+import { ContentFilterContext, useContentFilter } from './contentFilter';
 
 interface CardProps {
+    id?: string;
     children?: ReactNode;
     className?: string;
     contentClassName?: string;
@@ -17,32 +19,36 @@ interface CardProps {
     accentEdge?: 'none' | 'subtle' | 'active';
 }
 
-export function Card({ children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
+export function Card({ id, children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
+    const { visible, childrenFilter } = useContentFilter(id);
+    if (!visible) return null;
     const showHeader = !!(title || action);
     const edge: NonNullable<CardProps['accentEdge']> = accentEdge ?? (showHeader ? 'subtle' : 'none');
     const edgeClass = edge === 'active' ? 'w-[3px] bg-accent' : 'w-[2px] bg-accent/60';
     const hasBody = children !== undefined && children !== null && children !== false;
     return (
-        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
-            {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
-            {showHeader && (
-                <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-hl/5' : ''}`}>
-                    <div className="min-w-0">
-                        {title && (
-                            <div className={`flex items-center gap-2 ${description ? 'mb-1' : ''}`}>
-                                {Icon && <Icon className="w-4 h-4 text-accent" />}
-                                <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">{title}</h3>
-                            </div>
-                        )}
-                        {description && (
-                            <p className="text-xs text-text-secondary">{description}</p>
-                        )}
+        <ContentFilterContext value={childrenFilter}>
+            <div id={id} className={`bg-bg-secondary/50 backdrop-blur-sm border border-hl/5 rounded-sm overflow-hidden relative ${className}`}>
+                {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
+                {showHeader && (
+                    <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-4 ${hasBody ? 'border-b border-hl/5' : ''}`}>
+                        <div className="min-w-0">
+                            {title && (
+                                <div className={`flex items-center gap-2 ${description ? 'mb-1' : ''}`}>
+                                    {Icon && <Icon className="w-4 h-4 text-accent" />}
+                                    <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">{title}</h3>
+                                </div>
+                            )}
+                            {description && (
+                                <p className="text-xs text-text-secondary">{description}</p>
+                            )}
+                        </div>
+                        {action && <div className="shrink-0">{action}</div>}
                     </div>
-                    {action && <div className="shrink-0">{action}</div>}
-                </div>
-            )}
-            {hasBody && <div className={`p-5 ${contentClassName}`}>{children}</div>}
-        </div>
+                )}
+                {hasBody && <div className={`p-5 ${contentClassName}`}>{children}</div>}
+            </div>
+        </ContentFilterContext>
     );
 }
 
@@ -313,6 +319,7 @@ export function ProgressBar({ value, max, label, indeterminate = false, classNam
 }
 
 interface ToggleProps {
+    id?: string;
     checked: boolean;
     onChange: (checked: boolean) => void;
     label?: ReactNode;
@@ -346,10 +353,12 @@ export function ToggleIndicator({ checked, disabled, className = '' }: ToggleInd
     );
 }
 
-export function Toggle({ checked, onChange, label, description, className = '', disabled }: ToggleProps) {
+export function Toggle({ id, checked, onChange, label, description, className = '', disabled }: ToggleProps) {
+    const { visible } = useContentFilter(id);
+    if (!visible) return null;
     return (
-        <label className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
-            <div className="relative shrink-0 mt-0.5">
+        <label id={id} className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
+            <div className="relative shrink-0">
                 <input
                     type="checkbox"
                     className="peer sr-only"
@@ -366,7 +375,8 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                 />
             </div>
             <div>
-                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors">{label}</span>}
+                {/* The first line matches the switch height and trims to cap height, so the letters sit on the switch's center. */}
+                {label && <span className="flex min-h-6 items-center text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors"><span className="text-trim-cap">{label}</span></span>}
                 {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
             </div>
         </label>
@@ -441,7 +451,7 @@ export function Button({
 // buttons need an accessible name) and doubles as the hover tooltip.
 // ============================================================================
 
-interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
+interface IconButtonProps extends Omit<React.ComponentPropsWithRef<'button'>, 'aria-label'> {
     icon: LucideIcon;
     /** Accessible name + hover tooltip (icon-only, so this is mandatory). */
     label: string;
@@ -542,6 +552,8 @@ export function ModalHeader({
 interface SegmentOption<T extends string> {
     value: T;
     label: ReactNode;
+    /** Hover tooltip for the segment. */
+    title?: string;
 }
 
 interface MultiSelectSegmentOption<T extends string> {
@@ -674,6 +686,7 @@ export function SegmentedControl<T extends string>({
                         type="button"
                         role="tab"
                         aria-selected={active}
+                        title={opt.title}
                         tabIndex={active ? 0 : -1}
                         disabled={disabled}
                         onClick={() => !disabled && onChange(opt.value)}

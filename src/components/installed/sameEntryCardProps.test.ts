@@ -50,5 +50,18 @@ describe('Installed card memo equality', () => {
     expect(sameEntryCardProps(before, { ...before, sortableDisabled: true })).toBe(false);
     expect(sameEntryCardProps({ entry }, { entry, selected: false })).toBe(false);
     expect(sameEntryCardProps({ entry, selected: undefined }, { entry, shiftHeld: undefined })).toBe(false);
+    expect(sameEntryCardProps({ entry, lists: undefined }, { entry, shiftHeld: undefined })).toBe(false);
+  });
+
+  it('skips unrelated membership edits but refreshes changed membership, names, icons and list order', () => {
+    const [entry] = buildModEntries([mod('one')]);
+    const lists = [{ id: 'first', name: 'First', keys: ['one'] }, { id: 'second', name: 'Second', keys: [] }];
+    const before = { entry, lists, listIds: ['first'] };
+    const after = { entry, lists: [lists[0], { ...lists[1], keys: ['another-mod'] }], listIds: ['first'] };
+    expect(sameEntryCardProps(before, after)).toBe(true);
+    expect(sameEntryCardProps(before, { ...after, listIds: ['first', 'second'] })).toBe(false);
+    expect(sameEntryCardProps(before, { ...after, lists: [{ ...lists[0], name: 'Renamed' }, lists[1]] })).toBe(false);
+    expect(sameEntryCardProps(before, { ...after, lists: [{ ...lists[0], icon: 'music' }, lists[1]] })).toBe(false);
+    expect(sameEntryCardProps(before, { ...after, lists: [...lists].reverse() })).toBe(false);
   });
 });

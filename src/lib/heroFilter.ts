@@ -37,8 +37,8 @@ export function nameMentionsHero(name: string, hero: string): boolean {
       hero.replace(/\s+/g, ''),
       ...(browseHeroAliases[hero.toLowerCase()] ?? []),
       ...Object.entries(HERO_ALIASES)
-        .filter(([, name]) => name.toLowerCase() === hero.toLowerCase())
-        .map(([alias]) => alias),
+        .filter(([name]) => name.toLowerCase() === hero.toLowerCase())
+        .flatMap(([, aliases]) => aliases),
     ])];
     pattern = new RegExp(`(?<!\\p{L})(?:${aliases.map(escapeRegex).join('|')})(?!\\p{L})`, 'iu');
     heroPatterns.set(hero, pattern);

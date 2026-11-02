@@ -7,6 +7,7 @@ import {
   HeroPoseFailureState,
   HeroPoseLoadingState,
   PosedModel,
+  RiggedModel,
   type TurntableInteraction,
 } from './HeroPoseViewer';
 import { resolveHeroPoseRenderFeatures } from './heroPoseRenderFeatures';
@@ -195,5 +196,29 @@ describe('PosedModel R3F behavior', () => {
 
     expect(pausedGroup.rotation.y).toBe(0);
     paused.unmount();
+  });
+});
+
+describe('UI graph animation playback', () => {
+  it('seeks in clip seconds while preserving the graph action speed', async () => {
+    const { scene } = makeScene();
+    const bone = new THREE.Bone();
+    bone.name = 'testbone';
+    scene.add(bone);
+    const clip = new THREE.AnimationClip('ui_shop', 10, [
+      new THREE.VectorKeyframeTrack('testbone.position', [0, 10], [0, 0, 0, 10, 0, 0]),
+    ]);
+    clip.userData.grimoireShowcase = { graph: 'ui.vnmgraph_c', state: 'shop', playback: 'loop', speed: 0.69 };
+    const renderer = await ReactThreeTestRenderer.create(React.createElement(RiggedModel, {
+      heroName: 'Rem', scene, clips: [clip], clipName: clip.name, interaction: interaction(true), clothModel: null, clothEnabled: false,
+      playback: { paused: false, speed: 1 }, seek: { time: 3, revision: 1 }, reset: 0,
+    }));
+    try {
+      expect(bone.position.x).toBeCloseTo(3);
+      await ReactThreeTestRenderer.act(async () => { await renderer.advanceFrames(1, 0.1); });
+      expect(bone.position.x).toBeCloseTo(3.069);
+      await ReactThreeTestRenderer.act(async () => { await renderer.advanceFrames(110, 0.1); });
+      expect(bone.position.x).toBeCloseTo(0.659);
+    } finally { await renderer.unmount(); }
   });
 });

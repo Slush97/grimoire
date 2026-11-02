@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
-import { entryHeroNames, entryTags, type ModEntry } from './modEntries';
+import { buildModEntries, entryHeroNames, entryTags, entrySize, type ModEntry } from './modEntries';
 import { buildCategoryPaths } from './categoryPaths';
 import type { InstalledTaxonomyContext } from './installedCardTaxonomy';
 
@@ -78,5 +78,16 @@ describe('entryTags', () => {
     ]);
     expect(entryTags(single({ categoryName: undefined }))).toEqual([]);
     expect(entryTags(group([single({ categoryName: undefined }).mod, single({ categoryName: 'Solomon' }).mod]), context)).toEqual([]);
+  });
+});
+
+describe('entrySize', () => {
+  const mod = (id: string, size: number, gameBananaId?: number) =>
+    ({ id, name: id, fileName: `${id}.vpk`, size, priority: 0, enabled: false, installedAt: '', gameBananaId }) as Mod;
+
+  it('counts every variant of a group, not just the one on the card', () => {
+    const entries = buildModEntries([mod('a', 100, 7), mod('b', 250, 7), mod('c', 300)]);
+    const sizes = new Map(entries.map((entry) => [entry.kind === 'single' ? entry.mod.id : 'group', entrySize(entry)]));
+    expect(sizes).toEqual(new Map([['c', 300], ['group', 350]]));
   });
 });

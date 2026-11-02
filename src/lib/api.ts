@@ -16,6 +16,7 @@ import type {
   HeroPoseInfo,
   HeroPoseSkinSource,
   HeroEffectInfo,
+  HeroParticleBundleInfo,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -376,6 +377,10 @@ export async function exportHeroEffect(heroName: string, skinSources?: HeroPoseS
   return window.electronAPI.exportHeroEffect(heroName, skinSources);
 }
 
+export async function exportHeroParticles(heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]): Promise<HeroParticleBundleInfo> {
+  return window.electronAPI.exportHeroParticles(heroName, skinSources, clips);
+}
+
 export async function applyHeroSound(
   heroName: string,
   slot: AbilitySlot,
@@ -527,6 +532,10 @@ export async function setModPriority(modId: string, priority: number): Promise<M
 
 export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
   return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
+}
+
+export async function reorderPriorityMods(orderedIds: string[]): Promise<Mod[]> {
+  return withGameRunningWarning(() => window.electronAPI.reorderPriorityMods(orderedIds));
 }
 
 export async function applyModToggleBatch(
@@ -1338,6 +1347,7 @@ import type {
   PublishResponse as SocialPublishResponse,
   ReportRequest as SocialReportRequest,
   UpdateProfileRequest as SocialUpdateProfileRequest,
+  UpdateProfileContentsRequest as SocialUpdateProfileContentsRequest,
   UpdateProfileResponse as SocialUpdateProfileResponse,
 } from '@grimoire/social-types';
 import type { SocialSessionStatus } from '../types/social';
@@ -1352,6 +1362,7 @@ export type {
   SocialPublishResponse,
   SocialReportRequest,
   SocialUpdateProfileRequest,
+  SocialUpdateProfileContentsRequest,
   SocialUpdateProfileResponse,
   SocialSessionStatus,
 };
@@ -1402,6 +1413,13 @@ export async function socialUpdateProfile(
 
 export async function socialLike(id: string): Promise<SocialLikeResponse> {
   return window.electronAPI.social.like(id);
+}
+
+export async function socialUpdateProfileContents(
+  id: string,
+  body: SocialUpdateProfileContentsRequest
+): Promise<SocialUpdateProfileResponse> {
+  return window.electronAPI.social.updateProfileContents(id, body);
 }
 
 export async function socialUnlike(id: string): Promise<SocialLikeResponse> {

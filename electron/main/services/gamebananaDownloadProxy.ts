@@ -5,6 +5,7 @@ import type { Agent } from 'http';
 import { z } from 'zod';
 import type { GameBananaDownloadProxyConfig } from '../../../src/types/electron';
 import { createDownloadProxyAgent, fetchThroughDownloadProxy, isGameBananaProxyTarget, parseDownloadProxyUrl } from './downloadProxyTransport';
+import { fetchChromiumGameBananaDownload, isGameBananaConnectionFailure } from './gamebananaDownloadTransport';
 
 const configSchema = z.object({ enabled: z.boolean(), url: z.string().max(2048) });
 const storedSchema = configSchema.extend({ credentials: z.string().optional() });
@@ -107,5 +108,13 @@ export async function getGameBananaDownloadProxyAgent(target: string): Promise<A
 export const fetchGameBananaDownload: typeof globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
     const agent = await getGameBananaDownloadProxyAgent(request.url);
-    return agent ? fetchThroughDownloadProxy(request, agent) : globalThis.fetch(input, init);
+    if (agent) return fetchThroughDownloadProxy(request, agent);
+    try {
+        return await globalThis.fetch(input, init);
+    } catch (error) {
+        request.signal.throwIfAborted();
+        if (!isGameBananaProxyTarget(new URL(request.url)) || !isGameBananaConnectionFailure(error)) throw error;
+        console.warn('[download] Node server probe failed; retrying with Chromium:', new URL(request.url).hostname);
+        return fetchChromiumGameBananaDownload(request);
+    }
 };

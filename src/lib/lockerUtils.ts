@@ -3,6 +3,7 @@ import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import { categorySubtreeIds } from './heroFilter';
+import { resolveInstalledGeneralType } from './categoryPaths';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -353,8 +354,8 @@ export function isLockerManagedSound(mod: Mod): boolean {
 }
 
 /** Main resolves category-derived and explicit classifications consistently. */
-export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType'>): GlobalModType | undefined {
-  return mod.globalType;
+export function getEffectiveGlobalType(mod: Pick<Mod, 'globalType' | 'globalTypeSource' | 'gameBananaId' | 'sourceSection' | 'categoryName' | 'lockerHeroes' | 'lockerHero' | 'lockerHeroSource'>): GlobalModType | undefined {
+  return mod.globalType ?? resolveInstalledGeneralType(mod, undefined, modHeroNames(mod));
 }
 
 /** The effective set is supplied by main; legacy local hero tags remain usable. */
@@ -448,12 +449,17 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   icons: 'Icon Packs',
   hud: 'HUD',
   effects: 'Effects',
+  animations: 'Animations',
+  maps: 'Maps',
   announcer: 'Announcer / SFX',
   'killstreak-music': 'Killstreak Music',
 };
 
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
-  return type === 'effects' ? t('locker.page.effects') : GLOBAL_MOD_TYPE_LABELS[type];
+  if (type === 'effects') return t('locker.page.effects');
+  if (type === 'animations') return t('locker.page.animations');
+  if (type === 'maps') return t('locker.page.maps');
+  return GLOBAL_MOD_TYPE_LABELS[type];
 }
 
 /** Carousel/section order for the global types. */
@@ -464,6 +470,8 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'icons',
   'hud',
   'effects',
+  'animations',
+  'maps',
   'announcer',
   'killstreak-music',
 ];
@@ -503,6 +511,8 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     icons: [],
     hud: [],
     effects: [],
+    animations: [],
+    maps: [],
     announcer: [],
     'killstreak-music': [],
   };

@@ -16,6 +16,7 @@ export const TRIPPY_STYLE_LABELS: Record<TrippyStyleName, string> = {
   halftone: 'Halftone',
   lava: 'Lava',
   vaporwave: 'Vaporwave',
+  moo: 'Moo',
 };
 
 /** Display names for the trippy VFX particle animation styles. */

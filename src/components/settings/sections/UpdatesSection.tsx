@@ -1,3 +1,4 @@
+import { FilterItem } from '../../common/FilteredContent';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { ArrowDownCircle, Download, RefreshCw, Sparkles } from 'lucide-react';
@@ -116,10 +117,10 @@ export default function UpdatesSection() {
 
   return (
     <>
-      <Card title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download}>
+      <Card id="settings-updates-settings-sections-updates-card" title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download}>
         <div className="space-y-4">
           {installSource !== 'managed' && (
-            <div className="space-y-2">
+            <FilterItem id="settings-update-channel" className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm font-medium"><Tx k="settings.updates.channel" fallback="Update channel" /></span>
                 <SegmentedControl<UpdateChannel>
@@ -142,10 +143,10 @@ export default function UpdatesSection() {
                 <p className="text-xs text-text-secondary"><Tx k="settings.updates.returnToStable" fallback="You're running a nightly build. Download and install the offered stable release to return to Stable, even if its version is older." /></p>
               )}
               {channelError && <p role="alert" className="text-xs text-state-danger">{channelError}</p>}
-            </div>
+            </FilterItem>
           )}
           {installSource !== 'managed' && (
-            <Toggle
+            <Toggle id="settings-updates-settings-updates-autoCheck-toggle"
               checked={settings?.autoCheckAppUpdates ?? true}
               onChange={checked => { if (settings) void saveSettings({ ...settings, autoCheckAppUpdates: checked }); }}
               disabled={!settings}
@@ -153,7 +154,7 @@ export default function UpdatesSection() {
               description={<Tx k="settings.updates.autoCheckDescription" fallback="Asks GitHub for the newest release each time Grimoire starts. Check for Updates still works when this is off." />}
             />
           )}
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <FilterItem id="settings-update-version" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
@@ -225,7 +226,7 @@ export default function UpdatesSection() {
                 </Button>
               )}
             </div>
-          </div>
+          </FilterItem>
 
           {installSource === 'managed' && (
             <div className="rounded-lg bg-bg-tertiary border border-hl/10 p-3 text-sm text-text-secondary space-y-2">

@@ -64,7 +64,8 @@ describe('Authored glass sampling', () => {
 
   it('point-samples the decoded Citadel glass kernel without leaking across screen edges', () => {
     const patch = NPR_PATCH_MAP['*']['vec4 transmitted = getIBLVolumeRefraction('] as { value: string };
-    const offsets = [...patch.value.matchAll(/vec2\((-?\d+\.\d+), (-?\d+\.\d+)\)/g)]
+    const kernel = patch.value.split('vec2 glassOffsets[8]')[1].split(');')[0];
+    const offsets = [...kernel.matchAll(/vec2\((-?\d+\.\d+), (-?\d+\.\d+)\)/g)]
       .map((match) => [Number(match[1]), Number(match[2])]);
     expect(offsets).toHaveLength(8);
     expect(offsets[0]).toEqual([-0.0876, 0.9703]);
@@ -414,7 +415,7 @@ describe('glass and alpha material helpers', () => {
     };
   }
 
-  it('detects shader glass and rejects placeholder transmission masks', () => {
+  it('detects shader glass and preserves constant transmission masks', () => {
     const glass = morphic({
       shader: 'hero_glass.vfx',
       resolvedTextures: {
@@ -423,7 +424,7 @@ describe('glass and alpha material helpers', () => {
     });
 
     expect(isTrueGlassMaterial(glass)).toBe(true);
-    expect(glassTransmissionTexture(glass)).toBeNull();
+    expect(glassTransmissionTexture(glass)).toBe(glass.resolvedTextures?.g_tGlass);
   });
 
   it('lets explicit alpha state override physical transmission fallback', () => {
@@ -537,7 +538,7 @@ describe('applySource2MaterialHints glass and cloak state', () => {
   it.each([
     ['placeholder', {}, texture(4)],
     ['dynamic', { dynamic_texture_params: { g_tGlass: dynamicExpr('texture') } }, texture(16)],
-  ])('clears inherited physical transmission maps for %s glass masks', (_name, overrides, glassMask) => {
+  ])('honors authored constant and dynamic glass masks for %s', (name, overrides, glassMask) => {
     const inheritedGlass = texture(16);
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
@@ -557,7 +558,7 @@ describe('applySource2MaterialHints glass and cloak state', () => {
 
     expect(result.stats.glass).toBe(1);
     expect(material.transmission).toBeGreaterThan(0);
-    expect(material.transmissionMap).toBeNull();
+    expect(material.transmissionMap).toBe(name === 'placeholder' ? glassMask : null);
 
     result.restore();
     expect(material.transmission).toBe(0.6);
@@ -733,7 +734,7 @@ describe('glass transmission shader integration', () => {
     expect(shader.fragmentShader).toContain('if (uCitadelGlass > 0.5)');
     expect(shader.fragmentShader).toContain('max(dot(n, v), 0.01)');
     expect(shader.fragmentShader).toContain('(1.0 - metalnessFactor) * material.transmission');
-    expect(shader.fragmentShader).toContain('if (glassRadius > 0.0) glassScene.rgb *= 12.0;');
+    expect(shader.fragmentShader).not.toContain('glassScene.rgb *= 12.0');
     expect(shader.fragmentShader).toContain('uCitadelGlass > 0.5 ? max(material.roughness, 0.45) : material.roughness');
     expect(shader.fragmentShader).not.toContain('#include <lights_fragment_maps>');
     expect(shader.fragmentShader).toContain('material.attenuationDistance );\n      }');

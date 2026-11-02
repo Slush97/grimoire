@@ -16,7 +16,7 @@
  * until the first time the user toggles it off and on.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -30,7 +30,7 @@ vi.mock('./launch', () => ({
   readStash: async () => null,
 }));
 
-import { healModFolders, scanMods, setModPriorityFolder, disableMod, enableMod } from './mods';
+import { healModFolders, scanMods, setModPriorityFolder, disableMod, enableMod, reorderPriorityMods } from './mods';
 import { getModMetadata } from './metadata';
 
 /** A VPK header the scanner accepts, padded so the file has a plausible size. */
@@ -169,3 +169,30 @@ describe('setModPriorityFolder', () => {
 });
 // These tests use inert file placeholders; scanner behavior has its own fixtures.
 vi.mock('./modSafety', () => ({ assertVpkSafety: vi.fn(async () => {}), moveSafetySnapshot: vi.fn() }));
+
+
+describe('reorderPriorityMods', () => {
+  it('reorders only selected Global slots and carries metadata and chunks', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'priority-order-'));
+    const dl = join(root, 'dl');
+    const folder = join(dl, ...GRIMOIRE);
+    const addons = join(dl, ...ADDONS);
+    h.userData = join(root, 'userdata');
+    for (const dir of [folder, addons, join(addons, '.disabled'), h.userData]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dl, 'game', 'citadel', 'gameinfo.gi'), 'GameInfo {}');
+    for (const slot of ['01', '05', '07', '09']) writeVpk(join(folder, `pak${slot}_dir.vpk`));
+    writeFileSync(join(folder, 'pak05_000.vpk'), 'chunk-five');
+    writeFileSync(join(folder, 'pak09_000.vpk'), 'chunk-nine');
+    const mods = await scanMods(dl);
+    const first = mods.find((mod) => mod.metaKey === 'grimoire/pak05_dir.vpk')!;
+    const last = mods.find((mod) => mod.metaKey === 'grimoire/pak09_dir.vpk')!;
+    await reorderPriorityMods(dl, [last.id, first.id]);
+    expect(readFileSync(join(folder, 'pak05_000.vpk'), 'utf8')).toBe('chunk-nine');
+    expect(readFileSync(join(folder, 'pak09_000.vpk'), 'utf8')).toBe('chunk-five');
+    expect(existsSync(join(folder, 'pak01_dir.vpk'))).toBe(true);
+    expect(existsSync(join(folder, 'pak07_dir.vpk'))).toBe(true);
+    expect(getModMetadata('grimoire/pak05_dir.vpk')?.priorityMod).toBe(true);
+    expect(getModMetadata('grimoire/pak09_dir.vpk')?.priorityMod).toBe(true);
+    await expect(reorderPriorityMods(dl, [last.id, last.id])).rejects.toThrow();
+  });
+});

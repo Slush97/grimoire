@@ -60,7 +60,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroEffectInfo } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroEffectInfo, HeroParticleBundleInfo } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -985,13 +985,16 @@ export interface ElectronAPI {
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
     previewMovementFx: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementFxPreview>;
+    previewMovementEngine: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementEnginePreview>;
     exportMovementFx: (choice: import('../lib/movementFx').MovementFxChoice) => Promise<import('./foundry').VpkExportResult>;
     saveMovementFx: (request: import('../lib/movementFx').MovementFxSaveRequest) => Promise<void>;
     /** Swaps a saved skin-editor overlay in the stack for its own sources and returns its edits. */
     resumeSkinEdit: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditResume>;
     exportSkinEdits: (request: import('./skinEditor').SkinEditExport) => Promise<import('./foundry').VpkExportResult>;
     saveSkinEdits: (request: import('./skinEditor').SkinEditSave) => Promise<import('./skinEditor').SkinEditSaveResult>;
+    onSkinEditProgress: (callback: (progress: import('./skinEditor').SkinEditProgress) => void) => () => void;
     loadHideoutScene: () => Promise<import('./skinEditor').HideoutSceneInfo>;
+    getHeroShaderNoise: () => Promise<string>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]
@@ -1012,6 +1015,8 @@ export interface ElectronAPI {
     ) => Promise<HeroPoseInfo>;
     getHeroEffectInfo: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
     exportHeroEffect: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
+    /** The faithful particle runtime's bundle for a hero's own effects (served at grimoire-hero://m/<key>/particles/). */
+    exportHeroParticles: (heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]) => Promise<HeroParticleBundleInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     getGameBananaFileServerDiagnostics: () => Promise<GameBananaFileServerDiagnostics>;
@@ -1076,6 +1081,7 @@ export interface ElectronAPI {
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
+    reorderPriorityMods: (orderedIds: string[]) => Promise<Mod[]>;
     applyModToggleBatch: (
         enableIds: string[],
         disableIds: string[]
@@ -1448,6 +1454,10 @@ export interface ElectronAPI {
         updateProfile: (
             id: string,
             body: import('@grimoire/social-types').UpdateProfileRequest
+        ) => Promise<import('@grimoire/social-types').UpdateProfileResponse>;
+        updateProfileContents: (
+            id: string,
+            body: import('@grimoire/social-types').UpdateProfileContentsRequest
         ) => Promise<import('@grimoire/social-types').UpdateProfileResponse>;
         like: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;
         unlike: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;

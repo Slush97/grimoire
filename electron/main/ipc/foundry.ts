@@ -22,7 +22,7 @@ import { exportFoundryAsset } from '../services/foundryAssetExport';
 import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
 import { loadHideoutScene } from '../services/hideoutScene';
 import { resumeSkinEdit, saveSkinEdits } from '../services/saveSkinEdits';
-import { previewMovementFx, exportMovementFx, saveMovementFx } from '../services/movementFx';
+import { previewMovementFx, previewMovementEngine, exportMovementFx, saveMovementFx } from '../services/movementFx';
 import type {
     HeroEffectExportRequest,
     HeroInfo,
@@ -50,9 +50,12 @@ ipcMain.handle('foundry:skinEditInfo', (_event, input: unknown) =>
 ipcMain.handle('foundry:resumeSkinEdit', (_event, input: unknown) =>
     resumeSkinEdit(requireDeadlockPath(), skinEditSourceSchema.parse(input)));
 ipcMain.handle('foundry:exportSkinEdits', (_event, input: unknown) => exportSkinEdits(requireDeadlockPath(), input));
-ipcMain.handle('foundry:saveSkinEdits', (_event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input));
+ipcMain.handle('foundry:saveSkinEdits', (event, input: unknown) => saveSkinEdits(requireDeadlockPath(), input, (progress) => {
+    if (!event.sender.isDestroyed()) event.sender.send('foundry:skinEditProgress', progress);
+}));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
 ipcMain.handle('foundry:previewMovementFx', (_event, input: unknown) => previewMovementFx(requireDeadlockPath(), input));
+ipcMain.handle('foundry:previewMovementEngine', (_event, input: unknown) => previewMovementEngine(requireDeadlockPath(), input));
 ipcMain.handle('foundry:exportMovementFx', (_event, input: unknown) => exportMovementFx(requireDeadlockPath(), input));
 ipcMain.handle('foundry:saveMovementFx', (_event, input: unknown) => saveMovementFx(requireDeadlockPath(), input));
 

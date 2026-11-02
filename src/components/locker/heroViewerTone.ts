@@ -1,25 +1,27 @@
-// Deadlock's base postprocess uses a white-normalized Hable curve. These
-// coefficients come from basepostprocess_deadlock.vpost, not ACES defaults.
+import { DEADLOCK_BASE_POST, applyTonemapping } from '../../lib/particles/render/post';
+
+// Share the post volume's units with SourcePostPass. White point and exposure
+// bias are authored in stops; the 2.8 pre-scale precedes the channel curves.
 export const DEADLOCK_TONE = {
-  shoulder: 0.3538, linear: 0.3258, angle: 0.2528,
-  toe: 0.6966, numerator: 0, denominator: 0.7819, white: 3.9996,
+  white: 2 ** DEADLOCK_BASE_POST.tonemap.whitePoint,
+  scale: 2.8 * 2 ** DEADLOCK_BASE_POST.tonemap.exposureBias,
 };
 
 export function deadlockTone(value: number): number {
-  const { shoulder: a, linear: b, angle: c, toe: d, numerator: e, denominator: f, white } = DEADLOCK_TONE;
-  const curve = (x: number) => (x * (a * x + c * b) + d * e) / (x * (a * x + b) + d * f) - e / f;
-  return Math.min(1, Math.max(0, curve(Math.max(0, value)) / curve(white)));
+  const { white, scale } = DEADLOCK_TONE;
+  const curve = (x: number) => applyTonemapping(DEADLOCK_BASE_POST.tonemap, x);
+  return Math.max(0, curve(Math.min(white, Math.max(0, value) * scale)) / curve(white));
 }
 
 export const DEADLOCK_TONE_SHADER = /* glsl */ `
   uniform float previewExposure;
   float previewCurve(float x) {
-    return (x * (0.3538 * x + 0.3258 * 0.2528)) /
-      (x * (0.3538 * x + 0.3258) + 0.6966 * 0.7819);
+    return (x * (${DEADLOCK_BASE_POST.tonemap.shoulderStrength} * x + ${DEADLOCK_BASE_POST.tonemap.linearStrength} * ${DEADLOCK_BASE_POST.tonemap.linearAngle}) + ${DEADLOCK_BASE_POST.tonemap.toeStrength} * ${DEADLOCK_BASE_POST.tonemap.toeNum.toFixed(1)}) /
+      (x * (${DEADLOCK_BASE_POST.tonemap.shoulderStrength} * x + ${DEADLOCK_BASE_POST.tonemap.linearStrength}) + ${DEADLOCK_BASE_POST.tonemap.toeStrength} * ${DEADLOCK_BASE_POST.tonemap.toeDenom}) - ${DEADLOCK_BASE_POST.tonemap.toeNum.toFixed(1)} / ${DEADLOCK_BASE_POST.tonemap.toeDenom};
   }
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-    vec3 v = max(inputColor.rgb * previewExposure, vec3(0.0));
+    vec3 v = clamp(inputColor.rgb * previewExposure * ${DEADLOCK_TONE.scale}, 0.0, ${DEADLOCK_TONE.white});
     outputColor = vec4(clamp(vec3(previewCurve(v.r), previewCurve(v.g), previewCurve(v.b)) /
-      previewCurve(3.9996), 0.0, 1.0), inputColor.a);
+      previewCurve(${DEADLOCK_TONE.white}), 0.0, 1.0), inputColor.a);
   }
 `;

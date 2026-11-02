@@ -1,0 +1,6 @@
+<Project>
+  <!-- Must be set before the SDK props import, so it lives here rather than in the project. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>..\..\.codex-run\particle-render-oracle\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

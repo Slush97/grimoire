@@ -29,6 +29,7 @@ import {
     type PublishResponse as PublishResponseT,
     type ReportRequest,
     type UpdateProfileRequest,
+    type UpdateProfileContentsRequest,
     type UpdateProfileResponse as UpdateProfileResponseT,
 } from '@grimoire/social-types';
 import { socialApiRateLimiter } from './rateLimiter';
@@ -87,7 +88,7 @@ export class SocialUnauthenticatedError extends SocialApiError {
 type AuthMode = 'none' | 'optional' | 'required';
 
 interface RequestOptions {
-    method?: 'GET' | 'POST' | 'DELETE' | 'PATCH';
+    method?: 'GET' | 'POST' | 'DELETE' | 'PATCH' | 'PUT';
     body?: unknown;
     auth?: AuthMode;
     timeoutMs?: number;
@@ -282,6 +283,17 @@ export async function updateProfile(
 export async function likeProfile(id: string): Promise<LikeResponseT> {
     return request(`/v1/profiles/${encodeURIComponent(id)}/like`, LikeResponse, {
         method: 'POST',
+        auth: 'required',
+    });
+}
+
+export async function updateProfileContents(
+    id: string,
+    body: UpdateProfileContentsRequest
+): Promise<UpdateProfileResponseT> {
+    return request(`/v1/profiles/${encodeURIComponent(id)}/contents`, UpdateProfileResponse, {
+        method: 'PUT',
+        body,
         auth: 'required',
     });
 }

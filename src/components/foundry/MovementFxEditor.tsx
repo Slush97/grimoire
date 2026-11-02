@@ -98,7 +98,7 @@ function MovementSession({ kind, heroName, skinSources }: { kind: MovementFxChoi
           <ErrorBoundary><Suspense fallback={<p role="status" className="p-4 text-sm text-text-secondary">{t('foundry.skin.loading')}</p>}>
             <HeroPoseViewer heroName={heroName} skinSources={skinSources} workspaceKey={`movement:${heroName}`}
               initialScene="studio" initialBackground="none"
-              movementPreview={preview ? { ...preview.value, kind, revision: replay, loop } : undefined} />
+              movementPreview={preview ? { ...preview.value, kind, revision: replay, loop, request: { choice: preview.choice, heroName } } : undefined} />
           </Suspense></ErrorBoundary>
           {!current && !previewError && <p role="status" className="absolute left-3 top-3 rounded-sm bg-bg-secondary px-2 py-1 text-xs text-text-secondary">{t('foundry.movement.updating')}</p>}
         </>}

@@ -80,11 +80,11 @@ describe('Installed filter menu', () => {
     expect(tabs('status').every(tab => tab.getAttribute('aria-selected') === 'true')).toBe(true);
   });
 
-  it('keeps all four sorts embedded without closing the filter panel', () => {
+  it('keeps all five sorts embedded without closing the filter panel', () => {
     const radios = [...panel().querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-    expect(radios.map(radio => radio.value)).toEqual(['priority', 'name', 'hero', 'recent']);
+    expect(radios.map(radio => radio.value)).toEqual(['priority', 'name', 'hero', 'recent', 'size']);
     expect(radios.map(radio => radio.parentElement?.textContent)).toEqual([
-      'installed.sort.loadOrder', 'installed.sort.nameAZ', 'installed.sort.heroAZ', 'installed.sort.recentlyAdded',
+      'installed.sort.loadOrder', 'installed.sort.nameAZ', 'installed.sort.heroAZ', 'installed.sort.recentlyAdded', 'installed.sort.sizeLargest',
     ]);
     expect(new Set(radios.map(radio => radio.name)).size).toBe(1);
     act(() => radios[3].click());

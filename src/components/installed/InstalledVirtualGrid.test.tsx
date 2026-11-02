@@ -55,7 +55,7 @@ describe('Installed card windowing', () => {
   });
   afterEach(() => { act(() => root.unmount()); scroller.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-  function render(extra: Partial<Parameters<typeof InstalledVirtualGrid>[0]> = {}) {
+  function render(extra: Partial<Parameters<typeof InstalledVirtualGrid<ModEntry>>[0]> = {}) {
     const scrollRef = createRef<HTMLDivElement>();
     scrollRef.current = scroller;
     act(() => root.render(<InstalledVirtualGrid entries={entries} scrollRef={scrollRef} gridClassName="grid gap-4"

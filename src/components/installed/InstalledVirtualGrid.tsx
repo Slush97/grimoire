@@ -1,22 +1,23 @@
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import type { ModEntry } from '../../lib/modEntries';
 import { installedColumnCount, installedGridOffset, installedPinnedRows, installedRowEstimate, type InstalledWindowView } from './installedWindowing';
 
-type InstalledVirtualGridProps = {
-  entries: readonly ModEntry[];
+/** Lists view mixes drop slots in with mods, so items only need a stable key. */
+type GridItem = { key: string };
+type InstalledVirtualGridProps<T extends GridItem> = {
+  entries: readonly T[];
   scrollRef: RefObject<HTMLDivElement | null>;
   gridClassName: string;
   gridStyle?: CSSProperties;
   viewMode: InstalledWindowView;
-  renderEntry: (entry: ModEntry, renderContent: boolean) => ReactNode;
-  getEntryKey?: (entry: ModEntry) => string;
+  renderEntry: (entry: T, renderContent: boolean) => ReactNode;
+  getEntryKey?: (entry: T) => string;
   revealEntryKey?: string | null;
   draggingKey?: string | null;
   dragging?: boolean;
 };
 
-const entryKey = (entry: ModEntry) => entry.key;
+const entryKey = (entry: GridItem) => entry.key;
 const FOCUSABLE = 'button, a[href], input, select, textarea, audio[controls], [tabindex]';
 
 function focusableElements(cell: HTMLElement): HTMLElement[] {
@@ -105,10 +106,10 @@ function useRowMeasurements(
 }
 
 /** Range changes stay inside this boundary instead of rendering the entire page. */
-export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
+export const InstalledVirtualGrid = memo(function InstalledVirtualGrid<T extends GridItem>({
   entries, scrollRef, gridClassName, gridStyle, viewMode, renderEntry,
   getEntryKey = entryKey, revealEntryKey = null, draggingKey = null, dragging = false,
-}: InstalledVirtualGridProps) {
+}: InstalledVirtualGridProps<T>) {
   'use no memo';
   const gridRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -346,4 +347,4 @@ export const InstalledVirtualGrid = memo(function InstalledVirtualGrid({
       })}
     </div>
   </div>;
-});
+}) as <T extends GridItem>(props: InstalledVirtualGridProps<T>) => ReactNode;

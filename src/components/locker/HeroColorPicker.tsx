@@ -560,6 +560,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
       <p className="text-xs text-text-secondary">
         {t('locker.colors.intro', { hero: heroName })}
       </p>
+      {mode === 'hue' && <p className="text-xs text-text-secondary">{t('locker.colors.hueHint')}</p>}
 
       {/* Mode toggle: three looks over the same one-per-hero slot. */}
       <div className="inline-flex flex-wrap rounded-md border border-border p-0.5 text-xs">

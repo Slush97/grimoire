@@ -58,10 +58,10 @@ export function needsModHeroDetection(mod: DetectionMod, metadata: ModMetadata |
 }
 
 const aliasesByHero = new Map(supportedHeroNames.map((name) => [name, new Set([name, name.replace(/\s+/g, '')])]));
-for (const [alias, name] of Object.entries(HERO_ALIASES)) {
+for (const [name, aliases] of Object.entries(HERO_ALIASES)) {
     const canonical = canonicalSupportedHeroName(name);
     if (!canonical) continue;
-    aliasesByHero.get(canonical)?.add(alias);
+    for (const alias of aliases) aliasesByHero.get(canonical)?.add(alias);
 }
 aliasesByHero.get('Doorman')?.add('The Doorman');
 aliasesByHero.get('Mo & Krill')?.add('Mo and Krill');

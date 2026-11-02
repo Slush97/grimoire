@@ -1674,6 +1674,30 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[], inven
     return new Map(migrations.map(({ from, to }) => [from, to]));
 }
 
+/** Reorder enabled Global mods within their existing priority-root slots. */
+export function reorderPriorityMods(deadlockPath: string, orderedIds: string[]): Promise<void> {
+    return withModMutationLock(async (inventory) => {
+        const mods = inventory ?? await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(mods);
+        const byId = new Map(mods.map((mod) => [mod.id, mod]));
+        if (new Set(orderedIds).size !== orderedIds.length) throw new Error('Duplicate mod in order');
+        const targets = orderedIds.map((id) => {
+            const mod = byId.get(id);
+            if (!mod || !mod.enabled || !isPriorityFolderPath(mod.path)) {
+                throw new Error(`Global mod not available: ${id}`);
+            }
+            return mod;
+        });
+        const slots = [...targets].sort((a, b) => a.priority - b.priority).map((mod) => mod.path);
+        const assignments = targets.map((mod, i) => ({ mod, toPath: slots[i] }))
+            .filter(({ mod, toPath }) => mod.path !== toPath);
+        if (!assignments.length) return;
+        assertCanMoveLoadedGameMods(assignments.map(({ mod }) => mod));
+        await renameVpkSetsViaTemp(assignments.map(({ mod, toPath }) => ({ from: mod.path, to: toPath })));
+        migrateModMetadata(assignments.map(({ mod, toPath }) => ({ from: mod.metaKey, to: metaKeyFor(toPath) })));
+    }, { healPath: deadlockPath });
+}
+
 /**
  * Swap the priorities of two mods (async).
  */

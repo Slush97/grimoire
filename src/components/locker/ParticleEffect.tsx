@@ -175,9 +175,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents, moti
     }
     geom.instanceCount = 0;
     quad.dispose();
-    const glow = layer.additive || (typeof layer.spritecard?.params.m_flSelfIllumAmount === 'number' && layer.spritecard.params.m_flSelfIllumAmount > 0);
     return { geometry: geom, material: spritecard?.material ?? new THREE.ShaderMaterial({
-      userData: { previewBloom: glow },
       uniforms: { map: { value: texture }, uHasMap: { value: texture ? 1 : 0 }, uAdditive: { value: layer.additive ? 1 : 0 }, uAlignNormal: { value: layer.alignNormal ? 1 : 0 }, uRenderTrail: { value: layer.trail ? 1 : 0 }, uAlphaOnly: { value: layer.alphaOnly ? 1 : 0 } },
       // Three's transmission target includes only the opaque queue. Custom
       // additive blending still works there, after bodies and before glass, so
@@ -188,7 +186,7 @@ function SpriteLayer({ layer, textureBaseUrl, model, playback, spawnEvents, moti
       blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
       blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     }) };
-  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, layer.trail, layer.spritecard, texture, beforeTransmission, spritecard]);
+  }, [layer.maxParticles, layer.additive, layer.alignNormal, layer.alphaOnly, layer.trail, texture, beforeTransmission, spritecard]);
   useEffect(() => () => { texture?.dispose(); }, [texture]);
   useEffect(() => () => { spritecard?.textures.forEach((t) => t.dispose()); }, [spritecard]);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);

@@ -94,6 +94,18 @@ describe('category-based General classification', () => {
     expect(resolveInstalledGeneralType({ gameBananaId: 7, categoryName: 'HUD > Character HUD' })).toBe('hud');
   });
 
+  it('classifies Maps and Animations through the shared resolver while retaining manual hero choices', () => {
+    const linked = { gameBananaId: 7, sourceSection: 'Mod' };
+    expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Animations' }, undefined, ['Haze'])).toBe('animations');
+    expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Maps' })).toBe('maps');
+    expect(resolveInstalledGeneralType({ categoryName: 'Animations' }, undefined, ['Haze'])).toBe('animations');
+    expect(resolveInstalledGeneralType({ categoryName: 'Maps' })).toBe('maps');
+    expect(resolveInstalledGeneralType({ categoryName: 'Animations', globalType: 'effects' })).toBe('effects');
+    expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Animations', lockerHero: 'Haze', lockerHeroSource: 'manual' })).toBeUndefined();
+    expect(resolveInstalledGeneralType({ ...linked, categoryName: 'Maps', globalType: null, globalTypeSource: 'manual' })).toBeUndefined();
+    expect(resolveInstalledGeneralType({ ...linked, sourceSection: 'Sound', categoryName: 'Maps' })).toBeUndefined();
+  });
+
   it('uses actual leaf and ancestor categories rather than generating classification tags', () => {
     expect(categoryGeneralType(generalPaths.get(11)!)).toBe('hud');
     expect(categoryGeneralType(generalPaths.get(21)!)).toBe('soul-container');

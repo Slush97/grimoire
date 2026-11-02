@@ -27,12 +27,14 @@ import {
   highlightLayer,
   citadelColorUniforms,
   configureCitadelGlassPass,
+  applyNprMapDefines,
 } from './source2NprMaterial';
 import { compileScalarExpr, peakScalar } from './dynamicScalar';
 import { source2TintPlan } from './source2ColorCorrection';
 // Shared blend-mode resolver (the cycle-free leaf of the source2Preview core).
 import { resolveBlendMode } from './source2Preview/blendMode';
 import { nprLightingUniforms } from './source2NprLighting';
+import { CITADEL_NPR, citadelNprUniforms } from './citadelNprLighting';
 
 /**
  * Unified Deadlock NPR material builder (the Phase 0/1 single build pass).
@@ -154,11 +156,13 @@ const F6_HIGHLIGHT_ENABLED = false;
  * full peak through a post-light additive pass washes the skin instead of matching
  * the localized in-game tattoo glow.
  */
-function selfIllumScale(morphic: MorphicExtras): {
+function selfIllumScale(morphic: MorphicExtras, emission: 'preview' | 'authored'): {
   value: number;
   peak: number;
   pulseValue: number;
   pulseFn: ((t: number) => number) | null;
+  /** Scale that, times the normalized pulse, reproduces the authored expression. */
+  exprScale: number;
 } {
   const staticScale = firstNumber(morphic, ['g_flSelfIllumScale1', 'g_flSelfIllumScale'], 0);
   const dyn = morphic.dynamic_params?.g_flSelfIllumScale1;
@@ -167,14 +171,16 @@ function selfIllumScale(morphic: MorphicExtras): {
       const pulse = compileScalarExpr(dyn.source);
       if (pulse) {
         const pk = peakScalar(pulse) || 1;
-        const value = staticScale > 0 ? staticScale : pk;
+        // The expression replaces the stored fallback in Source 2. Preview's normalized envelope
+        // remains available for its calibrated, capped lighting; the HDR host takes authored units.
+        const value = emission === 'authored' ? pk : staticScale > 0 ? staticScale : pk;
         const pulseFn = (t: number) => Math.max(0, pulse(t)) / pk;
-        return { value, peak: value, pulseValue: pulseFn(0), pulseFn };
+        return { value, peak: value, pulseValue: pulseFn(0), pulseFn, exprScale: pk };
       }
     }
-    return { value: staticScale, peak: staticScale, pulseValue: 1, pulseFn: null };
+    return { value: staticScale, peak: staticScale, pulseValue: 1, pulseFn: null, exprScale: staticScale };
   }
-  return { value: staticScale, peak: staticScale, pulseValue: 1, pulseFn: null };
+  return { value: staticScale, peak: staticScale, pulseValue: 1, pulseFn: null, exprScale: staticScale };
 }
 
 /**
@@ -226,7 +232,9 @@ function cloneOwned(base: THREE.Material, physical: boolean): THREE.MeshStandard
 export function buildDeadlockMaterial(
   base: THREE.Material,
   tuning: NprTuning = DEFAULT_NPR_TUNING,
-  tintOverride: THREE.Color | null = null
+  tintOverride: THREE.Color | null = null,
+  emission: 'preview' | 'authored' = 'preview',
+  pass: 'surface' | 'outline' | 'authored-shell' = 'surface',
 ): DeadlockMaterialResult {
   const morphic = getMorphic(base)!;
 
@@ -301,7 +309,7 @@ export function buildDeadlockMaterial(
       clone.alphaMap = null;
       clone.alphaTest = 0;
     } else {
-      const opacity = staticOpacityScale(morphic, 0.62);
+      const opacity = staticOpacityScale(morphic, 1);
       if (opacity !== null) clone.opacity = Math.min(clone.opacity, opacity);
     }
     if (alphaMask) {
@@ -328,7 +336,7 @@ export function buildDeadlockMaterial(
   // owns the glow; the clone's baked emissive is zeroed below (no stamp needed:
   // the clone is owned, not the base).
   const selfIllumMap = morphic.resolvedTextures?.g_tSelfIllumMask;
-  const si = selfIllumScale(morphic);
+  const si = selfIllumScale(morphic, emission);
   // A real mask localizes the glow, so a subtle scale is fine; a placeholder mask
   // glows the whole surface white, so require a clearly-intentional scale.
   // self_illum_valid is the exporter's ">4x4 real mask" call (mirrors the legacy
@@ -393,7 +401,10 @@ export function buildDeadlockMaterial(
   const tintMask = sharedTint ? ownClone(sharedTint) : null;
   const tintColor = tintOverride ?? new THREE.Color(1, 1, 1);
   const sharedTransmissive = morphic.resolvedTextures?.g_tNprTransmissiveColor;
-  const transmissiveMap = isNpr && isMeaningfulMask(sharedTransmissive) ? ownClone(sharedTransmissive) : null;
+  // One sampler serves both looks: the game-faithful path reads every authored
+  // transmissive texture (4x4 constant colors too); the classic path only real ones.
+  const transmissiveMap = isNpr && sharedTransmissive ? ownClone(sharedTransmissive) : null;
+  const classicTransmissive = !!transmissiveMap && isMeaningfulMask(sharedTransmissive);
   if (transmissiveMap) {
     transmissiveMap.colorSpace = THREE.SRGBColorSpace;
     transmissiveMap.needsUpdate = true;
@@ -414,7 +425,7 @@ export function buildDeadlockMaterial(
     illumMap.wrapT = THREE.RepeatWrapping;
     illumMap.needsUpdate = true;
   }
-  const shapeSelfIllumMask = !!illumMap && !!si.pulseFn;
+  const shapeSelfIllumMask = emission === 'preview' && !!illumMap && !!si.pulseFn;
   const siScroll =
     morphic.vectors?.g_vSelfIllumScrollSpeed1 ?? morphic.vectors?.g_vSelfIllumScrollSpeed;
   // Default tint WHITE: a scale-driven glow with albedoFactor 0 and no authored
@@ -456,8 +467,32 @@ export function buildDeadlockMaterial(
   }
   const hasJitter = flag(morphic, 'F_JITTER_VERTICES');
 
+  // The game-faithful lighting reads the authored self-illum mask directly; the
+  // preview gates above only shape the classic look.
+  const citadelEnabled = isNpr && !unlit;
+  const citadel = citadelNprUniforms(citadelEnabled);
+  const citadelSelfIllum = citadelEnabled && flag(morphic, 'F_SELF_ILLUM');
+  // Shares the self-illum sampler with the classic path, which treats an unbound
+  // mask as full coverage (uSelfIllumMaskFull).
+  const citadelMask = !illumMap && citadelSelfIllum && selfIllumMap ? ownClone(selfIllumMap) : null;
+  if (citadelMask) {
+    citadelMask.wrapS = THREE.RepeatWrapping;
+    citadelMask.wrapT = THREE.RepeatWrapping;
+  }
+  citadel.uCitadelHemiOctNormals.value = citadelEnabled && morphic.shader.toLowerCase() === 'pbr.vfx' && !!clone.normalMap ? 1 : 0;
+  citadel.uCitadelSelfIllumOn.value = citadelSelfIllum ? 1 : 0;
+  citadel.uCitadelSelfIllumScale.value = si.exprScale;
+  const fresnelTint = morphic.vectors?.g_vSelfIllumFresnelMaskTint1;
+  const fresnelRange = morphic.vectors?.g_vSelfIllumFresnelMaskRange1;
+  citadel.uCitadelSelfIllumFresnel.value.set(fresnelTint?.[0] ?? 1, fresnelTint?.[1] ?? 1, fresnelTint?.[2] ?? 1,
+    firstNumber(morphic, ['g_flSelfIllumFresnelMaskExponent'], 5));
+  citadel.uCitadelSelfIllumFresnelRange.value.set(fresnelRange?.[0] ?? 0, fresnelRange?.[1] ?? 1);
+
   const uniforms: Record<string, THREE.IUniform> = {
-    ...nprLightingUniforms({ enabled: isNpr && !glass && !alphaBlend && !unlit }),
+    ...nprLightingUniforms({ enabled: isNpr && !unlit }),
+    ...citadel,
+    uCitadelHasTransmissive: { value: citadelEnabled && transmissiveMap ? 1 : 0 },
+    uSelfIllumMaskFull: { value: illumMap ? 0 : 1 },
     uKeyDir: { value: tuning.keyDir.clone() },
     uBands: { value: tuning.bands },
     uStepSharpness: { value: tuning.stepSharpness },
@@ -478,15 +513,15 @@ export function buildDeadlockMaterial(
     uSource2ColorTint: { value: tintPlan.matrix },
     uSource2ColorTintOffset: { value: tintPlan.offset },
     uTime: { value: 0 },
-    uSelfIllumMap: { value: illumMap ?? whiteFallback() },
+    uSelfIllumMap: { value: illumMap ?? citadelMask ?? whiteFallback() },
     uHasSelfIllum: { value: hasSelfIllum ? 1.0 : 0.0 },
     uSelfIllumScroll: { value: new THREE.Vector2(siScroll?.[0] ?? 0, siScroll?.[1] ?? 0) },
     uSelfIllumTint: { value: siTint },
     uSelfIllumScale: { value: si.value },
     uSelfIllumPulse: { value: si.pulseValue },
     uSelfIllumAlbedoFactor: { value: siAlbedoFactor },
-    uSelfIllumCap: { value: tuning.selfIllumCap },
-    uSelfIllumSat: { value: tuning.selfIllumSat },
+    uSelfIllumCap: { value: emission === 'authored' ? 65504 : tuning.selfIllumCap },
+    uSelfIllumSat: { value: emission === 'authored' ? 1 : tuning.selfIllumSat },
     uSelfIllumMaskShaping: { value: shapeSelfIllumMask ? 1.0 : 0.0 },
     uSelfIllumMaskLow: { value: tuning.selfIllumMaskLow },
     uSelfIllumMaskHigh: { value: tuning.selfIllumMaskHigh },
@@ -494,7 +529,7 @@ export function buildDeadlockMaterial(
     uHasAlbedoCSB: { value: csb.has },
     uNprTransmissiveColor: { value: transmissiveMap ?? whiteFallback() },
     uNprTransmissiveTint: { value: transmissiveTint(morphic) },
-    uHasTransmissive: { value: transmissiveMap ? 1.0 : 0.0 },
+    uHasTransmissive: { value: classicTransmissive ? 1.0 : 0.0 },
     uTransStrength: { value: tuning.transStrength },
     uTransPower: { value: tuning.transPower },
     uDetailMap: { value: detailMap ?? whiteFallback() },
@@ -534,6 +569,45 @@ export function buildDeadlockMaterial(
 
   // Wrap the OWNED clone (never the live base) so CSM's in-place mutation lands
   // on the throwaway clone we dispose. No unwrapNprBase needed on this path.
+  if (pass === 'authored-shell') {
+    // Source glass can write depth before blending. Three captures opaque draws
+    // for transmission before that depth exists, so a rear-facing authored hull
+    // would fill the glass. Schedule it after transmission, with opaque output
+    // and the same depth test, rather than feeding it into that framebuffer.
+    clone.transparent = true;
+    clone.blending = THREE.NoBlending;
+    clone.depthTest = true;
+    clone.depthWrite = true;
+  }
+  if (pass === 'outline') {
+    clone.side = THREE.BackSide;
+    clone.normalMap = null;
+    clone.roughnessMap = null;
+    clone.metalnessMap = null;
+    clone.roughness = 1;
+    clone.metalness = 0;
+    clone.alphaTest = 0;
+    clone.transparent = false;
+    clone.opacity = 1;
+    clone.blending = THREE.NoBlending;
+    const sourceMask = morphic.resolvedTextures?.g_tNprOutlineMask;
+    const outlineMask = sourceMask ? ownClone(sourceMask) : whiteFallback();
+    if (sourceMask) {
+      outlineMask.wrapS = THREE.RepeatWrapping;
+      outlineMask.wrapT = THREE.RepeatWrapping;
+      outlineMask.minFilter = THREE.LinearFilter;
+      outlineMask.magFilter = THREE.LinearFilter;
+    }
+    uniforms.uCitadelOutlineMask = { value: outlineMask };
+    uniforms.uCitadelOutlineThickness = { value: flag(morphic, 'g_bOverrideNprOutline')
+      ? firstNumber(morphic, ['g_flOverrideNprOutlineThickness'], 0.2) : CITADEL_NPR.outlineThickness };
+    const outlineColor = (rgba: readonly [number, number, number, number]) => {
+      const color = new THREE.Color(rgba[0], rgba[1], rgba[2]).convertSRGBToLinear();
+      return new THREE.Vector4(color.r, color.g, color.b, rgba[3]);
+    };
+    uniforms.uCitadelOutlineDark = { value: outlineColor(CITADEL_NPR.outlineDark) };
+    uniforms.uCitadelOutlineBright = { value: outlineColor(CITADEL_NPR.outlineBright) };
+  }
   const csm = new CustomShaderMaterial({
     baseMaterial: clone as THREE.MeshPhysicalMaterial,
     vertexShader: NPR_VERTEX,
@@ -542,6 +616,9 @@ export function buildDeadlockMaterial(
     patchMap: NPR_PATCH_MAP,
   });
   configureCitadelGlassPass(csm as unknown as THREE.Material, uniforms);
+  applyNprMapDefines(csm as unknown as THREE.Material, !!detailMap, !!jitterMap);
+  if (pass === 'outline') csm.defines = { ...csm.defines, CITADEL_OUTLINE: '' };
+  if (pass === 'authored-shell') csm.defines = { ...csm.defines, OPAQUE: '' };
   csm.name = base.name;
 
   const dispose = () => {

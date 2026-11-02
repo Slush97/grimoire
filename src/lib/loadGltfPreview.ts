@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { resolveMorphicTextures } from './source2NprMaterial';
+import { hideAuthoredShells } from './citadelNprOutline';
 
 export interface GltfPreviewOptions {
   /** Decode embedded images with createImageBitmap, off the main thread, instead
@@ -39,6 +40,12 @@ export async function loadGltfPreview(
   return parseGltfPreview(await response.arrayBuffer(), options);
 }
 
+/** The game samples hero textures anisotropically (its texture filtering setting;
+ *  the material oracle's reference uses 8x). GLTFLoader leaves glTF samplers at 1,
+ *  which blurs and shifts texel detail on surfaces seen at an angle. three clamps
+ *  this to the GPU's maximum. */
+export const PREVIEW_TEXTURE_ANISOTROPY = 8;
+
 /** Parse an in-memory `.glb` (ArrayBuffer). Also used directly by the Soul
  *  Container import preview, which loads the dropped/picked file's bytes before
  *  any build. Morphic preview texture indices (the only part of the morphic
@@ -50,6 +57,14 @@ export async function parseGltfPreview(
 ): Promise<GLTF> {
   const gltf = await previewLoader(options).parseAsync(buffer, '');
   await resolveMorphicTextures(gltf);
+  hideAuthoredShells(gltf.scene);
+  gltf.scene.traverse((object) => {
+    const material = (object as THREE.Mesh).material;
+    if (!material) return;
+    for (const entry of Array.isArray(material) ? material : [material]) {
+      for (const texture of materialTextures(entry)) texture.anisotropy = PREVIEW_TEXTURE_ANISOTROPY;
+    }
+  });
   return gltf;
 }
 

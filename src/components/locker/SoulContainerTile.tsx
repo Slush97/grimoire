@@ -4,7 +4,7 @@ import type * as THREE from 'three';
 import { Loader2 } from 'lucide-react';
 import { getSoulModelInfo, exportSoulModel } from '../../lib/api';
 import { loadGltfPreview } from '../../lib/loadGltfPreview';
-import { buildNormalizedRoot, disposeScene, meshUrlFor } from './soulModel';
+import { buildNormalizedRoot, disposeScene, meshUrlFor, zeroMetalness } from './soulModel';
 import { useSoulRegistry } from './soulRegistry';
 import ModThumbnail from '../ModThumbnail';
 
@@ -99,6 +99,7 @@ export default function SoulContainerTile({
           disposeScene(gltf.scene);
           return;
         }
+        zeroMetalness(gltf.scene);
         const next = buildNormalizedRoot(gltf.scene);
         const prev = rootRef.current;
         rootRef.current = next;

@@ -1,3 +1,4 @@
+import { FilterItem, FilterDivider } from '../../common/FilteredContent';
 import { useCallback, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Eye, EyeClosed, EyeOff, Shield } from 'lucide-react';
@@ -80,7 +81,7 @@ export default function PrivacySection() {
 
   return (
     <>
-      <Card
+      <Card id="settings-privacy-settings-nav-privacy-card"
         title={<Tx k="settings.nav.privacy" fallback="Privacy & Content" />}
         description={
           <Trans
@@ -100,7 +101,7 @@ export default function PrivacySection() {
         icon={Shield}
       >
         <div className="space-y-6">
-          <div>
+          <FilterItem id="settings-nsfw">
             <span className="block text-sm font-medium text-text-primary">
               <Tx k="settings.privacy.nsfwContent" fallback="NSFW content" />
             </span>
@@ -120,25 +121,29 @@ export default function PrivacySection() {
                 { value: 'hide', label: <><EyeOff className="h-3.5 w-3.5" />{t('browse.viewOptions.hide')}</> },
               ]}
             />
-          </div>
+          </FilterItem>
 
-          <Toggle
-            checked={settings?.revealNsfwOnHover ?? false}
-            onChange={(checked) => settings && saveSettings({ ...settings, revealNsfwOnHover: checked })}
-            label={t('settings.privacy.revealNsfwOnHover')}
-            description={t('settings.privacy.revealNsfwOnHoverDescription')}
-          />
+          <FilterItem id="settings-reveal-nsfw-on-hover">
+            <Toggle
+              checked={settings?.revealNsfwOnHover ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, revealNsfwOnHover: checked })}
+              label={t('settings.privacy.revealNsfwOnHover')}
+              description={t('settings.privacy.revealNsfwOnHoverDescription')}
+            />
+          </FilterItem>
 
-          <Toggle
-            checked={settings?.browseAlwaysShowNsfwTag ?? false}
-            onChange={(checked) => settings && saveSettings({ ...settings, browseAlwaysShowNsfwTag: checked })}
-            label={t('settings.privacy.alwaysShowNsfwTag')}
-            description={t('settings.privacy.alwaysShowNsfwTagDescription')}
-          />
+          <FilterItem id="settings-browse-always-show-nsfw-tag">
+            <Toggle
+              checked={settings?.browseAlwaysShowNsfwTag ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, browseAlwaysShowNsfwTag: checked })}
+              label={t('settings.privacy.alwaysShowNsfwTag')}
+              description={t('settings.privacy.alwaysShowNsfwTagDescription')}
+            />
+          </FilterItem>
 
-          <div className="h-px bg-hl/5" />
+          <FilterDivider className="h-px bg-hl/5" />
 
-          <div>
+          <FilterItem id="settings-privacy-settings-preferences-contributeMatchData-toggle">
             <Toggle
               checked={settings?.contributeMatchSalts ?? false}
               onChange={handleContributeMatchSaltsChange}
@@ -153,11 +158,11 @@ export default function PrivacySection() {
                 {saltIngestStatus.lastError ? ` ${t('settings.preferences.lastSaltAttemptFailed', { error: saltIngestStatus.lastError })}` : ''}
               </div>
             )}
-          </div>
+          </FilterItem>
         </div>
       </Card>
 
-      <Card
+      <Card id="settings-privacy-settings-sections-hiddenCreators-card"
         title={<Tx k="settings.sections.hiddenCreators" fallback="Hidden creators" />}
         description={<Tx k="hiddenCreators.description" fallback="Hide uploads from selected GameBanana creators in Browse. Installed mods remain visible." />}
         icon={EyeOff}
@@ -185,7 +190,7 @@ export default function PrivacySection() {
         )}
       </Card>
 
-      <Card
+      <Card id="settings-privacy-hiddenMods-title-card"
         title={<Tx k="hiddenMods.title" fallback="Hidden mods" />}
         description={<Tx k="hiddenMods.description" fallback="Hide individual GameBanana mods from Browse. Installed mods remain visible." />}
         icon={EyeOff}

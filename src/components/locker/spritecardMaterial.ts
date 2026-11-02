@@ -102,6 +102,9 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
     varying vec2 vUv; varying float vAlpha; ${vertexColor ? "varying vec3 vColor;" : ""}
     ${frameRegion ? 'varying vec2 vCardUv; varying vec4 vFrameRegion; varying float vFrameClamp;' : ''}
     vec3 gammaColor(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-.055,step(vec3(.0031308),c));}
+    // Saturate by the peak channel so overbright glows keep their authored hue.
+    // A per-channel clamp turns an overbright blue into cyan or white.
+    vec3 saturateHue(vec3 c){c=max(c,vec3(0.0));return c/max(1.0,max(c.r,max(c.g,c.b)));}
     vec2 placeUv(vec2 p,vec4 ctl,float angle){float c=cos(angle),s=sin(angle);p-=.5;return vec2(c*p.x-s*p.y,s*p.x+c*p.y)/ctl.xy+fract(ctl.zw+.5);}
     void main(){vec4 accum=vec4(1.0);${chain}
       vec3 rgb=accum.rgb*tint${vertexColor ? "*vColor" : ""}*colorBlend;
@@ -111,16 +114,15 @@ export function spritecardMaterial(renderer: FxRenderer, base: string, vertexSha
         rgb=mix(rgb,outlineColor,ramp);accum.a=mix(rawAlpha,1.0,ramp);
       }
       rgb=mix(rgb,vec3(dot(rgb,vec3(.299,.587,.114))),desat)*overbright;
-      ${renderer.params.m_bSaturateColorPreAlphaBlend === false ? '' : 'rgb=clamp(rgb,0.0,1.0);'}
+      ${renderer.params.m_bSaturateColorPreAlphaBlend === false ? '' : 'rgb=saturateHue(rgb);'}
       rgb*=addSelf;
-      float alpha=smoothstep(0.0,1.0,accum.a)*vAlpha;
+      float alpha=clamp(accum.a,0.0,1.0)*vAlpha;
       ${additive ? 'float coverage=clamp(max(max(rgb.r,rgb.g),rgb.b),0.0,1.0);alpha*=coverage;rgb/=max(coverage,.0001);' : ''}
       if(alpha<=.001)discard;gl_FragColor=vec4(rgb,alpha);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
     blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
-  material.userData.previewBloom = true;
   return { material, textures, update(age: number) {
     inputs.forEach((input, i) => {
       const c = row(input.m_TextureControls);

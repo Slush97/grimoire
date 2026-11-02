@@ -39,6 +39,15 @@ export async function loadRiggedHeroPreview(info: HeroPoseInfo, physics: boolean
     loadAttachments(`${base}/attachments.json?v=${version}`),
   ]);
   gltf.scene.userData.grimoireAttachments = attachments;
+  if (info.hasAnimationFallback) {
+    const fallback = await loadGltfPreview(`${base}/animation-fallback.glb?v=${version}`);
+    // Base-only helper bones can be absent from a skin. Compatibility was
+    // checked at export; keep only tracks that can bind to this scene.
+    for (const clip of fallback.animations) {
+      clip.tracks = clip.tracks.filter((track) => !!gltf.scene.getObjectByName(track.name.slice(0, track.name.lastIndexOf('.'))));
+    }
+    gltf.animations.push(...fallback.animations);
+  }
   if (movement && info.hasMovement) {
     const motions = await loadGltfPreview(`${base}/movement.glb?v=${version}`);
     gltf.animations.push(...motions.animations);

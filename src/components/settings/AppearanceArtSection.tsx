@@ -1,3 +1,4 @@
+import { FilterItem, FilterDivider } from '../common/FilteredContent';
 import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Image as ImageIcon, Play, Wand2, Volume2, type LucideIcon } from 'lucide-react';
@@ -491,8 +492,8 @@ export default function AppearanceArtSection() {
   const draftBg: AppearanceBg = draftKind === 'hero' ? { kind: 'hero', hero: draftHero } : { kind: draftKind };
 
   return (
-    <div>
-      <Toggle
+    <FilterItem id="settings-art-controls">
+      <Toggle id="settings-appearance-settings-appearance-launchButtons-combine-toggle"
         checked={settings?.unifiedLaunchButton ?? false}
         onChange={(checked) => settings && void saveSettings({ ...settings, unifiedLaunchButton: checked })}
         label={<Tx k="settings.appearance.launchButtons.combine" fallback="Combine launch buttons" />}
@@ -504,51 +505,54 @@ export default function AppearanceArtSection() {
         }
       />
 
-      <div className="my-5 h-px bg-hl/5" />
+      <FilterDivider className="my-5 h-px bg-hl/5" />
 
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold text-text-primary">
-          <Tx k="settings.appearance.art.title" fallback="Launcher & sidebar art" />
-        </h3>
-        <p className="text-xs text-text-secondary">
-          <Tx
-            k="settings.appearance.art.description"
-            fallback="Set the background for each launch button, the active tab, and the volume bar."
-          />
-        </p>
-      </div>
+      <FilterItem id="settings-launcher-art">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            <Tx k="settings.appearance.art.title" fallback="Launcher & sidebar art" />
+          </h3>
+          <p className="text-xs text-text-secondary">
+            <Tx
+              k="settings.appearance.art.description"
+              fallback="Set the background for each launch button, the active tab, and the volume bar."
+            />
+          </p>
+        </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        {SURFACES.map((config) => {
-          const bg = resolveAppearanceBg(settings, config.id);
-          const kindLabel = t(`settings.appearance.art.kind.${bg.kind}`);
-          const detail = bg.kind === 'hero' ? bg.hero ?? DEFAULT_SIDEBAR_HERO : kindLabel;
-          return (
-            <button
-              key={config.id}
-              type="button"
-              onClick={() => openEditor(config.id)}
-              className="group flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/40 p-2 text-left transition-colors hover:border-accent/40 hover:bg-accent/5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <SurfacePreview
-                bg={bg}
-                config={config}
-                customSrc={appearanceImages[config.id]}
-                className="h-9 w-36 flex-shrink-0"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-text-primary">
-                  {t(config.labelKey, config.fallbackLabel)}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SURFACES.map((config) => {
+            const bg = resolveAppearanceBg(settings, config.id);
+            const kindLabel = t(`settings.appearance.art.kind.${bg.kind}`);
+            const detail = bg.kind === 'hero' ? bg.hero ?? DEFAULT_SIDEBAR_HERO : kindLabel;
+            return (
+              <button
+                key={config.id}
+                type="button"
+                onClick={() => openEditor(config.id)}
+                className="group flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/40 p-2 text-left transition-colors hover:border-accent/40 hover:bg-accent/5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <SurfacePreview
+                  bg={bg}
+                  config={config}
+                  customSrc={appearanceImages[config.id]}
+                  className="h-9 w-36 flex-shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-text-primary">
+                    {t(config.labelKey, config.fallbackLabel)}
+                  </span>
+                  <span className="block truncate text-xs text-text-secondary">{detail}</span>
                 </span>
-                <span className="block truncate text-xs text-text-secondary">{detail}</span>
-              </span>
-              <ImageIcon className="h-4 w-4 flex-shrink-0 text-text-secondary group-hover:text-accent" aria-hidden />
-            </button>
-          );
-        })}
-      </div>
+                <ImageIcon className="h-4 w-4 flex-shrink-0 text-text-secondary group-hover:text-accent" aria-hidden />
+              </button>
+            );
+          })}
+        </div>
 
-      <Toggle
+      </FilterItem>
+
+      <Toggle id="settings-appearance-settings-appearance-sidebar-transparent-toggle"
         checked={settings?.sidebarTransparent ?? false}
         onChange={(checked) => settings && void saveSettings({ ...settings, sidebarTransparent: checked })}
         label={<Tx k="settings.appearance.sidebar.transparent" fallback="Transparent sidebar" />}
@@ -708,6 +712,6 @@ export default function AppearanceArtSection() {
             )}
         </Modal>
       )}
-    </div>
+    </FilterItem>
   );
 }

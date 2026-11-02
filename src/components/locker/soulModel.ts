@@ -25,6 +25,19 @@ export function meshUrlFor(key: string, mtimeMs: number | null): string {
 }
 
 /**
+ * The grid lights a card directly, with no environment to reflect, and a metal surface only shows
+ * what it reflects: the albedo alpha vpkmerge reads as metalness would draw most props near black.
+ */
+export function zeroMetalness(scene: THREE.Object3D): void {
+  scene.traverse((obj) => {
+    const { material } = obj as THREE.Mesh;
+    for (const entry of Array.isArray(material) ? material : [material]) {
+      if (entry instanceof THREE.MeshStandardMaterial) entry.metalness = 0;
+    }
+  });
+}
+
+/**
  * Wrap a loaded GLB scene in a group normalized to a unit size and centered on
  * the origin, so tall and wide props both fit the small card frame. The shared
  * canvas spins the returned group's `rotation.y`; the inner group recenters.

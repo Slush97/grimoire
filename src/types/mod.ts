@@ -341,6 +341,7 @@ export const TRIPPY_STYLES = [
   'halftone',
   'lava',
   'vaporwave',
+  'moo',
 ] as const;
 export type TrippyStyleName = (typeof TRIPPY_STYLES)[number];
 
@@ -358,6 +359,9 @@ export type TrippyVfxTargets = 'all' | 'abilities' | 'weapons';
 /** Request for one animated trippy preview sprite (vpkmerge trippy-preview).
  *  Pure pattern generation: hero-independent and cheap (no VPK read). */
 export interface TrippySpriteOptions {
+  colors?: string[];
+  /** Moo density multiplier, 0.25..8. Omitted means 1x. */
+  scale?: number;
   style: TrippyStyleName;
   /** Pattern phase / hue offset, normalized 0..1. */
   phase: number;
@@ -452,7 +456,7 @@ export interface ApplyTrippySkinResult {
  * destination from GameBanana category ancestry. Explicit manual assignments
  * and previously classified local files retain their chosen destination.
  */
-export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects';
+export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Cached automatic hero matches for one installed payload. */

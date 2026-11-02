@@ -30,6 +30,12 @@ describe('Installed display sorting', () => {
     expect(keys(entries)).toEqual(['zebra', 'Banana', 'apple']);
   });
 
+  it('sorts by total group size and breaks equal sizes by load order', () => {
+    const entries = [single('small', { size: 10 }), single('equal-later', { size: 20, priority: 4 }),
+      group('largest', [mod('one', { size: 15 }), mod('two', { size: 15 })]), single('equal-first', { size: 20, priority: 2 })];
+    expect(keys(sortInstalledEntries(entries, 'size', () => []))).toEqual(['largest', 'equal-first', 'equal-later', 'small']);
+  });
+
   it('uses the alphabetically first resolved hero and puts files without heroes last', () => {
     const entries = [single('unassigned', { priority: 1 }), single('multiple'), single('apollo'), single('abrams')];
     const heroes: Record<string, string[]> = {

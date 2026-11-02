@@ -10,5 +10,12 @@
  * auto-busts stale cached GLBs, and available to the renderer's extras parser /
  * debug panel so the cache version and the parser's expected schema cannot drift
  * apart within grimoire.
+ *
+ * v3: pbr.vfx exports carry the game's metalness (opaque color alpha) in the
+ * metallic-roughness texture's blue channel, its roughness (normal-map blue) in
+ * green, keep small constant AO textures as occlusionTexture, and record the
+ * color texture's VTEX reflectivity in `texture_reflectivity`.
+ *
+ * v4: adds `source_material`, the resource path of the material. Nothing else changes.
  */
-export const SOURCE2_EXTRAS_VERSION = 2;
+export const SOURCE2_EXTRAS_VERSION = 4;

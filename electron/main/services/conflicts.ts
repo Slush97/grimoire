@@ -37,6 +37,7 @@ export const IGNORED_CONFLICT_FILES = new Set([
 // false positive as the default fallback textures below; matched by full path
 // so a legitimately-named file elsewhere isn't swept up.
 const IGNORED_CONFLICT_PATHS = new Set([
+    'deadlockforge/made_with_dlf.txt',
     'panorama/image_compiler.vdata_c',
 ]);
 

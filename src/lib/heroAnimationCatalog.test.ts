@@ -1,9 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { heroAnimationRecipe, isStandaloneHeroAnimation, preferredHeroAnimationName, selectHeroAnimations, type HeroAnimationInfo } from './heroAnimationCatalog';
+import { heroAnimationPlayback, heroAnimationRecipe, heroShowcaseAnimation, isStandaloneHeroAnimation, preferredHeroAnimation, preferredHeroAnimationName, selectHeroAnimations, showcaseFallback, type HeroAnimationInfo } from './heroAnimationCatalog';
 
 const clip = (name: string, extra: Partial<HeroAnimationInfo> = {}): HeroAnimationInfo => ({ name, frameCount: 61, fps: 30, durationSeconds: 2, looping: true, default: false, ...extra });
 
 describe('whole hero showcase actions', () => {
+  it('preserves graph defaults and playback through animation extras while keeping secondary actions', () => {
+    const showcase = { graph: 'ui.vnmgraph_c', state: 'shop', playback: 'loop' } as const;
+    const clips = [clip('primary_stand_idle'), clip('primary_airdash'), clip('melee_hit'), clip('new_shop', { showcase })];
+    expect(selectHeroAnimations(clips, 'Lash').map(c => c.name)).toEqual(['new_shop', 'primary_stand_idle', 'primary_airdash', 'melee_hit']);
+    expect(showcaseFallback(selectHeroAnimations(clips, 'Lash'), 'Lash')?.name).toBe('primary_stand_idle');
+    const loaded = [{ name: 'primary_idle' }, { name: 'new_shop', userData: { grimoireShowcase: showcase } }];
+    expect(preferredHeroAnimation(loaded, 'Billy')?.name).toBe('new_shop');
+    expect(heroAnimationPlayback(loaded[1], 'Billy')).toBe('loop');
+    expect(heroAnimationPlayback({ name: 'new_shop', userData: { grimoireShowcase: { ...showcase, playback: 'hold' } } })).toBe('hold');
+    expect(heroShowcaseAnimation({ userData: { grimoireShowcase: { ...showcase, speed: 0.69 } } })?.speed).toBe(0.69);
+    expect(heroShowcaseAnimation({ userData: { grimoireShowcase: { ...showcase, speed: -1 } } })).toBeUndefined();
+  });
+  it('exports one standing idle beside a graph default and prefers it once the export marks it', () => {
+    const showcase = { graph: 'ui.vnmgraph_c', state: 'shop', playback: 'loop' } as const;
+    const clips = [clip('ui_shop', { showcase }), clip('weapon_stand_idle'), clip('out_of_combat_stand_idle')];
+    expect(selectHeroAnimations(clips, 'Graves').map(c => c.name)).toEqual(['ui_shop', 'weapon_stand_idle']);
+    expect(showcaseFallback([clip('ui_shop', { showcase })], 'Graves')).toBeUndefined();
+    const loaded = [{ name: 'ui_shop', userData: { grimoireShowcase: showcase } }, { name: 'weapon_stand_idle', userData: { grimoireDefault: true } }];
+    expect(preferredHeroAnimation(loaded, 'Graves')?.name).toBe('weapon_stand_idle');
+    expect(preferredHeroAnimation(loaded.slice(0, 1), 'Graves')?.name).toBe('ui_shop');
+  });
+  it('finds a standing idle for a hero whose own recipes name none', () => {
+    const showcase = { graph: 'ui.vnmgraph_c', state: 'shop', playback: 'loop' } as const;
+    const selected = selectHeroAnimations([clip('ui_shop', { showcase }), clip('weapon_stand_idle')], 'Rem');
+    expect(selected.map(c => c.name)).toEqual(['ui_shop', 'weapon_stand_idle']);
+    expect(showcaseFallback(selected, 'Rem')?.name).toBe('weapon_stand_idle');
+  });
+  it('accepts the neutral primary_idle alias when a skin renames its idle', () => {
+    expect(selectHeroAnimations([clip('primary_idle'), clip('primary_run_n')], 'Seven').map((c) => c.name)).toEqual(['primary_idle']);
+    expect(selectHeroAnimations([clip('primary_idle', { additive: true })], 'Seven')).toEqual([]);
+  });
   it('offers the rendered Lash dash and heavy-melee actions without exporting additive fragments', () => {
     const clips = ['primary_stand_idle', 'primary_airdash', 'melee_hit', 'flinch_melee_left_add'].map((name) => clip(name));
     expect(selectHeroAnimations(clips, 'Lash').map((c) => c.name)).toEqual(['primary_stand_idle', 'primary_airdash', 'melee_hit']);

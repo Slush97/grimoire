@@ -91,6 +91,8 @@ export function categoryGeneralType(path: readonly GameBananaCategory[]): Global
       case 'hideout': return 'hideout';
       case 'hud': return 'hud';
       case 'killstreak music': return 'killstreak-music';
+      case 'animations': return 'animations';
+      case 'maps': return 'maps';
     }
   }
   return undefined;
@@ -115,12 +117,14 @@ export function resolveInstalledGeneralType(
 ): GlobalModType | undefined {
   if (mod.globalTypeSource === 'manual') return mod.globalType ?? undefined;
   if (mod.lockerHeroSource === 'manual' && mod.lockerHero?.trim()) return undefined;
-  if (!(typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0)) {
-    return mod.globalType ?? undefined;
-  }
-  if (resolvedHeroes.length > 0) return undefined;
-  return categoryGeneralType(resolveCategoryPath(paths, {
+  const linked = typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0;
+  if (!linked && mod.globalType) return mod.globalType;
+  const generalType = categoryGeneralType(resolveCategoryPath(paths, {
     id: mod.categoryId,
     name: mod.categoryName ?? '',
   }));
+  if ((generalType === 'animations' || generalType === 'maps') && (mod.sourceSection ?? 'Mod') !== 'Mod') return undefined;
+  if (generalType === 'animations') return generalType;
+  if (!linked && generalType !== 'maps') return undefined;
+  return resolvedHeroes.length > 0 ? undefined : generalType;
 }
