@@ -52,8 +52,10 @@ export function MovingParticleRope({ system, renderer, model, textureBaseUrl, de
     else anchor.getWorldPosition(state.origin);
     if (!initialized.current) { state.previous.copy(state.origin); initialized.current = true; }
     state.shift.copy(state.origin).sub(state.previous);
+    state.previous.copy(state.origin);
     state.gravity.fromArray(params.gravity).multiplyScalar(unit).applyQuaternion(state.sourceOrientation);
     const list = points.current.filter(p => p.age+dt < p.life);
+    const existing = list.length;
     const births = advanceSpriteEmission(params.emissions.map(e => ({...e,start:e.start+delay})), emissions.current, clock.current, clock.current+dt, maximum-list.length);
     clock.current += dt;
     for (const born of births) {
@@ -65,9 +67,15 @@ export function MovingParticleRope({ system, renderer, model, textureBaseUrl, de
       list.push({ position, velocity, age: born-dt, life, radius: radius*unit, alpha, extraAlpha: particleRopeInitialField(system,39,1) });
     }
     const lock = system.operators.find(n => n.class === 'C_OP_PositionLock');
-    for (const p of list) {
+    for (let index = 0; index < list.length; index++) {
+      const p = list[index];
       p.age += dt; const step = Math.min(dt, p.age), t = p.age/p.life;
-      if (lock && t >= paramScalar(lock.params.m_flStartTime_min, 0) && t < paramScalar(lock.params.m_flEndTime_max, 1)) p.position.add(state.shift);
+      if (lock && index < existing) {
+        // Start/end describe the unlock window. New births already use this frame's tip.
+        const start = paramScalar(lock.params.m_flStartTime_min, 1), end = paramScalar(lock.params.m_flEndTime_max, 1);
+        const weight = t <= start ? 1 : end > start ? THREE.MathUtils.clamp((end-t)/(end-start), 0, 1) : 0;
+        p.position.addScaledVector(state.shift, weight);
+      }
       state.inverseSource.copy(state.sourceOrientation).invert();
       state.sourcePosition.copy(p.position).applyQuaternion(state.inverseSource).divideScalar(unit);
       state.force.fromArray(particleRopeAcceleration(system, state.sourcePosition.toArray() as [number,number,number], t, clock.current)).multiplyScalar(unit).applyQuaternion(state.sourceOrientation);
@@ -102,7 +110,6 @@ export function MovingParticleRope({ system, renderer, model, textureBaseUrl, de
     }
     geometry.setDrawRange(0,Math.max(0,(list.length-1)*subdivisions)*6);
     for(const attribute of [positions,uv,alpha,color]) attribute.needsUpdate = true;
-    state.previous.copy(state.origin);
   });
   if (!params || !resource || attachment.kind !== 'exact') return null;
   return <mesh ref={mesh} geometry={geometry} material={resource.material} frustumCulled={false} />;

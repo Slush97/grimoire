@@ -15,7 +15,14 @@ import { assertVpkSafety } from './modSafety';
 import { assertCanMoveLoadedGameMods, syncRunningGameModSnapshotFromMods } from './gameSessionMods';
 import { notifyModChanges } from './modChangeObservation';
 import type { FxDescriptor } from '../../../src/components/locker/fxDescriptor';
-import { movementFxCacheRoot as root } from './movementFxPaths';
+import { movementEngineHeroDir, movementFxCacheRoot as root } from './movementFxPaths';
+import { resolveMovementGameData } from '../../../src/lib/movementGameData';
+import type { MovementEnginePreview } from '../../../src/lib/movementFx';
+import { PackageStack } from './heroParticleSources';
+import { exportParticleBundle as exportSourceParticleBundle } from './heroParticleBundle';
+import { MODEL_ENTRY_OVERRIDES } from './heroPoseModels';
+import { getString, isCollection, type KVObject } from '../../../src/lib/particles/kv';
+import { PARTICLE_BUNDLE_VERSION } from '../../../src/lib/particles/host/bundle';
 
 const VERSION = 'movement-v5';
 const inFlight = new Map<string, Promise<string>>();
@@ -148,6 +155,59 @@ export async function previewMovementFx(game: string, input: unknown): Promise<M
     const descriptor = JSON.parse(await fs.readFile(file, 'utf8')) as FxDescriptor;
     return { key: `${key}:${request.heroName}`, descriptor: attachment ? bindMeleeAttachment(descriptor, attachment) : descriptor,
       textureBaseUrl: `grimoire-hero://f/${key}/effect-tex/` };
+  });
+}
+
+const engineBuilds = new Map<string, Promise<MovementEnginePreview>>();
+const ENGINE_VERSION = `engine-${PARTICLE_BUNDLE_VERSION}`;
+
+/**
+ * The faithful runtime's preview of a movement effect on a hero: the game data that stages it (the
+ * hero's melee or dash ability, read through the package stack, the baked effect first) and a particle
+ * bundle of every effect it names on the hero's model, under the bake's cache entry.
+ */
+export async function previewMovementEngine(game: string, input: unknown): Promise<MovementEnginePreview> {
+  const request = movementFxPreviewSchema.parse(input);
+  return withBake(game, request.choice, async (dir, choice, key) => {
+    const heroDir = movementEngineHeroDir(request.heroName);
+    const outDir = join(dir, 'engine', heroDir);
+    const id = `${key}:${heroDir}`;
+    if (!engineBuilds.has(id)) {
+      const build = (async (): Promise<MovementEnginePreview> => {
+        const cached = await fs.readFile(join(outDir, 'preview.json'), 'utf8').then((text) => JSON.parse(text) as MovementEnginePreview & { version?: string }, () => null);
+        if (cached?.version === ENGINE_VERSION) return cached;
+        await fs.rm(outDir, { recursive: true, force: true });
+        await fs.mkdir(outDir, { recursive: true });
+        const vpkmerge = { stdout: (args: string[]) => runVpkmergeStdout(args) };
+        const stack = new PackageStack([join(dir, 'effect_dir.vpk'), basePak(game), join(game, 'game', 'core', 'pak01_dir.vpk')], vpkmerge, join(outDir, '.scratch'));
+        try {
+          const [heroes, abilities] = await Promise.all([stack.decode('scripts/heroes.vdata_c'), stack.decode('scripts/abilities.vdata_c')]);
+          const data = resolveMovementGameData(heroes, abilities, codenamesForHero(request.heroName));
+          if (!data) throw new Error(`No heroes.vdata entry for ${request.heroName}.`);
+          const systems = choice.kind === 'dash'
+            ? [data.dash?.particle]
+            : [data.melee?.holdBegin, data.melee?.attack, data.melee?.swing, data.melee?.impact];
+          const hero = isCollection(heroes?.[data.heroKey] ?? null) ? heroes![data.heroKey] as KVObject : {};
+          const vdataModel = getString(hero, 'm_strModelName');
+          const modelEntry = MODEL_ENTRY_OVERRIDES[request.heroName] ?? (vdataModel ? `${vdataModel.replace(/\\/g, '/')}_c` : '');
+          if (!/^models\/[a-zA-Z0-9_./-]+\.vmdl_c$/.test(modelEntry)) throw new Error(`No model for ${request.heroName}.`);
+          const effects = systems.filter((system): system is string => !!system).map((system, i) => ({
+            id: `${i}`, system, source: 'anim-event' as const, evidence: 'movement staging', configuration: 'preview', attachment: null, attachmentCp1: null,
+          }));
+          await exportSourceParticleBundle(stack, { heroKey: data.heroKey, modelEntry, effects, notes: [] }, { hero: request.heroName, outDir, vpkmerge });
+          const preview: MovementEnginePreview & { version: string } = {
+            version: ENGINE_VERSION, key: `${key}:${heroDir}`, data,
+            bundleUrl: `grimoire-hero://f/${key}/engine/${heroDir}/bundle.json`, textureBaseUrl: `grimoire-hero://f/${key}/engine/${heroDir}/tex/`,
+          };
+          await fs.writeFile(join(outDir, 'preview.json'), JSON.stringify(preview));
+          return preview;
+        } finally {
+          await fs.rm(join(outDir, '.scratch'), { recursive: true, force: true });
+        }
+      })();
+      engineBuilds.set(id, build);
+    }
+    try { return await engineBuilds.get(id)!; } finally { engineBuilds.delete(id); }
   });
 }
 

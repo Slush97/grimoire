@@ -87,6 +87,8 @@ export class SurfaceSnapshot {
     const { x: ox, y: oy, z: oz } = ray.origin, { x: dx, y: dy, z: dz } = ray.direction;
     this.root.traverseVisible((object) => {
       if (!(object instanceof THREE.Mesh) || this.skip(object)) return;
+      // Meshes placed by their shader, like engine particles parented under the hero, have no positions to test.
+      if (!object.geometry.attributes.position) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       if (!materials.some((material) => material.visible)) return;
       const snap = this.snapshot(object);

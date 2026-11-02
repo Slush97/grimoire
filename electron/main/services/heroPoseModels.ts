@@ -29,9 +29,13 @@ import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { app, net } from 'electron';
 import { registerAssetProtocol } from './assetProtocol';
-import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
+import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput, vpkmergeBinaryPath } from './modMerger';
 import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
 import { exportParticleBundle } from './heroParticleExport';
+import { BUNDLE_FILENAME, BUNDLE_TEXTURE_DIRNAME } from './heroParticleBundle';
+import { exportHeroParticlesInWorker } from './heroParticleWorkerClient';
+import { PackageStack, type VpkmergeRunner } from './heroParticleSources';
+import { BUNDLE_TEXTURE_FILE, PARTICLE_BUNDLE_VERSION } from '../../../src/lib/particles/host/bundle';
 import { exportModelAttachments } from './modelAttachments';
 import { readHeroAnimationMetadata } from './heroAnimationMetadata';
 import { heroAnimationRecipe, selectHeroAnimations, type HeroAnimationInfo } from '../../../src/lib/heroAnimationCatalog';
@@ -40,7 +44,7 @@ import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 import { parseVpkDirectoryCached } from './vpk';
 import { skinPreviewForm, skinFormExportArgs } from '../../../src/lib/skinModelForms';
 import { hideoutCacheFile } from './hideoutScene';
-import { movementCacheFile } from './movementFxPaths';
+import { movementCacheFile, movementEngineFile } from './movementFxPaths';
 import { selectMovementClips } from '../../../src/lib/movementMotion';
 
 export const HERO_POSE_SCHEME = 'grimoire-hero';
@@ -99,7 +103,7 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
  * entries below, so compiled metadata reads and selected skins refer to the
  * same body. Billy now has a reviewed embedded `primary_idle` clip.
  */
-const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
+export const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Abrams: 'models/heroes_wip/abrams/abrams.vmdl_c',
     McGinnis: 'models/heroes_wip/mcginnis/mcginnis.vmdl_c',
     Pocket: 'models/heroes_wip/pocket/pocket.vmdl_c',
@@ -362,7 +366,8 @@ function versionFile(key: string): string {
  */
 // v14: Graves uses the complete standing weapon pose; shop parks its spectral
 // hand at the model origin. Refresh existing menus instead of reusing that pose.
-const RIGGED_PIPELINE_VERSION = '20';
+// v21: the movement bundle carries the heavy melee lunge (melee_dash) for the staged preview.
+const RIGGED_PIPELINE_VERSION = '21';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -1158,7 +1163,7 @@ async function runRiggedHeroExportForSources(
                 await fs.writeFile(join(dir, RIGGED_ATTACHMENTS_FILENAME), JSON.stringify(await attachments));
                 const modelEntry = selector[entryIndex + 1];
                 let motions = modelEntry ? selectMovementClips(parseVpkDirectoryCached(pak01) ?? [], modelEntry, modelCodenamesForHero(heroName)) : [];
-                if (modelEntry && motions.length < 5) {
+                if (modelEntry && motions.length < 6) {
                     const embedded = parseModelClipsJson(await runVpkmergeStdout(['model', 'clips', '--vpk', source.vpk, ...selector, '--base', pak01, '--json']));
                     motions = selectMovementClips(parseVpkDirectoryCached(pak01) ?? [], modelEntry, modelCodenamesForHero(heroName), embedded.map(clip => clip.name));
                 }
@@ -1288,6 +1293,103 @@ export async function exportHeroEffect(
  * registerSchemesAsPrivileged({ scheme, privileges }) call before app-ready
  * (done in index.ts).
  */
+/** The faithful particle runtime's bundle for a hero, under the pose cache entry (see heroParticleBundle.ts). */
+const PARTICLE_BUNDLE_DIRNAME = 'particles';
+const PARTICLE_VERSION_FILENAME = '.particles-cache-version';
+
+function particleBundleDir(key: string): string {
+    return join(modelDir(key), PARTICLE_BUNDLE_DIRNAME);
+}
+
+function particleVersionFile(key: string): string {
+    return join(modelDir(key), PARTICLE_VERSION_FILENAME);
+}
+
+const particleVpkmerge: VpkmergeRunner = { stdout: (args) => runVpkmergeStdout(args) };
+
+let particleSupport: Promise<[boolean, boolean]> | null = null;
+
+/**
+ * What a cached bundle was made with: the bundle version, whether the bundled vpkmerge reported stored
+ * KV3 formats and exported stored mips (a vpkmerge update that adds either re-exports), and the clips
+ * whose events it read.
+ */
+async function particleCacheTag(clips: readonly string[]): Promise<string> {
+    const probe = new PackageStack([], particleVpkmerge, tmpdir());
+    particleSupport ??= Promise.all([probe.supportsFormat(), probe.supportsMips()]);
+    const [format, mips] = await particleSupport;
+    const clipHash = createHash('md5').update([...clips].sort().join('|')).digest('hex').slice(0, 8);
+    return `${PARTICLE_BUNDLE_VERSION}:${format ? 'f' : 'n'}${mips ? 'm' : ''}:${clipHash}`;
+}
+
+export interface HeroParticleBundleInfo {
+    hasBundle: boolean;
+    /** Content-addressed storage key for the selected skin stack. */
+    key: string;
+    /** How many effects discovery found, 0 when it found none. */
+    effects: number;
+}
+
+const inFlightParticleExports = new Map<string, Promise<HeroParticleBundleInfo>>();
+
+/**
+ * Discover a hero's own particle effects from game data (and the selected skin stack) and export the
+ * bundle the renderer's faithful particle runtime reads: `particles/bundle.json` and `particles/tex/`,
+ * served over the `grimoire-hero:` scheme. Reads mod packages first, then citadel, then core.
+ */
+export async function exportHeroParticles(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = [],
+    clips: readonly string[] = []
+): Promise<HeroParticleBundleInfo> {
+    const normalized = normalizeSkinSources(skinSources);
+    const key = await resolvePoseKey(deadlockPath, heroName, normalized);
+    const tag = await particleCacheTag(clips.slice(0, 64));
+    const cached = await fs.readFile(particleVersionFile(key), 'utf8').catch(() => '');
+    if (cached.startsWith(`${tag}:`)) {
+        const effects = Number(cached.slice(tag.length + 1)) || 0;
+        if (effects === 0) return { hasBundle: false, key, effects };
+        if (await fs.access(join(particleBundleDir(key), BUNDLE_FILENAME)).then(() => true, () => false)) {
+            return { hasBundle: true, key, effects };
+        }
+    }
+
+    // Different clip requests still write one directory. Drain its writer, then recheck our tag,
+    // rather than deleting its textures or publishing its cache stamp while it is still exporting.
+    const existing = inFlightParticleExports.get(key);
+    if (existing) {
+        await existing.catch(() => undefined);
+        return exportHeroParticles(deadlockPath, heroName, skinSources, clips);
+    }
+
+    const work = (async (): Promise<HeroParticleBundleInfo> => {
+        const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+        const source = await resolvePoseSource(deadlockPath, pak01, normalized);
+        try {
+            const exportKey = poseKey(heroName, source.sources, source.fingerprint);
+            const outDir = particleBundleDir(exportKey);
+            await fs.mkdir(outDir, { recursive: true });
+            await fs.rm(particleVersionFile(exportKey), { force: true });
+            const effects = await exportHeroParticlesInWorker({
+                packages: [source.vpk, pak01, join(deadlockPath, 'game', 'core', 'pak01_dir.vpk')],
+                binary: vpkmergeBinaryPath(), hero: heroName, outDir,
+                modelEntry: MODEL_ENTRY_OVERRIDES[heroName], clips: clips.slice(0, 64),
+            });
+            await fs.writeFile(particleVersionFile(exportKey), `${tag}:${effects}`);
+            return { hasBundle: effects > 0, key: exportKey, effects };
+        } finally {
+            if (source.tempDir) await fs.rm(source.tempDir, { recursive: true, force: true });
+        }
+    })();
+    inFlightParticleExports.set(key, work);
+    try {
+        return await work;
+    } finally {
+        inFlightParticleExports.delete(key);
+    }
+}
+
 export function registerHeroPoseProtocol(): void {
     registerAssetProtocol(HERO_POSE_SCHEME, async (request) => {
         try {
@@ -1295,7 +1397,8 @@ export function registerHeroPoseProtocol(): void {
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
             if (url.hostname === 'f') {
-                const file = parts[1] === 'effect-tex' && parts.length === 3 ? movementCacheFile(key, parts[2]) : null;
+                const file = parts[1] === 'effect-tex' && parts.length === 3 ? movementCacheFile(key, parts[2])
+                    : parts[1] === 'engine' ? movementEngineFile(key, parts.slice(1)) : null;
                 return file ? net.fetch(pathToFileURL(file).toString()) : new Response(null, { status: 404 });
             }
             if (url.hostname === 's') {
@@ -1310,7 +1413,20 @@ export function registerHeroPoseProtocol(): void {
             // entry dir.
             const requested = parts[1] ?? STATIC_MODEL_FILENAME;
             let file: string;
-            if (requested === EFFECT_DESCRIPTOR_FILENAME) {
+            if (requested === PARTICLE_BUNDLE_DIRNAME) {
+                // particles/bundle.json, or particles/tex/<name>.png and its stored mips <name>.mip<n>.png
+                if (parts.length === 3 && parts[2] === BUNDLE_FILENAME) {
+                    file = join(particleBundleDir(key), BUNDLE_FILENAME);
+                } else if (parts.length === 4 && parts[2] === BUNDLE_TEXTURE_DIRNAME && BUNDLE_TEXTURE_FILE.test(parts[3])) {
+                    file = join(particleBundleDir(key), BUNDLE_TEXTURE_DIRNAME, parts[3]);
+                } else {
+                    return new Response(null, { status: 404 });
+                }
+                await fs.access(file);
+                const now = new Date();
+                void fs.utimes(particleVersionFile(key), now, now).catch(() => { });
+                return net.fetch(pathToFileURL(file).toString());
+            } else if (requested === EFFECT_DESCRIPTOR_FILENAME) {
                 file = effectFile(key);
             } else if (requested === EFFECT_TEX_DIRNAME) {
                 const png = parts[2] ?? '';

@@ -18,6 +18,13 @@ describe('surface snapshot', () => {
     const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
     expect(new SurfaceSnapshot(scene(mesh), () => false).raycast(towardBox())).toBeNull();
   });
+  it('skips meshes without positions, like engine particles parented under the model', () => {
+    const root = scene(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+    const particles = new THREE.InstancedBufferGeometry();
+    particles.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
+    root.add(new THREE.Mesh(particles, new THREE.MeshBasicMaterial()));
+    expect(new SurfaceSnapshot(root, () => false).raycast(towardBox())?.distance).toBeCloseTo(4.5);
+  });
   it('notices a changed morph weight', () => {
     const geometry = new THREE.PlaneGeometry(1, 1);
     const moved = geometry.attributes.position.clone();

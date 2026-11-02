@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Keep build output out of the source tree. -->
+    <BaseOutputPath>..\..\.codex-run\particle-render-oracle\bin\</BaseOutputPath>
+    <!-- VRF grants its internals to an assembly of this name signed with its key, which the
+         oracle needs to drive a particle system frame by frame. -->
+    <AssemblyName>Source2Viewer</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\.codex-run\vrf-src\Misc\ValveResourceFormat.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.9.4" />
+    <ProjectReference Include="..\..\.codex-run\vrf-src\ValveResourceFormat\ValveResourceFormat.csproj" />
+    <ProjectReference Include="..\..\.codex-run\vrf-src\Renderer\Renderer.csproj" />
+  </ItemGroup>
+</Project>

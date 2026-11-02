@@ -22,6 +22,8 @@ import {
     exportRiggedHeroPose,
     getHeroEffectInfo,
     exportHeroEffect,
+    exportHeroParticles,
+    type HeroParticleBundleInfo,
     type HeroPoseInfo,
     type HeroPoseSkinSource,
     type HeroEffectInfo,
@@ -177,6 +179,15 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         return getHeroEffectInfo(deadlockPath, heroName, skinSources);
+    }
+);
+
+ipcMain.handle(
+    'export-hero-particles',
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[], clips?: string[]): Promise<HeroParticleBundleInfo> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return exportHeroParticles(deadlockPath, heroName, skinSources, Array.isArray(clips) ? clips.filter((clip) => typeof clip === 'string').slice(0, 64) : []);
     }
 );
 
