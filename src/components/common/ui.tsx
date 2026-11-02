@@ -374,7 +374,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
 }
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success' | 'warning' | 'update';
+    variant?: 'primary' | 'secondary' | 'toolbar' | 'danger' | 'ghost' | 'success' | 'warning' | 'update';
     size?: 'sm' | 'md';
     icon?: LucideIcon;
     isLoading?: boolean;
@@ -396,6 +396,7 @@ export function Button({
         primary: 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent',
         update: 'border-state-update/40 bg-state-update/10 hover:bg-state-update/20 hover:border-state-update/60 text-text-primary focus-visible:ring-state-update',
         secondary: 'border-hl/5 bg-bg-tertiary hover:bg-hl/10 text-text-primary focus-visible:ring-hl/60',
+        toolbar: 'border-border bg-bg-secondary hover:bg-bg-tertiary text-text-primary focus-visible:ring-accent',
         danger: 'border-state-danger/30 bg-state-danger/10 hover:bg-state-danger/20 hover:border-state-danger/50 text-state-danger focus-visible:ring-state-danger',
         success: 'border-state-success/30 bg-state-success/10 hover:bg-state-success/20 hover:border-state-success/50 text-state-success focus-visible:ring-state-success',
         warning: 'border-state-warning/30 bg-state-warning/10 hover:bg-state-warning/20 hover:border-state-warning/50 text-state-warning focus-visible:ring-state-warning',

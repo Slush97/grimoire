@@ -3,7 +3,7 @@ import { Check, ChevronDown, Funnel } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AnchoredPopover } from '../common/AnchoredPopover';
 import { HeroSelect } from '../common/HeroSelect';
-import { MultiSelectSegments } from '../common/ui';
+import { Button, MultiSelectSegments } from '../common/ui';
 import { FilterCheckList, type FilterCheckOption } from './FilterCheckList';
 import { InstalledTagSelect, type InstalledTagOption, type InstalledTagSelectProps } from './InstalledTagSelect';
 import { HeroIconStack } from './chips';
@@ -68,13 +68,13 @@ export function InstalledFilterMenu({
   ];
 
   return <div ref={anchorRef} className="relative shrink-0">
-    <button type="button" onClick={() => setOpen(value => !value)} aria-haspopup="dialog" aria-expanded={open}
+    <Button type="button" variant={active ? 'primary' : 'toolbar'} icon={Funnel}
+      onClick={() => setOpen(value => !value)} aria-haspopup="dialog" aria-expanded={open}
       aria-label={t('browse.filters.title')} title={t('browse.filters.title')}
-      className={`flex h-[38px] items-center gap-2 rounded-lg border px-3 text-sm text-text-primary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${active ? 'border-accent/40 bg-accent/10 hover:border-accent/60 hover:bg-accent/20' : 'border-border bg-bg-secondary hover:bg-bg-tertiary'}`}>
-      <Funnel className="h-4 w-4" aria-hidden />
+      className="h-[38px]! rounded-lg! px-3! font-normal!">
       {t('browse.filters.title')}
       <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-    </button>
+    </Button>
     <AnchoredPopover open={open} onClose={close} anchorRef={anchorRef} width={288}
       ariaLabel={t('browse.filters.title')} className="p-3 text-sm">
       <div className="space-y-3 [&>div:not(:last-child)]:border-b [&>div:not(:last-child)]:border-border [&>div:not(:last-child)]:pb-3">

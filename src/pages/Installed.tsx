@@ -3609,12 +3609,11 @@ export default function Installed() {
               aria-label={t('installed.actions.openModsFolder')} title={t('installed.actions.openModsFolder')}>
               <FolderOpen className="h-4 w-4" aria-hidden />
             </button>
-            <button type="button" disabled={!!bulkProgress} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
-              aria-pressed={selectMode} className={`${installedToolbarIconClass} ${selectMode ? 'ring-1 ring-accent/40' : ''}`}
+            <Button type="button" variant={selectMode ? 'primary' : 'toolbar'} icon={CheckSquare}
+              disabled={!!bulkProgress} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              aria-pressed={selectMode} className="h-[38px]! w-[38px]! shrink-0 rounded-lg! p-0!"
               aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
-              title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')}>
-              <CheckSquare className="h-4 w-4" aria-hidden />
-            </button>
+              title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')} />
             <InstalledFilterMenu sortMode={sortMode} onSortModeChange={setSortMode}
               view={listPreferences.view} onViewChange={setListView}
               sourceSel={sourceSel} onSourceChange={setSourceSel} sourceCounts={{ gamebanana: gbCount, local: localCount }}

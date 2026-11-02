@@ -40,7 +40,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 ## Components
 
-- **Buttons:** `Button` (primary, secondary, ghost, danger, success, warning, update; sm/md; `icon`, `isLoading`) or `IconButton` (icon-only, `label` required, doubles as tooltip). One primary per view. Toolbars use ghost. Danger belongs in confirmations, not on every row.
+- **Buttons:** `Button` (primary, secondary, toolbar, ghost, danger, success, warning, update; sm/md; `icon`, `isLoading`) or `IconButton` (icon-only, `label` required, doubles as tooltip). One primary per view. Toolbar controls use toolbar for their neutral surface and primary when selected; text-only toolbar actions use ghost. Danger belongs in confirmations, not on every row.
 - **Pick-one toggles:** `SegmentedControl`. One toggle style; no pills.
 - **Tab strips:** `MultiSelectSegments` provides the shared Browse section and
   Installed filter presentation. Callers own selection rules, including whether
