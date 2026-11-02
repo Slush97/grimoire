@@ -137,7 +137,6 @@ function enrichMod(mod: Mod, categoryPaths = new Map<string, CategoryPaths | und
         staleModels: staleModelsSnapshot(mod.path),
         // Use the stored mod name from GameBanana if available
         name: metadata.modName || mod.name,
-        updatedAt: metadata.updatedAt,
         thumbnailUrl: metadata.thumbnailUrl,
         audioUrl: metadata.audioUrl,
         gameBananaId: metadata.gameBananaId,

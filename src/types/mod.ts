@@ -648,8 +648,6 @@ export interface Mod {
   size: number;
   installedAt: string;
   description?: string;
-  /** Local completion time of the latest successful update/replacement. */
-  updatedAt?: string;
   thumbnailUrl?: string;
   audioUrl?: string;
   gameBananaId?: number;

@@ -1,12 +1,7 @@
 import type { ModEntry } from './modEntries';
 import { entryInstalledAt, entryName, entrySortPriority } from './modEntries';
 
-export type InstalledSortMode = 'priority' | 'recent' | 'name' | 'hero' | 'updated';
-
-function updatedAt(entry: ModEntry): string {
-  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
-  return mods.reduce((latest, mod) => mod.updatedAt && mod.updatedAt > latest ? mod.updatedAt : latest, '');
-}
+export type InstalledSortMode = 'priority' | 'recent' | 'name' | 'hero';
 
 export function sortInstalledEntries(entries: readonly ModEntry[], mode: InstalledSortMode, heroes: (entry: ModEntry) => readonly string[]): ModEntry[] {
   if (mode === 'priority') return [...entries];
@@ -20,8 +15,7 @@ export function sortInstalledEntries(entries: readonly ModEntry[], mode: Install
       if (!first && second) return 1;
       return (first && second ? compareNames(first, second) : 0) || entrySortPriority(left) - entrySortPriority(right);
     }
-    return (mode === 'updated' ? updatedAt(right).localeCompare(updatedAt(left)) : 0)
-      || entryInstalledAt(right).localeCompare(entryInstalledAt(left))
+    return entryInstalledAt(right).localeCompare(entryInstalledAt(left))
       || entrySortPriority(left) - entrySortPriority(right);
   });
 }

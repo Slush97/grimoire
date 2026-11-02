@@ -8,8 +8,6 @@ import { getMetadataPath as metadataPathForMode } from '../utils/paths';
 import { isDevModeEnabled } from './settings';
 
 export interface ModMetadata {
-    /** Local update/replacement time, independent of the author's archive timestamps. */
-    updatedAt?: string;
     movementFx?: import('../../../src/lib/movementFx').MovementFxChoice;
     modName?: string;      // The human-readable mod name from GameBanana
     /** GameBanana submitter name, captured at download time. Absent for local

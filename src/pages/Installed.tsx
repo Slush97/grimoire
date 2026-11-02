@@ -811,7 +811,7 @@ export default function Installed() {
   }, []);
   const [sortMode, setSortMode] = useState<InstalledSortMode>(() => {
     const stored = localStorage.getItem('installedSortMode');
-    return stored === 'recent' || stored === 'name' || stored === 'hero' || stored === 'updated' ? stored : 'priority';
+    return stored === 'recent' || stored === 'name' || stored === 'hero' ? stored : 'priority';
   });
   // Source + status are independent toggles (both on = no filter). Source
   // persists; status resets per session like the type selection.

@@ -65,7 +65,6 @@ export function InstalledFilterMenu({
     { value: 'name', label: t('installed.sort.nameAZ') },
     { value: 'hero', label: t('installed.sort.heroAZ') },
     { value: 'recent', label: t('installed.sort.recentlyAdded') },
-    { value: 'updated', label: t('installed.sort.recentlyUpdated') },
   ];
 
   return <div ref={anchorRef} className="relative shrink-0">

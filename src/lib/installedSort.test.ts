@@ -50,40 +50,21 @@ describe('Installed display sorting', () => {
     expect(keys(sortInstalledEntries(entries, 'hero', () => []))).toEqual(expected);
   });
 
-  it('sorts local update times ahead of newer installs without an update record', () => {
-    const entries = [
-      single('new-install', { installedAt: '2026-10-27T00:00:00.000Z' }),
-      single('older-update', { updatedAt: '2026-10-24T00:00:00.000Z' }),
-      single('latest-update', { updatedAt: '2026-10-26T00:00:00.000Z' }),
-    ];
-    expect(keys(sortInstalledEntries(entries, 'updated', () => [])))
-      .toEqual(['latest-update', 'older-update', 'new-install']);
-  });
-
-  it('uses the latest updated variant even when it is not the group representative', () => {
-    const variants = [mod('primary', { updatedAt: '2026-10-20T00:00:00.000Z' }),
-      mod('other', { updatedAt: '2026-10-26T00:00:00.000Z' })];
-    const entries = [single('standalone', { updatedAt: '2026-10-25T00:00:00.000Z' }), group('variants', variants)];
-    expect(keys(sortInstalledEntries(entries, 'updated', () => []))).toEqual(['variants', 'standalone']);
-  });
-
-  it('falls back to Recently Added, then load order for missing or equal update timestamps', () => {
+  it('breaks matching Recently Added timestamps by load order', () => {
     const entries = [
       single('older', { installedAt: '2026-10-10T00:00:00.000Z' }),
       single('same-time-later-slot', { priority: 8, installedAt: '2026-10-20T00:00:00.000Z' }),
       single('same-time-first-slot', { priority: 2, installedAt: '2026-10-20T00:00:00.000Z' }),
     ];
     const expected = ['same-time-first-slot', 'same-time-later-slot', 'older'];
-    expect(keys(sortInstalledEntries(entries, 'updated', () => []))).toEqual(expected);
-    for (const entry of entries) if (entry.kind === 'single') entry.mod.updatedAt = '2026-10-25T00:00:00.000Z';
-    expect(keys(sortInstalledEntries(entries, 'updated', () => []))).toEqual(expected);
+    expect(keys(sortInstalledEntries(entries, 'recent', () => []))).toEqual(expected);
   });
 
-  it('keeps Recently Added based on the newest install in a group, independent of update times', () => {
+  it('sorts Recently Added by the newest install in a group', () => {
     const entries = [
-      single('updated', { updatedAt: '2026-10-27T00:00:00.000Z' }),
+      single('standalone'),
       group('variants', [mod('primary'), mod('newer-file', { installedAt: '2026-10-26T00:00:00.000Z' })]),
     ];
-    expect(keys(sortInstalledEntries(entries, 'recent', () => []))).toEqual(['variants', 'updated']);
+    expect(keys(sortInstalledEntries(entries, 'recent', () => []))).toEqual(['variants', 'standalone']);
   });
 });

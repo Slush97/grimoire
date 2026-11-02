@@ -1541,7 +1541,6 @@ async function replaceMergeSourcesLocked(
             thumbnailUrl: targetMeta.thumbnailUrl,
             sha256: rebuiltOriginal.sha256,
             merged: newManifest,
-            updatedAt: new Date().toISOString(),
         });
         // Same in-place rebuild as add-sources: saved profile entries have to
         // follow the merge onto its new hash.

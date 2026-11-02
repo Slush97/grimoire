@@ -110,9 +110,8 @@ mapping; no category data is rewritten.
 
 Installed sorting lives inside Filters. Hero (A-Z) uses the first alphabetic
 resolved hero, puts entries without heroes last, and breaks hero ties by load
-order. Recently Updated uses the latest local replacement completion time across
-variants, then Recently Added. Older installations without a recorded update
-time fall back to Recently Added. Manual disabled-card ordering applies only to
+order. Recently Added uses the newest install time across variants.
+Manual disabled-card ordering applies only to
 Load Order; the other sort modes take precedence while retaining favorites.
 Filters also contains the Default/Lists view switch and list management, even
 when no custom lists exist. Its Source, Status, and view segments use neutral
