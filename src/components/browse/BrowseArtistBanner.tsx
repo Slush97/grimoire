@@ -143,7 +143,7 @@ export function BrowseArtistBanner({
               href={submitter.profileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              title={`View ${submitter.name} on GameBanana`}
+              title={t('browse.artist.viewOnGameBanana', { name: submitter.name })}
               className="group inline-flex min-w-0 items-center gap-1.5 text-lg font-bold text-text-primary transition-colors hover:text-accent"
             >
               <span className="min-w-0 truncate">{submitter.name}</span>
@@ -154,7 +154,7 @@ export function BrowseArtistBanner({
           )}
           {totalCount > 0 && (
             <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-2xs font-semibold text-text-secondary border border-border">
-              {totalCount.toLocaleString()} {totalCount === 1 ? 'mod' : 'mods'}
+              {t('browse.artist.modCount', { count: totalCount, formatted: totalCount.toLocaleString() })}
             </span>
           )}
         </div>
@@ -187,7 +187,7 @@ export function BrowseArtistBanner({
             href={submitter.kofiUrl}
             target="_blank"
             rel="noopener noreferrer"
-            title={`Support ${submitter.name} on Ko-fi`}
+            title={t('browse.artist.supportOnKofi', { name: submitter.name })}
             className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
           >
             <KofiIcon className="h-4 w-4" />

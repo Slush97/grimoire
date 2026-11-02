@@ -10,7 +10,7 @@ vi.mock('../../lib/api', () => ({ previewTrippySprite: vi.fn(async () => ({ data
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe.each([{ label: 'Galaxy', style: 'galaxy' }, { label: 'Moo', style: 'moo' }])('$label pattern defaults', ({ label, style }) => {
+describe.each([{ label: 'Galaxy', style: 'galaxy' }, { label: 'Moo', style: 'moo' }])('$label pattern defaults', ({ style }) => {
   it.each([null, { style: 'gradient', intensity: 0.6, phase: 0.2, scroll: 0, colors: ['#ff0000', '#0000ff'] } satisfies SkinPartPattern])(
     'uses style colors and 50%% speed for a new pattern, preserving existing choices', async (value) => {
       vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -19,7 +19,7 @@ describe.each([{ label: 'Galaxy', style: 'galaxy' }, { label: 'Moo', style: 'moo
       const change = vi.fn();
       try {
         await act(async () => { root.render(<SkinPatternPicker value={value} color="#123456" disabled={false} onChange={change} />); });
-        await act(async () => { host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click(); });
+        await act(async () => { host.querySelector<HTMLButtonElement>(`button[aria-label="locker.trippy.styles.${style}"]`)!.click(); });
         expect(change).toHaveBeenCalledWith({ style, intensity: value?.intensity ?? 1,
           phase: value?.phase ?? 0, scroll: value?.scroll ?? 0.5, colors: value?.colors, scale: style === 'moo' ? 1 : undefined });
       } finally { act(() => root.unmount()); }
@@ -37,9 +37,9 @@ describe('Moo density', () => {
     try {
       await act(async () => { root.render(<SkinPatternPicker value={value} color="#123456" disabled={false} onChange={change} />); });
       expect(host.querySelector<HTMLInputElement>('input[aria-label="foundry.skin.patchSize"]')?.value).toBe('37');
-      await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="Moo"]')!.click(); });
+      await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="locker.trippy.styles.moo"]')!.click(); });
       expect(change).toHaveBeenLastCalledWith({ ...value, colors: undefined });
-      await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="Galaxy"]')!.click(); });
+      await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="locker.trippy.styles.galaxy"]')!.click(); });
       expect(change).toHaveBeenLastCalledWith({ ...value, style: 'galaxy', scale: undefined, colors: undefined });
       await act(async () => { root.render(<SkinPatternPicker value={{ ...value, style: 'galaxy' }} color="#123456" disabled={false} onChange={change} />); });
       expect(host.querySelector('input[aria-label="foundry.skin.patchSize"]')).toBeNull();

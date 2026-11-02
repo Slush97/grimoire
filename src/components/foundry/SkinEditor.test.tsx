@@ -189,7 +189,7 @@ describe('Door Stuck skin recovery', () => {
     });
     await click('button[aria-label="#ef4444"]');
     await click('[role="tab"]', 'foundry.skin.pattern');
-    await click('button[aria-label="Confetti"]');
+    await click('button[aria-label="locker.trippy.styles.confetti"]');
     await click('label', 'foundry.skin.customPatternColors');
     expect(previewEdits()[0]).toMatchObject({ tint: '#ef4444', repaint: true, pattern: { style: 'confetti', colors: ['#ef4444', '#ffffff'] } });
   });

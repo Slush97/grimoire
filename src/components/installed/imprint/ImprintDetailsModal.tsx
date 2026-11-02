@@ -76,7 +76,7 @@ export function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () =>
   const copyValue = (value: string) => {
     navigator.clipboard.writeText(value).then(
       () => showToast(t('installed.imprintDetails.copied'), { tone: 'success', duration: 2200 }),
-      (err) => showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+      (err) => showToast(t('installed.imprintDetails.copyFailed', { error: err instanceof Error ? err.message : String(err) }), { tone: 'error' })
     );
   };
 

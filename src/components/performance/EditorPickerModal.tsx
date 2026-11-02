@@ -37,7 +37,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     const path = await showOpenDialog({
       title: t('performance.editor.chooseTitle'),
       filters: navigator.platform.startsWith('Win')
-        ? [{ name: 'Applications', extensions: ['exe'] }]
+        ? [{ name: t('common.fileTypes.applications'), extensions: ['exe'] }]
         : undefined,
     });
     if (path) onChoose(path);

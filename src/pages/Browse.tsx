@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation } from 'react-i18next';
 import {
   Search,
@@ -2669,7 +2670,7 @@ export default function Browse() {
                         disabled={layout === 'list'}
                         onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
                         aria-label={t('browse.viewOptions.cardSize')}
-                        aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
+                        aria-valuetext={t('installed.view.cardSizeValue', { value: browseCardSizeMultiplier.toFixed(2) })}
                         className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                       />
                       <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
@@ -2850,7 +2851,7 @@ export default function Browse() {
                         <div className="block">
                           <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
                           <HeroSelect
-                            ariaLabel="Filter by hero"
+                            ariaLabel={t('browse.filters.filterByHero')}
                             value={String(heroCategoryId)}
                             placeholder={t('browse.filters.allHeroes')}
                             onChange={(v) => {
@@ -2890,7 +2891,7 @@ export default function Browse() {
                           >
                             <option value="all">{t('browse.filters.allCategories')}</option>
                             {categoryOptions.map((cat) => (
-                              <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
+                              <option key={cat.id} value={String(cat.id)}>{gameBananaCategoryLabel(cat.label, t)}</option>
                             ))}
                           </Select>
                           {heroCategoryId !== 'all' && (
@@ -3029,8 +3030,8 @@ export default function Browse() {
             return (
               <EmptyState
                 icon={Search}
-                title={hasActiveFilters ? 'No mods match your filters' : 'No mods found'}
-                description={hasActiveFilters ? 'Try widening your search or clearing filters.' : undefined}
+                title={hasActiveFilters ? t('browse.empty.noModsMatch') : t('browse.empty.noModsFound')}
+                description={hasActiveFilters ? t('browse.empty.widenSearch') : undefined}
                 action={
                   hasActiveFilters ? (
                     <Button
