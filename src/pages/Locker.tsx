@@ -1533,6 +1533,7 @@ export default function Locker() {
               return (
                 <div
                   key={skin.key}
+                  data-nsfw-hover-reveal={settings?.revealNsfwOnHover || undefined}
                   className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
                 >
                   <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
@@ -1973,6 +1974,7 @@ interface LockerGlobalViewProps {
 function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal, shuffleArmed, includedShuffleKeys, excludedShuffleKeys, onToggleShuffleIncluded, onSetShuffleIncluded, heroList, categories, categoryGroups, categoryMembership, onAddModsToCategory, onToggleModCategory, onCreateCategory, onManageCategories }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
+  const revealNsfwOnHover = useAppStore((s) => s.settings?.revealNsfwOnHover ?? false);
   // Every tab is selectable, empty or not. We still default the landing tab to
   // the first populated type (or a prop container when nothing is installed),
   // so the view opens on something meaningful rather than a blank pane.
@@ -2503,6 +2505,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       key={
                         isPropContainer ? mod.sha256 ?? mod.id : mod.id
                       }
+                      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
                       // Cards stagger in as the grid mounts; the delay is capped
                       // so a large grid still finishes settling quickly. fill-mode
                       // 'both' holds the hidden start frame through the delay so a

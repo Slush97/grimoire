@@ -15,6 +15,7 @@ import { HeroTagLabel } from '../installed/chips';
 import { getHeroRenderPath, getHeroFacePosition } from '../../lib/lockerUtils';
 import { categoryModelForSection } from '../../lib/categoryPaths';
 import { useCategoryStore } from '../../stores/categoryStore';
+import { useAppStore } from '../../stores/appStore';
 import {
   BROWSE_READABLE_CARD_GOLDEN,
   getReadableCardTargetWidth,
@@ -70,6 +71,7 @@ function ReadableBrowseModCard({
   taxonomy,
 }: ModCardProps & { taxonomy: ReturnType<typeof getBrowseCardTaxonomy> }) {
   const { t } = useTranslation();
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
@@ -96,7 +98,7 @@ function ReadableBrowseModCard({
   const cardFrameStyle = typeof cardHeight === 'number' ? { height: `${cardHeight}px` } : undefined;
   const bodyPaddingClass = isMicro ? 'p-2' : 'p-3';
   const media = isSoundSection ? (
-    <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
+    <div className="relative h-full w-full overflow-hidden bg-bg-tertiary" data-nsfw-blurred={shouldHideNsfw || undefined}>
       {heroRenderUrl ? (
         shouldHideNsfw ? (
           <RevealImage
@@ -134,7 +136,7 @@ function ReadableBrowseModCard({
         <BrowseSoundPlaceholder title={mod.name} />
       )}
       {shouldHideNsfw && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
+        <div data-nsfw-overlay className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
           <AlertTriangle className="h-5 w-5" />
           <span className="mt-1 text-2xs font-semibold">{t('browse.card.nsfwHidden')}</span>
         </div>
@@ -163,6 +165,7 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`browse-card-hover-surface browse-readable-card premium-card-glow group flex w-full flex-col overflow-hidden rounded-xl border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
@@ -313,6 +316,7 @@ const LIST_THUMB_HEIGHT = 80;
 
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable, priority }: ModCardProps) {
   const { t } = useTranslation();
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const paths = useCategoryStore((state) => state.pathsByModel[categoryModelForSection(section)]);
   const heroNames = useCategoryStore((state) => state.heroNames);
   const taxonomy = getBrowseCardTaxonomy(mod, section, paths, heroNames);
@@ -356,6 +360,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
+        data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
         className={`browse-card-hover-surface relative bg-bg-secondary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
@@ -535,6 +540,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
+        data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
         className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group aspect-[3/2] ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'

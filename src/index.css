@@ -777,6 +777,20 @@ body {
   transform: none;
 }
 
+/* Reuse card hover without rendering or changing the NSFW content filter.
+   Scrolling suppresses reveals just like the other card hover effects. */
+@media (hover: hover) and (pointer: fine) {
+  [data-nsfw-hover-reveal='true']:hover:not(:where(.browse-is-scrolling *, .installed-is-scrolling *)) [data-nsfw-blurred='true'] img {
+    filter: none;
+    scale: 1;
+  }
+
+  [data-nsfw-hover-reveal='true']:hover:not(:where(.browse-is-scrolling *, .installed-is-scrolling *)) [data-nsfw-overlay] {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
 @keyframes browseDownloadSheen {
   0% {
     opacity: 0;

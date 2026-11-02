@@ -122,6 +122,13 @@ export default function PrivacySection() {
             />
           </div>
 
+          <Toggle
+            checked={settings?.revealNsfwOnHover ?? false}
+            onChange={(checked) => settings && saveSettings({ ...settings, revealNsfwOnHover: checked })}
+            label={t('settings.privacy.revealNsfwOnHover')}
+            description={t('settings.privacy.revealNsfwOnHoverDescription')}
+          />
+
           <div className="h-px bg-hl/5" />
 
           <div>

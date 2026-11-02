@@ -221,6 +221,7 @@ function LoadOrderRow({
     id: group.key,
     disabled,
   });
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const primary = group.primary;
   const enabledCount = groupEnabledVariants(group).length;
   // The whole row is the drag handle (and keyboard-focusable via the sortable
@@ -229,6 +230,7 @@ function LoadOrderRow({
   return (
     <div
       ref={setNodeRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       {...(disabled ? {} : attributes)}
       {...(disabled ? {} : listeners)}
       role={disabled ? undefined : 'button'}
@@ -435,6 +437,7 @@ function SkinGroupCard({
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   // Close the variant picker on Escape or any click outside the card.
   useEffect(() => {
@@ -462,6 +465,7 @@ function SkinGroupCard({
   return (
     <div
       ref={cardRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
           ? 'border-accent bg-hl/[0.02] hover:bg-hl/[0.04]'
@@ -775,9 +779,11 @@ function SkinGroupRow({
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const rowRef = useRef<HTMLDivElement>(null);
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   return (
     <div
       ref={rowRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`group/row relative rounded-md border transition-colors ${
         groupActive
           ? 'border-accent/60 bg-hl/[0.04] backdrop-blur-sm'

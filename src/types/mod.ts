@@ -1146,6 +1146,8 @@ export interface AppSettings {
   /** How mods marked NSFW are shown app-wide. `hide` also drops them from
    *  Browse; surfaces that can't drop a mod (Installed, Locker) blur instead. */
   nsfwContentMode: NsfwContentMode;
+  /** Reveal blurred mod thumbnails while their card is hovered. Off by default. */
+  revealNsfwOnHover: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
   /** GameBanana submitters whose Mods, Sounds, and WiPs are excluded from

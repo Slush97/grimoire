@@ -1213,6 +1213,8 @@
     "privacy": {
       "nsfwContent": "NSFW content",
       "nsfwContentDescription": "Applies across Grimoire. Blur covers thumbnails; Hide also removes NSFW mods from Browse results.",
+      "revealNsfwOnHover": "Reveal NSFW images on hover",
+      "revealNsfwOnHoverDescription": "Temporarily reveal blurred mod images in Browse, Installed, and Locker while hovering over their card. Images are blurred again when the pointer leaves.",
       "noHiddenCreators": "No creators are hidden right now.",
       "whatGrimoireSends": "Everything Grimoire can send, and who receives it, is listed on the <privacyLink>privacy page</privacyLink>."
     }

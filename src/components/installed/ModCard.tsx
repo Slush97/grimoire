@@ -733,6 +733,7 @@ export function ModCard({
   const pathsByModel = useCategoryStore((state) => state.pathsByModel);
   const taxonomyContext = useMemo(() => ({ heroByCategoryId, heroNames, pathsByModel }), [heroByCategoryId, heroNames, pathsByModel]);
   const tagScope = useAppStore(state => getInstallationScope(state.settings));
+  const revealNsfwOnHover = useAppStore(state => state.settings?.revealNsfwOnHover ?? false);
   const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
   const assignedCustomTags = customTagsForMods(customTags, group?.variants ?? [mod]);
   const baseTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
@@ -1269,6 +1270,7 @@ export function ModCard({
       ref={cardRef}
       data-mod-entry-key={entryKey}
       data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
       onPointerEnter={() => {
         pointerInside.current = true;

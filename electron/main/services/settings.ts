@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     devMode: false,
     devDeadlockPath: null,
     nsfwContentMode: 'blur',
+    revealNsfwOnHover: false,
     hideOutdatedMods: false,
     hiddenCreators: [],
     hiddenMods: [],
