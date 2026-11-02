@@ -79,6 +79,16 @@ win:
     - nsis
     - portable
   icon: resources/icon.ico
+  # Only .exe is signed by default. Smart App Control blocks unsigned binaries
+  # with no reputation, so an unsigned better_sqlite3.node crashes on launch.
+  # The DLLs are named one by one because d3dcompiler_47.dll and dxil.dll
+  # already carry Microsoft's signature, which ".dll" would overwrite.
+  signExts:
+    - .node
+    - ffmpeg.dll
+    - dxcompiler.dll
+    - vk_swiftshader.dll
+    - vulkan-1.dll
 # macOS runs Deadlock through a CrossOver bottle (see docs/macos.md), so the
 # audience is Apple Silicon only in practice.
 #

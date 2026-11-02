@@ -42,16 +42,16 @@
     "vpkmerge": {
       "flake": false,
       "locked": {
-        "lastModified": 1793215607,
-        "narHash": "sha256-xSatPEgcNhgIQ6LLKg7qDKJXHXGvJ0HtXlUzy3zDTaQ=",
+        "lastModified": 1793606069,
+        "narHash": "sha256-5g5QR5rntoyuY12Gim7b7JNXpTP8tc+WzPX6Yj/TJkk=",
         "owner": "Slush97",
         "repo": "vpkmerge",
-        "rev": "c87ce356e5cbbd1cad05e55931f7224e1a89fadb",
+        "rev": "7c35f2890f64c90afc0b8186c07dbb43c1b4d561",
         "type": "github"
       },
       "original": {
         "owner": "Slush97",
-        "ref": "v0.28.0",
+        "ref": "v0.29.0",
         "repo": "vpkmerge",
         "type": "github"
       }
