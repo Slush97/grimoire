@@ -109,4 +109,32 @@ describe('alternate form cards', () => {
         expect(portraits.map((p) => p.variant)).toEqual(['card', 'wolf_card']);
         await fs.rm(mocks.userData, { recursive: true, force: true });
     });
+
+    it('keeps the hero card when a form PNG cannot be read back', async () => {
+        mocks.userData = await fs.mkdtemp(join(tmpdir(), 'grimoire-portraits-'));
+        mocks.paths = [
+            `${heroes}/werewolf_card_psd.vtex_c`,
+            `${heroes}/werewolf_wolf_card_psd.vtex_c`,
+        ];
+        mocks.runVpkmerge.mockReset();
+        mocks.runVpkmerge.mockImplementation(async (args) => {
+            const out = args[args.indexOf('--out') + 1];
+            const manifest = args[args.indexOf('--manifest') + 1];
+            const wolf = args[args.indexOf('--hero') + 1] === 'werewolf_wolf';
+            await fs.mkdir(out, { recursive: true });
+            const png = join(out, 'card.png');
+            if (!wolf) await fs.writeFile(png, 'decoded card');
+            await fs.writeFile(manifest, JSON.stringify({ portraits: [{
+                variant: 'card', width: 240, height: 320,
+                format_name: 'BGRA8888', source_path: 'unused', output_path: png,
+            }] }));
+        });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        const portraits = await getHeroPortraits('Deadlock', 'Silver');
+
+        expect(portraits.map((p) => p.variant)).toEqual(['card']);
+        warn.mockRestore();
+        await fs.rm(mocks.userData, { recursive: true, force: true });
+    });
 });

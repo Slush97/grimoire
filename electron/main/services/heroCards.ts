@@ -410,17 +410,14 @@ export async function getAppliedCardThumbnails(
     for (const sel of selections) {
         // The split folds in the whole per-hero prefix, so the art may sit under
         // a legacy alias codename, not the primary. Try each and keep the best.
-        let best: { rank: number; outputPath: string } | null = null;
+        let best: { rank: number; dataUrl: string } | null = null;
         for (const codename of codenamesForHero(sel.heroName)) {
             for (const p of await decodeHeroCardArt(vpkPath, codename, cacheRoot)) {
                 const rank = heroCardVariantRank(p.variant);
-                if (!best || rank < best.rank) best = { rank, outputPath: p.outputPath };
+                if (!best || rank < best.rank) best = { rank, dataUrl: p.dataUrl };
             }
         }
-        if (best) {
-            const png = await fs.readFile(best.outputPath);
-            out.push({ heroName: sel.heroName, dataUrl: `data:image/png;base64,${png.toString('base64')}` });
-        }
+        if (best) out.push({ heroName: sel.heroName, dataUrl: best.dataUrl });
     }
     return out;
 }

@@ -43,20 +43,20 @@ interface PortraitManifest {
     }>;
 }
 
-/** One card texture `vpkmerge portrait` decoded to a PNG on disk. */
+/** One card texture `vpkmerge portrait` decoded, as a PNG data URL. */
 export interface DecodedCardArt {
     variant: string;
     width: number;
     height: number;
     formatName: string;
     sourcePath: string;
-    outputPath: string;
+    dataUrl: string;
 }
 
 /**
- * Decode all of one codename's card art in a VPK to PNGs under `cacheDir`,
- * alternate forms included. A set that fails to decode is logged and skipped so
- * it can't sink the others.
+ * Decode all of one codename's card art in a VPK, alternate forms included,
+ * using `cacheDir` for the PNGs. A set that fails to decode or read back is
+ * logged and skipped so it can't sink the others.
  */
 export async function decodeHeroCardArt(
     vpkPath: string,
@@ -77,13 +77,14 @@ export async function decodeHeroCardArt(
             ) as PortraitManifest;
             for (const p of manifest.portraits) {
                 if (!p.output_path) continue;
+                const png = await fs.readFile(p.output_path);
                 decoded.push({
                     variant: `${set.variantPrefix}${p.variant}`,
                     width: p.width,
                     height: p.height,
                     formatName: p.format_name,
                     sourcePath: p.source_path,
-                    outputPath: p.output_path,
+                    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
                 });
             }
         } catch (err) {
@@ -143,14 +144,13 @@ export async function getHeroPortraits(
             // different folders don't clobber each other's decoded portraits.
             const art = await decodeHeroCardArt(vpk, codename, join(cacheRoot, sanitize(metaKey)));
             for (const p of art) {
-                const png = await fs.readFile(p.outputPath);
                 results.push({
                     modFileName: metaKey,
                     variant: p.variant,
                     width: p.width,
                     height: p.height,
                     formatName: p.formatName,
-                    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+                    dataUrl: p.dataUrl,
                 });
             }
         }

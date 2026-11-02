@@ -94,13 +94,12 @@ export async function getCustomCardSlots(
     for (const codename of codenames) {
         const slots: CustomCardSlot[] = [];
         for (const p of await decodeHeroCardArt(basePak, codename, cacheRoot)) {
-            const png = await fs.readFile(p.outputPath);
             slots.push({
                 variant: p.variant,
                 entry: p.sourcePath,
                 width: p.width,
                 height: p.height,
-                baseDataUrl: `data:image/png;base64,${png.toString('base64')}`,
+                baseDataUrl: p.dataUrl,
             });
         }
         if (slots.length > 0) {
@@ -256,11 +255,7 @@ export async function getAppliedCustomCard(
     for (const codename of codenames) {
         const out: { variant: string; dataUrl: string }[] = [];
         for (const p of await decodeHeroCardArt(stagingPath, codename, cacheRoot)) {
-            const png = await fs.readFile(p.outputPath);
-            out.push({
-                variant: p.variant,
-                dataUrl: `data:image/png;base64,${png.toString('base64')}`,
-            });
+            out.push({ variant: p.variant, dataUrl: p.dataUrl });
         }
         if (out.length > 0) {
             return out.sort((x, y) => heroCardVariantRank(x.variant) - heroCardVariantRank(y.variant));

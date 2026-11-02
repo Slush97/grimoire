@@ -346,7 +346,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                           className="max-h-full max-w-full object-contain"
                         />
                       </div>
-                      <figcaption className="mt-1 text-center text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                      <figcaption className="mt-1 break-words text-center text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
                         {heroCardVariantLabel(p.variant)}
                       </figcaption>
                     </figure>
@@ -434,7 +434,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     </button>
                   )}
                   <figcaption className="mt-1 text-center">
-                    <span className="block text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                    <span className="block break-words text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
                       {heroCardVariantLabel(slot.variant)}
                     </span>
                     <span className="block text-[9px] tabular-nums text-text-secondary/70">
