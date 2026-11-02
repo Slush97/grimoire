@@ -21,7 +21,7 @@ vi.mock('./modMerger', () => ({
     runVpkmerge: mocks.runVpkmerge,
 }));
 
-import { codenameForHero, codenamesForHero } from './heroCodenames';
+import { cardArtSets, codenameForHero, codenamesForHero } from './heroCodenames';
 import { getHeroPortraits } from './heroPortraits';
 
 describe('Vyper portrait paths', () => {
@@ -63,5 +63,50 @@ describe('Vyper portrait paths', () => {
         mocks.paths = ['panorama/images/heroes/bull_card_psd.vtex_c'];
         expect(await getHeroPortraits('Deadlock', 'Vyper')).toEqual([]);
         expect(mocks.runVpkmerge).not.toHaveBeenCalled();
+    });
+});
+
+describe('alternate form cards', () => {
+    const heroes = 'panorama/images/heroes';
+
+    it('finds a form next to the hero art and ignores unit icons', () => {
+        expect(cardArtSets([
+            `${heroes}/werewolf_card_psd.vtex_c`,
+            `${heroes}/werewolf_card_critical_psd.vtex_c`,
+            `${heroes}/werewolf_wolf_card_psd.vtex_c`,
+            `${heroes}/werewolf_wolf_card_gloat_psd.vtex_c`,
+            `${heroes}/necro_shambler_psd.vtex_c`,
+        ], 'werewolf')).toEqual([
+            { codename: 'werewolf', variantPrefix: '' },
+            { codename: 'werewolf_wolf', variantPrefix: 'wolf_' },
+        ]);
+        expect(cardArtSets([`${heroes}/necro_shambler_psd.vtex_c`], 'necro')).toEqual([
+            { codename: 'necro', variantPrefix: '' },
+        ]);
+    });
+
+    it('keeps a form card distinct from the hero card', async () => {
+        mocks.userData = await fs.mkdtemp(join(tmpdir(), 'grimoire-portraits-'));
+        mocks.paths = [
+            `${heroes}/werewolf_card_psd.vtex_c`,
+            `${heroes}/werewolf_wolf_card_psd.vtex_c`,
+        ];
+        mocks.runVpkmerge.mockReset();
+        mocks.runVpkmerge.mockImplementation(async (args) => {
+            const out = args[args.indexOf('--out') + 1];
+            const manifest = args[args.indexOf('--manifest') + 1];
+            await fs.mkdir(out, { recursive: true });
+            const png = join(out, 'card.png');
+            await fs.writeFile(png, 'decoded card');
+            await fs.writeFile(manifest, JSON.stringify({ portraits: [{
+                variant: 'card', width: 240, height: 320,
+                format_name: 'BGRA8888', source_path: 'unused', output_path: png,
+            }] }));
+        });
+
+        const portraits = await getHeroPortraits('Deadlock', 'Silver');
+
+        expect(portraits.map((p) => p.variant)).toEqual(['card', 'wolf_card']);
+        await fs.rm(mocks.userData, { recursive: true, force: true });
     });
 });

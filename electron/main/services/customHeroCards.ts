@@ -24,6 +24,7 @@ import {
     verifyVpkOutput,
 } from './modMerger';
 import { codenamesForHero } from './heroCodenames';
+import { decodeHeroCardArt } from './heroPortraits';
 import {
     baseCardPakPath,
     customCardVpkPath,
@@ -35,6 +36,7 @@ import { invalidateVpkParseCache } from './vpk';
 import { fingerprintFile } from './fileMatch';
 import type { ApplyHeroCardResult, LockerCardSelection } from '../../../src/types/mod';
 import type { CustomCardSlot } from '../../../src/types/portrait';
+import { heroCardVariantRank } from '../../../src/lib/heroCardVariants';
 
 /** One variant slot the user fills with a PNG. `dataUrl` is a `data:image/png`
  *  base64 URL (the cropper output, already at the variant's target aspect); an
@@ -69,23 +71,6 @@ function decodePngDataUrl(dataUrl: string, variant: string): Buffer {
     return bytes;
 }
 
-/** Display/sort order for variant slots (full card first, then by prominence). */
-const VARIANT_ORDER = ['card', 'vertical', 'card_critical', 'card_gloat', 'minimap', 'small', 'other'];
-function variantRank(variant: string): number {
-    const i = VARIANT_ORDER.indexOf(variant);
-    return i === -1 ? VARIANT_ORDER.length : i;
-}
-
-interface BasePortraitManifest {
-    portraits: Array<{
-        variant: string;
-        width: number;
-        height: number;
-        source_path: string;
-        output_path: string | null;
-    }>;
-}
-
 /**
  * The uploadable variant slots for a hero, derived from the base game's own card
  * art: one slot per variant `pak01_dir.vpk` ships, carrying the template entry
@@ -107,33 +92,19 @@ export async function getCustomCardSlots(
 
     const cacheRoot = join(app.getPath('userData'), 'custom-card-slots');
     for (const codename of codenames) {
-        const outDir = join(cacheRoot, codename);
-        const manifestPath = join(outDir, 'manifest.json');
-        try {
-            await runVpkmerge(
-                ['portrait', basePak, '--hero', codename, '--out', outDir, '--manifest', manifestPath],
-                60000
-            );
-            const manifest = JSON.parse(
-                await fs.readFile(manifestPath, 'utf-8')
-            ) as BasePortraitManifest;
-            const slots: CustomCardSlot[] = [];
-            for (const p of manifest.portraits) {
-                if (!p.output_path || !p.source_path) continue;
-                const png = await fs.readFile(p.output_path);
-                slots.push({
-                    variant: p.variant,
-                    entry: p.source_path,
-                    width: p.width,
-                    height: p.height,
-                    baseDataUrl: `data:image/png;base64,${png.toString('base64')}`,
-                });
-            }
-            if (slots.length > 0) {
-                return slots.sort((a, b) => variantRank(a.variant) - variantRank(b.variant));
-            }
-        } catch (err) {
-            console.warn(`[customHeroCards] base slots for ${codename}: ${String(err)}`);
+        const slots: CustomCardSlot[] = [];
+        for (const p of await decodeHeroCardArt(basePak, codename, cacheRoot)) {
+            const png = await fs.readFile(p.outputPath);
+            slots.push({
+                variant: p.variant,
+                entry: p.sourcePath,
+                width: p.width,
+                height: p.height,
+                baseDataUrl: `data:image/png;base64,${png.toString('base64')}`,
+            });
+        }
+        if (slots.length > 0) {
+            return slots.sort((x, y) => heroCardVariantRank(x.variant) - heroCardVariantRank(y.variant));
         }
     }
     return [];
@@ -281,32 +252,18 @@ export async function getAppliedCustomCard(
     if (!existsSync(stagingPath)) return [];
 
     vpkmergeBinaryPath();
-    const cacheRoot = join(app.getPath('userData'), 'custom-card-applied');
+    const cacheRoot = join(app.getPath('userData'), 'custom-card-applied', primaryCodename);
     for (const codename of codenames) {
-        const outDir = join(cacheRoot, primaryCodename, codename);
-        const manifestPath = join(outDir, 'manifest.json');
-        try {
-            await runVpkmerge(
-                ['portrait', stagingPath, '--hero', codename, '--out', outDir, '--manifest', manifestPath],
-                60000
-            );
-            const manifest = JSON.parse(
-                await fs.readFile(manifestPath, 'utf-8')
-            ) as BasePortraitManifest;
-            const out: { variant: string; dataUrl: string }[] = [];
-            for (const p of manifest.portraits) {
-                if (!p.output_path) continue;
-                const png = await fs.readFile(p.output_path);
-                out.push({
-                    variant: p.variant,
-                    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
-                });
-            }
-            if (out.length > 0) {
-                return out.sort((a, b) => variantRank(a.variant) - variantRank(b.variant));
-            }
-        } catch (err) {
-            console.warn(`[customHeroCards] applied images for ${codename}: ${String(err)}`);
+        const out: { variant: string; dataUrl: string }[] = [];
+        for (const p of await decodeHeroCardArt(stagingPath, codename, cacheRoot)) {
+            const png = await fs.readFile(p.outputPath);
+            out.push({
+                variant: p.variant,
+                dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+            });
+        }
+        if (out.length > 0) {
+            return out.sort((x, y) => heroCardVariantRank(x.variant) - heroCardVariantRank(y.variant));
         }
     }
     return [];
