@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'meshoptimizer/decoder';
 import { resolveMorphicTextures } from './source2NprMaterial';
 import { hideAuthoredShells } from './citadelNprOutline';
 
@@ -15,6 +16,7 @@ export interface GltfPreviewOptions {
 
 function previewLoader({ imageBitmaps = false }: GltfPreviewOptions): GLTFLoader {
   const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
   if (!imageBitmaps) {
     // Swap this parser's texture loader rather than hiding createImageBitmap
     // globally, so a concurrent imageBitmaps load is unaffected.

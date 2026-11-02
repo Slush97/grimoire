@@ -10,6 +10,7 @@ import { BundleTextureSource } from './bundleTextures';
 import { type ParticleDrawLayer, createParticleDrawLayer } from './particleDrawLayer';
 import { SceneColorPass } from './sceneColor';
 import { SceneDepthPass } from './sceneDepth';
+import { ParticleProgramWarmup } from './particleProgramWarmup';
 
 /**
  * Plays an effect timeline on the animated rig with the faithful Source 2 runtime. `timeRef` holds the
@@ -26,7 +27,7 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
   playback: { paused: boolean; speed: number };
   timeRef: RefObject<number>;
 }) {
-  const state = useRef<{ player: EffectTimelinePlayer; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer> } | null>(null);
+  const state = useRef<{ player: EffectTimelinePlayer; frame: THREE.Object3D; group: THREE.Group; bones: (THREE.Object3D | undefined)[]; layers: Map<ParticleEffectHost, ParticleDrawLayer>; warmup: ParticleProgramWarmup } | null>(null);
   const depthPass = useRef<SceneDepthPass | null>(null);
   const colorPass = useRef<SceneColorPass | null>(null);
   const uptime = useRef(0);
@@ -48,10 +49,13 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
     frame.add(group);
     const textures = new BundleTextureSource(bundle, textureBaseUrl);
     const models = bundleModelSource(bundle);
+    const warmup = new ParticleProgramWarmup();
     const layers = new Map<ParticleEffectHost, ParticleDrawLayer>();
     const player = new EffectTimelinePlayer(bundle, timeline, {
       added(host) {
         const layer = createParticleDrawLayer(host.simulation, textures, models);
+        for (const light of layer.lights) light.deferNewLights();
+        warmup.track(layer.object3d);
         layers.set(host, layer);
         group.add(layer.object3d);
         return layer.addControlPointDefaults;
@@ -68,9 +72,10 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
     const byName = new Map<string, THREE.Object3D>();
     frame.traverse((object) => { if (object.name) byName.set(object.name.toLowerCase(), object); });
     const bones = player.boneNames.map((name) => byName.get(name.toLowerCase()) ?? byName.get(THREE.PropertyBinding.sanitizeNodeName(name).toLowerCase()));
-    state.current = { player, frame, group, bones, layers };
+    state.current = { player, frame, group, bones, layers, warmup };
 
     return () => {
+      warmup.dispose();
       player.dispose();
       for (const failure of player.failures) console.warn('[TimelineParticleLayer]', failure.cue.system, failure.error);
       frame.remove(group);
@@ -91,7 +96,7 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
   useFrame((three, delta) => {
     const current = state.current;
     if (!current) return;
-    const { player, frame, group, bones, layers } = current;
+    const { player, frame, group, bones, layers, warmup } = current;
 
     frame.updateWorldMatrix(true, true);
     inverse.current.copy(frame.matrixWorld).invert();
@@ -130,6 +135,7 @@ export function TimelineParticleLayer({ bundle, textureBaseUrl, timeline, model,
       layer.setScene(depth, color);
       layer.update(three.camera, size, uptime.current);
     }
+    warmup.update(three.gl, three.scene, three.camera, group);
   });
 
   return null;

@@ -20,7 +20,7 @@ import { buildHeroEffectVpkForExport } from '../services/heroColors';
 import { exportVpkViaDialog } from '../services/foundryExport';
 import { exportFoundryAsset } from '../services/foundryAssetExport';
 import { getSkinEditInfo, exportSkinEdits, skinEditSourceSchema } from '../services/skinEditor';
-import { loadHideoutScene } from '../services/hideoutScene';
+import { hideoutBuildProgress, hideoutSceneReady, loadHideoutScene, saveHideoutSnapshot } from '../services/hideoutScene';
 import { resumeSkinEdit, saveSkinEdits } from '../services/saveSkinEdits';
 import { previewMovementFx, previewMovementEngine, exportMovementFx, saveMovementFx } from '../services/movementFx';
 import type {
@@ -54,6 +54,15 @@ ipcMain.handle('foundry:saveSkinEdits', (event, input: unknown) => saveSkinEdits
     if (!event.sender.isDestroyed()) event.sender.send('foundry:skinEditProgress', progress);
 }));
 ipcMain.handle('viewer:hideout', () => loadHideoutScene(requireDeadlockPath()));
+ipcMain.handle('viewer:hideoutProgress', () => hideoutBuildProgress());
+ipcMain.handle('viewer:hideoutReady', () => {
+    const deadlockPath = getActiveDeadlockPath();
+    return deadlockPath ? hideoutSceneReady(deadlockPath) : false;
+});
+ipcMain.handle('viewer:hideoutSnapshot', (_event, key: unknown, name: unknown, bytes: unknown) => {
+    if (typeof key !== 'string' || typeof name !== 'string' || !(bytes instanceof Uint8Array)) throw new Error('Invalid hideout snapshot.');
+    return saveHideoutSnapshot(key, name, bytes);
+});
 ipcMain.handle('foundry:previewMovementFx', (_event, input: unknown) => previewMovementFx(requireDeadlockPath(), input));
 ipcMain.handle('foundry:previewMovementEngine', (_event, input: unknown) => previewMovementEngine(requireDeadlockPath(), input));
 ipcMain.handle('foundry:exportMovementFx', (_event, input: unknown) => exportMovementFx(requireDeadlockPath(), input));

@@ -28,6 +28,10 @@ vi.mock('three/examples/jsm/loaders/GLTFLoader.js', () => ({
   GLTFLoader: class {
     private plugins: ((parser: GLTFParser) => { name: string })[] = [];
 
+    setMeshoptDecoder(): this {
+      return this;
+    }
+
     register(callback: (parser: GLTFParser) => { name: string }): this {
       this.plugins.push(callback);
       return this;

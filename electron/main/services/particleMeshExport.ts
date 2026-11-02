@@ -14,8 +14,8 @@ const MAX_MODEL_VERTICES = 65536;
 interface GltfAccessor { bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string; normalized?: boolean }
 interface GltfBufferView { byteOffset?: number; byteLength: number; byteStride?: number }
 interface GltfNode { mesh?: number; children?: number[]; matrix?: number[]; translation?: number[]; rotation?: number[]; scale?: number[] }
-interface GltfPrimitive { attributes: Record<string, number>; indices?: number; mode?: number }
-interface Gltf { accessors: GltfAccessor[]; bufferViews: GltfBufferView[]; nodes: GltfNode[]; meshes: { primitives: GltfPrimitive[] }[]; scenes?: { nodes: number[] }[]; scene?: number }
+interface GltfPrimitive { attributes: Record<string, number>; indices?: number; mode?: number; material?: number }
+interface Gltf { accessors: GltfAccessor[]; bufferViews: GltfBufferView[]; nodes: GltfNode[]; meshes: { primitives: GltfPrimitive[] }[]; materials?: { extras?: { morphic?: { source_material?: string } } }[]; scenes?: { nodes: number[] }[]; scene?: number }
 
 const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
 
@@ -112,6 +112,7 @@ export function readGlbMeshes(glb: Buffer): ParticleModelPrimitive[] {
       const floats = (name: string) => (primitive.attributes[name] === undefined ? null : Float32Array.from(readAccessor(gltf, bin, primitive.attributes[name])));
       const colors = floats('COLOR_0');
       primitives.push({
+        material: primitive.material === undefined ? null : gltf.materials?.[primitive.material]?.extras?.morphic?.source_material ?? null,
         positions, normals, uvs: floats('TEXCOORD_0'), uvs2: floats('TEXCOORD_1'),
         // Colours of three components take an opaque alpha
         colors: colors !== null && colors.length === count * 3 ? Float32Array.from({ length: count * 4 }, (_, i) => (i % 4 === 3 ? 1 : colors[(i >> 2) * 3 + (i % 4)])) : colors,
