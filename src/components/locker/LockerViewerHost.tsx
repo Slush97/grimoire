@@ -100,8 +100,9 @@ export function LockerViewerHost() {
   }, [shown, request]);
   if (!request) return null;
   return createPortal(
-    // Without hardware WebGL the canvas throws; keep that inside the panel.
-    <ErrorBoundary>
+    // Without hardware WebGL the canvas throws; keep that inside the panel. The next hero or skin
+    // gets a fresh try: one model that crashes must not take the viewer away from every other.
+    <ErrorBoundary resetKey={JSON.stringify([request.heroName, request.skinSources])}>
       <Suspense
         fallback={
           <div className="absolute inset-0 flex items-center justify-center">

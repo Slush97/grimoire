@@ -76,7 +76,7 @@ import { hideoutWarmingProgress, roomStageProgress } from '../../lib/hideoutProg
 import { ProgressBar } from '../common/ui';
 import { useAppStore } from '../../stores/appStore';
 import { heroViewerSceneSchema, hideoutReadyNow, migrateViewerScene, openingViewerScene, ownViewerSceneDraft, refreshHideoutReady, viewerSceneDraft, type ViewerSceneSurface } from '../../lib/hideoutDefault';
-import { foundryDraftScope } from '../../lib/foundryDrafts';
+import { foundryDraftKey, foundryDraftScope, readFoundryDraft } from '../../lib/foundryDrafts';
 import { SkinPartPreview } from './SkinPartPreview';
 import { SkinPartPicking } from './SkinPartPicking';
 import { SkinPartPatterns } from './SkinPartPatterns';
@@ -645,9 +645,9 @@ export function RiggedModel({
 /** While painting, the primary button belongs to the brush: the right button turns and the middle button pans. */
 const PAINT_MOUSE_BUTTONS = { MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
 
-export function Controls({ interaction, reset, label, model, fitKey, savedView, onViewChange, focusMaterial, movement, painting = false, hideout = false }: {
+export function Controls({ interaction, reset, label, model, fitKey, readSavedView, onViewChange, focusMaterial, movement, painting = false, hideout = false }: {
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
-  savedView?: ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
+  readSavedView?: () => ViewerCameraDraft | null; onViewChange?: (view: ViewerCameraDraft) => void;
   focusMaterial?: string | null;
   movement?: Pick<MovementViewerPreview, 'kind' | 'loop' | 'engine'>;
   painting?: boolean;
@@ -673,7 +673,8 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
     if (length > allowed) camera.position.copy(controls.target).addScaledVector(offset, allowed / length);
   });
   const pendingFit = useRef(true);
-  const restoreView = useRef(savedView);
+  // The viewer outlives a hero, so each model that arrives restores its view's camera.
+  const restoredModel = useRef<THREE.Object3D | null>(null);
   const cameraCommit = useMemo(() => deferredCommit<ViewerCameraDraft>(view => onViewChange?.(view)), [onViewChange]);
   useEffect(() => {
     if (typeof window === 'undefined') return () => cameraCommit.flush();
@@ -741,11 +742,15 @@ export function Controls({ interaction, reset, label, model, fitKey, savedView, 
     controls.minDistance = minimum;
     controls.maxDistance = Math.max(6, distance * 2);
     Object.assign(camera.userData, { previewHome: { position: camera.position.toArray(), target: center.toArray() } });
-    if (reset === 0 && !focusMaterial && restoreView.current) {
-      camera.position.fromArray(restoreView.current.position);
-      controls.target.fromArray(restoreView.current.target);
+    if (restoredModel.current !== model) {
+      restoredModel.current = model;
+      cameraCommit.flush();
+      const saved = focusMaterial ? null : readSavedView?.();
+      if (saved) {
+        camera.position.fromArray(saved.position);
+        controls.target.fromArray(saved.target);
+      }
     }
-    restoreView.current = null;
     controls.update();
     pendingFit.current = false;
   });
@@ -1264,14 +1269,14 @@ function NprMaterials({
       restore.push(() => { matrix.copy(previousMatrix); offset.copy(previousOffset); });
     });
     return () => restore.forEach((reset) => reset());
-  }, [partEdits, scene, enabled, unified, source2Active]);
+  }, [partEdits, scene, enabled, unified, source2Active, authoredEmission]);
 
   useEffect(() => {
     if (!enabled) return;
     buildsRef.current.forEach((b) => {
       if (b.uniforms.uCelV2) b.uniforms.uCelV2.value = celV2 ? 1.0 : 0.0;
     });
-  }, [celV2, enabled]);
+  }, [celV2, enabled, authoredEmission]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -1289,7 +1294,7 @@ function NprMaterials({
         else uniforms.uCitadelAmbientFit.value.set(0, 0, 0, 1);
       }
     });
-  }, [ambientCube, mapProbe, ambientTarget, citadel, exposure, enabled, scene, unified, source2Active]);
+  }, [ambientCube, mapProbe, ambientTarget, citadel, exposure, enabled, scene, unified, source2Active, authoredEmission]);
 
   return null;
 }
@@ -1648,10 +1653,18 @@ export default function HeroPoseViewer({
       crossfade.revealSoon();
     });
   }, [hideoutCache, crossfade]);
-  const viewerScene = buildingHideout ? 'studio' : chosenScene;
+  const [hideoutStatus, setHideoutStatus] = useState<HideoutStatus>({ kind: 'loading' });
+  // A room that failed leaves the hero in the Studio's lights and post, under the notice below.
+  const hideoutFailed = wantsHideout && hideoutStatus.kind === 'failed';
+  const viewerScene = buildingHideout || hideoutFailed ? 'studio' : chosenScene;
   // The room stays loaded for a while after another scene is chosen, so coming back is instant.
   const [hideoutResident, setHideoutResident] = useState(wantsHideout);
   if (wantsHideout && !hideoutResident) setHideoutResident(true);
+  // A failed room isn't kept: choosing the hideout again loads it afresh.
+  if (!wantsHideout && hideoutResident && hideoutStatus.kind === 'failed') {
+    setHideoutResident(false);
+    setHideoutStatus({ kind: 'loading' });
+  }
   useEffect(() => {
     if (wantsHideout || !hideoutResident) return;
     const timer = setTimeout(() => setHideoutResident(false), HIDEOUT_RESIDENT_MS);
@@ -1680,8 +1693,12 @@ export default function HeroPoseViewer({
   const lighting = viewerScene === 'midtown' ? 'midtown' : 'studio';
   // Display exposure for the Deadlock tone curve; the game-faithful ambient divides by it.
   const [wireframe, setWireframe] = useState(false);
-  const [cameraView, , saveCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
-  const [hideoutStatus, setHideoutStatus] = useState<HideoutStatus>({ kind: 'loading' });
+  const [, , saveCameraView] = useFoundryDraft(`${viewKey}:camera`, viewerCameraSchema.nullable(), null);
+  // Camera moves save without a rerender, so the saved view is read when a model needs it.
+  const readCameraView = useCallback(() => {
+    try { return readFoundryDraft(localStorage, foundryDraftKey(draftScope, `${viewKey}:camera`), viewerCameraSchema.nullable()) ?? null; }
+    catch { return null; }
+  }, [draftScope, viewKey]);
   const hideoutInfo = hideoutStatus.kind === 'failed' ? undefined : hideoutStatus.info;
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
   const previewExposure = viewerScene === 'hideout' ? hideoutInfo?.exposure ?? 1 : compact || viewerScene === 'midtown' ? 1.6 : 1.3;
@@ -2224,7 +2241,7 @@ export default function HeroPoseViewer({
           : regionHighlight && <SkinRegionOverlay scene={scene} material={regionHighlight.material} seeds={regionHighlight.seeds} />}
         <MovementFxStage preview={stagedMovementPreview} scene={scene} paused={heldPlayback.paused} speed={playback.speed}
           controls={<Controls interaction={interaction} reset={resetView} label={t('locker.pose.cameraHint')} model={scene} fitKey={playingClip} focusMaterial={focusMaterial} hideout={viewerScene === 'hideout'}
-            movement={stagedMovementPreview} savedView={compact ? null : cameraView} onViewChange={compact ? undefined : saveCameraView}
+            movement={stagedMovementPreview} readSavedView={compact ? undefined : readCameraView} onViewChange={compact ? undefined : saveCameraView}
             painting={regionSelection?.picker.by === 'brush'} />}>
         {rigged ? (
           <RiggedModel
@@ -2319,7 +2336,7 @@ export default function HeroPoseViewer({
       {!compact && toolbar}
       {!hideoutWarm && (buildingHideout || waitingForRoom) && <HideoutWarmingIndicator
         progress={hideoutWarmingProgress({ building: buildingHideout, built: hideoutBuilt, build: buildProgress, room: roomProgress })} />}
-      {viewerScene === 'hideout' && hideoutStatus.kind === 'failed' && (
+      {hideoutFailed && (
         <p role="alert" className="absolute left-3 top-3 max-w-64 rounded-sm border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-secondary">
           {t('locker.pose.hideoutFailed')}
         </p>

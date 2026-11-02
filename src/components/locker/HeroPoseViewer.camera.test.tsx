@@ -90,17 +90,18 @@ describe('hero preview camera fitting', () => {
     await renderer.unmount();
   });
 
-  it('restores a saved camera and still refits after Reset view', async () => {
+  it('restores a saved camera for each model and still refits after Reset view', async () => {
     const model = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial());
+    const next = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial());
     let state!: RootState;
-    function Figure({ reset }: { reset: number }) {
+    function Figure({ reset, shown = model }: { reset: number; shown?: THREE.Mesh }) {
       const current = useThree();
       useLayoutEffect(() => {
         state = current;
         Object.assign(current.gl.domElement, { setAttribute: vi.fn() });
       }, [current]);
-      return <><primitive object={model} /><Controls interaction={{ current: { dragging: false, paused: true } }}
-        reset={reset} label="camera" model={model} fitKey="hero" savedView={{ position: [2, 1, 4], target: [0, 0.1, 0] }} /></>;
+      return <><primitive object={shown} /><Controls interaction={{ current: { dragging: false, paused: true } }}
+        reset={reset} label="camera" model={shown} fitKey="hero" readSavedView={() => ({ position: [2, 1, 4], target: [0, 0.1, 0] })} /></>;
     }
     const renderer = await ReactThreeTestRenderer.create(<Figure reset={0} />);
     await renderer.advanceFrames(1, 1 / 60);
@@ -108,6 +109,9 @@ describe('hero preview camera fitting', () => {
     await renderer.update(<Figure reset={1} />);
     await renderer.advanceFrames(1, 1 / 60);
     expect(state.camera.position.toArray()).not.toEqual([2, 1, 4]);
+    await renderer.update(<Figure reset={1} shown={next} />);
+    await renderer.advanceFrames(1, 1 / 60);
+    expect(state.camera.position.toArray()).toEqual([2, 1, 4]);
     await renderer.unmount();
   });
   it.each(['static', 'skinned'])('fits the first %s pose and refits when the canvas narrows', async (kind) => {

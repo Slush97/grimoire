@@ -78,7 +78,8 @@ export async function compressHideoutGeometry(bytes: Buffer, compact = true): Pr
             && accessors.every(a => a.componentType === component && a.type === accessor.type && a.count === accessor.count && !a.byteOffset)) {
             if (indices && component === 5125) {
                 let fits = true;
-                for (let n = 0; n < accessor.count; n++) if (source.readUInt32LE(n * 4) > 65535) { fits = false; break; }
+                // 65535 is the primitive restart index, which an unsigned short index can't carry.
+                for (let n = 0; n < accessor.count; n++) if (source.readUInt32LE(n * 4) >= 65535) { fits = false; break; }
                 if (fits) {
                     const packed = Buffer.alloc(accessor.count * 2);
                     for (let n = 0; n < accessor.count; n++) packed.writeUInt16LE(source.readUInt32LE(n * 4), n * 2);
