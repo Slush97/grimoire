@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>Source2Viewer</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\.codex-run\vrf-src\Misc\ValveResourceFormat.snk</AssemblyOriginatorKeyFile>
+    <BaseOutputPath>..\..\.codex-run\hideout-oracle\bin\</BaseOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.9.4" />
+    <ProjectReference Include="..\..\.codex-run\vrf-src\ValveResourceFormat\ValveResourceFormat.csproj" />
+    <ProjectReference Include="..\..\.codex-run\vrf-src\Renderer\Renderer.csproj" />
+  </ItemGroup>
+</Project>

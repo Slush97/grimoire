@@ -251,7 +251,8 @@ function partOnFloor({ parent, joints, weighted, restWorld, height, sample }: Cl
  */
 function liesFlat({ weighted, height, sample }: ClipSampler): boolean {
     for (let k = 0; k <= SAMPLES; k++) {
-        const heights = [...weighted].flatMap((index) => sample(k)[index]?.[1] ?? []);
+        const pose = sample(k);
+        const heights = [...weighted].flatMap((index) => pose[index]?.[1] ?? []);
         if (heights.length && Math.max(...heights) - Math.min(...heights) >= FLAT_FRACTION * height) return false;
     }
     return true;

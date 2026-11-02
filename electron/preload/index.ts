@@ -257,6 +257,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('foundry:skinEditProgress', handler);
     },
     loadHideoutScene: () => ipcRenderer.invoke('viewer:hideout'),
+    isHideoutSceneReady: () => ipcRenderer.invoke('viewer:hideoutReady'),
+    getHideoutBuildProgress: () => ipcRenderer.invoke('viewer:hideoutProgress'),
+    saveHideoutSnapshot: (key, name, bytes) => ipcRenderer.invoke('viewer:hideoutSnapshot', key, name, bytes),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
         ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
     getRiggedHeroPose: (heroName: string, skinSources?: unknown[]) =>

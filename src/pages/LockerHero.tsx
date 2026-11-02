@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/common/ui';
@@ -9,7 +9,6 @@ import {
   Shirt,
   Images,
   Box,
-  Loader2,
   Sparkles,
   ImageIcon,
   type LucideIcon,
@@ -20,11 +19,10 @@ import { LockerModImagePicker } from '../components/locker/LockerModImagePicker'
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
-import FloatingModelPanel from '../components/locker/FloatingModelPanel';
-import { ErrorBoundary } from '../components/common/ErrorBoundary';
-// three.js viewer is heavy; only pull the chunk when the user flips to 3D.
-const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
+import { lockerViewerLoaded, useLockerViewer, useLockerViewerRequest } from '../stores/lockerViewerStore';
 import { useAppStore } from '../stores/appStore';
+import { hideoutReadyNow, openingViewerScene, refreshHideoutReady, storedViewerScene } from '../lib/hideoutDefault';
+import { preloadHideout } from '../lib/hideoutPreload';
 import { useTrippyPreviewStore } from '../stores/trippyPreviewStore';
 import type { Mod } from '../types/mod';
 import type { HeroPoseSkinSource } from '../types/portrait';
@@ -109,6 +107,9 @@ export function LockerHeroView({
   // the user picked one (set per skin in the skins list below).
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
   const workshopEnabled = useAppStore((s) => s.settings?.experimentalFoundry === true);
+  const hideoutDefault = useAppStore((s) => s.settings?.experimentalHideoutDefault === true);
+  // Known before the 3D button is pressed, so the viewer opens on the right scene.
+  useEffect(() => { if (hideoutDefault) refreshHideoutReady(); }, [hideoutDefault]);
   const lockerModBackgrounds = useAppStore((s) => s.lockerModBackgrounds);
   const lockerBgHideHeroName = useAppStore((s) => s.lockerBgHideHeroName);
   const activeSkin = useMemo(() => activeLockerSkin(skinList), [skinList]);
@@ -125,7 +126,9 @@ export function LockerHeroView({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
-  const [view3d, setView3d] = useState(false);
+  // Shared by every hero: switching heroes keeps the viewer open and loaded.
+  const view3d = useLockerViewer((state) => state.open);
+  const setView3d = useLockerViewer((state) => state.setOpen);
   const navigate = useNavigate();
   const [section, setSection] = useState<SectionId>('skins');
   const [poseSkinSelection, setPoseSkinSelection] = useState<{
@@ -155,9 +158,6 @@ export function LockerHeroView({
         .sort((a, b) => b.priority - a.priority || a.metaKey.localeCompare(b.metaKey)),
     [skinList]
   );
-  const activeSkinSourceKey =
-    activeSkinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|') ||
-    'vanilla';
 
   // Live Body + Gun trippy params, pushed by TrippySkinPanel. Only feed the
   // viewer when it targets the hero currently shown so a stale entry from
@@ -165,6 +165,13 @@ export function LockerHeroView({
   const trippyPreview = useTrippyPreviewStore((s) => s.preview);
   const matchedTrippyPreview =
     trippyPreview && trippyPreview.heroName === hero.name ? trippyPreview : undefined;
+  // The live 3D panel itself is LockerViewerPanel, above this per-hero view (see Locker.tsx).
+  useLockerViewerRequest(view3d, {
+    heroName: hero.name,
+    skinSources: activeSkinSources,
+    fallbackSkinMetaKey: fallbackPoseSkinMetaKey,
+    trippyPreview: matchedTrippyPreview,
+  });
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
@@ -326,7 +333,13 @@ export function LockerHeroView({
         )}
         <button
           type="button"
-          onClick={() => setView3d((v) => !v)}
+          onClick={() => {
+            // Start reading the hideout while the viewer's code and hero load.
+            const { settings } = useAppStore.getState();
+            if (!view3d && !lockerViewerLoaded() && openingViewerScene(storedViewerScene(settings, `viewer:${hero.name}:view`), 'midtown',
+              settings?.experimentalHideoutDefault === true, hideoutReadyNow()) === 'hideout') preloadHideout(`viewer:${hero.name}:view`);
+            setView3d(!view3d);
+          }}
           aria-pressed={view3d}
           title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
@@ -492,31 +505,6 @@ export function LockerHeroView({
           {selectionPanel}
         </div>
       </div>
-
-      {/* Live 3D model: a floating, draggable panel over the portrait backdrop.
-          Mounted only while open so the heavy three.js chunk loads on demand. */}
-      {view3d && (
-        <FloatingModelPanel title={t('locker.hero.hero3dModel', { hero: hero.name })} onClose={() => setView3d(false)}>
-          {/* Without hardware WebGL the canvas throws; keep that inside the panel. */}
-          <ErrorBoundary>
-            <Suspense
-              fallback={
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-                </div>
-              }
-            >
-              <HeroPoseViewer
-                key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
-                heroName={hero.name}
-                skinSources={activeSkinSources}
-                fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
-                trippyPreview={matchedTrippyPreview}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        </FloatingModelPanel>
-      )}
 
       {/* Unified per-skin image picker (issue #208): tabbed for the 3:4 grid
           thumbnail, the 16:9 skin-panel card and the 16:9 backdrop, opening on

@@ -5,7 +5,7 @@
 // Renders an Omni2 light per particle. Up to m_nMaxAllowed particles get a light each, which follows
 // its particle by id; particles past that wait for a light to come free. A point or sphere light is a
 // three.js point light; a barn light is a spot light over its frustum (three.js has no barn light),
-// with VRF's barn brightness. The skirt and the luminaire shape are kept on the state for hosts that
+// with VRF's barn brightness. The skirt, the luminaire shape and the cookie are kept on the state for hosts that
 // light another way: three.js lights end smoothly at their distance where VRF's fade over the skirt.
 // Light styles come from the map (VRF's scene light styles), so none is ever found here.
 
@@ -113,6 +113,8 @@ export class RenderOmni2Light extends ParticleLightRenderer {
   private readonly barnNearSizeY: NumberProvider;
   private readonly barnSoftX: NumberProvider;
   private readonly barnSoftY: NumberProvider;
+  private readonly cookie: string | null;
+  private readonly castShadows: boolean;
   private readonly colorScratch: Rgba = [0, 0, 0, 0];
 
   /** The barn fields of the lights in use, by particle id, for hosts that draw barn lights themselves. */
@@ -126,7 +128,8 @@ export class RenderOmni2Light extends ParticleLightRenderer {
     this.brightnessUnit = parse.enum('m_nBrightnessUnit', ParticleLightUnitChoiceList, ParticleLightUnitChoiceList.PARTICLE_LIGHT_UNIT_LUMENS);
     this.brightnessLumens = parse.numberProvider('m_flBrightnessLumens', new LiteralNumberProvider(1000));
     this.brightnessCandelas = parse.numberProvider('m_flBrightnessCandelas', new LiteralNumberProvider(1000));
-    parse.boolean('m_bCastShadows', false);
+    this.castShadows = parse.boolean('m_bCastShadows', false);
+    this.cookie = parse.string('m_hLightCookie') || null;
     this.luminaireRadius = parse.numberProvider('m_flLuminaireRadius', new LiteralNumberProvider(1));
     this.skirt = parse.numberProvider('m_flSkirt', new LiteralNumberProvider(0.1));
     this.range = parse.numberProvider('m_flRange', new LiteralNumberProvider(512));
@@ -247,6 +250,8 @@ export class RenderOmni2Light extends ParticleLightRenderer {
 
       const rotation = this.lightRotation(i, positions, particleNormals, pitches, yaws, rolls, directions);
       const direction = safeNormalizeOr(new Vector3(rotation.m[0], rotation.m[1], rotation.m[2]), Vector3.unitX);
+      const left = new THREE.Vector3(rotation.m[4], rotation.m[5], rotation.m[6]);
+      const up = new THREE.Vector3(rotation.m[8], rotation.m[9], rotation.m[10]);
       let linearBrightness = linearBrightnessFromCandelas(lightCandelas);
       let fallOff = skirts[i];
       let spotInner = innerAngle;
@@ -285,6 +290,10 @@ export class RenderOmni2Light extends ParticleLightRenderer {
         fallOff,
         position: new THREE.Vector3(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]),
         direction: new THREE.Vector3(direction.x, direction.y, direction.z),
+        left,
+        up,
+        cookie: this.cookie,
+        castShadows: this.castShadows,
         tubeHalfLength: 0,
       };
     }

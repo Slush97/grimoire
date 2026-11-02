@@ -148,10 +148,17 @@ export function vpkmergeBinaryPath(): string {
     return full;
 }
 
-export function runVpkmerge(args: string[], timeoutMs = 300000, env?: NodeJS.ProcessEnv): Promise<void> {
+/**
+ * `env` adds variables for the child (e.g. a thread cap). `onSpawn` receives the
+ * child's pid, e.g. to lower a background job's priority.
+ */
+export interface VpkmergeRunOptions { env?: NodeJS.ProcessEnv; onSpawn?: (pid: number) => void }
+
+export function runVpkmerge(args: string[], timeoutMs = 300000, options: VpkmergeRunOptions = {}): Promise<void> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
-        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(env && { env: { ...process.env, ...env } }) });
+        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(options.env && { env: { ...process.env, ...options.env } }) });
+        if (proc.pid !== undefined) options.onSpawn?.(proc.pid);
         let stderr = '';
         let stdout = '';
         let killed = false;
@@ -189,10 +196,11 @@ export function runVpkmerge(args: string[], timeoutMs = 300000, env?: NodeJS.Pro
  * decode (`soundevents <entry> --from-vpk <vpk>`), which prints JSON to stdout
  * and a human summary to stderr.
  */
-export function runVpkmergeStdout(args: string[], timeoutMs = 120000): Promise<string> {
+export function runVpkmergeStdout(args: string[], timeoutMs = 120000, options: VpkmergeRunOptions = {}): Promise<string> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
         const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        if (proc.pid !== undefined) options.onSpawn?.(proc.pid);
         let stderr = '';
         let stdout = '';
         let killed = false;

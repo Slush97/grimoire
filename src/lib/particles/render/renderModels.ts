@@ -122,7 +122,7 @@ class ModelNode {
     this.group.visible = false;
 
     mesh.primitives.forEach((primitive, index) => {
-      const data = materials[index] ?? materials[0] ?? null;
+      const data = materials[index] ?? null;
 
       if (data === null) {
         return;
@@ -159,7 +159,10 @@ class ModelNode {
     const m = value.m;
     // How far the transform carries each model axis (its rows), as the texcoord scale by model reads it
     const scale: [number, number, number] = [Math.hypot(m[0], m[1], m[2]), Math.hypot(m[4], m[5], m[6]), Math.hypot(m[8], m[9], m[10])];
-    for (const material of this.materials) material.setModelScale(scale);
+    for (const material of this.materials) {
+      material.setModelScale(scale);
+      material.setModelTransform(this.group.matrix);
+    }
   }
 
   setTint(tint: [number, number, number], alpha: number): void {
@@ -612,10 +615,13 @@ export class RenderModels extends ParticleFunctionRenderer {
    */
   private materialsFor(mesh: ParticleModelMesh): (ParticleMaterialData | null)[] {
     const override = this.overrideMaterial === null ? null : this.context.models?.material(this.overrideMaterial) ?? null;
-    const own = mesh.primitives.map((_, index) => this.context.models?.material(`${mesh.name}#${index}`) ?? null);
+    const own = mesh.primitives.map((primitive, index) => this.context.models?.material(primitive.material ?? `${mesh.name}#${index}`) ?? null);
 
-    return own.map((material) => {
-      if (override === null) return material;
+    return own.map((material, index) => {
+      if (override === null) {
+        if (material === null) this.logger.warn(`Particle model draw '${mesh.name}#${index}' has no material; the draw is omitted.`);
+        return material;
+      }
       if (material === null) return override;
       const attributes = material.intAttributes;
       const translucent = attributes.translucent === 1 || material.intParams.F_TRANSLUCENT === 1;

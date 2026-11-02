@@ -41,10 +41,11 @@ describe('loadRiggedHeroPreview', () => {
       new VectorKeyframeTrack('pelvis.position', [0, 1], [0, 0, 0, 0, 2, 0]),
       new VectorKeyframeTrack('attachWorld.position', [0, 1], [0, 0, 0, 0, 1, 0]),
     ]));
-    vi.mocked(loadGltfPreview).mockResolvedValueOnce(gltf).mockResolvedValueOnce(fallback);
+    // The base animations load alongside the model, so route by file rather than call order.
+    vi.mocked(loadGltfPreview).mockImplementation(async (url) => url.includes('/animation-fallback.glb') ? fallback : gltf);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])));
     await loadRiggedHeroPreview({ ...info, hasAnimationFallback: true }, false);
-    expect(loadGltfPreview).toHaveBeenLastCalledWith(expect.stringContaining('/animation-fallback.glb?v=42'));
+    expect(loadGltfPreview).toHaveBeenCalledWith(expect.stringContaining('/animation-fallback.glb?v=42'));
     expect(gltf.animations[0].tracks.map((track) => track.name)).toEqual(['pelvis.position']);
     const mixer = new AnimationMixer(gltf.scene);
     mixer.clipAction(gltf.animations[0]).play();
