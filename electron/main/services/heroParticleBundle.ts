@@ -91,16 +91,25 @@ const VPKMERGE_CONCURRENCY = 8;
 /** Textures per `panorama dump`. */
 const DUMP_CHUNK = 24;
 
-/** Runs `run` for each key, VPKMERGE_CONCURRENCY at a time, and keys the results. */
+/** Runs `run` for each key, VPKMERGE_CONCURRENCY at a time, and keys the results. A failure starts
+ *  nothing new and rejects once the running keys settle, so the caller can clean up behind them. */
 async function runEach<T>(keys: readonly string[], run: (key: string) => Promise<T>): Promise<Map<string, T>> {
     const results = new Map<string, T>();
     let next = 0;
-    await Promise.all(Array.from({ length: Math.min(VPKMERGE_CONCURRENCY, keys.length) }, async () => {
-        while (next < keys.length) {
+    let failed = false;
+    const workers = await Promise.allSettled(Array.from({ length: Math.min(VPKMERGE_CONCURRENCY, keys.length) }, async () => {
+        while (next < keys.length && !failed) {
             const key = keys[next++];
-            results.set(key, await run(key));
+            try {
+                results.set(key, await run(key));
+            } catch (error) {
+                failed = true;
+                throw error;
+            }
         }
     }));
+    const rejected = workers.find((worker) => worker.status === 'rejected');
+    if (rejected) throw rejected.reason;
     return results;
 }
 
@@ -146,7 +155,14 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
     let level = discovery.effects.map((effect) => ({ path: bundleSystemKey(effect.system), depth: 0 }));
     while (level.length > 0) {
         const wanted = level.filter(({ path, depth }) => !(path in systems) && SYSTEM_PATH.test(path) && !path.includes('..') && depth <= LIMITS.depth);
-        const decodedLevel = await runEach([...new Set(wanted.map(({ path }) => path))], (path) => stack.decodeWithFormat(`${path}_c`));
+        // In batches the system limit has room for: a missing definition leaves its place to the next.
+        const queue = [...new Set(wanted.map(({ path }) => path))];
+        const decodedLevel = new Map<string, Awaited<ReturnType<typeof stack.decodeWithFormat>>>();
+        while (queue.length > 0) {
+            const room = LIMITS.systems - Object.keys(systems).length - [...decodedLevel.values()].filter(Boolean).length;
+            if (room <= 0) break;
+            for (const [path, decoded] of await runEach(queue.splice(0, room), (path) => stack.decodeWithFormat(`${path}_c`))) decodedLevel.set(path, decoded);
+        }
         const next: typeof level = [];
         const snapshotPaths = new Map<string, Buffer | null>();
         for (const { path, depth } of level) {

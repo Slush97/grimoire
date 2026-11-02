@@ -65,6 +65,8 @@ export class RoomClearance {
   private readonly pixels = new Float32Array(SIZE * 6 * SIZE * 4);
   private reach = 0;
   private stale = false;
+  /** Counts invalidations: a read-back started before the latest one is discarded. */
+  private generation = 0;
   private pending: Promise<void> | null = null;
 
   /** Renders the room's `layer` from `origin` out to `reach` world units and reads it back. */
@@ -82,8 +84,9 @@ export class RoomClearance {
     this.render(gl, scene, from, reach, layer);
     if (this.reach) this.aim(this.origin, this.reach);
     const pixels = new Float32Array(this.pixels.length);
+    const generation = this.generation;
     this.pending = gl.readRenderTargetPixelsAsync(this.target, 0, 0, SIZE * 6, SIZE, pixels)
-      .then(() => this.load(from, reach, pixels), () => {})
+      .then(() => { if (generation === this.generation) this.load(from, reach, pixels); }, () => {})
       .finally(() => { this.pending = null; });
     return this.pending;
   }
@@ -144,6 +147,7 @@ export class RoomClearance {
    *  answers {@link distance} until a new one replaces it. */
   invalidate(): void {
     this.stale = true;
+    this.generation++;
   }
 
   /** Whether a current measurement from within `tolerance` of `origin` is held. */

@@ -259,6 +259,11 @@ export async function loadHideoutScene(deadlockPath: string, { background = fals
     try { return await work; } finally { inFlight.delete(key); }
 }
 
+/** This session's builds that exported with failures. Their scene works, so the viewer reopens it
+ *  as it is; the next launch retries when the viewer asks for it. */
+const partialBuilds = new Map<string, HideoutSceneInfo>();
+const PARTIAL_BUILD_MARKER = 'export-failed';
+
 /** Build the scene cache before the viewer asks for it: the first time after a
  *  game update or exporter change. Unless the hideout is the default scene
  *  (`everyone`), only for players who have opened it before. Old fingerprints
@@ -268,7 +273,11 @@ export async function prebuildHideoutScene(deadlockPath: string, { everyone = fa
     const previous = (await fs.readdir(root).catch(() => [])).filter(name => /^[a-f0-9]{24}$/.test(name));
     if (!previous.length && !everyone) return;
     const { key } = await sceneSource(deadlockPath);
-    if (!await completeCache(join(root, key))) await loadHideoutScene(deadlockPath, { background: true });
+    if (!await completeCache(join(root, key))) {
+        // A failed export waits for the viewer to retry it: at every launch it would only fail again.
+        if (await fs.access(join(root, key, PARTIAL_BUILD_MARKER)).then(() => true, () => false)) return;
+        await loadHideoutScene(deadlockPath, { background: true });
+    }
     if (!await completeCache(join(root, key))) return;
     for (const name of previous) if (name !== key) await fs.rm(join(root, name), { recursive: true, force: true });
 }
@@ -317,9 +326,21 @@ async function completeCache(dir: string): Promise<HideoutSceneInfo | null> {
 }
 
 async function build(map: string, base: string, key: string, priority: BuildPriority, progress: BuildProgress): Promise<HideoutSceneInfo> {
+    // A retry writes the same directory, so a failed build still waits for its particle export.
+    let particlesExported: Promise<void> | undefined;
+    try {
+        return await exportScene(map, base, key, priority, progress, (exporting) => { particlesExported = exporting; });
+    } finally {
+        await particlesExported;
+    }
+}
+
+async function exportScene(map: string, base: string, key: string, priority: BuildPriority, progress: BuildProgress, onParticles: (exporting: Promise<void>) => void): Promise<HideoutSceneInfo> {
     const dir = join(app.getPath('userData'), 'viewer-scenes', key);
     const cached = await completeCache(dir);
     if (cached) return cached;
+    const partial = partialBuilds.get(key);
+    if (partial) return partial;
     // Missing or interrupted cache: rebuild from the installed map.
     const runVpkmerge = (args: string[]) => runVpkmergeAt(args, undefined, priority.options);
     const runVpkmergeStdout = (args: string[]) => runVpkmergeStdoutAt(args, undefined, priority.options);
@@ -457,16 +478,18 @@ async function build(map: string, base: string, key: string, priority: BuildPrio
     // A cookie that fails to export leaves its light with the authored soft edge.
     if (!missingCookie) result.omissions = result.omissions.filter(item => item !== 'lightCookies');
     progress.reach('entities');
-    result.particles.entities = readMapParticles(particleEntities);
     // The map particles need nothing below, so they export alongside the atmosphere, probes and models.
-    const particlesExported = exportMapParticles([map, base, join(base, '..', '..', 'core', 'pak01_dir.vpk')], result.particles.entities, dir, { stdout: runVpkmergeStdout }).then((bundle) => {
+    const particlesExported = (async () => {
+        result.particles.entities = readMapParticles(particleEntities);
+        const bundle = await exportMapParticles([map, base, join(base, '..', '..', 'core', 'pak01_dir.vpk')], result.particles.entities, dir, { stdout: runVpkmergeStdout });
         const lightCookies = particleLightCookies(bundle);
         if (Object.keys(lightCookies).length) result.particles.lightCookies = lightCookies;
         result.omissions = result.omissions.filter(item => item !== 'mapEffects');
-    }, () => {
+    })().catch(() => {
         result.failures.push('particles/bundle.json');
         exportFailed = true;
     });
+    onParticles(particlesExported);
     const atmosphere = { run: (args: string[]) => runVpkmerge(args), decode: (vpk: string, entry: string) => decode(vpk, entry, priority), entry: compiledMapEntry };
     try { result.sky = await exportMapSky(particleEntities, [base, map], dir, atmosphere); } catch { result.failures.push('sky.bin'); exportFailed = true; }
     try {
@@ -617,10 +640,7 @@ async function build(map: string, base: string, key: string, priority: BuildPrio
         } finally { await fs.rm(manifest, { force: true }); }
     }
     progress.reach('models');
-    if (!result.instances.length) {
-        await particlesExported;
-        throw new Error('No hideout geometry could be exported.');
-    }
+    if (!result.instances.length) throw new Error('No hideout geometry could be exported.');
     const names = [...new Set(result.instances.filter(instance => !instance.animation).map(instance => instance.model))];
     const stats = await prepareBundle({ dir, names, out: join(dir, 'models.glb') });
     await particlesExported;
@@ -628,8 +648,12 @@ async function build(map: string, base: string, key: string, priority: BuildPrio
     progress.reach('bundle');
     const ready: HideoutSceneInfo = { ...result, bundle: { file: 'models.glb', ...stats } };
     // Unsaved, the next load retries a failed export and reuses the GLBs that did export.
-    if (exportFailed) await fs.rm(join(dir, 'scene.json'), { force: true });
-    else {
+    if (exportFailed) {
+        await fs.rm(join(dir, 'scene.json'), { force: true });
+        await fs.writeFile(join(dir, PARTIAL_BUILD_MARKER), '');
+        partialBuilds.set(key, ready);
+    } else {
+        await fs.rm(join(dir, PARTIAL_BUILD_MARKER), { force: true });
         await fs.writeFile(join(dir, 'scene.json'), JSON.stringify(ready));
         for (const name of names) await fs.rm(join(dir, name), { force: true });
     }
@@ -720,7 +744,9 @@ export function fixedMapExposure(entity: { enableexposure?: boolean; minexposure
 // Light cookies are color textures (sRGB), exported once per path at their own size up to 512.
 async function exportCookie(vpks: string[], entry: string, dir: string, runVpkmerge: (args: string[]) => Promise<void>): Promise<string> {
     const source = compiledMapEntry(entry);
-    const name = source.replace(/\.vtex_c$/, '').split('/').at(-1)?.toLowerCase().replace(/[^a-z0-9_]/g, '_') ?? 'cookie';
+    const stem = source.replace(/\.vtex_c$/, '').split('/').at(-1)?.toLowerCase().replace(/[^a-z0-9_]/g, '_') ?? 'cookie';
+    // Two folders can hold a cookie of the same name.
+    const name = `${stem}_${createHash('sha256').update(source).digest('hex').slice(0, 8)}`;
     const file = `cookies/${name}.png`;
     if (await fs.access(join(dir, file)).then(() => true, () => false)) return file;
     const staging = join(dir, `prepare-cookie-${name}`);

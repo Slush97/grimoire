@@ -78,7 +78,7 @@ export function HideoutParticleLayer({ info, parent, lights, active = true, post
       group.userData.failures = failures;
       group.userData.bundleDiagnostics = bundle.diagnostics;
       // Shown once their shaders have linked; the simulations wait with it.
-      return precompileHidden(gl, scene, viewCamera, [group], postprocess);
+      return precompileHidden(gl, scene, viewCamera, [group], postprocess).ready;
     }).then(() => { if (!cancelled) group.userData.ready = true; },
       error => { if (!cancelled) { group.userData.failures = [String(error)]; group.userData.ready = true; } });
     return () => {

@@ -57,8 +57,9 @@ export function HideoutWorldCards({ parent, postprocess }: { parent: THREE.Group
       object.material = Array.isArray(original) ? replacements : replacements[0];
       current.current.push({ context, mesh: object, materials, restore: () => { object.material = original; object.renderOrder = order; } });
     });
-    void precompileHidden(gl, scene, camera, current.current.map(entry => entry.mesh), postprocess);
+    const precompile = precompileHidden(gl, scene, camera, current.current.map(entry => entry.mesh), postprocess);
     return () => {
+      precompile.cancel();
       for (const entry of current.current) { entry.restore(); entry.materials.forEach(material => material.dispose()); entry.context.dispose(); }
       current.current = [];
     };
