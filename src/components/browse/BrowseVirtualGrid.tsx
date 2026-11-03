@@ -1,4 +1,5 @@
-import { memo, useLayoutEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, type Dispatch, type ReactNode, type RefObject, type SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { browseModKey, browseModSection } from '../../lib/browseSections';
 import type { GameBananaMod } from '../../types/gamebanana';
@@ -7,6 +8,45 @@ import type { BrowseCardDesign, ViewMode } from './cardGeometry';
 import { MemoizedModCard } from './BrowseModCard';
 
 const BROWSE_GRID_OVERSCAN_ROWS = 4;
+
+/** One pending page at a time, with a screen of lead time and a quiet fallback
+ * at the actual bottom if scrolling overtakes the next response. */
+export function BrowseLoadMore({ scrollRef, hasMore, loading, paused, needsMore, queryKey, onLoadMore, children }: {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  hasMore: boolean;
+  loading: boolean;
+  paused: boolean;
+  needsMore: boolean;
+  queryKey: string;
+  onLoadMore: () => void;
+  children?: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const markerRef = useRef<HTMLDivElement>(null);
+  const requested = useRef(false);
+  useEffect(() => {
+    requested.current = false;
+    if (!hasMore || loading || paused) return;
+    let active = true;
+    const load = () => {
+      if (!active || requested.current) return;
+      requested.current = true;
+      onLoadMore();
+    };
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) load();
+    }, { root: scrollRef.current, threshold: 0, rootMargin: '0px 0px 900px 0px' });
+    if (markerRef.current) observer.observe(markerRef.current);
+    // A filtered response or buffered partial row may need another page even
+    // when the toolbar pushes the marker below the initial viewport.
+    if (needsMore) queueMicrotask(load);
+    return () => { active = false; observer.disconnect(); };
+  }, [hasMore, loading, paused, needsMore, queryKey, onLoadMore, scrollRef]);
+  return <div ref={markerRef} className="flex items-center justify-center p-4">
+    {loading && <span role="status" className="text-xs text-text-secondary">{t('browse.loadMore.loadingMore')}</span>}
+    {children}
+  </div>;
+}
 
 type BrowseVirtualGridProps = {
   mods: GameBananaMod[];

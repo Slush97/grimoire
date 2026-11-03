@@ -60,7 +60,7 @@ import { getPrimaryFile, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
 } from '../stores/appStore';
-import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
+import type { BrowseTimeRange, BrowseLayout, BrowseArtistRef, BrowseSortOption as SortOption } from '../stores/appStore';
 import type { NsfwContentMode, HiddenCreator, HiddenMod } from '../types/mod';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -83,9 +83,9 @@ import { useCursorPackStore } from '../stores/cursorPackStore';
 import { BrowseArtistBanner } from '../components/browse/BrowseArtistBanner';
 import { BrowseErrorDescription } from '../components/browse/BrowseErrorDescription';
 import { ModCardSkeleton } from '../components/browse/BrowseModCard';
-import { BrowseVirtualGrid } from '../components/browse/BrowseVirtualGrid';
+import { BrowseLoadMore, BrowseVirtualGrid } from '../components/browse/BrowseVirtualGrid';
 import { BrowseSectionPicker } from '../components/browse/BrowseSectionPicker';
-import { browseModKey, browseModSection } from '../lib/browseSections';
+import { BROWSE_REQUEST_SIZE, browseCacheIsFresh, browsePageHasMore, completeBrowseRowCount, mergeBrowseMods, browseModKey, browseModSection } from '../lib/browseSections';
 import {
   estimateBrowseRowHeight,
   getReadableCardGridGap,
@@ -95,7 +95,6 @@ import {
 } from '../components/browse/cardGeometry';
 import { usePrefersReducedMotion } from '../components/browse/cardUtils';
 
-const DEFAULT_PER_PAGE = 36;
 const EMPTY_CATEGORIES: GameBananaCategoryNode[] = [];
 // Row count below which the local catalog mirror is treated as unusable. A
 // part-synced catalog returns misleadingly thin results, so the filters that
@@ -118,7 +117,6 @@ function traceBrowse(message: string): void {
   } catch { /* tracing must never break the page */ }
 }
 
-type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 // Where a clicked mod's details open: the centered overlay (default) or a
 // docked right-side panel that lets the user keep browsing the grid. Persisted
 // like the other Browse view preferences (card design/size).
@@ -227,6 +225,7 @@ type BrowseResultCacheEntry = {
   hasMore: boolean;
   totalCount: number;
   scrollTop: number;
+  fetchedAt: number;
 };
 
 type QueuedDownloadState = {
@@ -281,31 +280,6 @@ function getResponsiveBrowseCardSize(metrics: BrowseViewportMetrics, multiplier:
     BROWSE_CARD_SIZE_MAX * nextMultiplier
   );
 }
-
-
-
-function dedupeModsById(mods: GameBananaMod[]): GameBananaMod[] {
-  const seen = new Set<string>();
-  return mods.filter((mod) => {
-    if (seen.has(browseModKey(mod))) return false;
-    seen.add(browseModKey(mod));
-    return true;
-  });
-}
-
-function appendUniqueModsById(previous: GameBananaMod[], next: GameBananaMod[]): GameBananaMod[] {
-  if (next.length === 0) return previous;
-
-  const seen = new Set(previous.map(browseModKey));
-  const uniqueNext = next.filter((mod) => {
-    if (seen.has(browseModKey(mod))) return false;
-    seen.add(browseModKey(mod));
-    return true;
-  });
-
-  return uniqueNext.length === 0 ? previous : [...previous, ...uniqueNext];
-}
-
 
 
 
@@ -408,7 +382,7 @@ export default function Browse() {
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
   const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
-  const initialCache = browseSession && browseSession.stamp === initialFilterStamp
+  const initialCache = browseSession && browseSession.stamp === initialFilterStamp && browseCacheIsFresh(browseSession.fetchedAt)
     ? browseSession
     : null;
 
@@ -419,7 +393,7 @@ export default function Browse() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(() => initialCache?.page ?? 1);
   const [_totalCount, setTotalCount] = useState(() => initialCache?.totalCount ?? 0);
-  const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
+  const perPage = BROWSE_REQUEST_SIZE; // Keep network pages stable while the grid buffers partial rows.
   const [sections, setSections] = useState<GameBananaSection[]>([]);
   const categoryTrees = useCategoryStore((state) => state.treesByModel);
   const loadCategoryTree = useCategoryStore((state) => state.load);
@@ -511,8 +485,6 @@ export default function Browse() {
     : null;
   const downloadQueue = visibleDownloads.queue;
   const [playingModId, setPlayingModId] = useState<string | null>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
@@ -802,15 +774,14 @@ export default function Browse() {
   // useCallback dep (that would self-trigger). Also doubles as the source
   // for the unmount-time cache save.
   const modsRef = useRef<GameBananaMod[]>(mods);
+  // Cache only completed pages so leaving during a fetch cannot skip its results.
   const pageRef = useRef<number>(page);
+  const fetchedAtRef = useRef(initialCache?.fetchedAt ?? 0);
   const hasMoreRef = useRef<boolean>(hasMore);
   const totalCountRef = useRef<number>(_totalCount);
   useEffect(() => {
     modsRef.current = mods;
   }, [mods]);
-  useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
   useEffect(() => {
     hasMoreRef.current = hasMore;
   }, [hasMore]);
@@ -832,6 +803,7 @@ export default function Browse() {
       hasMore: hasMoreRef.current,
       totalCount: totalCountRef.current,
       scrollTop,
+      fetchedAt: fetchedAtRef.current,
     });
     browseScrollCacheRef.current.set(stamp, scrollTop);
   }, []);
@@ -844,6 +816,7 @@ export default function Browse() {
       hasMore,
       totalCount: _totalCount,
       scrollTop: initialCache.scrollTop,
+      fetchedAt: initialCache.fetchedAt ?? 0,
     });
     browseScrollCacheRef.current.set(fetchFilterStamp, initialCache.scrollTop);
     activeFetchFilterStampRef.current = fetchFilterStamp;
@@ -973,6 +946,7 @@ export default function Browse() {
         hasMore: hasMoreRef.current,
         totalCount: totalCountRef.current,
         scrollTop,
+        fetchedAt: fetchedAtRef.current,
         stamp,
       });
     };
@@ -1121,11 +1095,8 @@ export default function Browse() {
         return;
       }
 
-      const nextMods =
-        page === 1
-          ? dedupeModsById(enrichedRecords)
-          : appendUniqueModsById(modsRef.current, enrichedRecords);
-      const nextHasMore = response.records.length === perPage && page * perPage < response.totalCount;
+      const nextMods = mergeBrowseMods(page === 1 ? [] : modsRef.current, enrichedRecords, sort);
+      const nextHasMore = browsePageHasMore(response, page, perPage);
 
       setMods(nextMods);
       setTotalCount(response.totalCount);
@@ -1134,6 +1105,7 @@ export default function Browse() {
       pageRef.current = page;
       totalCountRef.current = response.totalCount;
       hasMoreRef.current = nextHasMore;
+      fetchedAtRef.current = Date.now();
       const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
       browseResultsCacheRef.current.set(fetchFilterStamp, {
         mods: nextMods,
@@ -1141,6 +1113,7 @@ export default function Browse() {
         hasMore: nextHasMore,
         totalCount: response.totalCount,
         scrollTop: cachedScrollTop,
+        fetchedAt: fetchedAtRef.current,
       });
       browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
@@ -1283,11 +1256,8 @@ export default function Browse() {
         return;
       }
 
-      const nextMods =
-        page === 1
-          ? dedupeModsById(convertedMods)
-          : appendUniqueModsById(modsRef.current, convertedMods);
-      const nextHasMore = convertedMods.length === perPage && page * perPage < result.totalCount;
+      const nextMods = mergeBrowseMods(page === 1 ? [] : modsRef.current, convertedMods, sort);
+      const nextHasMore = browsePageHasMore({ records: convertedMods, totalCount: result.totalCount, perPage }, page);
 
       setMods(nextMods);
       setTotalCount(result.totalCount);
@@ -1296,6 +1266,7 @@ export default function Browse() {
       pageRef.current = page;
       totalCountRef.current = result.totalCount;
       hasMoreRef.current = nextHasMore;
+      fetchedAtRef.current = Date.now();
       const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
       browseResultsCacheRef.current.set(fetchFilterStamp, {
         mods: nextMods,
@@ -1303,6 +1274,7 @@ export default function Browse() {
         hasMore: nextHasMore,
         totalCount: result.totalCount,
         scrollTop: cachedScrollTop,
+        fetchedAt: fetchedAtRef.current,
       });
       browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
@@ -1344,7 +1316,9 @@ export default function Browse() {
     lastFetchedStampRef.current = null;
 
     const cached = browseResultsCacheRef.current.get(current);
-    if (cached) {
+    if (cached && browseCacheIsFresh(cached.fetchedAt)) {
+      fetchedAtRef.current = cached.fetchedAt;
+      pageRef.current = cached.page;
       pendingPageResetStampRef.current = null;
       setMods(cached.mods);
       setPage(cached.page);
@@ -1367,6 +1341,10 @@ export default function Browse() {
       return;
     }
 
+    fetchedAtRef.current = 0;
+    pageRef.current = 1;
+    latestScrollTopRef.current = 0;
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     if (page !== 1) {
       pendingPageResetStampRef.current = current;
     }
@@ -1470,6 +1448,7 @@ export default function Browse() {
       // when the user switches to them. Sections sync one at a time, so this is
       // what keeps a three-section sync from firing three redundant queries.
       if (!useAppStore.getState().browseUi.selectedSections.includes(data.section)) return;
+      fetchedAtRef.current = 0;
       if (!useLocalSearchRef.current) return;
       if (pageRef.current !== 1) return;
       traceBrowse(`catalog sync finished (${data.section}); re-running current query`);
@@ -1519,33 +1498,6 @@ export default function Browse() {
   useEffect(() => {
     void loadCursorPacks();
   }, [loadCursorPacks]);
-
-  // Infinite scroll observer
-  // Infinite scroll observer
-  useEffect(() => {
-    if (observerRef.current) observerRef.current.disconnect();
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        // Load more when reaching bottom and not already loading. autoLoadPaused
-        // gates this after a fetch failure so a refusing API isn't hammered in a
-        // loop (the sentinel re-enters view when the grid shrinks).
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore && !autoLoadPaused) {
-          setPage(prev => prev + 1);
-        }
-      },
-      // Rooted on the grid's own scroller: with the viewport as root its
-      // overflow clip swallowed the margin, so the next page only started at
-      // the very end. A screen of lead time lets it land before it is needed.
-      { root: scrollContainerRef.current, threshold: 0, rootMargin: '0px 0px 900px 0px' }
-    );
-
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-
-    return () => observerRef.current?.disconnect();
-  }, [hasMore, loading, loadingMore, autoLoadPaused]);
 
   // Background fetch download counts for visible mods (using global cache with TTL)
   // DISABLED: This makes N API calls per page load which is very slow and risks rate limiting.
@@ -2062,9 +2014,33 @@ export default function Browse() {
     };
   }, [selectedMod, installedMods, loadMods]);
 
-  // Just use all loaded mods - infinite scroll handles pagination.
+  const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
+  const gridGap =
+    layout === 'list'
+      ? 12
+      : browseCardDesign === 'readable'
+        ? getReadableCardGridGap(readableCardTargetWidth)
+        : 12;
+  const columnMinWidth =
+    layout === 'list'
+      ? Math.max(1, browseViewportMetrics.containerWidth - 32)
+      : browseCardDesign === 'readable'
+        ? readableCardTargetWidth
+        : browseCardSize;
+  const contentWidth = Math.max(columnMinWidth, browseViewportMetrics.containerWidth - 32);
+  const virtualColumnCount =
+    layout === 'list'
+      ? 1
+      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+  const virtualColumnWidth =
+    layout === 'list'
+      ? contentWidth
+      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
+  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign);
+  const virtualRowHeight = virtualCardHeight + gridGap;
+  // Keep all fetched records; only complete filtered rows are revealed below.
   // Hide outdated mods if the user has opted in.
-  const displayMods = useMemo(() => {
+  const filteredMods = useMemo(() => {
     let nextMods = !allowHiddenSubmitter && hiddenCreatorIdSet.size > 0
       ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
@@ -2092,13 +2068,15 @@ export default function Browse() {
 
     return nextMods;
   }, [mods, settings?.hideOutdatedMods, section, combinedFeed, heroCategoryId, nsfw, hiddenCreatorIdSet, hiddenModKeys, allowHiddenSubmitter]);
+  const displayMods = useMemo(() => {
+    const count = completeBrowseRowCount(filteredMods.length, virtualColumnCount, hasMore && !autoLoadPaused);
+    return count === filteredMods.length ? filteredMods : filteredMods.slice(0, count);
+  }, [filteredMods, virtualColumnCount, hasMore, autoLoadPaused]);
   // Client-side filters (Hide mode, hidden creators/mods, outdated) can empty a
   // remote page entirely. The sentinel sits below the fold then, so page on
   // until something survives or the results run out.
   const pagingPastFilteredPage = displayMods.length === 0 && mods.length > 0 && hasMore && !autoLoadPaused;
-  useEffect(() => {
-    if (pagingPastFilteredPage && !loading && !loadingMore) setPage((prev) => prev + 1);
-  }, [pagingPastFilteredPage, loading, loadingMore]);
+  const loadNextPage = useStableCallback(() => setPage(prev => prev + 1));
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id && browseModSection(mod) === selectedDetailsSection)
     : -1;
@@ -2269,30 +2247,6 @@ export default function Browse() {
     }
   }, [submitter?.id, hiddenCreatorIdSet, allowHiddenSubmitter, setBrowseUi]);
 
-  const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
-  const gridGap =
-    layout === 'list'
-      ? 12
-      : browseCardDesign === 'readable'
-        ? getReadableCardGridGap(readableCardTargetWidth)
-        : 12;
-  const columnMinWidth =
-    layout === 'list'
-      ? Math.max(1, browseViewportMetrics.containerWidth - 32)
-      : browseCardDesign === 'readable'
-        ? readableCardTargetWidth
-        : browseCardSize;
-  const contentWidth = Math.max(columnMinWidth, browseViewportMetrics.containerWidth - 32);
-  const virtualColumnCount =
-    layout === 'list'
-      ? 1
-      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
-  const virtualColumnWidth =
-    layout === 'list'
-      ? contentWidth
-      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
-  const virtualCardHeight = estimateBrowseRowHeight(virtualColumnWidth, layout, browseCardDesign);
-  const virtualRowHeight = virtualCardHeight + gridGap;
   // Scroll anchor: when the grid's geometry changes (column count or row
   // height, e.g. the details sidebar opening/closing or a window resize),
   // the same scrollTop suddenly points at different mods and the view appears
@@ -2869,7 +2823,7 @@ export default function Browse() {
                 aria-busy="true"
                 aria-live="polite"
               >
-                {Array.from({ length: Math.min(DEFAULT_PER_PAGE, virtualColumnCount * 6) }).map((_, i) => (
+                {Array.from({ length: Math.min(completeBrowseRowCount(perPage, virtualColumnCount, true) || virtualColumnCount, virtualColumnCount * 6) }).map((_, i) => (
                   <ModCardSkeleton key={i} viewMode={viewMode} cardDesign={browseCardDesign} height={virtualCardHeight} index={i} />
                 ))}
               </div>
@@ -2943,13 +2897,8 @@ export default function Browse() {
           );
         })()}
         {/* Infinite Scroll Trigger */}
-        <div ref={loadMoreRef} className="flex items-center justify-center p-4">
-          {loadingMore && (
-            <div className="flex items-center gap-2 text-text-secondary">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">{t('browse.loadMore.loadingMore')}</span>
-            </div>
-          )}
+        <BrowseLoadMore scrollRef={scrollContainerRef} hasMore={hasMore} loading={loading || loadingMore}
+          paused={autoLoadPaused || !catalogChecked || mods.length === 0} needsMore={pagingPastFilteredPage} queryKey={fetchFilterStamp} onLoadMore={loadNextPage}>
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">
@@ -2963,7 +2912,7 @@ export default function Browse() {
           {!hasMore && !loadMoreError && mods.length > 0 && !loadingMore && (
             <span className="text-sm text-text-secondary">{t('browse.loadMore.noMore')}</span>
           )}
-        </div>
+        </BrowseLoadMore>
       </div>
 
       {/* Mod details: centered modal (portals to body). The sidebar variant is

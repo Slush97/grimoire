@@ -7,6 +7,7 @@ import { inferRequirementImportance, parseRequirements } from '../../../src/lib/
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
+import { BROWSE_REQUEST_SIZE } from '../../../src/lib/browseSections';
 import { buildCategoryPaths, type CategoryPaths } from '../../../src/lib/categoryPaths';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
@@ -707,6 +708,7 @@ export async function fetchSubmissions(
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
+    const requestSize = Number.isFinite(perPage) ? Math.min(BROWSE_REQUEST_SIZE, Math.max(1, Math.floor(perPage))) : BROWSE_REQUEST_SIZE;
     // GameBanana's default list order (no _sSort) is by date *modified*, not date
     // added, so "Recently Added" (recent) has to request Generic_Newest explicitly
     // or it silently mirrors "Recently Updated". 'updated' maps to
@@ -740,7 +742,7 @@ export async function fetchSubmissions(
         params.set('_sModelName', model);
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[itemtype]', model);
-        params.set('_nPerpage', String(perPage));
+        params.set('_nPerpage', String(requestSize));
         params.set('_nPage', String(page));
         params.set('_csvProperties', fields);
 
@@ -762,7 +764,7 @@ export async function fetchSubmissions(
         // Some endpoints ignore Generic_Game without an explicit game id.
         params.set('_idGameRow', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
-        params.set('_nPerpage', String(perPage));
+        params.set('_nPerpage', String(requestSize));
         params.set('_nPage', String(page));
         params.set('_csvProperties', fields);
 
@@ -793,7 +795,7 @@ export async function fetchSubmissions(
         records: records.map(mapMod),
         totalCount: metadata?._nRecordCount ?? records.length,
         isComplete: metadata?._bIsComplete ?? true,
-        perPage: metadata?._nPerpage ?? perPage,
+        perPage: metadata?._nPerpage ?? requestSize,
     };
 }
 

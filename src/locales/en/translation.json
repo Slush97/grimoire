@@ -3337,7 +3337,7 @@
     },
     "previewVolume": "Preview volume",
     "loadMore": {
-      "loadingMore": "Loading more...",
+      "loadingMore": "Loading...",
       "couldntLoadMore": "Couldn't load more.",
       "noMore": "No more mods to load"
     },

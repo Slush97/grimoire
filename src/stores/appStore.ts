@@ -1,5 +1,6 @@
 import { profileShuffleSchema, type ProfileShuffle } from '../lib/profileShuffle';
 import { create } from 'zustand';
+import type { BrowseSortOption } from '../lib/browseSections';
 import type { Mod, AppSettings, AppearanceSurface, DeleteModEntry, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
 import { getActiveDeadlockPath, getInstallationScope } from '../lib/appSettings';
@@ -223,8 +224,8 @@ async function migrateLockerImagePreferences(
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
-export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 export type BrowseLayout = 'grid' | 'list';
+export type { BrowseSortOption } from '../lib/browseSections';
 
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
@@ -345,6 +346,8 @@ export interface BrowseSessionCache {
   hasMore: boolean;
   totalCount: number;
   scrollTop: number;
+  /** Time of the last successful query, not the time the tab was closed. */
+  fetchedAt?: number;
   /** Stamp of the filter state these mods belong to. If any filter changes
    *  while Browse is unmounted (impossible today, but defensive), we'll
    *  refetch instead of restoring stale results. */

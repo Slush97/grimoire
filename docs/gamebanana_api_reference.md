@@ -252,6 +252,27 @@ Downloading is a multi-step process to ensure valid links.
 
 ## 6. Best Practices
 
+### Browse pagination
+
+Browse requests 50 records per page, capped in the main process before reaching
+the existing GameBanana rate limiter. The grid reveals only complete rows while
+more results are available, keeping the remaining records in memory. It includes
+the remaining records when results end or loading pauses after an error, and
+reuses buffered records on resize.
+One request at a time starts within 900px of the bottom; a small `Loading...`
+label appears there only if scrolling catches up with the pending page.
+Navigation saves only completed pages, and resuming an identical pending request
+shares its response instead of issuing another listing request.
+
+Continuation uses the response's page-size metadata. In particular, live search
+can report 15 records per page and return a shorter nonempty page even before
+the end. Repeated section/item identities refresh the existing record and
+explicit sorts reorder the loaded set. Saved results expire after five minutes
+when reused; navigation does not extend their original fetch time. There is no
+periodic Browse polling. New unseen entries moving above an already-fetched
+page still require Refresh or a fresh query because the remote API has no stable
+pagination snapshot.
+
 ### NSFW Handling
 Deadlock has a significant number of NSFW submissions.
 1. **List View**: Check `_bIsNsfw`. If missing, check `_bHasContentRatings`. If `true`, treat as potentially NSFW (blur it).

@@ -906,6 +906,9 @@ export function onVanillaRestoreComplete(
 }
 
 // GameBanana
+// Tab navigation can resume a page whose original IPC request is still pending.
+const pendingBrowseRequests = new Map<string, Promise<GameBananaModsResponse>>();
+
 export async function browseMods(
   page: number,
   perPage: number,
@@ -915,7 +918,14 @@ export async function browseMods(
   sort?: string,
   submitterId?: number
 ): Promise<GameBananaModsResponse> {
-  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort, submitterId });
+  const args = { page, perPage, search, section, categoryId, sort, submitterId };
+  const key = JSON.stringify(args);
+  const pending = pendingBrowseRequests.get(key);
+  if (pending) return pending;
+  const request = window.electronAPI.browseMods(args);
+  pendingBrowseRequests.set(key, request);
+  try { return await request; }
+  finally { if (pendingBrowseRequests.get(key) === request) pendingBrowseRequests.delete(key); }
 }
 
 export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {

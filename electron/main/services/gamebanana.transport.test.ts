@@ -56,6 +56,27 @@ describe('GameBanana Chromium transport fallback', () => {
         expect(h.acquire).toHaveBeenCalledTimes(1);
     });
 
+    it.each([0, -1, 36, 50, 500, NaN])('keeps requested page size %s within the API limit', async size => {
+        const nodeFetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json(payload));
+        vi.stubGlobal('fetch', nodeFetch);
+        await fetchSubmissions('Mod', 1, size);
+        const url = new URL(String(nodeFetch.mock.calls[0][0]));
+        expect(Number(url.searchParams.get('_nPerpage'))).toBe(Number.isFinite(size) ? Math.min(50, Math.max(1, size)) : 50);
+        expect(nodeFetch).toHaveBeenCalledOnce();
+        expect(h.acquire).toHaveBeenCalledOnce();
+    });
+
+    it('preserves the smaller search page size without issuing extra requests', async () => {
+        const nodeFetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ...payload, _aMetadata: { _nRecordCount: 199, _nPerpage: 15, _bIsComplete: false } }));
+        vi.stubGlobal('fetch', nodeFetch);
+        const result = await fetchSubmissions('Mod', 2, 50, 'haze');
+        expect(result.perPage).toBe(15);
+        const url = new URL(String(nodeFetch.mock.calls[0][0]));
+        expect(url.searchParams.get('_nPage')).toBe('2');
+        expect(url.searchParams.get('_nPerpage')).toBe('50');
+        expect(nodeFetch).toHaveBeenCalledOnce();
+    });
+
     it.each([403, 429, 503])('does not retry HTTP %i through Chromium', async status => {
         vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status })));
         await expect(fetchSubmissions('Mod', 1, 1)).rejects.toThrow(`GameBanana API error: ${status}`);
