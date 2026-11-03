@@ -85,6 +85,11 @@ not the HTML `alt` attribute. It is also returned by the existing
 `/Mod/{id}?_csvProperties=_aPreviewMedia` request, so no extra request is needed.
 Grimoire maps it to `GameBananaImage.caption` and displays it as plain text below
 the image in the mod-details lightbox. Missing or blank captions are hidden.
+Scroll over the full-size viewer to zoom toward the pointer, up to 8x the fitted
+size. Zooming hides the controls with a short fade; dragging pans the enlarged
+image within its edges. At fitted size, clicking the image toggles the controls.
+Zooming back out restores them. Switching images or reopening the viewer resets
+zoom and pan. Captions remain selectable, and their own scrolling is preserved.
 
 ---
 

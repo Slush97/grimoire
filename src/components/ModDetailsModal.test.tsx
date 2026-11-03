@@ -283,6 +283,101 @@ describe('mod details', () => {
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 
+  describe('full-size image gestures', () => {
+    const open = async (imageWidth = 600, imageHeight = 400) => {
+      await render(false, { mod: { ...mod, previewMedia: { images: [
+        { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'first.jpg', caption: 'Caption' },
+        { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'second.jpg' },
+      ] } } });
+      await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="View image 1 of 2 full size"]')!.click());
+      const viewer = document.querySelector('figure')!.parentElement!;
+      const image = viewer.querySelector('img')!;
+      const viewport = viewer.querySelector<HTMLElement>('[data-lightbox-viewport]')!;
+      Object.defineProperties(viewport, { clientWidth: { value: 600 }, clientHeight: { value: 400 } });
+      viewport.getBoundingClientRect = () => DOMRect.fromRect({ width: 600, height: 400 });
+      Object.defineProperties(image, { naturalWidth: { value: imageWidth * 2 }, offsetWidth: { value: imageWidth }, offsetHeight: { value: imageHeight } });
+      image.setPointerCapture = vi.fn();
+      image.hasPointerCapture = vi.fn(() => true);
+      image.releasePointerCapture = vi.fn();
+      return { viewer, image, controls: viewer.querySelector<HTMLElement>('[data-lightbox-controls]')! };
+    };
+    const wheel = async (target: Element, deltaY: number, clientX = 300, clientY = 200) => {
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, clientX, clientY });
+      await act(async () => target.dispatchEvent(event));
+      return event;
+    };
+    const transform = (image: HTMLImageElement) => image.style.transform.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const pointer = async (image: HTMLImageElement, type: string, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      await act(async () => image.dispatchEvent(event));
+    };
+
+    it('toggles fading controls with an image click without closing the viewer', async () => {
+      const { image, controls } = await open();
+      expect(controls.getAttribute('aria-hidden')).toBe('false');
+      await act(async () => image.click());
+      expect(controls.getAttribute('aria-hidden')).toBe('true');
+      expect(controls.hasAttribute('inert')).toBe(true);
+      expect(controls.className).toContain('transition-opacity');
+      expect(image.isConnected).toBe(true);
+      await act(async () => image.click());
+      expect(controls.getAttribute('aria-hidden')).toBe('false');
+    });
+
+    it('zooms around the pointer, caps zoom, and restores controls when zooming back to fit', async () => {
+      const { image, controls } = await open();
+      expect((await wheel(image, -100, 450, 100)).defaultPrevented).toBe(true);
+      const [x, y, scale] = transform(image);
+      expect(scale).toBeGreaterThan(1);
+      expect((150 - x) / scale).toBeCloseTo(150);
+      expect((-100 - y) / scale).toBeCloseTo(-100);
+      expect(controls.hasAttribute('inert')).toBe(true);
+      for (let i = 0; i < 8; i++) await wheel(image, -240);
+      expect(transform(image)[2]).toBe(8);
+      await act(async () => image.click());
+      expect(controls.getAttribute('aria-hidden')).toBe('true');
+      for (let i = 0; i < 8; i++) await wheel(image, 240);
+      expect(transform(image)).toEqual([0, 0, 1]);
+      expect(controls.getAttribute('aria-hidden')).toBe('false');
+    });
+
+    it.each([600, 200])('clamps panning at the image edges and centers axes that fit (width=%i)', async width => {
+      const { viewer, image, controls } = await open(width);
+      await wheel(image, -240);
+      const scale = transform(image)[2];
+      await pointer(image, 'pointerdown', 300, 200);
+      expect(image.setPointerCapture).toHaveBeenCalledWith(1);
+      await pointer(image, 'pointermove', 10000, 10000);
+      expect(transform(image)).toEqual([Math.max(0, (width * scale - 600) / 2), (400 * scale - 400) / 2, scale]);
+      await pointer(image, 'pointermove', -10000, -10000);
+      expect(transform(image)[0]).toBeCloseTo(-Math.max(0, (width * scale - 600) / 2));
+      expect(transform(image)[1]).toBe(-(400 * scale - 400) / 2);
+      await pointer(image, 'pointerup', -10000, -10000);
+      expect(image.releasePointerCapture).toHaveBeenCalledWith(1);
+      expect(image.classList.contains('cursor-grab')).toBe(true);
+      expect(image.classList.contains('cursor-grabbing')).toBe(false);
+      expect(viewer.isConnected).toBe(true);
+      expect(controls.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('keeps caption scrolling independent and resets gestures on image navigation and reopening', async () => {
+      const { viewer, image } = await open();
+      await wheel(image, -240);
+      const before = image.style.transform;
+      expect((await wheel(viewer.querySelector('figcaption')!, 100)).defaultPrevented).toBe(false);
+      expect(image.style.transform).toBe(before);
+      await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+      const nextImage = document.querySelector<HTMLImageElement>('figure img')!;
+      expect(transform(nextImage)).toEqual([0, 0, 1]);
+      expect(document.querySelector('[data-lightbox-controls]')?.getAttribute('aria-hidden')).toBe('false');
+      await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+      expect(document.querySelector('figure')).toBeNull();
+      await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label^="View image"]')!.click());
+      expect(transform(document.querySelector<HTMLImageElement>('figure img')!)).toEqual([0, 0, 1]);
+    });
+  });
+
   it.each(['modal', 'sidebar'] as const)('shows the selected image caption only in the %s lightbox', async variant => {
     await render(false, {
       variant,
