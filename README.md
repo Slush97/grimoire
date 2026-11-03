@@ -50,7 +50,7 @@ Built from source via the repo's flake:
 
 ```nix
 # flake.nix
-inputs.grimoire.url = "github:Slush97/grimoire";
+inputs.grimoire.url = "github:Slush97/grimoire/stable";
 
 # use the package directly
 inputs.grimoire.packages.${pkgs.system}.default
@@ -61,7 +61,9 @@ environment.systemPackages = [ pkgs.grimoire ];
 ```
 
 Exposes `packages.<system>.{grimoire,vpkmerge}` and `overlays.default`.
-Updates come through the flake, not the in-app updater.
+Updates come through the flake (`nix flake update grimoire`), not the in-app updater.
+
+The `stable` branch follows releases, and only moves once the release's Nix package has built and passed a launch test in CI. Plain `github:Slush97/grimoire` tracks `main`, which gets every change before it's released and is only tested as a Nix package once a day.
 
 Requires Deadlock installed via Steam.
 
