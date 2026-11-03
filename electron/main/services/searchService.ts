@@ -307,7 +307,7 @@ export function searchMods(options: SearchOptions): SearchResult {
                 .join(' ');
             if (searchTerms) {
                 params.query = searchTerms;
-                fromClause = 'FROM mods JOIN mods_fts ON mods.id = mods_fts.rowid';
+                fromClause = 'FROM mods JOIN mods_fts ON mods.row_id = mods_fts.rowid';
                 rankSelect = 'bm25(mods_fts) as rank';
                 conditions.push('mods_fts MATCH @query');
                 appliedFtsQuery = true;

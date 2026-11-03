@@ -273,6 +273,23 @@ periodic Browse polling. New unseen entries moving above an already-fetched
 page still require Refresh or a fresh query because the remote API has no stable
 pagination snapshot.
 
+Changing between live API and local catalog results restarts at page one because
+their page sizes and ordering can differ. Session caches identify the completed
+query and its source, preserving scroll offset through the virtualizer.
+
+Toolbar Refresh fetches one fresh listing for live results. Catalog-backed
+filters first refresh only page one of each selected section, sharing pending
+head requests, then replace the local results. Refresh does not run a full sync
+or change the full-sync timestamp. The refresh icon finishes each eased full
+revolution before resting once the replacement results arrive.
+
+The catalog identifies entries by `(section, id)` and uses a separate `row_id`
+for FTS indexing. Cached details, content flags and download counts also scope
+their lookups to the section. Existing numeric-key caches migrate atomically,
+retaining rows, enrichment and category trees while rebuilding search. The
+migration marks the full mirror stale so the next normal sync can recover
+entries that an older cache may have overwritten.
+
 ### NSFW Handling
 Deadlock has a significant number of NSFW submissions.
 1. **List View**: Check `_bIsNsfw`. If missing, check `_bHasContentRatings`. If `true`, treat as potentially NSFW (blur it).

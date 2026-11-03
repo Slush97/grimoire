@@ -226,6 +226,8 @@ type BrowseResultCacheEntry = {
   totalCount: number;
   scrollTop: number;
   fetchedAt: number;
+  source: 'local' | 'remote' | undefined;
+  sessionStamp: string | undefined;
 };
 
 type QueuedDownloadState = {
@@ -382,7 +384,7 @@ export default function Browse() {
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
   const initialFilterStamp = `${browseUi.selectedSections.slice().sort().join(',')}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${browseUi.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
-  const initialCache = browseSession && browseSession.stamp === initialFilterStamp && browseCacheIsFresh(browseSession.fetchedAt)
+  const initialCache = browseSession && browseSession.source && browseSession.stamp === initialFilterStamp && browseCacheIsFresh(browseSession.fetchedAt)
     ? browseSession
     : null;
 
@@ -409,6 +411,7 @@ export default function Browse() {
   const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   const [modalNavigation, setModalNavigation] = useState<{ direction: ModDetailsNavigationDirection; label: string } | null>(null);
   const modalNavigationRequestRef = useRef(0);
+  useEffect(() => () => { modalNavigationRequestRef.current += 1; }, []);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? true);
   // A page>1 (or stale-results) fetch failure routes here instead of `error`
@@ -463,6 +466,9 @@ export default function Browse() {
   // effect falls back to the API path. Resets whenever filter inputs change.
   const [localSearchFailed, setLocalSearchFailed] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [refreshIconSpinning, setRefreshIconSpinning] = useState(false);
+  const manualRefreshRef = useRef(false);
+  const refreshPreparingRef = useRef(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // Multi-file quick-install picker anchored to a card's Install button (#209).
   const [filePicker, setFilePicker] = useState<{
@@ -777,6 +783,9 @@ export default function Browse() {
   // Cache only completed pages so leaving during a fetch cannot skip its results.
   const pageRef = useRef<number>(page);
   const fetchedAtRef = useRef(initialCache?.fetchedAt ?? 0);
+  const resultSourceRef = useRef(initialCache?.source);
+  const loadedSessionStampRef = useRef(initialCache?.stamp);
+  const querySessionStamp = `${sectionStamp}|${effectiveSearch}|${sort}|${categoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${addedFrom}|${addedTo}|${submitter?.id ?? ''}|${hiddenCreatorOverrideId ?? ''}|${hiddenCreatorsStamp}`;
   const hasMoreRef = useRef<boolean>(hasMore);
   const totalCountRef = useRef<number>(_totalCount);
   useEffect(() => {
@@ -804,6 +813,8 @@ export default function Browse() {
       totalCount: totalCountRef.current,
       scrollTop,
       fetchedAt: fetchedAtRef.current,
+      source: resultSourceRef.current,
+      sessionStamp: loadedSessionStampRef.current,
     });
     browseScrollCacheRef.current.set(stamp, scrollTop);
   }, []);
@@ -817,6 +828,8 @@ export default function Browse() {
       totalCount: _totalCount,
       scrollTop: initialCache.scrollTop,
       fetchedAt: initialCache.fetchedAt ?? 0,
+      source: initialCache.source,
+      sessionStamp: initialCache.stamp,
     });
     browseScrollCacheRef.current.set(fetchFilterStamp, initialCache.scrollTop);
     activeFetchFilterStampRef.current = fetchFilterStamp;
@@ -925,15 +938,10 @@ export default function Browse() {
   // since the closure captures at first render.
   useEffect(() => {
     return () => {
-      const ui = useAppStore.getState().browseUi;
-      const liveSettings = useAppStore.getState().settings;
-      const liveHiddenCreators = liveSettings?.hiddenCreators ?? [];
-      const liveNsfw = browseNsfwFilter(liveSettings?.nsfwContentMode ?? 'blur', ui.onlyNsfw);
-      const stamp = `${ui.selectedSections.slice().sort().join(',')}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${liveNsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}|${ui.hiddenCreatorOverrideId ?? ''}|${hiddenCreatorIdsStamp(liveHiddenCreators)}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
       // unhelpfully. Clear instead so the next mount starts fresh.
-      if (cachedMods.length === 0) {
+      if (cachedMods.length === 0 || !loadedSessionStampRef.current) {
         setBrowseSession(null);
         return;
       }
@@ -947,7 +955,8 @@ export default function Browse() {
         totalCount: totalCountRef.current,
         scrollTop,
         fetchedAt: fetchedAtRef.current,
-        stamp,
+        source: resultSourceRef.current,
+        stamp: loadedSessionStampRef.current,
       });
     };
   }, [setBrowseSession]);
@@ -1011,7 +1020,14 @@ export default function Browse() {
     );
   }, [useLocalSearch, section, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, submitter, hasLocalCache, localSearchFailed]);
 
+  const finishRefresh = useStableCallback(() => {
+    manualRefreshRef.current = false;
+    setSyncing(false);
+    if (prefersReducedMotion) setRefreshIconSpinning(false);
+  });
+
   const fetchMods = useCallback(async () => {
+    if (refreshPreparingRef.current) return;
     // Don't fetch from API if we're using local search
     if (useLocalSearch) return;
     if (restoredCacheSkipStampRef.current === fetchFilterStamp) {
@@ -1070,7 +1086,7 @@ export default function Browse() {
       if (response.records.length > 0) {
         try {
           const ids = response.records.map(m => m.id);
-          const nsfwStatus = await window.electronAPI.getModsNsfwStatus(ids);
+          const nsfwStatus = await window.electronAPI.getModsNsfwStatus(ids, section);
           enrichedRecords = response.records.map(mod => ({
             ...mod,
             nsfw: nsfwStatus[mod.id] ?? mod.nsfw ?? false,
@@ -1079,16 +1095,6 @@ export default function Browse() {
           // If enrichment fails, continue with original data
           console.warn('Failed to enrich NSFW status from cache:', enrichErr);
         }
-      }
-
-      // Remote fallback paths cannot express a negative submitter filter in
-      // GameBanana's API. Filter defensively here; normal browsing routes to
-      // the local catalog above so pagination remains full and accurate. Only
-      // trusted entry points may deliberately reveal one hidden artist.
-      if (!allowHiddenSubmitter) {
-        enrichedRecords = enrichedRecords.filter(
-          (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
-        );
       }
 
       if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
@@ -1106,6 +1112,8 @@ export default function Browse() {
       totalCountRef.current = response.totalCount;
       hasMoreRef.current = nextHasMore;
       fetchedAtRef.current = Date.now();
+      resultSourceRef.current = 'remote';
+      loadedSessionStampRef.current = querySessionStamp;
       const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
       browseResultsCacheRef.current.set(fetchFilterStamp, {
         mods: nextMods,
@@ -1114,6 +1122,8 @@ export default function Browse() {
         totalCount: response.totalCount,
         scrollTop: cachedScrollTop,
         fetchedAt: fetchedAtRef.current,
+        source: 'remote',
+        sessionStamp: querySessionStamp,
       });
       browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
@@ -1135,6 +1145,7 @@ export default function Browse() {
       if (requestGeneration === requestGenerationRef.current && lastFetchedStampRef.current === stamp) {
         setLoading(false);
         setLoadingMore(false);
+        finishRefresh();
       }
     }
   }, [
@@ -1149,12 +1160,13 @@ export default function Browse() {
     fetchFilterStamp,
     useLocalSearch,
     submitter,
-    allowHiddenSubmitter,
-    hiddenCreatorIdSet,
+    querySessionStamp,
+    finishRefresh,
   ]);
 
   // Local search function using SQLite cache
   const searchLocal = useCallback(async () => {
+    if (refreshPreparingRef.current) return;
     if (restoredCacheSkipStampRef.current === fetchFilterStamp) {
       restoredCacheSkipStampRef.current = null;
       return;
@@ -1267,6 +1279,8 @@ export default function Browse() {
       totalCountRef.current = result.totalCount;
       hasMoreRef.current = nextHasMore;
       fetchedAtRef.current = Date.now();
+      resultSourceRef.current = 'local';
+      loadedSessionStampRef.current = querySessionStamp;
       const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
       browseResultsCacheRef.current.set(fetchFilterStamp, {
         mods: nextMods,
@@ -1275,6 +1289,8 @@ export default function Browse() {
         totalCount: result.totalCount,
         scrollTop: cachedScrollTop,
         fetchedAt: fetchedAtRef.current,
+        source: 'local',
+        sessionStamp: querySessionStamp,
       });
       browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
@@ -1294,9 +1310,10 @@ export default function Browse() {
       if (requestGeneration === requestGenerationRef.current && lastFetchedStampRef.current === stamp) {
         setLoading(false);
         setLoadingMore(false);
+        finishRefresh();
       }
     }
-  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, selectedSections, combinedFeed, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, selectedHeroCategoryIds, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp, querySessionStamp, finishRefresh]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -1316,8 +1333,10 @@ export default function Browse() {
     lastFetchedStampRef.current = null;
 
     const cached = browseResultsCacheRef.current.get(current);
-    if (cached && browseCacheIsFresh(cached.fetchedAt)) {
+    if (cached && !manualRefreshRef.current && browseCacheIsFresh(cached.fetchedAt) && cached.source === (useLocalSearch ? 'local' : 'remote')) {
       fetchedAtRef.current = cached.fetchedAt;
+      resultSourceRef.current = cached.source;
+      loadedSessionStampRef.current = cached.sessionStamp;
       pageRef.current = cached.page;
       pendingPageResetStampRef.current = null;
       setMods(cached.mods);
@@ -1357,7 +1376,7 @@ export default function Browse() {
     // auto-pagination for the fresh result set.
     setLoadMoreError(null);
     setAutoLoadPaused(false);
-  }, [cacheCurrentBrowseResults, fetchFilterStamp, page]);
+  }, [cacheCurrentBrowseResults, fetchFilterStamp, page, useLocalSearch]);
 
   useEffect(() => {
     const models = new Set(['ModCategory', ...sectionStamp.split(',').map(categoryModelForSection)]);
@@ -1402,24 +1421,28 @@ export default function Browse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fetchMods and searchLocal share `lastFetchedStampRef`, and its key
-  // (`page` + fetchFilterStamp) describes the FILTERS only, not which backend
-  // answered them. So when the catalog becomes usable mid-session the fetch
-  // effect below re-runs, calls searchLocal instead of fetchMods, and the
-  // shared gate sees an identical stamp and early-returns: the grid keeps the
-  // remote, default-ordered results and the local mirror is never queried
-  // until the user happens to touch a filter. Worse, the route trace would
-  // report `route=local` over remote data, which is exactly backwards in the
-  // state the tracing exists to explain. Dropping the stamp on a routing flip
-  // lets the pending query re-run against the backend that can actually
-  // serve it. Declared before the fetch effect so it clears the gate first.
-  const lastRoutedLocalRef = useRef(useLocalSearch);
+  // A backend change can alter page size and ordering without changing filters.
+  // Restart before the fetch effect runs so those pages cannot be mixed. A
+  // restored cache already identifies its source and can keep its position.
+  const lastRoutedLocalRef = useRef<'local' | 'remote' | undefined>(initialCache?.source);
   useEffect(() => {
-    if (lastRoutedLocalRef.current === useLocalSearch) return;
-    lastRoutedLocalRef.current = useLocalSearch;
+    if (!catalogChecked) return;
+    const source = useLocalSearch ? 'local' : 'remote';
+    const previous = lastRoutedLocalRef.current;
+    lastRoutedLocalRef.current = source;
+    if (!previous || previous === source) return;
+    if (restoredCacheSkipStampRef.current === fetchFilterStamp) return;
+    requestGenerationRef.current += 1;
+    fetchedAtRef.current = 0;
     lastFetchedStampRef.current = null;
-    traceBrowse(`routing flipped to ${useLocalSearch ? 'local' : 'remote'}; re-running current query`);
-  }, [useLocalSearch]);
+    restoredCacheSkipStampRef.current = null;
+    browseResultsCacheRef.current.delete(fetchFilterStamp);
+    if (page !== 1) pendingPageResetStampRef.current = fetchFilterStamp;
+    setPage(1);
+    setAutoLoadPaused(false);
+    setLoadMoreError(null);
+    traceBrowse(`routing flipped to ${source}; restarting pagination`);
+  }, [useLocalSearch, catalogChecked, fetchFilterStamp, page]);
 
   // A finished catalog sync writes new rows straight into mods-cache.db, but
   // the grid keeps whatever it fetched at mount: the fetch effect below only
@@ -1449,6 +1472,7 @@ export default function Browse() {
       // what keeps a three-section sync from firing three redundant queries.
       if (!useAppStore.getState().browseUi.selectedSections.includes(data.section)) return;
       fetchedAtRef.current = 0;
+      if (manualRefreshRef.current) return;
       if (!useLocalSearchRef.current) return;
       if (pageRef.current !== 1) return;
       traceBrowse(`catalog sync finished (${data.section}); re-running current query`);
@@ -1546,27 +1570,36 @@ export default function Browse() {
   };
 
   const handleRefresh = async () => {
+    if (manualRefreshRef.current) return;
+    manualRefreshRef.current = true;
+    refreshPreparingRef.current = true;
     setSyncing(true);
+    setRefreshIconSpinning(true);
+    requestGenerationRef.current += 1;
+    fetchedAtRef.current = 0;
     try {
-      // Sync current section from GameBanana API to local DB
-      for (const selected of selectedSections) await window.electronAPI.syncSection(selected);
-      // Reset state and force re-fetch
-      setMods([]);
+      // Remote results already fetch a fresh page. Catalog-backed filters need
+      // only the selected section heads, rather than a full mirror download.
+      if (useLocalSearch) await window.electronAPI.refreshCatalogHead(selectedSections);
+      refreshPreparingRef.current = false;
+      browseResultsCacheRef.current.clear();
+      browseScrollCacheRef.current.clear();
+      latestScrollTopRef.current = 0;
+      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
       setHasMore(true);
       setPage(1);
+      setLoadingMore(true);
       setError(null);
       setLoadMoreError(null);
       setAutoLoadPaused(false);
-      browseResultsCacheRef.current.delete(fetchFilterStamp);
-      browseScrollCacheRef.current.delete(fetchFilterStamp);
-      requestGenerationRef.current += 1;
       lastFetchedStampRef.current = null;
       pendingPageResetStampRef.current = null;
+      restoredCacheSkipStampRef.current = null;
       setRefreshKey(k => k + 1);
     } catch (err) {
       showToast(String(err), { tone: 'error', duration: 7000 });
-    } finally {
-      setSyncing(false);
+      refreshPreparingRef.current = false;
+      finishRefresh();
     }
   };
 
@@ -1602,7 +1635,7 @@ export default function Browse() {
 
       // Also update the local cache so future browses show correct status
       try {
-        await window.electronAPI.updateModNsfw(mod.id, details.nsfw);
+        await window.electronAPI.updateModNsfw(mod.id, details.nsfw, detailsSection);
       } catch (cacheErr) {
         console.warn('Failed to update NSFW cache:', cacheErr);
       }
@@ -1612,7 +1645,7 @@ export default function Browse() {
     if (details.files && details.files.length > 0) {
       const totalDownloads = details.files.reduce((sum, f) => sum + (f.downloadCount || 0), 0);
       try {
-        await window.electronAPI.updateModDownloadCount(mod.id, totalDownloads);
+        await window.electronAPI.updateModDownloadCount(mod.id, totalDownloads, detailsSection);
         // Update local state so the card shows the count immediately
         setMods(prev => prev.map(m =>
           browseModKey(m) === browseModKey(mod) ? { ...m, downloadCount: totalDownloads } : m
@@ -1624,11 +1657,14 @@ export default function Browse() {
   };
 
   const handleModClick = useStableCallback(async (mod: GameBananaMod) => {
+    const requestId = ++modalNavigationRequestRef.current;
+    setModalNavigation(null);
     try {
       const details = await getModDetails(mod.id, browseModSection(mod), { includeSubmitter: true });
+      if (modalNavigationRequestRef.current !== requestId) return;
       await applyLoadedModDetails(mod, details, browseModSection(mod));
     } catch (err) {
-      toastModActionError(err);
+      if (modalNavigationRequestRef.current === requestId) toastModActionError(err);
     }
   });
 
@@ -1675,7 +1711,7 @@ export default function Browse() {
       // Dates may not be in the current grid (cross-section / off-page link).
       // Prefer cache when present so the meta row still has something useful.
       try {
-        const cached = await window.electronAPI.getCachedMod(item.id);
+        const cached = await window.electronAPI.getCachedMod(item.id, item.section);
         if (modalNavigationRequestRef.current !== requestId) return;
         setSelectedModDates(
           cached
@@ -2415,11 +2451,8 @@ export default function Browse() {
               className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               title={t('browse.refreshFromGameBanana')}
             >
-              {syncing ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-5 h-5" />
-              )}
+              <RefreshCw className={`w-5 h-5 ${refreshIconSpinning ? 'browse-refresh-spin' : ''}`}
+                onAnimationIteration={() => { if (!syncing) setRefreshIconSpinning(false); }} />
             </button>
 
             <button
@@ -2871,6 +2904,7 @@ export default function Browse() {
               mods={displayMods}
               scrollRef={scrollContainerRef}
               gridRef={gridWrapRef}
+              initialScrollOffset={initialCache?.scrollTop ?? 0}
               columnCount={virtualColumnCount}
               columnWidth={virtualColumnWidth}
               cardHeight={virtualCardHeight}
@@ -2898,7 +2932,7 @@ export default function Browse() {
         })()}
         {/* Infinite Scroll Trigger */}
         <BrowseLoadMore scrollRef={scrollContainerRef} hasMore={hasMore} loading={loading || loadingMore}
-          paused={autoLoadPaused || !catalogChecked || mods.length === 0} needsMore={pagingPastFilteredPage} queryKey={fetchFilterStamp} onLoadMore={loadNextPage}>
+          paused={autoLoadPaused || syncing || !catalogChecked || mods.length === 0} needsMore={pagingPastFilteredPage} queryKey={fetchFilterStamp} onLoadMore={loadNextPage}>
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">

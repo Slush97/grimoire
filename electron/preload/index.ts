@@ -704,20 +704,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Mod Database (Local Cache)
     syncAllMods: () => ipcRenderer.invoke('sync-all-mods'),
     syncSection: (section: string) => ipcRenderer.invoke('sync-section', section),
-    refreshCatalogHead: () => ipcRenderer.invoke('refresh-catalog-head'),
+    refreshCatalogHead: (sections?: string[]) => ipcRenderer.invoke('refresh-catalog-head', sections),
     wipeModCache: () => ipcRenderer.invoke('wipe-mod-cache'),
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     needsSync: () => ipcRenderer.invoke('needs-sync'),
     isSyncInProgress: () => ipcRenderer.invoke('is-sync-in-progress'),
     searchLocalMods: (options: SearchLocalModsOptions) => ipcRenderer.invoke('search-local-mods', options),
-    getCachedMod: (id: number) => ipcRenderer.invoke('get-cached-mod', id),
+    getCachedMod: (id: number, section?: string) => ipcRenderer.invoke('get-cached-mod', id, section),
     getLocalModCount: (section?: string) => ipcRenderer.invoke('get-local-mod-count', section),
     getLocalCategories: (section?: string) => ipcRenderer.invoke('get-local-categories', section),
     getSectionStats: () => ipcRenderer.invoke('get-section-stats'),
-    getModsNsfwStatus: (ids: number[]) => ipcRenderer.invoke('get-mods-nsfw-status', ids),
-    updateModNsfw: (modId: number, isNsfw: boolean) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw),
-    getModsDownloadCounts: (ids: number[]) => ipcRenderer.invoke('get-mods-download-counts', ids),
-    updateModDownloadCount: (modId: number, downloadCount: number) => ipcRenderer.invoke('update-mod-download-count', modId, downloadCount),
+    getModsNsfwStatus: (ids: number[], section?: string) => ipcRenderer.invoke('get-mods-nsfw-status', ids, section),
+    updateModNsfw: (modId: number, isNsfw: boolean, section?: string) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw, section),
+    getModsDownloadCounts: (ids: number[], section?: string) => ipcRenderer.invoke('get-mods-download-counts', ids, section),
+    updateModDownloadCount: (modId: number, downloadCount: number, section?: string) => ipcRenderer.invoke('update-mod-download-count', modId, downloadCount, section),
     onSyncProgress: (callback: (data: SyncProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: SyncProgressData) => callback(data);
         ipcRenderer.on('sync-progress', handler);

@@ -1318,7 +1318,7 @@ export default function Installed() {
     setDetailsGameBananaId(m.gameBananaId);
     setDetailsDates(null);
     setDetailsOffline(false);
-    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null);
+    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId, section).catch(() => null);
     try {
       const details = await getModDetails(m.gameBananaId, section, { includeSubmitter: true });
       const cached = await cachedPromise;
@@ -1417,7 +1417,7 @@ export default function Installed() {
     setDetailsSourceModId(source?.id ?? null);
     setDetailsDates(null);
 
-    const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
+    const cachedPromise = window.electronAPI.getCachedMod(item.id, item.section).catch(() => null);
     try {
       const details = await getModDetails(item.id, item.section, { includeSubmitter: true });
       const cached = await cachedPromise;
@@ -2632,7 +2632,7 @@ export default function Installed() {
   const viewEntryAuthor = useStableCallback(async (mod: Mod) => {
     if (!mod.gameBananaId) return;
     try {
-      const cached = await window.electronAPI.getCachedMod(mod.gameBananaId).catch(() => null);
+      const cached = await window.electronAPI.getCachedMod(mod.gameBananaId, mod.sourceSection ?? 'Mod').catch(() => null);
       let artist: BrowseArtistRef | undefined =
         cached?.submitterId && cached.submitterId > 0
           ? { id: cached.submitterId, name: cached.submitterName ?? 'Artist', profileUrl: cached.profileUrl }

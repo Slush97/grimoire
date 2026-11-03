@@ -348,6 +348,7 @@ export interface BrowseSessionCache {
   scrollTop: number;
   /** Time of the last successful query, not the time the tab was closed. */
   fetchedAt?: number;
+  source?: 'local' | 'remote';
   /** Stamp of the filter state these mods belong to. If any filter changes
    *  while Browse is unmounted (impossible today, but defensive), we'll
    *  refetch instead of restoring stale results. */

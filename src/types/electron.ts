@@ -1372,20 +1372,20 @@ export interface ElectronAPI {
     syncSection: (section: string) => Promise<{ success: boolean }>;
     /** Launch-time top-up: page 1 of each section only, leaving the 24h full-sync
      *  cadence (`needsSync`) untouched. */
-    refreshCatalogHead: () => Promise<{ success: boolean }>;
+    refreshCatalogHead: (sections?: string[]) => Promise<{ success: boolean }>;
     wipeModCache: () => Promise<{ success: boolean }>;
     getSyncStatus: () => Promise<Record<string, { lastSync: number; count: number } | null>>;
     needsSync: () => Promise<boolean>;
     isSyncInProgress: () => Promise<boolean>;
     searchLocalMods: (options: SearchLocalModsOptions) => Promise<LocalSearchResult>;
-    getCachedMod: (id: number) => Promise<CachedMod | null>;
+    getCachedMod: (id: number, section?: string) => Promise<CachedMod | null>;
     getLocalModCount: (section?: string) => Promise<number>;
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
-    getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
-    getModsDownloadCounts: (ids: number[]) => Promise<Record<number, number>>;
-    updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
-    updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
+    getModsNsfwStatus: (ids: number[], section?: string) => Promise<Record<number, boolean>>;
+    getModsDownloadCounts: (ids: number[], section?: string) => Promise<Record<number, number>>;
+    updateModNsfw: (modId: number, isNsfw: boolean, section?: string) => Promise<void>;
+    updateModDownloadCount: (modId: number, downloadCount: number, section?: string) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
     /** Write a renderer-side trace line into main.log (and therefore into
      *  diagnostic reports). Fire-and-forget, returns nothing. */

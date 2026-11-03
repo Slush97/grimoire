@@ -25,7 +25,7 @@ export function RequirementIdentity({ item, target, installedMod }: { item: ModR
   useEffect(() => {
     if (!id) return;
     let current = true;
-    void window.electronAPI.getCachedMod(id).then(mod => {
+    void window.electronAPI.getCachedMod(id, section).then(mod => {
       if (current) setCached(mod?.section === section ? mod : null);
     }).catch(() => {});
     return () => { current = false; };

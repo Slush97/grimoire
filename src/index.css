@@ -1781,6 +1781,14 @@ body {
   .mod-list-count-pop { animation: mod-list-count-pop 240ms ease-out; }
 }
 
+@keyframes browseRefreshSpin {
+  to { transform: rotate(360deg); }
+}
+
+.browse-refresh-spin {
+  animation: browseRefreshSpin 900ms ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-slide-in-left,
   .animate-hero-zoom-in,
@@ -1860,6 +1868,10 @@ body {
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */
   .update-stripes::before {
+    animation: none;
+  }
+
+  .browse-refresh-spin {
     animation: none;
   }
 

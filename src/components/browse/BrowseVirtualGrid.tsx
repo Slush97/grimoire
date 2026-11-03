@@ -52,6 +52,7 @@ type BrowseVirtualGridProps = {
   mods: GameBananaMod[];
   scrollRef: RefObject<HTMLDivElement | null>;
   gridRef: RefObject<HTMLDivElement | null>;
+  initialScrollOffset: number;
   columnCount: number;
   columnWidth: number;
   cardHeight: number;
@@ -83,6 +84,7 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
   mods,
   scrollRef,
   gridRef,
+  initialScrollOffset,
   columnCount,
   columnWidth,
   cardHeight,
@@ -111,6 +113,7 @@ export const BrowseVirtualGrid = memo(function BrowseVirtualGrid({
   const rowVirtualizer = useVirtualizer({
     count: virtualRowCount,
     getScrollElement: () => scrollRef.current,
+    initialOffset: initialScrollOffset,
     estimateSize: () => rowHeight,
     overscan: BROWSE_GRID_OVERSCAN_ROWS,
   });

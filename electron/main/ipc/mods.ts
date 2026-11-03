@@ -2077,7 +2077,7 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
             author: modinfo.author,
             gamebananaId,
             gamebananaFileId: modinfo.source?.gamebananaFileId,
-            thumbnailUrl: catalogThumbnailUrl(gamebananaId),
+            thumbnailUrl: catalogThumbnailUrl(gamebananaId, modinfo.source?.section),
             kind: 'mod',
         };
     }
@@ -2110,9 +2110,9 @@ ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintR
 // Read from the local catalog mirror only, so peeking never touches the
 // network. A mod the catalog hasn't synced still gets its art from the
 // post-import fetch (fireAdoptedThumbnailFetches).
-function catalogThumbnailUrl(gamebananaId: number | undefined): string | undefined {
+function catalogThumbnailUrl(gamebananaId: number | undefined, section = 'Mod'): string | undefined {
     if (!gamebananaId) return undefined;
-    return getModById(gamebananaId)?.thumbnailUrl ?? undefined;
+    return getModById(gamebananaId, section)?.thumbnailUrl ?? undefined;
 }
 
 ipcMain.handle('review-mod-compatibility', async () => {
