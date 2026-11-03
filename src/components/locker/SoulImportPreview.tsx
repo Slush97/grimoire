@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } fr
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { makeBackdropTexture } from './soulBackdrops';
+import { zeroMetalness } from './soulModel';
 
 /**
  * Live 3D preview for the Soul Container import.
@@ -385,6 +386,7 @@ export default function SoulImportPreview({
   captureRef?: MutableRefObject<(() => string | null) | null>;
 }) {
   useLayoutEffect(() => {
+    zeroMetalness(scene);
     makeSourceMeshesVisible(scene);
     if (heroScene) makeSourceMeshesVisible(heroScene);
   }, [scene, heroScene]);
