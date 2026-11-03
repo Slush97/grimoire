@@ -25,8 +25,9 @@ export function meshUrlFor(key: string, mtimeMs: number | null): string {
 }
 
 /**
- * The grid lights a card directly, with no environment to reflect, and a metal surface only shows
- * what it reflects: the albedo alpha vpkmerge reads as metalness would draw most props near black.
+ * The grid and the import previews light a model directly, with no environment to reflect, and a
+ * metal surface only shows what it reflects: the albedo alpha vpkmerge reads as metalness would draw
+ * most props near black.
  */
 export function zeroMetalness(scene: THREE.Object3D): void {
   scene.traverse((obj) => {
