@@ -12,7 +12,7 @@
   stdenv,
   fetchPnpmDeps,
   pnpmConfigHook,
-  pnpm_10,
+  pnpm_12,
   nodejs_24,
   electron,
   makeWrapper,
@@ -29,7 +29,7 @@
 }:
 
 let
-  pnpm = pnpm_10;
+  pnpm = pnpm_12;
 
   packageJson = builtins.fromJSON (builtins.readFile (grimoire-src + "/package.json"));
 
@@ -61,7 +61,7 @@ stdenv.mkDerivation (finalAttrs: {
     # (.github/workflows/nix.yml) runs that build on every PR that touches
     # pnpm-lock.yaml, so a stale hash fails CI instead of downstream users.
     fetcherVersion = 4;
-    hash = "sha256-tOkLOl+Ppp9PwGfqMliFM6b5DDg5wyiFFkmOowRdFQM=";
+    hash = "sha256-GkJ1wSxBFcuzsHH+Uy/a9w1juFS5bUzH08vzujFK1HA=";
   };
 
   nativeBuildInputs = [

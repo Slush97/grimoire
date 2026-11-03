@@ -64,8 +64,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          # Match the local pnpm that generates pnpm-lock.yaml (v10); see ci.yml.
-          version: 10
+          # See ci.yml: the checkout lives in grimoire/.
+          package_json_file: grimoire/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -79,7 +79,7 @@ jobs:
       # from the Electron build.
       - name: Install grimoire-social deps (for the shared workspace package)
         working-directory: grimoire-social
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install dependencies
         working-directory: grimoire

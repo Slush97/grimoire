@@ -9,11 +9,12 @@
   },
   "type": "module",
   "main": "dist/main/index.js",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "better-sqlite3"
-    ]
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.x",
+      "onFail": "download"
+    }
   },
   "scripts": {
     "prepare": "husky",
