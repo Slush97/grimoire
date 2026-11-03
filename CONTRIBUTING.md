@@ -7,7 +7,7 @@ Thanks for your interest in contributing.
 Requirements:
 
 - [Node.js](https://nodejs.org/) 24+
-- [pnpm](https://pnpm.io/) 12 (pinned in `package.json`. Upgrade first: pnpm 10 can't read the lockfile, and pnpm 11 rewrites its header)
+- [pnpm](https://pnpm.io/) 12 (`package.json` rejects other versions)
 - [Git](https://git-scm.com/)
 
 With Nix, `flake.nix` provides all of the above via `nix develop`. On NixOS
