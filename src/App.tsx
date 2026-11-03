@@ -23,7 +23,7 @@ const Discover = lazy(() => import('./pages/Discover'));
 const Servers = lazy(() => import('./pages/Servers'));
 const Locker = lazy(() => import('./pages/Locker'));
 const Foundry = lazy(() => import('./pages/Foundry'));
-const Conflicts = lazy(() => import('./pages/Conflicts'));
+const Overlap = lazy(() => import('./pages/Overlap'));
 const Profiles = lazy(() => import('./pages/Profiles'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Crosshair = lazy(() => import('./pages/Crosshair'));
@@ -87,7 +87,7 @@ export default function App() {
               <Route path="servers" element={<Servers />} />
               <Route path="locker/*" element={<Locker />} />
               <Route path="foundry" element={<Foundry />} />
-              <Route path="conflicts" element={<Conflicts />} />
+              <Route path="overlap" element={<Overlap />} />
               <Route path="profiles" element={<Profiles />} />
               <Route path="crosshair" element={<Crosshair />} />
               <Route path="autoexec" element={<Autoexec />} />

@@ -72,30 +72,36 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 }
 
 // ============================================================================
-// PageHeader - serif title, optional one-line description, actions right
+// PageHeader - serif title, optional one-line description, actions right.
+// `intro` is for longer text: it runs under the whole row, so the actions stay
+// beside the title instead of wrapping below it.
 // ============================================================================
 
 interface PageHeaderProps {
     title: ReactNode;
     description?: ReactNode;
+    intro?: ReactNode;
     action?: ReactNode;
     stats?: ReactNode;
     className?: string;
 }
 
-export function PageHeader({ title, description, action, stats, className = '' }: PageHeaderProps) {
+export function PageHeader({ title, description, intro, action, stats, className = '' }: PageHeaderProps) {
     return (
-        <div className={`flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-border ${className}`}>
-            <div className="min-w-0">
-                <h1 className="text-2xl font-reaver tracking-wide text-text-primary leading-tight whitespace-nowrap">
-                    {title}
-                </h1>
-                {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
+        <div className={`pb-4 border-b border-border ${className}`}>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                    <h1 className="text-2xl font-reaver tracking-wide text-text-primary leading-tight whitespace-nowrap">
+                        {title}
+                    </h1>
+                    {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                    {stats && <div className="text-sm text-text-secondary">{stats}</div>}
+                    {action}
+                </div>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-                {stats && <div className="text-sm text-text-secondary">{stats}</div>}
-                {action}
-            </div>
+            {intro && <div className="mt-2 max-w-3xl text-sm text-pretty text-text-secondary">{intro}</div>}
         </div>
     );
 }

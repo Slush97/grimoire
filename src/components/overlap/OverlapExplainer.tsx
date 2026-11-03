@@ -42,24 +42,24 @@ function Figure({ hat, jacket, pants, hatLost = false }: { hat: Source; jacket: 
 }
 
 /**
- * Explains that a conflict is a shared file, not a launch blocker: both mods
+ * Explains that overlap is a shared file, not a launch blocker: both mods
  * load, and only the files they both replace go to whichever loads first.
  */
-export default function ConflictExplainer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function OverlapExplainer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [aFirst, setAFirst] = useState(true);
 
   const mods = [
-    { id: 'a' as const, name: t('conflicts.explainer.modA'), parts: t('conflicts.explainer.modAParts'), slot: aFirst ? 0 : 1 },
-    { id: 'b' as const, name: t('conflicts.explainer.modB'), parts: t('conflicts.explainer.modBParts'), slot: aFirst ? 1 : 0 },
+    { id: 'a' as const, name: t('overlap.explainer.modA'), parts: t('overlap.explainer.modAParts'), slot: aFirst ? 0 : 1 },
+    { id: 'b' as const, name: t('overlap.explainer.modB'), parts: t('overlap.explainer.modBParts'), slot: aFirst ? 1 : 0 },
   ];
   const winner = aFirst ? mods[0].name : mods[1].name;
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" labelledBy="conflict-explainer-title">
+    <Modal open={open} onClose={onClose} size="lg" labelledBy="overlap-explainer-title">
       <ModalHeader
-        title={t('conflicts.explainer.title')}
-        titleId="conflict-explainer-title"
+        title={t('overlap.explainer.title')}
+        titleId="overlap-explainer-title"
         onClose={onClose}
         closeLabel={t('common.actions.close')}
       />
@@ -91,7 +91,7 @@ export default function ConflictExplainer({ open, onClose }: { open: boolean; on
                   <div key={file} className="flex flex-col items-center gap-0.5" style={{ width: SLOT_WIDTH }}>
                     <code className="font-mono text-2xs text-text-secondary">{file}</code>
                     <span className={`text-2xs ${i === 0 ? 'text-accent' : 'text-text-tertiary'}`}>
-                      {i === 0 ? t('conflicts.explainer.loadsFirst') : t('conflicts.explainer.loadsSecond')}
+                      {i === 0 ? t('overlap.explainer.loadsFirst') : t('overlap.explainer.loadsSecond')}
                     </span>
                   </div>
                 ))}
@@ -105,24 +105,24 @@ export default function ConflictExplainer({ open, onClose }: { open: boolean; on
               style={{ width: SLOT_WIDTH - 12 }}
             >
               <Figure hat={aFirst ? 'a' : 'b'} jacket="a" pants="b" />
-              <figcaption className="text-xs font-medium text-text-primary">{t('conflicts.explainer.inGame')}</figcaption>
-              <span className="text-2xs text-text-secondary">{t('conflicts.explainer.hatFrom', { name: winner })}</span>
+              <figcaption className="text-xs font-medium text-text-primary">{t('overlap.explainer.inGame')}</figcaption>
+              <span className="text-2xs text-text-secondary">{t('overlap.explainer.hatFrom', { name: winner })}</span>
             </figure>
           </div>
 
           <Button size="sm" variant="secondary" icon={ArrowDownUp} onClick={() => setAFirst((v) => !v)}>
-            {t('conflicts.explainer.swap')}
+            {t('overlap.explainer.swap')}
           </Button>
         </div>
 
         <div className="space-y-3 pb-1 text-sm text-text-secondary">
           <p>
-            <span className="font-medium text-text-primary">{t('conflicts.explainer.notAnError')}</span>{' '}
-            {t('conflicts.explainer.bothLoad')}
+            <span className="font-medium text-text-primary">{t('overlap.explainer.notAnError')}</span>{' '}
+            {t('overlap.explainer.bothLoad')}
           </p>
-          <p>{t('conflicts.explainer.sharedFiles')}</p>
-          <p>{t('conflicts.explainer.modelSwaps')}</p>
-          <p>{t('conflicts.explainer.whatToDo')}</p>
+          <p>{t('overlap.explainer.sharedFiles')}</p>
+          <p>{t('overlap.explainer.modelSwaps')}</p>
+          <p>{t('overlap.explainer.whatToDo')}</p>
         </div>
       </ModalBody>
     </Modal>

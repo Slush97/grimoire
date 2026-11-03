@@ -82,7 +82,7 @@ const SURFACE_PRESENCE: Record<string, SurfaceText> = {
     browse: { details: 'Browsing GameBanana', state: 'Hunting for mods' },
     discover: { details: 'Browsing the community', state: 'Looking through shared profiles' },
     locker: { details: 'In the Hero Locker', state: 'Organizing skins' },
-    conflicts: { details: 'Resolving mod conflicts' },
+    overlap: { details: 'Sorting out mod overlap' },
     profiles: { details: 'Managing mod profiles' },
     crosshair: { details: 'Designing a crosshair' },
     autoexec: { details: 'Editing the autoexec' },

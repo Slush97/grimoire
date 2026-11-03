@@ -49,7 +49,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 Every page renders inside `PageLayout` (`flow` when the shell scrolls, `fill` when the page owns its scroll regions). The shell already scrolls and fades in, so pages never add their own `h-full overflow-y-auto` or `animate-fade-in`.
 
-1. `PageHeader`: serif title, optional one-line description, actions on the right.
+1. `PageHeader`: serif title, optional one-line description, actions on the right. Anything longer goes in `intro`, which runs under the whole row.
 2. Toolbar row: search, one filter popover, view toggle.
 3. Content. Full width for grids (Installed, Browse, Locker), `maxWidth="5xl"` for forms and settings.
 

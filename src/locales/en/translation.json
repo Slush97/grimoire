@@ -95,7 +95,8 @@
       "collapseDetails": "Collapse details",
       "expandDetails": "Expand details",
       "tryAgain": "Try again",
-      "redo": "Redo"
+      "redo": "Redo",
+      "disable": "Disable"
     },
     "errorBoundary": {
       "title": "Something went wrong",
@@ -150,7 +151,7 @@
     "servers": "Servers",
     "locker": "Locker",
     "foundry": "Door Stuck",
-    "conflicts": "Conflicts",
+    "overlap": "Overlap",
     "profiles": "Profiles",
     "crosshair": "Crosshair",
     "autoexec": "Autoexec",
@@ -898,128 +899,115 @@
       "gamePathRequired": "Set your Deadlock game path in Settings before joining a server."
     }
   },
-  "conflicts": {
+  "overlap": {
+    "title": "Overlap",
+    "about": "This shows if overlapping files are present in any mods. This feature is really only needed if you run a million mods and need to see what has shared files. The creator of Grimoire keeps this option turned off via <settingsLink>Settings</settingsLink>.",
+    "errorTitle": "Couldn't check for overlap",
+    "empty": {
+      "title": "No overlap"
+    },
     "search": {
-      "label": "Search conflicts",
-      "placeholder": "Search active conflicts by mod or file...",
+      "label": "Search overlap",
+      "placeholder": "Search by mod or file",
       "clear": "Clear search",
-      "resultCount": "Showing {{count}} of {{total}} conflicts",
-      "noResults": "No matching conflicts",
-      "noResultsHint": "Try a different mod name or shared-file path."
+      "resultCount": "{{count}} of {{total}}",
+      "noResults": "Nothing matches",
+      "noResultsHint": "Try a different mod name or file path."
+    },
+    "standing": {
+      "wins": "Wins"
+    },
+    "notes": {
+      "sameSlot": "Both mods sit in the same load slot, so either one can load first. Click the card that should win.",
+      "sharedModel": "Both mods replace the same model, so {{name}} won't show up in game."
+    },
+    "kinds": {
+      "hud": "HUD and menus",
+      "images": "Icons and images",
+      "models": "Models",
+      "textures": "Textures",
+      "sounds": "Sounds",
+      "effects": "Effects",
+      "gameData": "Game data",
+      "text": "Text",
+      "maps": "Maps",
+      "other": "Other files",
+      "more_one": "+{{count}} more",
+      "more_other": "+{{count}} more"
+    },
+    "files": {
+      "count_one": "{{count}} file",
+      "count_other": "{{count}} files",
+      "ignoreForPair": "Ignore for these two mods",
+      "ignoreEverywhere": "Ignore in every mod",
+      "showMore_one": "Show {{count}} more",
+      "showMore_other": "Show {{count}} more",
+      "show": "Show files",
+      "hide": "Hide files"
     },
     "actions": {
-      "clearIgnored": "Clear ignored",
-      "clearing": "Clearing…",
-      "disable": "Disable",
-      "disableNamed": "Disable {{name}}",
-      "disabling": "Disabling…",
+      "help": "How overlap works",
       "ignore": "Ignore",
+      "ignoreTitle": "Stop showing this pair",
       "ignoreAll": "Ignore all",
-      "ignoreAllTitle": "Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore.",
-      "ignoreCount_one": "Ignore {{count}}",
-      "ignoreCount_other": "Ignore {{count}}",
-      "ignoreModEverywhere": "Ignore this mod everywhere",
-      "ignoreTitle": "Stop flagging this pair as a conflict",
-      "ignoring": "Ignoring…",
-      "unignore": "Unignore"
-    },
-    "confirm": {
-      "clearIgnoredHint": "Pairs that still conflict will reappear in the active list after refresh.",
-      "clearIgnoredMessage": "Every ignored pair will be restored to normal conflict detection.",
-      "clearIgnoredTitle_one": "Clear {{count}} ignored conflict?",
-      "clearIgnoredTitle_other": "Clear {{count}} ignored conflicts?",
-      "disableMessage": "{{name}} will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.",
-      "disableTitle": "Disable this mod?",
-      "ignoreAllHint": "Reversible: you can restore any pair individually with Unignore.",
-      "ignoreAllMessage": "Every currently active conflict pair will move to the Ignored section below.",
-      "ignoreAllTitle_one": "Ignore all {{count}} conflict?",
-      "ignoreAllTitle_other": "Ignore all {{count}} conflicts?"
-    },
-    "empty": {
-      "activeWithIgnored_one": "No active conflicts. {{count}} pair currently ignored, see below.",
-      "activeWithIgnored_other": "No active conflicts. {{count}} pairs currently ignored, see below.",
-      "noActive": "No active conflicts.",
-      "noConflicts": {
-        "title": "No Conflicts Detected",
-        "description": "Your installed mods don't have any conflicts. Great!"
-      }
-    },
-    "errors": {
-      "bothModsEnabled": "Both mods must be enabled to set their load order.",
-      "clearIgnoredFailed_one": "Failed to clear {{count}} ignored pair. See console for details.",
-      "clearIgnoredFailed_other": "Failed to clear {{count}} ignored pairs. See console for details.",
-      "ignoreFailed_one": "Failed to ignore {{count}} pair. See console for details.",
-      "ignoreFailed_other": "Failed to ignore {{count}} pairs. See console for details."
-    },
-    "errorTitle": "Error Loading Conflicts",
-    "files": {
-      "heading_one": "Shared file ({{count}})",
-      "heading_other": "Shared files ({{count}})",
-      "ignoreEverywhere": "Ignore in all mods",
-      "ignoreFile": "Ignore",
-      "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)",
-      "ignoreForPair": "Ignore for this pair",
-      "showMore_one": "Show {{count}} more",
-      "showMore_other": "Show {{count}} more"
-    },
-    "header": {
-      "description": "Resolve conflicts between installed mods",
-      "noActiveDescription": "No active conflicts. Review or restore your ignored pairs below."
+      "ignoreAllTitle": "Stop showing every pair listed here",
+      "swapLocked": "Global mods always load first. Turn off Global to change this.",
+      "more": "More actions",
+      "ignoreMod": "Ignore every overlap with {{name}}",
+      "disableHeading": "Disable"
     },
     "ignored": {
-      "clearTitle": "Restore conflict detection for every ignored pair",
-      "title_one": "Ignored ({{count}})",
-      "title_other": "Ignored ({{count}})",
-      "unignoreTitle": "Restore conflict detection for this pair"
-    },
-    "ignoredFiles": {
+      "title": "Ignored",
+      "tabs": {
+        "pairs": "Pairs",
+        "files": "Files",
+        "mods": "Mods"
+      },
+      "pair": "{{a}} and {{b}}",
+      "everyMod": "In every mod",
+      "restore": "Restore",
+      "restoreFile": "Restore this file",
       "restoreAll": "Restore all",
-      "restoreAllTitle": "Restore conflict detection for every ignored file in this pair",
-      "title": "Ignored files",
-      "unignoreFileTitle": "Restore this file to conflict detection"
+      "stale_one": "{{count}} more is for a mod that isn't installed anymore.",
+      "stale_other": "{{count}} more are for mods that aren't installed anymore.",
+      "forgetStale": "Forget"
     },
-    "ignoredFilesGlobal": {
-      "title": "Ignored in all mods",
-      "unignoreTitle": "Flag this file as a conflict again (across all mods)"
+    "confirm": {
+      "disableTitle": "Disable {{name}}?",
+      "disableMessage": "It moves out of the addons folder. You can turn it back on from Installed.",
+      "disable": "Disable",
+      "ignoreAllTitle_one": "Ignore {{count}} pair?",
+      "ignoreAllTitle_other": "Ignore {{count}} pairs?",
+      "ignoreAllMessage": "They move to Ignored at the bottom of the page. You can restore any of them later.",
+      "restoreAllTitle_one": "Restore {{count}} ignored item?",
+      "restoreAllTitle_other": "Restore {{count}} ignored items?",
+      "restoreAllMessage": "Anything that still overlaps shows up in the list again."
     },
-    "ignoredMods": {
-      "tag": "Ignored",
-      "title": "Ignored mods",
-      "unignoreTitle": "Flag this mod's conflicts again"
-    },
-    "noPreview": "No Preview",
-    "removedMod": "(removed mod)",
-    "reorder": {
-      "alreadyWins": "{{name}} already wins this conflict",
-      "enableBothHint": "Enable both mods to set their load order.",
-      "globalLocked": "Global mods load before everything else. Turn off Global to change this.",
-      "hint": "The mod that loads first overrides shared files. This sets the pair adjacent in load order.",
-      "makeWinner": "Make {{name}} win (load it before {{other}})",
-      "resolveByLoadOrder": "Resolve by load order",
-      "winsSharedFiles": "Wins shared files"
-    },
-    "title_one": "Conflicts ({{count}})",
-    "title_other": "Conflicts ({{count}})",
-    "view": {
-      "grid": "Grid view",
-      "list": "List view"
+    "errors": {
+      "bothEnabled": "Both mods need to be enabled to set their load order.",
+      "batchFailed_one": "{{count}} change failed. See the log for details.",
+      "batchFailed_other": "{{count}} changes failed. See the log for details."
     },
     "explainer": {
-      "title": "How conflicts work",
+      "title": "How overlap works",
       "modA": "Mod A",
       "modB": "Mod B",
       "modAParts": "Hat and jacket",
       "modBParts": "Hat and pants",
       "inGame": "In game",
       "hatFrom": "Hat from {{name}}",
-      "notAnError": "A conflict isn't an error.",
+      "notAnError": "Overlap isn't an error.",
       "bothLoad": "The game still starts, and both mods still load.",
       "sharedFiles": "It just means two mods change the same thing. For that one thing, the mod that loads first wins. Everything else from both mods still shows up in game.",
-      "whatToDo": "Pick which mod should win, or ignore the conflict if the game already looks right.",
+      "whatToDo": "Swap the order to pick which mod wins, or ignore the pair if the game already looks right.",
       "swap": "Swap load order",
       "loadsFirst": "Loads first",
       "loadsSecond": "Loads second",
       "modelSwaps": "Model swaps are the exception. If both mods replace the same model (like two skins for one hero), only the first one shows up, and the second one most likely won't load at all."
+    },
+    "stack": {
+      "pick": "Make {{name}} win",
+      "makeWin": "Make this win"
     }
   },
   "hiddenCreators": {
@@ -1226,7 +1214,7 @@
       "keepModBackups": "Keep removed mod files for 24 hours",
       "enableAfterDownload": "Enable mods after download",
       "confirmProfileUpdate": "Confirm before updating a profile",
-      "ignoreConflicts": "Ignore conflicts by default",
+      "ignoreOverlap": "Ignore overlap by default",
       "discordRpc": "Discord Rich Presence",
       "contributeMatchData": "Contribute match data to deadlock-api.com",
       "saltsContributed_one": "{{count}} match key contributed.",
@@ -1382,7 +1370,7 @@
       "keepModBackups": "Back up updated, replaced, and deleted mod files. Restore them as disabled files from a mod's Backups menu. Backups older than 24 hours are removed at startup. Turning this off stops new backups.",
       "enableAfterDownload": "Enable mods as soon as they finish downloading. Stays disabled if no slot is free.",
       "confirmProfileUpdate": "Confirm before overwriting a profile's saved mods. Off overwrites immediately.",
-      "ignoreConflicts": "Hide all conflicts from the Conflicts page. Off shows them.",
+      "ignoreOverlap": "Hide every overlap from the Overlap page. Off shows them.",
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, two download keys, and a fixed \"grimoire\" client tag: no account id, no player name, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
@@ -1748,11 +1736,13 @@
       "cardSize": "Card size",
       "cardSizeHint": "Card size (drag to the small end for compact cards)",
       "cardSizeGridOnly": "Card size applies to grid view.",
+      "grid": "Grid view",
+      "list": "List view",
       "cardSizeValue": "{{value}}x card size"
     },
     "status": {
-      "conflictCount_one": "{{count}} conflict",
-      "conflictCount_other": "{{count}} conflicts",
+      "overlapCount_one": "{{count}} overlap",
+      "overlapCount_other": "{{count}} overlaps",
       "issues_one": "{{count}} issue",
       "issues_other": "{{count}} issues",
       "enableCap": "You can have at most 990 mods enabled at once. Disable one to make room.",
@@ -2006,7 +1996,7 @@
       "enableMod": "Enable mod",
       "deselectNamed": "Deselect {{name}}",
       "selectNamed": "Select {{name}}",
-      "conflict": "Conflict",
+      "overlap": "Overlap",
       "outdatedData": "Outdated data",
       "outdatedDataTitle_one": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} field added to Deadlock since the mod was built is removed in game: {{sample}}",
       "outdatedDataTitle_other": "Ships an old copy of {{file}}. It replaces the game's copy, so {{count}} fields added to Deadlock since the mod was built are removed in game, starting with: {{sample}}",
@@ -3332,7 +3322,7 @@
       "crosshair": "Custom crosshair editor.",
       "autoexec": "Console commands that run at game launch.",
       "stats": "Match history and personal stats.",
-      "conflicts": "Mods that overwrite the same game files.",
+      "overlap": "Mods that change the same game files.",
       "profiles": "Save and swap sets of enabled mods."
     },
     "launch": {

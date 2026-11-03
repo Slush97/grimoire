@@ -3689,9 +3689,9 @@ export default function Installed() {
       key: 'conflicts',
       variant: 'warning',
       icon: AlertTriangle,
-      label: t('installed.status.conflictCount', { count: conflictPairCount }),
+      label: t('installed.status.overlapCount', { count: conflictPairCount }),
       count: conflictPairCount,
-      onOpen: () => navigate('/conflicts'),
+      onOpen: () => navigate('/overlap'),
     });
   }
   if (unknownMods.length > 0 && !fixUnknownHidden) {
@@ -4118,8 +4118,8 @@ export default function Installed() {
                     className="w-full"
                     value={layout}
                     options={[
-                      { value: 'grid', label: t('conflicts.view.grid'), icon: LayoutGrid },
-                      { value: 'list', label: t('conflicts.view.list'), icon: List },
+                      { value: 'grid', label: t('installed.view.grid'), icon: LayoutGrid },
+                      { value: 'list', label: t('installed.view.list'), icon: List },
                     ]}
                     onChange={(mode) => setLayout(mode === 'list' ? 'list' : 'grid')}
                   />
@@ -4780,7 +4780,7 @@ export default function Installed() {
                 onClick={handleBulkDisable}
                 title={selectedEnabledCount === 0 ? t('installed.select.noEnabledSelected') : t('installed.select.disableCount', { count: selectedEnabledCount })}
               >
-                {t('conflicts.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
+                {t('common.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
               </Button>
               <Button
                 variant="secondary"

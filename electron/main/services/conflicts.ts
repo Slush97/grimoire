@@ -12,7 +12,7 @@ export function conflictPairKey(a: string, b: string): string {
 }
 
 // Files to ignore when checking for conflicts (non-game metadata files)
-export const IGNORED_CONFLICT_FILES = new Set([
+const IGNORED_CONFLICT_FILES = new Set([
     'readme.txt',
     'readme.md',
     'license.txt',
@@ -37,9 +37,15 @@ export const IGNORED_CONFLICT_FILES = new Set([
 // false positive as the default fallback textures below; matched by full path
 // so a legitimately-named file elsewhere isn't swept up.
 const IGNORED_CONFLICT_PATHS = new Set([
-    'deadlockforge/made_with_dlf.txt',
     'panorama/image_compiler.vdata_c',
 ]);
+
+// Every .txt in the citadel and core paks lives under one of these (bar three
+// root-level tool files no mod overrides), and they are real game data: mods
+// ship resource/localization/*.txt to rename heroes, so a shared one is a true
+// overlap. A .txt anywhere else is a note the game never opens, such as a
+// readme or DeadlockForge's deadlockforge/made_with_dlf.txt.
+const GAME_READ_TXT_PREFIXES = ['cfg/', 'panorama/', 'resource/', 'scripts/', 'soundstacks/', 'tools/'];
 
 // Path prefixes for files the VPK packer commonly bundles even when the mod
 // doesn't really touch them. Two mods both shipping a copy of the engine's
@@ -54,11 +60,14 @@ const IGNORED_CONFLICT_PREFIXES = [
 /**
  * Check if a file path should be ignored for conflict detection
  */
-function shouldIgnoreFile(filePath: string): boolean {
+export function shouldIgnoreFile(filePath: string): boolean {
     const normalizedPath = filePath.toLowerCase();
     if (IGNORED_CONFLICT_PATHS.has(normalizedPath)) return true;
     const fileName = normalizedPath.split('/').pop() || normalizedPath;
     if (IGNORED_CONFLICT_FILES.has(fileName)) return true;
+    if (fileName.endsWith('.txt') && !GAME_READ_TXT_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix))) {
+        return true;
+    }
     for (const prefix of IGNORED_CONFLICT_PREFIXES) {
         if (normalizedPath.startsWith(prefix)) return true;
     }
