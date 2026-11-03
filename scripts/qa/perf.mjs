@@ -68,7 +68,7 @@ const ALL_ROUTES = [
   ['locker', '/locker'],
   ['locker-hero', '/locker/hero/:hero'],
   ['foundry', '/foundry'],
-  ['conflicts', '/conflicts'],
+  ['overlap', '/overlap'],
   ['profiles', '/profiles'],
   ['crosshair', '/crosshair'],
   ['autoexec', '/autoexec'],

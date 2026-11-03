@@ -161,21 +161,21 @@ describe('indexed conflict scans', () => {
 
   it('preserves pair order, mod A path order, deduplication, and case-sensitive overlaps', async () => {
     installed([
-      ['z.txt', 'a.txt', 'z.txt', 'Case.txt'],
-      ['a.txt', 'z.txt', 'case.txt'],
-      ['Case.txt', 'a.txt', 'z.txt'],
+      ['z.vtex_c', 'a.vtex_c', 'z.vtex_c', 'Case.vtex_c'],
+      ['a.vtex_c', 'z.vtex_c', 'case.vtex_c'],
+      ['Case.vtex_c', 'a.vtex_c', 'z.vtex_c'],
     ]);
     const conflicts = await detectConflicts('/deadlock');
     expect(conflicts.map((c) => [c.modA, c.modB, c.files])).toEqual([
-      ['mod0', 'mod1', ['z.txt', 'a.txt']],
-      ['mod0', 'mod2', ['z.txt', 'a.txt', 'Case.txt']],
-      ['mod1', 'mod2', ['a.txt', 'z.txt']],
+      ['mod0', 'mod1', ['z.vtex_c', 'a.vtex_c']],
+      ['mod0', 'mod2', ['z.vtex_c', 'a.vtex_c', 'Case.vtex_c']],
+      ['mod1', 'mod2', ['a.vtex_c', 'z.vtex_c']],
     ]);
-    expect(conflicts[1].details).toBe('3 shared file(s): z.txt, a.txt, Case.txt');
+    expect(conflicts[1].details).toBe('3 shared file(s): z.vtex_c, a.vtex_c, Case.vtex_c');
   });
 
   it('keeps priority conflicts first and scopes slots to their addon folder', async () => {
-    installed([['shared.txt'], ['shared.txt'], ['shared.txt'], ['shared.txt']], [
+    installed([['shared.vtex_c'], ['shared.vtex_c'], ['shared.vtex_c'], ['shared.vtex_c']], [
       { priority: 1 }, { priority: 1 }, { priority: 2 }, { priority: 1, metaKey: 'addons1/mod3.vpk' },
     ]);
     const conflicts = await detectConflicts('/deadlock');
@@ -190,7 +190,7 @@ describe('indexed conflict scans', () => {
   });
 
   it('retains pair suppression even if a scan contains repeated mod ids', async () => {
-    installed([['shared.txt'], ['shared.txt'], ['shared.txt']], [{}, {}, { id: 'mod1' }]);
+    installed([['shared.vtex_c'], ['shared.vtex_c'], ['shared.vtex_c']], [{}, {}, { id: 'mod1' }]);
     expect((await detectConflicts('/deadlock')).map((c) => [c.modA, c.modB])).toEqual([
       ['mod0', 'mod1'], ['mod1', 'mod1'],
     ]);
@@ -203,26 +203,27 @@ describe('indexed conflict scans', () => {
     expect((await detectConflicts('/deadlock'))[0].files).toEqual(['nested/default_foo.vtex_c']);
   });
 
-  it('ignores only the exact DeadlockForge marker path, case-insensitively', async () => {
+  it('ignores .txt outside the folders the game reads, case-insensitively', async () => {
     const paths = ['deadlockforge/made_with_dlf.txt', 'DEADLOCKFORGE/MADE_WITH_DLF.TXT',
-      'made_with_dlf.txt', 'other/made_with_dlf.txt', 'deadlockforge/settings.txt',
+      'made_with_dlf.txt', 'glamorous_geist_blue_readme.txt', 'notes/settings.txt',
+      'resource/localization/citadel_heroes/citadel_heroes_english.txt', 'SCRIPTS/soundmixers.txt',
       'models/heroes/abrams/body.vmdl_c'];
     installed([paths, paths.slice()]);
-    expect((await detectConflicts('/deadlock'))[0].files).toEqual(paths.slice(2));
+    expect((await detectConflicts('/deadlock'))[0].files).toEqual(paths.slice(5));
   });
 
-  it('reports no conflict for mods sharing only the DeadlockForge marker', async () => {
+  it('reports no conflict for mods sharing only a stray .txt', async () => {
     installed([['deadlockforge/made_with_dlf.txt'], ['deadlockforge/made_with_dlf.txt']]);
     expect(await detectConflicts('/deadlock')).toEqual([]);
   });
 
   it('applies every ignore layer freshly even when the file index is cached', async () => {
-    installed([['a.txt', 'b.txt', 'c.txt'], ['c.txt', 'b.txt', 'a.txt']]);
+    installed([['a.vtex_c', 'b.vtex_c', 'c.vtex_c'], ['c.vtex_c', 'b.vtex_c', 'a.vtex_c']]);
     const [conflict] = await detectConflicts('/deadlock');
     const settings = (value: Partial<AppSettings>) => vi.mocked(loadSettings).mockReturnValue(value as AppSettings);
-    settings({ ignoredConflictFilesGlobal: ['a.txt'], ignoredConflictFiles: { [conflict.ignoreKey]: ['b.txt'] } });
-    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['c.txt']);
-    settings({ ignoredConflictFiles: { [conflict.ignoreKey]: ['a.txt', 'b.txt', 'c.txt'] } });
+    settings({ ignoredConflictFilesGlobal: ['a.vtex_c'], ignoredConflictFiles: { [conflict.ignoreKey]: ['b.vtex_c'] } });
+    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['c.vtex_c']);
+    settings({ ignoredConflictFiles: { [conflict.ignoreKey]: ['a.vtex_c', 'b.vtex_c', 'c.vtex_c'] } });
     expect(await detectConflicts('/deadlock')).toEqual([]);
     for (const value of [
       { ignoreConflictsByDefault: true },
@@ -239,24 +240,24 @@ describe('indexed conflict scans', () => {
 
   it('reuses unchanged parse arrays and rebuilds after replacement, disappearance, or reordering', async () => {
     let reads = 0;
-    const filesA = ['a.txt', 'b.txt'];
-    Object.defineProperty(filesA, 0, { get: () => { reads++; return 'a.txt'; } });
-    const filesB = ['b.txt', 'a.txt'];
+    const filesA = ['a.vtex_c', 'b.vtex_c'];
+    Object.defineProperty(filesA, 0, { get: () => { reads++; return 'a.vtex_c'; } });
+    const filesB = ['b.vtex_c', 'a.vtex_c'];
     const mods = installed([filesA, filesB]);
-    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['a.txt', 'b.txt']);
+    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['a.vtex_c', 'b.vtex_c']);
     const initialReads = reads;
-    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['a.txt', 'b.txt']);
+    expect((await detectConflicts('/deadlock'))[0].files).toEqual(['a.vtex_c', 'b.vtex_c']);
     expect(reads).toBe(initialReads);
 
     vi.mocked(scanMods).mockResolvedValue([mods[1], { ...mods[0], name: 'Renamed' }]);
     h.metaMap[mods[0].metaKey] = { gameBananaId: 40 };
     const [reordered] = await detectConflicts('/deadlock');
-    expect(reordered.files).toEqual(['b.txt', 'a.txt']);
+    expect(reordered.files).toEqual(['b.vtex_c', 'a.vtex_c']);
     expect(reordered.modBName).toBe('Renamed');
     expect(reordered.modBIdentity).toBe('gb:40:mod');
 
     vi.mocked(parseVpkDirectoriesAsync).mockResolvedValue(new Map([
-      [mods[0].path, ['new.txt']], [mods[1].path, filesB],
+      [mods[0].path, ['new.vtex_c']], [mods[1].path, filesB],
     ]));
     expect(await detectConflicts('/deadlock')).toEqual([]);
     vi.mocked(parseVpkDirectoriesAsync).mockResolvedValue(new Map([[mods[1].path, filesB]]));
@@ -268,7 +269,7 @@ describe('indexed conflict scans', () => {
     const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed; };
     for (let round = 0; round < 8; round++) {
       const files = Array.from({ length: 18 }, (_, i) => Array.from({ length: 70 }, () =>
-        random() % 3 === 0 ? `unique/${i}/${random()}.txt` : `shared/${random() % (20 + round * 30)}.txt`
+        random() % 3 === 0 ? `unique/${i}/${random()}.vtex_c` : `shared/${random() % (20 + round * 30)}.vtex_c`
       ));
       const mods = installed(files);
       const expected: [string, string, string[]][] = [];

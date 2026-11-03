@@ -1568,7 +1568,7 @@ export function ModCard({
                   icon={AlertTriangle}
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
-                  {t('installed.card.conflict')}
+                  {t('installed.card.overlap')}
                 </Tag>
               )}
               <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="overlay" />

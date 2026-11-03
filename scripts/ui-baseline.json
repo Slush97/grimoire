@@ -190,10 +190,6 @@
     "focus-ring": 2,
     "em-dash": 9
   },
-  "src/pages/Conflicts.tsx": {
-    "raw-palette": 23,
-    "em-dash": 9
-  },
   "src/pages/Discover.tsx": {
     "raw-palette": 9,
     "em-dash": 1

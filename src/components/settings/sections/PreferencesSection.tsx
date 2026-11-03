@@ -57,11 +57,11 @@ export default function PreferencesSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
-          <Toggle id="settings-preferences-settings-preferences-ignoreConflicts-toggle"
+          <Toggle id="settings-preferences-settings-preferences-ignoreOverlap-toggle"
             checked={settings?.ignoreConflictsByDefault ?? false}
             onChange={(checked) => update({ ignoreConflictsByDefault: checked })}
-            label={<Tx k="settings.preferences.ignoreConflicts" fallback="Ignore conflicts by default" />}
-            description={<Tx k="settings.toggles.ignoreConflicts" fallback="Hide all conflicts from the Conflicts page. Off shows them." />}
+            label={<Tx k="settings.preferences.ignoreOverlap" fallback="Ignore overlap by default" />}
+            description={<Tx k="settings.toggles.ignoreOverlap" fallback="Hide every overlap from the Overlap page. Off shows them." />}
           />
 
           <FilterDivider className="h-px bg-hl/5" />

@@ -11,7 +11,7 @@ import {
   Target,
   ScrollText,
   Activity,
-  Swords,
+  Blend,
   BookMarked,
   Settings2,
   AlertTriangle,
@@ -520,7 +520,7 @@ export default function Sidebar() {
       { to: '/crosshair', icon: Target, labelKey: 'nav.crosshair', label: t('nav.crosshair'), tooltip: t('sidebar.tooltip.crosshair'), experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, labelKey: 'nav.autoexec', label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
-      { to: '/conflicts', icon: Swords, labelKey: 'nav.conflicts', label: t('nav.conflicts'), tooltip: t('sidebar.tooltip.conflicts'), badge: conflictCount, badgeTone: 'warning' },
+      { to: '/overlap', icon: Blend, labelKey: 'nav.overlap', label: t('nav.overlap'), tooltip: t('sidebar.tooltip.overlap'), badge: conflictCount, badgeTone: 'muted' },
       { to: '/profiles', icon: BookMarked, labelKey: 'nav.profiles', label: t('nav.profiles'), tooltip: t('sidebar.tooltip.profiles') },
     ];
 

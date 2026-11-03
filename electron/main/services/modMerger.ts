@@ -20,7 +20,7 @@ import {
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { resolveVpkIdentity, type OriginalIdentity } from './vpkIdentity';
 import { parseVpkDirectoryCached, parseVpkEntryStats } from './vpk';
-import { IGNORED_CONFLICT_FILES } from './conflicts';
+import { shouldIgnoreFile } from './conflicts';
 import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import {
     computeOriginalIdentity,
@@ -485,8 +485,7 @@ export function assertNoStrictCollisions(vpkPaths: string[]): void {
     const collisions = new Set<string>();
     for (const vpkPath of vpkPaths) {
         for (const entry of new Set(parseVpkDirectoryCached(vpkPath) ?? [])) {
-            const fileName = entry.toLowerCase().split('/').pop() ?? '';
-            if (IGNORED_CONFLICT_FILES.has(fileName)) continue;
+            if (shouldIgnoreFile(entry)) continue;
             if (seen.has(entry)) collisions.add(entry);
             else seen.add(entry);
         }
