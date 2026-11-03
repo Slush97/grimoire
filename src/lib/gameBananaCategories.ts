@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 
 /** Keys for GameBanana's Deadlock categories, by lowercased name. */
-const CATEGORY_LABEL_KEYS: Record<string, string> = {
+export const CATEGORY_LABEL_KEYS: Record<string, string> = {
   skins: 'gamebanana.categories.skins',
   abilities: 'gamebanana.categories.abilities',
   'other/misc': 'gamebanana.categories.otherMisc',

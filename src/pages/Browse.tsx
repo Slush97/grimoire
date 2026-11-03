@@ -1987,8 +1987,10 @@ export default function Browse() {
       }
     }
 
-    return Array.from(byLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [categories, categoriesSection, section, heroOptions]);
+    return Array.from(byLabel.values()).sort((a, b) =>
+      gameBananaCategoryLabel(a.label, t).localeCompare(gameBananaCategoryLabel(b.label, t))
+    );
+  }, [categories, categoriesSection, section, heroOptions, t]);
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
