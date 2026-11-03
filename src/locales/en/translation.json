@@ -1787,6 +1787,8 @@
       "receivingUpdates": "Mods receiving updates ({{count}})",
       "updateCount": "Update ({{count}})",
       "updateAll": "Update all",
+      "updateDisabled": "Only disabled",
+      "updateEnabled": "Only enabled",
       "updating": "Updating",
       "confirmTitle_one": "Update {{count}} file?",
       "confirmTitle_other": "Update {{count}} files?",
