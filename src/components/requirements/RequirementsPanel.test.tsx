@@ -346,9 +346,9 @@ describe('compact requirements panel', () => {
   });
 
   it.each([
-    ['enable', 'requirements.enableTitle', ['requirements.enableAll', 'requirements.onlyThis', 'requirements.disable']],
+    ['enable', 'requirements.enableTitle', ['requirements.disable', 'requirements.onlyThis', 'requirements.enableAll']],
     ['disable', 'requirements.disableTitle', ['requirements.disableAll', 'requirements.onlyThis', 'requirements.enable']],
-    ['manage', 'requirements.manageTitle', ['requirements.enableAll', 'requirements.disableAll', 'common.actions.close']],
+    ['manage', 'requirements.manageTitle', ['requirements.disableAll', 'requirements.enableAll', 'common.actions.close']],
   ] as const)('shows the %s dialog title and ordered footer actions', async (mode, title, actions) => {
     const dialog = await renderToggle(toggleReview(mode));
     expect(dialog.querySelector('h2')?.textContent).toBe(title);

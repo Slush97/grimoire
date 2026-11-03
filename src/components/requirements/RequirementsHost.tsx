@@ -96,6 +96,14 @@ export function RequirementToggleDialog({ review }: { review: RequirementToggleR
     }
     void apply([...desired].map(([key, enabled]) => ({ key, enabled })));
   };
+  const allAction = <Button icon={review.mode === 'disable' ? PowerOff : Power} disabled={busy || !target}
+    onClick={() => all(review.mode !== 'disable')}>{t(review.mode === 'disable' ? 'requirements.disableAll' : 'requirements.enableAll')}</Button>;
+  const onlyAction = <Button variant="secondary" disabled={busy || !target}
+    onClick={() => useRequirementsStore.getState().finishToggle('only')}>{t('requirements.onlyThis')}</Button>;
+  const declineAction = <Button variant="ghost" disabled={busy}
+    onClick={() => { void apply([{ key: review.key, enabled: review.mode === 'disable' }], 'cancel'); }}>
+    {t(review.mode === 'disable' ? 'requirements.enable' : 'requirements.disable')}
+  </Button>;
   return <Modal onClose={close} labelledBy="requirement-toggle-title" dismissable={!busy}
     backdropClassName="z-80" panelClassName="max-h-[85vh]">
     <ModalHeader titleId="requirement-toggle-title" title={t(review.mode === 'enable' ? 'requirements.enableTitle'
@@ -128,17 +136,13 @@ export function RequirementToggleDialog({ review }: { review: RequirementToggleR
       {error && <p role="alert" className="mt-3 text-sm text-state-danger">{t('requirements.changeFailed')}</p>}
     </ModalBody>
     <ModalFooter className="flex-wrap">
-      <Button icon={review.mode === 'disable' ? PowerOff : Power} disabled={busy || !target}
-        onClick={() => all(review.mode !== 'disable')}>{t(review.mode === 'disable' ? 'requirements.disableAll' : 'requirements.enableAll')}</Button>
       {review.mode === 'manage' ? <>
         <Button variant="secondary" icon={PowerOff} disabled={busy || !target} onClick={() => all(false)}>{t('requirements.disableAll')}</Button>
+        {allAction}
         <Button variant="ghost" disabled={busy} onClick={close}>{t('common.actions.close')}</Button>
-      </> : <>
-        <Button variant="secondary" disabled={busy || !target} onClick={() => useRequirementsStore.getState().finishToggle('only')}>{t('requirements.onlyThis')}</Button>
-        <Button variant="ghost" disabled={busy} onClick={() => { void apply([{ key: review.key, enabled: review.mode === 'disable' }], 'cancel'); }}>
-          {t(review.mode === 'disable' ? 'requirements.enable' : 'requirements.disable')}
-        </Button>
-      </>}
+      </> : review.mode === 'enable'
+        ? <>{declineAction}{onlyAction}{allAction}</>
+        : <>{allAction}{onlyAction}{declineAction}</>}
     </ModalFooter>
   </Modal>;
 }

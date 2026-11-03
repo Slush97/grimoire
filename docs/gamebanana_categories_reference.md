@@ -76,7 +76,7 @@ Match category names to the app's supported hero names and aliases to render her
 Mod details place the category tags above Files. Requirements share one compact card below current and archived files, before the artist information. Their thumbnails and names open the linked mod's details. Required and Recommended tags sit beside the existing actions; downloads remain in the linked mod's file section.
 
 Enabling an installed mod with required dependencies opens a confirmation with
-**Enable all**, **Only this**, and **Disable**. Disabling a dependency used by
+**Disable**, **Only this**, and **Enable all**. Disabling a dependency used by
 enabled mods offers **Disable all**, **Only this**, and **Enable**. The compact
 list includes thumbnails, requirement importance, and checkboxes that immediately
 enable or disable individual installed mods. Missing requirements stay visible
@@ -93,7 +93,7 @@ Closing and reopening the picker resets that choice. Cancelling a requirements
 prompt does not save a choice, and disable confirmations still apply individually.
 
 **View requirements** in a mod's context menu opens the same list with
-**Enable all** and **Disable all** actions. It also lists enabled mods that require
+**Disable all** and **Enable all** actions. It also lists enabled mods that require
 this mod, marking them as **Requires this mod**. The requirements icon also opens it.
 Required dependency problems on an enabled mod use a yellow icon; disabled mods
 and optional-only requirements use light gray. Requirements do not appear in
