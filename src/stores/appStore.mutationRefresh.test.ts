@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mod } from '../types/mod';
+import type { AppSettings, Mod } from '../types/mod';
 import * as api from '../lib/api';
 import { modRestoreKey } from '../lib/soloRestore';
 import { useAppStore } from './appStore';
@@ -34,6 +34,7 @@ beforeEach(() => {
     mods: [], modsLoaded: true, modsLoading: false, modsError: null, modsNotice: null,
     soloRestore: null, shuffleOnLaunch: false, shuffleIncluded: new Set(), shuffleVariants: new Map(),
     loadedGameModIds: new Set(),
+    settings: null,
   });
 });
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -294,6 +295,26 @@ describe('requirements toggle decisions', () => {
     expect(getModRequirements).toHaveBeenCalledExactlyOnceWith([{ id: 1, section: 'Mod' }], false);
     useRequirementsStore.getState().finishToggle();
     await expect(pending).resolves.toBe(false);
+  });
+});
+
+describe('optional requirement preference', () => {
+  it('uses the saved preference to prompt and respects turning it off', async () => {
+    const owner = { ...mod('owner', false), gameBananaId: 1 };
+    useAppStore.setState({ mods: [owner], settings: { promptOptionalRequirements: true } as AppSettings });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, {
+      status: 'loaded', checkedAt: Date.now(), items: [{ name: 'Optional base', importance: 'optional', state: 'on' }],
+    });
+    const pending = useAppStore.getState().toggleMod(owner.id);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview?.mode).toBe('enable'));
+    expect(api.enableMod).not.toHaveBeenCalled();
+    useRequirementsStore.getState().finishToggle();
+    await expect(pending).resolves.toBe(false);
+    useAppStore.setState({ settings: { promptOptionalRequirements: false } as AppSettings });
+    vi.mocked(api.enableMod).mockResolvedValueOnce({ ...owner, enabled: true });
+    await expect(useAppStore.getState().toggleMod(owner.id)).resolves.toBe(true);
+    expect(useRequirementsStore.getState().toggleReview).toBeNull();
+    expect(api.enableMod).toHaveBeenCalledExactlyOnceWith(owner.id);
   });
 });
 

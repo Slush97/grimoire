@@ -90,6 +90,26 @@ describe('requirements toggle review', () => {
     expect(useRequirementsStore.getState().toggleReview).toBeNull();
   });
 
+  it.each(['optional', 'recommended'] as const)('prompts for %s requirements when opted in', async importance => {
+    useRequirementsStore.getState().remember(source, {
+      ...source.requirements, status: 'loaded', items: [{ ...required, importance }],
+    });
+    const pending = requestRequirementToggle(owner, true, [owner], true);
+    expect(useRequirementsStore.getState().toggleReview).toMatchObject({ mod: owner, mode: 'enable' });
+    useRequirementsStore.getState().finishToggle('only');
+    await expect(pending).resolves.toBe('only');
+  });
+
+  it('still skips unknown and off requirements when optional prompts are enabled', async () => {
+    useRequirementsStore.getState().remember(source, {
+      ...source.requirements, status: 'loaded', items: [
+        { ...required, importance: 'unknown' }, { ...required, importance: 'optional', state: 'off' },
+      ],
+    });
+    await expect(requestRequirementToggle(owner, true, [owner], true)).resolves.toBe('skip');
+    expect(useRequirementsStore.getState().toggleReview).toBeNull();
+  });
+
   it('treats an unknown requirement state as on and includes required local edit sources', async () => {
     useRequirementsStore.getState().remember(source, {
       ...source.requirements, status: 'loaded', items: [{ ...required, state: 'unknown' }],

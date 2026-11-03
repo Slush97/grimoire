@@ -57,6 +57,15 @@ export default function PreferencesSection() {
 
           <FilterDivider className="h-px bg-hl/5" />
 
+          <Toggle id="settings-preferences-settings-preferences-promptOptionalRequirements-toggle"
+            checked={settings?.promptOptionalRequirements ?? false}
+            onChange={(checked) => update({ promptOptionalRequirements: checked })}
+            label={t('settings.preferences.promptOptionalRequirements')}
+            description={t('settings.toggles.promptOptionalRequirements')}
+          />
+
+          <FilterDivider className="h-px bg-hl/5" />
+
           <Toggle id="settings-preferences-settings-preferences-ignoreConflicts-toggle"
             checked={settings?.ignoreConflictsByDefault ?? false}
             onChange={(checked) => update({ ignoreConflictsByDefault: checked })}

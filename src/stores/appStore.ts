@@ -101,7 +101,7 @@ async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[]
   const direction = enabled ? 'dependencies' : 'dependents';
   const relatedKeys = requiredModClosure(current.id, reviewMods, useRequirementsStore.getState().snapshots, direction)
     .map(id => reviewMods.find(mod => mod.id === id)!).map(modRestoreKey);
-  const choice = await requestRequirementToggle(current, enabled, reviewMods);
+  const choice = await requestRequirementToggle(current, enabled, reviewMods, useAppStore.getState().settings?.promptOptionalRequirements ?? false);
   if (choice === 'cancel') return cancelled;
   const mods = readMods();
   const target = mods.find(mod => modRestoreKey(mod) === key);

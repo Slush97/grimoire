@@ -91,10 +91,11 @@ export function checkQuickInstallRequirements(source: ModRequirementSource, mods
 
 /** The dialog stays outside the mod mutation queue so its individual checkboxes
  * can apply changes while the original toggle waits for the user's choice. */
-export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: readonly Mod[]): Promise<RequirementToggleChoice> {
+export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: readonly Mod[], promptOptional = false): Promise<RequirementToggleChoice> {
   const store = useRequirementsStore.getState();
   const needsReview = enabled
-    ? installedModRequirements(mod, mods, store.snapshots).some(({ item }) => item.importance === 'required' && item.state !== 'off')
+    ? installedModRequirements(mod, mods, store.snapshots).some(({ item }) => item.state !== 'off'
+      && (item.importance === 'required' || (promptOptional && (item.importance === 'optional' || item.importance === 'recommended'))))
     : requiredModClosure(mod.id, mods, store.snapshots, 'dependents').length > 0;
   if (!needsReview) return Promise.resolve('skip');
   if (store.review || store.toggleReview || store.targets.length) return Promise.resolve('cancel');

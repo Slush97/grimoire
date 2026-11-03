@@ -82,7 +82,9 @@ list includes thumbnails, requirement importance, and checkboxes that immediatel
 enable or disable individual installed mods. Missing requirements stay visible
 with disabled checkboxes and links to their details. Required dependencies and
 enabled dependents are followed transitively, with cycle protection; optional
-dependencies never trigger a confirmation. Another enabled variant can satisfy
+dependencies trigger a confirmation only when **Prompt for optional requirements**
+is enabled in Settings > Preferences (off by default). This includes recommended
+dependencies and only changes when the enable dialog opens. Another enabled variant can satisfy
 the same requirement without disabling its dependents.
 
 **View requirements** in a mod's context menu opens the same list with
