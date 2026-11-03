@@ -12,7 +12,8 @@ export interface HeroPortrait {
    *  but stays unique across folders, which the bare filename does not once a
    *  user overflows. Round-tripped verbatim back into applyHeroCard. */
   modFileName: string;
-  /** card | vertical | minimap | small | card_critical | card_gloat | other */
+  /** card | vertical | minimap | small | card_critical | card_gloat | other, or
+   *  one of those with an alternate form prefix (wolf_card). */
   variant: string;
   width: number;
   height: number;
@@ -29,7 +30,8 @@ export interface HeroPortrait {
  * exact dimensions the game expects for that variant.
  */
 export interface CustomCardSlot {
-  /** card | vertical | minimap | small | card_critical | card_gloat | other */
+  /** card | vertical | minimap | small | card_critical | card_gloat | other, or
+   *  one of those with an alternate form prefix (wolf_card). */
   variant: string;
   /** VPK entry path of the base template `.vtex_c` this slot replaces, fed
    *  straight back into applyCustomHeroCard as the `--set ENTRY=PNG` target. */
