@@ -67,7 +67,7 @@ After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Tran
 - **The CSP only applies to packaged builds.** `pnpm dev` has none, so "works in dev, broken packaged" bugs (especially 3D previews over `grimoire-hero:`/`grimoire-soul:`/`blob:`) usually mean the `connect-src` in `electron/main/index.ts` needs updating.
 - **vpkmerge version coupling.** A feature that needs a new vpkmerge flag or subcommand requires a vpkmerge release first, then a bump of the version + 3 sha256s in `scripts/fetch-vpkmerge.mjs`. `pnpm dev` hides the break when a locally built binary sits in `resources/vpkmerge/`.
 - **Mod mutations are serialized.** Enable/disable/reorder share an in-process lock (`withModMutationLock` / `runExclusiveModMutation` in `electron/main/services/mods.ts`) because racing `pakNN` slot writes clobbered VPKs. Route new mutating operations through it.
-- **pnpm-workspace.yaml is gitignored but load-bearing.** It holds `packages: ['../grimoire-social/packages/*']`. CI pins pnpm 10. Local pnpm 11 also needs `blockExoticSubdeps: false` and `allowBuilds.better-sqlite3: false`. Never commit a lockfile regenerated from a git worktree: the social-types link path is relative and dangles everywhere else.
+- **pnpm 12 is pinned through `devEngines.packageManager`** in `package.json`, and local pnpm and CI both follow it. `pnpm-workspace.yaml` is tracked: it holds `packages: ['../grimoire-social/packages/*']` and the `allowBuilds` list, and `better-sqlite3` stays `false` there because its install script deletes the binary on a failed build. Never commit a lockfile regenerated from a git worktree: the social-types link path is relative and dangles everywhere else.
 
 ## Read before touching
 

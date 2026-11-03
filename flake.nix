@@ -124,7 +124,7 @@
         packages =
           (with pkgs; [
             nodejs_24
-            pnpm_10
+            pnpm_12
             python3
             gnumake
             pkg-config
@@ -169,7 +169,7 @@
 
           echo ""
           echo "First-run commands (run in this order, after grimoire-social's own"
-          echo "'pnpm install' has completed):"
+          echo "'pnpm install --ignore-scripts' has completed):"
           echo "  pnpm install --frozen-lockfile"
           echo "  pnpm exec electron-rebuild -f -w better-sqlite3"
           echo "  pnpm dev"
