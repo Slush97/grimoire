@@ -281,7 +281,7 @@ export function LockerModImagePicker({
     if (busy) return;
     const path = await showOpenDialog({
       title: t('locker.modImage.dialogTitle'),
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      filters: [{ name: t('common.fileTypes.images'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
     });
     if (!path) return;
     try {

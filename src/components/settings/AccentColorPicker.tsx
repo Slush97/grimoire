@@ -88,8 +88,8 @@ export default function AccentColorPicker() {
               key={preset.id}
               type="button"
               onClick={() => handleAccentChange(preset.color)}
-              title={preset.name}
-              aria-label={t('settings.appearance.accentNamed', { name: preset.name })}
+              title={t(preset.nameKey)}
+              aria-label={t('settings.appearance.accentNamed', { name: t(preset.nameKey) })}
               aria-pressed={isActive}
               className={`${SWATCH_BASE} ${isActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
               style={{ backgroundColor: preset.color }}

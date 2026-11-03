@@ -508,7 +508,8 @@ export function countLockerSkins(mods: Mod[]): number {
 }
 
 /**
- * Display labels for the global (non-hero) cosmetic types. The "Icons &
+ * Canonical English labels for the global (non-hero) cosmetic types, used to
+ * dedupe tags. Show users globalModTypeLabel instead. The "Icons &
  * Portraits" merge is deliberate: icon packs and "portrait" packs write the
  * same panorama/images/heroes files, so they're one category (see
  * classifyGlobalModType).
@@ -527,10 +528,28 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
 };
 
 export function globalModTypeLabel(type: GlobalModType, t: (key: string) => string): string {
-  if (type === 'effects') return t('locker.page.effects');
-  if (type === 'animations') return t('locker.page.animations');
-  if (type === 'maps') return t('locker.page.maps');
-  return GLOBAL_MOD_TYPE_LABELS[type];
+  switch (type) {
+    case 'soul-container':
+      return t('locker.page.soulContainers');
+    case 'spirit-urn':
+      return t('locker.page.spiritUrns');
+    case 'hideout':
+      return t('locker.page.hideout');
+    case 'icons':
+      return t('locker.page.iconPacks');
+    case 'hud':
+      return t('locker.page.hud');
+    case 'effects':
+      return t('locker.page.effects');
+    case 'animations':
+      return t('locker.page.animations');
+    case 'maps':
+      return t('locker.page.maps');
+    case 'announcer':
+      return t('locker.page.announcer');
+    case 'killstreak-music':
+      return t('locker.page.killstreakMusic');
+  }
 }
 
 /** Carousel/section order for the global types. */

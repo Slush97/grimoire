@@ -57,7 +57,7 @@ Read `docs/ui-conventions.md` before any renderer UI work. The short version:
 
 `src/locales/en/translation.json` is the source of truth and the only catalog translators see (via Weblate). It must contain only keys actually referenced by `t()`/`<Tx>`. `src/locales/unwired-en.json` is an English-only to-do list of hardcoded strings still to be wired. It is never bundled or translated.
 
-After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Translations come back on `translations/<lang>` branches and only reach users once merged to `main`, because the app fetches the manifest and catalogs from `raw.githubusercontent.com/Slush97/grimoire/main` on demand. Full flow: `docs/localization.md`.
+After any catalog change run `pnpm i18n:manifest`, or CI and pre-push fail. Translations come back on `translations/<lang>` branches. The app reads the manifest from `raw.githubusercontent.com/Slush97/grimoire/main`, but every catalog in the repo at build time is bundled, and a bundled language only updates with a release. Only a language added after the release is downloaded and refreshed from `main`. Full flow: `docs/localization.md`.
 
 ## Gotchas that have shipped bugs
 

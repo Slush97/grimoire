@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TrendingUp } from 'lucide-react'
 import type { MMRSnapshot, PlayerMMRHistoryEntry } from '../../types/deadlock-stats'
 import { useHeroStore } from '../../stores/stats/heroStore'
-import { DIVISION_NAMES, rankLabel } from './format'
+import { rankDivisionName, rankLabel } from './format'
 
 // Ranked score trajectory. Primary source is the per-match mmr-history API
 // feed (one point per ranked match, full account lifetime); locally recorded
@@ -29,10 +29,10 @@ interface ChartPoint {
 }
 
 const RANGES = [
-    { key: '7d', label: '7D', days: 7 },
-    { key: '30d', label: '30D', days: 30 },
-    { key: '90d', label: '90D', days: 90 },
-    { key: 'all', label: 'All', days: null },
+    { key: '7d', days: 7 },
+    { key: '30d', days: 30 },
+    { key: '90d', days: 90 },
+    { key: 'all', days: null },
 ] as const
 
 type RangeKey = (typeof RANGES)[number]['key']
@@ -261,7 +261,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                             : 'text-text-secondary border border-transparent hover:text-white hover:bg-hl/5'
                     }`}
                 >
-                    {r.key === 'all' ? t('stats.mmrChart.all') : r.label}
+                    {r.key === 'all' ? t('stats.mmrChart.all') : t('stats.mmrChart.rangeDays', { days: r.days })}
                 </button>
             ))}
         </div>
@@ -312,7 +312,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
         return rank.badge_url
     }
     const divisionName = (division: number): string =>
-        ranks[division]?.name ?? DIVISION_NAMES[division] ?? `Division ${division}`
+        rankDivisionName(division) || (ranks[division]?.name ?? (division ? t('stats.mmrChart.divisionFallback', { division }) : ''))
 
     return (
         <div>
@@ -323,7 +323,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                         {delta.toFixed(1)}
                     </span>
                     <span className="ml-1.5">
-                        {formatDay(first.t, dateFormat)} to {formatDay(last.t, dateFormat)}
+                        {t('stats.mmrChart.dateRange', { from: formatDay(first.t, dateFormat), to: formatDay(last.t, dateFormat) })}
                         {fromSnapshots ? ` ${t('stats.mmrChart.localDailySnapshots')}` : ''}
                     </span>
                 </div>
@@ -371,7 +371,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                         preserveAspectRatio="none"
                         className="w-full h-full block"
                         role="img"
-                        aria-label={`Ranked score from ${first.v.toFixed(0)} (${rankLabel(first.division, first.tier)}) to ${last.v.toFixed(0)} (${rankLabel(last.division, last.tier)})`}
+                        aria-label={t('stats.mmrChart.scoreRangeAria', { fromScore: first.v.toFixed(0), fromRank: rankLabel(first.division, first.tier), toScore: last.v.toFixed(0), toRank: rankLabel(last.division, last.tier) })}
                         onMouseMove={handleMove}
                         onMouseLeave={() => setHovered(null)}
                     >

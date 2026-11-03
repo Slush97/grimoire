@@ -528,8 +528,7 @@ interface AppState {
 // path (enable, reorder/compact, local import, merge). We surface it as a
 // transient toast instead of the full-page modsError screen. Match on the
 // cap-agnostic tail so a future MAX_ADDON_FOLDERS bump doesn't break detection.
-const ENABLE_CAP_NOTICE =
-  'You can have at most 990 mods enabled at once. Disable one to make room.';
+const enableCapNotice = (): string => i18n.t('installed.status.enableCap');
 const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -878,7 +877,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The 99-enabled cap is an expected, recoverable outcome - surface it as
       // a transient notice (toast) instead of the full-page modsError screen.
       if (isEnableCapError(err)) {
-        set({ modsNotice: ENABLE_CAP_NOTICE });
+        set({ modsNotice: enableCapNotice() });
         return false;
       }
       if (isGameRunningModLockError(err)) {
@@ -963,7 +962,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return mods === state.mods ? state : { mods };
       });
     } catch (err) {
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
+      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); return; }
       if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
@@ -980,7 +979,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return mods === state.mods ? state : { mods };
       });
     } catch (err) {
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods({ force: true });
     }
@@ -1114,7 +1113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return { failures: failures.length };
       } catch (err) {
-        if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+        if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
         else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
         get().loadMods({ force: true });
         return { failures: plan.enableIds.length + plan.disableIds.length };
@@ -1145,7 +1144,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { applied: true, failures: failures.length };
     } catch (err) {
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods({ force: true });
       // The game-running lock is swallowed silently everywhere else (background
@@ -1177,7 +1176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       return { failures: failures.length };
     } catch (err) {
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods({ force: true });
       return { failures: enable.length + disable.length };
@@ -1319,12 +1318,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       // check runs over them. The dialog shows each failed row inline; the
       // notice is what explains the cap itself (which no row-level message can).
       if (results.some((r) => !r.ok && isEnableCapError(r.error))) {
-        set({ modsNotice: ENABLE_CAP_NOTICE });
+        set({ modsNotice: enableCapNotice() });
       }
       return results;
     } catch (err) {
       // A throw here means the whole batch never ran (no game path, empty list).
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      if (isEnableCapError(err)) { set({ modsNotice: enableCapNotice() }); }
       else { set({ modsError: String(err) }); }
       throw err;
     }

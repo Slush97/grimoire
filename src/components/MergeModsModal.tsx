@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Layers, AlertTriangle, Info } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
@@ -41,13 +42,13 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
     [groups, picks]
   );
 
-  const [name, setName] = useState<string>(() => suggestMergeName(effectiveSources));
+  const [name, setName] = useState<string>(() => suggestMergeName(effectiveSources, t));
   // Pin the name the user has actually typed so changing variants below
   // doesn't clobber their edit. An empty trimmed value means "regenerate
   // from the effective list" as variants change.
   const [nameTouched, setNameTouched] = useState(false);
 
-  const liveName = nameTouched ? name : suggestMergeName(effectiveSources);
+  const liveName = nameTouched ? name : suggestMergeName(effectiveSources, t);
 
   const [strict, setStrict] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -180,7 +181,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                         {group.modName}
                       </span>
                       <span className="ml-auto text-[10px] text-text-secondary uppercase tracking-wide">
-                        {group.variants.length} variants
+                        {t('mergeMods.variantCount', { count: group.variants.length })}
                       </span>
                     </div>
                     <div className="space-y-1">
@@ -207,7 +208,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                             </span>
                             <span className="truncate" title={variantLabelOf(variant)}>{variantLabelOf(variant)}</span>
                             {variant.enabled && (
-                              <span className="ml-auto text-[10px] text-accent uppercase tracking-wide">enabled</span>
+                              <span className="ml-auto text-[10px] text-accent uppercase tracking-wide">{t('mergeMods.enabled')}</span>
                             )}
                           </label>
                         );
@@ -379,10 +380,10 @@ function variantLabelOf(mod: Mod): string {
   return mod.variantLabel || mod.fileDescription || mod.sourceFileName || mod.fileName;
 }
 
-function suggestMergeName(sources: Mod[]): string {
+function suggestMergeName(sources: Mod[], t: TFunction): string {
   if (sources.length === 0) return '';
   const first = sources[0].name;
   if (sources.length === 1) return first;
   if (sources.length === 2) return `${first} + ${sources[1].name}`;
-  return `${first} + ${sources.length - 1} more`;
+  return t('mergeMods.suggestedName', { first, count: sources.length - 1 });
 }

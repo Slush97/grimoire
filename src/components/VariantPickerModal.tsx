@@ -342,7 +342,7 @@ export default function VariantPickerModal({
                     onClick={overlay ? undefined : (event) => pick(v, event.currentTarget.parentElement)}
                     disabled={overlay || !!pending || isEditing}
                     className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
-                    title={isActive ? 'Disable this file' : 'Enable this file'}
+                    title={isActive ? t('variantPicker.disableFile') : t('variantPicker.enableFile')}
                     aria-pressed={isActive}
                 >
                     <div className="flex items-center gap-3">
@@ -406,7 +406,7 @@ export default function VariantPickerModal({
                                 <span className="opacity-50 flex-shrink-0">-</span>
                                 <span
                                     className="flex-shrink-0 tabular-nums"
-                                    title={`Installed ${formatAbsoluteDate(v.installedAt)}`}
+                                    title={t('installed.card.installedAt', { date: formatAbsoluteDate(v.installedAt) })}
                                 >
                                     {formatRelativeDate(v.installedAt)}
                                 </span>
@@ -458,7 +458,7 @@ export default function VariantPickerModal({
                                     onClick={() => move(v, 'up')}
                                     disabled={overlay || !!pending || !canMoveUp}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                    title={upLocked ? t('common.gameRunningWarning') : canMoveUp ? 'Move up' : 'Already first in load order'}
+                                    title={upLocked ? t('common.gameRunningWarning') : canMoveUp ? t('installed.lists.moveUp') : t('variantPicker.alreadyFirst')}
                                     aria-label={t('variantPicker.moveFileUp')}
                                 >
                                     {isMoveUpPending ? (
@@ -472,7 +472,7 @@ export default function VariantPickerModal({
                                     onClick={() => move(v, 'down')}
                                     disabled={overlay || !!pending || !canMoveDown}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                    title={downLocked ? t('common.gameRunningWarning') : canMoveDown ? 'Move down' : 'Already last in load order'}
+                                    title={downLocked ? t('common.gameRunningWarning') : canMoveDown ? t('installed.lists.moveDown') : t('variantPicker.alreadyLast')}
                                     aria-label={t('variantPicker.moveFileDown')}
                                 >
                                     {isMoveDownPending ? (
@@ -488,7 +488,7 @@ export default function VariantPickerModal({
                             onClick={() => startRename(v)}
                             disabled={overlay || !!pending}
                             className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-                            title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
+                            title={v.variantLabel ? t('variantPicker.renameFile') : t('variantPicker.nameFile')}
                             aria-label={t('variantPicker.renameFile')}
                         >
                             <Pencil className="w-4 h-4" />
@@ -514,8 +514,8 @@ export default function VariantPickerModal({
                             onClick={() => handleDelete(v)}
                             disabled={overlay || !!pending}
                             className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-                            title={`Delete ${primaryTitle}`}
-                            aria-label={`Delete ${primaryTitle}`}
+                            title={t('variantPicker.deleteFile', { name: primaryTitle })}
+                            aria-label={t('variantPicker.deleteFile', { name: primaryTitle })}
                         >
                             {isDeletePending ? (
                                 <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

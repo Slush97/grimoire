@@ -3,7 +3,7 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { SkinPaintPanel, SkinRegionEditor } from './SkinRegionControls';
-import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import type { SkinPartRegion } from '../../types/skinEditor';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => options?.index ? `${key}:${String(options.index)}` : key }) }));
@@ -58,7 +58,7 @@ describe('SkinPaintPanel', () => {
     const value = props({ areas: [{ id: 'r5', seeds: [{ u: 0.5, v: 0.5 }], finish: { roughness: 0.18, metalness: 1 } }, region,
       { id: 'r4', seeds: [{ u: 0.5, v: 0.5 }], pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } }] });
     act(() => root.render(<SkinPaintPanel {...value} />));
-    act(() => button(TRIPPY_STYLE_LABELS.holo).click());
+    act(() => button(TRIPPY_STYLE_LABEL_KEYS.holo).click());
     expect(value.onPattern).toHaveBeenLastCalledWith('holo');
     expect(value.onFinish).toHaveBeenLastCalledWith(null);
     act(() => button('foundry.skin.paint.shines.metal').click());
@@ -68,7 +68,7 @@ describe('SkinPaintPanel', () => {
     act(() => button('foundry.skin.paint.colors.blue').click());
     expect(value.onColor).toHaveBeenLastCalledWith('#3b82f6');
     const rows = [...host.querySelectorAll('li')].map((row) => row.textContent);
-    expect(rows).toEqual(['foundry.skin.paint.colors.red', TRIPPY_STYLE_LABELS.camo, 'foundry.skin.paint.shines.metal']);
+    expect(rows).toEqual(['foundry.skin.paint.colors.red', TRIPPY_STYLE_LABEL_KEYS.camo, 'foundry.skin.paint.shines.metal']);
   });
   it('glows in the picked color and lists glow after shine', () => {
     const value = props({ color: '#3b82f6', areas: [{ id: 'r6', seeds: [{ u: 0.5, v: 0.5 }], glow: { color: '#ff00aa', animation: 'rainbow' } }, region] });
@@ -106,7 +106,7 @@ describe('SkinRegionEditor', () => {
     expect(onChange).toHaveBeenLastCalledWith({ paint: '#3b82f6' });
     render({ ...region, pattern: { style: 'camo', intensity: 1, phase: 0, scroll: 0 } }, 'pattern');
     expect(host.querySelector('input[aria-label="foundry.skin.scroll"]')).toBeNull();
-    act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABELS.holo}"]`) as HTMLButtonElement).click());
+    act(() => (host.querySelector(`button[aria-label="${TRIPPY_STYLE_LABEL_KEYS.holo}"]`) as HTMLButtonElement).click());
     expect(onChange).toHaveBeenLastCalledWith({ pattern: expect.objectContaining({ style: 'holo', scroll: 0 }) });
   });
 });

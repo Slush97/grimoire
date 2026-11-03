@@ -3,7 +3,7 @@ import { Plus, RotateCcw, X } from 'lucide-react';
 import { Button, IconButton, Toggle } from '../common/ui';
 import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
 import { useTrippySwatches } from '../../lib/useTrippySwatches';
-import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import { TRIPPY_STYLES } from '../../types/mod';
 import type { SkinPartPattern } from '../../types/skinEditor';
 
@@ -30,11 +30,11 @@ export function SkinPatternPicker({ value, color, disabled, still = false, onCha
         <span className="mt-1 block truncate">{t('foundry.skin.noPattern')}</span>
       </button>
       {TRIPPY_STYLES.map((style) => <button key={style} type="button" aria-pressed={value?.style === style} disabled={disabled}
-        aria-label={TRIPPY_STYLE_LABELS[style]} title={TRIPPY_STYLE_LABELS[style]} onClick={() => onChange({ style, intensity: value?.intensity ?? 1, phase: value?.phase ?? 0, scroll: still ? 0 : value?.scroll ?? 0.5,
+        aria-label={t(TRIPPY_STYLE_LABEL_KEYS[style])} title={t(TRIPPY_STYLE_LABEL_KEYS[style])} onClick={() => onChange({ style, intensity: value?.intensity ?? 1, phase: value?.phase ?? 0, scroll: still ? 0 : value?.scroll ?? 0.5,
           colors: value?.colors, scale: style === 'moo' ? value?.style === 'moo' ? value.scale ?? 1 : 1 : undefined })}
         className={`min-w-0 overflow-hidden rounded-sm border p-1 text-2xs transition-colors disabled:opacity-40 ${value?.style === style ? 'border-accent bg-accent/10 text-text-primary' : 'border-border bg-bg-tertiary text-text-secondary hover:bg-hl/5'}`}>
         <TrippySpriteSwatch sprite={sprites[style] ?? null} className="h-6 w-full rounded-sm" />
-        <span className="mt-1 block truncate">{TRIPPY_STYLE_LABELS[style]}</span>
+        <span className="mt-1 block truncate">{t(TRIPPY_STYLE_LABEL_KEYS[style])}</span>
       </button>)}
     </div>
     {value && <div className="space-y-2">

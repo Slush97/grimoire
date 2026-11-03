@@ -228,3 +228,13 @@ The managed VPKs are owned by Grimoire, never by the user:
   default" affordance and error toasts.
 
 Phases 1 and 2 ship together (without 2 the cosmetics VPK pollutes the UI).
+
+## Alternate form cards
+
+A hero's form can swap its card in game. Silver's transformation does it through
+`m_HeroCardOverride` in `scripts/abilities.vdata_c`, pointing at
+`werewolf_wolf_card`, `_card_critical` and `_card_gloat`. `vpkmerge portrait` reads
+that stem as its own hero (`werewolf_wolf`), so `cardArtSets` finds forms from the
+VPK's file names and decodes each one as its own `--hero`. Its variants carry the
+form as a prefix (`wolf_card`) so they stay separate from the hero's own. Apply and
+split need no change: the `werewolf_` prefix already covers the form's files.

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
@@ -360,18 +362,18 @@ interface ModListRowContentProps {
   actions: ReactNode;
 }
 
-function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
+function lockerHeroSourceLabel(source: Mod['lockerHeroSource'], t: TFunction): string {
   switch (source) {
     case 'manual':
-      return 'Manual override';
+      return t('installed.card.heroSourceManual');
     case 'download-title':
     case 'title':
-      return 'Inferred from title';
+      return t('installed.card.heroSourceTitle');
     case 'download-vpk':
     case 'vpk':
-      return 'Inferred from VPK files';
+      return t('installed.card.heroSourceVpk');
     default:
-      return 'Inferred by Grimoire';
+      return t('installed.card.heroSourceGrimoire');
   }
 }
 
@@ -430,9 +432,10 @@ function LockerHeroChip({
    *  where a narrow chip otherwise truncates the name to a useless "L." */
   iconOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   if (!mod.lockerHero) return null;
   const isManual = mod.lockerHeroSource === 'manual';
-  const title = `${lockerHeroSourceLabel(mod.lockerHeroSource)}: ${mod.lockerHero}`;
+  const title = `${lockerHeroSourceLabel(mod.lockerHeroSource, t)}: ${mod.lockerHero}`;
   // Icon-only (card grid): just the bare face icon, no accent chip frame — the
   // colored manual/inferred border reads as a highlight that fights the theme.
   if (iconOnly) {
@@ -469,6 +472,7 @@ function EditableModTitle({
   /** Undefined when the title isn't renamable (GameBanana-sourced mods). */
   onRename?: (newName: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -490,7 +494,7 @@ function EditableModTitle({
     return (
       <h3
         className={`${className}${onRename ? ' cursor-text' : ''}`}
-        title={onRename ? `${name} (double-click to rename)` : name}
+        title={onRename ? t('installed.card.renameTitle', { name }) : name}
         onDoubleClick={
           onRename
             ? (e) => {
@@ -648,7 +652,7 @@ function ModListRowContent({
   const listHeroFacePosX = listHeroName ? getHeroFacePosition(listHeroName).x : 50;
   const taxonomyLabel = taxonomy.globalType
     ? globalModTypeLabel(taxonomy.globalType, t)
-    : taxonomy.categoryLabel;
+    : taxonomy.categoryLabel && gameBananaCategoryLabel(taxonomy.categoryLabel, t);
 
   return (
     <>
@@ -768,7 +772,7 @@ function ModListRowContent({
             <MetaTextChip label="18+" className={dangerInlineChipClasses} />
           )}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-          <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
+          <span className="flex-shrink-0 tabular-nums" title={t('installed.card.installedAt', { date: formatAbsoluteDate(mod.installedAt) })}>
             {formatRelativeDate(mod.installedAt)}
           </span>
           {group && (
@@ -1117,7 +1121,8 @@ export function ModCard({
   // therefore does not also need a text chip. Previously compact cards counted
   // available slots and silently dropped later tags, which made the same mod
   // appear to have different metadata as the size slider crossed a breakpoint.
-  const cardTaxonomyLabel = cardGlobalLabel ?? cardTaxonomy.categoryLabel;
+  const cardTaxonomyLabel = cardGlobalLabel
+    ?? (cardTaxonomy.categoryLabel && gameBananaCategoryLabel(cardTaxonomy.categoryLabel, t));
   // Enabled cards get their own copy: pinning only takes effect once the mod is
   // disabled, and the disabled section's "top of disabled mods" wording would be
   // a lie there.
@@ -1644,7 +1649,7 @@ export function ModCard({
           />
           <div
             className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
-            title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
+            title={t('installed.card.gridMetaTitle', { file: mod.fileName, size: formatBytes(mod.size), date: formatAbsoluteDate(mod.installedAt) })}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
               {cardTaxonomy.heroName && (

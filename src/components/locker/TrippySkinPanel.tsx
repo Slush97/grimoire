@@ -9,7 +9,7 @@ import {
   getGameRunningStatus,
   revertTrippySkin,
 } from '../../lib/api';
-import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import TrippyPatternPicker from './TrippyPatternPicker';
 import { useTrippyPreviewStore } from '../../stores/trippyPreviewStore';
 import type { ActiveTrippySkin, TrippySkinTargets, TrippyStyleName } from '../../types/mod';
@@ -222,7 +222,7 @@ export default function TrippySkinPanel({
         busy={busy}
         summary={
           <>
-            {TRIPPY_STYLE_LABELS[style]}
+            {t(TRIPPY_STYLE_LABEL_KEYS[style])}
             <span className="text-text-secondary">
               {' '}
               {t('locker.trippy.summarySuffix', { intensity: pct(intensity), scroll: pct(scroll) })}
@@ -235,7 +235,7 @@ export default function TrippySkinPanel({
             : !dirty
               ? t('locker.trippy.applied')
               : t('locker.trippy.statusApplied', {
-                  style: TRIPPY_STYLE_LABELS[activeSkin.style],
+                  style: t(TRIPPY_STYLE_LABEL_KEYS[activeSkin.style]),
                   intensity: pct(activeSkin.intensity),
                   targets: activeSkin.targets,
                 })

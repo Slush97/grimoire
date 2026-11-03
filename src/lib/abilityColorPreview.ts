@@ -19,20 +19,20 @@ export interface GStop {
 
 export interface GradientPreset {
   name: string;
-  label: string;
+  labelKey: string;
   stops: GStop[];
 }
 
 /** Built-in gradients. Hues mirror vpkmerge's `PrismGradient::preset`. */
 export const GRADIENT_PRESETS: ReadonlyArray<GradientPreset> = [
-  { name: 'fire', label: 'Fire', stops: [{ pos: 0, hue: 0, sat: 1 }, { pos: 0.5, hue: 25, sat: 1 }, { pos: 1, hue: 50, sat: 1 }] },
-  { name: 'ice', label: 'Ice', stops: [{ pos: 0, hue: 190, sat: 1 }, { pos: 0.5, hue: 215, sat: 0.9 }, { pos: 1, hue: 205, sat: 0.25 }] },
-  { name: 'toxic', label: 'Toxic', stops: [{ pos: 0, hue: 110, sat: 1 }, { pos: 0.5, hue: 90, sat: 1 }, { pos: 1, hue: 72, sat: 1 }] },
-  { name: 'sunset', label: 'Sunset', stops: [{ pos: 0, hue: 280, sat: 1 }, { pos: 0.5, hue: 325, sat: 0.95 }, { pos: 1, hue: 30, sat: 1 }] },
-  { name: 'ocean', label: 'Ocean', stops: [{ pos: 0, hue: 175, sat: 1 }, { pos: 0.5, hue: 205, sat: 1 }, { pos: 1, hue: 235, sat: 1 }] },
-  { name: 'neon', label: 'Neon', stops: [{ pos: 0, hue: 300, sat: 1 }, { pos: 0.5, hue: 240, sat: 1 }, { pos: 1, hue: 180, sat: 1 }] },
-  { name: 'gold', label: 'Gold', stops: [{ pos: 0, hue: 25, sat: 1 }, { pos: 0.5, hue: 45, sat: 1 }, { pos: 1, hue: 55, sat: 0.55 }] },
-  { name: 'void', label: 'Void', stops: [{ pos: 0, hue: 270, sat: 1 }, { pos: 0.5, hue: 305, sat: 1 }, { pos: 1, hue: 240, sat: 1 }] },
+  { name: 'fire', labelKey: 'locker.colors.gradients.fire', stops: [{ pos: 0, hue: 0, sat: 1 }, { pos: 0.5, hue: 25, sat: 1 }, { pos: 1, hue: 50, sat: 1 }] },
+  { name: 'ice', labelKey: 'locker.colors.gradients.ice', stops: [{ pos: 0, hue: 190, sat: 1 }, { pos: 0.5, hue: 215, sat: 0.9 }, { pos: 1, hue: 205, sat: 0.25 }] },
+  { name: 'toxic', labelKey: 'locker.colors.gradients.toxic', stops: [{ pos: 0, hue: 110, sat: 1 }, { pos: 0.5, hue: 90, sat: 1 }, { pos: 1, hue: 72, sat: 1 }] },
+  { name: 'sunset', labelKey: 'locker.colors.gradients.sunset', stops: [{ pos: 0, hue: 280, sat: 1 }, { pos: 0.5, hue: 325, sat: 0.95 }, { pos: 1, hue: 30, sat: 1 }] },
+  { name: 'ocean', labelKey: 'locker.colors.gradients.ocean', stops: [{ pos: 0, hue: 175, sat: 1 }, { pos: 0.5, hue: 205, sat: 1 }, { pos: 1, hue: 235, sat: 1 }] },
+  { name: 'neon', labelKey: 'locker.colors.gradients.neon', stops: [{ pos: 0, hue: 300, sat: 1 }, { pos: 0.5, hue: 240, sat: 1 }, { pos: 1, hue: 180, sat: 1 }] },
+  { name: 'gold', labelKey: 'locker.colors.gradients.gold', stops: [{ pos: 0, hue: 25, sat: 1 }, { pos: 0.5, hue: 45, sat: 1 }, { pos: 1, hue: 55, sat: 0.55 }] },
+  { name: 'void', labelKey: 'locker.colors.gradients.void', stops: [{ pos: 0, hue: 270, sat: 1 }, { pos: 0.5, hue: 305, sat: 1 }, { pos: 1, hue: 240, sat: 1 }] },
 ];
 
 /** Default 3-stop custom gradient (purple -> teal -> gold). */
@@ -134,9 +134,9 @@ export function parseGradientSpec(spec: string | undefined): { preset: string; s
 }
 
 /** A human label for an applied gradient spec (preset label or "Custom"). */
-export function gradientLabelOf(spec: string | undefined | null): string {
+export function gradientLabelOf(spec: string | undefined | null, t: (key: string) => string): string {
   if (spec && GRADIENT_PRESETS.some((g) => g.name === spec)) {
-    return GRADIENT_PRESETS.find((g) => g.name === spec)?.label ?? spec;
+    return t(GRADIENT_PRESETS.find((g) => g.name === spec)?.labelKey ?? spec);
   }
-  return 'Custom';
+  return t('locker.colors.custom');
 }

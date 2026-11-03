@@ -55,7 +55,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      setError(`Copy failed: ${err instanceof Error ? err.message : String(err)}`);
+      setError(t('exportProfile.copyFailed', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 

@@ -175,7 +175,7 @@ import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/inst
 import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
 import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 import { InstalledSkeleton } from '../components/installed/InstalledSkeleton';
-import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entrySize, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entrySize, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyDisplayLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -1661,7 +1661,7 @@ export default function Installed() {
   // sidesteps the rate-limit pain of the CRC auto-matcher.
   const associateUnknownMatch = async (mod: Mod, args: AssociateUnknownModArgs) => {
     await associateUnknownMod(mod.id, args);
-    showToast(`Linked to ${args.modName}`, { tone: 'success', duration: 2200 });
+    showToast(t('installed.unknown.linkedTo', { name: args.modName }), { tone: 'success', duration: 2200 });
     await finishUnknownFix(mod);
   };
 
@@ -1723,7 +1723,7 @@ export default function Installed() {
       [mod.id]: {
         modId: mod.id,
         phase: 'cancelled',
-        message: cached ? 'Stopped caching remaining files.' : 'Search cancelled.',
+        message: cached ? t('installed.unknown.stoppedCaching') : t('installed.unknown.searchCancelled'),
         result: cached,
       },
     }));
@@ -1836,7 +1836,7 @@ export default function Installed() {
             modId: mod.id,
             requestId: requestIds[mod.id],
             phase: 'complete',
-            message: `Cache check failed. Queued for online search. ${message}`,
+            message: t('installed.unknown.cacheCheckFailed', { error: message }),
           };
         }
         return next;
@@ -2219,7 +2219,7 @@ export default function Installed() {
     if (selectedMods.length === 0) return;
     setModToDelete({
       mods: selectedMods,
-      name: `${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'}`,
+      name: t('installed.delete.bulkCount', { count: selectedMods.length }),
       isGroup: false,
       isBulk: true,
     });
@@ -2272,7 +2272,7 @@ export default function Installed() {
       }
     } catch (err) {
       console.error('[Installed] unmerge failed:', err);
-      showToast(`Unmerge failed: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
+      showToast(t('installed.merge.unmergeFailed', { error: err instanceof Error ? err.message : String(err) }), { tone: 'error' });
     }
   };
 
@@ -2302,11 +2302,11 @@ export default function Installed() {
     await loadMods({ silent: true });
     if (result.collapsed) {
       setMergedContentsMod(null);
-      showToast(`Merge dissolved (extracted ${source.modName})`, { tone: 'success', duration: 2200 });
+      showToast(t('installed.merge.mergeDissolved', { name: source.modName }), { tone: 'success', duration: 2200 });
       return;
     }
     setMergedContentsMod(result.merged);
-    showToast(`Extracted ${source.modName}`, { tone: 'success', duration: 2200 });
+    showToast(t('installed.merge.extracted', { name: source.modName }), { tone: 'success', duration: 2200 });
   };
 
   const handleAddMergeSources = async (modIds: string[], strict: boolean) => {
@@ -2713,7 +2713,7 @@ export default function Installed() {
       const cached = await window.electronAPI.getCachedMod(mod.gameBananaId).catch(() => null);
       let artist: BrowseArtistRef | undefined =
         cached?.submitterId && cached.submitterId > 0
-          ? { id: cached.submitterId, name: cached.submitterName ?? 'Artist', profileUrl: cached.profileUrl }
+          ? { id: cached.submitterId, name: cached.submitterName ?? t('modDetails.meta.artist'), profileUrl: cached.profileUrl }
           : undefined;
       if (!artist) {
         const details = await getModDetails(mod.gameBananaId, mod.sourceSection ?? 'Mod', {
@@ -2730,7 +2730,7 @@ export default function Installed() {
       }
       openArtistPage(artist);
     } catch (err) {
-      showToast(`Couldn't open author page: ${err instanceof Error ? err.message : String(err)}`, {
+      showToast(t('installed.card.openAuthorPageFailed', { error: err instanceof Error ? err.message : String(err) }), {
         tone: 'error',
       });
     }
@@ -3073,7 +3073,7 @@ export default function Installed() {
     .filter((name) => heroOptionMap.has(name))
     .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
   const tagOptions = Array.from(tagOptionMap.entries())
-    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
+    .map(([key, count]) => ({ key, label: tagKeyDisplayLabel(key, t), count }))
     .sort((a, b) => {
       if (a.key === OTHER_TAG_KEY) return 1;
       if (b.key === OTHER_TAG_KEY) return -1;
@@ -3464,7 +3464,7 @@ export default function Installed() {
   const commitLoadPosition = async (modId: string, newPosition: number): Promise<void> => {
     const ordered = numberedByLoadOrder.slice();
     const fromIdx = ordered.findIndex((m) => m.id === modId);
-    if (fromIdx === -1) throw new Error('Mod not found');
+    if (fromIdx === -1) throw new Error(t('installed.priorityEditor.modNotFound'));
     // The editor validates 1..N, but a stale render could submit out of range;
     // clamp to a real slot so we never index past the ends.
     const toIdx = Math.min(Math.max(newPosition - 1, 0), ordered.length - 1);
@@ -3732,7 +3732,7 @@ export default function Installed() {
             e.preventDefault();
             setFixUnknownHidden(false);
           }}
-          aria-label={`Restore the Fix unknown button (${unknownMods.length} unknown)`}
+          aria-label={t('installed.unknown.restoreFixButtonAria', { count: unknownMods.length })}
           title={t('installed.unknown.fixHiddenHint')}
           className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-secondary/40 transition-colors hover:text-text-secondary cursor-pointer"
         >
@@ -3974,7 +3974,7 @@ export default function Installed() {
                         )}
                       </div>
                       <HeroSelect
-                        ariaLabel="Filter by hero"
+                        ariaLabel={t('browse.filters.filterByHero')}
                         value={heroFilter}
                         onChange={setHeroFilter}
                         size="sm"
@@ -4144,7 +4144,7 @@ export default function Installed() {
                         disabled={layout === 'list'}
                         onChange={(e) => setCardSizeMultiplier(Number(e.currentTarget.value))}
                         aria-label={t('installed.view.cardSize')}
-                        aria-valuetext={`${cardSizeMultiplier.toFixed(2)}x card size`}
+                        aria-valuetext={t('installed.view.cardSizeValue', { value: cardSizeMultiplier.toFixed(2) })}
                         className="h-1.5 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                       />
                       <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
@@ -4734,7 +4734,11 @@ export default function Installed() {
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              {bulkProgress.verb} {bulkProgress.done}/{bulkProgress.total}…
+              {bulkProgress.verb === 'Enabling'
+                ? t('installed.status.bulkEnabling', { done: bulkProgress.done, total: bulkProgress.total })
+                : bulkProgress.verb === 'Disabling'
+                  ? t('installed.status.bulkDisabling', { done: bulkProgress.done, total: bulkProgress.total })
+                  : t('installed.status.bulkTagging', { done: bulkProgress.done, total: bulkProgress.total })}
             </span>
           ) : (
             <>

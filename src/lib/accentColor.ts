@@ -7,20 +7,20 @@
 
 export interface AccentPreset {
   id: string;
-  name: string;
+  nameKey: string;
   color: string;
   hover: string;
 }
 
 export const ACCENT_PRESETS: AccentPreset[] = [
-  { id: 'ember',   name: 'Ember',   color: '#f97316', hover: '#ea580c' },
-  { id: 'amber',   name: 'Amber',   color: '#f59e0b', hover: '#d97706' },
-  { id: 'crimson', name: 'Crimson', color: '#ef4444', hover: '#dc2626' },
-  { id: 'rose',    name: 'Rose',    color: '#ec4899', hover: '#db2777' },
-  { id: 'violet',  name: 'Violet',  color: '#8b5cf6', hover: '#7c3aed' },
-  { id: 'azure',   name: 'Azure',   color: '#3b82f6', hover: '#2563eb' },
-  { id: 'cyan',    name: 'Cyan',    color: '#06b6d4', hover: '#0891b2' },
-  { id: 'emerald', name: 'Emerald', color: '#10b981', hover: '#059669' },
+  { id: 'ember',   nameKey: 'settings.appearance.accentPresets.ember',   color: '#f97316', hover: '#ea580c' },
+  { id: 'amber',   nameKey: 'settings.appearance.accentPresets.amber',   color: '#f59e0b', hover: '#d97706' },
+  { id: 'crimson', nameKey: 'settings.appearance.accentPresets.crimson', color: '#ef4444', hover: '#dc2626' },
+  { id: 'rose',    nameKey: 'settings.appearance.accentPresets.rose',    color: '#ec4899', hover: '#db2777' },
+  { id: 'violet',  nameKey: 'settings.appearance.accentPresets.violet',  color: '#8b5cf6', hover: '#7c3aed' },
+  { id: 'azure',   nameKey: 'settings.appearance.accentPresets.azure',   color: '#3b82f6', hover: '#2563eb' },
+  { id: 'cyan',    nameKey: 'settings.appearance.accentPresets.cyan',    color: '#06b6d4', hover: '#0891b2' },
+  { id: 'emerald', nameKey: 'settings.appearance.accentPresets.emerald', color: '#10b981', hover: '#059669' },
 ];
 
 export const DEFAULT_ACCENT_COLOR = ACCENT_PRESETS[0].color;
