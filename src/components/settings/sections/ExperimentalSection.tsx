@@ -131,6 +131,15 @@ export default function ExperimentalSection() {
             onChange={(checked) => update({ experimentalFoundry: checked })}
             label={<Tx k="settings.experimental.foundry" fallback="Door Stuck" />}
           />
+
+          <FilterDivider className="h-px bg-hl/5" />
+
+          <Toggle id="settings-experimental-settings-experimental-hideoutDefault-toggle"
+            checked={settings?.experimentalHideoutDefault ?? false}
+            onChange={(checked) => update({ experimentalHideoutDefault: checked })}
+            label={<Tx k="settings.experimental.hideoutDefault" fallback="Open 3D models in the Hideout" />}
+            description={<Tx k="settings.experimental.hideoutDefaultDescription" fallback="Prepares the Hideout in the background after each game update. Until it's ready, models open in the usual scene." />}
+          />
         </div>
       </Card>
 

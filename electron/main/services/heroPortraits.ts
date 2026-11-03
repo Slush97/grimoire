@@ -19,7 +19,7 @@ import { listInstalledUserVpks } from './modLibrary';
 import { parseVpkDirectoryCached } from './vpk';
 import { vpkmergeBinaryPath, runVpkmerge } from './modMerger';
 import { getModMetadata } from './metadata';
-import { codenamesForHero } from './heroCodenames';
+import { cardArtSets, codenamesForHero } from './heroCodenames';
 import type { HeroPortrait } from '../../../src/types/portrait';
 
 function sanitize(value: string): string {
@@ -38,8 +38,60 @@ interface PortraitManifest {
         width: number;
         height: number;
         format_name: string;
+        source_path: string;
         output_path: string | null;
     }>;
+}
+
+/** One card texture `vpkmerge portrait` decoded, as a PNG data URL. */
+export interface DecodedCardArt {
+    variant: string;
+    width: number;
+    height: number;
+    formatName: string;
+    sourcePath: string;
+    dataUrl: string;
+}
+
+/**
+ * Decode all of one codename's card art in a VPK, alternate forms included,
+ * using `cacheDir` for the PNGs. A set that fails to decode or read back is
+ * logged and skipped so it can't sink the others.
+ */
+export async function decodeHeroCardArt(
+    vpkPath: string,
+    codename: string,
+    cacheDir: string
+): Promise<DecodedCardArt[]> {
+    const decoded: DecodedCardArt[] = [];
+    for (const set of cardArtSets(parseVpkDirectoryCached(vpkPath) ?? [], codename)) {
+        const outDir = join(cacheDir, set.codename);
+        const manifestPath = join(outDir, 'manifest.json');
+        try {
+            await runVpkmerge(
+                ['portrait', vpkPath, '--hero', set.codename, '--out', outDir, '--manifest', manifestPath],
+                60000
+            );
+            const manifest = JSON.parse(
+                await fs.readFile(manifestPath, 'utf-8')
+            ) as PortraitManifest;
+            for (const p of manifest.portraits) {
+                if (!p.output_path) continue;
+                const png = await fs.readFile(p.output_path);
+                decoded.push({
+                    variant: `${set.variantPrefix}${p.variant}`,
+                    width: p.width,
+                    height: p.height,
+                    formatName: p.format_name,
+                    sourcePath: p.source_path,
+                    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+                });
+            }
+        } catch (err) {
+            console.warn(`[heroPortraits] skipping ${basename(vpkPath)} (${set.codename}): ${String(err)}`);
+        }
+    }
+    return decoded;
 }
 
 /**
@@ -90,31 +142,16 @@ export async function getHeroPortraits(
         for (const codename of matched) {
             // Cache dir keyed by the unique metaKey so two same-named sources in
             // different folders don't clobber each other's decoded portraits.
-            const outDir = join(cacheRoot, sanitize(metaKey), codename);
-            const manifestPath = join(outDir, 'manifest.json');
-            try {
-                await runVpkmerge(
-                    ['portrait', vpk, '--hero', codename, '--out', outDir, '--manifest', manifestPath],
-                    60000
-                );
-                const manifest = JSON.parse(
-                    await fs.readFile(manifestPath, 'utf-8')
-                ) as PortraitManifest;
-                for (const p of manifest.portraits) {
-                    if (!p.output_path) continue;
-                    const png = await fs.readFile(p.output_path);
-                    results.push({
-                        modFileName: metaKey,
-                        variant: p.variant,
-                        width: p.width,
-                        height: p.height,
-                        formatName: p.format_name,
-                        dataUrl: `data:image/png;base64,${png.toString('base64')}`,
-                    });
-                }
-            } catch (err) {
-                // One malformed VPK shouldn't sink the whole picker.
-                console.warn(`[heroPortraits] skipping ${basename(vpk)} (${codename}): ${String(err)}`);
+            const art = await decodeHeroCardArt(vpk, codename, join(cacheRoot, sanitize(metaKey)));
+            for (const p of art) {
+                results.push({
+                    modFileName: metaKey,
+                    variant: p.variant,
+                    width: p.width,
+                    height: p.height,
+                    formatName: p.formatName,
+                    dataUrl: p.dataUrl,
+                });
             }
         }
     }

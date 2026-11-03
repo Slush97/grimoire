@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import { Images, Loader2, AlertCircle, Check, Upload, X, Download } from 'lucide-react';
 import {
   applyCustomHeroCard,
@@ -18,35 +17,12 @@ import {
 } from '../../lib/api';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
+import { heroCardVariantLabel, heroCardVariantRank } from '../../lib/heroCardVariants';
 import CardCropper from './CardCropper';
 import type { CustomCardSlot, HeroPortrait } from '../../types/portrait';
 
 interface HeroCardPickerProps {
   heroName: string;
-}
-
-const VARIANT_LABEL_KEYS: Record<string, string> = {
-  card: 'locker.cards.variants.card',
-  vertical: 'locker.cards.variants.vertical',
-  card_critical: 'locker.cards.variants.cardCritical',
-  card_gloat: 'locker.cards.variants.cardGloat',
-  minimap: 'locker.cards.variants.minimap',
-  small: 'locker.cards.variants.small',
-  other: 'locker.cards.variants.other',
-};
-
-function variantLabel(variant: string, t: TFunction): string {
-  const key = VARIANT_LABEL_KEYS[variant];
-  return key ? t(key) : variant;
-}
-
-/** Display order for the variant strip. The full "card" cover reads first,
- *  then the rest roughly by prominence; unknown variants sort last. */
-const VARIANT_ORDER = ['card', 'vertical', 'card_critical', 'card_gloat', 'minimap', 'small', 'other'];
-
-function variantRank(variant: string): number {
-  const i = VARIANT_ORDER.indexOf(variant);
-  return i === -1 ? VARIANT_ORDER.length : i;
 }
 
 /** A cheap order-independent fingerprint of the current picks, used to tell
@@ -171,7 +147,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
     try {
       const path = await showOpenDialog({
         title: t('locker.cards.chooseImageForCard', {
-          variant: variantLabel(slot.variant, t),
+          variant: heroCardVariantLabel(slot.variant, t),
         }),
         filters: [{ name: t('common.fileTypes.images'), extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       });
@@ -273,7 +249,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
     }
     return Array.from(byFile.entries()).map(([modFileName, variants]) => ({
       modFileName,
-      variants: [...variants].sort((a, b) => variantRank(a.variant) - variantRank(b.variant)),
+      variants: [...variants].sort((a, b) => heroCardVariantRank(a.variant) - heroCardVariantRank(b.variant)),
     }));
   }, [portraits]);
 
@@ -365,13 +341,13 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                       <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40">
                         <img
                           src={p.dataUrl}
-                          alt={`${heroName} ${variantLabel(p.variant, t)}`}
-                          title={`${variantLabel(p.variant, t)} · ${p.width}x${p.height} · ${p.formatName}`}
+                          alt={`${heroName} ${heroCardVariantLabel(p.variant, t)}`}
+                          title={`${heroCardVariantLabel(p.variant, t)} · ${p.width}x${p.height} · ${p.formatName}`}
                           className="max-h-full max-w-full object-contain"
                         />
                       </div>
-                      <figcaption className="mt-1 truncate text-center text-[9px] uppercase tracking-wide text-text-secondary">
-                        {variantLabel(p.variant, t)}
+                      <figcaption className="mt-1 break-words text-center text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                        {heroCardVariantLabel(p.variant, t)}
                       </figcaption>
                     </figure>
                   ))}
@@ -427,13 +403,13 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     type="button"
                     disabled={customBusy}
                     onClick={() => handlePickVariant(slot)}
-                    title={`${variantLabel(slot.variant, t)} · ${slot.width} x ${slot.height}`}
+                    title={`${heroCardVariantLabel(slot.variant, t)} · ${slot.width} x ${slot.height}`}
                     style={{ aspectRatio: `${slot.width} / ${slot.height}` }}
                     className="group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-border/50 bg-bg-primary/40 transition-colors hover:border-accent/50 disabled:cursor-not-allowed"
                   >
                     <img
                       src={pick ?? slot.baseDataUrl}
-                      alt={`${heroName} ${variantLabel(slot.variant, t)}`}
+                      alt={`${heroName} ${heroCardVariantLabel(slot.variant, t)}`}
                       className={`max-h-full max-w-full object-contain ${pick ? '' : 'opacity-30'}`}
                     />
                     <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white/0 transition-colors group-hover:bg-black/55 group-hover:text-white/90">
@@ -450,7 +426,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                       }}
                       title={t('locker.cards.clearImage')}
                       aria-label={t('locker.cards.clearVariantImage', {
-                        variant: variantLabel(slot.variant, t),
+                        variant: heroCardVariantLabel(slot.variant, t),
                       })}
                       className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-hl/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
                     >
@@ -458,8 +434,8 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     </button>
                   )}
                   <figcaption className="mt-1 text-center">
-                    <span className="block truncate text-[9px] uppercase tracking-wide text-text-secondary">
-                      {variantLabel(slot.variant, t)}
+                    <span className="block break-words text-[9px] uppercase leading-tight tracking-wide text-text-secondary">
+                      {heroCardVariantLabel(slot.variant, t)}
                     </span>
                     <span className="block text-[9px] tabular-nums text-text-secondary/70">
                       {slot.width} x {slot.height}
@@ -529,7 +505,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
           imageDataUrl={cropping.sourceDataUrl}
           targetWidth={cropping.slot.width}
           targetHeight={cropping.slot.height}
-          variantLabel={variantLabel(cropping.slot.variant, t)}
+          variantLabel={heroCardVariantLabel(cropping.slot.variant, t)}
           onCancel={() => setCropping(null)}
           onCrop={handleCropDone}
         />

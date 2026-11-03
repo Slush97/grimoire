@@ -228,6 +228,11 @@ export abstract class ParticleFunctionRenderer extends ParticleFunction {
     return false;
   }
 
+  /** Optional feathering may be omitted by a host without an opaque depth copy. */
+  get requiresSceneDepth(): boolean {
+    return this.wantsSceneDepth;
+  }
+
   /** Whether this renderer samples the opaque scene colour. */
   get wantsSceneColor(): boolean {
     return false;

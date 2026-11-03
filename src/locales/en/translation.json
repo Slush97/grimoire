@@ -1258,7 +1258,9 @@
       "fixUnknownMods": "Fix Unknown Mods",
       "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
-      "foundry": "Door Stuck"
+      "foundry": "Door Stuck",
+      "hideoutDefault": "Open 3D models in the Hideout",
+      "hideoutDefaultDescription": "Prepares the Hideout in the background after each game update. Until it's ready, models open in the usual scene."
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
@@ -2529,7 +2531,11 @@
         "minimap": "Minimap",
         "small": "Small",
         "other": "Other"
-      }
+      },
+      "forms": {
+        "wolf": "Wolf"
+      },
+      "formVariant": "{{form}} {{variant}}"
     },
     "trippy": {
       "loading": "Loading...",
@@ -2629,6 +2635,7 @@
     },
     "pose": {
       "posing": "Posing {{hero}}...",
+      "loadingHero": "Loading {{hero}}",
       "posingWithMods": "Posing {{hero}} with {{count}} active mods...",
       "cannotPose": "This hero can't be posed in 3D yet.",
       "physics": "Cloth",
@@ -2665,6 +2672,7 @@
       "bloom": "Bloom",
       "particles": "Particles",
       "sourceParticles": "Engine particles",
+      "fullResolutionFog": "Full-resolution fog",
       "resetView": "Reset view (R)",
       "screenshot": "Save screenshot",
       "fullscreen": "Enter fullscreen",
@@ -2686,7 +2694,6 @@
       "particlesPartial": "Some particle effects are unsupported.",
       "particlesUnavailable": "No supported ambient particle preview is available for this hero.",
       "animationUnavailable": "An animated preview is unavailable for this model.",
-      "baseAnimations": "Using base animations",
       "clipLabels": {
         "idle": "Idle",
         "relaxedIdle": "Relaxed idle",
@@ -2699,11 +2706,9 @@
       "hideout": "Hideout",
       "wireframe": "Wireframe",
       "hideoutLoading": "Loading hideout. First load takes a few minutes.",
+      "hideoutBuilding": "Building hideout",
       "hideoutFailed": "Could not load the hideout. Choose another scene.",
-      "hideoutPreview": "Hideout preview",
-      "hideoutApproximation": "Some lighting and materials differ from the game.",
-      "hideoutMissing_one": "{{count}} asset unavailable.",
-      "hideoutMissing_other": "{{count}} assets unavailable."
+      "hideoutWarming": "Loading hideout"
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"

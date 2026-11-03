@@ -62,6 +62,13 @@ export function useViewerBackdrop(enabled = true, initialPreset: ViewerBackgroun
     })();
     return () => request.abort();
   }, [preset, enabled]);
+  // A viewer shared between pages starts each page on that page's background.
+  const [opening, setOpening] = useState(initialPreset);
+  if (opening !== initialPreset) {
+    setOpening(initialPreset);
+    setPreset(initialPreset);
+    if (initialPreset === 'none') { setTexture(null); setLoading(false); setErrorKey(null); }
+  }
   const clear = () => { pending.current?.abort(); setPreset('none'); setTexture(null); setLoading(false); setErrorKey(null); };
   const choosePreset = (value: ViewerBackground) => {
     if (value === 'none') clear();

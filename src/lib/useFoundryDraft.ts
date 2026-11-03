@@ -3,15 +3,14 @@ import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../stores/appStore';
 import { showToast } from '../stores/toastStore';
-import { foundryDraftKey, readFoundryDraft, writeFoundryDraft } from './foundryDrafts';
+import { foundryDraftKey, foundryDraftScope, readFoundryDraft, writeFoundryDraft } from './foundryDrafts';
 
 let reportedStorageFailure = false;
 
 /** Persist committed input before a subsequent click can unmount the editor. */
 export function useFoundryDraft<T>(key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, initial: T): [T, Dispatch<SetStateAction<T>>, (value: T) => void] {
   const { t } = useTranslation();
-  const scope = useAppStore((state) => state.settings?.devMode && state.settings.devDeadlockPath
-    ? state.settings.devDeadlockPath : state.settings?.deadlockPath ?? '');
+  const scope = useAppStore((state) => foundryDraftScope(state.settings));
   const storageKey = foundryDraftKey(scope, key);
   const read = () => {
     try { return readFoundryDraft(localStorage, storageKey, schema) ?? initial; }

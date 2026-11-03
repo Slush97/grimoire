@@ -3,6 +3,7 @@ import en from '../locales/en/translation.json';
 import { ACCENT_PRESETS } from './accentColor';
 import { BACKGROUND_GRADIENT_PRESETS } from './backgroundGradient';
 import { CATEGORY_LABEL_KEYS } from './gameBananaCategories';
+import { FORM_LABEL_KEYS, VARIANT_LABEL_KEYS } from './heroCardVariants';
 import { TRIPPY_ANIMATION_LABEL_KEYS, TRIPPY_STYLE_LABEL_KEYS } from './trippy';
 
 function inCatalog(key: string): boolean {
@@ -13,13 +14,15 @@ function inCatalog(key: string): boolean {
   return typeof node === 'string';
 }
 
-// check-i18n only sees literal t('...') calls, so a typo in a key table reaches
-// users as a raw key unless something looks the values up.
+// check-i18n only sees keys written literally at a call site, so a typo in a key
+// table reaches users as a raw key unless something looks the values up.
 describe('label key tables', () => {
   it.each([
     ['accent presets', ACCENT_PRESETS.map((p) => p.nameKey)],
     ['background presets', BACKGROUND_GRADIENT_PRESETS.map((p) => p.nameKey)],
     ['GameBanana categories', Object.values(CATEGORY_LABEL_KEYS)],
+    ['hero card forms', Object.values(FORM_LABEL_KEYS)],
+    ['hero card variants', Object.values(VARIANT_LABEL_KEYS)],
     ['trippy styles', Object.values(TRIPPY_STYLE_LABEL_KEYS)],
     ['trippy animations', Object.values(TRIPPY_ANIMATION_LABEL_KEYS)],
   ])('%s resolve in the en catalog', (_name, keys) => {

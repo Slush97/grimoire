@@ -14,12 +14,14 @@ import { MaintainEmitter } from './emitters/maintainEmitter';
 import { NoiseEmitter } from './emitters/noiseEmitter';
 import { AttractToControlPoint } from './forces/attractToControlPoint';
 import { CurlNoiseForce } from './forces/curlNoiseForce';
+import { TwistAroundAxis } from './forces/twistAroundAxis';
 import type { ParticleFunction } from './functions';
 import { CreateFromParentParticles } from './initializers/createFromParentParticles';
 import { CreateOnModel } from './initializers/createOnModel';
 import { CreateSequentialPathV2 } from './initializers/createSequentialPathV2';
 import { CreateWithinBox } from './initializers/createWithinBox';
 import { CreateWithinSphereTransform } from './initializers/createWithinSphereTransform';
+import { DistanceToCPInit } from './initializers/distanceToCPInit';
 import { InheritVelocity } from './initializers/inheritVelocity';
 import { InitFloat } from './initializers/initFloat';
 import { InitFromParentKilled } from './initializers/initFromParentKilled';
@@ -74,6 +76,7 @@ import { RemapSpeed } from './operators/remapSpeed';
 import { RemapTransformOrientationToRotations } from './operators/remapTransformOrientationToRotations';
 import { RotateVector } from './operators/rotateVector';
 import { SetFloat } from './operators/setFloat';
+import { SetAttributeToScalarExpression as OperateScalarExpression } from './operators/setAttributeToScalarExpression';
 import { SetFloatCollection } from './operators/setFloatCollection';
 import { SetPerChildControlPoint } from './operators/setPerChildControlPoint';
 import { SetToCP } from './operators/setToCP';
@@ -90,6 +93,7 @@ import { SetControlPointOrientation } from './preEmission/setControlPointOrienta
 import { SetControlPointToVectorExpression } from './preEmission/setControlPointToVectorExpression';
 import { SetParentControlPointsToChildCP } from './preEmission/setParentControlPointsToChildCP';
 import { SetSingleControlPointPosition } from './preEmission/setSingleControlPointPosition';
+import { SetControlPointPositions } from './preEmission/setControlPointPositions';
 import { StopAfterDuration } from './preEmission/stopAfterDuration';
 
 export type FunctionKind = 'preEmission' | 'emitter' | 'initializer' | 'operator' | 'forceGenerator' | 'constraint';
@@ -99,6 +103,7 @@ type Factory = (parse: ParticleDefinitionParser) => ParticleFunction;
 /** The classes this runtime implements, by kind. */
 const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
   preEmission: {
+    C_OP_SetControlPointPositions: (parse) => new SetControlPointPositions(parse),
     C_OP_SetControlPointFieldToScalarExpression: (parse) => new SetControlPointFieldToScalarExpression(parse),
     C_OP_SetControlPointOrientation: (parse) => new SetControlPointOrientation(parse),
     C_OP_StopAfterCPDuration: (parse) => new StopAfterDuration(parse),
@@ -114,6 +119,7 @@ const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
     C_OP_NoiseEmitter: (parse) => new NoiseEmitter(parse),
   },
   initializer: {
+    C_INIT_DistanceToCPInit: (parse) => new DistanceToCPInit(parse),
     C_INIT_CreateFromParentParticles: (parse) => new CreateFromParentParticles(parse),
     C_INIT_RemapInitialTransformDirectionToRotation: (parse) => new RemapInitialTransformDirectionToRotation(parse),
     C_INIT_RemapTransformToVector: (parse) => new RemapTransformToVector(parse),
@@ -142,6 +148,7 @@ const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
     C_INIT_VelocityRandom: (parse) => new VelocityRandom(parse),
   },
   operator: {
+    C_OP_SetAttributeToScalarExpression: (parse) => new OperateScalarExpression(parse),
     C_OP_FadeOut: (parse) => new FadeOutRandom(parse),
     C_OP_InheritFromParentParticlesV2: (parse) => new InheritFromParentParticlesV2(parse),
     C_OP_LerpScalar: (parse) => new LerpScalar(parse),
@@ -187,6 +194,7 @@ const PORTED: Record<FunctionKind, Readonly<Record<string, Factory>>> = {
     C_OP_VectorNoise: (parse) => new VectorNoise(parse),
   },
   forceGenerator: {
+    C_OP_TwistAroundAxis: (parse) => new TwistAroundAxis(parse),
     C_OP_AttractToControlPoint: (parse) => new AttractToControlPoint(parse),
     C_OP_CurlNoiseForce: (parse) => new CurlNoiseForce(parse),
   },

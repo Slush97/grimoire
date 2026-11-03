@@ -6,6 +6,8 @@ import { MEME_ERROR_NOTE, MEME_ERROR_BUTTON, rollErrorBoundaryEgg } from '../../
 interface ErrorBoundaryProps {
     children: ReactNode;
     fallback?: ReactNode;
+    /** A change clears a caught error, for a boundary that outlives what crashed. */
+    resetKey?: string;
 }
 
 interface ErrorBoundaryState {
@@ -39,6 +41,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         // Log error to console for debugging
         console.error('[ErrorBoundary] Caught error:', error);
         console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
+    }
+
+    componentDidUpdate(previous: ErrorBoundaryProps): void {
+        if (this.state.hasError && previous.resetKey !== this.props.resetKey) this.handleReset();
     }
 
     handleReset = (): void => {

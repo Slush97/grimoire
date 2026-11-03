@@ -2898,7 +2898,6 @@
       "particlesPartial": "Некоторые эффекты частиц не поддерживаются.",
       "particlesUnavailable": "Для этого героя нет поддерживаемого превью фоновых частиц.",
       "animationUnavailable": "Для этой модели нет анимированного превью.",
-      "baseAnimations": "Используются базовые анимации",
       "clipLabels": {
         "idle": "Стойка",
         "relaxedIdle": "Спокойная стойка",
@@ -2911,13 +2910,7 @@
       "hideout": "Убежище",
       "wireframe": "Каркас",
       "hideoutLoading": "Загрузка убежища. Первая загрузка занимает несколько минут.",
-      "hideoutFailed": "Не удалось загрузить убежище. Выберите другую сцену.",
-      "hideoutPreview": "Превью убежища",
-      "hideoutApproximation": "Освещение и материалы местами отличаются от игры.",
-      "hideoutMissing_one": "{{count}} ресурс недоступен.",
-      "hideoutMissing_few": "{{count}} ресурса недоступны.",
-      "hideoutMissing_many": "{{count}} ресурсов недоступно.",
-      "hideoutMissing_other": "{{count}} ресурса недоступны."
+      "hideoutFailed": "Не удалось загрузить убежище. Выберите другую сцену."
     },
     "downloadSkins": {
       "browseMore": "Найти ещё скины"
