@@ -9,12 +9,16 @@ import { _electron } from 'playwright-core';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const layouts = {
-    linux: ['linux-unpacked', 'grimoire', 'resources'],
-    win32: ['win-unpacked', 'Grimoire.exe', 'resources'],
-    darwin: ['mac-arm64/Grimoire.app', 'Contents/MacOS/Grimoire', 'Contents/Resources'],
+    linux: ['release/linux-unpacked', 'grimoire', 'resources'],
+    win32: ['release/win-unpacked', 'Grimoire.exe', 'resources'],
+    darwin: ['release/mac-arm64/Grimoire.app', 'Contents/MacOS/Grimoire', 'Contents/Resources'],
+    // `nix build .#grimoire`: a read-only store path whose wrapper hardcodes
+    // its own app.asar, so it runs in place instead of from a copy.
+    nix: ['result', 'bin/grimoire', 'share/grimoire/resources'],
 };
-const [directory, binary, resources] = layouts[process.platform];
-const source = resolve(process.argv[2] ?? join(repo, 'release', directory));
+const nix = process.argv[2] === '--nix';
+const [directory, binary, resources] = layouts[nix ? 'nix' : process.platform];
+const source = resolve(process.argv[nix ? 3 : 2] ?? join(repo, directory));
 assert.ok((await stat(join(source, resources, 'app.asar'))).isFile(), 'Package the app first');
 
 const root = await realpath(await mkdtemp(join(tmpdir(), 'grimoire-packaged-')));
@@ -24,8 +28,8 @@ let application;
 let watchdog;
 
 try {
-    const packaged = join(root, process.platform === 'darwin' ? 'Grimoire.app' : 'app');
-    await cp(source, packaged, { recursive: true, verbatimSymlinks: true });
+    const packaged = nix ? await realpath(source) : join(root, process.platform === 'darwin' ? 'Grimoire.app' : 'app');
+    if (!nix) await cp(source, packaged, { recursive: true, verbatimSymlinks: true });
     await mkdir(userData);
     await writeFile(join(userData, 'settings.json'), JSON.stringify({
         autoCheckAppUpdates: false,
@@ -220,20 +224,25 @@ try {
     catch { application.process().kill('SIGKILL'); }
     application = undefined;
 
-    const probe = join(root, 'sqlite-probe.cjs');
-    await writeFile(probe, `
-        const { createRequire } = require('node:module');
-        const Database = createRequire(process.argv[2])('better-sqlite3');
-        const db = new Database(':memory:');
-        db.exec("CREATE VIRTUAL TABLE probe USING fts5(value); INSERT INTO probe VALUES ('parity');");
-        require('node:assert/strict').equal(db.prepare("SELECT value FROM probe WHERE probe MATCH 'parity'").get().value, 'parity');
-        db.close();
-        console.log('PASS ELECTRON_RUN_AS_NODE: packaged better-sqlite3 and FTS5');
-    `);
-    const native = await promisify(execFile)(executablePath, [probe, join(packaged, resources, 'app.asar', 'package.json')], {
-        env: { ...env, ELECTRON_RUN_AS_NODE: '1' }, cwd: root, timeout: 30000,
-    });
-    process.stdout.write(native.stdout);
+    // The Nix wrapper puts app.asar ahead of every argument, so ELECTRON_RUN_AS_NODE
+    // would run the app instead of the probe. The in-process FTS5 check above
+    // already covers its natively rebuilt better-sqlite3.
+    if (!nix) {
+        const probe = join(root, 'sqlite-probe.cjs');
+        await writeFile(probe, `
+            const { createRequire } = require('node:module');
+            const Database = createRequire(process.argv[2])('better-sqlite3');
+            const db = new Database(':memory:');
+            db.exec("CREATE VIRTUAL TABLE probe USING fts5(value); INSERT INTO probe VALUES ('parity');");
+            require('node:assert/strict').equal(db.prepare("SELECT value FROM probe WHERE probe MATCH 'parity'").get().value, 'parity');
+            db.close();
+            console.log('PASS ELECTRON_RUN_AS_NODE: packaged better-sqlite3 and FTS5');
+        `);
+        const native = await promisify(execFile)(executablePath, [probe, join(packaged, resources, 'app.asar', 'package.json')], {
+            env: { ...env, ELECTRON_RUN_AS_NODE: '1' }, cwd: root, timeout: 30000,
+        });
+        process.stdout.write(native.stdout);
+    }
     console.log('Packaged smoke passed');
 } catch (error) {
     console.error(error);
