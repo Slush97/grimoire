@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { previewTrippySprite } from '../../lib/api';
-import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import TrippySpriteSwatch from './TrippySpriteSwatch';
 import {
   TRIPPY_STYLES,
@@ -149,8 +149,8 @@ export default function TrippyPatternPicker({
             type="button"
             disabled={busy}
             onClick={() => onStyle(s)}
-            title={TRIPPY_STYLE_LABELS[s]}
-            aria-label={TRIPPY_STYLE_LABELS[s]}
+            title={t(TRIPPY_STYLE_LABEL_KEYS[s])}
+            aria-label={t(TRIPPY_STYLE_LABEL_KEYS[s])}
             className={`overflow-hidden rounded-md border transition-transform hover:scale-105 disabled:cursor-not-allowed ${
               style === s ? 'border-text-primary ring-2 ring-accent/60' : 'border-border'
             }`}

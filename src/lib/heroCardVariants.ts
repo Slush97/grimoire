@@ -1,17 +1,24 @@
+import type { TFunction } from 'i18next';
+
 /**
  * Hero card variant names, shared by the main-process card services and the
  * Locker picker. A plain variant comes straight from `vpkmerge portrait`
  * (`card`, `card_critical`, ...). A variant from an alternate form carries the
  * form as a prefix (`wolf_card` for `werewolf_wolf_card_psd.vtex_c`).
  */
-const VARIANT_LABEL: Record<string, string> = {
-  card: 'Card',
-  vertical: 'Vertical',
-  card_critical: 'Low HP',
-  card_gloat: 'Gloat',
-  minimap: 'Minimap',
-  small: 'Small',
-  other: 'Other',
+export const VARIANT_LABEL_KEYS: Record<string, string> = {
+  card: 'locker.cards.variants.card',
+  vertical: 'locker.cards.variants.vertical',
+  card_critical: 'locker.cards.variants.cardCritical',
+  card_gloat: 'locker.cards.variants.cardGloat',
+  minimap: 'locker.cards.variants.minimap',
+  small: 'locker.cards.variants.small',
+  other: 'locker.cards.variants.other',
+};
+
+/** A form missing here reads as its capitalized file name token. */
+export const FORM_LABEL_KEYS: Record<string, string> = {
+  wolf: 'locker.cards.forms.wolf',
 };
 
 /** The full card reads first, then the rest roughly by prominence. */
@@ -31,9 +38,15 @@ export function heroCardVariantRank(variant: string): number {
   return form ? VARIANT_ORDER.length + 1 + baseRank(form[2]) : baseRank(variant);
 }
 
-export function heroCardVariantLabel(variant: string): string {
+export function heroCardVariantLabel(variant: string, t: TFunction): string {
   const form = FORM_VARIANT.exec(variant);
-  if (!form) return VARIANT_LABEL[variant] ?? variant;
-  const name = form[1].charAt(0).toUpperCase() + form[1].slice(1);
-  return `${name} ${VARIANT_LABEL[form[2]]}`;
+  if (!form) {
+    const key = VARIANT_LABEL_KEYS[variant];
+    return key ? t(key) : variant;
+  }
+  const formKey = FORM_LABEL_KEYS[form[1]];
+  return t('locker.cards.formVariant', {
+    form: formKey ? t(formKey) : form[1].charAt(0).toUpperCase() + form[1].slice(1),
+    variant: t(VARIANT_LABEL_KEYS[form[2]]),
+  });
 }

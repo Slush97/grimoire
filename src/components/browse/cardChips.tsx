@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
+import type { TFunction } from 'i18next';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 import type { BrowseReadableChip, BrowseReadableChipTone } from './cardUtils';
 
@@ -39,7 +42,25 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
+/** Chips keep their canonical English label for dedupe and ranking, and hero
+ *  names pass through as they arrive. */
+function chipDisplayLabel(label: string, t: TFunction): string {
+  switch (label) {
+    case 'Skin':
+      return t('browse.card.chipSkin');
+    case 'Sound':
+      return t('browse.card.chipSound');
+    case 'Mod':
+      return t('browse.card.chipMod');
+    case 'Wip':
+      return t('browse.card.chipWip');
+    default:
+      return gameBananaCategoryLabel(label, t);
+  }
+}
+
 function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadableChip; onImage?: boolean }) {
+  const { t } = useTranslation();
   if (chip.hero) {
     return (
       <img
@@ -54,13 +75,13 @@ function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadab
   }
   return (
     <span
-      title={chip.label}
+      title={chipDisplayLabel(chip.label, t)}
       className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-2xs font-medium leading-none ${readableChipTone(
         chip.tone,
         onImage
       )}`}
     >
-      {chip.label}
+      {chipDisplayLabel(chip.label, t)}
     </span>
   );
 }
@@ -76,6 +97,7 @@ export function BrowseReadableChipRow({
   maxVisible?: number;
   onImage?: boolean;
 }) {
+  const { t } = useTranslation();
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
   const rowWidth = Math.max(48, availableWidth);
@@ -85,7 +107,7 @@ export function BrowseReadableChipRow({
     if (visibleChips.length >= maxVisible) break;
 
     const remainingAfter = orderedChips.length - index - 1;
-    const chipWidth = chip.hero ? BROWSE_READABLE_HERO_CHIP_WIDTH : estimateReadableChipWidth(chip.label);
+    const chipWidth = chip.hero ? BROWSE_READABLE_HERO_CHIP_WIDTH : estimateReadableChipWidth(chipDisplayLabel(chip.label, t));
     const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
     const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
 
@@ -107,7 +129,7 @@ export function BrowseReadableChipRow({
       {hiddenChips.length > 0 && (
         <div className="group/hidden relative shrink-0">
           <span
-            title={`${hiddenChips.length} more`}
+            title={t('browse.card.moreCount', { count: hiddenChips.length })}
             className={`inline-flex h-6 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${
               onImage
                 ? 'border-hl/20 bg-black/55 text-white/90 backdrop-blur-sm'

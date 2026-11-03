@@ -68,7 +68,12 @@ export default function GameSection() {
       try {
         const status = await getGameinfoStatus();
         if (!active) return;
-        setGameinfoStatus(status.message);
+        setGameinfoStatus(
+          status.reason === 'ok' ? t('settings.gameinfo.statusOk')
+            : status.reason === 'boot-paths-missing' ? t('settings.gameinfo.statusBootPathsMissing')
+            : status.reason === 'language-paths-missing' ? t('settings.gameinfo.statusLanguagePathsMissing')
+            : status.message
+        );
         setGameinfoConfigured(status.configured);
         setGameinfoMissing(status.missing);
         setGameinfoCandidates(status.candidates);
@@ -84,7 +89,7 @@ export default function GameSection() {
     return () => {
       active = false;
     };
-  }, [activeDeadlockPath]);
+  }, [activeDeadlockPath, t]);
 
   const handleBrowse = async () => {
     if (isDevMode) return;

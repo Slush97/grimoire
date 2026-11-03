@@ -1,5 +1,6 @@
 import type { Mod, GlobalModType } from '../types/mod';
-import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder, skinCategoryHero } from './lockerUtils';
+import { gameBananaCategoryLabel } from './gameBananaCategories';
+import { inferHeroFromTitle, canonicalHeroName, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, globalModTypeLabel, modLoadOrder, skinCategoryHero } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { heroNameForLabel } from './heroNames';
@@ -226,6 +227,14 @@ export function tagKeyLabel(key: string): string {
   if (key.startsWith('cat:')) return key.slice('cat:'.length);
   if (key.startsWith('section:')) return key.slice('section:'.length);
   return key;
+}
+
+/** tagKeyLabel in the user's language. Unknown GameBanana names pass through. */
+export function tagKeyDisplayLabel(key: string, t: (key: string) => string): string {
+  if (key === OTHER_TAG_KEY) return t('installed.filters.tagOther');
+  if (key === 'section:sound') return t('installed.filters.tagSounds');
+  if (key.startsWith('global:')) return globalModTypeLabel(key.slice('global:'.length) as GlobalModType, t);
+  return gameBananaCategoryLabel(tagKeyLabel(key), t);
 }
 
 function modTagKeys(mod: Mod): string[] {

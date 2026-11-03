@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useBackdropDismiss } from './common/useBackdropDismiss';
@@ -723,15 +724,15 @@ function ModDetailsModal({
             </p>
           )}
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
-            <span className="whitespace-nowrap">{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+            <span className="whitespace-nowrap">{t('modDetails.files.sizeMb', { size: (file.fileSize / 1024 / 1024).toFixed(2) })}</span>
             <span className="opacity-50">-</span>
-            <span className="whitespace-nowrap">{file.downloadCount.toLocaleString()} downloads</span>
+            <span className="whitespace-nowrap">{t('browse.filePicker.downloadsFormatted', { count: file.downloadCount, formatted: file.downloadCount.toLocaleString() })}</span>
             {file.dateAdded && file.dateAdded > 0 && (
               <>
                 <span className="opacity-50">-</span>
                 <span
                   className="flex items-center gap-1 whitespace-nowrap"
-                  title={`Uploaded ${formatDate(file.dateAdded)} ${new Date(file.dateAdded * 1000).toLocaleTimeString()}`}
+                  title={t('modDetails.files.uploadedAt', { date: formatDate(file.dateAdded), time: new Date(file.dateAdded * 1000).toLocaleTimeString() })}
                 >
                   <Clock className="w-3 h-3" />
                   {formatDate(file.dateAdded)}
@@ -764,7 +765,7 @@ function ModDetailsModal({
           {showDeleteButton && installedFileState && (
             <IconButton
               icon={Trash2}
-              label={`Delete ${file.fileName}`}
+              label={t('variantPicker.deleteFile', { name: file.fileName })}
               tone="danger"
               onClick={() => setDeleteCandidate({
                 mod: { id: installedFileState.modId, size: installedFileState.size, installedAt: installedFileState.installedAt },
@@ -1010,8 +1011,8 @@ function ModDetailsModal({
               e.stopPropagation();
               onNavigatePrevious();
             }}
-            aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
-            title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
+            aria-label={previousLabel ? t('modDetails.nav.previousModNamed', { name: previousLabel }) : t('modDetails.nav.previousMod')}
+            title={previousLabel ? t('modDetails.nav.previousNamed', { name: previousLabel }) : t('modDetails.nav.previousMod')}
             className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
             {isNavigating && navigationDirection === 'previous' ? (
@@ -1029,8 +1030,8 @@ function ModDetailsModal({
               e.stopPropagation();
               onNavigateNext();
             }}
-            aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
-            title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
+            aria-label={nextLabel ? t('modDetails.nav.nextModNamed', { name: nextLabel }) : t('modDetails.nav.nextMod')}
+            title={nextLabel ? t('modDetails.nav.nextNamed', { name: nextLabel }) : t('modDetails.nav.nextMod')}
             className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
             {isNavigating && navigationDirection === 'next' ? (
@@ -1052,8 +1053,8 @@ function ModDetailsModal({
                 type="button"
                 disabled={isNavigating || !onNavigatePrevious}
                 onClick={() => onNavigatePrevious?.()}
-                aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
-                title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
+                aria-label={previousLabel ? t('modDetails.nav.previousModNamed', { name: previousLabel }) : t('modDetails.nav.previousMod')}
+                title={previousLabel ? t('modDetails.nav.previousNamed', { name: previousLabel }) : t('modDetails.nav.previousMod')}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-tertiary text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:cursor-default disabled:opacity-40 cursor-pointer"
               >
                 {isNavigating && navigationDirection === 'previous' ? (
@@ -1066,8 +1067,8 @@ function ModDetailsModal({
                 type="button"
                 disabled={isNavigating || !onNavigateNext}
                 onClick={() => onNavigateNext?.()}
-                aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
-                title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
+                aria-label={nextLabel ? t('modDetails.nav.nextModNamed', { name: nextLabel }) : t('modDetails.nav.nextMod')}
+                title={nextLabel ? t('modDetails.nav.nextNamed', { name: nextLabel }) : t('modDetails.nav.nextMod')}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-tertiary text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:cursor-default disabled:opacity-40 cursor-pointer"
               >
                 {isNavigating && navigationDirection === 'next' ? (
@@ -1113,8 +1114,8 @@ function ModDetailsModal({
                 }
                 title={
                   ignoreUpdates
-                    ? 'Currently ignoring updates for this mod. Click to resume detection.'
-                    : 'Stop flagging updates for this mod (you can re-enable later).'
+                    ? t('modDetails.actions.resumeUpdatesTitle')
+                    : t('modDetails.actions.stopUpdatesTitle')
                 }
               >
                 {ignoreUpdates ? (
@@ -1138,7 +1139,7 @@ function ModDetailsModal({
             )}
             {mod.category?.name && (
               <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border">
-                {mod.category.name}
+                {gameBananaCategoryLabel(mod.category.name, t)}
               </span>
             )}
           </div>
@@ -1160,7 +1161,7 @@ function ModDetailsModal({
                     href={gbUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title={`View ${mod.name} on GameBanana`}
+                    title={t('browse.artist.viewOnGameBanana', { name: mod.name })}
                     className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
                   >
                     <span className="min-w-0 truncate">{mod.name}</span>
@@ -1185,7 +1186,7 @@ function ModDetailsModal({
             return (
               <div className="hidden md:flex items-center gap-3 text-xs text-text-secondary flex-shrink-0">
                 {addedStr && (
-                  <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
+                  <span className="flex items-center gap-1" title={t('modDetails.meta.uploaded', { date: addedStr })}>
                     <Clock className="w-3 h-3" />
                     <span className="text-text-tertiary">{t('modDetails.meta.added')}</span>
                     <span className="text-text-primary">{addedStr}</span>
@@ -1195,8 +1196,8 @@ function ModDetailsModal({
                   <span
                     className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
                     title={outdated
-                      ? `Last updated ${modifiedStr} (may be outdated for the current game version)`
-                      : `Last updated ${modifiedStr}`}
+                      ? t('modDetails.meta.lastUpdatedOutdated', { date: modifiedStr })
+                      : t('browse.card.lastUpdated', { date: modifiedStr })}
                   >
                     <RefreshCw className="w-3 h-3" />
                     <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>{t('profiles.updated')}</span>
@@ -1204,7 +1205,7 @@ function ModDetailsModal({
                   </span>
                 )}
                 {totalDownloads > 0 && (
-                  <span className="flex items-center gap-1" title={`${totalDownloads.toLocaleString()} downloads`}>
+                  <span className="flex items-center gap-1" title={t('browse.filePicker.downloadsFormatted', { count: totalDownloads, formatted: totalDownloads.toLocaleString() })}>
                     <Download className="w-3 h-3" />
                     <span className="text-text-primary">{totalDownloads.toLocaleString()}</span>
                   </span>
@@ -1222,7 +1223,7 @@ function ModDetailsModal({
           {onChangeView && (
             <IconButton
               icon={isSidebar ? Maximize2 : PanelRight}
-              label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
+              label={isSidebar ? t('modDetails.actions.popOut') : t('modDetails.actions.dock')}
               onClick={() => onChangeView(isSidebar ? 'modal' : 'sidebar')}
             />
           )}
@@ -1369,12 +1370,12 @@ function ModDetailsModal({
                         <button
                           type="button"
                           onClick={() => openLightboxAt(idx)}
-                          aria-label={`View image ${idx + 1} of ${images.length} full size`}
+                          aria-label={t('modDetails.images.viewFullSize', { index: idx + 1, total: images.length })}
                           className="group absolute inset-0 h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                         >
                           <RevealImage
                             src={previewSrc}
-                            alt={`${mod.name} - Image ${idx + 1}`}
+                            alt={t('modDetails.images.alt', { name: mod.name, index: idx + 1 })}
                             loading="eager"
                             draggable={false}
                             className={`absolute inset-0 h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
@@ -1420,7 +1421,7 @@ function ModDetailsModal({
                         {imageHidden ? (
                           slot
                         ) : (
-                          <ImageContextMenu src={previewSrc} copySrc={fullSrc} alt={`${mod.name} - Image ${idx + 1}`}>
+                          <ImageContextMenu src={previewSrc} copySrc={fullSrc} alt={t('modDetails.images.alt', { name: mod.name, index: idx + 1 })}>
                             {slot}
                           </ImageContextMenu>
                         )}
@@ -1431,7 +1432,7 @@ function ModDetailsModal({
                                 key={dotIndex}
                                 type="button"
                                 onClick={() => setCurrentImageIndex(dotIndex)}
-                                aria-label={`Go to image ${dotIndex + 1}`}
+                                aria-label={t('modDetails.images.goTo', { index: dotIndex + 1 })}
                                 aria-current={dotIndex === idx}
                                 className={`h-1.5 rounded-full transition-all ${
                                   dotIndex === idx ? 'w-4 bg-accent' : 'w-1.5 bg-text-tertiary/50 hover:bg-text-tertiary'
@@ -1465,13 +1466,13 @@ function ModDetailsModal({
                         key={`${img.baseUrl}/${img.file}`}
                         type="button"
                         onClick={() => openLightboxAt(index)}
-                        aria-label={`View image ${index + 1} of ${images.length} full size`}
+                        aria-label={t('modDetails.images.viewFullSize', { index: index + 1, total: images.length })}
                         style={{ aspectRatio: ratio ? String(ratio) : '16 / 9' }}
                         className="relative block w-full bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
                       >
                         <RevealImage
                           src={previewSrc}
-                          alt={`${mod.name} - Image ${index + 1}`}
+                          alt={t('modDetails.images.alt', { name: mod.name, index: index + 1 })}
                           onLoad={(e) => {
                             const el = e.currentTarget;
                             if (el.naturalWidth > 0 && el.naturalHeight > 0) {
@@ -1505,7 +1506,7 @@ function ModDetailsModal({
                         key={`${img.baseUrl}/${img.file}`}
                         src={previewSrc}
                         copySrc={fullSrc}
-                        alt={`${mod.name} - Image ${index + 1}`}
+                        alt={t('modDetails.images.alt', { name: mod.name, index: index + 1 })}
                       >
                         {previewButton}
                       </ImageContextMenu>
@@ -1565,7 +1566,7 @@ function ModDetailsModal({
                         href={gbUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`View ${mod.name} on GameBanana`}
+                        title={t('browse.artist.viewOnGameBanana', { name: mod.name })}
                         className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
                       >
                         <span className="min-w-0">{mod.name}</span>
@@ -1581,7 +1582,7 @@ function ModDetailsModal({
                     return (
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
                         {addedStr && (
-                          <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
+                          <span className="flex items-center gap-1" title={t('modDetails.meta.uploaded', { date: addedStr })}>
                             <Clock className="h-3 w-3" />
                             {addedStr}
                           </span>
@@ -1589,14 +1590,14 @@ function ModDetailsModal({
                         {showModified && (
                           <span
                             className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
-                            title={`Last updated ${modifiedStr}`}
+                            title={t('browse.card.lastUpdated', { date: modifiedStr })}
                           >
                             <RefreshCw className="h-3 w-3" />
                             {modifiedStr}
                           </span>
                         )}
                         {totalDownloads > 0 && (
-                          <span className="flex items-center gap-1" title={`${totalDownloads.toLocaleString()} downloads`}>
+                          <span className="flex items-center gap-1" title={t('browse.filePicker.downloadsFormatted', { count: totalDownloads, formatted: totalDownloads.toLocaleString() })}>
                             <Download className="h-3 w-3" />
                             {totalDownloads.toLocaleString()}
                           </span>
@@ -1617,7 +1618,7 @@ function ModDetailsModal({
                       <button
                         type="button"
                         onClick={openArtist}
-                        title={`View ${submitter.name}'s mods`}
+                        title={t('modDetails.meta.viewAuthorMods', { name: submitter.name })}
                         className="flex-shrink-0 rounded-full transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer"
                       >
                         {avatarVisual}
@@ -1631,7 +1632,7 @@ function ModDetailsModal({
                         <button
                           type="button"
                           onClick={openArtist}
-                          title={`View ${submitter.name}'s mods`}
+                          title={t('modDetails.meta.viewAuthorMods', { name: submitter.name })}
                           className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent cursor-pointer"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
@@ -1642,7 +1643,7 @@ function ModDetailsModal({
                           href={submitterProfileUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title={`View ${submitter.name} on GameBanana`}
+                          title={t('browse.artist.viewOnGameBanana', { name: submitter.name })}
                           className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent"
                         >
                           <span className="min-w-0 truncate">{submitter.name}</span>
@@ -1657,7 +1658,7 @@ function ModDetailsModal({
                         href={submitterKofiUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`Support ${submitter.name} on Ko-fi`}
+                        title={t('browse.artist.supportOnKofi', { name: submitter.name })}
                         className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
@@ -1866,7 +1867,7 @@ function ModDetailsModal({
                           {comment.poster.avatarUrl ? (
                             <img
                               src={comment.poster.avatarUrl}
-                              alt={`${comment.poster.name} avatar`}
+                              alt={t('modDetails.comments.avatarAlt', { name: comment.poster.name })}
                               loading="lazy"
                               referrerPolicy="no-referrer"
                               className="h-8 w-8 flex-shrink-0 rounded-full border border-border bg-bg-secondary object-cover"
@@ -1928,7 +1929,7 @@ function ModDetailsModal({
           className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
-          aria-label={`${mod.name} - full size image`}
+          aria-label={t('modDetails.images.fullSizeAria', { name: mod.name })}
         >
           <button
             type="button"
@@ -1963,11 +1964,11 @@ function ModDetailsModal({
           )}
           <ImageContextMenu
             src={currentImageFullUrl}
-            alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
+            alt={t('modDetails.images.altFullSize', { name: mod.name, index: currentImageIndex + 1 })}
           >
             <img
               src={currentImageFullUrl}
-              alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
+              alt={t('modDetails.images.altFullSize', { name: mod.name, index: currentImageIndex + 1 })}
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}
             />

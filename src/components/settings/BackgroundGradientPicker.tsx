@@ -144,7 +144,7 @@ export default function BackgroundGradientPicker() {
             key={preset.id}
             gradient={preset}
             active={sameGradient(preset, saved)}
-            label={preset.name}
+            label={t(preset.nameKey)}
             onClick={() => void select({ from: preset.from, to: preset.to })}
           />
         ))}

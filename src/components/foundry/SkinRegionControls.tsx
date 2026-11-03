@@ -13,7 +13,7 @@ import { CHECKER, CLEAR_PRESETS, finishBall, PAINT_FINISHES, sameFinish } from '
 import { colorFamily, PAINT_SWATCHES } from '../../lib/colorNames';
 import { areaName, isClearRegion, isFinishRegion, isGlowRegion, regionKind } from '../../lib/skinRegions';
 import { useTrippySwatches } from '../../lib/useTrippySwatches';
-import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import TrippySpriteSwatch from '../locker/TrippySpriteSwatch';
 import { TRIPPY_STYLES, type TrippyStyleName } from '../../types/mod';
 import type { SkinGlowAnimation, SkinPartFinish, SkinPartGlow, SkinPartRegion } from '../../types/skinEditor';
@@ -141,7 +141,7 @@ export function SkinPaintPanel({ part, color, pattern = null, finish = null, fin
         </button>
       </div>
       <div className="grid grid-cols-8 justify-items-center gap-1" role="group" aria-label={t('foundry.skin.paint.patterns')}>
-        {TRIPPY_STYLES.map((style) => <button key={style} type="button" aria-label={TRIPPY_STYLE_LABELS[style]} title={TRIPPY_STYLE_LABELS[style]}
+        {TRIPPY_STYLES.map((style) => <button key={style} type="button" aria-label={t(TRIPPY_STYLE_LABEL_KEYS[style])} title={t(TRIPPY_STYLE_LABEL_KEYS[style])}
           aria-pressed={painting && pattern === style} onClick={() => pick({ pattern: style })} className={`h-5 w-5 ${chip}`}>
           <TrippySpriteSwatch sprite={sprites[style] ?? null} className="h-full w-full" />
         </button>)}

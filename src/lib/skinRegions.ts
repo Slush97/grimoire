@@ -2,7 +2,7 @@ import type { SkinPartRegion, SkinRegionSeed } from '../types/skinEditor';
 export { hasRegionEdit, hasRegionLook, isClearRegion, isFinishRegion, isGlowRegion, regionKind } from './skinColorAdjustments';
 import { colorFamily, PAINT_SWATCHES } from './colorNames';
 import { CLEAR_PRESETS, FINISHES, sameFinish } from './skinFinishes';
-import { TRIPPY_STYLE_LABELS } from './trippy';
+import { TRIPPY_STYLE_LABEL_KEYS } from './trippy';
 
 /** One triangle list in texture space. `index` null means every three vertices form a triangle. */
 export interface UvGeometry {
@@ -759,7 +759,7 @@ const SHINE_NAMES = { glossy: true, metal: true, polished: true };
 /** What an area paints with: its own name, else the pattern, the shine or the everyday color name. */
 export function areaName(area: SkinPartRegion, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (area.name?.trim()) return area.name.trim();
-  if (area.pattern) return TRIPPY_STYLE_LABELS[area.pattern.style];
+  if (area.pattern) return t(TRIPPY_STYLE_LABEL_KEYS[area.pattern.style]);
   // A swatch has an everyday name; a color from the picker shows its code, so two similar ones stay apart.
   if (area.paint) return PAINT_SWATCHES.includes(area.paint.toLowerCase()) ? t(`foundry.skin.paint.colors.${colorFamily(area.paint)}`) : area.paint.toUpperCase();
   if (area.glow) return t(`foundry.skin.paint.glows.${area.glow.animation}`);

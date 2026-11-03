@@ -1,5 +1,10 @@
+import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
+import en from '../locales/en/translation.json';
 import { heroCardVariantLabel, heroCardVariantRank } from './heroCardVariants';
+
+const i18n = i18next.createInstance();
+void i18n.init({ lng: 'en', resources: { en: { translation: en } }, initAsync: false });
 
 describe('hero card variants', () => {
   it.each([
@@ -9,9 +14,10 @@ describe('hero card variants', () => {
     ['wolf_card', 'Wolf Card'],
     ['wolf_card_critical', 'Wolf Low HP'],
     ['wolf_card_gloat', 'Wolf Gloat'],
+    ['bear_card', 'Bear Card'],
     ['something_else', 'something_else'],
   ])('labels %s', (variant, label) => {
-    expect(heroCardVariantLabel(variant)).toBe(label);
+    expect(heroCardVariantLabel(variant, i18n.t)).toBe(label);
   });
 
   it('sorts form art after the hero art, in the same order', () => {

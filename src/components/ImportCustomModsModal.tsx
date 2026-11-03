@@ -260,7 +260,7 @@ export default function ImportCustomModsModal({
     if (submitting) return;
     const picked = await showOpenDialogMulti({
       title: t('installed.batchImport.selectFiles'),
-      filters: [{ name: 'VPK or archive', extensions: VPK_IMPORT_EXTS }],
+      filters: [{ name: t('common.fileTypes.vpkOrArchive'), extensions: VPK_IMPORT_EXTS }],
     });
     setError(null);
     addPaths(picked);
@@ -292,7 +292,7 @@ export default function ImportCustomModsModal({
     if (submitting) return;
     const picked = await showOpenDialog({
       title: t('installed.imageField.selectImage'),
-      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
+      filters: [{ name: t('common.fileTypes.images'), extensions: IMAGE_EXTS }],
     });
     if (!picked) return;
     try {

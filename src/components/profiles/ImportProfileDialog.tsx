@@ -835,7 +835,7 @@ export default function ImportProfileDialog({
                         onClick={() => setAutoexecExpanded((v) => !v)}
                         className="ml-auto flex-shrink-0 inline-flex items-center gap-1 text-text-secondary hover:text-text-primary cursor-pointer"
                         aria-expanded={autoexecExpanded}
-                        aria-label={autoexecExpanded ? 'Hide autoexec details' : 'Show autoexec details'}
+                        aria-label={autoexecExpanded ? t('importProfile.hideAutoexecDetails') : t('importProfile.showAutoexecDetails')}
                       >
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${autoexecExpanded ? 'rotate-180' : ''}`} />
                       </button>
@@ -916,7 +916,7 @@ export default function ImportProfileDialog({
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-2xs justify-end flex-shrink-0">
                 <span className="px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-300 border border-green-500/20">
-                  {report.exactCount} exact
+                  {t('importProfile.report.exact', { count: report.exactCount })}
                 </span>
                 {report.alreadyInstalledCount > 0 && (
                   <span className="px-1.5 py-0.5 rounded-sm bg-hl/5 text-text-secondary border border-hl/10" title={t('importProfile.modsAlreadyInstalledLocally')}>
@@ -925,17 +925,17 @@ export default function ImportProfileDialog({
                 )}
                 {report.upgradedCount > 0 && (
                   <span className="px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-300 border border-blue-500/20">
-                    {report.upgradedCount} upgraded
+                    {t('importProfile.report.upgraded', { count: report.upgradedCount })}
                   </span>
                 )}
                 {report.unresolvableCount > 0 && (
                   <span className="px-1.5 py-0.5 rounded-sm bg-red-500/10 text-red-300 border border-red-500/20">
-                    {report.unresolvableCount} unresolvable
+                    {t('importProfile.report.unresolvable', { count: report.unresolvableCount })}
                   </span>
                 )}
                 {parsed.extensions?.grimoire?.crosshair && (
                   <span className="px-1.5 py-0.5 rounded-sm bg-hl/5 text-text-secondary border border-hl/10">
-                    crosshair
+                    {t('importProfile.report.crosshair')}
                   </span>
                 )}
               </div>
@@ -951,7 +951,7 @@ export default function ImportProfileDialog({
                   // DMM imports exported without a modName) still show real names
                   // instead of "Submission #NNN".
                   const displayName =
-                    hint?.name ?? mod.resolvedName ?? `Submission #${gbSubmissionId(mod) ?? '?'}`;
+                    hint?.name ?? mod.resolvedName ?? t('importProfile.submissionNumber', { id: gbSubmissionId(mod) ?? '?' });
                   const isUnresolvable = mod.status === 'unresolvable';
                   const nsfwBlocked = skipNsfw && !!hint?.nsfw && !isUnresolvable;
                   const blocked = isRowBlocked(r);
@@ -968,7 +968,7 @@ export default function ImportProfileDialog({
                     pickedFiles.length === 1
                       ? pickedFiles[0].fileName
                       : pickedFiles.length > 1
-                        ? `${pickedFiles.length} variants picked`
+                        ? t('importCollection.variantsPicked', { count: pickedFiles.length })
                         : null;
                   const progressPct =
                     r.status === 'downloading' && r.progress && r.progress.total > 0
@@ -996,7 +996,7 @@ export default function ImportProfileDialog({
                             onChange={() => toggleRow(idx)}
                             disabled={blocked || importing}
                             className="peer sr-only"
-                            aria-label={`Toggle ${hint?.name ?? mod.resolvedName ?? 'mod'}`}
+                            aria-label={t('importProfile.toggleMod', { name: hint?.name ?? mod.resolvedName ?? t('importProfile.modFallback') })}
                           />
                           <CheckboxMark checked={r.selected && !blocked} disabled={blocked || importing} />
                         </label>
@@ -1176,12 +1176,12 @@ export default function ImportProfileDialog({
                                         </span>
                                         {file.isArchived && (
                                           <span className="text-text-tertiary text-2xs uppercase tracking-wide">
-                                            archived
+                                            {t('common.status.archived')}
                                           </span>
                                         )}
                                         <span
                                           className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
-                                          title={`${file.downloadCount.toLocaleString()} downloads`}
+                                          title={t('browse.filePicker.downloadsFormatted', { count: file.downloadCount, formatted: file.downloadCount.toLocaleString() })}
                                         >
                                           <Download className="w-3 h-3" />
                                           {file.downloadCount.toLocaleString()}
