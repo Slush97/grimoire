@@ -101,6 +101,7 @@ import { useInstalledScrollActivity } from '../components/installed/useInstalled
 import { InstalledVirtualGrid } from '../components/installed/InstalledVirtualGrid';
 import { useInstalledScrollRestoration } from '../components/installed/useInstalledScrollRestoration';
 import { useInstalledEntryReveal } from '../components/installed/useInstalledEntryReveal';
+import { useInstalledModSwap } from '../components/installed/useInstalledModSwap';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -160,7 +161,7 @@ import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/inst
 import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
 import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 import { InstalledSkeleton } from '../components/installed/InstalledSkeleton';
-import { type ModEntry, type InstalledTag, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryIsLocal, entryHeroNames, entryTags, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+import { type ModEntry, type InstalledTag, type EntrySwapTarget, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryIsLocal, entryHeroNames, entryTags, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
 
 const installedToolbarIconClass = 'inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -294,6 +295,8 @@ interface InstalledEntryCardProps {
   /** Opens the variant picker for a group, by its shared grouping key. */
   onOpenPicker: (groupKey: string) => void;
   onToggle: (entry: ModEntry) => Promise<boolean>;
+  swapTargets?: readonly EntrySwapTarget[];
+  onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
@@ -359,6 +362,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onViewAuthor,
   onOpenPicker,
   onToggle,
+  swapTargets,
+  onSwap,
   onSoloLaunch,
   onDelete,
   onEditLocal,
@@ -419,6 +424,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
+        swapTargets={swapTargets}
+        onSwap={key => onSwap(entry, key)}
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
@@ -504,6 +511,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
+      swapTargets={swapTargets}
+      onSwap={key => onSwap(entry, key)}
       onSoloLaunch={() => onSoloLaunch(entry)}
       soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
@@ -1025,13 +1034,6 @@ export default function Installed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectMode, clampSelectBarPos]);
 
-  // GB id of the group whose picker is open, or null. The actual entry is
-  // derived from live `mods` each render so per-file deletes inside the
-  // picker reflect immediately without juggling a separate snapshot.
-  // Open variant picker, held by the group's shared grouping key (see
-  // variantGroupKey): "gb:<id>" for GameBanana groups, "local:<uuid>" for
-  // locally imported multi-VPK archives.
-  const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
@@ -2348,17 +2350,7 @@ export default function Installed() {
     clearModsNotice();
   }, [modsNotice, clearModsNotice]);
 
-  /**
-   * Flip a single variant's enabled state. Variants are independent — a
-   * mod's model VPK and its voice-lines VPK (same archive) or its red and
-   * blue uploads (different archives on the same mod page) can each be on
-   * or off without affecting the others. Sequential just because the store
-   * action is single-mod.
-   */
-  const toggleVariant = async (target: Mod) => {
-    return toggleMod(target.id);
-  };
-
+  /** Apply one state to every file represented by a grouped card. */
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
     const targets = group.variants.filter((v) => v.enabled !== enabled);
     for (const v of targets) {
@@ -2529,6 +2521,7 @@ export default function Installed() {
   // rebuilding entries every render would re-render every card on each
   // page-level setState.
   const allEntries = useMemo(() => buildModEntries(visibleMods), [visibleMods]);
+  const { pickerGroupId, setPickerGroupId, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
   const enabledEntries = useMemo(
     () =>
       allEntries
@@ -3431,6 +3424,8 @@ export default function Installed() {
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
     onToggle: toggleEntry,
+    swapTargets: swapTargets.get(entry.key),
+    onSwap: beginSwap,
     onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,

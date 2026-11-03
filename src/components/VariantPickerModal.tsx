@@ -119,11 +119,15 @@ function SortableVariantRow({
         zIndex: isDragging ? 1 : undefined,
     };
 
+    // A disabled drag handle must not disable the controls inside it.
     return (
         <div
             ref={setNodeRef}
             style={style}
             {...attributes}
+            role={disabled ? undefined : attributes.role}
+            tabIndex={disabled ? undefined : attributes.tabIndex}
+            aria-disabled={disabled ? undefined : attributes['aria-disabled']}
             {...listeners}
         >
             {children}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Mod } from '../types/mod';
-import { buildModEntries, entryHeroNames, entryTags, entrySize, type ModEntry } from './modEntries';
+import { buildEntrySwapTargets, buildModEntries, entryHeroNames, entryTags, entrySize, type ModEntry } from './modEntries';
 import { buildCategoryPaths } from './categoryPaths';
 import type { InstalledTaxonomyContext } from './installedCardTaxonomy';
 
@@ -22,6 +22,52 @@ const context: InstalledTaxonomyContext = {
 const group = (variants: Mod[]): ModEntry => ({
   kind: 'group', key: 'group:test', groupKey: 'gb:1', variants,
   primary: variants[0], active: null, enabledVariants: [], totalSize: 1,
+});
+
+describe('hero swap targets', () => {
+  const mod = (id: string, enabled: boolean, heroes: string[], extra: Partial<Mod> = {}): Mod => ({
+    id, name: id, fileName: `${id}.vpk`, metaKey: `${id}.vpk`, path: '', size: 1,
+    enabled, installedAt: '', priority: 1, sha256: id, lockerHeroes: heroes, ...extra,
+  });
+  const matches = (mods: Mod[], id: string) => {
+    const entries = buildModEntries(mods);
+    const entry = entries.find(entry => entry.kind === 'single' ? entry.mod.id === id : entry.variants.some(mod => mod.id === id))!;
+    return buildEntrySwapTargets(entries).get(entry.key)?.map(target => target.name) ?? [];
+  };
+
+  it('offers enabled hero matches, excluding disabled and unrelated mods', () => {
+    expect(matches([mod('new', false, ['Haze']), mod('old', true, ['Haze']),
+      mod('unrelated', true, ['Abrams']), mod('disabled', false, ['Haze'])], 'new')).toEqual(['old']);
+  });
+  it('omits enabled cards and cards without a hero tag', () => {
+    const mods = [mod('enabled', true, ['Haze']), mod('untagged', false, [])];
+    expect(buildEntrySwapTargets(buildModEntries(mods)).size).toBe(0);
+  });
+  it('combines all heroes and includes each candidate only once', () => {
+    expect(matches([mod('new', false, ['Haze', 'Abrams']), mod('both', true, ['Haze', 'Abrams']),
+      mod('Abrams only', true, ['Abrams'])], 'new')).toEqual(['both', 'Abrams only']);
+  });
+  it('does not match a hero carried only by a disabled file in an enabled group', () => {
+    expect(matches([mod('new', false, ['Haze']), mod('enabled variant', true, ['Abrams'], { localGroupId: 'old' }),
+      mod('disabled variant', false, ['Haze'], { localGroupId: 'old' })], 'new')).toEqual([]);
+  });
+  it('carries the target heroes once, excluding its disabled variants', () => {
+    const entries = buildModEntries([mod('new', false, ['Haze']),
+      mod('enabled variant', true, ['Haze', 'Wraith'], { localGroupId: 'old' }),
+      mod('second enabled variant', true, ['Wraith'], { localGroupId: 'old' }),
+      mod('disabled variant', false, ['Abrams'], { localGroupId: 'old' })]);
+    const replacement = entries.find(entry => entry.kind === 'single')!;
+    expect(buildEntrySwapTargets(entries).get(replacement.key)).toEqual([
+      { key: 'group:local:old', name: 'enabled variant', heroNames: ['Haze', 'Wraith'] },
+    ]);
+  });
+  it('uses all hero tags of a disabled variant group and canonical aliases', () => {
+    const entries = buildModEntries([mod('new Haze', false, ['Haze'], { localGroupId: 'new' }),
+      mod('new Abrams', false, ['Abrams'], { localGroupId: 'new' }), mod('old', true, ['Abrams'])]);
+    const replacement = entries.find(entry => entry.kind === 'group')!;
+    expect(buildEntrySwapTargets(entries).get(replacement.key)?.map(target => target.name)).toEqual(['old']);
+    expect(matches([mod('new', false, ['Rat King']), mod('old', true, ['RatKing'])], 'new')).toEqual(['old']);
+  });
 });
 
 describe('entryHeroNames', () => {

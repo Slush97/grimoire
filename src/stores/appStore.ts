@@ -7,16 +7,16 @@ import { useInstalledTagsStore } from './installedTagsStore';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
-import { isGameRunningModLockError } from '../lib/modLocks';
+import { isGameRunningModLockError, isModLoadedInGame } from '../lib/modLocks';
 import { showToast } from './toastStore';
-import { buildHeroList, getLockerSkinKey, type HeroCategory } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey, modLoadOrder, type HeroCategory } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import { reconcileMods } from '../lib/reconcileMods';
 import { installedModRequirements, modRequirementRefs, requiredModClosure } from '../lib/modRequirements';
-import { requestRequirementToggle, useRequirementsStore } from './requirementsStore';
+import { requestRequirementToggle, useRequirementsStore, type RequirementToggleChoice } from './requirementsStore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
   planLaunchShuffle,
@@ -84,6 +84,49 @@ function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
     () => undefined
   );
   return run;
+}
+
+/** Review outside the mutation queue so dependency checkboxes can still write. */
+async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[]): Promise<{
+  choice: RequirementToggleChoice; changes: { key: string; enabled: boolean }[];
+}> {
+  const key = modRestoreKey(mod);
+  const cancelled = { choice: 'cancel' as const, changes: [] };
+  if (typeof window !== 'undefined' && typeof window.electronAPI?.getModRequirements === 'function') {
+    await useRequirementsStore.getState().load(readMods().flatMap(modRequirementRefs));
+  }
+  const reviewMods = readMods();
+  const current = reviewMods.find(mod => modRestoreKey(mod) === key);
+  if (!current) return cancelled;
+  const direction = enabled ? 'dependencies' : 'dependents';
+  const relatedKeys = requiredModClosure(current.id, reviewMods, useRequirementsStore.getState().snapshots, direction)
+    .map(id => reviewMods.find(mod => mod.id === id)!).map(modRestoreKey);
+  const choice = await requestRequirementToggle(current, enabled, reviewMods);
+  if (choice === 'cancel') return cancelled;
+  const mods = readMods();
+  const target = mods.find(mod => modRestoreKey(mod) === key);
+  if (!target) return cancelled;
+  const keys = new Set([key]);
+  if (choice === 'all') {
+    for (const related of relatedKeys) keys.add(related);
+    for (const id of requiredModClosure(target.id, mods, useRequirementsStore.getState().snapshots, direction)) {
+      const related = mods.find(mod => mod.id === id);
+      if (related) keys.add(modRestoreKey(related));
+    }
+  }
+  const changes = new Map([...keys].map(key => [key, enabled]));
+  if (choice === 'all' && enabled) {
+    for (const owner of mods.filter(mod => keys.has(modRestoreKey(mod)))) {
+      for (const { item, matches } of installedModRequirements(owner, mods, useRequirementsStore.getState().snapshots)) {
+        if (item.importance !== 'required' || item.state !== 'off') continue;
+        for (const match of matches) {
+          const incompatible = mods.find(mod => mod.id === match.modId);
+          if (incompatible && !keys.has(modRestoreKey(incompatible))) changes.set(modRestoreKey(incompatible), false);
+        }
+      }
+    }
+  }
+  return { choice, changes: [...changes].map(([key, enabled]) => ({ key, enabled })) };
 }
 
 function formerStandalonePreferenceKey(mod: Mod): string[] {
@@ -440,6 +483,7 @@ interface AppState {
   /** Apply explicit states after a requirements review, resolving renamed files
    *  from their stable keys once earlier mutations have completed. */
   setModEnabledStates: (changes: readonly { key: string; enabled: boolean }[]) => Promise<boolean>;
+  swapMods: (replacementKey: string, outgoingKeys: readonly string[]) => Promise<'swapped' | 'blocked' | 'cancelled' | 'failed'>;
   clearModsNotice: () => void;
   deleteMod: (mod: DeleteModEntry) => Promise<void>;
   /** Deletes the ids as one locked main-process batch, with a progress tick
@@ -866,47 +910,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const initial = get().mods.find(mod => mod.id === modId);
     if (!initial) return false;
     const key = modRestoreKey(initial);
-    const enabled = !initial.enabled;
-    // Keep the dialog outside the mutation queue so its individual checkboxes
-    // can apply state changes while the original toggle waits for a choice.
-    if (typeof window !== 'undefined' && typeof window.electronAPI?.getModRequirements === 'function') {
-      await useRequirementsStore.getState().load(get().mods.flatMap(modRequirementRefs));
-    }
-    const reviewMods = get().mods;
-    const current = reviewMods.find(mod => modRestoreKey(mod) === key);
-    if (!current) return false;
-    const direction = enabled ? 'dependencies' : 'dependents';
-    const relatedKeys = requiredModClosure(current.id, reviewMods, useRequirementsStore.getState().snapshots, direction)
-      .map(id => reviewMods.find(mod => mod.id === id)!)
-      .map(modRestoreKey);
-    const choice = await requestRequirementToggle(current, enabled, reviewMods);
-    if (choice === 'cancel') return false;
-    if (choice === 'all' || choice === 'only') {
-      const mods = get().mods;
-      const target = mods.find(mod => modRestoreKey(mod) === key);
-      if (!target) return false;
-      const keys = new Set([key]);
-      if (choice === 'all') {
-        for (const related of relatedKeys) keys.add(related);
-        for (const id of requiredModClosure(target.id, mods, useRequirementsStore.getState().snapshots, direction)) {
-          const related = mods.find(mod => mod.id === id);
-          if (related) keys.add(modRestoreKey(related));
-        }
-      }
-      const changes = new Map([...keys].map(key => [key, enabled]));
-      if (choice === 'all' && enabled) {
-        for (const owner of mods.filter(mod => keys.has(modRestoreKey(mod)))) {
-          for (const { item, matches } of installedModRequirements(owner, mods, useRequirementsStore.getState().snapshots)) {
-            if (item.importance !== 'required' || item.state !== 'off') continue;
-            for (const match of matches) {
-              const incompatible = mods.find(mod => mod.id === match.modId);
-              if (incompatible && !keys.has(modRestoreKey(incompatible))) changes.set(modRestoreKey(incompatible), false);
-            }
-          }
-        }
-      }
-      return get().setModEnabledStates([...changes].map(([key, enabled]) => ({ key, enabled })));
-    }
+    const review = await reviewModToggle(initial, !initial.enabled, () => get().mods);
+    if (review.choice === 'cancel') return false;
+    if (review.choice === 'all' || review.choice === 'only') return get().setModEnabledStates(review.changes);
     return enqueueToggle(async () => {
       const mod = get().mods.find(candidate => modRestoreKey(candidate) === key);
       if (!mod) return false;
@@ -985,6 +991,69 @@ export const useAppStore = create<AppState>((set, get) => ({
       return false;
     }
   }),
+
+  swapMods: async (replacementKey, outgoingKeys) => {
+    const stale = () => {
+      showToast(i18n.t('installed.swap.unavailable'), { tone: 'warning' });
+      return 'failed' as const;
+    };
+    const mods = get().mods;
+    const replacement = mods.find(mod => modRestoreKey(mod) === replacementKey && !mod.enabled);
+    const outgoing = mods.filter(mod => outgoingKeys.includes(modRestoreKey(mod)) && mod.enabled);
+    if (!replacement || !outgoing.length || outgoingKeys.includes(replacementKey)) return stale();
+    const locked = () => get().mods.some(mod => outgoingKeys.includes(modRestoreKey(mod)) && isModLoadedInGame(mod, get().loadedGameModIds));
+    if (locked()) {
+      showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
+      return 'blocked';
+    }
+    const incomingReview = await reviewModToggle(replacement, true, () => get().mods);
+    if (incomingReview.choice === 'cancel') return 'cancelled';
+    const changes = new Map(incomingReview.changes.map(change => [change.key, change.enabled]));
+    for (const source of outgoing) {
+      const review = await reviewModToggle(source, false, () => get().mods);
+      if (review.choice === 'cancel') return 'cancelled';
+      for (const change of review.changes) {
+        if (changes.has(change.key) && changes.get(change.key) !== change.enabled) {
+          showToast(i18n.t('installed.swap.requirementConflict'), { tone: 'warning' });
+          return 'cancelled';
+        }
+        changes.set(change.key, change.enabled);
+      }
+    }
+    return enqueueToggle(async () => {
+      if (locked()) {
+        showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
+        return 'blocked';
+      }
+      const mods = get().mods;
+      if ([...changes.keys()].some(key => !mods.some(mod => modRestoreKey(mod) === key))) return stale();
+      const replacement = mods.find(mod => modRestoreKey(mod) === replacementKey && !mod.enabled);
+      const anchor = mods.filter(mod => mod.enabled && outgoingKeys.includes(modRestoreKey(mod)))
+        .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))[0];
+      if (!replacement || !anchor) return stale();
+      const enable = mods.filter(mod => changes.get(modRestoreKey(mod)) === true).map(mod => mod.id);
+      const disable = mods.filter(mod => changes.get(modRestoreKey(mod)) === false).map(mod => mod.id);
+      try {
+        const updated = await api.swapMods(enable, disable, { incomingId: replacement.id, outgoingId: anchor.id });
+        invalidateModsReads();
+        set(state => ({ mods: reconcileMods(state.mods, updated) }));
+        for (const mod of updated) {
+          if (!mod.enabled || !mod.outdatedVdata?.[0] || mods.some(previous => previous.enabled && modRestoreKey(previous) === modRestoreKey(mod))) continue;
+          const outdated = mod.outdatedVdata[0];
+          showToast(i18n.t('installed.outdatedData.enabledToast', { name: mod.name, count: outdated.missing, file: outdated.entry }), { tone: 'warning', duration: 10000 });
+        }
+        return 'swapped';
+      } catch (error) {
+        invalidateModsReads();
+        await get().loadMods({ silent: true, force: true });
+        if (isGameRunningModLockError(error)) return 'blocked';
+        if (String(error).includes('MOD_SWAP_STALE')) return stale();
+        if (isEnableCapError(error)) set({ modsNotice: ENABLE_CAP_NOTICE });
+        else showToast(String(error), { tone: 'error' });
+        return 'failed';
+      }
+    });
+  },
 
   clearModsNotice: () => set({ modsNotice: null }),
 

@@ -748,6 +748,12 @@ export interface DeleteModsProgress {
 // the mod at the id is still the one that was picked.
 export type DeleteModEntry = Pick<Mod, 'id' | 'size' | 'installedAt'>;
 
+export interface ModSwapPlacement {
+  /** Selected pair that transfers its slot, apart from any requirement toggles. */
+  incomingId: string;
+  outgoingId: string;
+}
+
 export interface DeleteModsResult {
   /** Ids whose mod was gone or had changed since it was picked. Nothing was deleted for them. */
   skipped: string[];

@@ -210,6 +210,71 @@ describe('installed card menu mounting', () => {
     expect(requirementsOnly.querySelectorAll('svg')).toHaveLength(1);
   });
 
+  it.each(['grid', 'compact', 'list'] as const)('places the hover swap button directly after More actions in %s', async viewMode => {
+    input = { ...input, viewMode, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze'] },
+      swapTargets: [{ key: 'old', name: 'Current Haze skin', heroNames: ['Haze'] }], onSwap: vi.fn(async () => {}) };
+    await act(async () => root.render(<ModCard {...input} />));
+    const button = host.querySelector<HTMLButtonElement>('[data-mod-swap]')!;
+    const more = host.querySelector('[aria-label="installed.card.moreActionsFor"]')!;
+    expect(more.closest('div')?.nextElementSibling).toBe(button);
+    expect(button.className).toContain('installed-card-hover-action');
+    expect(button.className).toContain('opacity-0');
+    expect(button.querySelector('.lucide-arrow-left-right')).not.toBeNull();
+    await act(async () => button.click());
+    expect(input.onSwap).toHaveBeenCalledExactlyOnceWith('old');
+    expect(input.onToggle).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-swap-menu]')).toBeNull();
+  });
+
+  it.each(['enabled', 'untagged', 'no-match', 'selection'] as const)('omits the swap button for %s cards', async kind => {
+    input = { ...input, mod: { ...input.mod, enabled: kind === 'enabled', lockerHeroes: kind === 'untagged' ? [] : ['Haze'] },
+      selectMode: kind === 'selection', swapTargets: kind === 'no-match' ? [] : [{ key: 'old', name: 'Old', heroNames: ['Haze'] }], onSwap: vi.fn(async () => {}) };
+    await act(async () => root.render(<ModCard {...input} />));
+    expect(host.querySelector('[data-mod-swap]')).toBeNull();
+  });
+
+  it('opens the enabled-mod dropdown and swaps only the selected target', async () => {
+    input = { ...input, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze', 'Abrams'] },
+      swapTargets: [{ key: 'haze', name: 'Enabled Haze', heroNames: ['Haze', 'Wraith'] }, { key: 'abrams', name: 'Enabled Abrams', heroNames: ['Abrams'] }], onSwap: vi.fn(async () => {}) };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => host.querySelector('[data-mod-swap]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    const menu = document.querySelector('[data-swap-menu]')!;
+    const targets = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    expect(targets.map(item => item.title)).toEqual(['Enabled Haze', 'Enabled Abrams']);
+    expect(targets[0].querySelectorAll('[data-hero-stack] img')).toHaveLength(2);
+    expect(targets[0].querySelector<HTMLElement>('[data-hero-stack]')?.style.width).toBe('44px');
+    expect(targets[0].querySelector('img[src*="haze.png"]')).not.toBeNull();
+    expect(targets[0].querySelector('img[src*="wraith.png"]')).not.toBeNull();
+    expect(targets[1].querySelector('img[src*="abrams.png"]')).not.toBeNull();
+    expect(menu.querySelector('.lucide-arrow-left-right')).toBeNull();
+    expect(input.onSwap).not.toHaveBeenCalled();
+    await act(async () => targets[1].click());
+    expect(input.onSwap).toHaveBeenCalledExactlyOnceWith('abrams');
+    expect(document.querySelector('[data-swap-menu]')).toBeNull();
+  });
+
+  it('uses the target dropdown for a multihero mod even when only one target is available', async () => {
+    input = { ...input, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze', 'Abrams'] },
+      swapTargets: [{ key: 'old', name: 'Enabled Haze', heroNames: ['Haze'] }], onSwap: vi.fn(async () => {}) };
+    await act(async () => root.render(<ModCard {...input} />));
+    await act(async () => host.querySelector('[data-mod-swap]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(document.querySelector('[data-swap-menu] [role="menuitem"]')?.getAttribute('title')).toBe('Enabled Haze');
+    expect(input.onSwap).not.toHaveBeenCalled();
+  });
+
+  it('prevents repeated swap clicks while a replacement is being enabled', async () => {
+    let finish!: () => void;
+    input = { ...input, mod: { ...input.mod, enabled: false, lockerHeroes: ['Haze'] },
+      swapTargets: [{ key: 'old', name: 'Old', heroNames: ['Haze'] }], onSwap: vi.fn(() => new Promise<void>(resolve => { finish = resolve; })) };
+    await act(async () => root.render(<ModCard {...input} />));
+    const button = host.querySelector<HTMLButtonElement>('[data-mod-swap]')!;
+    await act(async () => { button.click(); button.click(); });
+    expect(input.onSwap).toHaveBeenCalledOnce();
+    expect(button.disabled).toBe(true);
+    await act(async () => finish());
+    expect(button.disabled).toBe(false);
+  });
+
   it.each(['context', 'dropdown'] as const)('opens requirement management from the %s menu', async kind => {
     input = { ...input, mod: { ...input.mod, gameBananaId: 1 } };
     useAppStore.setState({ mods: [input.mod as Mod] });

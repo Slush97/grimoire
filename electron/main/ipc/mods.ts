@@ -24,6 +24,7 @@ import {
     reorderPriorityMods,
     swapModPriority,
     setModsEnabledBatch,
+    swapEnabledMods,
     setModPriorityFolder,
     installEnabledVpk,
     runExclusiveModMutation,
@@ -85,7 +86,7 @@ import { refreshEmbedAfterMetadataChange, toLocalVariantGroupMember } from '../s
 import { resolveImportedVariantLabel } from '../../../src/lib/customModImport';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, AddMergeSourcesResult, DeleteModEntry, ModSwapPlacement, DeleteModsResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -978,6 +979,14 @@ ipcMain.handle(
         return { mods: enrichMods(mods), failures: result.failures };
     }
 );
+
+// swap-mods: enable replacements before releasing the outgoing loadout.
+ipcMain.handle('swap-mods', async (_, enableIds: string[], disableIds: string[], placement: ModSwapPlacement): Promise<Mod[]> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) throw new Error('No Deadlock path configured');
+    await swapEnabledMods(deadlockPath, enableIds, disableIds, placement);
+    return enrichMods(await scanMods(deadlockPath));
+});
 
 // swap-mod-priority
 ipcMain.handle(

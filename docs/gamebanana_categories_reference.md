@@ -109,6 +109,26 @@ Installed cards and filter facets share `installedCardTaxonomy.ts` and the categ
 - Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
 
+Disabled Installed cards with resolved hero tags show a hover-only swap action
+beside More actions when an enabled card shares a hero. A single match swaps
+directly; multiple matches, or a replacement tagged for several heroes, use a
+dropdown of enabled card names with their hero icons in the cards' 66px overlapping
+stack. Each enabled card appears once, and disabled
+variants do not contribute hero matches for an enabled group. Matching uses the
+complete visible library before search and filter narrowing.
+
+For a replacement with several VPKs, choosing the outgoing card opens the existing
+variant picker. Closing it leaves the outgoing mod enabled. The first successful
+replacement enable disables only the chosen outgoing card's enabled files;
+subsequent picker toggles remain independent. Requirements confirmations and
+safety review still apply. The main process holds one mutation lock, enables
+replacements before disabling outgoing files, and restores moved files on failure.
+The chosen replacement inherits the outgoing card's exact folder and load-order
+slot (its first slot when several files are enabled), leaving other mods in place.
+Global placement follows that slot, including its persisted priority flag.
+Game-loaded outgoing files block the swap with the usual warning and shake
+feedback on both rendered cards, including when the lock changes during selection.
+
 Installed's Hero selector supports several heroes, matching any selected hero.
 Selected heroes share the cards' 66px overlapping stack, showing up to eight
 icons before an overflow urn. Its tooltip lists every selected hero.

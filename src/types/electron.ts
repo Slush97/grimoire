@@ -5,6 +5,7 @@ import type {
     Mod,
     AppSettings,
     DeleteModEntry,
+    ModSwapPlacement,
     DeleteModsProgress,
     DeleteModsResult,
     GlobalModType,
@@ -940,6 +941,7 @@ export interface ElectronAPI {
     getMods: () => Promise<Mod[]>;
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
+    swapMods: (enableIds: string[], disableIds: string[], placement: ModSwapPlacement) => Promise<Mod[]>;
     deleteMod: (entry: DeleteModEntry) => Promise<DeleteModsResult>;
     deleteMods: (entries: DeleteModEntry[]) => Promise<DeleteModsResult>;
     onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => () => void;

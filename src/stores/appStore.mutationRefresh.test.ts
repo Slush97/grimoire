@@ -9,7 +9,7 @@ import { useToastStore } from './toastStore';
 vi.mock('../i18n', () => ({ default: { t: (key: string) => key }, applyLanguagePreference: vi.fn() }));
 vi.mock('../lib/api', () => ({
   getMods: vi.fn(), reorderMods: vi.fn(), swapModPriority: vi.fn(),
-  enableMod: vi.fn(), disableMod: vi.fn(), applyModToggleBatch: vi.fn(),
+  enableMod: vi.fn(), disableMod: vi.fn(), applyModToggleBatch: vi.fn(), swapMods: vi.fn(),
   getGamebananaCategories: vi.fn(async () => []), deleteMod: vi.fn(), editLocalMod: vi.fn(),
 }));
 
@@ -33,6 +33,7 @@ beforeEach(() => {
   useAppStore.setState({
     mods: [], modsLoaded: true, modsLoading: false, modsError: null, modsNotice: null,
     soloRestore: null, shuffleOnLaunch: false, shuffleIncluded: new Set(), shuffleVariants: new Map(),
+    loadedGameModIds: new Set(),
   });
 });
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -293,5 +294,125 @@ describe('requirements toggle decisions', () => {
     expect(getModRequirements).toHaveBeenCalledExactlyOnceWith([{ id: 1, section: 'Mod' }], false);
     useRequirementsStore.getState().finishToggle();
     await expect(pending).resolves.toBe(false);
+  });
+});
+
+describe('hero mod swaps', () => {
+  it.each([false, true])('takes the first global load-order slot of the selected group (Global=%s)', async priority => {
+    const later = { ...mod('later'), priority: 1, metaKey: 'addons1/pak01_dir.vpk' };
+    const earlier = { ...mod('earlier'), priority: 80, metaKey: priority ? 'grimoire/pak80_dir.vpk' : 'pak80_dir.vpk' };
+    const replacement = mod('replacement', false);
+    useAppStore.setState({ mods: [later, earlier, replacement] });
+    vi.mocked(api.swapMods).mockResolvedValueOnce([]);
+    await expect(useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(later), modRestoreKey(earlier)])).resolves.toBe('swapped');
+    expect(api.swapMods).toHaveBeenCalledExactlyOnceWith([replacement.id], [later.id, earlier.id], {
+      incomingId: replacement.id, outgoingId: earlier.id,
+    });
+  });
+
+  it('publishes both renamed files from one transaction and invalidates older scans', async () => {
+    const source = mod('source'); const replacement = mod('replacement', false);
+    useAppStore.setState({ mods: [source, replacement] });
+    const scan = deferred<Mod[]>(); vi.mocked(api.getMods).mockReturnValueOnce(scan.promise);
+    const loading = useAppStore.getState().loadMods({ silent: true });
+    const updated = [{ ...source, id: 'disabled-source', enabled: false }, { ...replacement, id: 'enabled-replacement', enabled: true }];
+    vi.mocked(api.swapMods).mockResolvedValueOnce(updated);
+    await expect(useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)])).resolves.toBe('swapped');
+    expect(api.swapMods).toHaveBeenCalledExactlyOnceWith([replacement.id], [source.id], { incomingId: replacement.id, outgoingId: source.id });
+    scan.resolve([source, replacement]); await loading;
+    expect(useAppStore.getState().mods).toEqual(updated);
+  });
+
+  it('includes required dependency enables in the same swap after Enable all', async () => {
+    const source = mod('source'); const replacement = { ...mod('replacement', false), gameBananaId: 1 };
+    const base = { ...mod('base', false), gameBananaId: 99 };
+    useAppStore.setState({ mods: [source, replacement, base] });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: Date.now(), items: [
+      { name: 'Base', url: 'https://gamebanana.com/mods/99', importance: 'required', state: 'on' },
+    ] });
+    vi.mocked(api.swapMods).mockResolvedValueOnce([{ ...source, enabled: false }, { ...replacement, enabled: true }, { ...base, enabled: true }]);
+    const swapping = useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)]);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview?.mode).toBe('enable'));
+    expect(api.swapMods).not.toHaveBeenCalled();
+    useRequirementsStore.getState().finishToggle('all');
+    await expect(swapping).resolves.toBe('swapped');
+    expect(api.swapMods).toHaveBeenCalledExactlyOnceWith([replacement.id, base.id], [source.id], { incomingId: replacement.id, outgoingId: source.id });
+  });
+
+  it('preserves the current mod when a requirements confirmation is cancelled', async () => {
+    const source = mod('source'); const replacement = { ...mod('replacement', false), gameBananaId: 1 };
+    useAppStore.setState({ mods: [source, replacement] });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: 1, items: [
+      { name: 'Missing', url: 'https://gamebanana.com/mods/99', importance: 'required', state: 'on' },
+    ] });
+    const swapping = useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)]);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview).not.toBeNull());
+    useRequirementsStore.getState().finishToggle();
+    await expect(swapping).resolves.toBe('cancelled');
+    expect(api.swapMods).not.toHaveBeenCalled();
+    expect(useAppStore.getState().mods).toEqual([source, replacement]);
+  });
+
+  it('blocks loaded targets without touching files or opening requirements', async () => {
+    const source = mod('source'); const replacement = mod('replacement', false);
+    useAppStore.setState({ mods: [source, replacement], loadedGameModIds: new Set([source.id]) });
+    await expect(useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)])).resolves.toBe('blocked');
+    expect(api.swapMods).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe('common.gameRunningWarning');
+  });
+
+  it('rechecks the loaded snapshot after the requirements popup', async () => {
+    const source = mod('source'); const replacement = { ...mod('replacement', false), gameBananaId: 1 };
+    useAppStore.setState({ mods: [source, replacement] });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: 1, items: [
+      { name: 'Missing', url: 'https://gamebanana.com/mods/99', importance: 'required', state: 'on' },
+    ] });
+    const swapping = useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)]);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview).not.toBeNull());
+    useAppStore.setState({ loadedGameModIds: new Set([source.id]) });
+    useRequirementsStore.getState().finishToggle('only');
+    await expect(swapping).resolves.toBe('blocked');
+    expect(api.swapMods).not.toHaveBeenCalled();
+  });
+
+  it('resolves current filenames after an earlier queued mutation', async () => {
+    const source = mod('source'); const replacement = mod('replacement', false); const other = mod('other', false);
+    useAppStore.setState({ mods: [source, replacement, other] });
+    const first = deferred<{ mods: Mod[]; failures: string[] }>();
+    vi.mocked(api.applyModToggleBatch).mockReturnValueOnce(first.promise);
+    const preceding = useAppStore.getState().setModEnabledStates([{ key: modRestoreKey(other), enabled: true }]);
+    await vi.waitFor(() => expect(api.applyModToggleBatch).toHaveBeenCalled());
+    const swapping = useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)]);
+    const renamed = [{ ...source, id: 'source-renamed' }, { ...replacement, id: 'replacement-renamed' }, { ...other, enabled: true }];
+    vi.mocked(api.swapMods).mockResolvedValueOnce(renamed);
+    first.resolve({ mods: renamed, failures: [] });
+    await preceding; await swapping;
+    expect(api.swapMods).toHaveBeenCalledExactlyOnceWith(['replacement-renamed'], ['source-renamed'], { incomingId: 'replacement-renamed', outgoingId: 'source-renamed' });
+  });
+
+  it('reports backend game locks and refreshes without leaving stale state', async () => {
+    const source = mod('source'); const replacement = mod('replacement', false);
+    useAppStore.setState({ mods: [source, replacement] });
+    vi.mocked(api.swapMods).mockRejectedValueOnce(new Error('Game is running'));
+    vi.mocked(api.getMods).mockResolvedValueOnce([source, replacement]);
+    await expect(useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)])).resolves.toBe('blocked');
+    expect(api.getMods).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().mods).toEqual([source, replacement]);
+  });
+
+  it('rejects contradictory requirements and swaps that resolve to the same content', async () => {
+    const source = { ...mod('source'), gameBananaId: 99 }; const replacement = { ...mod('replacement', false), gameBananaId: 1 };
+    useAppStore.setState({ mods: [source, replacement] });
+    useRequirementsStore.getState().remember({ id: 1, section: 'Mod' }, { status: 'loaded', checkedAt: 1, items: [
+      { name: 'Current', url: 'https://gamebanana.com/mods/99', importance: 'required', state: 'on' },
+    ] });
+    const swapping = useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(source)]);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview).not.toBeNull());
+    useRequirementsStore.getState().finishToggle('all');
+    await expect(swapping).resolves.toBe('cancelled');
+    expect(api.swapMods).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe('installed.swap.requirementConflict');
+    await expect(useAppStore.getState().swapMods(modRestoreKey(replacement), [modRestoreKey(replacement)])).resolves.toBe('failed');
+    expect(api.swapMods).not.toHaveBeenCalled();
   });
 });

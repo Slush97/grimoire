@@ -1,5 +1,5 @@
 import type { Mod } from '../types/mod';
-import { modLoadOrder } from './lockerUtils';
+import { canonicalHeroName, modLoadOrder } from './lockerUtils';
 import { installedVariantGroupKey } from './localVariantEligibility';
 import { modPreferenceKey } from './disabledModPrefs';
 import { getInstalledCardTaxonomy, installedTaxonomyTags, type InstalledTaxonomyContext } from './installedCardTaxonomy';
@@ -188,6 +188,37 @@ export function entryHeroNames(entry: ModEntry, context?: InstalledTaxonomyConte
   return Array.from(new Set(
     mods.flatMap((mod) => getInstalledCardTaxonomy(mod, context).heroNames)
   ));
+}
+
+export interface EntrySwapTarget { key: string; name: string; heroNames: string[] }
+
+/** Match disabled cards to enabled cards using the same resolved hero tags.
+ * Disabled variants cannot make an enabled group eligible for another hero. */
+export function buildEntrySwapTargets(entries: readonly ModEntry[], context?: InstalledTaxonomyContext): Map<string, EntrySwapTarget[]> {
+  const byHero = new Map<string, EntrySwapTarget[]>();
+  for (const entry of entries) {
+    const enabled = entry.kind === 'single' ? [entry.mod].filter(mod => mod.enabled) : entry.enabledVariants;
+    const heroes = new Map(enabled.flatMap(mod => getInstalledCardTaxonomy(mod, context).heroNames)
+      .map(hero => { const name = canonicalHeroName(hero); return [name.toLowerCase(), name]; }));
+    const target = { key: entry.key, name: entryName(entry), heroNames: [...heroes.values()] };
+    for (const hero of heroes.keys()) {
+      const matches = byHero.get(hero) ?? [];
+      matches.push(target);
+      byHero.set(hero, matches);
+    }
+  }
+  const targets = new Map<string, EntrySwapTarget[]>();
+  for (const entry of entries) {
+    if (isEntryEnabled(entry)) continue;
+    const matches = new Map<string, EntrySwapTarget>();
+    for (const hero of entryHeroNames(entry, context)) {
+      for (const candidate of byHero.get(canonicalHeroName(hero).toLowerCase()) ?? []) {
+        matches.set(candidate.key, candidate);
+      }
+    }
+    if (matches.size) targets.set(entry.key, [...matches.values()]);
+  }
+  return targets;
 }
 
 export interface InstalledTag {

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight } from 'lucide-react';
+import type { EntrySwapTarget } from '../../lib/modEntries';
 import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
@@ -101,6 +102,8 @@ interface ModCardProps {
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
   onToggle: () => Promise<boolean> | void;
+  swapTargets?: readonly EntrySwapTarget[];
+  onSwap?: (outgoingEntryKey: string) => Promise<void>;
   /** Disable every other mod, enable only this one, and launch the game. Used
    *  for A/B testing a single skin. */
   onSoloLaunch?: () => void;
@@ -699,6 +702,8 @@ export function ModCard({
   previewMetaKey,
   onViewAuthor,
   onToggle,
+  swapTargets = [],
+  onSwap,
   onSoloLaunch,
   soloBusy = false,
   onDelete,
@@ -763,6 +768,9 @@ export function ModCard({
     }
   };
   const [hovered, setHovered] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [swapping, setSwapping] = useState(false);
+  const swapInFlight = useRef(false);
   // Ordinary hover is styled by CSS. Only Shift-selection needs React state.
   // Remember the pointer separately so pressing Shift over a stationary card
   // still shows the preview before paint.
@@ -1203,6 +1211,27 @@ export function ModCard({
     </>
   );
 
+  const runSwap = async (key: string) => {
+    if (!onSwap || swapInFlight.current) return;
+    swapInFlight.current = true;
+    setSwapping(true);
+    try { await onSwap(key); }
+    catch (error) { showToast(String(error), { tone: 'error' }); }
+    finally { swapInFlight.current = false; setSwapping(false); }
+  };
+  const chooseSwapTarget = swapTargets.length > 1 || cardTaxonomy.heroNames.length > 1;
+  const swapButton = <button type="button" disabled={swapping} aria-busy={swapping || undefined}
+    onPointerDown={event => event.stopPropagation()}
+    onClick={event => {
+      event.stopPropagation();
+      if (!chooseSwapTarget && swapTargets[0]) void runSwap(swapTargets[0].key);
+    }}
+    className={`${utilityActionClasses} ${hoverActionVisibilityClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto disabled:cursor-default`}
+    title={t('installed.swap.action', { name: mod.name })} aria-label={t('installed.swap.action', { name: mod.name })}
+    data-card-action="true" data-mod-swap>
+    {swapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+  </button>;
+
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       {/* At small sizes the direct favorite/delete buttons consumed 56px even
@@ -1260,6 +1289,17 @@ export function ModCard({
           </MenuContent>
         </MenuRoot>
       </div>
+      {!mod.enabled && !selectMode && cardTaxonomy.heroNames.length > 0 && swapTargets.length > 0 && onSwap && (
+        chooseSwapTarget ? <MenuRoot kind="dropdown" open={swapOpen} onOpenChange={setSwapOpen}>
+          <MenuTrigger asChild>{swapButton}</MenuTrigger>
+          <MenuContent side="bottom" align="end" className="max-h-[50vh] max-w-80 overflow-y-auto" data-swap-menu>
+            <MenuLabel>{t('installed.swap.choose')}</MenuLabel>
+            <DeferredMenuItems>{() => swapTargets.map(target => <MenuItem key={target.key}
+              leading={<span className="flex h-[22px] w-[66px] shrink-0 items-center" aria-hidden><HeroIconStack heroes={target.heroNames} /></span>}
+              disabled={swapping} title={target.name} onSelect={() => { void runSwap(target.key); }}>{target.name}</MenuItem>)}</DeferredMenuItems>
+          </MenuContent>
+        </MenuRoot> : swapButton
+      )}
         <button
           onClick={async () => {
             const toggled = await onToggle();

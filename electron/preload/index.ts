@@ -24,6 +24,7 @@ import type {
     ApplyUnknownModMatchArgs,
     AssociateUnknownModArgs,
     DeleteModEntry,
+    ModSwapPlacement,
     DeleteModsProgress,
     GlobalModType,
     EditLocalModArgs,
@@ -177,6 +178,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getMods: () => ipcRenderer.invoke('get-mods'),
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
+    swapMods: (enableIds: string[], disableIds: string[], placement: ModSwapPlacement) => ipcRenderer.invoke('swap-mods', enableIds, disableIds, placement),
     deleteMod: (entry: DeleteModEntry) => ipcRenderer.invoke('delete-mod', entry),
     deleteMods: (entries: DeleteModEntry[]) => ipcRenderer.invoke('delete-mods', entries),
     onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => {

@@ -2092,6 +2092,12 @@
       "loadOrder": "Load Order",
       "recentlyAdded": "Recently Added",
       "sizeLargest": "Size (largest first)"
+    },
+    "swap": {
+      "action": "Swap {{name}}",
+      "choose": "Replace an enabled mod",
+      "requirementConflict": "These mods have conflicting requirements. Review their requirements before swapping.",
+      "unavailable": "The selected mods changed. Choose a mod to swap again."
     }
   },
   "locker": {
