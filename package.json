@@ -9,11 +9,14 @@
   },
   "type": "module",
   "main": "dist/main/index.js",
+  "engines": {
+    "pnpm": "12.x"
+  },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
       "version": "12.x",
-      "onFail": "download"
+      "onFail": "ignore"
     }
   },
   "scripts": {
