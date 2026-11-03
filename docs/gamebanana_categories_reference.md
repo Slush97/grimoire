@@ -87,6 +87,11 @@ is enabled in Settings > Preferences (off by default). This includes recommended
 dependencies and only changes when the enable dialog opens. Another enabled variant can satisfy
 the same requirement without disabling its dependents.
 
+The VPK variant picker reuses the first accepted **Enable all** or **Only this**
+choice for later enables in the same opening, including a swap's first variant.
+Closing and reopening the picker resets that choice. Cancelling a requirements
+prompt does not save a choice, and disable confirmations still apply individually.
+
 **View requirements** in a mod's context menu opens the same list with
 **Enable all** and **Disable all** actions. It also lists enabled mods that require
 this mod, marking them as **Requires this mod**. The requirements icon also opens it.

@@ -3904,7 +3904,7 @@ export default function Installed() {
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
             conflictsByVariantId={conflictsByVariantId}
-            onToggle={(target) => toggleVariant(target)}
+            onToggle={toggleVariant}
             onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)

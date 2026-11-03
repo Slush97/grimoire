@@ -16,7 +16,7 @@ import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '.
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import { reconcileMods } from '../lib/reconcileMods';
 import { installedModRequirements, modRequirementRefs, requiredModClosure } from '../lib/modRequirements';
-import { requestRequirementToggle, useRequirementsStore, type RequirementToggleChoice } from './requirementsStore';
+import { requestRequirementToggle, useRequirementsStore, type RequirementToggleChoice, type RequirementToggleSession } from './requirementsStore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
   planLaunchShuffle,
@@ -87,7 +87,7 @@ function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Review outside the mutation queue so dependency checkboxes can still write. */
-async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[]): Promise<{
+async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[], session?: RequirementToggleSession): Promise<{
   choice: RequirementToggleChoice; changes: { key: string; enabled: boolean }[];
 }> {
   const key = modRestoreKey(mod);
@@ -101,7 +101,7 @@ async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[]
   const direction = enabled ? 'dependencies' : 'dependents';
   const relatedKeys = requiredModClosure(current.id, reviewMods, useRequirementsStore.getState().snapshots, direction)
     .map(id => reviewMods.find(mod => mod.id === id)!).map(modRestoreKey);
-  const choice = await requestRequirementToggle(current, enabled, reviewMods, useAppStore.getState().settings?.promptOptionalRequirements ?? false);
+  const choice = await requestRequirementToggle(current, enabled, reviewMods, useAppStore.getState().settings?.promptOptionalRequirements ?? false, session);
   if (choice === 'cancel') return cancelled;
   const mods = readMods();
   const target = mods.find(mod => modRestoreKey(mod) === key);
@@ -479,11 +479,11 @@ interface AppState {
   setLoadedGameModIds: (ids: readonly string[]) => void;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
-  toggleMod: (modId: string) => Promise<boolean>;
+  toggleMod: (modId: string, session?: RequirementToggleSession) => Promise<boolean>;
   /** Apply explicit states after a requirements review, resolving renamed files
    *  from their stable keys once earlier mutations have completed. */
   setModEnabledStates: (changes: readonly { key: string; enabled: boolean }[]) => Promise<boolean>;
-  swapMods: (replacementKey: string, outgoingKeys: readonly string[]) => Promise<'swapped' | 'blocked' | 'cancelled' | 'failed'>;
+  swapMods: (replacementKey: string, outgoingKeys: readonly string[], session?: RequirementToggleSession) => Promise<'swapped' | 'blocked' | 'cancelled' | 'failed'>;
   clearModsNotice: () => void;
   deleteMod: (mod: DeleteModEntry) => Promise<void>;
   /** Deletes the ids as one locked main-process batch, with a progress tick
@@ -906,11 +906,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
   // clicks resolve in order and each sees the previous one's renamed id.
-  toggleMod: async (modId: string) => {
+  toggleMod: async (modId: string, session) => {
     const initial = get().mods.find(mod => mod.id === modId);
     if (!initial) return false;
     const key = modRestoreKey(initial);
-    const review = await reviewModToggle(initial, !initial.enabled, () => get().mods);
+    const review = await reviewModToggle(initial, !initial.enabled, () => get().mods, session);
     if (review.choice === 'cancel') return false;
     if (review.choice === 'all' || review.choice === 'only') return get().setModEnabledStates(review.changes);
     return enqueueToggle(async () => {
@@ -992,7 +992,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   }),
 
-  swapMods: async (replacementKey, outgoingKeys) => {
+  swapMods: async (replacementKey, outgoingKeys, session) => {
     const stale = () => {
       showToast(i18n.t('installed.swap.unavailable'), { tone: 'warning' });
       return 'failed' as const;
@@ -1006,7 +1006,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
       return 'blocked';
     }
-    const incomingReview = await reviewModToggle(replacement, true, () => get().mods);
+    const incomingReview = await reviewModToggle(replacement, true, () => get().mods, session);
     if (incomingReview.choice === 'cancel') return 'cancelled';
     const changes = new Map(incomingReview.changes.map(change => [change.key, change.enabled]));
     for (const source of outgoing) {

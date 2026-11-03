@@ -41,6 +41,7 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
 import { shakeElement } from '../lib/shakeElement';
 import { useAppStore } from '../stores/appStore';
+import type { RequirementToggleSession } from '../stores/requirementsStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { getInstalledCardTaxonomy } from '../lib/installedCardTaxonomy';
 import { canonicalHeroName } from '../lib/lockerUtils';
@@ -56,7 +57,7 @@ interface Props {
     modName: string;
     variants: Mod[];
     /** Toggle a single variant's enabled state. Variants are independent. */
-    onToggle: (target: Mod) => Promise<boolean> | void;
+    onToggle: (target: Mod, session?: RequirementToggleSession) => Promise<boolean> | void;
     /** Swap a variant with its picker-neighbor. */
     onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
     /** Drag-drop reorder. Drops source before or after neighbor in load order. */
@@ -178,6 +179,7 @@ export default function VariantPickerModal({
     const isOrderLocked = (mod?: Mod) => isModLoadedInGame(mod, loadedGameModIds);
     const titleId = useId();
     const [pending, setPending] = useState<string | null>(null);
+    const requirementsSession = useRef<RequirementToggleSession>({});
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -247,7 +249,7 @@ export default function VariantPickerModal({
         if (pending) return;
         setPending(target.id);
         try {
-            const toggled = await onToggle(target);
+            const toggled = await onToggle(target, requirementsSession.current);
             if (target.enabled && toggled === false) shakeElement(row);
         } finally {
             setPending(null);

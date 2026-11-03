@@ -7,6 +7,8 @@ import type { Mod } from '../types/mod';
 type Review = { kind: 'inspect'; source: RequirementSource }
   | { kind: 'install'; source: ModRequirementSource; resolve: (accepted: boolean) => void };
 export type RequirementToggleChoice = 'all' | 'only' | 'cancel' | 'skip';
+/** Owned by one picker opening; only accepted enable choices are reused. */
+export interface RequirementToggleSession { enableChoice?: 'all' | 'only' }
 export interface RequirementToggleReview {
   mod: Mod;
   key: string;
@@ -91,7 +93,7 @@ export function checkQuickInstallRequirements(source: ModRequirementSource, mods
 
 /** The dialog stays outside the mod mutation queue so its individual checkboxes
  * can apply changes while the original toggle waits for the user's choice. */
-export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: readonly Mod[], promptOptional = false): Promise<RequirementToggleChoice> {
+export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: readonly Mod[], promptOptional = false, session?: RequirementToggleSession): Promise<RequirementToggleChoice> {
   const store = useRequirementsStore.getState();
   const needsReview = enabled
     ? installedModRequirements(mod, mods, store.snapshots).some(({ item }) => item.state !== 'off'
@@ -99,7 +101,12 @@ export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: reado
     : requiredModClosure(mod.id, mods, store.snapshots, 'dependents').length > 0;
   if (!needsReview) return Promise.resolve('skip');
   if (store.review || store.toggleReview || store.targets.length) return Promise.resolve('cancel');
+  if (enabled && session?.enableChoice) return Promise.resolve(session.enableChoice);
   return new Promise(resolve => useRequirementsStore.setState({ toggleReview: {
-    mod, key: modRestoreKey(mod), mode: enabled ? 'enable' : 'disable', mods, snapshots: store.snapshots, resolve,
+    mod, key: modRestoreKey(mod), mode: enabled ? 'enable' : 'disable', mods, snapshots: store.snapshots,
+    resolve: choice => {
+      if (enabled && session && (choice === 'all' || choice === 'only')) session.enableChoice = choice;
+      resolve(choice);
+    },
   } }));
 }

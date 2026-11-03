@@ -3,7 +3,7 @@ import type { AppSettings, Mod } from '../types/mod';
 import * as api from '../lib/api';
 import { modRestoreKey } from '../lib/soloRestore';
 import { useAppStore } from './appStore';
-import { useRequirementsStore } from './requirementsStore';
+import { useRequirementsStore, type RequirementToggleSession } from './requirementsStore';
 import { useToastStore } from './toastStore';
 
 vi.mock('../i18n', () => ({ default: { t: (key: string) => key }, applyLanguagePreference: vi.fn() }));
@@ -295,6 +295,35 @@ describe('requirements toggle decisions', () => {
     expect(getModRequirements).toHaveBeenCalledExactlyOnceWith([{ id: 1, section: 'Mod' }], false);
     useRequirementsStore.getState().finishToggle();
     await expect(pending).resolves.toBe(false);
+  });
+});
+
+describe('picker requirement choices', () => {
+  it.each(['all', 'only'] as const)('reuses %s while resolving each variant\'s current dependencies', async choice => {
+    const first = { ...mod('first', false), gameBananaId: 1 };
+    const second = { ...mod('second', false), gameBananaId: 2 };
+    const firstBase = { ...mod('first-base', false), gameBananaId: 99 };
+    const secondBase = { ...mod('second-base', false), gameBananaId: 100 };
+    useAppStore.setState({ mods: [first, second, firstBase, secondBase] });
+    for (const [id, base] of [[1, 99], [2, 100]]) {
+      useRequirementsStore.getState().remember({ id, section: 'Mod' }, {
+        status: 'loaded', checkedAt: Date.now(), items: [
+          { name: 'Base', importance: 'required', state: 'on', url: `https://gamebanana.com/mods/${base}` },
+        ],
+      });
+    }
+    vi.mocked(api.applyModToggleBatch).mockImplementation(async (enable, disable) => ({
+      mods: useAppStore.getState().mods.map(mod => enable.includes(mod.id) ? { ...mod, enabled: true }
+        : disable.includes(mod.id) ? { ...mod, enabled: false } : mod), failures: [],
+    }));
+    const session: RequirementToggleSession = {};
+    const firstEnable = useAppStore.getState().toggleMod(first.id, session);
+    await vi.waitFor(() => expect(useRequirementsStore.getState().toggleReview?.mode).toBe('enable'));
+    useRequirementsStore.getState().finishToggle(choice);
+    await expect(firstEnable).resolves.toBe(true);
+    await expect(useAppStore.getState().toggleMod(second.id, session)).resolves.toBe(true);
+    expect(useRequirementsStore.getState().toggleReview).toBeNull();
+    expect(api.applyModToggleBatch).toHaveBeenLastCalledWith(choice === 'all' ? [second.id, secondBase.id] : [second.id], []);
   });
 });
 

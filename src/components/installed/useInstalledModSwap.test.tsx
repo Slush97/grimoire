@@ -62,7 +62,7 @@ describe('Installed hero swap lifecycle', () => {
     const other = mod('other', true);
     await render([incoming, outgoing, other]);
     await act(async () => swap.beginSwap(entryFor(incoming.id), entryFor(outgoing.id).key));
-    expect(useAppStore.getState().swapMods).toHaveBeenCalledExactlyOnceWith(modRestoreKey(incoming), [modRestoreKey(outgoing)]);
+    expect(useAppStore.getState().swapMods).toHaveBeenCalledExactlyOnceWith(modRestoreKey(incoming), [modRestoreKey(outgoing)], undefined);
     expect(swap.pickerGroupId).toBeNull();
     expect(useAppStore.getState().toggleMod).not.toHaveBeenCalled();
   });
@@ -82,10 +82,11 @@ describe('Installed hero swap lifecycle', () => {
     const first = mod('first', false, 'new'); const second = mod('second', false, 'new');
     await render([first, second, outgoing]);
     await act(async () => swap.beginSwap(entryFor(first.id), entryFor(outgoing.id).key));
-    await act(async () => expect(await swap.toggleVariant(second)).toBe(true));
-    expect(useAppStore.getState().swapMods).toHaveBeenCalledExactlyOnceWith(modRestoreKey(second), [modRestoreKey(outgoing)]);
-    await act(async () => expect(await swap.toggleVariant(first)).toBe(true));
-    expect(useAppStore.getState().toggleMod).toHaveBeenCalledExactlyOnceWith(first.id);
+    const session = {};
+    await act(async () => expect(await swap.toggleVariant(second, session)).toBe(true));
+    expect(useAppStore.getState().swapMods).toHaveBeenCalledExactlyOnceWith(modRestoreKey(second), [modRestoreKey(outgoing)], session);
+    await act(async () => expect(await swap.toggleVariant(first, session)).toBe(true));
+    expect(useAppStore.getState().toggleMod).toHaveBeenCalledExactlyOnceWith(first.id, session);
     expect(useAppStore.getState().swapMods).toHaveBeenCalledOnce();
   });
 
@@ -108,7 +109,7 @@ describe('Installed hero swap lifecycle', () => {
     await act(async () => swap.setPickerGroupId('local:other'));
     await act(async () => swap.toggleVariant(first));
     expect(useAppStore.getState().swapMods).not.toHaveBeenCalled();
-    expect(useAppStore.getState().toggleMod).toHaveBeenCalledExactlyOnceWith(first.id);
+    expect(useAppStore.getState().toggleMod).toHaveBeenCalledExactlyOnceWith(first.id, undefined);
   });
 
   it('blocks a game-loaded target before opening a variant picker and shakes both cards', async () => {

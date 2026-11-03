@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkQuickInstallRequirements, requestRequirementToggle, useRequirementsStore } from './requirementsStore';
+import { checkQuickInstallRequirements, requestRequirementToggle, useRequirementsStore, type RequirementToggleSession } from './requirementsStore';
 import type { ModRequirementSource } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 
@@ -61,6 +61,44 @@ describe('requirements install review', () => {
 });
 
 describe('requirements toggle review', () => {
+  it.each(['all', 'only'] as const)('reuses the %s enable choice only within its picker session', async choice => {
+    useRequirementsStore.getState().remember(source, source.requirements);
+    const session: RequirementToggleSession = {};
+    const first = requestRequirementToggle(owner, true, [owner], false, session);
+    useRequirementsStore.getState().finishToggle(choice);
+    await expect(first).resolves.toBe(choice);
+    await expect(requestRequirementToggle(owner, true, [owner], false, session)).resolves.toBe(choice);
+    expect(useRequirementsStore.getState().toggleReview).toBeNull();
+    const reopened = requestRequirementToggle(owner, true, [owner], false, {});
+    expect(useRequirementsStore.getState().toggleReview?.mode).toBe('enable');
+    useRequirementsStore.getState().finishToggle();
+    await expect(reopened).resolves.toBe('cancel');
+  });
+
+  it('does not consume the session on a cancelled prompt or a mod without requirements', async () => {
+    const session: RequirementToggleSession = {};
+    await expect(requestRequirementToggle(owner, true, [owner], false, session)).resolves.toBe('skip');
+    useRequirementsStore.getState().remember(source, source.requirements);
+    const first = requestRequirementToggle(owner, true, [owner], false, session);
+    useRequirementsStore.getState().finishToggle();
+    await expect(first).resolves.toBe('cancel');
+    expect(session.enableChoice).toBeUndefined();
+    const retry = requestRequirementToggle(owner, true, [owner], false, session);
+    expect(useRequirementsStore.getState().toggleReview?.mode).toBe('enable');
+    useRequirementsStore.getState().finishToggle('only');
+    await expect(retry).resolves.toBe('only');
+  });
+
+  it('still asks about disabling dependents after an enable choice is saved', async () => {
+    useRequirementsStore.getState().remember(source, source.requirements);
+    const session: RequirementToggleSession = { enableChoice: 'all' };
+    const pending = requestRequirementToggle(base, false, [{ ...owner, enabled: true }, base], false, session);
+    expect(useRequirementsStore.getState().toggleReview?.mode).toBe('disable');
+    useRequirementsStore.getState().finishToggle('only');
+    await expect(pending).resolves.toBe('only');
+    expect(session.enableChoice).toBe('all');
+  });
+
   it.each(['missing', 'disabled', 'enabled'] as const)('asks before enabling a mod with a %s required dependency', async state => {
     useRequirementsStore.getState().remember(source, source.requirements);
     const mods = state === 'missing' ? [owner] : [owner, { ...base, enabled: state === 'enabled' }];

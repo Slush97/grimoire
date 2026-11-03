@@ -7,6 +7,7 @@ import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { useCategoryStore } from '../stores/categoryStore';
 import { buildCategoryPaths } from '../lib/categoryPaths';
+import { requestRequirementToggle, useRequirementsStore } from '../stores/requirementsStore';
 
 vi.mock('react-i18next', () => ({
     initReactI18next: { type: '3rdParty', init: () => {} },
@@ -27,6 +28,7 @@ describe('variant hero indicators', () => {
     beforeEach(() => {
         vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
         useAppStore.getState().setLoadedGameModIds([]);
+        useRequirementsStore.setState({ snapshots: {}, review: null, toggleReview: null, targets: [] });
         useCategoryStore.setState({ heroNames: [], heroByCategoryId: new Map(), pathsByModel: {} });
         host = document.createElement('div');
         document.body.append(host);
@@ -115,7 +117,31 @@ describe('variant hero indicators', () => {
         const first = variant('first', ['Haze', 'Wraith']);
         await render([first, variant('second', ['Wraith'])]);
         await act(async () => row('first').querySelector<HTMLButtonElement>('button[aria-pressed]')!.click());
-        expect(props.onToggle).toHaveBeenCalledExactlyOnceWith(first);
+        expect(props.onToggle).toHaveBeenCalledExactlyOnceWith(first, expect.any(Object));
+    });
+
+    it('asks once across row changes and asks again after the picker is reopened', async () => {
+        const variants = [variant('first', [], { enabled: false }), variant('second', [], { enabled: false })];
+        useRequirementsStore.getState().remember({ id: 1, section: 'Sound' }, {
+            status: 'loaded', checkedAt: 1, items: [{ name: 'Base', importance: 'required', state: 'on' }],
+        });
+        props = { ...props, onToggle: async (target, session) =>
+            (await requestRequirementToggle(target, true, variants, false, session)) !== 'cancel' };
+        const click = async (index: number) => act(async () => {
+            document.querySelectorAll<HTMLButtonElement>('button[aria-pressed="false"]')[index].click();
+        });
+        await render(variants);
+        await click(0);
+        expect(useRequirementsStore.getState().toggleReview?.mod.id).toBe('first');
+        await act(async () => useRequirementsStore.getState().finishToggle('only'));
+        await render(variants.map(mod => ({ ...mod, priority: 2 })));
+        await click(1);
+        expect(useRequirementsStore.getState().toggleReview).toBeNull();
+        await act(async () => root.render(null));
+        await render(variants);
+        await click(0);
+        expect(useRequirementsStore.getState().toggleReview?.mod.id).toBe('first');
+        await act(async () => useRequirementsStore.getState().finishToggle());
     });
 
     it('shows the same hero icons in the drag preview', async () => {

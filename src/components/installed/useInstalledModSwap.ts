@@ -9,6 +9,7 @@ import { modRestoreKey } from '../../lib/soloRestore';
 import { shakeElement } from '../../lib/shakeElement';
 import { useStableCallback } from '../../lib/useStableCallback';
 import type { Mod } from '../../types/mod';
+import type { RequirementToggleSession } from '../../stores/requirementsStore';
 
 interface PendingSwap {
   incomingEntryKey: string;
@@ -38,12 +39,12 @@ export function useInstalledModSwap(entries: readonly ModEntry[], taxonomy: Inst
     setPicker(null);
     requestAnimationFrame(() => feedback(swap));
   };
-  const performSwap = async (replacement: Mod, swap: PendingSwap) => {
+  const performSwap = async (replacement: Mod, swap: PendingSwap, session?: RequirementToggleSession) => {
     if (inFlight.current) return false;
     if (blocked(swap)) { refuse(swap); return false; }
     inFlight.current = true;
     try {
-      const result = await useAppStore.getState().swapMods(modRestoreKey(replacement), swap.outgoingKeys);
+      const result = await useAppStore.getState().swapMods(modRestoreKey(replacement), swap.outgoingKeys, session);
       if (result === 'blocked') {
         refuse(swap, false);
       } else if (result === 'swapped') {
@@ -73,9 +74,9 @@ export function useInstalledModSwap(entries: readonly ModEntry[], taxonomy: Inst
     }
   });
 
-  const toggleVariant = useStableCallback(async (variant: Mod): Promise<boolean> => {
-    if (picker?.swap && !variant.enabled) return performSwap(variant, picker.swap);
-    return useAppStore.getState().toggleMod(variant.id);
+  const toggleVariant = useStableCallback(async (variant: Mod, session?: RequirementToggleSession): Promise<boolean> => {
+    if (picker?.swap && !variant.enabled) return performSwap(variant, picker.swap, session);
+    return useAppStore.getState().toggleMod(variant.id, session);
   });
 
   return { pickerGroupId: picker?.groupId ?? null, setPickerGroupId, swapTargets, beginSwap, toggleVariant };
