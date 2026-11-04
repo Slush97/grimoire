@@ -4,13 +4,15 @@ name: Nix
 # derivation, so nix/grimoire.nix carries a hash of the whole dependency set.
 # Every pnpm-lock.yaml change invalidates it, and nothing in CI noticed until
 # a downstream build failed with "hash mismatch in fixed-output derivation".
-# This job rebuilds that store on the PR that moves the lockfile, so the hash
-# is bumped in the same change that breaks it.
+# The pnpm-deps job rebuilds that store on the PR that moves the lockfile, so
+# the hash is bumped in the same change that breaks it.
 #
 # The full `nix build .#grimoire` (electron-vite + electron-builder + a
-# better-sqlite3 rebuild) is deliberately not run here: it costs far more
-# runner time than the failure it would catch, which is Electron API drift
-# rather than lockfile drift.
+# better-sqlite3 rebuild) is too slow for every PR. It runs on release tags,
+# once a day against main, and by hand, and the result has to pass the same
+# packaged smoke test as the release builds. A release that passes moves the
+# `stable` branch, which is what the README tells Nix users to follow, so a
+# broken Nix package stays on main instead of reaching them.
 
 on:
   pull_request:
@@ -28,6 +30,10 @@ on:
   push:
     branches:
       - main
+    # Path filters are not evaluated for tag pushes, so every release runs.
+    tags:
+      - 'v*'
+      - '!v*-nightly.*'
     paths:
       - 'pnpm-lock.yaml'
       - 'package.json'
@@ -39,6 +45,8 @@ on:
       - 'flake.lock'
       - 'nix/**'
       - '.github/workflows/nix.yml'
+  schedule:
+    - cron: '23 9 * * *'
   workflow_dispatch:
 
 jobs:
@@ -61,3 +69,62 @@ jobs:
       # error when nix/grimoire.nix has gone stale.
       - name: Build vendored pnpm store
         run: nix build --no-link .#grimoire.pnpmDeps
+
+  package:
+    if: github.ref_type == 'tag' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout grimoire
+        uses: actions/checkout@v7
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build package
+        run: nix build -L .#grimoire
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The smoke script needs only playwright-core, not the whole pnpm tree.
+      - name: Install playwright-core
+        run: |
+          version="$(grep -m1 -oP '^  playwright-core@\K[0-9.]+(?=:)' pnpm-lock.yaml)"
+          npm install --prefix "$RUNNER_TEMP/smoke" "playwright-core@$version"
+          ln -s "$RUNNER_TEMP/smoke/node_modules" node_modules
+
+      - name: Smoke test package
+        timeout-minutes: 10
+        run: xvfb-run -a node scripts/smoke-packaged.mjs --nix result
+
+  # GITHUB_TOKEN can't move a branch across commits that touch
+  # .github/workflows, which most releases do, so this pushes with a deploy
+  # key that has write access. Fast-forward only: a re-run for an older tag
+  # is rejected instead of rolling Nix users back. The nightly exclusion is
+  # repeated here because the push.tags filter doesn't apply to a manual
+  # dispatch against a tag.
+  promote:
+    needs: package
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && !contains(github.ref_name, '-nightly.')
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: git refuses a non-forced push when the branch's current
+      # tip isn't in the local clone, which it never is at depth 1.
+      - name: Checkout grimoire
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Move stable to this release
+        env:
+          DEPLOY_KEY: ${{ secrets.NIX_STABLE_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/stable
+          chmod 600 ~/.ssh/stable
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          GIT_SSH_COMMAND='ssh -i ~/.ssh/stable -o IdentitiesOnly=yes' \
+            git push "git@github.com:$GITHUB_REPOSITORY.git" "$GITHUB_SHA:refs/heads/stable"
