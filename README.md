@@ -65,6 +65,24 @@ Updates come through the flake (`nix flake update grimoire`), not the in-app upd
 
 The `stable` branch follows releases, and only moves once the release's Nix package has built and passed a launch test in CI. Plain `github:Slush97/grimoire` tracks `main`, which gets every change before it's released and is only tested as a Nix package once a day.
 
+Releases are prebuilt in the `grimoire` Cachix cache, so you don't have to compile it. On NixOS:
+
+```nix
+nix.settings = {
+  extra-substituters = [ "https://grimoire.cachix.org" ];
+  extra-trusted-public-keys = [ "grimoire.cachix.org-1:5Y9dQ9wk9z4BsOnkv9t8ULcsnnaJ1zSMnzOd1dV5QbA=" ];
+};
+```
+
+Rebuild with that before adding Grimoire, since a rebuild can't use a cache it's only now turning on. On other distros, add the same two settings to `/etc/nix/nix.conf` and restart the daemon (`sudo systemctl restart nix-daemon`):
+
+```
+extra-substituters = https://grimoire.cachix.org
+extra-trusted-public-keys = grimoire.cachix.org-1:5Y9dQ9wk9z4BsOnkv9t8ULcsnnaJ1zSMnzOd1dV5QbA=
+```
+
+The cache only has release builds, so you get a hit when you follow `stable` (or pin a release tag) and use the flake's own package. The overlay and `inputs.grimoire.inputs.nixpkgs.follows` both swap in your nixpkgs, which almost always means building from source.
+
 Requires Deadlock installed via Steam.
 
 ## Features
