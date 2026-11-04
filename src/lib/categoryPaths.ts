@@ -4,10 +4,12 @@ import { categoryIdFromProfileUrl } from './heroFilter';
 
 export type CategoryPaths = ReadonlyMap<number, readonly GameBananaCategory[]>;
 
-/** Correct the known upstream typo without changing category identities. */
+/** Correct known upstream labels without changing category identities. */
 export function normalizeCategoryLabel(label: string): string {
   const cleaned = label.replace(/\s+/g, ' ').trim();
-  return /^faithul\/vanilla\+$/i.test(cleaned) ? 'Faithful/Vanilla+' : cleaned;
+  if (/^faithul\/vanilla\+$/i.test(cleaned)) return 'Faithful/Vanilla+';
+  if (/^rat\s*king flag$/i.test(cleaned)) return 'Rat King Flag';
+  return cleaned;
 }
 
 export function categoryModelForSection(section?: string): string {

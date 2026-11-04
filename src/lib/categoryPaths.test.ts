@@ -72,15 +72,22 @@ describe('category ancestry', () => {
     expect(categoryModelForSection()).toBe('ModCategory');
   });
 
-  it('corrects the upstream Faithul typo in cached paths and offline labels without changing IDs', () => {
-    const misspelled = node(6, 'Faithul/Vanilla+');
+  it.each([
+    ['Faithul/Vanilla+', 'Faithful/Vanilla+'],
+    ['RatKing Flag', 'Rat King Flag'],
+    ['ratking flag', 'Rat King Flag'],
+    ['  Rat   King   Flag  ', 'Rat King Flag'],
+  ])('corrects %s in cached paths and offline labels without changing IDs', (original, expected) => {
+    const misspelled = node(6, original);
     const corrected = resolveCategoryPath(buildCategoryPaths([misspelled]), misspelled);
-    expect(corrected).toEqual([{ id: 6, name: 'Faithful/Vanilla+', profileUrl: misspelled.profileUrl, iconUrl: undefined }]);
-    expect(labels(resolveCategoryPath(undefined, { id: 6, name: 'Faithul/Vanilla+' })))
-      .toEqual(['Faithful/Vanilla+']);
-    expect(misspelled.name).toBe('Faithul/Vanilla+');
+    expect(corrected).toEqual([{ id: 6, name: expected, profileUrl: misspelled.profileUrl, iconUrl: undefined }]);
+    expect(labels(resolveCategoryPath(undefined, { id: 6, name: original })))
+      .toEqual([expected]);
+    expect(misspelled.name).toBe(original);
     expect(normalizeCategoryLabel('  Soul   Container  ')).toBe('Soul Container');
     expect(normalizeCategoryLabel('Faithful/Vanilla+')).toBe('Faithful/Vanilla+');
+    expect(normalizeCategoryLabel('Rat King Flag')).toBe('Rat King Flag');
+    expect(normalizeCategoryLabel('RatKing Flags')).toBe('RatKing Flags');
   });
 });
 

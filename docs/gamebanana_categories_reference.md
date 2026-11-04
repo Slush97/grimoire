@@ -113,7 +113,7 @@ Installed cards and filter facets share `installedCardTaxonomy.ts` and the categ
 - Grouped variants contribute their combined categories and hero identities, with each group counted once per filter option.
 - CameraOff, FileWarning, and requirements indicators share one overlapping stack before the hero stack and category tags in every Installed layout. Each 16px icon is centered in a 22px slot, with their shared stack currently capped at 110px. Severity colors and detailed tooltips are retained. Other warning badges keep their existing placement. Merged-source updates use the normal orange Update tag without an extra hover effect; source counts and replacement details remain in its tooltip.
 - When variant hero sets differ, the installed variant picker shows each file's own hero icons. It omits these repeated icons when all files target the same heroes, and never adds category text to the variant rows.
-- Category labels retain GameBanana's spelling and singular/plural forms. The known upstream typo `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, retaining the original category ID.
+- Category labels retain GameBanana's spelling and singular/plural forms, with two known corrections: `Faithul/Vanilla+` is displayed as `Faithful/Vanilla+`, and `RatKing Flag` as `Rat King Flag`. Both use the shared label normalizer for cached paths and offline labels, retaining the original category IDs.
 - Identical labels share a filter option. There is no synthetic Other bucket or a second tag generated from Locker's General classification for linked mods.
 
 Disabled Installed cards with resolved hero tags show a hover-only swap action
