@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\.codex-run\hideout-oracle\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

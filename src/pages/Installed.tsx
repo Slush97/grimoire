@@ -79,6 +79,7 @@ import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOrder } from '../lib/lockerUtils';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import {
   canJoinLocalVariantGroup,
   localVariantSelectionEligibility,
@@ -1584,7 +1585,7 @@ export default function Installed() {
   // sidesteps the rate-limit pain of the CRC auto-matcher.
   const associateUnknownMatch = async (mod: Mod, args: AssociateUnknownModArgs) => {
     await associateUnknownMod(mod.id, args);
-    showToast(`Linked to ${args.modName}`, { tone: 'success', duration: 2200 });
+    showToast(t('installed.unknown.linkedTo', { name: args.modName }), { tone: 'success', duration: 2200 });
     await finishUnknownFix(mod);
   };
 
@@ -1646,7 +1647,7 @@ export default function Installed() {
       [mod.id]: {
         modId: mod.id,
         phase: 'cancelled',
-        message: cached ? 'Stopped caching remaining files.' : 'Search cancelled.',
+        message: cached ? t('installed.unknown.stoppedCaching') : t('installed.unknown.searchCancelled'),
         result: cached,
       },
     }));
@@ -1759,7 +1760,7 @@ export default function Installed() {
             modId: mod.id,
             requestId: requestIds[mod.id],
             phase: 'complete',
-            message: `Cache check failed. Queued for online search. ${message}`,
+            message: t('installed.unknown.cacheCheckFailed', { error: message }),
           };
         }
         return next;
@@ -2145,7 +2146,7 @@ export default function Installed() {
     if (selectedMods.length === 0) return;
     setModToDelete({
       mods: selectedMods,
-      name: `${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'}`,
+      name: t('installed.delete.bulkCount', { count: selectedMods.length }),
       isGroup: false,
       isBulk: true,
     });
@@ -2198,7 +2199,7 @@ export default function Installed() {
       }
     } catch (err) {
       console.error('[Installed] unmerge failed:', err);
-      showToast(`Unmerge failed: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
+      showToast(t('installed.merge.unmergeFailed', { error: err instanceof Error ? err.message : String(err) }), { tone: 'error' });
     }
   };
 
@@ -2228,11 +2229,11 @@ export default function Installed() {
     await loadMods({ silent: true });
     if (result.collapsed) {
       setMergedContentsMod(null);
-      showToast(`Merge dissolved (extracted ${source.modName})`, { tone: 'success', duration: 2200 });
+      showToast(t('installed.merge.mergeDissolved', { name: source.modName }), { tone: 'success', duration: 2200 });
       return;
     }
     setMergedContentsMod(result.merged);
-    showToast(`Extracted ${source.modName}`, { tone: 'success', duration: 2200 });
+    showToast(t('installed.merge.extracted', { name: source.modName }), { tone: 'success', duration: 2200 });
   };
 
   const handleAddMergeSources = async (modIds: string[], strict: boolean) => {
@@ -2635,7 +2636,7 @@ export default function Installed() {
       const cached = await window.electronAPI.getCachedMod(mod.gameBananaId, mod.sourceSection ?? 'Mod').catch(() => null);
       let artist: BrowseArtistRef | undefined =
         cached?.submitterId && cached.submitterId > 0
-          ? { id: cached.submitterId, name: cached.submitterName ?? 'Artist', profileUrl: cached.profileUrl }
+          ? { id: cached.submitterId, name: cached.submitterName ?? t('modDetails.meta.artist'), profileUrl: cached.profileUrl }
           : undefined;
       if (!artist) {
         const details = await getModDetails(mod.gameBananaId, mod.sourceSection ?? 'Mod', {
@@ -2652,7 +2653,7 @@ export default function Installed() {
       }
       openArtistPage(artist);
     } catch (err) {
-      showToast(`Couldn't open author page: ${err instanceof Error ? err.message : String(err)}`, {
+      showToast(t('installed.card.openAuthorPageFailed', { error: err instanceof Error ? err.message : String(err) }), {
         tone: 'error',
       });
     }
@@ -2991,7 +2992,7 @@ export default function Installed() {
   const heroOptions = Array.from(heroOptionMap, ([name, count]) => ({ name, count }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const tagOptions = Array.from(tagOptionMap.entries())
-    .map(([key, { label, count, custom }]) => ({ key, label, count, custom }))
+    .map(([key, { label, count, custom }]) => ({ key, label: custom ? label : gameBananaCategoryLabel(label, t), count, custom }))
     .sort((a, b) => a.label.localeCompare(b.label));
   const createCustomTag = (name: string) => {
     if (!tagScope || tagOptions.some(tag => tag.label.toLocaleLowerCase() === name.trim().slice(0, 80).toLocaleLowerCase())) return false;
@@ -3373,7 +3374,7 @@ export default function Installed() {
   const commitLoadPosition = async (modId: string, newPosition: number): Promise<void> => {
     const ordered = numberedByLoadOrder.slice();
     const fromIdx = ordered.findIndex((m) => m.id === modId);
-    if (fromIdx === -1) throw new Error('Mod not found');
+    if (fromIdx === -1) throw new Error(t('installed.priorityEditor.modNotFound'));
     // The editor validates 1..N, but a stale render could submit out of range;
     // clamp to a real slot so we never index past the ends.
     const toIdx = Math.min(Math.max(newPosition - 1, 0), ordered.length - 1);
@@ -3594,8 +3595,8 @@ export default function Installed() {
                 <X className="h-3.5 w-3.5" />
               </button>}
             </div>
-            {conflictCount > 0 && <Button variant="warning" icon={AlertTriangle} className="h-[38px]! rounded-lg!" onClick={() => navigate('/conflicts')}>
-              {t('installed.status.conflictCount', { count: conflictPairCount })}
+            {conflictCount > 0 && <Button variant="warning" icon={AlertTriangle} className="h-[38px]! rounded-lg!" onClick={() => navigate('/overlap')}>
+              {t('installed.status.overlapCount', { count: conflictPairCount })}
             </Button>}
             {updateModCount > 0 && <Button variant="primary" icon={Download} className="h-[38px]! rounded-lg!" aria-live="polite"
               title={t('installed.updateAll.hint')} onClick={() => setUpdateAllConfirmOpen(true)}>
@@ -4212,7 +4213,11 @@ export default function Installed() {
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              {bulkProgress.verb} {bulkProgress.done}/{bulkProgress.total}…
+              {bulkProgress.verb === 'Enabling'
+                ? t('installed.status.bulkEnabling', { done: bulkProgress.done, total: bulkProgress.total })
+                : bulkProgress.verb === 'Disabling'
+                  ? t('installed.status.bulkDisabling', { done: bulkProgress.done, total: bulkProgress.total })
+                  : t('installed.status.bulkTagging', { done: bulkProgress.done, total: bulkProgress.total })}
             </span>
           ) : (
             <>
@@ -4254,7 +4259,7 @@ export default function Installed() {
                 onClick={handleBulkDisable}
                 title={selectedEnabledCount === 0 ? t('installed.select.noEnabledSelected') : t('installed.select.disableCount', { count: selectedEnabledCount })}
               >
-                {t('conflicts.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
+                {t('common.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
               </Button>
               <Button
                 variant="secondary"

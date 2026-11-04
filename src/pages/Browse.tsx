@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useId } from 'react';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation } from 'react-i18next';
 import {
   Search,
@@ -1889,8 +1890,10 @@ export default function Browse() {
       }
     }
 
-    return Array.from(byLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [categories, categoriesSection, section, heroOptions]);
+    return Array.from(byLabel.values()).sort((a, b) =>
+      gameBananaCategoryLabel(a.label, t).localeCompare(gameBananaCategoryLabel(b.label, t))
+    );
+  }, [categories, categoriesSection, section, heroOptions, t]);
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
@@ -2680,7 +2683,7 @@ export default function Browse() {
                             disabled={heroCategoryId !== 'all'}
                             options={[
                               { value: 'all', label: t('browse.filters.allCategories') },
-                              ...categoryOptions.map((cat) => ({ value: String(cat.id), label: cat.label })),
+                              ...categoryOptions.map((cat) => ({ value: String(cat.id), label: gameBananaCategoryLabel(cat.label, t) })),
                             ]}
                             search={{
                               ariaLabel: t('browse.filters.searchCategoriesAria'),
@@ -2881,8 +2884,8 @@ export default function Browse() {
             return (
               <EmptyState
                 icon={Search}
-                title={hasActiveFilters ? 'No mods match your filters' : 'No mods found'}
-                description={hasActiveFilters ? 'Try widening your search or clearing filters.' : undefined}
+                title={hasActiveFilters ? t('browse.empty.noModsMatch') : t('browse.empty.noModsFound')}
+                description={hasActiveFilters ? t('browse.empty.widenSearch') : undefined}
                 action={
                   hasActiveFilters ? (
                     <Button

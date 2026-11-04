@@ -20,7 +20,7 @@ import {
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { resolveVpkIdentity, type OriginalIdentity } from './vpkIdentity';
 import { parseVpkDirectoryCached, parseVpkEntryStats } from './vpk';
-import { IGNORED_CONFLICT_FILES } from './conflicts';
+import { shouldIgnoreFile } from './conflicts';
 import { VPKMERGE_BINARY_BY_PLATFORM, type SupportedPlatform } from './vpkmergeBinary';
 import {
     computeOriginalIdentity,
@@ -148,10 +148,17 @@ export function vpkmergeBinaryPath(): string {
     return full;
 }
 
-export function runVpkmerge(args: string[], timeoutMs = 300000, env?: NodeJS.ProcessEnv): Promise<void> {
+/**
+ * `env` adds variables for the child (e.g. a thread cap). `onSpawn` receives the
+ * child's pid, e.g. to lower a background job's priority.
+ */
+export interface VpkmergeRunOptions { env?: NodeJS.ProcessEnv; onSpawn?: (pid: number) => void }
+
+export function runVpkmerge(args: string[], timeoutMs = 300000, options: VpkmergeRunOptions = {}): Promise<void> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
-        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(env && { env: { ...process.env, ...env } }) });
+        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(options.env && { env: { ...process.env, ...options.env } }) });
+        if (proc.pid !== undefined) options.onSpawn?.(proc.pid);
         let stderr = '';
         let stdout = '';
         let killed = false;
@@ -189,10 +196,11 @@ export function runVpkmerge(args: string[], timeoutMs = 300000, env?: NodeJS.Pro
  * decode (`soundevents <entry> --from-vpk <vpk>`), which prints JSON to stdout
  * and a human summary to stderr.
  */
-export function runVpkmergeStdout(args: string[], timeoutMs = 120000): Promise<string> {
+export function runVpkmergeStdout(args: string[], timeoutMs = 120000, options: VpkmergeRunOptions = {}): Promise<string> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
         const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        if (proc.pid !== undefined) options.onSpawn?.(proc.pid);
         let stderr = '';
         let stdout = '';
         let killed = false;
@@ -477,8 +485,7 @@ export function assertNoStrictCollisions(vpkPaths: string[]): void {
     const collisions = new Set<string>();
     for (const vpkPath of vpkPaths) {
         for (const entry of new Set(parseVpkDirectoryCached(vpkPath) ?? [])) {
-            const fileName = entry.toLowerCase().split('/').pop() ?? '';
-            if (IGNORED_CONFLICT_FILES.has(fileName)) continue;
+            if (shouldIgnoreFile(entry)) continue;
             if (seen.has(entry)) collisions.add(entry);
             else seen.add(entry);
         }

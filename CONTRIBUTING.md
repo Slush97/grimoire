@@ -7,7 +7,7 @@ Thanks for your interest in contributing.
 Requirements:
 
 - [Node.js](https://nodejs.org/) 24+
-- [pnpm](https://pnpm.io/) 10+ (pnpm 9 mis-links the out-of-root workspace package below)
+- [pnpm](https://pnpm.io/) 12 (`package.json` rejects other versions)
 - [Git](https://git-scm.com/)
 
 With Nix, `flake.nix` provides all of the above via `nix develop`. On NixOS
@@ -36,7 +36,7 @@ git clone https://github.com/Slush97/grimoire.git
 git clone https://github.com/Slush97/grimoire-social.git
 
 cd grimoire-social
-pnpm install
+pnpm install --ignore-scripts
 
 cd ../grimoire
 pnpm install

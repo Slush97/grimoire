@@ -112,10 +112,10 @@ describe('mod details', () => {
     }
     const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
     expect(hero.querySelector('img')?.getAttribute('src')).toContain('/heroes/chip-icons/violet.png');
-    expect(hero.parentElement?.textContent).toBe('VioletSkinsFaithful/Vanilla+');
+    expect(hero.parentElement?.textContent).toBe('Violetgamebanana.categories.skinsFaithful/Vanilla+');
     const tags = hero.parentElement!;
     expect(tags.firstElementChild).toBe(hero);
-    expect([...tags.children].slice(1).map(tag => tag.textContent)).toEqual(['Skins', 'Faithful/Vanilla+']);
+    expect([...tags.children].slice(1).map(tag => tag.textContent)).toEqual(['gamebanana.categories.skins', 'Faithful/Vanilla+']);
     const requirements = document.querySelector('[aria-label="requirements.title"]')!;
     expect(requirements.querySelector(':scope > h3')?.textContent).toBe('requirements.title');
     const fileTitle = [...document.querySelectorAll('h3')].find(item => item.textContent?.includes('modDetails.sections.files'))!;
@@ -143,7 +143,7 @@ describe('mod details', () => {
     ]]]);
     await render(false, { variant, mod: { ...mod, category: { id: 4, name: 'Haze' } } });
     const hero = document.querySelector<HTMLElement>('[title="Violet"]')!;
-    expect([...hero.parentElement!.children].map(tag => tag.textContent)).toEqual(['Violet', 'Haze', 'Skins', 'Faithful/Vanilla+']);
+    expect([...hero.parentElement!.children].map(tag => tag.textContent)).toEqual(['Violet', 'Haze', 'gamebanana.categories.skins', 'Faithful/Vanilla+']);
   });
 
   it('leaves no empty badge group before the title when no status is visible', async () => {
@@ -289,7 +289,7 @@ describe('mod details', () => {
         { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'first.jpg', caption: 'Caption' },
         { baseUrl: 'https://images.gamebanana.com/img/ss/mods', file: 'second.jpg' },
       ] } } });
-      await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="View image 1 of 2 full size"]')!.click());
+      await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="modDetails.images.viewFullSize"]')!.click());
       const viewer = document.querySelector('figure')!.parentElement!;
       const image = viewer.querySelector('img')!;
       const viewport = viewer.querySelector<HTMLElement>('[data-lightbox-viewport]')!;
@@ -373,7 +373,7 @@ describe('mod details', () => {
       expect(document.querySelector('[data-lightbox-controls]')?.getAttribute('aria-hidden')).toBe('false');
       await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
       expect(document.querySelector('figure')).toBeNull();
-      await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label^="View image"]')!.click());
+      await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="modDetails.images.viewFullSize"]')!.click());
       expect(transform(document.querySelector<HTMLImageElement>('figure img')!)).toEqual([0, 0, 1]);
     });
   });
@@ -388,7 +388,7 @@ describe('mod details', () => {
       ] } },
     });
     expect(document.querySelector('figcaption')).toBeNull();
-    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="View image 1 of 3 full size"]')!.click());
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="modDetails.images.viewFullSize"]')!.click());
     expect(document.querySelector('figcaption')?.textContent).toBe('why u bulleh meh');
     await act(async () => document.querySelector('figcaption')!.click());
     expect(document.querySelector('figcaption')?.textContent).toBe('why u bulleh meh');

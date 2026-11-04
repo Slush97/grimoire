@@ -164,7 +164,7 @@ function ReadableBrowseModCard({
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
       role="button"
       tabIndex={0}
-      aria-label={`Open details for ${mod.name}`}
+      aria-label={t('browse.card.openDetails', { name: mod.name })}
       style={cardFrameStyle}
       data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`browse-card-hover-surface browse-readable-card premium-card-glow group flex w-full flex-col overflow-hidden rounded-xl border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
@@ -218,7 +218,7 @@ function ReadableBrowseModCard({
           {showAuthor && (
             <div className="flex h-4 min-w-0 items-center gap-2 text-xs leading-4">
               <p className="min-w-0 flex-1 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85" title={mod.submitter?.name}>
-                by {mod.submitter?.name ?? t('browse.card.unknownAuthor')}
+                {mod.submitter?.name != null ? t('browse.card.byAuthor', { name: mod.submitter.name }) : t('browse.card.byUnknownAuthor')}
               </p>
               {updatedWithAuthor && <BrowseReadableUpdatedLine timestamp={mod.dateModified} />}
             </div>
@@ -361,7 +361,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         }}
         role="button"
         tabIndex={0}
-        aria-label={`Open details for ${mod.name}`}
+        aria-label={t('browse.card.openDetails', { name: mod.name })}
         data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
         className={`browse-card-hover-surface relative bg-bg-secondary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
           isPlaying
@@ -405,12 +405,12 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 title={t('browse.actions.enableDisabledTitle')}
               >
                 <Power className="w-3 h-3" />
-                Enable
+                {t('browse.card.enable')}
               </button>
             ) : installed ? (
-              <Tag tone="success" variant="overlay" title={t('nav.installed')} className="flex-shrink-0">
+              <Tag tone="success" variant="overlay" title={t('browse.card.installed')} className="flex-shrink-0">
                 <span aria-hidden>✓</span>
-                {t('nav.installed')}
+                {t('browse.card.installed')}
               </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
@@ -433,10 +433,10 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           )}
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
             {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
-            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
-            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={t('browse.card.likes', { count: mod.likeCount ?? 0 })} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={t('browse.card.views', { count: mod.viewCount ?? 0 })} />
           </div>
-          {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
+          {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">{t('browse.card.byAuthor', { name: mod.submitter.name })}</p>}
           {mod.dateModified > 0 && (
             <IconText
               icon={isModOutdated(mod.dateModified) ? AlertTriangle : Clock}
@@ -541,7 +541,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         }}
         role="button"
         tabIndex={0}
-        aria-label={`Open details for ${mod.name}`}
+        aria-label={t('browse.card.openDetails', { name: mod.name })}
         data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
         className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group aspect-[3/2] ${
           isPlaying
@@ -647,7 +647,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               {installed && (
                 <Tag tone="success" variant="overlay">
                   <span aria-hidden>✓</span>
-                  Installed
+                  {t('browse.card.installed')}
                 </Tag>
               )}
               {!installed && isOutdated && (
@@ -655,7 +655,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   tone="warning"
                   variant="overlay"
                   icon={AlertTriangle}
-                  title={`Last updated ${formatDate(mod.dateModified)}`}
+                  title={t('browse.card.lastUpdated', { date: formatDate(mod.dateModified) })}
                 >
                   {t('browse.card.outdated')}
                 </Tag>
@@ -665,9 +665,9 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <h3 className="font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-base">{mod.name}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-xs">
             {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
-            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
-            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
-            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={t('browse.card.likes', { count: mod.likeCount ?? 0 })} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={t('browse.card.views', { count: mod.viewCount ?? 0 })} />
+            {mod.submitter && <span className="truncate">{t('browse.card.byAuthor', { name: mod.submitter.name })}</span>}
           </div>
         </div>
       ) : (
@@ -689,9 +689,9 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           >
             <div className="mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] text-sm">
               {taxonomy.heroNames.map(hero => <span key={hero} title={hero}><HeroTagLabel heroName={hero} iconClassName="h-5 w-5" iconOnly /></span>)}
-              <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
-              <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
-              {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+              <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={t('browse.card.likes', { count: mod.likeCount ?? 0 })} />
+              <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={t('browse.card.views', { count: mod.viewCount ?? 0 })} />
+              {mod.submitter && <span className="truncate">{t('browse.card.byAuthor', { name: mod.submitter.name })}</span>}
             </div>
             {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
               <IconText
@@ -717,7 +717,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           {installed && (
             <Tag tone="success" variant="overlay">
               <span aria-hidden>✓</span>
-              Installed
+              {t('browse.card.installed')}
             </Tag>
           )}
           {!installed && isOutdated && (
@@ -725,7 +725,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               tone="warning"
               variant="overlay"
               icon={AlertTriangle}
-              title={`Last updated ${formatDate(mod.dateModified)}`}
+              title={t('browse.card.lastUpdated', { date: formatDate(mod.dateModified) })}
             >
               {t('browse.card.outdated')}
             </Tag>
@@ -770,8 +770,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   onVolumeChange(volume > 0 ? 0 : 1);
                 }}
                 className="flex h-6 w-6 items-center justify-center rounded-full border border-hl/10 bg-hl/5 text-white/70 transition-colors hover:bg-hl/10 hover:text-white cursor-pointer"
-                title={volume > 0 ? 'Mute' : 'Unmute'}
-                aria-label={volume > 0 ? 'Mute' : 'Unmute'}
+                title={volume > 0 ? t('audioPreview.mute') : t('audioPreview.unmute')}
+                aria-label={volume > 0 ? t('audioPreview.mute') : t('audioPreview.unmute')}
               >
                 {volume > 0 ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
               </button>
@@ -783,7 +783,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 value={Math.round(volume * 100)}
                 onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
                 className="w-16 h-1 accent-accent cursor-pointer"
-                title={`Volume: ${Math.round(volume * 100)}%`}
+                title={t('browse.card.volumeValue', { value: Math.round(volume * 100) })}
                 aria-label={t('browse.card.volume')}
               />
             </div>
@@ -803,7 +803,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             title={t('browse.actions.enableDisabledTitle')}
           >
             <Power className="w-3.5 h-3.5" />
-            Enable
+            {t('browse.card.enable')}
           </button>
         ) : installed ? (
           <span
@@ -819,7 +819,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         ) : queuePosition ? (
           <div
             className="flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md w-8 h-8 text-xs"
-            title={`Queued #${queuePosition}`}
+            title={t('browse.card.queuedNumber', { position: queuePosition })}
           >
             {queuePosition}
           </div>

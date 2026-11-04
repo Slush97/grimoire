@@ -4,16 +4,21 @@
 import * as THREE from 'three';
 import { ADDITIVE_OVERLAY_RENDER_ORDER } from '../../../lib/source2Preview';
 import type { ControlPointDefaults } from '../../../lib/particles/controlPointDefaults';
-import { ParticleSystemRenderer, type ParticleSceneDepth } from '../../../lib/particles/render';
+import { ParticleSystemRenderer, type ParticleSceneDepth, type ParticleSystemRendererOptions } from '../../../lib/particles/render';
 import type { ParticleModelSource } from '../../../lib/particles/render/particleModels';
 import type { ParticleSystemSimulation } from '../../../lib/particles/simulation';
 import type { ParticleTextureSource } from '../../../lib/particles/render/textures';
+import { ParticleLightRenderer } from '../../../lib/particles/render/lightRenderer';
 
 export interface ParticleDrawLayer {
   /** Drawn in Source space; parent it under the Source-to-viewer frame. */
   readonly object3d: THREE.Object3D;
   /** Whether the tree feathers against the opaque scene, and so wants `setScene`'s depth. */
   readonly wantsSceneDepth: boolean;
+  readonly requiresSceneDepth: boolean;
+  readonly emitsLight: boolean;
+  /** The tree's light renderers, whose lights a host can take over (ParticleLightRenderer.useHostLighting). */
+  readonly lights: readonly ParticleLightRenderer[];
   /** Whether the tree refracts the opaque scene, and so wants `setScene`'s colour. */
   readonly wantsSceneColor: boolean;
   /** Prepares the frame's draws; call every frame after the simulation stepped, also while paused. */
@@ -29,9 +34,11 @@ export interface ParticleDrawLayer {
  * Builds the drawing layer for a simulation; call before the simulation starts, as VRF builds its
  * renderers: they tell the simulation which fields they read and which sheet times its sequences.
  */
-export function createParticleDrawLayer(simulation: ParticleSystemSimulation, textures: ParticleTextureSource, models?: ParticleModelSource, beforeTransmission = false): ParticleDrawLayer {
-  const renderer = new ParticleSystemRenderer(simulation, textures, { models });
+export function createParticleDrawLayer(simulation: ParticleSystemSimulation, textures: ParticleTextureSource, models?: ParticleModelSource, beforeTransmission = false,
+  lighting: Pick<ParticleSystemRendererOptions, 'sunColor'> = {}): ParticleDrawLayer {
+  const renderer = new ParticleSystemRenderer(simulation, textures, { models, ...lighting });
   const renderers = renderer.renderers;
+  const lights = renderers.filter(entry => entry instanceof ParticleLightRenderer);
 
   // The tree's draws keep VRF's order among themselves (renderOrder 0 up) and all come after the hero's
   // translucent meshes (renderOrder 0), not only the first draw sorting among them by depth. VRF sorts
@@ -54,6 +61,9 @@ export function createParticleDrawLayer(simulation: ParticleSystemSimulation, te
   return {
     object3d: renderer.object3d,
     wantsSceneDepth: renderer.wantsSceneDepth,
+    requiresSceneDepth: renderers.some(entry => entry.requiresSceneDepth),
+    emitsLight: lights.length > 0,
+    lights,
     wantsSceneColor: renderer.wantsSceneColor,
     update: (camera, viewport, time) => renderer.update(camera, viewport, time),
     setScene(depth, color) {

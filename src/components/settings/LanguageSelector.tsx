@@ -23,10 +23,9 @@ interface LanguageSelectorProps {
 /**
  * Language picker backed by the GitHub-hosted locale manifest.
  *
- * It lists every language on `main` with how much of the app each covers, and
- * downloads the chosen catalog on demand (caching it for offline use). English
- * is bundled; selecting an undownloaded language fetches it, registers it with
- * i18next, then applies it.
+ * It lists every language on `main` with how much of the app each covers.
+ * Selecting a bundled or already downloaded language applies it. Any other
+ * language is fetched, cached for offline use and registered with i18next first.
  */
 export default function LanguageSelector({ value, onChange }: LanguageSelectorProps) {
   const { t } = useTranslation();

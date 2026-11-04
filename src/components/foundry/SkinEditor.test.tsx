@@ -9,7 +9,7 @@ import type { SkinEditProgress, SkinPartEdit } from '../../types/skinEditor';
 import { SILVER_TRANSFORMED_MODEL } from '../../lib/skinModelForms';
 
 vi.mock('react-i18next', () => ({ initReactI18next: { type: '3rdParty', init: () => {} }, useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../locker/HeroPoseViewer', () => ({ default: function Preview({ heroName, partEdits, highlightedPart, onPreviewCapture }: {
+vi.mock('../locker/LockerViewerHost', () => ({ SharedHeroViewer: function Preview({ heroName, partEdits, highlightedPart, onPreviewCapture }: {
   heroName: string; partEdits: SkinPartEdit[]; highlightedPart: string | null; onPreviewCapture: (capture: (() => Promise<string>) | null) => void;
 }) {
   useEffect(() => { onPreviewCapture(async () => 'data:image/webp;base64,UklGRg=='); return () => onPreviewCapture(null); }, [onPreviewCapture]);
@@ -189,7 +189,7 @@ describe('Door Stuck skin recovery', () => {
     });
     await click('button[aria-label="#ef4444"]');
     await click('[role="tab"]', 'foundry.skin.pattern');
-    await click('button[aria-label="Confetti"]');
+    await click('button[aria-label="locker.trippy.styles.confetti"]');
     await click('label', 'foundry.skin.customPatternColors');
     expect(previewEdits()[0]).toMatchObject({ tint: '#ef4444', repaint: true, pattern: { style: 'confetti', colors: ['#ef4444', '#ffffff'] } });
   });

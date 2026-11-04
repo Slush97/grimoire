@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { gameBananaCategoryLabel } from '../../../lib/gameBananaCategories';
 import { Trans, useTranslation } from 'react-i18next';
 import { Loader2, AlertTriangle, FilePlus, X, Search, Check, RotateCcw, Beaker, Link2, Banana } from 'lucide-react';
 import { getModDetails, browseMods } from '../../../lib/api';
@@ -532,7 +533,7 @@ function UnknownManualSearch({
                         {gbMod.name}
                       </div>
                       <div className="text-2xs text-text-tertiary truncate">
-                        {gbMod.rootCategory?.name ?? (section === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds'))} · #{gbMod.id}
+                        {(gbMod.rootCategory?.name ? gameBananaCategoryLabel(gbMod.rootCategory.name, t) : null) ?? (section === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds'))} · #{gbMod.id}
                       </div>
                     </div>
                     {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}

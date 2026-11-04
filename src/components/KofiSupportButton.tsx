@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Tx from './translation/Tx';
 import { getAssetPath } from '../lib/assetPath';
 import { getHeroRenderPath } from '../lib/lockerUtils';
@@ -12,6 +13,7 @@ const KOFI_URL = 'https://ko-fi.com/esocidae';
  * the dev server and the packaged file:// build.
  */
 export default function KofiSupportButton() {
+  const { t } = useTranslation();
   const minaRender = getHeroRenderPath('Mina');
   const minaIcon = getAssetPath('/heroes/icons/mina.png');
   return (
@@ -19,7 +21,7 @@ export default function KofiSupportButton() {
       href={KOFI_URL}
       target="_blank"
       rel="noreferrer noopener"
-      title="Support Grimoire on Ko-fi"
+      title={t('settings.support.kofiTitle')}
       className="kofi-button inline-flex shrink-0 items-center gap-2 rounded-sm border px-3.5 py-2 text-sm font-medium text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/40 whitespace-nowrap"
     >
       <span

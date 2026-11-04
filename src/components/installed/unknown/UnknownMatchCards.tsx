@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { gameBananaCategoryLabel } from '../../../lib/gameBananaCategories';
 import { useTranslation } from 'react-i18next';
 import { Info, Check, RotateCcw, Link2, Fingerprint } from 'lucide-react';
 import type { Mod, AssociateUnknownModArgs } from '../../../types/mod';
@@ -88,7 +89,7 @@ export function UnknownEmbeddedCard({
                 {match.section === 'Mod' ? t('installed.unknown.sectionMods') : match.section === 'Sound' ? t('installed.unknown.sectionSounds') : match.section}
               </Tag>
             )}
-            {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
+            {match.categoryName && <Tag tone="neutral">{gameBananaCategoryLabel(match.categoryName, t)}</Tag>}
             {typeof match.modId === 'number' && <Tag tone="neutral">{t('installed.unknown.modIdTag', { id: match.modId })}</Tag>}
           </div>
         )}
@@ -172,7 +173,7 @@ export function UnknownMatchCard({
               {match.section === 'Mod' ? t('installed.unknown.sectionMods') : match.section === 'Sound' ? t('installed.unknown.sectionSounds') : match.section}
             </Tag>
           )}
-          {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
+          {match.categoryName && <Tag tone="neutral">{gameBananaCategoryLabel(match.categoryName, t)}</Tag>}
           {typeof match.modId === 'number' && <Tag tone="neutral">{t('installed.unknown.modIdTag', { id: match.modId })}</Tag>}
           {typeof match.fileId === 'number' && <Tag tone="neutral">{t('installed.unknown.fileIdTag', { id: match.fileId })}</Tag>}
         </div>

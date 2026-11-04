@@ -23,6 +23,7 @@ import type { ParticleRendererContext } from './context';
 import type { ParticleMaterialData } from './particleModels';
 import { ParticleRenderTexture } from './textures';
 import type { RenderView } from './view';
+import { PBR_JITTER_GLSL } from './pbrAnimation';
 
 const LUMINANCE_WEIGHTS: [number, number, number] = [0.2125, 0.7154, 0.0721];
 
@@ -114,6 +115,8 @@ precision highp int;
 uniform mat4 modelMatrix;
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
+uniform mat4 uModelToSource;
+uniform mat4 uSourceToModel;
 
 uniform vec4 uTint; // the node's tint (gamma) and alpha
 uniform vec3 uModelScale;
@@ -130,6 +133,28 @@ in vec4 color;
 out vec3 vNormalOut;
 out vec4 vTexCoord;
 out vec4 vVertexColorOut;
+
+#if USE_SKINNING
+// A rigged map prop (the hideout's ghosts). three.js binds these for any skinned mesh; the pose is
+// applied as its skinning chunks do, in the model space every later step already works in.
+uniform mat4 bindMatrix;
+uniform mat4 bindMatrixInverse;
+uniform highp sampler2D boneTexture;
+in vec4 skinIndex;
+in vec4 skinWeight;
+
+mat4 GetBoneMatrix(float index)
+{
+    int size = textureSize(boneTexture, 0).x;
+    int j = int(index) * 4;
+    int x = j % size;
+    int y = j / size;
+    return mat4(texelFetch(boneTexture, ivec2(x, y), 0), texelFetch(boneTexture, ivec2(x + 1, y), 0),
+        texelFetch(boneTexture, ivec2(x + 2, y), 0), texelFetch(boneTexture, ivec2(x + 3, y), 0));
+}
+#endif
+
+${PBR_JITTER_GLSL}
 
 vec3 SrgbGammaToLinear(vec3 c)
 {
@@ -148,8 +173,26 @@ float ScaleTexCoordByModel(float texCoord, int axis, float origin)
 
 void main()
 {
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    vNormalOut = normalize(mat3(modelMatrix) * normal);
+    vec3 modelPosition = position;
+    vec3 modelNormal = normal;
+#if USE_SKINNING
+    mat4 skin = skinWeight.x * GetBoneMatrix(skinIndex.x) + skinWeight.y * GetBoneMatrix(skinIndex.y)
+        + skinWeight.z * GetBoneMatrix(skinIndex.z) + skinWeight.w * GetBoneMatrix(skinIndex.w);
+    skin = bindMatrixInverse * skin * bindMatrix;
+    modelPosition = (skin * vec4(position, 1.0)).xyz;
+    modelNormal = (skin * vec4(normal, 0.0)).xyz;
+#endif
+    vec3 sourcePosition = (uModelToSource * vec4(modelPosition, 1.0)).xyz;
+#if F_JITTER_VERTICES > 0
+    vec2 jitterUv = g_bUseSecondaryUvForJitterMask ? uv1 : uv;
+#if F_JITTER_VERTICES == 2
+    sourcePosition += mat3(uModelToSource) * GetJitterDisplacement(modelPosition, jitterUv);
+#else
+    sourcePosition += GetJitterDisplacement(sourcePosition, jitterUv);
+#endif
+#endif
+    gl_Position = projectionMatrix * modelViewMatrix * uSourceToModel * vec4(sourcePosition, 1.0);
+    vNormalOut = normalize(transpose(mat3(uSourceToModel)) * modelNormal);
 
     vVertexColorOut.rgb = SrgbGammaToLinear(uTint.rgb);
     vVertexColorOut.a = uTint.a;
@@ -226,7 +269,7 @@ uniform float g_flUnlitAdditiveScale1;
 
 float GetScrollTime(float quantize)
 {
-    return (quantize != 0.0) ? (floor(g_flTime / quantize + 0.5) * quantize) : g_flTime;
+    return (quantize != 0.0) ? (round(g_flTime / quantize) * quantize) : g_flTime;
 }
 
 vec2 ScrollTexCoord(vec2 texCoord, vec2 speed, float quantize)
@@ -363,6 +406,7 @@ const DEFAULT_FLOATS: Record<string, number> = {
   g_flAlphaAnglePower1: 0, g_flOpacityScale1: 1, g_flAlphaTestReference1: 0.5, g_flTranslucentScrollQuantize0_1: 0,
   g_flTranslucentScrollQuantize1_1: 0, g_flSelfIllumScale1: 0, g_flSelfIllumAlbedoFactor1: 1, g_flSelfIllumScrollQuantize1: 0,
   g_flUnlitAdditiveScale1: 1,
+  g_flJitterSpeedA1: 10, g_flJitterSpeedB1: 7, g_flJitterQuantizeTime1: 0, g_flJitterQuantizeDisplacement1: 0,
 };
 const DEFAULT_VEC2: Record<string, [number, number]> = {
   g_vAlbedoScrollSpeed1: [0, 0], g_vAlbedoTexcoordScale1: [1, 1], g_vAlbedoTexcoordOffset1: [0, 0], g_vSelfIllumTexcoordScale1: [1, 1],
@@ -371,6 +415,7 @@ const DEFAULT_VEC2: Record<string, [number, number]> = {
 const DEFAULT_BOOLS: Record<string, boolean> = {
   g_bMaskColorTint1: true, g_bMaskVertexColorTint1: true, g_bApplyTintToVertexColors: false, g_bUseSecondaryUvForTranslucency: false,
   g_bUseSecondaryUvForAltTranslucency: false, g_bUseSecondaryUvForSelfIllum1: false,
+  g_bUseSecondaryUvForJitterMask: false,
 };
 /** The textures the shader samples, whether each is read from sRGB, and the default a material without one binds. */
 const TEXTURES: [string, boolean, string][] = [
@@ -378,6 +423,7 @@ const TEXTURES: [string, boolean, string][] = [
   ['g_tTintMask', false, 'materials/default/default_mask.vtex'],
   ['g_tAltTranslucency', false, 'materials/default/default_mask.vtex'],
   ['g_tSelfIllumMask', false, 'materials/default/default_mask.vtex'],
+  ['g_tJitterMask', false, 'materials/default/default_mask.vtex'],
 ];
 
 export class ModelMaterial {
@@ -385,8 +431,10 @@ export class ModelMaterial {
   private readonly uniforms: Record<string, THREE.IUniform>;
   private readonly textures: [string, ParticleRenderTexture][] = [];
   private readonly white: THREE.DataTexture;
+  private readonly supported: boolean;
+  private readonly requiredTextures = new Set<string>();
 
-  constructor(data: ParticleMaterialData, context: ParticleRendererContext, vertexColors: boolean) {
+  constructor(data: ParticleMaterialData, context: ParticleRendererContext, vertexColors: boolean, skinned = false) {
     const ints = data.intParams;
     const feature = (name: string) => (ints[name] ?? 0) !== 0 ? 1 : 0;
     const unlit = feature('F_UNLIT');
@@ -394,6 +442,7 @@ export class ModelMaterial {
     const alphaTest = feature('F_ALPHA_TEST');
     const additive = feature('F_ADDITIVE_BLEND');
     const supported = data.shader === 'pbr.vfx';
+    this.supported = supported;
 
     if ((!supported || !unlit) && !reported.has(data.name)) {
       reported.add(data.name);
@@ -408,8 +457,10 @@ export class ModelMaterial {
       F_ADDITIVE_BLEND: additive,
       F_ENABLE_TEXTURE_TRANSFORMS: feature('F_ENABLE_TEXTURE_TRANSFORMS'),
       F_SELF_ILLUM: feature('F_SELF_ILLUM'),
+      F_JITTER_VERTICES: ints.F_JITTER_VERTICES ?? 0,
       // Translucency runs the alpha through the view angle fade, and unlit alpha test tests the faded value
       FADED_OPACITY: translucent === 1 || (unlit === 1 && alphaTest === 1) ? 1 : 0,
+      USE_SKINNING: skinned ? 1 : 0,
     };
 
     this.white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
@@ -439,6 +490,7 @@ export class ModelMaterial {
     const originDefaults = [0, 2, 0, 2];
 
     this.uniforms = {
+      uModelToSource: { value: new THREE.Matrix4() }, uSourceToModel: { value: new THREE.Matrix4() },
       uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
       uModelScale: { value: new THREE.Vector3(1, 1, 1) },
       uScaleTexCoordAxis: { value: axis.map((name) => ints[name] ?? 0) },
@@ -455,8 +507,19 @@ export class ModelMaterial {
     for (const name of Object.keys(DEFAULT_FLOATS)) this.uniforms[name] = { value: float(name) };
     for (const name of Object.keys(DEFAULT_VEC2)) this.uniforms[name] = { value: vec2(name) };
     for (const name of Object.keys(DEFAULT_BOOLS)) this.uniforms[name] = { value: bool(name) };
+    const jitterVectors: Record<string, [number, number, number]> = {
+      g_vJitterFrequenciesA1: [0.02, 0.04, 0.08], g_vJitterFrequenciesB1: [0.05, 0.09, 0.17],
+      g_vJitterAmplitudesXA1: [4, 0, 0], g_vJitterAmplitudesYA1: [0, 4, 0], g_vJitterAmplitudesZA1: [0, 0, 4],
+      g_vJitterAmplitudesXB1: [0, 0, 0], g_vJitterAmplitudesYB1: [0, 0, 0], g_vJitterAmplitudesZB1: [0, 0, 0], g_vJitterExpression: [0, 0, 0],
+    };
+    for (const [name, fallback] of Object.entries(jitterVectors)) this.uniforms[name] = { value: new THREE.Vector3(...vec3(name, fallback)) };
 
     for (const [name, srgbRead, fallback] of TEXTURES) {
+      const active = name === 'g_tColor' || name === 'g_tTintMask'
+        || name === 'g_tAltTranslucency' && feature('F_ADVANCED_TRANSLUCENCY') === 1
+        || name === 'g_tSelfIllumMask' && feature('F_SELF_ILLUM') === 1
+        || name === 'g_tJitterMask' && (ints.F_JITTER_VERTICES ?? 0) > 0;
+      if (active && data.textureParams[name]) this.requiredTextures.add(name);
       const path = data.textureParams[name] ?? fallback;
       const texture = new ParticleRenderTexture(path, srgbRead, false, context.textures);
       this.textures.push([name, texture]);
@@ -472,10 +535,13 @@ export class ModelMaterial {
       toneMapped: false,
       fog: false,
       visible: supported,
+      forceSinglePass: true,
     });
 
-    // RenderMaterial: translucency blends the unpremultiplied colour, additively when the material adds
-    // (its compiled blend's destination is One), and writes no depth; F_RENDER_BACKFACES draws both faces
+    // RenderMaterial: translucency blends the unpremultiplied colour and writes no depth; F_RENDER_BACKFACES
+    // draws both faces. An additive colour is already multiplied by its opacity above, and the game's
+    // compiled pbr blend states take the source at One (premultiplied), so it adds once: SrcAlpha here
+    // would apply the opacity twice.
     const blends = translucent === 1 || additive === 1 || data.intAttributes.translucent === 1;
     this.material.transparent = blends;
     this.material.depthWrite = !blends && feature('F_DISABLE_DEPTH_WRITE') === 0;
@@ -485,7 +551,7 @@ export class ModelMaterial {
     if (blends) {
       this.material.blending = THREE.CustomBlending;
       this.material.blendEquation = THREE.AddEquation;
-      this.material.blendSrc = THREE.SrcAlphaFactor;
+      this.material.blendSrc = additive === 1 ? THREE.OneFactor : THREE.SrcAlphaFactor;
       this.material.blendDst = additive === 1 ? THREE.OneFactor : THREE.OneMinusSrcAlphaFactor;
       this.material.blendSrcAlpha = null;
       this.material.blendDstAlpha = null;
@@ -503,15 +569,24 @@ export class ModelMaterial {
     (this.uniforms.uModelScale.value as THREE.Vector3).set(scale[0], scale[1], scale[2]);
   }
 
+  /** Model positions to the same Source frame the camera and authored noise use. */
+  setModelTransform(modelToSource: THREE.Matrix4): void {
+    this.uniforms.uModelToSource.value.copy(modelToSource);
+    this.uniforms.uSourceToModel.value.copy(modelToSource).invert();
+  }
+
   /** The per frame constants, and textures that arrived since the last frame. */
   update(view: RenderView, context: ParticleRendererContext): void {
     this.uniforms.g_flTime.value = context.time;
     (this.uniforms.g_vCameraDirWs.value as THREE.Vector3).set(view.forward.x, view.forward.y, view.forward.z);
 
+    let ready = true;
     for (const [name, texture] of this.textures) {
       texture.resolve(context.maxAnisotropy);
       this.uniforms[name].value = texture.texture ?? this.white;
+      if (this.requiredTextures.has(name) && texture.texture === null) ready = false;
     }
+    this.material.visible = this.supported && ready;
   }
 
   dispose(): void {

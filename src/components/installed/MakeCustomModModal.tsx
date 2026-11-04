@@ -46,7 +46,7 @@ export function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: Ma
   const pickImage = async () => {
     const picked = await showOpenDialog({
       title: t('installed.imageField.selectImage'),
-      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
+      filters: [{ name: t('common.fileTypes.images'), extensions: IMAGE_EXTS }],
     });
     if (picked) await acceptImagePath(picked);
   };

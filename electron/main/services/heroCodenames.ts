@@ -122,3 +122,39 @@ export function heroForModelCodename(code: string, namespace: 'model' | 'panoram
     if (key === 'kali' && namespace !== 'panorama') return undefined;
     return modelHeroesByCodename.get(key) ?? canonicalSupportedHeroName(code);
 }
+
+/** One set of card art `vpkmerge portrait --hero` decodes as a unit. */
+export interface HeroCardArtSet {
+    /** The `--hero` value. */
+    codename: string;
+    /** Prepended to each decoded variant so a form's `card` stays distinct from
+     *  the hero's own. Empty for the hero's own art. */
+    variantPrefix: string;
+}
+
+/**
+ * The card art sets a VPK ships for a codename: the hero's own, plus each
+ * alternate form it finds. Silver's transformation swaps her card through
+ * `m_HeroCardOverride` to `werewolf_wolf_card*`. vpkmerge reads that stem as a
+ * separate hero (`werewolf_wolf`), so a plain `--hero werewolf` never sees it.
+ *
+ * Forms are read from the file names, not a table, so packs and any future form
+ * work. Requiring a `_card` suffix leaves out unit icons like `necro_shambler`.
+ */
+export function cardArtSets(paths: readonly string[], codename: string): HeroCardArtSet[] {
+    const formCard = new RegExp(
+        `^panorama/images/heroes/${codename}_([a-z0-9]+)_card(?:_critical|_gloat)?_(?:psd|png)\\.vtex_c$`
+    );
+    const forms = new Set<string>();
+    for (const path of paths) {
+        const form = formCard.exec(path)?.[1];
+        if (form) forms.add(form);
+    }
+    return [
+        { codename, variantPrefix: '' },
+        ...[...forms].sort().map((form) => ({
+            codename: `${codename}_${form}`,
+            variantPrefix: `${form}_`,
+        })),
+    ];
+}

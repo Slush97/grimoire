@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
@@ -377,10 +378,12 @@ function InstalledTaxonomyChips({
   taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
   className: string;
 }) {
+  const { t } = useTranslation();
+  const labels = useMemo(() => taxonomy.tags.map(label => gameBananaCategoryLabel(label, t)), [taxonomy.tags, t]);
   return (
     <>
       <HeroIconStack heroes={taxonomy.heroNames} />
-      <FittingTagList labels={taxonomy.tags} chipClassName={className} />
+      <FittingTagList labels={labels} chipClassName={className} />
     </>
   );
 }
@@ -402,6 +405,7 @@ function EditableModTitle({
   /** Undefined when the title isn't renamable (GameBanana-sourced mods). */
   onRename?: (newName: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -423,7 +427,7 @@ function EditableModTitle({
     return (
       <h3
         className={`${className}${onRename ? ' cursor-text' : ''}`}
-        title={onRename ? `${name} (double-click to rename)` : name}
+        title={onRename ? t('installed.card.renameTitle', { name }) : name}
         onDoubleClick={
           onRename
             ? (e) => {
@@ -644,7 +648,7 @@ function ModListRowContent({
             <MetaTextChip label="18+" className={dangerInlineChipClasses} />
           )}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-          <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
+          <span className="flex-shrink-0 tabular-nums" title={t('installed.card.installedAt', { date: formatAbsoluteDate(mod.installedAt) })}>
             {formatRelativeDate(mod.installedAt)}
           </span>
           {group && (
@@ -1476,7 +1480,7 @@ export function ModCard({
                   icon={AlertTriangle}
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
-                  {t('installed.card.conflict')}
+                  {t('installed.card.overlap')}
                 </Tag>
               )}
               {mod.isUnknown && (
@@ -1551,7 +1555,7 @@ export function ModCard({
           />
           <div
             className={`${isCompact ? 'mt-1.5' : 'mt-1'} grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-1.5`}
-            title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
+            title={t('installed.card.gridMetaTitle', { file: mod.fileName, size: formatBytes(mod.size), date: formatAbsoluteDate(mod.installedAt) })}
           >
             <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
               <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons

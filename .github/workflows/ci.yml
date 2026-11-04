@@ -29,11 +29,9 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          # Match the local pnpm that generates pnpm-lock.yaml (v10). pnpm 9
-          # mis-links the out-of-root @grimoire/social-types workspace package
-          # (../grimoire-social/packages/*), which makes tsc report it as an
-          # unresolved module and every social import cascades to implicit-any.
-          version: 10
+          # The checkout lives in grimoire/, so the action can't find the
+          # devEngines.packageManager pin on its own.
+          package_json_file: grimoire/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -49,11 +47,26 @@ jobs:
       # when typecheck follows the symlink.
       - name: Install grimoire-social deps (for the shared workspace package)
         working-directory: grimoire-social
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install dependencies
         working-directory: grimoire
         run: pnpm install --frozen-lockfile
+
+      # pnpm adds a second YAML document to the lockfile unless
+      # devEngines.packageManager.onFail is "ignore". GitHub's dependency graph
+      # reads only the first one, so Dependabot would lose every dependency and
+      # mark open alerts fixed, with no error anywhere.
+      - name: Lockfile stays a single YAML document
+        working-directory: grimoire
+        run: test "$(grep -c '^---$' pnpm-lock.yaml)" = 0
+
+      # allowBuilds keeps this off for installs, because a failed build deletes
+      # the binary on a Node newer than its prebuilds. Vitest needs it built
+      # for CI's Node, and pnpm rebuild honors allowBuilds, so run its script.
+      - name: Build better-sqlite3 for the test run
+        working-directory: grimoire/node_modules/better-sqlite3
+        run: npm run install
 
       - name: Lint
         working-directory: grimoire

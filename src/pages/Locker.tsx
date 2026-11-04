@@ -30,6 +30,7 @@ import {
   ShuffleIncludeButton,
 } from '../components/locker/ShuffleControls';
 import { LockerHeroView } from './LockerHero';
+import { LockerViewerPanel } from '../components/locker/LockerViewerHost';
 import { getLockerHeroNeighbors } from '../lib/lockerHeroNavigation';
 import ModThumbnail from '../components/ModThumbnail';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
@@ -1621,6 +1622,8 @@ export default function Locker() {
             onSetShuffleVariant={setShuffleVariant}
             shuffleArmed={shuffleOnLaunch}
           />
+          {/* Outside the keyed hero view: a hero change keeps the panel and its viewer in place. */}
+          <LockerViewerPanel />
         </div>
       )}
 

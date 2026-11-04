@@ -16,20 +16,20 @@ export interface BackgroundGradient {
 
 export interface BackgroundGradientPreset extends BackgroundGradient {
   id: string;
-  name: string;
+  nameKey: string;
 }
 
 export const BACKGROUND_GRADIENT_PRESETS: BackgroundGradientPreset[] = [
-  { id: 'ember',   name: 'Ember',   from: '#f97316', to: '#dc2626' },
-  { id: 'dusk',    name: 'Dusk',    from: '#8b5cf6', to: '#ec4899' },
-  { id: 'abyss',   name: 'Abyss',   from: '#3b82f6', to: '#06b6d4' },
-  { id: 'verdant', name: 'Verdant', from: '#10b981', to: '#84cc16' },
-  { id: 'nebula',  name: 'Nebula',  from: '#6366f1', to: '#f43f5e' },
-  { id: 'gold',    name: 'Gold',    from: '#f59e0b', to: '#eab308' },
+  { id: 'ember',   nameKey: 'settings.appearance.background.presets.ember',   from: '#f97316', to: '#dc2626' },
+  { id: 'dusk',    nameKey: 'settings.appearance.background.presets.dusk',    from: '#8b5cf6', to: '#ec4899' },
+  { id: 'abyss',   nameKey: 'settings.appearance.background.presets.abyss',   from: '#3b82f6', to: '#06b6d4' },
+  { id: 'verdant', nameKey: 'settings.appearance.background.presets.verdant', from: '#10b981', to: '#84cc16' },
+  { id: 'nebula',  nameKey: 'settings.appearance.background.presets.nebula',  from: '#6366f1', to: '#f43f5e' },
+  { id: 'gold',    nameKey: 'settings.appearance.background.presets.gold',    from: '#f59e0b', to: '#eab308' },
   // Slate rather than slate-into-navy: #1e293b over a #0f0f0f base lands about
   // seven points off the background, so the old pairing rendered as a single
   // grey smudge and its swatch was indistinguishable from "No glow".
-  { id: 'ash',     name: 'Ash',     from: '#94a3b8', to: '#64748b' },
+  { id: 'ash',     nameKey: 'settings.appearance.background.presets.ash',     from: '#94a3b8', to: '#64748b' },
 ];
 
 /** Peak alpha at each corner. Low enough that body text over the glow keeps

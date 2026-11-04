@@ -12,7 +12,7 @@
     # Rust CLI the app shells out to for VPK merge/split. Keep the ref in
     # sync with VPKMERGE_VERSION in scripts/fetch-vpkmerge.mjs.
     vpkmerge = {
-      url = "github:Slush97/vpkmerge?ref=v0.29.0";
+      url = "github:Slush97/vpkmerge?ref=v0.29.1";
       flake = false;
     };
   };
@@ -124,7 +124,7 @@
         packages =
           (with pkgs; [
             nodejs_24
-            pnpm_10
+            pnpm_12
             python3
             gnumake
             pkg-config
@@ -169,7 +169,7 @@
 
           echo ""
           echo "First-run commands (run in this order, after grimoire-social's own"
-          echo "'pnpm install' has completed):"
+          echo "'pnpm install --ignore-scripts' has completed):"
           echo "  pnpm install --frozen-lockfile"
           echo "  pnpm exec electron-rebuild -f -w better-sqlite3"
           echo "  pnpm dev"

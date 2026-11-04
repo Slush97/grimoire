@@ -35,7 +35,7 @@ import {
   parseGradientSpec,
   type GStop,
 } from '../../lib/abilityColorPreview';
-import { TRIPPY_ANIMATION_LABELS as ANIMATION_LABELS, TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import { TRIPPY_ANIMATION_LABEL_KEYS, TRIPPY_STYLE_LABEL_KEYS } from '../../lib/trippy';
 import TrippyPatternPicker from './TrippyPatternPicker';
 import {
   TRIPPY_ANIMATION_STYLES,
@@ -466,7 +466,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
   const gradientLabel =
     gradientPreset === 'custom'
       ? t('locker.colors.custom')
-      : (GRADIENT_PRESETS.find((g) => g.name === gradientPreset)?.label ?? gradientPreset);
+      : t(GRADIENT_PRESETS.find((g) => g.name === gradientPreset)?.labelKey ?? gradientPreset);
   const spectrumDirty =
     activeAnimated !== animated ||
     activeHue !== hue ||
@@ -505,15 +505,15 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
         ? t('locker.colors.applied.gradient', {
             label:
               activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient)
-                ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ??
-                  t('locker.colors.modes.gradient'))
+                ? t(GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.labelKey ??
+                  'locker.colors.modes.gradient')
                 : t('locker.colors.custom'),
             animated: animatedSuffix(activeAnimated),
           })
         : activeMode === 'trippy'
           ? t('locker.colors.applied.trippy', {
-              style: activeTrippy ? TRIPPY_STYLE_LABELS[activeTrippy.style] : '',
-              animation: activeTrippy ? ANIMATION_LABELS[activeTrippy.animationStyle] : '',
+              style: activeTrippy ? t(TRIPPY_STYLE_LABEL_KEYS[activeTrippy.style]) : '',
+              animation: activeTrippy ? t(TRIPPY_ANIMATION_LABEL_KEYS[activeTrippy.animationStyle]) : '',
               targets: activeTrippy?.targets ?? '',
             })
           : t('locker.colors.applied.single', {
@@ -799,14 +799,14 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                     type="button"
                     disabled={busy}
                     onClick={() => setGradientPreset(g.name)}
-                    title={g.label}
+                    title={t(g.labelKey)}
                     className={`h-7 w-10 rounded border transition-transform hover:scale-105 disabled:cursor-not-allowed ${
                       gradientPreset === g.name
                         ? 'border-text-primary ring-2 ring-accent/60'
                         : 'border-border'
                     }`}
                     style={{ background: gradientCss(g.stops, hue, saturation, brightness) }}
-                    aria-label={g.label}
+                    aria-label={t(g.labelKey)}
                   />
                 ))}
                 <button
@@ -889,10 +889,10 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             busy={busy}
             summary={
               <>
-                {TRIPPY_STYLE_LABELS[trippyStyle]}
+                {t(TRIPPY_STYLE_LABEL_KEYS[trippyStyle])}
                 <span className="text-text-secondary">
                   {' '}
-                  · {pct(trippyIntensity)}% · {ANIMATION_LABELS[trippyAnimStyle]}
+                  · {pct(trippyIntensity)}% · {t(TRIPPY_ANIMATION_LABEL_KEYS[trippyAnimStyle])}
                 </span>
               </>
             }
@@ -922,7 +922,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   onClick={() => setTrippyAnimStyle(a)}
                   className={segBtn(trippyAnimStyle === a)}
                 >
-                  {ANIMATION_LABELS[a]}
+                  {t(TRIPPY_ANIMATION_LABEL_KEYS[a])}
                 </button>
               ))}
             </div>

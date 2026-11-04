@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { FileArchive, Check } from 'lucide-react';
 import type { MultiVpkPickData } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
@@ -60,14 +60,20 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
             />
                 <ModalBody className="space-y-4">
                     <p className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">{data.modName}</span> contains{' '}
-                        {data.vpkFileNames.length} <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">.vpk</code> files.
+                        <Trans
+                            i18nKey="multiVpk.contains"
+                            values={{ name: data.modName, count: data.vpkFileNames.length }}
+                            components={{
+                                name: <span className="font-medium text-text-primary" />,
+                                code: <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded" />,
+                            }}
+                        />{' '}
                         {t('multiVpk.uncheckHint')}
                     </p>
 
                     <div className="flex items-center justify-between pb-2 border-b border-border/60">
                         <span className="text-xs uppercase tracking-wide text-text-secondary">
-                            {selected.size} of {data.vpkFileNames.length} selected
+                            {t('multiVpk.selectedCount', { selected: selected.size, total: data.vpkFileNames.length })}
                         </span>
                         <button
                             type="button"

@@ -322,9 +322,9 @@ describe('installed card menu mounting', () => {
     expect(host.querySelectorAll('img[src*="wraith.png"]')).toHaveLength(1);
     const row = host.querySelector('[data-fitting-tags]')!;
     const visibleTags = [...row.children].filter(node => node.hasAttribute('title'));
-    expect(visibleTags.map(node => node.textContent)).toEqual(['VOs', '+2']);
+    expect(visibleTags.map(node => node.textContent)).toEqual(['gamebanana.categories.vos', '+2']);
     const overflow = visibleTags.find(node => node.textContent === '+2') as HTMLElement | undefined;
-    expect(overflow?.title).toBe('Voices\nSounds');
+    expect(overflow?.title).toBe('Voices\nsync.sections.Sound');
   });
 
   it('does not infer hero icons or thumbnail art from a sound submission title', async () => {

@@ -6,11 +6,11 @@ import type { DownloadedLocale, LocaleManifest } from '../../../src/types/locale
 /**
  * Downloadable language packs.
  *
- * English ships bundled in the app; every other language lives only on GitHub
- * `main`. This service fetches the manifest (the language index the picker reads)
- * and individual catalogs from raw.githubusercontent.com, caching each downloaded
- * catalog under userData/locales/<code>/translation.json so it works offline on
- * the next launch.
+ * Languages in the repo at build time ship bundled in the app; one added since
+ * then lives only on GitHub `main`. This service fetches the manifest (the language
+ * index the picker reads) and individual catalogs from raw.githubusercontent.com,
+ * caching each downloaded catalog under userData/locales/<code>/translation.json so
+ * it works offline on the next launch.
  *
  * Updates to an already-downloaded language are picked up via refresh(): we store
  * each catalog's ETag and issue conditional GETs, so a language re-downloads only

@@ -22,8 +22,8 @@ export function BrowseSectionPicker({ sections, selected, canCombine, onChange }
       itemClassName="h-8 px-3 @max-[980px]:px-2.5"
       options={sections.map((entry) => ({
         value: entry.modelName,
-        ariaLabel: entry.pluralTitle,
-        label: <span className="text-sm @max-[980px]:hidden">{entry.pluralTitle}</span>,
+        ariaLabel: t(`sync.sections.${entry.modelName}`, { defaultValue: entry.pluralTitle }),
+        label: <span className="text-sm @max-[980px]:hidden">{t(`sync.sections.${entry.modelName}`, { defaultValue: entry.pluralTitle })}</span>,
         icon: entry.modelName === 'Sound' ? Music : entry.modelName === 'Wip' ? Construction : Package,
         title: canCombine ? t('browse.section.combineHint') : t('browse.section.catalogHint'),
       }))}

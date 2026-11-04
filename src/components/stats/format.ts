@@ -1,24 +1,32 @@
+import i18n from '../../i18n'
 import { formatRelativeDate } from '../../lib/dates'
 
 // Deadlock rank ladder, indexed by the API's division number (1-11).
 // Division 0 is unranked/uncalibrated.
-export const DIVISION_NAMES = [
+const DIVISION_NAME_KEYS = [
     '',
-    'Initiate',
-    'Seeker',
-    'Alchemist',
-    'Arcanist',
-    'Ritualist',
-    'Emissary',
-    'Archon',
-    'Oracle',
-    'Phantom',
-    'Ascendant',
-    'Eternus',
+    'stats.ranks.initiate',
+    'stats.ranks.seeker',
+    'stats.ranks.alchemist',
+    'stats.ranks.arcanist',
+    'stats.ranks.ritualist',
+    'stats.ranks.emissary',
+    'stats.ranks.archon',
+    'stats.ranks.oracle',
+    'stats.ranks.phantom',
+    'stats.ranks.ascendant',
+    'stats.ranks.eternus',
 ]
 
+/** Rank name in the active language, or '' for unranked and unknown divisions.
+ *  Read at call time, like lib/dates: the components showing it consume `t`. */
+export function rankDivisionName(division: number): string {
+    const key = DIVISION_NAME_KEYS[division]
+    return key ? i18n.t(key) : ''
+}
+
 export function rankLabel(division: number, tier: number): string {
-    const name = DIVISION_NAMES[division]
+    const name = rankDivisionName(division)
     if (!name) return '--'
     return tier > 0 ? `${name} ${tier}` : name
 }
@@ -31,8 +39,8 @@ export function rankLabelFromBadge(badgeLevel: number | undefined | null): strin
 
 export function formatDuration(seconds: number): string {
     const mins = Math.floor(seconds / 60)
-    if (mins < 60) return `${mins}m`
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`
+    if (mins < 60) return i18n.t('stats.duration.minutes', { minutes: mins })
+    return i18n.t('stats.duration.hours', { hours: Math.floor(mins / 60), minutes: mins % 60 })
 }
 
 /** Compact "3h ago" label for a unix-seconds match timestamp. */

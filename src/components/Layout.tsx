@@ -36,6 +36,7 @@ import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
 import { RequirementsHost } from './requirements/RequirementsHost';
 import { InstalledIssuesController } from './installed/InstalledIssuesController';
+import { LockerViewerHost } from './locker/LockerViewerHost';
 
 export default function Layout() {
   const { t } = useTranslation();
@@ -330,6 +331,7 @@ export default function Layout() {
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}
       <DiscordPresence />
       <CrashAdvisoryHost />
+      <LockerViewerHost />
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <GameinfoBanner />

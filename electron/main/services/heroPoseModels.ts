@@ -707,7 +707,7 @@ async function runPoseCacheSweep(): Promise<void> {
         let lastUsedMs = 0;
         try {
             if (!(await fs.stat(dir)).isDirectory()) continue;
-            for (const file of await fs.readdir(dir)) {
+            for (const file of await fs.readdir(dir, { recursive: true })) {
                 const stat = await fs.stat(join(dir, file));
                 bytes += stat.size;
                 lastUsedMs = Math.max(lastUsedMs, stat.mtimeMs);
@@ -1425,15 +1425,17 @@ let particleSupport: Promise<[boolean, boolean]> | null = null;
 
 /**
  * What a cached bundle was made with: the bundle version, whether the bundled vpkmerge reported stored
- * KV3 formats and exported stored mips (a vpkmerge update that adds either re-exports), and the clips
- * whose events it read.
+ * KV3 formats and exported stored mips (a vpkmerge update that adds either re-exports), the clips
+ * whose events it read, and the game files it read them from.
  */
-async function particleCacheTag(clips: readonly string[]): Promise<string> {
+async function particleCacheTag(clips: readonly string[], basePak: string): Promise<string> {
     const probe = new PackageStack([], particleVpkmerge, tmpdir());
     particleSupport ??= Promise.all([probe.supportsFormat(), probe.supportsMips()]);
     const [format, mips] = await particleSupport;
     const clipHash = createHash('md5').update([...clips].sort().join('|')).digest('hex').slice(0, 8);
-    return `${PARTICLE_BUNDLE_VERSION}:${format ? 'f' : 'n'}${mips ? 'm' : ''}:${clipHash}`;
+    const { size, mtimeMs } = await fs.stat(basePak);
+    const gameHash = createHash('md5').update(`${size}:${mtimeMs}`).digest('hex').slice(0, 8);
+    return `${PARTICLE_BUNDLE_VERSION}:${format ? 'f' : 'n'}${mips ? 'm' : ''}:${clipHash}:${gameHash}`;
 }
 
 export interface HeroParticleBundleInfo {
@@ -1460,8 +1462,8 @@ export async function exportHeroParticles(
 ): Promise<HeroParticleBundleInfo> {
     const normalized = normalizeSkinSources(skinSources);
     const key = await resolvePoseKey(deadlockPath, heroName, normalized);
-    const tag = await particleCacheTag(clips.slice(0, 64));
-    const postBloomEnabled = await readHeroPostBloomInWorker(deadlockPath);
+    const tag = await particleCacheTag(clips.slice(0, 64), join(getCitadelPath(deadlockPath), 'pak01_dir.vpk'));
+    const postBloomEnabled = await readHeroPostBloomInWorker(deadlockPath).catch(() => true);
     // Different clip requests still write one directory. Drain its writer, then recheck our tag,
     // rather than deleting its textures or publishing its cache stamp while it is still exporting.
     const existing = inFlightParticleExports.get(key);
@@ -1518,8 +1520,15 @@ export function registerHeroPoseProtocol(): void {
                 return file ? net.fetch(pathToFileURL(file).toString()) : new Response(null, { status: 404 });
             }
             if (url.hostname === 's') {
-                const sceneFile = hideoutCacheFile(key, parts[1] ?? '');
-                return sceneFile ? net.fetch(pathToFileURL(sceneFile).toString()) : new Response(null, { status: 404 });
+                const name = parts.slice(1).join('/');
+                const sceneFile = hideoutCacheFile(key, name);
+                if (!sceneFile) return new Response(null, { status: 404 });
+                if (name.startsWith('snapshots/')) {
+                    const now = new Date();
+                    // A missing snapshot is the normal first-open case, not an error to log.
+                    try { await fs.utimes(sceneFile, now, now); } catch { return new Response(null, { status: 204 }); }
+                }
+                return net.fetch(pathToFileURL(sceneFile).toString());
             }
             // The trailing segment(s) name what's served: the static `model.glb`
             // (default; legacy URLs omit it), the rigged GLB and cloth sidecar, the

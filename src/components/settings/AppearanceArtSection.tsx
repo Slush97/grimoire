@@ -433,7 +433,7 @@ export default function AppearanceArtSection() {
     if (busy) return;
     const path = await showOpenDialog({
       title: t('settings.appearance.art.uploadImage'),
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      filters: [{ name: t('common.fileTypes.images'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
     });
     if (!path) return;
     await stageCustomSource(await readImageDataUrl(path));

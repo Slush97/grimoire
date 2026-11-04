@@ -11,7 +11,7 @@ const MEME_NAV_TOOLTIPS: Record<string, string> = {
   '/crosshair': 'Aimbot (Legal)',
   '/autoexec': "Hacker Voice: I'm In",
   '/stats': 'Losing Streak',
-  '/conflicts': 'They Are Fighting',
+  '/overlap': 'They Are Fighting',
   '/profiles': 'Alt Accounts',
   '/settings': 'Nerd Stuff',
 };

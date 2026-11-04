@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { AnchoredPopover } from '../common/AnchoredPopover';
 import type { BrowseReadableChip, BrowseReadableChipTone } from './cardUtils';
 
@@ -35,10 +38,21 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
+function chipDisplayLabel(label: string, t: TFunction): string {
+  switch (label) {
+    case 'Skin': return t('browse.card.chipSkin');
+    case 'Sound': return t('browse.card.chipSound');
+    case 'Mod': return t('browse.card.chipMod');
+    case 'Wip': return t('browse.card.chipWip');
+    default: return gameBananaCategoryLabel(label, t);
+  }
+}
+
 function BrowseReadableChipBadge({ chip, onImage = false, wrap = false, alwaysVisible = false }: { chip: BrowseReadableChip; onImage?: boolean; wrap?: boolean; alwaysVisible?: boolean }) {
+  const { t } = useTranslation();
   return (
     <span
-      title={chip.label}
+      title={chipDisplayLabel(chip.label, t)}
       data-browse-chip
       data-always-visible={alwaysVisible || undefined}
       className={`inline-flex min-h-6 shrink-0 items-center rounded-sm border px-2 text-2xs font-medium leading-none ${wrap ? 'max-w-full whitespace-normal break-words py-1' : 'h-6 whitespace-nowrap'} ${readableChipTone(
@@ -46,12 +60,13 @@ function BrowseReadableChipBadge({ chip, onImage = false, wrap = false, alwaysVi
         onImage
       )}`}
     >
-      {chip.label}
+      {chipDisplayLabel(chip.label, t)}
     </span>
   );
 }
 
 function BrowseReadableChipOverflow({ chips, onImage }: { chips: BrowseReadableChip[]; onImage: boolean }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -69,7 +84,7 @@ function BrowseReadableChipOverflow({ chips, onImage }: { chips: BrowseReadableC
     if (document.activeElement !== anchorRef.current) closeTimer.current = setTimeout(close, 120);
   };
   useEffect(() => cancelClose, [cancelClose]);
-  const labels = chips.map(chip => chip.label).join(', ');
+  const labels = chips.map(chip => chipDisplayLabel(chip.label, t)).join(', ');
 
   return (
     <>
@@ -127,6 +142,7 @@ export function BrowseReadableChipRow({
   onImage?: boolean;
   alwaysShowNsfwTag?: boolean;
 }) {
+  const { t } = useTranslation();
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
   const rowWidth = Math.max(48, availableWidth);
@@ -136,7 +152,7 @@ export function BrowseReadableChipRow({
     if (visibleChips.length >= maxVisible) break;
 
     const remainingAfter = orderedChips.length - index - 1;
-    const chipWidth = estimateReadableChipWidth(chip.label);
+    const chipWidth = estimateReadableChipWidth(chipDisplayLabel(chip.label, t));
     const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
     const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
 

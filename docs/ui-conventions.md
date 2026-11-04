@@ -34,7 +34,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 - **Spacing:** 4px grid. Page padding 24 (`p-6`), gap between sections 32 (`gap-8`/`space-y-8`), card padding 16 (`p-4`).
 - **Elevation:** borders give depth. Shadows only on floating layers (modal, menu, popover, toast).
 - **Control heights:** 32px default, 28px small. `Button` and `IconButton` enforce this.
-  Installed toolbar controls use 38px, including Conflicts and Update.
+  Installed toolbar controls use 38px, including Overlap and Update.
   Browse toolbar controls use 40px.
 - **z-index:** pick from the ladder at the top of `index.css`. Never invent one.
 
@@ -58,7 +58,7 @@ Primitives live in `src/components/common/` (`ui.tsx`, `forms.tsx`, `PageCompone
 
 Every page renders inside `PageLayout` (`flow` when the shell scrolls, `fill` when the page owns its scroll regions). The shell already scrolls and fades in, so pages never add their own `h-full overflow-y-auto` or `animate-fade-in`.
 
-1. `PageHeader`: serif title, optional one-line description, actions on the right.
+1. `PageHeader`: serif title, optional one-line description, actions on the right. Anything longer goes in `intro`, which runs under the whole row.
 2. Toolbar row: search, one filter popover, view toggle.
 3. Content. Full width for grids (Installed, Browse, Locker), `maxWidth="5xl"` for forms and settings.
 

@@ -19,7 +19,7 @@ describe('Browse section selection', () => {
     return <BrowseSectionPicker sections={sections} selected={selected} canCombine={canCombine}
       onChange={next => { changed(next); setSelected(next); }} />;
   }
-  const tab = (name: string) => host.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+  const tab = (name: string) => host.querySelector<HTMLButtonElement>(`button[aria-label="sync.sections.${name}"]`)!;
 
   beforeEach(() => {
     vi.clearAllMocks();

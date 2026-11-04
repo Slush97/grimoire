@@ -263,7 +263,7 @@ function LoadOrderRow({
           {primary.name}
         </div>
         {enabledCount > 1 && (
-          <div className="text-[10px] text-white/50">{`${enabledCount} files`}</div>
+          <div className="text-[10px] text-white/50">{t('locker.skins.fileCount', { count: enabledCount })}</div>
         )}
       </div>
     </div>
@@ -555,19 +555,21 @@ function SkinGroupCard({
         aria-expanded={isMulti ? variantsOpen : undefined}
         aria-label={
           isMulti
-            ? `${variantsOpen ? 'Hide' : 'Show'} variants: ${primary.name}`
+            ? variantsOpen
+              ? t('locker.skins.hideVariantsNamed', { name: primary.name })
+              : t('locker.skins.showVariantsNamed', { name: primary.name })
             : groupActive
-              ? `Active skin: ${primary.name}`
-              : `Set active: ${primary.name}`
+              ? t('locker.skins.activeSkinNamed', { name: primary.name })
+              : t('locker.skins.setActiveNamed', { name: primary.name })
         }
         title={
           isMulti
             ? variantsOpen
-              ? 'Hide variants'
-              : 'Show variants'
+              ? t('locker.skins.hideVariants')
+              : t('locker.skins.showVariants')
             : groupActive
-              ? 'Active skin'
-              : 'Set active'
+              ? t('locker.skins.activeSkin')
+              : t('locker.skins.setActive')
         }
         className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
       />
@@ -662,7 +664,7 @@ function SkinGroupCard({
             <span>
               {enabledCount === 0
                 ? t('locker.skins.pickAVariant')
-                : `${enabledCount}/${group.variants.length} active`}
+                : t('locker.skins.activeCount', { enabled: enabledCount, total: group.variants.length })}
             </span>
             <ChevronDown
               className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`}
@@ -702,7 +704,7 @@ function SkinGroupCard({
                         toggleSkin(variant, onToggleVariant ?? onSelect, cardRef.current)
                       }
                       aria-pressed={variant.enabled}
-                      title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
+                      title={variant.enabled ? t('locker.skins.disableNamed', { name: label }) : t('locker.skins.enableNamed', { name: label })}
                       className="flex h-7 flex-shrink-0 cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-xs text-text-primary transition-colors hover:bg-hl/10 focus-visible:bg-hl/10 focus-visible:outline-none"
                     >
                       <span
@@ -858,10 +860,10 @@ function SkinGroupRow({
         }`}
         title={
           isMulti
-            ? `${enabledCount}/${group.variants.length} variants enabled`
+            ? t('locker.skins.variantsEnabled', { enabled: enabledCount, total: group.variants.length })
             : groupActive
-              ? 'Active skin'
-              : 'Set active'
+              ? t('locker.skins.activeSkin')
+              : t('locker.skins.setActive')
         }
       >
         <div className="w-20 h-20 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
@@ -893,7 +895,7 @@ function SkinGroupRow({
               </div>
             ) : (
               <div className="text-xs text-text-secondary truncate">
-                {`${enabledCount}/${group.variants.length} active`}
+                {t('locker.skins.activeCount', { enabled: enabledCount, total: group.variants.length })}
               </div>
             )
           ) : (
@@ -946,7 +948,7 @@ function SkinGroupRow({
                   toggleSkin(variant, onToggleVariant ?? onSelect, rowRef.current)
                 }
                 aria-pressed={variant.enabled}
-                title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
+                title={variant.enabled ? t('locker.skins.disableNamed', { name: label }) : t('locker.skins.enableNamed', { name: label })}
                 className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer max-w-[220px] truncate ${
                   variant.enabled
                     ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
@@ -973,7 +975,7 @@ export default function HeroSkinsPanel({
   useHeroPortraitThumbnails = false,
   heroName,
   showDownloadable = true,
-  emptyMessage = 'Download a skin for this hero to manage it here.',
+  emptyMessage,
   browseAction,
   layout = 'list',
   includedSkinKeys,
@@ -993,6 +995,7 @@ export default function HeroSkinsPanel({
   // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
   const groups = useMemo(() => groupVariants(mods), [mods]);
+  const { t } = useTranslation();
   // Issue #208: which skin's image picker is open (null = none). Skins only;
   // sound mods keep the hero-portrait thumbnail and get no picker.
   const [pickerGroup, setPickerGroup] = useState<SkinGroup | null>(null);
@@ -1098,7 +1101,7 @@ export default function HeroSkinsPanel({
         </>
       ) : (
         <div className="text-xs text-text-secondary">
-          <span>{emptyMessage}</span>
+          <span>{emptyMessage ?? t('locker.page.downloadASkinForThisHero')}</span>
           {browseLink && <span className="ml-1">{browseLink}</span>}
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import {
     X,
@@ -35,6 +36,7 @@ import {
     stopsForSpec,
     gradientLabelOf,
 } from '../lib/abilityColorPreview';
+import { TRIPPY_ANIMATION_LABEL_KEYS, TRIPPY_STYLE_LABEL_KEYS } from '../lib/trippy';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -60,8 +62,8 @@ const CLEAR_SCOPE: Record<Tab, 'cards' | 'sounds' | 'colors' | 'trippy'> = {
     effects: 'trippy',
 };
 
-function abilityLabel(slot: AbilitySlot): string {
-    return slot === 4 ? 'Ultimate' : `Ability ${slot}`;
+function abilityLabel(slot: AbilitySlot, t: TFunction): string {
+    return slot === 4 ? t('lockerOverrides.ultimate') : t('lockerOverrides.abilitySlot', { slot });
 }
 
 /** Representative CSS swatch for an applied recolor. Hue is absolute; the
@@ -510,8 +512,8 @@ export function LockerOverridesModal({
                                                     type="button"
                                                     onClick={() => removeCard(card.heroName)}
                                                     disabled={busy}
-                                                    title={`Remove ${card.heroName} card`}
-                                                    aria-label={`Remove ${card.heroName} card`}
+                                                    title={t('lockerOverrides.removeCard', { hero: card.heroName })}
+                                                    aria-label={t('lockerOverrides.removeCard', { hero: card.heroName })}
                                                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/85 ring-1 ring-hl/15 backdrop-blur-sm transition-all hover:bg-red-500 hover:text-white hover:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                                                 >
                                                     {isRemoving ? (
@@ -578,7 +580,7 @@ export function LockerOverridesModal({
                                                             {sound.heroName}
                                                         </span>
                                                         <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text-secondary">
-                                                            {abilityLabel(sound.slot)}
+                                                            {abilityLabel(sound.slot, t)}
                                                         </span>
                                                         {sound.tuned && (
                                                             <SlidersHorizontal
@@ -677,12 +679,15 @@ export function LockerOverridesModal({
                                                 };
                                     const headline =
                                         mode === 'prism'
-                                            ? `Rainbow · rot ${Math.round(color.hue)}°`
+                                            ? t('lockerOverrides.headline.rainbow', { rotation: Math.round(color.hue) })
                                             : mode === 'gradient'
-                                              ? `${gradientLabelOf(color.gradient)} gradient · rot ${Math.round(color.hue)}°`
+                                              ? t('lockerOverrides.headline.gradient', { label: gradientLabelOf(color.gradient, t), rotation: Math.round(color.hue) })
                                               : mode === 'trippy'
-                                                ? `Trippy VFX · ${color.trippy?.style ?? 'confetti'} · ${color.trippy?.animationStyle ?? 'cycle'}`
-                                                : `Hue ${Math.round(color.hue)}°`;
+                                                ? t('lockerOverrides.headline.trippy', {
+                                                    style: t(TRIPPY_STYLE_LABEL_KEYS[color.trippy?.style ?? 'confetti']).toLowerCase(),
+                                                    animation: t(TRIPPY_ANIMATION_LABEL_KEYS[color.trippy?.animationStyle ?? 'cycle']).toLowerCase(),
+                                                  })
+                                                : t('lockerOverrides.headline.hue', { hue: Math.round(color.hue) });
                                     return (
                                         <div
                                             key={key}
@@ -701,9 +706,9 @@ export function LockerOverridesModal({
                                                 <div className="truncate text-xs text-text-secondary tabular-nums">
                                                     {headline}
                                                     {color.saturation !== 1 &&
-                                                        ` · Sat ${color.saturation.toFixed(2)}x`}
+                                                        t('lockerOverrides.headline.saturation', { value: color.saturation.toFixed(2) })}
                                                     {color.brightness !== 1 &&
-                                                        ` · Bright ${color.brightness.toFixed(2)}x`}
+                                                        t('lockerOverrides.headline.brightness', { value: color.brightness.toFixed(2) })}
                                                 </div>
                                             </div>
                                             <Button

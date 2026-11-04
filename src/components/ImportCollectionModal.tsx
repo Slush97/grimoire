@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Loader2,
   Download,
@@ -131,16 +133,16 @@ function buildRows(
   });
 }
 
-function skipReasonLabel(reason: SkipReason): string {
+function skipReasonLabel(reason: SkipReason, t: TFunction): string {
   switch (reason.kind) {
     case 'wrong-game':
-      return `Skipped: ${reason.gameName ?? 'different game'}`;
+      return reason.gameName ? t('importCollection.skip.game', { game: reason.gameName }) : t('importCollection.skip.differentGame');
     case 'unsupported-type':
-      return `Skipped: ${reason.modelName} not supported`;
+      return t('importCollection.skip.unsupportedType', { model: reason.modelName });
     case 'no-files':
-      return 'Skipped: no downloadable files';
+      return t('importCollection.skip.noFiles');
     case 'files-unavailable':
-      return 'Files unavailable';
+      return t('importCollection.skip.filesUnavailable');
   }
 }
 
@@ -902,7 +904,7 @@ export default function ImportCollectionModal({
                   <h3 className="text-base font-semibold text-text-primary">{collection.name}</h3>
                   {collection.submitter && (
                     <p className="text-xs text-text-secondary mt-0.5">
-                      by {collection.submitter.name}
+                      {t('browse.card.byAuthor', { name: collection.submitter.name })}
                     </p>
                   )}
                 </div>
@@ -999,7 +1001,7 @@ export default function ImportCollectionModal({
                 pickedFiles.length === 1
                   ? pickedFiles[0].fileName
                   : pickedFiles.length > 1
-                    ? `${pickedFiles.length} variants picked`
+                    ? t('importCollection.variantsPicked', { count: pickedFiles.length })
                     : null;
 
               return (
@@ -1014,7 +1016,7 @@ export default function ImportCollectionModal({
                       onChange={() => toggleSelect(row.item.id)}
                       disabled={lockedRow}
                       className="w-4 h-4 accent-accent cursor-pointer disabled:cursor-not-allowed"
-                      aria-label={`Select ${row.item.name}`}
+                      aria-label={t('importCollection.selectItem', { name: row.item.name })}
                     />
                     <ModThumbnail
                       src={thumb}
@@ -1037,8 +1039,8 @@ export default function ImportCollectionModal({
                         <span className="px-2 py-0.5 rounded-sm bg-hl/5 border border-hl/5 font-medium">
                           {row.item.modelName}
                         </span>
-                        {row.item.submitter && <span>by {row.item.submitter.name}</span>}
-                        {row.item.rootCategory?.name && <span>· {row.item.rootCategory.name}</span>}
+                        {row.item.submitter && <span>{t('browse.card.byAuthor', { name: row.item.submitter.name })}</span>}
+                        {row.item.rootCategory?.name && <span>· {gameBananaCategoryLabel(row.item.rootCategory.name, t)}</span>}
                         {/* Variants chevron sits inline with metadata so the
                             right side only carries the status. Hides on
                             non-selectable / non-idle rows where it would
@@ -1081,7 +1083,7 @@ export default function ImportCollectionModal({
                         the row doesn't carry a giant empty stripe. */}
                     <div className="text-sm flex-shrink-0 text-right">
                       {row.skip ? (
-                        <span className="text-text-tertiary">{skipReasonLabel(row.skip)}</span>
+                        <span className="text-text-tertiary">{skipReasonLabel(row.skip, t)}</span>
                       ) : nsfwSkipped ? (
                         <span className="text-text-tertiary">{t('importCollection.skippedNsfw')}</span>
                       ) : row.status === 'installed' ? (
@@ -1176,11 +1178,11 @@ export default function ImportCollectionModal({
                                     {file.fileName}
                                   </span>
                                   {file.isArchived && (
-                                    <span className="text-text-tertiary text-2xs uppercase tracking-wide">archived</span>
+                                    <span className="text-text-tertiary text-2xs uppercase tracking-wide">{t('common.status.archived')}</span>
                                   )}
                                   <span
                                     className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
-                                    title={`${file.downloadCount.toLocaleString()} downloads`}
+                                    title={t('browse.filePicker.downloadsFormatted', { count: file.downloadCount, formatted: file.downloadCount.toLocaleString() })}
                                   >
                                     <Download className="w-3 h-3" />
                                     {file.downloadCount.toLocaleString()}

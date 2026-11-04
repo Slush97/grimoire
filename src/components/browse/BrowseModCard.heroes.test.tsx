@@ -77,7 +77,7 @@ describe('Browse Sound hero rendering', () => {
     ]);
     expect(host.querySelector('img:not([src*="chip-icons"])')).toBeNull();
     if (layout.cardDesign === 'readable') {
-      expect(host.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(`${shared.name} audio preview`);
+      expect(host.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('browse.card.audioPreviewAria');
     } else {
       expect(host.textContent).toContain('browse.card.sound');
     }

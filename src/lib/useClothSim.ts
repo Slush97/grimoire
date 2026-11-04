@@ -187,6 +187,11 @@ export const defaultClothTuning = {
 
 export const CLOTH_TIMESTEP = 1 / 120;
 const MAX_CLOTH_STEPS_PER_FRAME = 12;
+// Wall-clock time the viewer gives the cloth per frame. A heavy rig catching up after a slow
+// frame stops here and lets the animation catch up alone, instead of the frame rate collapsing.
+const CLOTH_FRAME_BUDGET_MS = 8;
+// The most animation time a frame over budget advances at once, four of the usual.
+const MAX_CLOTH_CATCH_UP = 4 * CLOTH_TIMESTEP;
 const CLOTH_RESUME_GAP = 0.25;
 const MIN_TIMESTEP_HISTORY_RATIO = 0.25;
 // Legacy exports without integrator selectors keep the preview damping fallback.
@@ -640,6 +645,8 @@ interface ClothRuntime {
   clothAnchors: Map<number, number>;
   writtenBones: Set<THREE.Bone>;
   accumulator: number;
+  /** Wall-clock time of the last substep under a frame budget. */
+  substepMs: number;
   simulationSteps: number;
   recoveryCount: number;
   teleportDistance: number;
@@ -787,11 +794,20 @@ const _decomposeScale = new THREE.Vector3();
 // Same arithmetic as setBoneWorldPosition/setBoneWorldQuaternion, without the
 // per-write subtree recursion. Writes run parent-first, so a parent written
 // earlier in the same pass (in `fresh`) already reflects every ancestor write;
-// any other parent gets the same full ancestor walk. The trailing
-// root.updateWorldMatrix(true, true) refreshes the rest of the tree.
+// any other parent gets the same ancestor walk, top down, once per pass: no
+// later write in the pass is shallower, so an ancestor refreshed here stays
+// fresh. The trailing root.updateWorldMatrix(true, true) refreshes the rest of
+// the tree.
+const _staleAncestors: THREE.Object3D[] = [];
 function freshParent(bone: THREE.Bone, fresh: Set<THREE.Object3D>): THREE.Object3D | null {
   const parent = bone.parent;
-  if (parent && !fresh.has(parent)) parent.updateWorldMatrix(true, false);
+  if (!parent || fresh.has(parent)) return parent;
+  for (let obj: THREE.Object3D | null = parent; obj && !fresh.has(obj); obj = obj.parent) _staleAncestors.push(obj);
+  for (let i = _staleAncestors.length - 1; i >= 0; i--) {
+    _staleAncestors[i].updateWorldMatrix(false, false);
+    fresh.add(_staleAncestors[i]);
+  }
+  _staleAncestors.length = 0;
   return parent;
 }
 
@@ -1192,6 +1208,7 @@ function buildRuntime(root: THREE.Object3D, model: ClothModel): ClothRuntime | n
     clothAnchors: clothAnchorMap(model),
     writtenBones: new Set(),
     accumulator: 0,
+    substepMs: 0,
     simulationSteps: 0,
     recoveryCount: 0,
     // Source units. Ordinary animation remains untouched; discontinuous body
@@ -1496,7 +1513,9 @@ function solveRods(rt: ClothRuntime): void {
 }
 
 const _writeRootQuat = new THREE.Quaternion();
-function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
+// `settle` false skips the closing full tree update: the next substep restores
+// the pose and refreshes every world matrix before reading any.
+function writeBack(root: THREE.Object3D, rt: ClothRuntime, settle = true): void {
   recoverInvalidSolverState(rt);
   updateSolvedRotations(rt);
   for (const node of rt.nodes) {
@@ -1582,7 +1601,7 @@ function writeBack(root: THREE.Object3D, rt: ClothRuntime): void {
     rt.writtenBones.add(bone);
   }
 
-  root.updateWorldMatrix(true, true);
+  if (settle) root.updateWorldMatrix(true, true);
 }
 
 function clearDebugGeometry(group: THREE.Group): void {
@@ -1665,6 +1684,7 @@ function stepClothRuntime(
   delta: number,
   animate?: (delta: number) => void,
   mode: 'simulation' | 'targets' = 'simulation',
+  budgetMs?: number,
 ): void {
   if (!Number.isFinite(delta) || delta <= 0) return;
   if (delta > CLOTH_RESUME_GAP) {
@@ -1681,12 +1701,21 @@ function stepClothRuntime(
 
   const { constraintIterations, goalIterations } = solverIterationPhases(rt.model, clothTuning.iterationOverride);
   const collideAfterConstraints = ((rt.model.dynamicNodeFlags ?? 0) & 0x2000) !== 0;
+  const started = budgetMs === undefined ? 0 : performance.now();
   for (let step = 0; step < count; step++) {
+    // A substep that would run past the budget is the frame's last. The animation takes the frame's
+    // remaining time, up to MAX_CLOTH_CATCH_UP, and the cloth skips it: the rest is dropped, not
+    // carried, since a slow frame that ran more substeps would make the next frame slower still.
+    // The solver itself always steps by CLOTH_TIMESTEP: one longer step scales the Verlet velocity
+    // by the step ratio and kicks the cloth, a visible bob on every slow frame of a heavy rig.
+    const stepStarted = budgetMs === undefined ? 0 : performance.now();
+    const last = step === count - 1 || (budgetMs !== undefined && stepStarted - started + rt.substepMs > budgetMs);
     restoreAnimationPose(rt);
-    animate?.(CLOTH_TIMESTEP);
+    animate?.(last ? Math.min((count - step) * CLOTH_TIMESTEP, MAX_CLOTH_CATCH_UP) : CLOTH_TIMESTEP);
     refreshTargets(root, rt);
     updateAnimatedRodLengths(rt);
-    warmStartRuntime(rt, CLOTH_TIMESTEP);
+    const dt = CLOTH_TIMESTEP;
+    warmStartRuntime(rt, dt);
     for (const node of rt.nodes) node.lastSolvedPos.copy(node.pos);
     if (mode === 'targets') {
       for (const node of rt.nodes) {
@@ -1694,29 +1723,29 @@ function stepClothRuntime(
         node.prev.copy(node.target);
         node.solvedRot.copy(node.targetRot);
       }
-      writeBack(root, rt);
-      rt.simulationSteps++;
-      continue;
-    }
-    integrate(rt, gravity, CLOTH_TIMESTEP);
+    } else {
+      integrate(rt, gravity, dt);
 
-    solveGoals(rt, CLOTH_TIMESTEP);
-    if (!collideAfterConstraints) solveCollisions(rt);
+      solveGoals(rt, dt);
+      if (!collideAfterConstraints) solveCollisions(rt);
 
-    for (let i = 0; i < constraintIterations; i++) {
-      for (const bend of rt.model.kelagerBends) projectKelagerBend(rt.nodes, bend);
-      for (const hinge of rt.model.hingeLimits) projectHingeLimit(rt.nodes, hinge);
-      solveRods(rt);
-      solveAnimStrayRadii(rt);
-      for (const batch of rt.model.quadBatches) projectQuadBatch(rt.nodes, batch);
-      for (const batch of rt.model.triangleBatches) projectTriangleBatch(rt.nodes, batch);
-      if (i >= constraintIterations - goalIterations) solveGoalDampedNodes(rt);
+      for (let i = 0; i < constraintIterations; i++) {
+        for (const bend of rt.model.kelagerBends) projectKelagerBend(rt.nodes, bend);
+        for (const hinge of rt.model.hingeLimits) projectHingeLimit(rt.nodes, hinge);
+        solveRods(rt);
+        solveAnimStrayRadii(rt);
+        for (const batch of rt.model.quadBatches) projectQuadBatch(rt.nodes, batch);
+        for (const batch of rt.model.triangleBatches) projectTriangleBatch(rt.nodes, batch);
+        if (i >= constraintIterations - goalIterations) solveGoalDampedNodes(rt);
+        restorePinnedSolverNodes(rt.nodes);
+      }
+      if (collideAfterConstraints) solveCollisions(rt);
       restorePinnedSolverNodes(rt.nodes);
     }
-    if (collideAfterConstraints) solveCollisions(rt);
-    restorePinnedSolverNodes(rt.nodes);
-    writeBack(root, rt);
+    writeBack(root, rt, last);
     rt.simulationSteps++;
+    if (budgetMs !== undefined) rt.substepMs = performance.now() - stepStarted;
+    if (last) break;
   }
 }
 
@@ -1797,13 +1826,13 @@ function collectClothHarnessMetrics(rt: ClothRuntime): ClothHarnessMetrics {
 export function createClothSimHarness(
   root: THREE.Object3D,
   femodel: ClothModel,
-  options: { mode?: 'simulation' | 'targets' } = {},
+  options: { mode?: 'simulation' | 'targets'; budgetMs?: number } = {},
 ): ClothSimHarness {
   const rt = buildRuntime(root, femodel);
   if (!rt) throw new Error('createClothSimHarness requires at least three matched cloth nodes');
   return {
     step(delta: number, animate?: (delta: number) => void): ClothHarnessMetrics {
-      stepClothRuntime(root, rt, delta, animate, options.mode);
+      stepClothRuntime(root, rt, delta, animate, options.mode, options.budgetMs);
       return collectClothHarnessMetrics(rt);
     },
     metrics(): ClothHarnessMetrics {
@@ -1894,7 +1923,10 @@ export function useClothSim(
         if (Number.isFinite(delta) && delta > 0) animate(delta);
         return;
       }
-      stepClothRuntime(root, rt, delta, animate);
+      const bench = import.meta.env.DEV || import.meta.env.VITE_GRIMOIRE_VIEWER_BENCH === '1';
+      const started = bench ? performance.now() : 0, steps = rt.simulationSteps;
+      stepClothRuntime(root, rt, delta, animate, 'simulation', CLOTH_FRAME_BUDGET_MS);
+      if (bench) Object.assign(root.userData, { clothMs: performance.now() - started, clothSteps: rt.simulationSteps - steps });
       updateDebug(root, rt, debugGroup);
     },
     [root],
