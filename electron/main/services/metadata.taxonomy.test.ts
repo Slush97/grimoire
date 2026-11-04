@@ -50,6 +50,84 @@ afterEach(() => {
 });
 
 describe('category taxonomy metadata migration', () => {
+    it('persists repaired leaf categories for old entries and variants without rewriting unchanged data', () => {
+        const flag = { gameBananaId: 723508, categoryId: 49629, categoryName: 'RatKing', sha256: 'b'.repeat(64) };
+        const original = put({ first: flag, second: { ...flag, variantLabel: 'Ivy' } });
+        expect(loadMetadata().first).toEqual(flag);
+        const resolveCategory = vi.fn(() => ({ id: 49852, name: 'RatKing Flag' }));
+        const repaired = loadMetadata(resolveCategory);
+        expect(repaired.first).toEqual({ ...flag, categoryId: 49852, categoryName: 'Rat King Flag' });
+        expect(repaired.second).toEqual({ ...repaired.first, variantLabel: 'Ivy' });
+        expect(JSON.parse(readFileSync(getMetadataPath(), 'utf8'))).toEqual(repaired);
+        const backup = readdirSync(metadataBackupDirectory())[0];
+        expect(readFileSync(join(metadataBackupDirectory(), backup), 'utf8')).toBe(original);
+        resolveCategory.mockClear();
+        expect(loadMetadata(resolveCategory)).toBe(repaired);
+        expect(resolveCategory).toHaveBeenCalledTimes(2);
+        expect(renameSync).toHaveBeenCalledTimes(1);
+        expect(copyFileSync).toHaveBeenCalledTimes(1);
+        resolveCategory.mockReturnValue({ id: 99, name: 'Later category' });
+        expect(loadMetadata(resolveCategory).first).toMatchObject({ categoryId: 99, categoryName: 'Later category' });
+        expect(renameSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves unavailable categories pending and retries cached metadata when data becomes available', () => {
+        const original = put({ linked: { gameBananaId: 123, categoryId: 10, categoryName: 'Old category' }, local });
+        const unavailable = vi.fn(() => undefined);
+        const pending = loadMetadata(unavailable);
+        expect(pending.linked).toEqual({ gameBananaId: 123, categoryId: 10, categoryName: 'Old category' });
+        expect(unavailable).toHaveBeenCalledTimes(1);
+        expect(readFileSync(getMetadataPath(), 'utf8')).toBe(original);
+        expect(copyFileSync).not.toHaveBeenCalled();
+        const repaired = loadMetadata(() => ({ id: 20, name: 'New category' }));
+        expect(repaired.linked).toMatchObject({ categoryId: 20, categoryName: 'New category' });
+        expect(repaired.local).toEqual(local);
+    });
+
+    it('repairs categories while preserving manual choices and unrelated per-file metadata', () => {
+        put({
+            manual: { ...sound, lockerHeroSource: 'manual', globalTypeSource: 'manual', globalType: null },
+            automatic: sound,
+            local,
+        });
+        const repaired = loadMetadata(() => ({ id: 20, name: 'VOs' }));
+        expect(repaired.manual).toMatchObject({
+            categoryId: 20, categoryName: 'VOs',
+            lockerHero: 'Vindicta', lockerHeroSource: 'manual', globalType: null, globalTypeSource: 'manual',
+            sourceFileName: sound.sourceFileName, fileDescription: sound.fileDescription, sha256: sound.sha256,
+        });
+        expect(repaired.automatic).not.toHaveProperty('lockerHero');
+        expect(repaired.automatic).not.toHaveProperty('globalType');
+        expect(repaired.local).toEqual(local);
+        expect(renameSync).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['backup', 'write'])('does not persist repaired categories after a failed %s', failure => {
+        const original = put({ linked: { gameBananaId: 123, categoryId: 10, categoryName: 'Old category' } });
+        if (failure === 'backup') vi.mocked(copyFileSync).mockImplementationOnce(() => { throw new Error('backup denied'); });
+        else vi.mocked(renameSync).mockImplementationOnce(() => { throw new Error('rename denied'); });
+        const resolveCategory = () => ({ id: 20, name: 'New category' });
+        expect(() => loadMetadata(resolveCategory)).toThrow();
+        expect(readFileSync(getMetadataPath(), 'utf8')).toBe(original);
+        expect(loadMetadata().linked.categoryId).toBe(10);
+        expect(loadMetadata(resolveCategory).linked.categoryId).toBe(20);
+    });
+
+    it('repairs normal and developer metadata independently while leaving correct categories unchanged', () => {
+        put({ old: { gameBananaId: 123 }, fresh: { gameBananaId: 456, categoryId: 30, categoryName: 'Fresh' } });
+        const devBytes = put({ old: { gameBananaId: 123 } }, true);
+        const resolveCategory = vi.fn((row: ModMetadata) => row.gameBananaId === 456
+            ? { id: 30, name: 'Fresh' } : { id: 20, name: 'New category' });
+        expect(loadMetadata(resolveCategory).fresh.categoryId).toBe(30);
+        expect(resolveCategory).toHaveBeenCalledTimes(2);
+        expect(readFileSync(getMetadataPath(true), 'utf8')).toBe(devBytes);
+        mode(true);
+        expect(loadMetadata(resolveCategory).old.categoryId).toBe(20);
+        expect(resolveCategory).toHaveBeenCalledTimes(3);
+        expect(readdirSync(metadataBackupDirectory(getMetadataPath(false)))).toHaveLength(1);
+        expect(readdirSync(metadataBackupDirectory(getMetadataPath(true)))).toHaveLength(1);
+    });
+
     it('retains explicit General choices as user identity, including an unassigned choice', () => {
         expect(hasModIdentity({ globalType: 'hud', globalTypeSource: 'manual' })).toBe(true);
         expect(hasModIdentity({ globalType: null, globalTypeSource: 'manual' })).toBe(true);

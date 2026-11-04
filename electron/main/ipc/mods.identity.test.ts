@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModMetadata } from '../services/metadata';
 import type { Mod } from '../services/mods';
+import { buildCategoryPaths } from '../../../src/lib/categoryPaths';
 
 const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
@@ -10,7 +11,7 @@ const h = vi.hoisted(() => ({
     ignoredConflicts: [] as string[],
     reorder: vi.fn(), priority: vi.fn(), swap: vi.fn(), migrateConflicts: vi.fn(), saveSettings: vi.fn(),
     scan: vi.fn(), parse: vi.fn(), heal: vi.fn(), enterLock: vi.fn(), write: vi.fn(), refresh: vi.fn(), download: vi.fn(), remove: vi.fn(), enable: vi.fn(),
-    patch: vi.fn(), paths: vi.fn(), categoryPaths: vi.fn(), localHero: vi.fn(),
+    patch: vi.fn(), paths: vi.fn(), categoryPaths: vi.fn(), localHero: vi.fn(), loadMetadata: vi.fn(), cachedMod: vi.fn(),
 }));
 vi.mock('electron', () => ({
     ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => h.handlers.set(name, handler) },
@@ -40,6 +41,7 @@ vi.mock('../services/mods', () => ({
     swapModPriority: h.swap,
 }));
 vi.mock('../services/metadata', () => ({
+    loadMetadata: h.loadMetadata,
     getModMetadata: (key: string) => h.metadata.get(key),
     setModMetadataWithHash: h.write,
     setModMetadata: h.patch,
@@ -70,7 +72,7 @@ vi.mock('../services/lockerVpk', () => ({ isLockerManaged: () => false }));
 vi.mock('../services/profiles', () => ({}));
 vi.mock('../services/unknownModDetection', () => ({ inferHeroFromVpkTree: h.localHero }));
 vi.mock('../services/adoptedThumbnail', () => ({}));
-vi.mock('../services/modDatabase', () => ({}));
+vi.mock('../services/modDatabase', () => ({ getModById: h.cachedMod }));
 vi.mock('../services/extract', () => ({}));
 vi.mock('../services/importVariantGroups', () => ({}));
 vi.mock('../services/localImportTransaction', () => ({}));
@@ -102,6 +104,8 @@ function deferred() {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    h.loadMetadata.mockReset();
+    h.cachedMod.mockReset();
     h.path = '/normal';
     h.devMode = false;
     h.locked = false;
@@ -140,6 +144,31 @@ beforeEach(() => {
 });
 
 describe('library enrichment installation isolation', () => {
+    it('repairs categories before enrichment, scopes catalog IDs by section, and shares variant lookups', async () => {
+        const modPaths = buildCategoryPaths([{ id: 1, name: 'Skins', itemCount: 0, children: [{
+            id: 49629, name: 'Rat King', itemCount: 0, children: [{ id: 49852, name: 'RatKing Flag', itemCount: 0 }],
+        }] }]);
+        const soundPaths = buildCategoryPaths([{ id: 2, name: 'VOs', itemCount: 0 }]);
+        h.categoryPaths.mockImplementation(model => model === 'ModCategory' ? modPaths : soundPaths);
+        h.cachedMod.mockImplementation((id, section) => id === 7
+            ? section === 'Mod' ? { subCategoryId: 49852 } : { categoryId: 2, subCategoryId: null }
+            : id === 8 ? { subCategoryId: 999 } : null);
+        h.metadata.set(source.metaKey, { gameBananaId: 7, categoryId: 49629, categoryName: 'RatKing', abilitySounds: null });
+        h.loadMetadata.mockImplementation(resolveCategory => {
+            const metadata = h.metadata.get(source.metaKey)!;
+            const category = resolveCategory(metadata);
+            expect(category).toEqual({ id: 49852, name: 'Rat King Flag' });
+            expect(resolveCategory(metadata)).toBe(category);
+            expect(resolveCategory({ gameBananaId: 7, sourceSection: 'Sound' })).toEqual({ id: 2, name: 'VOs' });
+            expect(resolveCategory({ gameBananaId: 8 })).toBeUndefined();
+            expect(resolveCategory({ gameBananaId: 9 })).toBeUndefined();
+            h.metadata.set(source.metaKey, { ...metadata, categoryId: category.id, categoryName: category.name });
+        });
+        const mods = await h.handlers.get('get-mods')!({}) as Array<Mod & { lockerHeroes: string[] }>;
+        expect(mods[0]).toMatchObject({ categoryId: 49852, categoryName: 'Rat King Flag', lockerHeroes: ['Rat King'] });
+        expect(h.cachedMod.mock.calls).toEqual([[7, 'Mod'], [7, 'Sound'], [8, 'Mod'], [9, 'Mod']]);
+    });
+
     it('does not classify unrelated cold files while creating a local group under the mutation lock', async () => {
         const peer = { ...source, id: 'peer', metaKey: 'peer.vpk', fileName: 'peer.vpk', path: '/normal/peer.vpk' };
         const unrelated = { ...source, id: 'unrelated', metaKey: 'unrelated.vpk', fileName: 'unrelated.vpk', path: '/normal/unrelated.vpk' };

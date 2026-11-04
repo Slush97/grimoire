@@ -6,6 +6,7 @@ import { listInstalledUserVpks } from './modLibrary';
 import { resolveVpkIdentity } from './vpkIdentity';
 import { getMetadataPath as metadataPathForMode } from '../utils/paths';
 import { isDevModeEnabled } from './settings';
+import { normalizeCategoryLabel } from '../../../src/lib/categoryPaths';
 
 export interface ModMetadata {
     movementFx?: import('../../../src/lib/movementFx').MovementFxChoice;
@@ -154,10 +155,23 @@ export function sanitizeLinkedModMetadata(metadata: ModMetadata): ModMetadata {
     return result;
 }
 
-function sanitizeMetadata(metadata: ModMetadataMap): ModMetadataMap {
+type CategoryMetadataResolver = (row: ModMetadata) => { id: number; name: string } | undefined;
+
+function sanitizeMetadata(metadata: ModMetadataMap, resolveCategory?: CategoryMetadataResolver): ModMetadataMap {
     let result = metadata;
     for (const [key, row] of Object.entries(metadata)) {
-        const sanitized = sanitizeLinkedModMetadata(row);
+        let sanitized = sanitizeLinkedModMetadata(row);
+        if (resolveCategory && typeof row.gameBananaId === 'number' && row.gameBananaId > 0) {
+            const category = resolveCategory(row);
+            const name = category && normalizeCategoryLabel(category.name);
+            if (category && (category.id !== row.categoryId || name !== row.categoryName)) {
+                sanitized = {
+                    ...sanitized,
+                    categoryId: category.id,
+                    categoryName: name,
+                };
+            }
+        }
         if (sanitized === row) continue;
         if (result === metadata) result = { ...metadata };
         result[key] = sanitized;
@@ -214,9 +228,10 @@ export function metadataBackupDirectory(path = getMetadataPath()): string {
 }
 
 /**
- * Load mod metadata from disk
+ * Load metadata, optionally repairing old categories from the local catalog.
+ * Only changed data is written; unavailable categories retain their saved values.
  */
-export function loadMetadata(): ModMetadataMap {
+export function loadMetadata(resolveCategory?: CategoryMetadataResolver): ModMetadataMap {
     const path = getMetadataPath();
 
     if (!existsSync(path)) {
@@ -234,11 +249,12 @@ export function loadMetadata(): ModMetadataMap {
             metadataCache.mtimeMs === stat.mtimeMs &&
             metadataCache.size === stat.size
         ) {
-            return metadataCache.data;
+            if (!resolveCategory) return metadataCache.data;
+            data = metadataCache.data;
+        } else {
+            const content = readFileSync(path, 'utf-8');
+            data = JSON.parse(content) as ModMetadataMap;
         }
-
-        const content = readFileSync(path, 'utf-8');
-        data = JSON.parse(content) as ModMetadataMap;
     } catch (error) {
         // Returning {} here means every writer that follows treats "I could not
         // read the sidecar" as "there is nothing in the sidecar", and the first
@@ -256,7 +272,7 @@ export function loadMetadata(): ModMetadataMap {
 
     // Keep migration errors outside the read/parse fallback: a failed backup
     // or atomic write must leave the existing sidecar available for retry.
-    const sanitized = sanitizeMetadata(data);
+    const sanitized = sanitizeMetadata(data, resolveCategory);
     if (sanitized !== data) {
         metadataCache = null;
         if (!backupMetadataSidecar('pre-category-tags')) {

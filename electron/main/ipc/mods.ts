@@ -31,7 +31,7 @@ import {
     type Mod,
 } from '../services/mods';
 import { metaKeyFor } from '../services/deadlock';
-import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, type ModMetadata } from '../services/metadata';
+import { getModMetadata, loadMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, type ModMetadata } from '../services/metadata';
 import { parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { resolveModClassification, needsModHeroDetection } from '../services/modHeroDetection';
 import { fetchCategoryTreeCached, readCachedCategoryPaths, observeCategoryTreeChanges } from '../services/gamebanana';
@@ -223,6 +223,23 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     if (!deadlockPath) {
         return [];
     }
+    const categoryPaths = new Map<string, CategoryPaths | undefined>();
+    const categoriesByMod = new Map<string, { id: number; name: string } | undefined>();
+    // Repair saved categories using existing catalog data. Unchanged entries
+    // need no write; library loads never fetch individual mod details.
+    loadMetadata(metadata => {
+        const section = metadata.sourceSection ?? 'Mod';
+        const key = `${section}:${metadata.gameBananaId}`;
+        if (categoriesByMod.has(key)) return categoriesByMod.get(key);
+        const cached = getModById(metadata.gameBananaId!, section);
+        const model = categoryModelForSection(section);
+        if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
+        const id = cached?.subCategoryId ?? cached?.categoryId;
+        const leaf = id == null ? undefined : categoryPaths.get(model)?.get(id)?.at(-1);
+        const category = leaf?.id !== undefined && leaf.name ? { id: leaf.id, name: leaf.name } : undefined;
+        categoriesByMod.set(key, category);
+        return category;
+    });
     let mods = await scanModsAfterMutations(deadlockPath);
     assertActiveModInstallation(deadlockPath, devMode);
     // Hide Grimoire-managed Locker VPKs (hero cards + ability sounds). They're
@@ -245,7 +262,8 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // its parseVpkDirectoryCached calls hit the warmed cache instead of
     // sequentially pinning the main process (worst case: first scan after
     // importing a large collection).
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
+    // A cold tree may have completed while scanning the inventory.
+    categoryPaths.clear();
     const warmPaths = visible.filter(mod => needsVpkParseForEnrich(mod, categoryPaths)).map((m) => m.path);
     if (warmPaths.length > 0) {
         await parseVpkDirectoriesAsync(warmPaths);
