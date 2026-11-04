@@ -385,7 +385,9 @@ function versionFile(key: string): string {
 // record each clip's floor offset (Doorman's lowered shop idle).
 // v30: a skin without clip files plays the game's clips, not the stale copies in its model.
 // v31: a graph pose that leaves the hero lying flat yields to the standing idle (Viscous).
-const RIGGED_PIPELINE_VERSION = '31';
+// v32: a skin missing a dangling hero bone chain takes the game's clips (2B on Yamato has
+// no ponytail); its v31 no-clip marker predates that.
+const RIGGED_PIPELINE_VERSION = '32';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
