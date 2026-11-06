@@ -33,15 +33,15 @@ function requireDeadlockPath(): string {
 // (fresh install, sync disabled): an empty catalog can't distinguish a wrong
 // id from an unsynced one, so the import then skips the check rather than
 // rejecting everything.
-function catalogSubmissionLookup(): ((id: number) => boolean) | undefined {
+function catalogSubmissionLookup(): ((id: number, section: 'Mod' | 'Sound') => boolean) | undefined {
     try {
         if (getModCount() === 0) return undefined;
     } catch {
         return undefined;
     }
-    return (id: number) => {
+    return (id: number, section: 'Mod' | 'Sound') => {
         try {
-            return getModById(id) !== null;
+            return getModById(id, section) !== null;
         } catch {
             // A lookup failure must not reject a legitimate mod: fail open.
             return true;

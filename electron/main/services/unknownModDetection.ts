@@ -58,8 +58,8 @@ export interface VpkHeroGuess {
 }
 
 /**
- * File-tree hero inference for unknown mods. Unlike inferHeroFromVpk (sound
- * paths only), this runs the full content classifier (models, materials,
+ * File-tree hero inference for unknown mods. This runs the full content
+ * classifier (models, materials,
  * particles, panorama, sounds), so it recognizes skins too. Pure local read:
  * uses the cached VPK parse, no GameBanana calls. Returns null when no hero is
  * found or when more than one hero shows a strong signal (ambiguous: better to

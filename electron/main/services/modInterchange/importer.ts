@@ -80,7 +80,7 @@ export interface InterchangeImportOptions {
   planOnly?: boolean;
   /** Validates a GameBanana submission id against the local catalog. Omitted
    *  = catalog unavailable, check skipped. */
-  isKnownSubmission?: (submissionId: number) => boolean;
+  isKnownSubmission?: (submissionId: number, section: 'Mod' | 'Sound') => boolean;
   /** Tag for the metadata sidecar backup. */
   backupTag?: string;
   /** Called before each mod is processed, and once more when done. */
@@ -433,7 +433,11 @@ export async function importInterchange(
               : 'already managed by Grimoire (submission id present in metadata)',
         ...(await splitInstalled(mod, existingKeys, ledger[mod.key])),
       });
-    } else if (gbId !== undefined && opts.isKnownSubmission && !opts.isKnownSubmission(gbId)) {
+    } else if (
+      gbId !== undefined &&
+      opts.isKnownSubmission &&
+      !opts.isKnownSubmission(gbId, mod.origin.provider === 'gamebanana' && mod.origin.submissionType === 'sound' ? 'Sound' : 'Mod')
+    ) {
       status[mod.key] = 'unknown-catalog';
       unknownToCatalog++;
       results.push({

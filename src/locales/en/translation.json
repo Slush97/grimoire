@@ -1513,9 +1513,7 @@
       "heroCount_other": "{{count}} Heroes",
       "tagSelectionCount_one": "{{selection}} Tag",
       "tagSelectionCount_other": "{{selection}} Tags",
-      "signedTag": "{{sign}} {{name}}",
-      "tagOther": "Other",
-      "tagSounds": "Sounds"
+      "signedTag": "{{sign}} {{name}}"
     },
     "lists": {
       "menuTrigger": "Add to list",
@@ -1630,10 +1628,7 @@
     "view": {
       "cardSize": "Card size",
       "cardSizeHint": "Card size (drag to the small end for compact cards)",
-      "cardSizeGridOnly": "Card size applies to grid view.",
-      "grid": "Grid view",
-      "list": "List view",
-      "cardSizeValue": "{{value}}x card size"
+      "cardSizeGridOnly": "Card size applies to grid view."
     },
     "status": {
       "overlapCount_one": "{{count}} overlap",
@@ -1722,8 +1717,7 @@
       "linkedTo": "Linked to {{name}}",
       "stoppedCaching": "Stopped caching remaining files.",
       "searchCancelled": "Search cancelled.",
-      "cacheCheckFailed": "Cache check failed. Queued for online search. {{error}}",
-      "restoreFixButtonAria": "Restore the Fix unknown button ({{count}} unknown)"
+      "cacheCheckFailed": "Cache check failed. Queued for online search. {{error}}"
     },
     "updateAll": {
       "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",
@@ -1891,10 +1885,6 @@
       "overlap": "Overlap",
       "openAuthorPageFailed": "Couldn't open author page: {{error}}",
       "installedAt": "Installed {{date}}",
-      "heroSourceManual": "Manual override",
-      "heroSourceTitle": "Inferred from title",
-      "heroSourceVpk": "Inferred from VPK files",
-      "heroSourceGrimoire": "Inferred by Grimoire",
       "renameTitle": "{{name}} (double-click to rename)",
       "gridMetaTitle": "{{file}} | {{size}} | installed {{date}}"
     },
@@ -3433,7 +3423,6 @@
       "loading": "Loading",
       "installNamed": "Install {{name}}",
       "audioPreviewAria": "{{title}} audio preview",
-      "moreCount": "{{count}} more",
       "chipSkin": "Skin",
       "chipSound": "Sound",
       "chipMod": "Mod",

@@ -119,13 +119,14 @@ export function InstalledIssuesModal({ open, onClose, mods, onIdentifyUnknown }:
     busyRef.current = true;
     useInstalledIssuesStore.getState().setBusy(true);
     let healed = 0;
+    const session = { bulk: true };
     try {
       for (const [done, target] of targets.entries()) {
         const mod = resolveCurrent(target, expected, kind === 'disable');
         if (!mod) continue;
         setOperation({ kind, modId: mod.id, name: mod.name, done, total: targets.length });
         if (kind === 'disable') {
-          if (mod.enabled) await useAppStore.getState().toggleMod(mod.id);
+          if (mod.enabled && !await useAppStore.getState().toggleMod(mod.id, session)) break;
         } else if (kind === 'repair') {
           const result = await repairModCompatibility(mod.id);
           assertCurrent(expected);

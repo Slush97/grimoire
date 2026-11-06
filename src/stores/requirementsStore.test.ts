@@ -99,6 +99,26 @@ describe('requirements toggle review', () => {
     expect(session.enableChoice).toBe('all');
   });
 
+  it('asks about dependents once per bulk action', async () => {
+    useRequirementsStore.getState().remember(source, source.requirements);
+    const mods = [{ ...owner, enabled: true }, base];
+    const session: RequirementToggleSession = { bulk: true };
+    const first = requestRequirementToggle(base, false, mods, false, session);
+    useRequirementsStore.getState().finishToggle('all');
+    await expect(first).resolves.toBe('all');
+    await expect(requestRequirementToggle(base, false, mods, false, session)).resolves.toBe('all');
+    expect(useRequirementsStore.getState().toggleReview).toBeNull();
+
+    const picker: RequirementToggleSession = {};
+    const pickerFirst = requestRequirementToggle(base, false, mods, false, picker);
+    useRequirementsStore.getState().finishToggle('only');
+    await pickerFirst;
+    const pickerSecond = requestRequirementToggle(base, false, mods, false, picker);
+    expect(useRequirementsStore.getState().toggleReview?.mode).toBe('disable');
+    useRequirementsStore.getState().finishToggle();
+    await expect(pickerSecond).resolves.toBe('cancel');
+  });
+
   it.each(['missing', 'disabled', 'enabled'] as const)('asks before enabling a mod with a %s required dependency', async state => {
     useRequirementsStore.getState().remember(source, source.requirements);
     const mods = state === 'missing' ? [owner] : [owner, { ...base, enabled: state === 'enabled' }];
