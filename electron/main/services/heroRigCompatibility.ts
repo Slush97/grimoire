@@ -6,7 +6,11 @@ const rigSchema = z.object({
 });
 
 /** A donor may omit skin-only cloth and prop bones. Shared animated bones must
- * keep their parents, and nearly all donor tracks must resolve on the skin. */
+ * keep their parents, and nearly all donor tracks must resolve on the skin.
+ * A skin may also leave out a dangling chain the hero carries (a ponytail, a
+ * jiggle bone): an unbranched run of donor bones hanging off a bone the skin
+ * has. Its tracks have nothing to move, so they do not count against the skin.
+ * A missing branch (a spine with arms under it) still counts in full. */
 export function compatibleHeroAnimationRig(targetJson: unknown, donorJson: unknown): boolean {
     const parsedTarget = rigSchema.safeParse(targetJson);
     const parsedDonor = rigSchema.safeParse(donorJson);
@@ -30,12 +34,30 @@ export function compatibleHeroAnimationRig(targetJson: unknown, donorJson: unkno
     const donorParents = parents(donor);
     const animated = new Set(donor.animations.flatMap((clip) => clip.channels.map((channel) => donor.nodes[channel.target.node]?.name)));
     if (animated.has(undefined) || animated.size < 2) return false;
+    const donorChildren = new Map<string, string[]>();
+    for (const node of donor.nodes) {
+        if (node.name) donorChildren.set(node.name, (node.children ?? []).flatMap((index) => donor.nodes[index]?.name ?? []));
+    }
+    const unbranched = (name: string): boolean => {
+        const children = donorChildren.get(name) ?? [];
+        return children.length === 0 || (children.length === 1 && unbranched(children[0]));
+    };
+    const danglingChain = (name: string): boolean => {
+        let root = name;
+        for (let parent = donorParents.get(root); parent !== undefined && !targetParents.has(parent); parent = donorParents.get(root)) root = parent;
+        return donorParents.get(root) !== undefined && unbranched(root);
+    };
     let matched = 0;
+    let counted = 0;
     for (const name of animated) {
         if (!name) return false;
-        if (!targetParents.has(name)) continue;
+        if (!targetParents.has(name)) {
+            if (!danglingChain(name)) counted++;
+            continue;
+        }
         if (targetParents.get(name) !== donorParents.get(name)) return false;
         matched++;
+        counted++;
     }
-    return matched >= 2 && matched / animated.size >= 0.9;
+    return matched >= 2 && matched / counted >= 0.9;
 }

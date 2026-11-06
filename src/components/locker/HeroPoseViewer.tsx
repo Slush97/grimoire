@@ -1596,7 +1596,9 @@ export default function HeroPoseViewer({
     turntable.paused = true;
     return () => { turntable.paused = paused; };
   }, [holdPose]);
-  const [clipName, setClipName] = useFoundryDraft(`${viewKey}:clip`, z.string().max(512), '');
+  // Only a clip the user picks is saved; empty plays the export's default, which can change with the export.
+  // The key moved from `:clip` when the viewer stopped saving its own default, so old saved defaults drop.
+  const [clipName, setClipName] = useFoundryDraft(`${viewKey}:pickedClip`, z.string().max(512), '');
   // The model on screen keeps its clip until the next hero's model replaces it.
   const [shownClip, setShownClip] = useState(clipName);
   if (current && shownClip !== clipName) setShownClip(clipName);
@@ -1951,8 +1953,7 @@ export default function HeroPoseViewer({
                 model = { cacheKey, scene: gltf.scene, clothModel, clips, rigged: true, bytes: heroModelBytes(gltf.scene, clips) };
               }
               const modelClips = model.clips;
-              const clip = pickIdleClip(modelClips, heroName);
-              setClipName((name) => modelClips.some((candidate) => candidate.name === name) ? name : clip?.name ?? '');
+              setClipName((name) => modelClips.some((candidate) => candidate.name === name) ? name : '');
               setAnimationUnavailable(false);
               show(model);
               return; // rigged path won.
@@ -2121,7 +2122,8 @@ export default function HeroPoseViewer({
     <HeroViewerToolbar
       heroName={heroName}
       actionPreview={!!movementPreview}
-      animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)} clip={clipName}
+      animated={features.riggedPreviewEnabled} clips={clips.map((c) => c.name)}
+      clip={clips.some((c) => c.name === clipName) ? clipName : pickIdleClip(clips, shownHero)?.name ?? ''}
       paused={playback.paused} speed={playback.speed} spinPaused={spinPaused}
       progressRef={playbackProgressRef} frozen={settling} onSeek={(time) => {
         setPlayback((p) => ({ ...p, paused: true }));
