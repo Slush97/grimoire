@@ -11,7 +11,6 @@ vi.mock('electron', () => ({
         static getAllWindows() { return []; }
     },
 }));
-vi.mock('@grimoire/social-types/heroes', () => ({ inferHeroFromTitle: () => null }));
 vi.mock('./gamebananaFileServers', () => ({
     gameBananaFileServerSelector: { getCandidates: selectorMocks.getCandidates },
 }));

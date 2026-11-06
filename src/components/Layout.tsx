@@ -23,6 +23,7 @@ import { applyAccentColor } from '../lib/accentColor';
 import { applyBackgroundGradient } from '../lib/backgroundGradient';
 import { applyOledMode } from '../lib/applyOledMode';
 import { useAppStore } from '../stores/appStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import type {
   OneClickSuspiciousFilesData,
   MultiVpkPickData,
@@ -34,6 +35,7 @@ import ImportCustomModsModal from './ImportCustomModsModal';
 import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
 import { RequirementsHost } from './requirements/RequirementsHost';
+import { InstalledIssuesController } from './installed/InstalledIssuesController';
 import { LockerViewerHost } from './locker/LockerViewerHost';
 
 export default function Layout() {
@@ -91,6 +93,14 @@ export default function Layout() {
       void state.loadMods({ silent: state.modsLoaded });
     }
   }, [activeDeadlockPath]);
+  useEffect(() => window.electronAPI.onGamebananaCategoriesChanged((model) => {
+    const categories = useCategoryStore.getState();
+    void categories.load(model, { afterCurrent: true }).catch(() => {});
+    const state = useAppStore.getState();
+    if (getActiveDeadlockPath(state.settings)) {
+      void state.loadMods({ afterCurrent: true, silent: true });
+    }
+  }), []);
   useEffect(() => {
     applyAccentColor(accentColor);
   }, [accentColor]);
@@ -420,6 +430,7 @@ export default function Layout() {
           onSubmittingChange={setBatchImportBusy}
         />
       )}
+      <InstalledIssuesController />
       <RequirementsHost />
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>

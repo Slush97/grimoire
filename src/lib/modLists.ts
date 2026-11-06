@@ -93,9 +93,9 @@ function normalizeList(value: unknown, taken: Set<string>): ModList | null {
   return { id, name, keys, ...(isModListIcon(raw.icon) ? { icon: raw.icon } : {}) };
 }
 
-export function readStoredModLists(): ModList[] {
+export function readStoredModLists(storageKey = MOD_LISTS_KEY): ModList[] {
   try {
-    const stored = localStorage.getItem(MOD_LISTS_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (!stored) return [];
     const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [];
@@ -108,9 +108,9 @@ export function readStoredModLists(): ModList[] {
   }
 }
 
-export function writeStoredModLists(lists: readonly ModList[]): void {
+export function writeStoredModLists(lists: readonly ModList[], storageKey = MOD_LISTS_KEY): void {
   try {
-    localStorage.setItem(MOD_LISTS_KEY, JSON.stringify(lists));
+    localStorage.setItem(storageKey, JSON.stringify(lists));
   } catch {
     // Lists remain usable for this session when storage is unavailable.
   }

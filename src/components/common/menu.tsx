@@ -122,6 +122,7 @@ interface MenuItemProps {
   children: ReactNode;
   variant?: MenuVariant;
   icon?: LucideIcon;
+  leading?: ReactNode;
   /** Renders the icon with animate-spin (in-flight clipboard ops etc.) */
   spinning?: boolean;
   tone?: 'default' | 'success' | 'warning' | 'danger';
@@ -146,7 +147,7 @@ const ITEM_TONE_CLASS: Record<NonNullable<MenuItemProps['tone']>, string> = {
   danger: 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10',
 };
 
-export function MenuItem({ children, variant = 'default', icon: Icon, spinning, tone = 'default', disabled, title, onSelect, onContextMenu, onKeyDown }: MenuItemProps) {
+export function MenuItem({ children, variant = 'default', icon: Icon, leading, spinning, tone = 'default', disabled, title, onSelect, onContextMenu, onKeyDown }: MenuItemProps) {
   const { ns } = useMenuImpl();
   const Item = ns.Item;
   const toneClass = tone === 'default' && variant === 'picker'
@@ -165,7 +166,7 @@ export function MenuItem({ children, variant = 'default', icon: Icon, spinning, 
       onKeyDown={onKeyDown}
       className={`${variant === 'picker' ? PICKER_ITEM_CLASS : ITEM_GEOMETRY_CLASS} ${toneClass}`}
     >
-      {Icon && <Icon className={`h-4 w-4 flex-shrink-0 ${variant === 'picker' && tone === 'default' ? 'text-text-secondary' : 'text-current'} ${spinning ? 'animate-spin' : ''}`} />}
+      {leading ?? (Icon && <Icon className={`h-4 w-4 flex-shrink-0 ${variant === 'picker' && tone === 'default' ? 'text-text-secondary' : 'text-current'} ${spinning ? 'animate-spin' : ''}`} />)}
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </Item>
   );

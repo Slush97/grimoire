@@ -15,6 +15,16 @@ an older Grimoire, or Grimoire reading an older DMM) builds the same document in
 memory straight from that manager's files. Importers never need to know where a
 document came from.
 
+Installed exposes these actions under **Options > Transfer**. The
+**Deadlock Mod Manager** action uses the detected library, asking for a folder
+if none is found. When a library is detected, its adjacent **Choose DMM Folder**
+icon lets the user choose another library. Both open the same import preview.
+The full manager name becomes **DMM** when the row cannot fit it; its tooltip
+and accessibility label keep the full name. **Import** reads an
+interchange file; **Export** opens the existing bundle exporter. Their dialogs
+remain mounted when the Options popup closes. The empty-library launcher shares
+the same source-selection controller.
+
 ## Bundle layout
 
 ```

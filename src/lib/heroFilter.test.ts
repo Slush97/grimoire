@@ -43,6 +43,29 @@ describe('nameMentionsHero', () => {
     expect(nameMentionsHero('RatKing flag', 'Rat King')).toBe(true);
   });
 
+  it.each([
+    ['DeAdMaN voice pack', 'Deadman Danny'],
+    ['dAnNy voice pack', 'Deadman Danny'],
+    ['hArRoW voice pack', 'Nurse Harrow'],
+    ['RATKING voice pack', 'Rat King'],
+  ])('recognizes the Browse shorthand %s as %s', (title, hero) => {
+    expect(nameMentionsHero(title, hero)).toBe(true);
+  });
+
+  it.each([
+    ['deadmanning voice pack', 'Deadman Danny'],
+    ['dannyish voice pack', 'Deadman Danny'],
+    ['harrowing voice pack', 'Nurse Harrow'],
+    ['nurse voice pack', 'Nurse Harrow'],
+    ['ratkingdom voice pack', 'Rat King'],
+  ])('keeps Browse shorthand bounded and rejects %s for %s', (title, hero) => {
+    expect(nameMentionsHero(title, hero)).toBe(false);
+  });
+
+  it.each(['Deadman Danny', 'Nurse Harrow', 'Rat King'])('retains the complete canonical name %s', hero => {
+    expect(nameMentionsHero(`${hero.toUpperCase()} voice pack`, hero)).toBe(true);
+  });
+
   it('does not let one hero match another', () => {
     expect(nameMentionsHero('Lady Geist crimson', 'Silver')).toBe(false);
     expect(nameMentionsHero('Grey wolf', 'Grey Talon')).toBe(false);

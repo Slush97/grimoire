@@ -1,12 +1,32 @@
 # Mod repairs
 
-Use **Repair mods** on Installed when you have enabled mods. Review scans
-enabled archives without writing. Choose **Repair** for a mod to apply the
+Use **Issues** on Installed to review known camera, game-data and unknown-mod
+problems. Each Installed entry appears once, with findings and
+actions for its affected files in a responsive card grid. Filter by issue type
+to show matching findings and variants; filter counts refer to mod cards.
+Technical details stay expandable, and bulk camera/data actions sit beside the
+filter. Filtering does not change acknowledgement or trigger another scan.
+Opening the window also scans enabled archives
+for supported compatibility repairs without writing. This deeper check runs
+on demand, not in the background. Choose **Repair** for a file to apply the
 supported changes. Repair checks the current library again under the mod
 mutation lock, saves the original archive
 under `userData/mod-repair-backups/<sha256>.vpk`, and replaces the selected archive.
 The result offers **Show original backup**. The backup can be imported again to
 recover the original mod. Keep Deadlock closed while repairing loaded mods.
+
+Camera **Fix camera** and **Fix all cameras** use the existing attachment repair,
+including disabled mods. Outdated enabled game-data files retain their
+**Disable** actions alongside any available repair. Unknown-mod identification
+opens its existing workflow. Requirements are managed separately from each
+mod's icon, context menu, or enable/disable confirmation.
+
+The Issues toolbar button turns red for new outdated-game-data findings and
+yellow for other new findings from existing inventory checks.
+Opening it acknowledges those findings for the current
+app session. Navigation does not reset acknowledgement; a new or recurring
+finding does. Normal and developer installations keep independent session state.
+No acknowledgement is saved to disk.
 
 This implementation uses Grimoire's own vpkmerge/morphic code. No DMM source,
 historical indexes, fixtures, or repair implementations are included.

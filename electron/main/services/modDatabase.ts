@@ -17,31 +17,70 @@ export interface SyncState {
 
 let db: Database.Database | null = null;
 
+const MOD_COLUMNS_SQL = `
+    row_id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    section TEXT NOT NULL,
+    category_id INTEGER,
+    category_name TEXT,
+    sub_category_id INTEGER,
+    submitter_name TEXT,
+    submitter_id INTEGER,
+    like_count INTEGER DEFAULT 0,
+    view_count INTEGER DEFAULT 0,
+    download_count INTEGER,
+    date_added INTEGER,
+    date_modified INTEGER,
+    has_files INTEGER DEFAULT 1,
+    is_nsfw INTEGER DEFAULT 0,
+    thumbnail_url TEXT,
+    audio_url TEXT,
+    profile_url TEXT,
+    cached_at INTEGER DEFAULT (strftime('%s', 'now')),
+    UNIQUE(section, id)
+`;
+
+const MOD_INDEXES_SQL = `
+    -- Create indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_mods_section ON mods(section);
+    CREATE INDEX IF NOT EXISTS idx_mods_category_id ON mods(category_id);
+    -- Category filtering matches on the root category NAME: the list API
+    -- omits _aRootCategory._idRow, so every cached category_id is null
+    -- (idx_mods_category_id is dead weight until that changes, kept
+    -- because the id comparison is still the last-resort path). The
+    -- collation has to be declared here or the NOCASE comparison in
+    -- searchService cannot use the index at all.
+    CREATE INDEX IF NOT EXISTS idx_mods_category_name ON mods(category_name COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
+    CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
+`;
+
 const SEARCH_SCHEMA_SQL = `
     CREATE VIRTUAL TABLE IF NOT EXISTS mods_fts USING fts5(
         name,
         category_name,
         submitter_name,
         content='mods',
-        content_rowid='id',
+        content_rowid='row_id',
         tokenize='porter unicode61'
     );
 
     CREATE TRIGGER IF NOT EXISTS mods_ai AFTER INSERT ON mods BEGIN
         INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-        VALUES (new.id, new.name, new.category_name, new.submitter_name);
+        VALUES (new.row_id, new.name, new.category_name, new.submitter_name);
     END;
 
     CREATE TRIGGER IF NOT EXISTS mods_ad AFTER DELETE ON mods BEGIN
         INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-        VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+        VALUES ('delete', old.row_id, old.name, old.category_name, old.submitter_name);
     END;
 
     CREATE TRIGGER IF NOT EXISTS mods_au AFTER UPDATE ON mods BEGIN
         INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-        VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+        VALUES ('delete', old.row_id, old.name, old.category_name, old.submitter_name);
         INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-        VALUES (new.id, new.name, new.category_name, new.submitter_name);
+        VALUES (new.row_id, new.name, new.category_name, new.submitter_name);
     END;
 `;
 
@@ -80,40 +119,7 @@ export function initDatabase(): Database.Database {
         // Create tables
         db.exec(`
             -- Core mod data
-            CREATE TABLE IF NOT EXISTS mods (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                section TEXT NOT NULL,
-                category_id INTEGER,
-                category_name TEXT,
-                sub_category_id INTEGER,
-                submitter_name TEXT,
-                submitter_id INTEGER,
-                like_count INTEGER DEFAULT 0,
-                view_count INTEGER DEFAULT 0,
-                download_count INTEGER,
-                date_added INTEGER,
-                date_modified INTEGER,
-                has_files INTEGER DEFAULT 1,
-                is_nsfw INTEGER DEFAULT 0,
-                thumbnail_url TEXT,
-                audio_url TEXT,
-                profile_url TEXT,
-                cached_at INTEGER DEFAULT (strftime('%s', 'now'))
-            );
-
-            -- Create indexes for common queries
-            CREATE INDEX IF NOT EXISTS idx_mods_section ON mods(section);
-            CREATE INDEX IF NOT EXISTS idx_mods_category_id ON mods(category_id);
-            -- Category filtering matches on the root category NAME: the list API
-            -- omits _aRootCategory._idRow, so every cached category_id is null
-            -- (idx_mods_category_id is dead weight until that changes, kept
-            -- because the id comparison is still the last-resort path). The
-            -- collation has to be declared here or the NOCASE comparison in
-            -- searchService cannot use the index at all.
-            CREATE INDEX IF NOT EXISTS idx_mods_category_name ON mods(category_name COLLATE NOCASE);
-            CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
-            CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
+            CREATE TABLE IF NOT EXISTS mods (${MOD_COLUMNS_SQL});
 
             -- Sync state tracking
             CREATE TABLE IF NOT EXISTS sync_state (
@@ -136,7 +142,7 @@ export function initDatabase(): Database.Database {
         `);
 
         // Run migrations for existing databases
-        runMigrations(db);
+        db.transaction(() => runMigrations(db!))();
 
         console.log('[ModDatabase] Database initialized successfully');
         return db;
@@ -174,6 +180,10 @@ export function initDatabase(): Database.Database {
             }
         }
 
+        if (db) {
+            db.close();
+            db = null;
+        }
         throw new Error(`Failed to initialize mod database: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
 }
@@ -222,7 +232,7 @@ export function upsertMod(mod: CachedMod): void {
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
             @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
         )
-        ON CONFLICT(id) DO UPDATE SET
+        ON CONFLICT(section, id) DO UPDATE SET
             name = excluded.name,
             section = excluded.section,
             category_id = excluded.category_id,
@@ -265,7 +275,7 @@ export function upsertMods(mods: CachedMod[]): void {
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
             @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
         )
-        ON CONFLICT(id) DO UPDATE SET
+        ON CONFLICT(section, id) DO UPDATE SET
             name = excluded.name,
             section = excluded.section,
             category_id = excluded.category_id,
@@ -377,10 +387,10 @@ export function getModCount(section?: string): number {
 /**
  * Get mod by ID
  */
-export function getModById(id: number): CachedMod | null {
+export function getModById(id: number, section = 'Mod'): CachedMod | null {
     const database = initDatabase();
-    const stmt = database.prepare('SELECT * FROM mods WHERE id = ?');
-    const row = stmt.get(id) as Record<string, unknown> | undefined;
+    const stmt = database.prepare('SELECT * FROM mods WHERE id = ? AND section = ?');
+    const row = stmt.get(id, section) as Record<string, unknown> | undefined;
     if (!row) return null;
     return mapRowToMod(row);
 }
@@ -415,34 +425,34 @@ export function mapRowToMod(row: Record<string, unknown>): CachedMod {
 /**
  * Update just the NSFW flag for a mod (used to enrich cache from detail fetches)
  */
-export function updateModNsfw(modId: number, isNsfw: boolean): void {
+export function updateModNsfw(modId: number, isNsfw: boolean, section = 'Mod'): void {
     const database = initDatabase();
-    const stmt = database.prepare('UPDATE mods SET is_nsfw = ? WHERE id = ?');
-    stmt.run(isNsfw ? 1 : 0, modId);
+    const stmt = database.prepare('UPDATE mods SET is_nsfw = ? WHERE id = ? AND section = ?');
+    stmt.run(isNsfw ? 1 : 0, modId, section);
 }
 
 /**
  * Update the download count for a mod (used to enrich cache from detail fetches)
  */
-export function updateModDownloadCount(modId: number, downloadCount: number): void {
+export function updateModDownloadCount(modId: number, downloadCount: number, section = 'Mod'): void {
     const database = initDatabase();
-    const stmt = database.prepare('UPDATE mods SET download_count = ? WHERE id = ?');
-    stmt.run(downloadCount, modId);
+    const stmt = database.prepare('UPDATE mods SET download_count = ? WHERE id = ? AND section = ?');
+    stmt.run(downloadCount, modId, section);
 }
 
 /**
  * Get download counts for multiple mods by their IDs
  * Returns a map of modId -> downloadCount (only includes mods that have cached counts)
  */
-export function getModsDownloadCounts(ids: number[]): Record<number, number> {
+export function getModsDownloadCounts(ids: number[], section = 'Mod'): Record<number, number> {
     if (ids.length === 0) return {};
 
     const database = initDatabase();
     const placeholders = ids.map(() => '?').join(',');
     const stmt = database.prepare(
-        `SELECT id, download_count FROM mods WHERE id IN (${placeholders}) AND download_count IS NOT NULL`
+        `SELECT id, download_count FROM mods WHERE section = ? AND id IN (${placeholders}) AND download_count IS NOT NULL`
     );
-    const rows = stmt.all(...ids) as Array<{ id: number; download_count: number }>;
+    const rows = stmt.all(section, ...ids) as Array<{ id: number; download_count: number }>;
 
     const result: Record<number, number> = {};
     for (const row of rows) {
@@ -455,13 +465,13 @@ export function getModsDownloadCounts(ids: number[]): Record<number, number> {
  * Get NSFW status for multiple mods by their IDs
  * Returns a map of modId -> isNsfw (only includes mods that exist in cache)
  */
-export function getModsNsfwStatus(ids: number[]): Record<number, boolean> {
+export function getModsNsfwStatus(ids: number[], section = 'Mod'): Record<number, boolean> {
     if (ids.length === 0) return {};
 
     const database = initDatabase();
     const placeholders = ids.map(() => '?').join(',');
-    const stmt = database.prepare(`SELECT id, is_nsfw FROM mods WHERE id IN (${placeholders})`);
-    const rows = stmt.all(...ids) as Array<{ id: number; is_nsfw: number }>;
+    const stmt = database.prepare(`SELECT id, is_nsfw FROM mods WHERE section = ? AND id IN (${placeholders})`);
+    const rows = stmt.all(section, ...ids) as Array<{ id: number; is_nsfw: number }>;
 
     const result: Record<number, boolean> = {};
     for (const row of rows) {
@@ -479,7 +489,8 @@ function runMigrations(database: Database.Database): void {
     let tableInfo = getTableColumns(database, 'mods');
     const legacyColumns = ['tags', 'file_metadata_source_date_modified', 'file_metadata_checked_at'];
     const hasLegacyColumns = legacyColumns.some((column) => tableInfo.includes(column));
-    const rebuildSearch = hasLegacyColumns || shouldRebuildSearch(database);
+    const scopeMigration = !tableInfo.includes('row_id');
+    const rebuildSearch = scopeMigration || hasLegacyColumns || shouldRebuildSearch(database);
     if (rebuildSearch) {
         console.log('[ModDatabase] Running migration: rebuilding mods search index');
         dropSearchObjects(database);
@@ -514,6 +525,19 @@ function runMigrations(database: Database.Database): void {
         }
     }
 
+    if (scopeMigration) {
+        // Preserve the surviving cache rows and their enrichment. A later full
+        // sync restores entries that the former numeric-only key overwrote.
+        const columns = getTableColumns(database, 'mods').join(', ');
+        database.exec(`
+            CREATE TABLE mods_scoped (${MOD_COLUMNS_SQL});
+            INSERT INTO mods_scoped (${columns}) SELECT ${columns} FROM mods;
+            DROP TABLE mods;
+            ALTER TABLE mods_scoped RENAME TO mods;
+            UPDATE sync_state SET last_sync = 0;
+        `);
+    }
+    database.exec(MOD_INDEXES_SQL);
     database.exec(SEARCH_SCHEMA_SQL);
 
     // Recreating mods_fts above leaves the index empty: its sync triggers only

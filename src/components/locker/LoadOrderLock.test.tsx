@@ -62,11 +62,13 @@ describe('loaded mod order controls', () => {
     const rows = () => [...document.querySelectorAll<HTMLElement>('[aria-roledescription="sortable"]')];
     const up = () => [...document.querySelectorAll<HTMLButtonElement>('[aria-label="variantPicker.moveFileUp"]')];
     const down = () => [...document.querySelectorAll<HTMLButtonElement>('[aria-label="variantPicker.moveFileDown"]')];
-    expect(rows().map(row => row.getAttribute('aria-disabled'))).toEqual(['true', 'false', 'false']);
+    expect(rows().map(row => row.getAttribute('aria-disabled'))).toEqual([null, 'false', 'false']);
+    expect(rows()[0].hasAttribute('tabindex')).toBe(false);
     expect(up()[1].disabled).toBe(true);
     expect(down()[0].disabled).toBe(true);
     expect(down()[1].disabled).toBe(false);
     expect(document.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')!.disabled).toBe(false);
+    expect(document.querySelector('button[aria-pressed="true"]')!.closest('[aria-disabled="true"]')).toBeNull();
     await act(async () => down()[0].click());
     expect(onMoveVariant).not.toHaveBeenCalled();
     await act(async () => down()[1].click());

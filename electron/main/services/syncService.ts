@@ -33,12 +33,13 @@ export interface SyncProgress {
 }
 
 let isSyncing = false;
+const pendingHeadRequests = new Map<string, Promise<void>>();
 
 /**
  * Check if a sync is currently in progress
  */
 export function isSyncInProgress(): boolean {
-    return isSyncing;
+    return isSyncing || pendingHeadRequests.size > 0;
 }
 
 /**
@@ -224,37 +225,35 @@ async function syncSection(section: SectionType): Promise<void> {
  * renders nothing for a 'complete' phase) while Browse still gets the signal
  * it needs to re-query.
  */
-export async function syncCatalogHead(): Promise<void> {
-    if (isSyncing) {
-        console.debug('[SyncService] Head sync skipped, sync already in progress');
-        return;
-    }
-
-    isSyncing = true;
-    try {
-        for (const section of SECTIONS) {
-            try {
+export async function syncCatalogHead(sections: readonly string[] = SECTIONS): Promise<void> {
+    const selected = [...new Set(sections)];
+    if (selected.some(section => !SECTIONS.includes(section as SectionType))) throw new Error('Invalid catalog section');
+    let failure: unknown;
+    for (const section of selected) {
+        let pending = pendingHeadRequests.get(section);
+        if (!pending) {
+            pending = (async () => {
                 const first = await fetchSubmissions(section, 1, SYNC_PER_PAGE, undefined, undefined, 'updated');
                 const mods = first.records.map(mod => mapToCache(mod, section));
                 timedUpsert(section, 1, mods);
-                console.debug(`[SyncService] ${section}: head sync refreshed ${mods.length} rows`);
                 emitProgress({
-                    section,
-                    currentPage: 1,
-                    totalPages: 1,
-                    modsProcessed: mods.length,
-                    totalMods: mods.length,
-                    phase: 'complete',
+                    section, currentPage: 1, totalPages: 1,
+                    modsProcessed: mods.length, totalMods: mods.length, phase: 'complete',
                 });
-            } catch (err) {
-                // Best-effort: a failed top-up leaves the existing mirror in
-                // place, and the 24h full sync still reports its own errors.
-                console.warn(`[SyncService] ${section}: head sync failed`, err);
-            }
+            })();
+            pendingHeadRequests.set(section, pending);
         }
-    } finally {
-        isSyncing = false;
+        try {
+            await pending;
+        } catch (err) {
+            // Retain the existing mirror and try the remaining selected sections.
+            console.warn(`[SyncService] ${section}: head sync failed`, err);
+            failure = err;
+        } finally {
+            if (pendingHeadRequests.get(section) === pending) pendingHeadRequests.delete(section);
+        }
     }
+    if (failure) throw failure;
 }
 
 /**

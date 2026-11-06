@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Ban,
+  FileText,
 } from 'lucide-react';
 import {
   getCollection,
@@ -48,6 +49,8 @@ interface ImportCollectionModalProps {
   queuedIds: Set<number>;
   activeDeadlockPath: string | null;
   onClose: () => void;
+  /** Browse shares this paste field with the existing portable-profile preview. */
+  onImportProfile?: (input: string) => void;
 }
 
 type SkipReason =
@@ -155,6 +158,7 @@ export default function ImportCollectionModal({
   queuedIds,
   activeDeadlockPath,
   onClose,
+  onImportProfile,
 }: ImportCollectionModalProps) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -198,6 +202,23 @@ export default function ImportCollectionModal({
   // older in-flight loops so a second resolve/queue click doesn't race.
   const loadTokenRef = useRef(0);
   const submitTokenRef = useRef(0);
+  const fileReadTokenRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  const readInputFile = async (file: File) => {
+    const token = ++fileReadTokenRef.current;
+    try {
+      const text = await file.text();
+      if (mountedRef.current && token === fileReadTokenRef.current) { setInput(text); setResolveError(null); }
+    } catch (error) {
+      if (mountedRef.current && token === fileReadTokenRef.current)
+        setResolveError(error instanceof Error ? error.message : String(error));
+    }
+  };
   // Ref mirror of rows for event handlers that need current state without
   // re-subscribing on every change.
   const rowsRef = useRef<ItemRow[]>(rows);
@@ -343,9 +364,18 @@ export default function ImportCollectionModal({
   // ───────── Resolving a collection or pasted item links ─────────
 
   const resolveImport = useCallback(async () => {
+    if (loadingItems || submitting) return;
+    fileReadTokenRef.current++;
+    const trimmed = input.trim();
+    // Profiles can contain GameBanana URLs. Route their envelope first so the
+    // link parser never treats references inside profile JSON as a link list.
+    if (onImportProfile && (trimmed.startsWith('mp1:') || trimmed.startsWith('{'))) {
+      onImportProfile(trimmed);
+      return;
+    }
     const source = classifyGameBananaImportInput(input);
     if (source.kind === 'invalid') {
-      setResolveError(t('importCollection.invalidInput'));
+      setResolveError(t(onImportProfile ? 'browse.import.invalidInput' : 'importCollection.invalidInput'));
       return;
     }
 
@@ -366,14 +396,14 @@ export default function ImportCollectionModal({
       if (source.kind === 'collection') {
         setSourceKind('collection');
         const meta = await getCollection(source.collectionId);
-        if (loadTokenRef.current !== token) return;
+        if (!mountedRef.current || loadTokenRef.current !== token) return;
         setCollection(meta);
 
         const collected: GameBananaCollectionItem[] = [];
         let page = 1;
         while (page <= 100) {
           const resp = await getCollectionItems(source.collectionId, page);
-          if (loadTokenRef.current !== token) return;
+          if (!mountedRef.current || loadTokenRef.current !== token) return;
           if (resp.records.length === 0) break;
           collected.push(...resp.records);
           setTotalCount(resp.totalCount);
@@ -450,7 +480,7 @@ export default function ImportCollectionModal({
               };
             }
 
-            if (loadTokenRef.current !== token) return;
+            if (!mountedRef.current || loadTokenRef.current !== token) return;
             directRows[index] = row;
             setRows(directRows.filter((candidate): candidate is ItemRow => candidate !== undefined));
           })
@@ -459,7 +489,7 @@ export default function ImportCollectionModal({
         finalRows = directRows.filter((candidate): candidate is ItemRow => candidate !== undefined);
       }
 
-      if (loadTokenRef.current !== token) return;
+      if (!mountedRef.current || loadTokenRef.current !== token) return;
       setRows(finalRows);
       // Pre-select every installable, not-already-handled item — the obvious
       // intent when opening a collection is to grab the bulk of it.
@@ -471,14 +501,14 @@ export default function ImportCollectionModal({
         )
       );
     } catch (err) {
-      if (loadTokenRef.current !== token) return;
+      if (!mountedRef.current || loadTokenRef.current !== token) return;
       setResolveError(String(err instanceof Error ? err.message : err));
     } finally {
-      if (loadTokenRef.current === token) {
+      if (mountedRef.current && loadTokenRef.current === token) {
         setLoadingItems(false);
       }
     }
-  }, [input, installedIds, queuedIds, t]);
+  }, [input, installedIds, queuedIds, loadingItems, submitting, onImportProfile, t]);
 
   // ───────── Variant picker (lazy resolve) ─────────
 
@@ -698,7 +728,7 @@ export default function ImportCollectionModal({
     const needsFetch = initialQueue.filter((r) => !r.details);
     if (needsFetch.length > 0) {
       await Promise.all(needsFetch.map((r) => ensureDetails(r)));
-      if (submitTokenRef.current !== token) {
+      if (!mountedRef.current || submitTokenRef.current !== token) {
         setSubmitting(false);
         return;
       }
@@ -711,7 +741,7 @@ export default function ImportCollectionModal({
     setBatchIds(new Set(toQueue.map((r) => r.item.id)));
 
     for (const row of toQueue) {
-      if (submitTokenRef.current !== token) break;
+      if (!mountedRef.current || submitTokenRef.current !== token) break;
 
       const details = row.details;
       if (!details?.files || details.files.length === 0) {
@@ -801,11 +831,12 @@ export default function ImportCollectionModal({
       dismissable={!submitting}
     >
         <ModalHeader
-          title={t('importCollection.title')}
+          title={onImportProfile ? t('profiles.actions.import') : t('importCollection.title')}
           titleId={titleId}
-          subtitle={t('importCollection.pasteHint')}
+          subtitle={onImportProfile ? t('browse.import.pasteHint') : t('importCollection.pasteHint')}
           onClose={onClose}
           closeLabel={t('common.actions.close')}
+          closeDisabled={submitting}
         />
 
         {/* Input */}
@@ -813,22 +844,36 @@ export default function ImportCollectionModal({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (!loadingItems) resolveImport();
+              void resolveImport();
             }}
-            className="flex items-end gap-2"
+            className="space-y-3"
           >
             <Textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={t('importCollection.placeholder')}
-              disabled={loadingItems}
+              onChange={(e) => { fileReadTokenRef.current++; setInput(e.target.value); }}
+              placeholder={onImportProfile ? t('browse.import.placeholder') : t('importCollection.placeholder')}
+              disabled={loadingItems || submitting}
               rows={3}
-              className="flex-1 min-h-20 font-mono text-xs"
-              aria-label={t('importCollection.inputLabel')}
+              className="w-full min-h-20 font-mono text-xs"
+              aria-label={onImportProfile ? t('browse.import.inputLabel') : t('importCollection.inputLabel')}
             />
-            <Button type="submit" disabled={loadingItems || !input.trim()}>
-              {loadingItems ? <Loader2 className="w-4 h-4 animate-spin" /> : t('importCollection.actions.fetch')}
-            </Button>
+            <div className={`flex flex-wrap items-center gap-2 ${onImportProfile ? 'justify-start' : 'justify-end'}`}>
+              <Button type="submit" disabled={loadingItems || submitting || !input.trim()}>
+                {loadingItems ? <Loader2 className="w-4 h-4 animate-spin" /> : onImportProfile ? t('browse.import.preview') : t('importCollection.actions.fetch')}
+              </Button>
+              {onImportProfile && <>
+                <Button type="button" variant="ghost" size="sm" icon={FileText} disabled={loadingItems || submitting}
+                  onClick={() => fileInputRef.current?.click()}>
+                  {t('importProfile.orLoadFromFile')}
+                </Button>
+                <input ref={fileInputRef} type="file" accept=".json,.modprofile.json" className="hidden" disabled={loadingItems || submitting}
+                  onChange={event => {
+                    const file = event.currentTarget.files?.[0];
+                    if (file) void readInputFile(file);
+                    event.currentTarget.value = '';
+                  }} />
+              </>}
+            </div>
           </form>
           {resolveError && (
             <p className="mt-2 text-xs text-state-danger flex items-center gap-1.5">
@@ -1233,7 +1278,7 @@ export default function ImportCollectionModal({
                   {t('importCollection.actions.cancelRemaining')}
                 </Button>
               ) : (
-                <Button variant="secondary" onClick={onClose}>
+                <Button variant="secondary" onClick={onClose} disabled={submitting}>
                   {counts.installed > 0 || counts.failed > 0 ? t('common.actions.done') : t('common.actions.cancel')}
                 </Button>
               )}

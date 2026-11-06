@@ -21,6 +21,13 @@ export const CATEGORY_LABEL_KEYS: Record<string, string> = {
   animations: 'gamebanana.categories.animations',
   movement: 'gamebanana.categories.movement',
   audio: 'gamebanana.categories.audio',
+  sounds: 'sync.sections.Sound',
+  'soul containers': 'locker.page.soulContainers',
+  'spirit urns': 'locker.page.spiritUrns',
+  hideout: 'locker.page.hideout',
+  'icon packs': 'locker.page.iconPacks',
+  effects: 'locker.page.effects',
+  'announcer / sfx': 'locker.page.announcer',
 };
 
 /**

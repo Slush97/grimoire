@@ -23,7 +23,7 @@ import {
     beginModMutationRunningScope,
     endModMutationRunningScope,
 } from './gameSessionMods';
-import type { DeleteModEntry, DeleteModsProgress, DeleteModsResult } from '../../../src/types/mod';
+import type { DeleteModEntry, DeleteModsProgress, DeleteModsResult, ModSwapPlacement } from '../../../src/types/mod';
 
 /** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
  *  main.log (captured by the diagnostic report) so a desync between the UI and
@@ -1359,6 +1359,79 @@ async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> 
     const result = await moveModToFolderAs(targetMod, folder, fileName, true);
     modTrace(`enable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey} (pri ${result.priority})`);
     return result;
+}
+
+/** Keep the outgoing loadout intact until every replacement is enabled. The
+ * same mutation lock covers preflight, file moves, and any needed rollback. */
+export function swapEnabledMods(deadlockPath: string, enableIds: string[], disableIds: string[], placement: ModSwapPlacement = {
+    incomingId: enableIds[0], outgoingId: disableIds[0],
+}): Promise<void> {
+    return runExclusiveModMutation(async () => {
+        const current = await scanMods(deadlockPath);
+        const enable = new Set(enableIds);
+        const disable = new Set(disableIds);
+        if (!enable.size || [...enable].some(id => disable.has(id))
+            || [...enable, ...disable].some(id => !current.some(mod => mod.id === id))) {
+            throw new Error('MOD_SWAP_STALE');
+        }
+        const outgoing = current.filter(mod => mod.enabled && disable.has(mod.id));
+        const replacement = current.find(mod => mod.id === placement.incomingId && !mod.enabled && enable.has(mod.id));
+        const anchor = outgoing.find(mod => mod.id === placement.outgoingId);
+        if (!replacement || !anchor) throw new Error('MOD_SWAP_STALE');
+        await syncRunningGameModSnapshotFromMods(current);
+        assertCanMoveLoadedGameMods(outgoing);
+        assertCanMoveLoadedGameMod(replacement);
+        const incoming = current.filter(mod => !mod.enabled && enable.has(mod.id));
+        // Complete safety review while the current loadout is untouched.
+        for (const mod of incoming) await assertVpkSafety(mod.path, { name: getModMetadata(mod.metaKey)?.modName || mod.name });
+        // A safety prompt can outlive the running-state sample taken on entry.
+        await beginModMutationRunningScope();
+        await syncRunningGameModSnapshotFromMods(current);
+        assertCanMoveLoadedGameMods(outgoing);
+        assertCanMoveLoadedGameMod(replacement);
+        const moves: { original: Mod; updated: Mod; priorityMod?: boolean }[] = [];
+        const trackMove = async (original: Mod, operation: () => Promise<Mod>) => {
+            const move = { original, updated: original, priorityMod: getModMetadata(original.metaKey)?.priorityMod };
+            moves.push(move);
+            move.updated = await operation();
+            return move.updated;
+        };
+        try {
+            let enabledReplacement = replacement;
+            for (const original of incoming) {
+                const updated = await trackMove(original, () => enableModUnlocked(deadlockPath, original.id));
+                if (original.id === replacement.id) enabledReplacement = updated;
+            }
+            for (const original of outgoing) await trackMove(original, () => disableModUnlocked(deadlockPath, original.id));
+            assertCanMoveLoadedGameMod(enabledReplacement);
+            const destinationIsPriority = isPriorityFolderPath(anchor.path);
+            const placed = await trackMove(enabledReplacement, () => {
+                if (!destinationIsPriority && getModMetadata(enabledReplacement.metaKey)?.priorityMod) {
+                    setModMetadata(enabledReplacement.metaKey, { priorityMod: undefined });
+                }
+                return moveModToFolderAs(enabledReplacement, dirname(anchor.path), anchor.fileName, true);
+            });
+            if (destinationIsPriority) setModMetadata(placed.metaKey, { priorityMod: true });
+        } catch (error) {
+            const failures: unknown[] = [];
+            for (const { original, updated, priorityMod } of moves.reverse()) {
+                try {
+                    if (updated.path !== original.path) assertCanMoveLoadedGameMod(updated);
+                    if (!isPriorityFolderPath(original.path) && getModMetadata(updated.metaKey)?.priorityMod !== priorityMod) {
+                        setModMetadata(updated.metaKey, { priorityMod });
+                    }
+                    const restored = updated.path === original.path ? updated
+                        : await moveModToFolderAs(updated, dirname(original.path), original.fileName, original.enabled);
+                    if (getModMetadata(restored.metaKey)?.priorityMod !== priorityMod) setModMetadata(restored.metaKey, { priorityMod });
+                } catch (rollbackError) { failures.push(rollbackError); }
+            }
+            if (failures.length) {
+                console.error('[swap] Could not restore every mod after a failed swap:', failures);
+                throw new AggregateError([error, ...failures], String(error), { cause: error });
+            }
+            throw error;
+        }
+    }, { healPath: deadlockPath });
 }
 
 /**

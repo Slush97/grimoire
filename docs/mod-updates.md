@@ -22,11 +22,17 @@ no dialog while its close callback settles.
 
 The update menu groups pending variants by GameBanana submission and section.
 The toolbar's `Update (n)` counts these mods; the menu title `Update n files?`
-counts their pending files. Its footer action is `Update all`.
+counts their pending files. Its footer offers `Only disabled`, `Only enabled`,
+and `Update all`, in that order. The first two select only pending files in that
+state, including within a mod with mixed enabled and disabled variants. A close
+button in the header dismisses the menu.
 Each mod shows its pending variant count, with variant names in the name's
 tooltip. A row can start just that mod's updates or ignore updates for all of
 its installed variants. Starting one mod keeps the menu open for the others;
 the menu closes when none remain. The footer uses the same batch executor.
+Each batch queues replacements for enabled files before disabled-only jobs,
+preserving relative order within each state. A shared archive replacing both
+enabled and disabled files counts as an enabled update and is queued once.
 The mod page's ignore/resume toggle applies to the same full submission and
 section. Its state follows all installed variants; resuming also clears a mixed
 ignore state left by an earlier per-file toggle or an interrupted save.

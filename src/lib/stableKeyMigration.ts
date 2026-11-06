@@ -236,7 +236,7 @@ export function migrateKeyedValues<T>(
   return { values, sourceForDestination };
 }
 
-function migrateMemberships<T extends { keys: string[] }>(
+export function migrateMemberships<T extends { keys: string[] }>(
   collections: readonly T[],
   plan: StableKeyMigrationPlan
 ): T[] {

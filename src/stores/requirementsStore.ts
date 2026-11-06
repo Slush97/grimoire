@@ -1,24 +1,39 @@
 import { create } from 'zustand';
-import { hasRequirementIssues, requirementKey, type RequirementSource } from '../lib/modRequirements';
+import { hasRequirementIssues, installedModRequirements, requiredModClosure, requirementKey, type RequirementSource } from '../lib/modRequirements';
+import { modRestoreKey } from '../lib/soloRestore';
 import type { GameBananaItemRef, ModRequirementSnapshot, ModRequirementSource } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 
 type Review = { kind: 'inspect'; source: RequirementSource }
   | { kind: 'install'; source: ModRequirementSource; resolve: (accepted: boolean) => void };
+export type RequirementToggleChoice = 'all' | 'only' | 'cancel' | 'skip';
+/** Owned by one picker opening; only accepted enable choices are reused. */
+export interface RequirementToggleSession { enableChoice?: 'all' | 'only' }
+export interface RequirementToggleReview {
+  mod: Mod;
+  key: string;
+  mode: 'enable' | 'disable' | 'manage';
+  mods: readonly Mod[];
+  snapshots: Readonly<Record<string, ModRequirementSnapshot>>;
+  resolve?: (choice: RequirementToggleChoice) => void;
+}
 interface RequirementsStore {
   snapshots: Record<string, ModRequirementSnapshot>;
   review: Review | null;
   targets: GameBananaItemRef[];
+  toggleReview: RequirementToggleReview | null;
   remember: (target: GameBananaItemRef, snapshot: ModRequirementSnapshot) => void;
   load: (targets: GameBananaItemRef[], refresh?: boolean) => Promise<void>;
   inspect: (source: RequirementSource) => void;
   openTarget: (target: GameBananaItemRef) => void;
   back: () => void;
   finish: (accepted: boolean) => void;
+  manage: (mod: Mod, mods: readonly Mod[]) => void;
+  finishToggle: (choice?: RequirementToggleChoice) => void;
 }
 const pending = new Map<string, Promise<void>>();
 export const useRequirementsStore = create<RequirementsStore>((set, get) => ({
-  snapshots: {}, review: null, targets: [],
+  snapshots: {}, review: null, targets: [], toggleReview: null,
   remember: (target, snapshot) => set(state => {
     const key = requirementKey(target);
     if ((state.snapshots[key]?.checkedAt ?? -1) > snapshot.checkedAt) return state;
@@ -46,7 +61,17 @@ export const useRequirementsStore = create<RequirementsStore>((set, get) => ({
     }
     try { await task; } finally { if (pending.get(key) === task) pending.delete(key); }
   },
-  inspect: source => { get().finish(false); set({ review: { kind: 'inspect', source }, targets: [] }); },
+  inspect: source => { get().finishToggle(); get().finish(false); set({ review: { kind: 'inspect', source }, targets: [] }); },
+  manage: (mod, mods) => {
+    get().finish(false);
+    get().finishToggle();
+    set({ toggleReview: { mod, key: modRestoreKey(mod), mode: 'manage', mods, snapshots: get().snapshots } });
+  },
+  finishToggle: (choice = 'cancel') => {
+    const review = get().toggleReview;
+    set({ toggleReview: null, targets: [] });
+    review?.resolve?.(choice);
+  },
   openTarget: target => set(state => {
     const index = state.targets.findIndex(t => requirementKey(t) === requirementKey(target));
     return { targets: index < 0 ? [...state.targets, target] : state.targets.slice(0, index + 1) };
@@ -62,6 +87,26 @@ export const useRequirementsStore = create<RequirementsStore>((set, get) => ({
 export function checkQuickInstallRequirements(source: ModRequirementSource, mods: readonly Mod[]): Promise<boolean> {
   if (!hasRequirementIssues(source.requirements, mods)) return Promise.resolve(true);
   const store = useRequirementsStore.getState();
-  if (store.review || store.targets.length) return Promise.resolve(false);
+  if (store.review || store.toggleReview || store.targets.length) return Promise.resolve(false);
   return new Promise(resolve => useRequirementsStore.setState({ review: { kind: 'install', source, resolve }, targets: [] }));
+}
+
+/** The dialog stays outside the mod mutation queue so its individual checkboxes
+ * can apply changes while the original toggle waits for the user's choice. */
+export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: readonly Mod[], promptOptional = false, session?: RequirementToggleSession): Promise<RequirementToggleChoice> {
+  const store = useRequirementsStore.getState();
+  const needsReview = enabled
+    ? installedModRequirements(mod, mods, store.snapshots).some(({ item }) => item.state !== 'off'
+      && (item.importance === 'required' || (promptOptional && (item.importance === 'optional' || item.importance === 'recommended'))))
+    : requiredModClosure(mod.id, mods, store.snapshots, 'dependents').length > 0;
+  if (!needsReview) return Promise.resolve('skip');
+  if (store.review || store.toggleReview || store.targets.length) return Promise.resolve('cancel');
+  if (enabled && session?.enableChoice) return Promise.resolve(session.enableChoice);
+  return new Promise(resolve => useRequirementsStore.setState({ toggleReview: {
+    mod, key: modRestoreKey(mod), mode: enabled ? 'enable' : 'disable', mods, snapshots: store.snapshots,
+    resolve: choice => {
+      if (enabled && session && (choice === 'all' || choice === 'only')) session.enableChoice = choice;
+      resolve(choice);
+    },
+  } }));
 }

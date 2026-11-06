@@ -1,14 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
+import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, FileWarning, Camera } from 'lucide-react';
-import { MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight } from 'lucide-react';
+import type { EntrySwapTarget } from '../../lib/modEntries';
+import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
+import { useRequirementsStore } from '../../stores/requirementsStore';
+import { modRequirementRefs } from '../../lib/modRequirements';
+import { modRestoreKey } from '../../lib/soloRestore';
 import { useModBackupsStore } from '../../stores/modBackupsStore';
-import { useHeroCategoryStore } from '../../stores/heroCategoryStore';
+import { useCategoryStore } from '../../stores/categoryStore';
+import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../../stores/installedTagsStore';
+import { getInstallationScope } from '../../lib/appSettings';
 import { getModBackupIdentity } from '../../lib/modBackupIdentity';
 import { restoreModBackup, revealModInFolder } from '../../lib/api';
 import { ModBackupsSubmenu } from './ModBackupsSubmenu';
@@ -19,8 +24,8 @@ import ModThumbnail from '../ModThumbnail';
 import { RevealImage } from '../common/RevealImage';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import PriorityEditor from '../PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
-import { getInstalledCardTaxonomy, type InstalledCardTaxonomy } from '../../lib/installedCardTaxonomy';
+import { getHeroRenderPath, getHeroFacePosition, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel } from '../../lib/lockerUtils';
+import { getInstalledGroupTaxonomy } from '../../lib/installedCardTaxonomy';
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates';
 import { formatBytes } from '../../lib/formatBytes';
 import { shakeElement } from '../../lib/shakeElement';
@@ -29,8 +34,7 @@ import type { ModList } from '../../lib/modLists';
 import { ModListSubmenu } from './ModListMenu';
 import { Tag } from '../common/ui';
 import type { ViewMode } from '../common/PageComponents';
-import { GlobalLoadBadge, ChipText, HeroTagLabel } from './chips';
-import { heroNameForLabel } from '../../lib/heroNames';
+import { GlobalLoadBadge, HeroTagLabel, HeroIconStack, RepairIssueIcons, FittingTagList, MetaTextChip } from './chips';
 import { EMPTY_LIST_IDS } from './emptyIds';
 import { ModSafetyBadge } from '../ModSafety';
 import { CrashAdvisoryBadge } from '../CrashAdvisories';
@@ -62,13 +66,17 @@ interface ModCardProps {
     movementFx?: Mod['movementFx'];
     audioUrl?: string;
     sourceSection?: string;
+    categoryId?: number;
     categoryName?: string;
     nsfw?: boolean;
     gameBananaId?: number;
+    sha256?: string;
+    skinEdit?: Mod['skinEdit'];
     localGroupId?: string;
     isUnknown?: boolean;
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
+    lockerHeroes?: string[];
     globalType?: GlobalModType;
     /** Lives in the citadel/grimoire priority root: wins every file collision
      *  and is never disabled by the launch shuffle. */
@@ -95,6 +103,8 @@ interface ModCardProps {
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
   onToggle: () => Promise<boolean> | void;
+  swapTargets?: readonly EntrySwapTarget[];
+  onSwap?: (outgoingEntryKey: string) => Promise<void>;
   /** Disable every other mod, enable only this one, and launch the game. Used
    *  for A/B testing a single skin. */
   onSoloLaunch?: () => void;
@@ -155,6 +165,7 @@ interface ModCardProps {
    *  Swaps the filename meta for an enabled/total count and routes the
    *  card-body click to the picker modal. */
   group?: {
+    variants?: readonly Mod[];
     variantCount: number;
     /** Enabled file labels for this group. Empty when fully disabled. */
     enabledCount: number;
@@ -165,6 +176,7 @@ interface ModCardProps {
 
 interface ModMediaPreviewProps {
   mod: ModCardProps['mod'];
+  heroName?: string;
   hideNsfwPreviews: boolean;
   soundVolume: number;
   overlayBadges: ReactNode;
@@ -204,6 +216,7 @@ function stopMediaDrag(e: React.DragEvent<HTMLElement>) {
 
 function ModMediaPreview({
   mod,
+  heroName,
   hideNsfwPreviews,
   soundVolume,
   overlayBadges,
@@ -226,10 +239,8 @@ function ModMediaPreview({
   const detailsLabel = canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined;
   // Prefer an explicit mod thumbnail. For sound-only mods without one, fall
   // back to the inferred hero render before using the waveform placeholder.
-  // `lockerHero` is persisted from VPK path inference and catches titles that
-  // don't name the hero; title matching covers not-yet-enriched mods.
   const soundHeroName = isSound && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? heroName
     : null;
   const soundHeroRenderUrl = soundHeroName ? getHeroRenderPath(soundHeroName) : null;
   const soundHeroFacePosX = soundHeroName ? getHeroFacePosition(soundHeroName).x : 50;
@@ -339,7 +350,7 @@ function ModMediaPreview({
 
 interface ModListRowContentProps {
   mod: ModCardProps['mod'];
-  taxonomy: InstalledCardTaxonomy;
+  taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
   hideNsfwPreviews: boolean;
   soundVolume: number;
   onOpenDetails?: () => void;
@@ -355,103 +366,25 @@ interface ModListRowContentProps {
   variantStatusTitle: string;
   metaChipClasses: string;
   manualTagChipClasses: string;
-  inferredTagChipClasses: string;
   dangerInlineChipClasses: string;
-  tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
 }
 
-function lockerHeroSourceLabel(source: Mod['lockerHeroSource'], t: TFunction): string {
-  switch (source) {
-    case 'manual':
-      return t('installed.card.heroSourceManual');
-    case 'download-title':
-    case 'title':
-      return t('installed.card.heroSourceTitle');
-    case 'download-vpk':
-    case 'vpk':
-      return t('installed.card.heroSourceVpk');
-    default:
-      return t('installed.card.heroSourceGrimoire');
-  }
-}
-
-function CategoryChip({
-  label,
+function InstalledTaxonomyChips({
+  taxonomy,
   className,
-  iconClassName = 'h-4 w-4',
-  iconOnly = false,
 }: {
-  label: string;
+  taxonomy: ReturnType<typeof getInstalledGroupTaxonomy>;
   className: string;
-  iconClassName?: string;
-  /** When the category is a hero, collapse to the bare face icon (no frame, no
-   *  truncated name) to match the locker-hero chip in cards. */
-  iconOnly?: boolean;
-}) {
-  const heroName = heroNameForLabel(label);
-  if (heroName && iconOnly) {
-    return (
-      <span className="inline-flex flex-shrink-0 items-center" title={label}>
-        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} iconOnly />
-      </span>
-    );
-  }
-  return (
-    <span className={className} title={label}>
-      {heroName ? (
-        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} />
-      ) : (
-        <ChipText>{label}</ChipText>
-      )}
-    </span>
-  );
-}
-
-function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
-  return (
-    <span className={className} title={title ?? label}>
-      <ChipText>{label}</ChipText>
-    </span>
-  );
-}
-
-function LockerHeroChip({
-  mod,
-  manualTagChipClasses,
-  inferredTagChipClasses,
-  iconClassName = 'h-4 w-4',
-  iconOnly = false,
-}: {
-  mod: { lockerHero?: string; lockerHeroSource?: Mod['lockerHeroSource'] };
-  manualTagChipClasses: string;
-  inferredTagChipClasses: string;
-  iconClassName?: string;
-  /** Drop the hero name and show just the face icon. Used in the card grid,
-   *  where a narrow chip otherwise truncates the name to a useless "L." */
-  iconOnly?: boolean;
 }) {
   const { t } = useTranslation();
-  if (!mod.lockerHero) return null;
-  const isManual = mod.lockerHeroSource === 'manual';
-  const title = `${lockerHeroSourceLabel(mod.lockerHeroSource, t)}: ${mod.lockerHero}`;
-  // Icon-only (card grid): just the bare face icon, no accent chip frame — the
-  // colored manual/inferred border reads as a highlight that fights the theme.
-  if (iconOnly) {
-    return (
-      <span className="inline-flex flex-shrink-0 items-center" title={title}>
-        <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} iconOnly />
-      </span>
-    );
-  }
+  const labels = useMemo(() => taxonomy.tags.map(label => gameBananaCategoryLabel(label, t)), [taxonomy.tags, t]);
   return (
-    <span
-      className={isManual ? manualTagChipClasses : inferredTagChipClasses}
-      title={title}
-    >
-      <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} />
-    </span>
+    <>
+      <HeroIconStack heroes={taxonomy.heroNames} />
+      <FittingTagList labels={labels} chipClassName={className} />
+    </>
   );
 }
 
@@ -562,33 +495,6 @@ function EditableModTitle({
   );
 }
 
-function OutdatedVdataTag({ outdated, enabled, variant }: { outdated?: Mod['outdatedVdata']; enabled: boolean; variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  if (!outdated?.length) return null;
-  const title = outdated
-    .map((v) => t('installed.card.outdatedDataTitle', { count: v.missing, file: v.entry, sample: v.sample.join(', ') }))
-    .join('\n\n');
-  return (
-    <Tag tone={enabled ? 'danger' : 'warning'} variant={variant} icon={FileWarning} title={title}>
-      {t('installed.card.outdatedData')}
-    </Tag>
-  );
-}
-
-/** `models/heroes_wip/werewolf/werewolf.vmdl_c` reads as `werewolf.vmdl`. */
-const modelFileName = (entry: string) => entry.slice(entry.lastIndexOf('/') + 1).replace(/_c$/, '');
-
-function StaleModelTag({ models, variant }: { models?: Mod['staleModels']; variant: 'overlay' | 'inline' }) {
-  const { t } = useTranslation();
-  if (!models?.length) return null;
-  return (
-    <Tag tone="warning" variant={variant} icon={Camera}
-      title={t('installed.card.staleModelTitle', { files: models.map((m) => modelFileName(m.entry)).join(', ') })}>
-      {t('installed.card.staleModel')}
-    </Tag>
-  );
-}
-
 function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
   staleCount: number;
   updatableCount: number;
@@ -596,26 +502,22 @@ function MergeSourceUpdateTag({ staleCount, updatableCount, onOpen, variant }: {
   variant: 'overlay' | 'inline';
 }) {
   const { t } = useTranslation();
-  if (onOpen && updatableCount > 0) {
-    return (
-      <button type="button" data-card-action="true" onClick={(event) => {
-        event.stopPropagation();
-        onOpen();
-      }} className="rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-2 focus-visible:outline-accent">
-        <Tag tone="update" variant={variant} icon={Download}
-          title={t('mergedContents.staleSourcesUpdatable', { count: updatableCount })}>
-          {t('mergedContents.updateSources', { count: updatableCount })}
-        </Tag>
-      </button>
-    );
-  }
-  if (staleCount === 0) return null;
-  return (
-    <Tag tone="update" variant={variant} icon={Download}
-      title={t('installed.card.staleSourcesTitle', { count: staleCount })}>
-      {t('installed.card.staleSourcesBadge', { count: staleCount })}
-    </Tag>
-  );
+  if (staleCount === 0 && updatableCount === 0) return null;
+  const manualCount = Math.max(0, staleCount - updatableCount);
+  const title = [
+    updatableCount > 0 && t('mergedContents.staleSourcesUpdatable', { count: updatableCount }),
+    manualCount > 0 && t('installed.card.staleSourcesTitle', { count: manualCount }),
+  ].filter(Boolean).join('\n');
+  const tag = <Tag tone="update" variant={variant} icon={Download} className="uppercase tracking-wide"
+    title={title}>
+    {t('profiles.actions.update')}
+  </Tag>;
+  return onOpen && updatableCount > 0 ? (
+    <button type="button" data-card-action="true" onClick={(event) => {
+      event.stopPropagation();
+      onOpen();
+    }} className="inline-flex rounded-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-accent">{tag}</button>
+  ) : tag;
 }
 
 function ModListRowContent({
@@ -636,9 +538,7 @@ function ModListRowContent({
   variantStatusTitle,
   metaChipClasses,
   manualTagChipClasses,
-  inferredTagChipClasses,
   dangerInlineChipClasses,
-  tagIconClassName,
   technicalMetaClasses,
   actions,
 }: ModListRowContentProps) {
@@ -646,13 +546,10 @@ function ModListRowContent({
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
   const canOpen = !!onOpenDetails;
   const listHeroName = isSound && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? taxonomy.previewHeroName
     : null;
   const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
   const listHeroFacePosX = listHeroName ? getHeroFacePosition(listHeroName).x : 50;
-  const taxonomyLabel = taxonomy.globalType
-    ? globalModTypeLabel(taxonomy.globalType, t)
-    : taxonomy.categoryLabel && gameBananaCategoryLabel(taxonomy.categoryLabel, t);
 
   return (
     <>
@@ -729,16 +626,16 @@ function ModListRowContent({
           className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary"
           onRename={onRenameLocal}
         />
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           <ModSafetyBadge id={(mod.safetyTarget ?? mod).id} name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />
           <CrashAdvisoryBadge modIds={mod.crashModIds ?? [mod.id]} />
-          <RequirementWarning mod={mod} />
-          <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="inline" />
-          <StaleModelTag models={mod.staleModels} variant="inline" />
           <MergeSourceUpdateTag staleCount={staleSourceCount} updatableCount={updatableSourceCount}
             onOpen={onOpenDetails} variant="inline" />
         </div>
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 whitespace-nowrap text-2xs leading-[24px] text-text-secondary">
+          <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
+            outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
+            requirement={{ icon, title }} />}</RequirementWarning>
           {!mod.enabled && mod.priorityMod && (
             <MetaTextChip
               label={t('installed.priority.chip')}
@@ -746,28 +643,7 @@ function ModListRowContent({
               title={t('installed.priority.hint')}
             />
           )}
-          {taxonomy.heroName && (
-            mod.lockerHero ? (
-              <LockerHeroChip
-                mod={mod}
-                manualTagChipClasses={manualTagChipClasses}
-                inferredTagChipClasses={inferredTagChipClasses}
-                iconClassName={tagIconClassName}
-              />
-            ) : (
-              <CategoryChip
-                label={taxonomy.heroName}
-                className={metaChipClasses}
-                iconClassName={tagIconClassName}
-              />
-            )
-          )}
-          {taxonomyLabel && (
-            <MetaTextChip
-              label={taxonomyLabel}
-              className={metaChipClasses}
-            />
-          )}
+          <InstalledTaxonomyChips taxonomy={taxonomy} className={metaChipClasses} />
           {mod.nsfw && (
             <MetaTextChip label="18+" className={dangerInlineChipClasses} />
           )}
@@ -830,6 +706,8 @@ export function ModCard({
   previewMetaKey,
   onViewAuthor,
   onToggle,
+  swapTargets = [],
+  onSwap,
   onSoloLaunch,
   soloBusy = false,
   onDelete,
@@ -869,7 +747,17 @@ export function ModCard({
   const modBackups = backups.filter((backup) => backup.identityKey === backupIdentity);
   const [backupBusy, setBackupBusy] = useState(false);
   const setBackupToDelete = useModBackupsStore((state) => state.setDeleteTarget);
-  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
+  const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
+  const heroNames = useCategoryStore((state) => state.heroNames);
+  const pathsByModel = useCategoryStore((state) => state.pathsByModel);
+  const taxonomyContext = useMemo(() => ({ heroByCategoryId, heroNames, pathsByModel }), [heroByCategoryId, heroNames, pathsByModel]);
+  const tagScope = useAppStore(state => getInstallationScope(state.settings));
+  const revealNsfwOnHover = useAppStore(state => state.settings?.revealNsfwOnHover ?? false);
+  const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  const assignedCustomTags = customTagsForMods(customTags, group?.variants ?? [mod]);
+  const baseTaxonomy = getInstalledGroupTaxonomy(mod, group?.variants ?? [mod], taxonomyContext);
+  const cardTaxonomy = { ...baseTaxonomy, tags: [...new Set([...baseTaxonomy.tags, ...assignedCustomTags.map(tag => tag.name)])] };
+  const tagHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
   const restoreBackup = async (backupId: string) => {
     if (backupBusy) return;
     setBackupBusy(true);
@@ -884,6 +772,9 @@ export function ModCard({
     }
   };
   const [hovered, setHovered] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [swapping, setSwapping] = useState(false);
+  const swapInFlight = useRef(false);
   // Ordinary hover is styled by CSS. Only Shift-selection needs React state.
   // Remember the pointer separately so pressing Shift over a stationary card
   // still shows the preview before paint.
@@ -900,7 +791,7 @@ export function ModCard({
   };
   const hasListActions = !selectMode && !!lists && !!onToggleList && !!onCreateList;
   const menuHeroName = mod.sourceSection === 'Sound' && !mod.thumbnailUrl
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    ? cardTaxonomy.previewHeroName
     : null;
   // Right-clicking one tile of a merged mod's collage should act on that tile,
   // not on the merged mod's first source. Captured from the pointer target
@@ -1039,22 +930,9 @@ export function ModCard({
       : '';
   const chipMaxClass =
     viewMode === 'compact' ? 'max-w-[132px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
-  const chipSizeClasses =
-    viewMode === 'list'
-      ? 'h-6 rounded-[7px] px-2 text-2xs'
-      : viewMode === 'compact'
-        ? 'h-[26px] rounded-lg px-2 text-[12px]'
-        : 'h-7 rounded-lg px-2.5 text-[12px]';
-  const tagIconClassName =
-    viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
-  // A compact text chip must retain enough width to show actual content; zero
-  // was technically valid to flexbox and produced the orphaned border seen on
-  // the smallest cards.
-  const chipMinClass = viewMode === 'compact' ? 'min-w-9' : 'min-w-0';
-  const baseChipClasses = `inline-flex ${chipMinClass} ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
+  const baseChipClasses = `inline-flex h-[22px] min-w-0 ${chipMaxClass} items-center overflow-hidden rounded-md px-1.5 text-2xs font-semibold leading-none`;
   const metaChipClasses = `${baseChipClasses} border border-hl/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
-  const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-2xs text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
@@ -1080,6 +958,7 @@ export function ModCard({
   }`;
   const isList = viewMode === 'list';
   const isCompact = viewMode === 'compact';
+  const quickActionSizeClasses = isList ? '' : '@max-[240px]/installed-card:hidden';
   // Cover-art source for the glass backdrop. Skipped when NSFW previews are
   // hidden so we never bleed hidden imagery, even blurred.
   const glassBackdropUrl =
@@ -1102,27 +981,6 @@ export function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
     : 'text-[15px] font-medium leading-[18px] truncate';
-  // Grid footers stay single-line. Classification is deliberately limited to
-  // one hero identity plus one text label below, so resizing a card never
-  // changes *which* tags it shows.
-  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'h-7 flex-nowrap';
-  // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
-  // manual or auto global tag is visible here, not just in the Locker. A global
-  // mod has no hero, so the two chips never both show.
-  const cardTaxonomy = getInstalledCardTaxonomy(mod, heroByCategoryId);
-  const cardGlobalLabel = cardTaxonomy.globalType
-    ? globalModTypeLabel(cardTaxonomy.globalType, t)
-    : undefined;
-  // One stable taxonomy model for every grid size:
-  //   1. the hero identity, when present (bare portrait);
-  //   2. either the Locker global type or the GameBanana category (one label).
-  // Global classification supersedes category because those labels are often
-  // identical (HUD/HUD). A hero category is represented by the portrait and
-  // therefore does not also need a text chip. Previously compact cards counted
-  // available slots and silently dropped later tags, which made the same mod
-  // appear to have different metadata as the size slider crossed a breakpoint.
-  const cardTaxonomyLabel = cardGlobalLabel
-    ?? (cardTaxonomy.categoryLabel && gameBananaCategoryLabel(cardTaxonomy.categoryLabel, t));
   // Enabled cards get their own copy: pinning only takes effect once the mod is
   // disabled, and the disabled section's "top of disabled mods" wording would be
   // a lie there.
@@ -1172,6 +1030,19 @@ export function ModCard({
           {t('installed.card.viewDetails')}
         </MenuItem>
       )}
+      {(modRequirementRefs(mod).length > 0 || !!mod.skinEdit?.sources.length) && (
+        <MenuItem icon={Link2} onSelect={() => {
+          const mods = useAppStore.getState().mods;
+          const owner = mods.find(candidate => candidate.id === mod.id);
+          if (!owner) return;
+          const key = modRestoreKey(owner);
+          void useRequirementsStore.getState().load(mods.flatMap(modRequirementRefs)).then(() => {
+            const current = useAppStore.getState().mods;
+            const owner = current.find(candidate => modRestoreKey(candidate) === key);
+            if (owner) useRequirementsStore.getState().manage(owner, current);
+          });
+        }}>{t('requirements.manageTitle')}</MenuItem>
+      )}
       {mod.merged && updatableSourceCount > 0 && onOpenDetails && (
         <MenuItem icon={Download} onSelect={onOpenDetails}>
           {t('mergedContents.updateSources', { count: updatableSourceCount })}
@@ -1215,6 +1086,13 @@ export function ModCard({
           onCreateNew={onCreateList}
         />
       )}
+      {tagScope && customTags.length > 0 && <MenuSub>
+        <MenuSubTrigger icon={TagIcon}>{t('installed.tags.title')}</MenuSubTrigger>
+        <MenuSubContent className="max-h-72 overflow-y-auto">
+          {customTags.map(tag => <MenuCheckboxItem key={tag.id} checked={assignedCustomTags.some(assigned => assigned.id === tag.id)}
+            onCheckedChange={() => useInstalledTagsStore.getState().toggle(tagScope, tag.id, mod)}>{tag.name}</MenuCheckboxItem>)}
+        </MenuSubContent>
+      </MenuSub>}
       {onToggleFavorite && (
         <MenuItem icon={Star} onSelect={onToggleFavorite}>
           {favoriteMenuLabel}
@@ -1264,9 +1142,8 @@ export function ModCard({
                   {t('installed.tag.clearLockerTag')}
                 </MenuItem>
                 <MenuSeparator />
-                {/* Global type and hero are independent axes (setModGlobalType does
-                    not clear lockerHero), so they are two radio groups rather than
-                    one. "Clear locker tag" above resets both. */}
+                {/* Assigning a General type clears the hero assignment. Separate
+                    radio groups keep the two destination lists easy to scan. */}
                 {onTagGlobal && (
                   <>
                     <MenuLabel>{t('installed.tag.global')}</MenuLabel>
@@ -1288,7 +1165,7 @@ export function ModCard({
                   value={canonicalHeroName(mod.lockerHero) ?? ''}
                   onValueChange={(value) => void applyLockerTag(value)}
                 >
-                  {HERO_NAMES_SORTED.map((heroName) => (
+                  {tagHeroNames.map((heroName) => (
                     <MenuRadioItem
                       key={heroName}
                       value={heroName}
@@ -1338,9 +1215,30 @@ export function ModCard({
     </>
   );
 
+  const runSwap = async (key: string) => {
+    if (!onSwap || swapInFlight.current) return;
+    swapInFlight.current = true;
+    setSwapping(true);
+    try { await onSwap(key); }
+    catch (error) { showToast(String(error), { tone: 'error' }); }
+    finally { swapInFlight.current = false; setSwapping(false); }
+  };
+  const chooseSwapTarget = swapTargets.length > 1 || cardTaxonomy.heroNames.length > 1;
+  const swapButton = <button type="button" disabled={swapping} aria-busy={swapping || undefined}
+    onPointerDown={event => event.stopPropagation()}
+    onClick={event => {
+      event.stopPropagation();
+      if (!chooseSwapTarget && swapTargets[0]) void runSwap(swapTargets[0].key);
+    }}
+    className={`${utilityActionClasses} ${hoverActionVisibilityClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto disabled:cursor-default`}
+    title={t('installed.swap.action', { name: mod.name })} aria-label={t('installed.swap.action', { name: mod.name })}
+    data-card-action="true" data-mod-swap>
+    {swapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+  </button>;
+
   const actions = (
     <div className="ml-auto flex items-center gap-1">
-      {/* At compact size the direct favorite/delete buttons consumed 56px even
+      {/* At small sizes the direct favorite/delete buttons consumed 56px even
           while transparent, squeezing the adjacent taxonomy chip down to a
           one-pixel border. Both actions remain available from the kebab and
           right-click menus; larger cards keep their faster hover affordances. */}
@@ -1352,7 +1250,7 @@ export function ModCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
+          className={`${utilityActionClasses} ${quickActionSizeClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
           title={favoriteLabel}
           aria-label={favoriteLabel}
           aria-pressed={favorite}
@@ -1368,7 +1266,7 @@ export function ModCard({
             e.stopPropagation();
             onDelete();
           }}
-          className={`${utilityActionClasses} ${hoverActionVisibilityClasses} text-state-danger hover:bg-state-danger/10 hover:text-state-danger focus-visible:ring-state-danger/60`}
+          className={`${utilityActionClasses} ${quickActionSizeClasses} ${hoverActionVisibilityClasses} text-state-danger hover:bg-state-danger/10 hover:text-state-danger focus-visible:ring-state-danger/60`}
           title={t('installed.card.deleteNamed', { name: mod.name })}
           aria-label={t('installed.card.deleteNamed', { name: mod.name })}
           data-card-action="true"
@@ -1395,6 +1293,17 @@ export function ModCard({
           </MenuContent>
         </MenuRoot>
       </div>
+      {!mod.enabled && !selectMode && cardTaxonomy.heroNames.length > 0 && swapTargets.length > 0 && onSwap && (
+        chooseSwapTarget ? <MenuRoot kind="dropdown" open={swapOpen} onOpenChange={setSwapOpen}>
+          <MenuTrigger asChild>{swapButton}</MenuTrigger>
+          <MenuContent side="bottom" align="end" className="max-h-[50vh] max-w-80 overflow-y-auto" data-swap-menu>
+            <MenuLabel>{t('installed.swap.choose')}</MenuLabel>
+            <DeferredMenuItems>{() => swapTargets.map(target => <MenuItem key={target.key}
+              leading={<span className="flex h-[22px] w-[66px] shrink-0 items-center" aria-hidden><HeroIconStack heroes={target.heroNames} /></span>}
+              disabled={swapping} title={target.name} onSelect={() => { void runSwap(target.key); }}>{target.name}</MenuItem>)}</DeferredMenuItems>
+          </MenuContent>
+        </MenuRoot> : swapButton
+      )}
         <button
           onClick={async () => {
             const toggled = await onToggle();
@@ -1428,6 +1337,7 @@ export function ModCard({
       ref={cardRef}
       data-mod-entry-key={entryKey}
       data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
       onPointerEnter={() => {
         pointerInside.current = true;
@@ -1445,7 +1355,7 @@ export function ModCard({
         }
       }}
       onContextMenu={captureContextImage}
-      className={`installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
+      className={`installed-card @container/installed-card group/card relative isolate rounded-xl border ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {(selectMode || selectionPreview) && (
@@ -1491,9 +1401,7 @@ export function ModCard({
             variantStatusTitle={variantStatusTitle}
             metaChipClasses={metaChipClasses}
             manualTagChipClasses={manualTagChipClasses}
-            inferredTagChipClasses={inferredTagChipClasses}
             dangerInlineChipClasses={dangerInlineChipClasses}
-            tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
           />
@@ -1555,7 +1463,6 @@ export function ModCard({
               {!selectMode && <ModSafetyBadge variant="overlay" id={(mod.safetyTarget ?? mod).id}
                 name={(mod.safetyTarget ?? mod).name} snapshot={(mod.safetyTarget ?? mod).safety} />}
               {!selectMode && <CrashAdvisoryBadge variant="overlay" modIds={mod.crashModIds ?? [mod.id]} />}
-              {!selectMode && <RequirementWarning mod={mod} variant="overlay" />}
               {mod.nsfw && (
                 <Tag
                   tone="danger"
@@ -1576,8 +1483,6 @@ export function ModCard({
                   {t('installed.card.overlap')}
                 </Tag>
               )}
-              <OutdatedVdataTag outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} variant="overlay" />
-              <StaleModelTag models={mod.staleModels} variant="overlay" />
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"
@@ -1628,6 +1533,7 @@ export function ModCard({
         return (
           <ModMediaPreview
             mod={mod}
+            heroName={cardTaxonomy.previewHeroName}
             hideNsfwPreviews={hideNsfwPreviews}
             soundVolume={soundVolume}
             overlayBadges={overlayBadges}
@@ -1648,28 +1554,14 @@ export function ModCard({
             onRename={onRenameLocal}
           />
           <div
-            className={`${isCompact ? 'mt-1.5 h-7 gap-1.5' : 'mt-1 gap-3'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end`}
+            className={`${isCompact ? 'mt-1.5' : 'mt-1'} grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-1.5`}
             title={t('installed.card.gridMetaTitle', { file: mod.fileName, size: formatBytes(mod.size), date: formatAbsoluteDate(mod.installedAt) })}
           >
-            <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
-              {cardTaxonomy.heroName && (
-                <span
-                  className="inline-flex flex-shrink-0 items-center"
-                  title={cardTaxonomy.heroName}
-                >
-                  <HeroTagLabel
-                    heroName={cardTaxonomy.heroName}
-                    iconClassName={tagIconClassName}
-                    iconOnly
-                  />
-                </span>
-              )}
-              {cardTaxonomyLabel && (
-                <MetaTextChip
-                  label={cardTaxonomyLabel}
-                  className={metaChipClasses}
-                />
-              )}
+            <div className="flex h-7 min-w-0 items-center gap-1 text-xs text-text-secondary">
+              <RequirementWarning mod={mod}>{(icon, title) => <RepairIssueIcons
+                outdated={mod.outdatedVdata} enabled={mod.outdatedVdataEnabled ?? mod.enabled} models={mod.staleModels}
+                requirement={selectMode ? undefined : { icon, title }} />}</RequirementWarning>
+              <InstalledTaxonomyChips taxonomy={cardTaxonomy} className={metaChipClasses} />
             </div>
 
             <div className={`flex flex-shrink-0 items-center justify-end gap-2 ${isCompact ? '' : 'pr-1'}`}>

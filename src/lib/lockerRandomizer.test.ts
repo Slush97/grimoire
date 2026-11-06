@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import type { GlobalModType, Mod } from '../types/mod';
 import { buildHeroList } from './lockerUtils';
 import {
+  getManualOnlyShuffleKeys,
   planRandomization,
   planLaunchShuffle,
   prunePoolKeysForMod,
   shuffleGroupKind,
   shufflePoolKey,
+  shuffleExclusionKey,
   shuffleSkinKey,
   summarizeShufflePool,
   readStoredShuffleIncluded,
@@ -41,6 +43,102 @@ const sequenceRng = (...values: number[]) => {
   let index = 0;
   return () => values[Math.min(index++, values.length - 1)] ?? 0;
 };
+
+it('leaves multi-hero WiP files untouched by both hero selection and disable sweeps', () => {
+  const shared = mod({ id: 'shared', sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const haze = mod({ id: 'haze', sourceSection: 'Mod', lockerHeroes: ['Haze'] });
+  const wraith = mod({ id: 'wraith', sourceSection: 'Mod', lockerHeroes: ['Wraith'] });
+  const included = new Set([shared, haze, wraith].map(shuffleSkinKey));
+  const plan = planRandomization({
+    heroSkins: new Map([[1, [shared, haze]], [2, [shared, wraith]]]),
+    heroIds: [1, 2], included, rng: fixedRng(0),
+  });
+  expect(plan.enableIds).toEqual(['haze', 'wraith']);
+  expect(plan.disableIds).toEqual([]);
+  expect(shuffleGroupKind(shared)).toBeNull();
+  expect(summarizeShufflePool([shared], included).eligibleKeys).toEqual([]);
+});
+
+it('preserves every variant of a logical skin containing a shared hero payload', () => {
+  const shared = mod({ id: 'shared', gameBananaId: 7, sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const single = mod({ id: 'single', gameBananaId: 7, sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze'] });
+  const alternative = mod({ id: 'alternative', sourceSection: 'Mod', lockerHeroes: ['Haze'] });
+  const included = new Set([shared, alternative].map(shuffleSkinKey));
+  expect(planRandomization({
+    heroSkins: new Map([[1, [shared, single, alternative]], [2, [shared]]]),
+    heroIds: [1, 2], included, rng: fixedRng(0),
+  })).toEqual({ enableIds: ['alternative'], disableIds: [], changedHeroes: [1] });
+  const excludedSkinKeys = getManualOnlyShuffleKeys([shared, single, alternative]);
+  expect(shuffleGroupKind(single, { excludedSkinKeys })).toBeNull();
+  expect(summarizeShufflePool([single], included, { excludedSkinKeys }).eligibleKeys).toEqual([]);
+});
+
+it('excludes a shared logical skin before splitting the library into visible hero groups', () => {
+  const shared = mod({ id: 'shared', localGroupId: 'g', sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const single = mod({ id: 'single', localGroupId: 'g', sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Ivy'] });
+  const alternative = mod({ id: 'alternative', sourceSection: 'Mod', lockerHeroes: ['Ivy'] });
+  expect(planLaunchShuffle({
+    mods: [shared, single, alternative], heroList: [{ id: 1, name: 'Ivy' }],
+    included: new Set([shared, alternative].map(shuffleSkinKey)), rng: fixedRng(0),
+  })).toEqual({ enableIds: ['alternative'], disableIds: [], changedHeroes: [1] });
+});
+
+it('does not exclude an unrelated skin when a Sound submission shares its numeric ID', () => {
+  const sound = mod({ id: 'sound', gameBananaId: 7, sourceSection: 'Sound',
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const skin = mod({ id: 'skin', gameBananaId: 7, sourceSection: 'Mod', lockerHeroes: ['Haze'] });
+  expect(planLaunchShuffle({
+    mods: [sound, skin], heroList: [{ id: 1, name: 'Haze' }],
+    included: new Set([shuffleSkinKey(skin)]), rng: fixedRng(0),
+  }).enableIds).toEqual(['skin']);
+});
+
+it('keeps hero-attributed HUDs in their existing General shuffle bucket', () => {
+  const hud = mod({ id: 'hud', gameBananaId: 7, sourceSection: 'Mod', globalType: 'hud',
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const skin = mod({ id: 'skin', gameBananaId: 7, sourceSection: 'Mod', lockerHeroes: ['Haze'] });
+  const excludedSkinKeys = getManualOnlyShuffleKeys([hud, skin]);
+  expect(excludedSkinKeys.size).toBe(0);
+  expect(shuffleGroupKind(hud, { excludedSkinKeys })).toBe('bucket');
+  expect(shuffleGroupKind(skin, { excludedSkinKeys })).toBe('hero');
+  expect(planLaunchShuffle({
+    mods: [hud], heroList: [{ id: 1, name: 'Haze' }, { id: 2, name: 'Wraith' }],
+    included: new Set([shufflePoolKey(hud)]), rng: fixedRng(0),
+  }).enableIds).toEqual(['hud']);
+});
+
+it('scopes remote exclusions to their section without changing persisted shuffle identities', () => {
+  const shared = mod({ id: 'shared', gameBananaId: 7, sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const wipSibling = mod({ id: 'sibling', gameBananaId: 7, sourceSection: 'Wip', enabled: true,
+    lockerHeroes: ['Haze'] });
+  const unrelated = mod({ id: 'skin', gameBananaId: 7, sourceSection: 'Mod', lockerHeroes: ['Haze'] });
+  const excludedSkinKeys = getManualOnlyShuffleKeys([shared, wipSibling, unrelated]);
+  expect(shuffleSkinKey(shared)).toBe(shuffleSkinKey(unrelated));
+  expect(shuffleExclusionKey(shared)).not.toBe(shuffleExclusionKey(unrelated));
+  expect(shuffleGroupKind(wipSibling, { excludedSkinKeys })).toBeNull();
+  expect(shuffleGroupKind(unrelated, { excludedSkinKeys })).toBe('hero');
+  expect(planLaunchShuffle({
+    mods: [shared, wipSibling, unrelated], heroList: [{ id: 1, name: 'Haze' }, { id: 2, name: 'Wraith' }],
+    included: new Set([shuffleSkinKey(unrelated)]), rng: fixedRng(0),
+  })).toEqual({ enableIds: ['skin'], disableIds: [], changedHeroes: [1] });
+});
+
+it('keeps an explicit local group excluded as a whole across member sections and remote provenance', () => {
+  const shared = mod({ id: 'shared', localGroupId: 'mixed', gameBananaId: 7, sourceSection: 'Wip',
+    lockerHeroes: ['Haze', 'Wraith'] });
+  const sibling = mod({ id: 'sibling', localGroupId: 'mixed', gameBananaId: 8, sourceSection: 'Mod',
+    lockerHeroes: ['Haze'] });
+  const excludedSkinKeys = getManualOnlyShuffleKeys([shared, sibling]);
+  expect(shuffleExclusionKey(shared)).toBe('localgroup:mixed');
+  expect(shuffleExclusionKey(sibling)).toBe(shuffleExclusionKey(shared));
+  expect(shuffleGroupKind(sibling, { excludedSkinKeys })).toBeNull();
+});
 
 it('shuffles direct and descendant skin categories together under their hero', () => {
   const heroList = buildHeroList([{

@@ -145,22 +145,30 @@ export function CheckboxMark({
     indeterminate = false,
     disabled = false,
     className = '',
+    tone = 'accent',
+    icon: Icon = Check,
+    variant = 'default',
 }: {
     checked: boolean;
     indeterminate?: boolean;
     disabled?: boolean;
     className?: string;
+    tone?: 'accent' | 'success' | 'danger';
+    icon?: LucideIcon;
+    variant?: 'default' | 'menu';
 }) {
     const active = checked || indeterminate;
+    const selectedStyles = tone === 'success' ? 'border-state-success bg-state-success'
+        : tone === 'danger' ? 'border-state-danger bg-state-danger' : 'border-accent bg-accent';
     return (
         <span
             aria-hidden
-            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent ${
-                active ? 'border-accent bg-accent' : 'border-border bg-bg-secondary'
+            className={`flex-shrink-0 w-4 h-4 rounded-sm ${variant === 'menu' ? 'border' : 'border-2'} flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent ${
+                active ? selectedStyles : variant === 'menu' ? 'border-border' : 'border-border bg-bg-secondary'
             } ${disabled ? 'opacity-50' : ''} ${className}`}
         >
             {checked ? (
-                <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
+                <Icon className={`${variant === 'menu' ? 'w-3 h-3' : 'w-2.5 h-2.5'} ${variant === 'menu' && tone === 'accent' ? 'text-accent-foreground' : 'text-black'}`} strokeWidth={variant === 'menu' ? 2 : 3} />
             ) : indeterminate ? (
                 <span className="w-2 h-0.5 rounded-full bg-black" />
             ) : null}
@@ -376,7 +384,7 @@ export function Toggle({ id, checked, onChange, label, description, className = 
 }
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success' | 'warning' | 'update';
+    variant?: 'primary' | 'secondary' | 'toolbar' | 'danger' | 'ghost' | 'success' | 'warning' | 'update';
     size?: 'sm' | 'md';
     icon?: LucideIcon;
     isLoading?: boolean;
@@ -398,6 +406,7 @@ export function Button({
         primary: 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent',
         update: 'border-state-update/40 bg-state-update/10 hover:bg-state-update/20 hover:border-state-update/60 text-text-primary focus-visible:ring-state-update',
         secondary: 'border-hl/5 bg-bg-tertiary hover:bg-hl/10 text-text-primary focus-visible:ring-hl/60',
+        toolbar: 'border-border bg-bg-secondary hover:bg-bg-tertiary text-text-primary focus-visible:ring-accent',
         danger: 'border-state-danger/30 bg-state-danger/10 hover:bg-state-danger/20 hover:border-state-danger/50 text-state-danger focus-visible:ring-state-danger',
         success: 'border-state-success/30 bg-state-success/10 hover:bg-state-success/20 hover:border-state-success/50 text-state-success focus-visible:ring-state-success',
         warning: 'border-state-warning/30 bg-state-warning/10 hover:bg-state-warning/20 hover:border-state-warning/50 text-state-warning focus-visible:ring-state-warning',
@@ -540,11 +549,159 @@ export function ModalHeader({
 // styles (underline vs pill) collapse to one.
 // ============================================================================
 
+/** Joined single-selection tabs for Browse and Installed view options. */
+export function ViewOptionControl<T extends string>({
+    label,
+    value,
+    options,
+    onChange,
+    disabled = false,
+}: {
+    label: string;
+    value: T;
+    options: readonly { value: T; label: ReactNode; icon?: LucideIcon }[];
+    onChange: (value: T) => void;
+    disabled?: boolean;
+}) {
+    const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    const move = (from: number, dir: -1 | 1) => {
+        if (disabled) return;
+        const next = (from + dir + options.length) % options.length;
+        onChange(options[next].value);
+        refs.current[next]?.focus();
+    };
+
+    return (
+        <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-[3px]" role="tablist" aria-label={label}>
+            {options.map((option, i) => {
+                const Icon = option.icon;
+                const active = option.value === value;
+                return (
+                    <button
+                        key={option.value}
+                        ref={(el) => { refs.current[i] = el; }}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        tabIndex={active ? 0 : -1}
+                        disabled={disabled}
+                        onClick={() => !disabled && onChange(option.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                move(i, 1);
+                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                move(i, -1);
+                            }
+                        }}
+                        className={`flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${
+                            active
+                                ? 'bg-bg-tertiary text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary'
+                        }`}
+                    >
+                        {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+                        <span className="min-w-0 translate-y-px truncate">{option.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
 interface SegmentOption<T extends string> {
     value: T;
     label: ReactNode;
     /** Hover tooltip for the segment. */
     title?: string;
+}
+
+interface MultiSelectSegmentOption<T extends string> {
+    value: T;
+    label: ReactNode;
+    ariaLabel?: string;
+    icon?: LucideIcon;
+    title?: string;
+}
+
+interface MultiSelectSegmentsProps<T extends string> {
+    options: readonly MultiSelectSegmentOption<T>[];
+    selected: readonly T[];
+    onToggle: (value: T) => void;
+    label: string;
+    multiselectable?: boolean;
+    tone?: 'accent' | 'neutral';
+    /** Optional right-click shortcut. Selection rules stay with the caller. */
+    onSelectOnly?: (value: T) => void;
+    className?: string;
+    itemClassName?: string;
+}
+
+/** Joined tabs with independent selection and focus, shared by Browse sections
+ * and Installed filters. Callers decide whether an empty selection is valid. */
+export function MultiSelectSegments<T extends string>({
+    options,
+    selected,
+    onToggle,
+    label,
+    multiselectable = true,
+    tone = 'accent',
+    onSelectOnly,
+    className = '',
+    itemClassName = 'h-8 px-3',
+}: MultiSelectSegmentsProps<T>) {
+    const refs = useRef<(HTMLButtonElement | null)[]>([]);
+    const [focused, setFocused] = useState<T>();
+    const tabStop = options.find((option) => option.value === focused)
+        ?? options.find((option) => selected.includes(option.value))
+        ?? options[0];
+
+    return (
+        <div role="tablist" aria-label={label} aria-multiselectable={multiselectable}
+            className={`flex items-center rounded-lg border border-border bg-bg-secondary p-[3px] ${className}`}>
+            {options.map((option, index) => {
+                const Icon = option.icon;
+                const active = selected.includes(option.value);
+                return <button
+                    key={option.value}
+                    ref={(node) => { refs.current[index] = node; }}
+                    type="button"
+                    role="tab"
+                    aria-label={option.ariaLabel}
+                    aria-selected={active}
+                    tabIndex={option === tabStop ? 0 : -1}
+                    title={option.title}
+                    onFocus={() => setFocused(option.value)}
+                    onClick={() => onToggle(option.value)}
+                    onContextMenu={onSelectOnly ? (event) => {
+                        event.preventDefault();
+                        event.currentTarget.focus();
+                        onSelectOnly(option.value);
+                    } : undefined}
+                    onKeyDown={(event) => {
+                        let next: number;
+                        switch (event.key) {
+                            case 'ArrowRight': case 'ArrowDown': next = (index + 1) % options.length; break;
+                            case 'ArrowLeft': case 'ArrowUp': next = (index - 1 + options.length) % options.length; break;
+                            case 'Home': next = 0; break;
+                            case 'End': next = options.length - 1; break;
+                            default: return;
+                        }
+                        event.preventDefault();
+                        refs.current[next]?.focus();
+                    }}
+                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${itemClassName} ${
+                        active ? `${tone === 'neutral' ? 'bg-bg-tertiary' : 'bg-accent/15'} text-text-primary` : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                >
+                    {Icon && <Icon className="h-4 w-4 flex-shrink-0" aria-hidden />}
+                    {option.label}
+                </button>;
+            })}
+        </div>
+    );
 }
 
 interface SegmentedControlProps<T extends string> {

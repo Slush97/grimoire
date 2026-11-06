@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -56,6 +56,10 @@ import type { ReplaceableFile } from '../lib/updateActions';
 import { RequirementsPanel } from './requirements/RequirementsPanel';
 import { useRequirementsStore } from '../stores/requirementsStore';
 import { hasRequirementIssues } from '../lib/modRequirements';
+import { categoryModelForSection, resolveCategoryPath } from '../lib/categoryPaths';
+import { heroNameForLabel } from '../lib/heroNames';
+import { useCategoryStore } from '../stores/categoryStore';
+import { HeroTagLabel } from './installed/chips';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -144,6 +148,143 @@ interface ModDetailsModalProps {
   onOpenGameBananaItem?: (item: GameBananaItemRef) => void;
 }
 
+type LightboxView = { scale: number; x: number; y: number };
+
+/** Each image opening owns its zoom, bounded pan, and control visibility. */
+function ModImageLightbox({ src, modName, caption, index, count, onClose, onPrevious, onNext }: {
+  src: string;
+  modName: string;
+  caption?: string;
+  index: number;
+  count: number;
+  onClose: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  const { t } = useTranslation();
+  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [view, setView] = useState<LightboxView>({ scale: 1, x: 0, y: 0 });
+  const viewRef = useRef(view);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ pointerId: number; startX: number; startY: number; x: number; y: number } | null>(null);
+
+  const applyView = useCallback((next: LightboxView) => {
+    const viewport = viewportRef.current;
+    const image = imageRef.current;
+    if (!viewport || !image) return;
+    // Keep smaller axes centered; larger ones can pan only as far as their edges.
+    const maxX = Math.max(0, (image.offsetWidth * next.scale - viewport.clientWidth) / 2);
+    const maxY = Math.max(0, (image.offsetHeight * next.scale - viewport.clientHeight) / 2);
+    const clamped = { scale: next.scale, x: Math.max(-maxX, Math.min(maxX, next.x)), y: Math.max(-maxY, Math.min(maxY, next.y)) };
+    const current = viewRef.current;
+    if (current.scale === clamped.scale && current.x === clamped.x && current.y === clamped.y) return;
+    viewRef.current = clamped;
+    setView(clamped);
+  }, []);
+
+  useEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    const onWheel = (event: WheelEvent) => {
+      const target = event.target as Element;
+      if (target.closest('figcaption, [data-lightbox-controls]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const viewport = viewportRef.current;
+      const image = imageRef.current;
+      if (!viewport || !image?.naturalWidth || !event.deltaY || drag.current) return;
+      const current = viewRef.current;
+      const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1);
+      const scale = Math.max(1, Math.min(8, current.scale * Math.exp(-Math.max(-240, Math.min(240, pixels)) * 0.002)));
+      if (scale === current.scale) return;
+      const rect = viewport.getBoundingClientRect();
+      const x = event.clientX - rect.left - rect.width / 2;
+      const y = event.clientY - rect.top - rect.height / 2;
+      const ratio = scale / current.scale;
+      applyView({ scale, x: x - (x - current.x) * ratio, y: y - (y - current.y) * ratio });
+      setControlsVisible(scale === 1);
+    };
+    // React wheel handlers are passive in Chromium; prevent page/browser zoom here.
+    backdrop.addEventListener('wheel', onWheel, { passive: false });
+    return () => backdrop.removeEventListener('wheel', onWheel);
+  }, [applyView, backdropRef]);
+
+  useLayoutEffect(() => {
+    const clamp = () => applyView(viewRef.current);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(clamp);
+    if (viewportRef.current) observer?.observe(viewportRef.current);
+    if (imageRef.current) observer?.observe(imageRef.current);
+    window.addEventListener('resize', clamp);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', clamp); };
+  }, [applyView]);
+
+  const endDrag = (event: ReactPointerEvent<HTMLImageElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const alt = t('modDetails.images.altFullSize', { name: modName, index: index + 1 });
+
+  return (
+    <div ref={backdropRef} className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/95 p-4"
+      role="dialog" aria-modal="true" aria-label={t('modDetails.images.fullSizeAria', { name: modName })}>
+      <div data-lightbox-controls inert={!controlsVisible} aria-hidden={!controlsVisible}
+        className={`pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 motion-reduce:transition-none ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <button type="button" onClick={event => { event.stopPropagation(); onClose(); }} aria-label={t('modDetails.aria.closeFullSizeView')}
+          className="pointer-events-auto absolute top-4 right-4 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
+          <X className="h-5 w-5" />
+        </button>
+        {count > 1 && <>
+          <button type="button" onClick={event => { event.stopPropagation(); onPrevious(); }} aria-label={t('modDetails.aria.previousImage')}
+            className="pointer-events-auto absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button type="button" onClick={event => { event.stopPropagation(); onNext(); }} aria-label={t('modDetails.aria.nextImage')}
+            className="pointer-events-auto absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-hl/15 bg-black/60 p-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white cursor-pointer">
+            <ChevronRight className="h-6 w-6" />
+          </button>
+          <div className="absolute top-4 left-4 rounded-md border border-hl/15 bg-black/60 px-2.5 py-1 text-xs text-white/90 backdrop-blur-sm">{index + 1} / {count}</div>
+        </>}
+      </div>
+      <figure className="pointer-events-none flex h-full w-full min-h-0 flex-col items-center gap-3" onClick={event => event.stopPropagation()}>
+        <div ref={viewportRef} data-lightbox-viewport className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
+          <ImageContextMenu src={src} alt={alt}>
+            <img ref={imageRef} src={src} alt={alt} draggable={false}
+              className={`pointer-events-auto max-h-full max-w-full touch-none select-none object-contain ${view.scale > 1 ? dragging ? 'cursor-grabbing' : 'cursor-grab' : 'cursor-default'}`}
+              style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+              onLoad={() => applyView(viewRef.current)}
+              onClick={event => {
+                event.stopPropagation();
+                if (viewRef.current.scale === 1) setControlsVisible(visible => !visible);
+              }}
+              onPointerDown={event => {
+                if (event.button !== 0 || viewRef.current.scale === 1) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: viewRef.current.x, y: viewRef.current.y };
+                setDragging(true);
+              }}
+              onPointerMove={event => {
+                const active = drag.current;
+                if (!active || active.pointerId !== event.pointerId) return;
+                const dx = event.clientX - active.startX;
+                const dy = event.clientY - active.startY;
+                applyView({ scale: viewRef.current.scale, x: active.x + dx, y: active.y + dy });
+              }}
+              onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
+            />
+          </ImageContextMenu>
+        </div>
+        {caption && <figcaption className="pointer-events-auto max-h-32 w-full max-w-3xl shrink-0 overflow-y-auto whitespace-pre-wrap break-words text-center text-sm text-text-secondary select-text">{caption}</figcaption>}
+      </figure>
+    </div>
+  );
+}
+
 function ModDetailsModal({
   onBack,
   requirementsLayer = false,
@@ -185,6 +326,19 @@ function ModDetailsModal({
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  const categoryModel = categoryModelForSection(section);
+  const categoryPaths = useCategoryStore(state => state.pathsByModel[categoryModel]);
+  const heroNames = useCategoryStore(state => state.heroNames);
+  const loadCategories = useCategoryStore(state => state.load);
+  const categories = resolveCategoryPath(categoryPaths, mod.category, mod.rootCategory)
+    .map(category => ({ category, hero: heroNameForLabel(category.name, heroNames) }))
+    .sort((a, b) => Number(!!b.hero) - Number(!!a.hero));
+  useEffect(() => {
+    const models = categoryModel === 'ModCategory' ? [categoryModel] : [categoryModel, 'ModCategory'];
+    void Promise.all(models.map(model => loadCategories(model))).catch(() => {
+      // Supplied category names remain usable when no cached tree is available.
+    });
+  }, [mod.id, categoryModel, loadCategories]);
   const requirementMods = useAppStore(state => state.mods);
   const requirementSnapshot = useRequirementsStore(state => state.snapshots[`${section}:${mod.id}`]) ?? mod.requirements;
   const requirementIssues = hasRequirementIssues(requirementSnapshot, requirementMods);
@@ -292,13 +446,9 @@ function ModDetailsModal({
     { fileId: number; fileName: string; replaced: ReplaceableFile } | null
   >(null);
   const [dontAskAgain, setDontAskAgain] = useState(false);
-  // Backdrop dismissal for the two nested overlays. The hook ignores drags
-  // that only end on the backdrop, so releasing a text selection (or the
-  // lightbox drag) outside the panel no longer closes them.
-  const lightboxBackdropRef = useBackdropDismiss<HTMLDivElement>(
-    () => setLightboxOpen(false),
-    lightboxOpen
-  );
+  // Backdrop dismissal for the nested delete overlay. The hook ignores drags
+  // that only end on the backdrop, so releasing a text selection outside the
+  // panel no longer closes it.
   const deleteBackdropRef = useBackdropDismiss<HTMLDivElement>(
     () => setDeleteCandidate(null),
     !!deleteCandidate && !deleteInProgress
@@ -1079,70 +1229,67 @@ function ModDetailsModal({
               </button>
             </div>
           )}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-state-update/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-update border border-state-update/40">
-                <Download className="w-2.5 h-2.5" />
-                {t('profiles.actions.update')}
-              </span>
-            )}
-            {installed && !updateAvailable && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
-                <CheckCircle2 className="w-2.5 h-2.5" />
-                {t('modDetails.status.installed')}
-              </span>
-            )}
-            {archivedByAuthor && (
-              <Tag icon={Archive} title={t('modDetails.status.archivedByAuthorTitle')}>
-                {t('modDetails.status.archivedByAuthor')}
-              </Tag>
-            )}
-            {/* Only surface the ignore-updates pill in the installed-mod
-                context (handler provided) and when it's actually relevant:
-                either there's an update available now, or the user already
-                opted out and might want to re-enable detection. */}
-            {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
-              <button
-                type="button"
-                onClick={onToggleIgnoreUpdates}
-                disabled={ignoreUpdatesPending}
-                aria-busy={ignoreUpdatesPending}
-                className={
-                  ignoreUpdates
-                    ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
-                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
-                }
-                title={
-                  ignoreUpdates
-                    ? t('modDetails.actions.resumeUpdatesTitle')
-                    : t('modDetails.actions.stopUpdatesTitle')
-                }
-              >
-                {ignoreUpdates ? (
-                  <>
-                    <BellOff className="w-2.5 h-2.5" />
-                    {t('modDetails.status.updatesIgnored')}
-                  </>
-                ) : (
-                  <>
-                    <Bell className="w-2.5 h-2.5" />
-                    {t('modDetails.actions.ignoreUpdates')}
-                  </>
-                )}
-              </button>
-            )}
-            {outdated && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                {t('modDetails.status.outdated')}
-              </span>
-            )}
-            {mod.category?.name && (
-              <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border">
-                {gameBananaCategoryLabel(mod.category.name, t)}
-              </span>
-            )}
-          </div>
+          {(updateAvailable || installed || archivedByAuthor || outdated) && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {updateAvailable && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-state-update/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-update border border-state-update/40">
+                  <Download className="w-2.5 h-2.5" />
+                  {t('profiles.actions.update')}
+                </span>
+              )}
+              {installed && !updateAvailable && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  {t('modDetails.status.installed')}
+                </span>
+              )}
+              {archivedByAuthor && (
+                <Tag icon={Archive} title={t('modDetails.status.archivedByAuthorTitle')}>
+                  {t('modDetails.status.archivedByAuthor')}
+                </Tag>
+              )}
+              {/* Only surface the ignore-updates pill in the installed-mod
+                  context (handler provided) and when it's actually relevant:
+                  either there's an update available now, or the user already
+                  opted out and might want to re-enable detection. */}
+              {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
+                <button
+                  type="button"
+                  onClick={onToggleIgnoreUpdates}
+                  disabled={ignoreUpdatesPending}
+                  aria-busy={ignoreUpdatesPending}
+                  className={
+                    ignoreUpdates
+                      ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
+                      : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                  }
+                  title={
+                    ignoreUpdates
+                      ? t('modDetails.actions.resumeUpdatesTitle')
+                      : t('modDetails.actions.stopUpdatesTitle')
+                  }
+                >
+                  {ignoreUpdates ? (
+                    <>
+                      <BellOff className="w-2.5 h-2.5" />
+                      {t('modDetails.status.updatesIgnored')}
+                    </>
+                  ) : (
+                    <>
+                      <Bell className="w-2.5 h-2.5" />
+                      {t('modDetails.actions.ignoreUpdates')}
+                    </>
+                  )}
+                </button>
+              )}
+              {outdated && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                  {t('modDetails.status.outdated')}
+                </span>
+              )}
+            </div>
+          )}
           {/* Sidebar moves the title down into the body to keep this header from
               cramming, so here it's just a spacer that pushes the action buttons
               to the right edge. */}
@@ -1608,8 +1755,19 @@ function ModDetailsModal({
                 </div>
               )}
 
-              <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
+              {categories.length > 0 && (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {categories.map(({ category, hero }) => hero ? (
+                      <span key={category.id ?? category.name} className="inline-flex h-[22px] items-center" title={category.name}>
+                        <HeroTagLabel heroName={hero} iconClassName="h-[22px] w-[22px]" iconOnly />
+                      </span>
+                    ) : (
+                      <Tag key={category.id ?? category.name} className="h-[22px]">{gameBananaCategoryLabel(category.name, t)}</Tag>
+                    ))}
+                </div>
+              )}
               {filesSection}
+              <RequirementsPanel source={{ id: mod.id, section, name: mod.name, requirements: mod.requirements ?? { status: 'unavailable', checkedAt: 0 } }} />
 
               {submitter && (
                 <section>
@@ -1920,59 +2078,12 @@ function ModDetailsModal({
         </div>
       </div>
 
-      {/* Lightbox overlay - sits above the modal so ESC closes it first.
-          Click outside the image dismisses; carousel arrows still work via
-          the global keydown listener so users can flip pictures while zoomed. */}
+      {/* Keyed per image so navigation and reopening reset zoom and controls. */}
       {lightboxOpen && currentImageFullUrl && (
-        <div
-          ref={lightboxBackdropRef}
-          className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4 animate-fade-in"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('modDetails.images.fullSizeAria', { name: mod.name })}
-        >
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
-            aria-label={t('modDetails.aria.closeFullSizeView')}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          {images.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-                aria-label={t('modDetails.aria.previousImage')}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                aria-label={t('modDetails.aria.nextImage')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-hl/15 transition-colors cursor-pointer z-10"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-              <div className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white/90 text-xs border border-hl/15">
-                {currentImageIndex + 1} / {images.length}
-              </div>
-            </>
-          )}
-          <ImageContextMenu
-            src={currentImageFullUrl}
-            alt={t('modDetails.images.altFullSize', { name: mod.name, index: currentImageIndex + 1 })}
-          >
-            <img
-              src={currentImageFullUrl}
-              alt={t('modDetails.images.altFullSize', { name: mod.name, index: currentImageIndex + 1 })}
-              className="max-w-full max-h-full object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </ImageContextMenu>
+        <div className="fixed inset-0 z-[60] animate-fade-in">
+          <ModImageLightbox key={`${mod.id}:${currentImageIndex}`} src={currentImageFullUrl}
+            modName={mod.name} caption={currentImage.caption} index={currentImageIndex} count={images.length}
+            onClose={() => setLightboxOpen(false)} onPrevious={goToPrevious} onNext={goToNext} />
         </div>
       )}
     </div>

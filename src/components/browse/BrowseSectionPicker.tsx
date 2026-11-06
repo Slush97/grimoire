@@ -2,6 +2,7 @@ import { Construction, Music, Package } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GameBananaSection } from '../../types/gamebanana';
 import { toggleBrowseSection, type BrowseSections } from '../../lib/browseSections';
+import { MultiSelectSegments } from '../common/ui';
 
 export function BrowseSectionPicker({ sections, selected, canCombine, onChange }: {
   sections: GameBananaSection[];
@@ -11,26 +12,21 @@ export function BrowseSectionPicker({ sections, selected, canCombine, onChange }
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-shrink-0 items-center h-10 rounded-sm border border-border bg-bg-secondary p-1" role="group" aria-label={t('browse.section.label')}>
-      {sections.map((entry) => {
-        const Icon = entry.modelName === 'Sound' ? Music : entry.modelName === 'Wip' ? Construction : Package;
-        const active = selected.includes(entry.modelName);
-        const title = t(`sync.sections.${entry.modelName}`, { defaultValue: entry.pluralTitle });
-        return (
-          <button
-            key={entry.modelName}
-            type="button"
-            aria-label={title}
-            aria-pressed={active}
-            onClick={() => onChange(canCombine ? toggleBrowseSection(selected, entry.modelName) : [entry.modelName])}
-            className={`flex items-center gap-1.5 px-3 py-1.5 @max-[980px]:px-2.5 rounded-sm transition-colors cursor-pointer ${active ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:text-text-primary'}`}
-            title={canCombine ? t('browse.section.combineHint') : t('browse.section.catalogHint')}
-          >
-            <Icon className="w-4 h-4" />
-            <span className="text-sm @max-[980px]:hidden">{title}</span>
-          </button>
-        );
-      })}
-    </div>
+    <MultiSelectSegments
+      label={t('browse.section.label')}
+      selected={selected}
+      multiselectable={canCombine}
+      onToggle={(section) => onChange(canCombine ? toggleBrowseSection(selected, section) : [section])}
+      onSelectOnly={(section) => onChange([section])}
+      className="h-10 flex-shrink-0"
+      itemClassName="h-8 px-3 @max-[980px]:px-2.5"
+      options={sections.map((entry) => ({
+        value: entry.modelName,
+        ariaLabel: t(`sync.sections.${entry.modelName}`, { defaultValue: entry.pluralTitle }),
+        label: <span className="text-sm @max-[980px]:hidden">{t(`sync.sections.${entry.modelName}`, { defaultValue: entry.pluralTitle })}</span>,
+        icon: entry.modelName === 'Sound' ? Music : entry.modelName === 'Wip' ? Construction : Package,
+        title: canCombine ? t('browse.section.combineHint') : t('browse.section.catalogHint'),
+      }))}
+    />
   );
 }

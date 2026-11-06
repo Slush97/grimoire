@@ -24,6 +24,7 @@ import type {
     ApplyUnknownModMatchArgs,
     AssociateUnknownModArgs,
     DeleteModEntry,
+    ModSwapPlacement,
     DeleteModsProgress,
     GlobalModType,
     EditLocalModArgs,
@@ -177,6 +178,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getMods: () => ipcRenderer.invoke('get-mods'),
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
+    swapMods: (enableIds: string[], disableIds: string[], placement: ModSwapPlacement) => ipcRenderer.invoke('swap-mods', enableIds, disableIds, placement),
     deleteMod: (entry: DeleteModEntry) => ipcRenderer.invoke('delete-mod', entry),
     deleteMods: (entries: DeleteModEntry[]) => ipcRenderer.invoke('delete-mods', entries),
     onDeleteModsProgress: (callback: (progress: DeleteModsProgress) => void) => {
@@ -487,6 +489,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>
         ipcRenderer.invoke('get-gamebanana-categories', args),
+    onGamebananaCategoriesChanged: (callback: (model: string) => void) => {
+        const listener = (_: unknown, model: string) => callback(model);
+        ipcRenderer.on('gamebanana-categories-changed', listener);
+        return () => ipcRenderer.removeListener('gamebanana-categories-changed', listener);
+    },
     getCollection: (args: { collectionId: number }) =>
         ipcRenderer.invoke('get-collection', args),
     getCollectionItems: (args: { collectionId: number; page?: number }) =>
@@ -700,20 +707,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Mod Database (Local Cache)
     syncAllMods: () => ipcRenderer.invoke('sync-all-mods'),
     syncSection: (section: string) => ipcRenderer.invoke('sync-section', section),
-    refreshCatalogHead: () => ipcRenderer.invoke('refresh-catalog-head'),
+    refreshCatalogHead: (sections?: string[]) => ipcRenderer.invoke('refresh-catalog-head', sections),
     wipeModCache: () => ipcRenderer.invoke('wipe-mod-cache'),
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     needsSync: () => ipcRenderer.invoke('needs-sync'),
     isSyncInProgress: () => ipcRenderer.invoke('is-sync-in-progress'),
     searchLocalMods: (options: SearchLocalModsOptions) => ipcRenderer.invoke('search-local-mods', options),
-    getCachedMod: (id: number) => ipcRenderer.invoke('get-cached-mod', id),
+    getCachedMod: (id: number, section?: string) => ipcRenderer.invoke('get-cached-mod', id, section),
     getLocalModCount: (section?: string) => ipcRenderer.invoke('get-local-mod-count', section),
     getLocalCategories: (section?: string) => ipcRenderer.invoke('get-local-categories', section),
     getSectionStats: () => ipcRenderer.invoke('get-section-stats'),
-    getModsNsfwStatus: (ids: number[]) => ipcRenderer.invoke('get-mods-nsfw-status', ids),
-    updateModNsfw: (modId: number, isNsfw: boolean) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw),
-    getModsDownloadCounts: (ids: number[]) => ipcRenderer.invoke('get-mods-download-counts', ids),
-    updateModDownloadCount: (modId: number, downloadCount: number) => ipcRenderer.invoke('update-mod-download-count', modId, downloadCount),
+    getModsNsfwStatus: (ids: number[], section?: string) => ipcRenderer.invoke('get-mods-nsfw-status', ids, section),
+    updateModNsfw: (modId: number, isNsfw: boolean, section?: string) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw, section),
+    getModsDownloadCounts: (ids: number[], section?: string) => ipcRenderer.invoke('get-mods-download-counts', ids, section),
+    updateModDownloadCount: (modId: number, downloadCount: number, section?: string) => ipcRenderer.invoke('update-mod-download-count', modId, downloadCount, section),
     onSyncProgress: (callback: (data: SyncProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: SyncProgressData) => callback(data);
         ipcRenderer.on('sync-progress', handler);

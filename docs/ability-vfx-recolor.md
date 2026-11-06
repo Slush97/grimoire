@@ -26,7 +26,7 @@ The ult **dragon** is the exception. Its color is not in particles: `bookworm_dr
 
 ## Layer extraction (built)
 
-`detectVfxLayer(paths)` / `detectVfxLayerFromVpk(vpk)` in `electron/main/services/vpk.ts` find a single hero VFX layer in a VPK's path list (returns the codename, the matched paths, and the split prefixes, or null on multi hero / no VFX, matching the existing `inferHeroFromVpk` "one confident answer or nothing" contract).
+`detectVfxLayer(paths)` / `detectVfxLayerFromVpk(vpk)` in `electron/main/services/vpk.ts` find a single hero VFX layer in a VPK's path list (returns the codename, the matched paths, and the split prefixes, or null on multi hero / no VFX).
 
 `extractVfxLayer(srcVpk, outVpk, prefixes)` in `electron/main/services/modMerger.ts` runs `vpkmerge split` with a plan routing only those two particle roots into a standalone addon and dropping everything else (body model, dragon material, shared masks). Validated: the blue Paige skin (276 entries) extracts to a 267 entry particles only addon.
 

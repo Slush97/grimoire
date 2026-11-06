@@ -48,6 +48,30 @@ function setup() {
 beforeEach(() => vi.restoreAllMocks());
 
 describe('main-process update coordination', () => {
+    it('queues enabled replacements before disabled variants across every submission in a batch', async () => {
+        const h = setup();
+        h.setMods([
+            mod('off-a', 10, 'A off'), mod('on-a', 11, 'A on', 1, { enabled: true }),
+            mod('off-b', 12, 'B off', 2), mod('on-b', 13, 'B on', 2, { enabled: true }),
+        ]);
+        h.deps.details.mockImplementation(async id => details(id, id === 1
+            ? [file(20, 'A off'), file(21, 'A on')]
+            : [file(22, 'B off'), file(23, 'B on')]));
+        await h.controller.start(['off-a', 'on-a', 'off-b', 'on-b']);
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['on-a'], ['on-b'], ['off-a'], ['off-b']]);
+        expect(h.deps.snapshot).toHaveBeenCalledOnce();
+        h.work.forEach(job => job.resolve()); await flush();
+    });
+
+    it('gives a shared archive priority when any replaced file is enabled without duplicating the download', async () => {
+        const h = setup();
+        h.setMods([mod('off-only', 10, 'Original', 2), mod('off-shared', 11, 'Original'), mod('on-shared', 11, 'Original', 1, { enabled: true })]);
+        h.deps.details.mockImplementation(async id => details(id, [file(id + 20, 'Original')]));
+        await h.controller.start(['off-only', 'off-shared', 'on-shared']);
+        expect(h.deps.replace.mock.calls.map(call => call[2])).toEqual([['off-shared', 'on-shared'], ['off-only']]);
+        h.work.forEach(job => job.resolve()); await flush();
+    });
+
     it.each(['bulk', 'manual', 'details'] as const)('retains sources in every published state until %s replacement settles', async kind => {
         const h = setup();
         let standalone: Promise<unknown> | undefined;

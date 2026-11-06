@@ -176,7 +176,8 @@ export function createModUpdateController(deps: Dependencies) {
                     entries.push(mod);
                     bySubmission.set(key, entries);
                 }
-                const automatic: Array<{ group: UpdateGroup; args: DownloadModArgs; sources: string[]; promote: boolean }> = [];
+                const enabledIds = new Set(targets.filter(mod => mod.enabled).map(mod => mod.id));
+                const automatic: Array<{ group: UpdateGroup; args: DownloadModArgs; sources: string[]; promote: boolean; enabled: boolean }> = [];
                 const autoMatch = deps.autoMatchRemainingFiles();
                 for (const [key, selectedMods] of bySubmission) {
                     const modId = selectedMods[0].gameBananaId!;
@@ -205,15 +206,20 @@ export function createModUpdateController(deps: Dependencies) {
                         }
                         for (const [fileId, job] of destinations) {
                             const file = details.files!.find(file => file.id === fileId)!;
-                            automatic.push({ group, sources: job.sources, promote: job.promote, args: {
-                                modId, fileId, fileName: file.fileName, modName: details.name, section,
-                                categoryId: selectedMods[0].categoryId, isReplacement: true,
-                            } });
+                            automatic.push({
+                                group, sources: job.sources, promote: job.promote,
+                                enabled: job.sources.some(id => enabledIds.has(id)),
+                                args: {
+                                    modId, fileId, fileName: file.fileName, modName: details.name, section,
+                                    categoryId: selectedMods[0].categoryId, isReplacement: true,
+                                },
+                            });
                         }
                     } catch (error) { fail(modId, selectedMods[0].name, error); }
                 }
                 // A single recovery point covers automatic jobs and later manual choices.
                 if (automatic.length > 0 || hasPending()) await snapshot();
+                automatic.sort((a, b) => Number(b.enabled) - Number(a.enabled));
                 for (const job of automatic) {
                     try { enqueue(job.group, job.args, job.sources, job.promote, installed.filter(mod => job.sources.includes(mod.id))); }
                     catch (error) { fail(job.group.modId, job.group.modName, error); }

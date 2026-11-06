@@ -1,24 +1,26 @@
 import { canonicalHeroName, inferHeroFromTitle, isLockerManagedMod } from './lockerUtils';
-import { getInstalledCardTaxonomy } from './installedCardTaxonomy';
+import { getInstalledCardTaxonomy, type InstalledTaxonomyContext } from './installedCardTaxonomy';
 import type { Mod } from '../types/mod';
 import type { SkinEditSource } from '../types/skinEditor';
 import type { MovementFxLink } from './movementFx';
 
-export function installedDoorStuckTarget(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): SkinEditSource | MovementFxLink | null {
-  return mod.movementFx ? { kind: 'movement', choice: mod.movementFx } : installedSkinTarget(mod, heroByCategoryId);
+export function installedDoorStuckTarget(mod: Mod, context: InstalledTaxonomyContext = {}): SkinEditSource | MovementFxLink | null {
+  return mod.movementFx ? { kind: 'movement', choice: mod.movementFx } : installedSkinTarget(mod, context);
 }
 
-export function installedSkinTarget(mod: Mod, heroByCategoryId?: ReadonlyMap<number, string>): SkinEditSource | null {
+export function installedSkinTarget(mod: Mod, context: InstalledTaxonomyContext = {}): SkinEditSource | null {
   if (!isLockerManagedMod(mod)) return null;
-  const heroName = canonicalHeroName(mod.skinEdit?.hero ?? getInstalledCardTaxonomy(mod, heroByCategoryId).heroName
+  const heroes = getInstalledCardTaxonomy(mod, context).heroNames;
+  if (!mod.skinEdit?.hero && heroes.length > 1) return null;
+  const heroName = canonicalHeroName(mod.skinEdit?.hero ?? heroes[0]
     ?? inferHeroFromTitle(mod.name) ?? '');
   if (!heroName) return null;
   return { heroName, skinSources: [{ metaKey: mod.metaKey, priority: mod.priority }] };
 }
 
 /** A saved material overlay is only meaningful together with its original skins. */
-export function installedSkinPreviewTarget(mod: Mod, mods: readonly Mod[], heroByCategoryId?: ReadonlyMap<number, string>): SkinEditSource | null {
-  const target = installedSkinTarget(mod, heroByCategoryId);
+export function installedSkinPreviewTarget(mod: Mod, mods: readonly Mod[], context: InstalledTaxonomyContext = {}): SkinEditSource | null {
+  const target = installedSkinTarget(mod, context);
   if (!target) return null;
   const stack = new Map<string, Mod>();
   const visiting = new Set<string>();

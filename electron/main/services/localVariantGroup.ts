@@ -24,24 +24,29 @@ export interface LocalVariantGroupMember {
     localGroupId?: string;
     lockerHero?: string;
     lockerHeroSource?: LockerHeroSource;
-    lockerHeroVpkChecked?: boolean;
     globalType?: GlobalModType | null;
-    globalTypeClassifierVersion?: number;
+    globalTypeSource?: 'manual';
+    /** Runtime comparison only. Never propagated to another VPK's metadata. */
+    resolvedHeroes?: readonly string[];
+    resolvedGlobalType?: GlobalModType;
     priorityMod?: boolean;
     merged?: boolean;
 }
 
 export interface LocalVariantGroupClassification {
-    lockerHero: string | undefined;
-    lockerHeroSource: LockerHeroSource | undefined;
-    lockerHeroVpkChecked: boolean | undefined;
-    globalType: GlobalModType | null;
-    globalTypeClassifierVersion: number | undefined;
+    /** Missing fields are unchanged; explicit undefined clears an override. */
+    lockerHero?: string;
+    lockerHeroSource?: LockerHeroSource;
+    globalType?: GlobalModType | null;
+    globalTypeSource?: 'manual';
 }
 
 export interface LocalVariantGroupProfile {
     classification?: LocalVariantGroupClassification;
     priorityMod: boolean;
+    /** Resolved axis for compatibility checks, separate from stored overrides. */
+    resolvedHeroes?: readonly string[];
+    resolvedGlobalType?: GlobalModType;
 }
 
 /** One sidecar merge-write. Fields left undefined are not touched. */
@@ -65,7 +70,7 @@ export interface LocalVariantGroupPlan {
 
 type LocalVariantClassificationFields = Pick<
     LocalVariantGroupMember,
-    'lockerHero' | 'globalType'
+    'lockerHero' | 'globalType' | 'resolvedHeroes' | 'resolvedGlobalType'
 >;
 
 /** A normal GameBanana install groups by submission id. An explicitly-local
@@ -85,9 +90,32 @@ function currentGroupOf(member: LocalVariantGroupMember): string | undefined {
 }
 
 function classificationKey(member: LocalVariantClassificationFields): string | undefined {
-    if (member.globalType) return `global:${member.globalType}`;
-    const hero = member.lockerHero?.trim();
-    return hero ? `hero:${hero.toLocaleLowerCase()}` : undefined;
+    const globalType = member.resolvedHeroes === undefined ? member.globalType : member.resolvedGlobalType;
+    if (globalType) return `global:${globalType}`;
+    const heroes = member.resolvedHeroes ?? (member.lockerHero ? [member.lockerHero] : []);
+    const names = [...new Set(heroes.map((hero) => hero.trim().toLowerCase()).filter(Boolean))].sort();
+    return names.length > 0 ? `hero:${JSON.stringify(names)}` : undefined;
+}
+
+/** Only explicit choices, including preserved local classifications, can transfer. */
+function storedClassification(member: LocalVariantGroupMember): LocalVariantGroupClassification | undefined {
+    const manualHero = member.lockerHeroSource === 'manual' ? member.lockerHero?.trim() : undefined;
+    if (manualHero) {
+        return {
+            lockerHero: manualHero,
+            lockerHeroSource: 'manual',
+            globalType: undefined,
+            globalTypeSource: undefined,
+        };
+    }
+    if (member.globalTypeSource === 'manual' || (!member.gameBananaId && member.globalType)) {
+        return {
+            globalType: member.globalType,
+            globalTypeSource: 'manual',
+            ...(member.globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
+        };
+    }
+    return undefined;
 }
 
 /** Reject two definite but different Locker axes. An unclassified VPK may
@@ -106,8 +134,8 @@ export function assertCompatibleLocalVariantClassifications(
     }
 }
 
-/** Resolve the fields that must be identical across one logical card.
- * Unclassified members inherit a known peer's Locker axis. Two positive but
+/** Resolve one group's comparison axis and explicit shared choices.
+ * Automatic identities stay on their original payload. Two positive but
  * different classifications are refused: silently relabelling an Ivy VPK as
  * Geist (or a HUD as a hero skin) would be worse than declining the grouping.
  * Priority-root placement is never inferred/rewritten here because it entails
@@ -131,30 +159,18 @@ export function resolveLocalVariantGroupProfile(
     for (const member of classified.slice(1)) {
         assertCompatibleLocalVariantClassifications(owner, member);
     }
-    if (!owner) return { priorityMod: priority };
-
-    if (owner.globalType) {
-        return {
-            priorityMod: priority,
-            classification: {
-                globalType: owner.globalType,
-                globalTypeClassifierVersion: owner.globalTypeClassifierVersion,
-                lockerHero: undefined,
-                lockerHeroSource: undefined,
-                lockerHeroVpkChecked: undefined,
-            },
-        };
-    }
-
+    const choices = members.map(storedClassification).filter((choice): choice is LocalVariantGroupClassification => !!choice);
+    // An unassigned member cannot erase a positive explicit group identity.
+    // A null-only patch leaves any automatic hero fields on their own payload.
+    const classification = choices.find(choice => choice.lockerHero || choice.globalType)
+        ?? choices[0];
     return {
         priorityMod: priority,
-        classification: {
-            globalType: null,
-            globalTypeClassifierVersion: owner.globalTypeClassifierVersion,
-            lockerHero: owner.lockerHero?.trim(),
-            lockerHeroSource: owner.lockerHeroSource,
-            lockerHeroVpkChecked: owner.lockerHeroVpkChecked,
-        },
+        ...(owner ? {
+            resolvedHeroes: owner.resolvedHeroes ?? (owner.lockerHero ? [owner.lockerHero] : []),
+            resolvedGlobalType: owner.resolvedHeroes === undefined ? owner.globalType ?? undefined : owner.resolvedGlobalType,
+        } : {}),
+        ...(classification ? { classification } : {}),
     };
 }
 
@@ -162,13 +178,8 @@ function needsClassification(
     member: LocalVariantGroupMember,
     classification: LocalVariantGroupClassification
 ): boolean {
-    return (
-        member.lockerHero !== classification.lockerHero ||
-        member.lockerHeroSource !== classification.lockerHeroSource ||
-        member.lockerHeroVpkChecked !== classification.lockerHeroVpkChecked ||
-        member.globalType !== classification.globalType ||
-        member.globalTypeClassifierVersion !== classification.globalTypeClassifierVersion
-    );
+    return (Object.keys(classification) as Array<keyof LocalVariantGroupClassification>)
+        .some(key => member[key] !== classification[key]);
 }
 
 /**

@@ -24,6 +24,8 @@ describe('mod update menu', () => {
   let props: ComponentProps<typeof ModUpdatesModal>;
   const render = async () => { await act(async () => root.render(<ModUpdatesModal {...props} />)); };
   const rows = () => [...document.querySelectorAll('li')];
+  const footerButton = (action: 'updateAll' | 'updateEnabled' | 'updateDisabled') => [...document.querySelectorAll<HTMLButtonElement>('button')]
+    .find(button => button.textContent === `installed.updateAll.${action}`)!;
   const rowButton = (index: number, action: 'update' | 'ignore') => rows()[index].querySelector<HTMLButtonElement>(`[aria-label^="installed.updateAll.${action}Mod"]`)!;
 
   beforeEach(() => {
@@ -175,5 +177,42 @@ describe('mod update menu', () => {
     props.updateIds = new Set();
     await render();
     expect(props.onClose).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['updateDisabled', ['1']],
+    ['updateEnabled', ['2', '4']],
+  ] as const)('starts only the pending files matching %s and keeps the other state available', async (action, expected) => {
+    props.mods[1].enabled = true;
+    props.mods.push(mod('4', { enabled: true, gameBananaId: 11 }), mod('5', { enabled: true, ignoreUpdates: true }));
+    props.updateIds = new Set(['1', '2', '4', '5']);
+    await act(async () => root.render(<LiveMenu />));
+    await act(async () => footerButton(action).click());
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith([...expected]);
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(footerButton(action).disabled).toBe(true);
+    expect(footerButton(action === 'updateDisabled' ? 'updateEnabled' : 'updateDisabled').disabled).toBe(false);
+  });
+
+  it('offers disabled, enabled and all actions in that order and dismisses from the header', async () => {
+    await render();
+    const footer = footerButton('updateAll').parentElement!;
+    expect([...footer.querySelectorAll('button')].map(button => button.textContent)).toEqual([
+      'installed.updateAll.updateDisabled', 'installed.updateAll.updateEnabled', 'installed.updateAll.updateAll',
+    ]);
+    expect(footerButton('updateEnabled').disabled).toBe(true);
+    expect(document.body.textContent).not.toContain('common.actions.cancel');
+    const close = document.querySelector<HTMLButtonElement>('[aria-label="common.actions.close"]')!;
+    expect(footer.contains(close)).toBe(false);
+    await act(async () => close.click());
+    expect(props.onClose).toHaveBeenCalledOnce();
+    expect(props.onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('submits enabled files first on Update all, even across mixed variant groups', async () => {
+    props.mods = [mod('1'), mod('2', { enabled: true }), mod('3', { gameBananaId: 11 }), mod('4', { gameBananaId: 11, enabled: true })];
+    props.updateIds = new Set(['1', '2', '3', '4']);
+    await render(); await act(async () => footerButton('updateAll').click());
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith(['2', '4', '1', '3']);
   });
 });
