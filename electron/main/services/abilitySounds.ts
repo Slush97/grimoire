@@ -28,8 +28,8 @@ import { parseVpkDirectoryCached } from './vpk';
  *
  * A mod can touch more than one hero (usually a dominant hero plus one stray
  * copy-pasted file), so we attribute each file independently and report per-hero
- * contributions instead of collapsing to a single hero the way inferHeroFromVpk
- * does. Pick the dominant hero by file count downstream; tiny stray
+ * contributions instead of collapsing to a single hero. Pick the dominant hero
+ * by file count downstream; tiny stray
  * contributions are easy to threshold out.
  */
 

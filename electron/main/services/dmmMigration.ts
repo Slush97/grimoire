@@ -36,7 +36,7 @@ export interface DmmMigrationOptions extends DmmMigrationRequest {
    *  native sqlite imports (its tests run without Electron). Omitted = catalog
    *  unavailable, check skipped. Guards against stamping a bogus id (e.g. a
    *  digit-prefixed filename that isn't a GameBanana id) onto a real file. */
-  isKnownSubmission?: (submissionId: number) => boolean;
+  isKnownSubmission?: (submissionId: number, section: 'Mod' | 'Sound') => boolean;
 }
 
 /** Migrate (or, with planOnly, preview) a DMM install. Throws only when no DMM

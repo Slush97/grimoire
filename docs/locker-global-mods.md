@@ -20,7 +20,7 @@ flatly:
 
 | Concept | Code | UI label | What it answers |
 |---|---|---|---|
-| Classification axis (Soul Containers, HUD, Announcer, ...) | `globalType`, `GlobalModType` | **General** | "What kind of mod is this?" |
+| Classification axis (Soul Containers, HUD, Hideout, ...) | `globalType`, `GlobalModType` | **General** | "What kind of mod is this?" |
 | Precedence / placement | `priorityMod`, `PRIORITY_TAB` | **Global** | "Does this mod win?" |
 
 The code names and the UI labels deliberately do NOT match. `globalType` is a
@@ -129,7 +129,7 @@ directory-plus-chunk reserved check used by this path.
 ## Shuffle interaction
 
 The launch shuffle re-rolls **groups**: one group per hero, plus one per General
-classification bucket (Soul Containers, HUD, Announcer, ...). `planShuffleGroup`
+classification bucket (Soul Containers, HUD, Hideout, ...). `planShuffleGroup`
 (`src/lib/lockerRandomizer.ts`) is the single implementation both axes run, so
 these three rules hold everywhere by construction rather than by copy:
 
@@ -339,10 +339,25 @@ single-card toggle, so a bulk change is one storage write and one state update.
   the footer count and an enabled Add button pointing at nothing;
   `GlobalModPicker` has not been given the same treatment.
 
-## Shared effects
+## How a mod gets its General classification
 
-General > Effects contains shared particle replacements under `particles/generic/`,
-including dash, jump and slide trails. Hero model, material and ability payloads
-keep their hero classification even when they include a shared particle. Classifier
-version 5 rechecks older unclassified installs. Other unmatched mods can be filed
-manually using the Unassigned picker, which offers General categories and heroes.
+Since #560 there is no VPK-content classifier. `resolveInstalledGeneralType`
+(`src/lib/categoryPaths.ts`) decides at runtime, and nothing automatic is
+persisted:
+
+1. A type set by hand from Locker or the Installed bulk menu goes through
+   `set-mod-global-type`, is stored with `globalTypeSource: 'manual'`, and
+   always wins.
+2. A GameBanana-linked mod is classified from its category ancestry only
+   (`categoryGeneralType`): Soul Containers, Spirit Urns, Hideout, HUD,
+   Killstreak Music, Animations and Maps. A mod in a generic category such as
+   "Model Replacement" or "Quality of Life/Fixes" gets no General type, even
+   when its files are a HUD or hideout replacement.
+3. A local mod keeps a stored `globalType` (the Soul Container and Spirit Urn
+   importers write one). A new local VPK otherwise gets none.
+
+Icon Packs, Effects and Announcer / SFX are manual-only destinations: nothing
+routes into them automatically. The migration in `sanitizeLinkedModMetadata`
+(`electron/main/services/metadata.ts`) dropped every pre-#560 `globalType` on
+linked mods, because older sidecars stored hand-set and classifier values the
+same way. The pre-migration sidecar is backed up as `pre-category-tags`.

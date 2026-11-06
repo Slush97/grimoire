@@ -7,8 +7,9 @@ import type { Mod } from '../types/mod';
 type Review = { kind: 'inspect'; source: RequirementSource }
   | { kind: 'install'; source: ModRequirementSource; resolve: (accepted: boolean) => void };
 export type RequirementToggleChoice = 'all' | 'only' | 'cancel' | 'skip';
-/** Owned by one picker opening; only accepted enable choices are reused. */
-export interface RequirementToggleSession { enableChoice?: 'all' | 'only' }
+/** Owned by one picker opening or one bulk action. Accepted enable choices are
+ * reused; disable choices only within a bulk action, so a batch asks once. */
+export interface RequirementToggleSession { enableChoice?: 'all' | 'only'; disableChoice?: 'all' | 'only'; bulk?: boolean }
 export interface RequirementToggleReview {
   mod: Mod;
   key: string;
@@ -102,10 +103,14 @@ export function requestRequirementToggle(mod: Mod, enabled: boolean, mods: reado
   if (!needsReview) return Promise.resolve('skip');
   if (store.review || store.toggleReview || store.targets.length) return Promise.resolve('cancel');
   if (enabled && session?.enableChoice) return Promise.resolve(session.enableChoice);
+  if (!enabled && session?.disableChoice) return Promise.resolve(session.disableChoice);
   return new Promise(resolve => useRequirementsStore.setState({ toggleReview: {
     mod, key: modRestoreKey(mod), mode: enabled ? 'enable' : 'disable', mods, snapshots: store.snapshots,
     resolve: choice => {
-      if (enabled && session && (choice === 'all' || choice === 'only')) session.enableChoice = choice;
+      if (session && (choice === 'all' || choice === 'only')) {
+        if (enabled) session.enableChoice = choice;
+        else if (session.bulk) session.disableChoice = choice;
+      }
       resolve(choice);
     },
   } }));

@@ -49,7 +49,7 @@ function makeSandbox(): Sandbox {
 }
 
 interface StateModSpec {
-  id: number;
+  id: number | string;
   name: string;
   enabled: boolean;
   vpks: string[];
@@ -287,6 +287,17 @@ describe('catalog validation: unknown submission ids are never stamped', () => {
     expect(report.skipped[0].submissionId).toBe(76);
     expect(report.skipped[0].reason).toContain('catalog');
     expect(report.warnings.some((w) => w.includes('catalog'))).toBe(true);
+  });
+
+  it('validates sound submissions against the Sound catalog section', async () => {
+    const sb = makeSandbox();
+    const soundVpk = join(sb.addons, 'pak50_dir.vpk');
+    writeFileSync(soundVpk, Buffer.from('SOUND-222'));
+    writeState(sb, [{ id: 'snd-222', name: 'Cool Sound', enabled: true, vpks: [soundVpk] }]);
+
+    const report = await run(sb, { isKnownSubmission: (id, section) => section === 'Sound' && id === 222 });
+    expect(report.adopted.map((a) => a.submissionId)).toEqual([222]);
+    expect(report.skipped).toEqual([]);
   });
 
   it('scan preview reflects the same filters as execute', async () => {

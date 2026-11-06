@@ -1983,11 +1983,12 @@ export default function Installed() {
   // stable even as `mods` updates after each toggle.
   const runBulkToggle = async (targets: Mod[], verb: 'Enabling' | 'Disabling') => {
     setBulkProgress({ verb, done: 0, total: targets.length });
+    const session = { bulk: true };
     for (let i = 0; i < targets.length; i++) {
       const key = modRestoreKey(targets[i]);
       const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === key);
       const enabled = verb === 'Enabling';
-      const ok = current ? current.enabled === enabled || await toggleMod(current.id) : false;
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id, session) : false;
       setBulkProgress({ verb, done: i + 1, total: targets.length });
       // Stop the batch as soon as we hit the 99-enabled cap rather than firing
       // a failing enable for every remaining selection.
@@ -2354,9 +2355,10 @@ export default function Installed() {
   /** Apply one state to every file represented by a grouped card. */
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
     const targets = group.variants.filter((v) => v.enabled !== enabled);
+    const session = { bulk: true };
     for (const v of targets) {
       const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === modRestoreKey(v));
-      const ok = current ? current.enabled === enabled || await toggleMod(current.id) : false;
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id, session) : false;
       if (!ok) {
         return false;
       }

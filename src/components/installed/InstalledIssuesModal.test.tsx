@@ -289,11 +289,11 @@ describe('Installed issues dialog', () => {
     });
     await render([first, second]);
     await act(async () => buttons('installed.outdatedData.disable')[0].click());
-    expect(toggle).toHaveBeenCalledExactlyOnceWith('a');
+    expect(toggle).toHaveBeenCalledExactlyOnceWith('a', { bulk: true });
     await render(useAppStore.getState().mods);
     expect(buttons('installed.outdatedData.disable')).toHaveLength(1);
     await act(async () => button('installed.outdatedData.disable').click());
-    expect(toggle).toHaveBeenNthCalledWith(2, 'renamed-b');
+    expect(toggle).toHaveBeenNthCalledWith(2, 'renamed-b', { bulk: true });
     expect(useAppStore.getState().mods.every(candidate => !candidate.enabled)).toBe(true);
   });
 
@@ -305,8 +305,17 @@ describe('Installed issues dialog', () => {
     });
     await render([data('a'), data('b')]);
     await act(async () => button('installed.issues.disableAll').click());
-    expect(toggle.mock.calls).toEqual([['a'], ['renamed-b']]);
+    expect(toggle.mock.calls).toEqual([['a', { bulk: true }], ['renamed-b', { bulk: true }]]);
+    expect(toggle.mock.calls[1][1]).toBe(toggle.mock.calls[0][1]);
     expect(useAppStore.getState().mods.every(candidate => !candidate.enabled)).toBe(true);
+    expect(useInstalledIssuesStore.getState().busy).toBe(false);
+  });
+
+  it('stops disabling the rest when a requirements prompt is cancelled', async () => {
+    const toggle = vi.spyOn(useAppStore.getState(), 'toggleMod').mockResolvedValue(false);
+    await render([data('a'), data('b')]);
+    await act(async () => button('installed.issues.disableAll').click());
+    expect(toggle).toHaveBeenCalledExactlyOnceWith('a', { bulk: true });
     expect(useInstalledIssuesStore.getState().busy).toBe(false);
   });
 
@@ -318,7 +327,7 @@ describe('Installed issues dialog', () => {
     });
     await render([data('a', { sha256: 'same-payload' }), data('b', { sha256: 'same-payload' })]);
     await act(async () => button('installed.issues.disableAll').click());
-    expect(toggle.mock.calls).toEqual([['a'], ['renamed-b']]);
+    expect(toggle.mock.calls).toEqual([['a', { bulk: true }], ['renamed-b', { bulk: true }]]);
     expect(useAppStore.getState().mods.every(candidate => !candidate.enabled)).toBe(true);
   });
 
