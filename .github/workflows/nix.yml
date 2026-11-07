@@ -10,9 +10,10 @@ name: Nix
 # The full `nix build .#grimoire` (electron-vite + electron-builder + a
 # better-sqlite3 rebuild) is too slow for every PR. It runs on release tags,
 # once a day against main, and by hand, and the result has to pass the same
-# packaged smoke test as the release builds. A release that passes moves the
-# `stable` branch, which is what the README tells Nix users to follow, so a
-# broken Nix package stays on main instead of reaching them.
+# packaged smoke test as the release builds. A release that passes is pushed
+# to grimoire.cachix.org and moves the `stable` branch, which is what the
+# README tells Nix users to follow, so a broken Nix package stays on main
+# instead of reaching them, and the one that does reach them is prebuilt.
 
 on:
   pull_request:
@@ -98,6 +99,16 @@ jobs:
       - name: Smoke test package
         timeout-minutes: 10
         run: xvfb-run -a node scripts/smoke-packaged.mjs --nix result
+
+      # Releases only. The package's src is the whole repo, so every commit
+      # has its own store path, and `stable` is the only ref users follow that
+      # always points at a commit this job built. The daily main builds would
+      # just burn the cache's storage quota.
+      - name: Push to Cachix
+        if: github.ref_type == 'tag' && !contains(github.ref_name, '-nightly.')
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: nix run nixpkgs#cachix -- push grimoire ./result
 
   # GITHUB_TOKEN can't move a branch across commits that touch
   # .github/workflows, which most releases do, so this pushes with a deploy

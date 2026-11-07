@@ -253,6 +253,15 @@ export default function UpdatesSection() {
                   }}
                 />
               </p>
+              <p>
+                <Trans
+                  i18nKey="settings.updates.managedNix"
+                  components={{
+                    ref: <code className="font-mono text-text-primary" />,
+                    cmd: <code className="font-mono text-text-primary" />,
+                  }}
+                />
+              </p>
             </div>
           )}
 

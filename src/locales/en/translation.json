@@ -1009,6 +1009,7 @@
       "managed": "Updates are managed by your package manager.",
       "managedInstructions": "Grimoire was installed via a system package. Update with your distro's tools: <arch>yay -Syu grimoire-bin</arch> on Arch, <apt>sudo apt update && sudo apt upgrade</apt> on Debian/Ubuntu, or <dnf>sudo dnf upgrade --refresh</dnf> on Fedora.",
       "installedDeb": "Installed the <deb>.deb</deb> or <rpm>.rpm</rpm> manually? Add the apt or dnf repository for automatic updates (instructions at <url>grimoiremods.com/download</url>).",
+      "managedNix": "On Nix, point your flake input at <ref>github:Slush97/grimoire/stable</ref> to follow releases, then update with <cmd>nix flake update grimoire</cmd>.",
       "downloading": "Downloading update...",
       "whatsNewIn": "What's New in",
       "released": "Released {{date}}",
