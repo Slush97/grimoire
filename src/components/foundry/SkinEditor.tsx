@@ -271,7 +271,7 @@ export function SkinEditorSession({ heroName, sources, draftKey = `skin:${heroNa
   // While painting, hovering a row in the list outlines that area through the paint overlay.
   const hoveredSeeds = paintingPart ? regions.find((region) => region.id === previewRegion)?.seeds ?? NO_SEEDS : NO_SEEDS;
   const layoutOf = (material: string) => baker?.layout(material) ?? null;
-  const staleRegion = (material: string, region: SkinPartRegion) => !!region.layout && !!layoutOf(material) && region.layout !== layoutOf(material);
+  const staleRegion = (material: string, region: SkinPartRegion) => !!region.layout && !!baker?.stale(material, region.layout);
   /**
    * Paint seeds in the current color, or erase them. A color owns what it paints: the same seeds are
    * removed from every other area of its kind, so the newest paint always shows whatever order the areas
