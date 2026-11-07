@@ -20,12 +20,15 @@ export function isSkinRegionHelper(object: THREE.Object3D): boolean {
   return !!object.userData.skinPartHighlight || !!object.userData.skinRegionOverlay;
 }
 
-/** Meshes drawing `material`, with the index range of the matching group when a mesh has several. */
+/**
+ * Meshes drawing `material`, with the index range of the matching group when a mesh has several.
+ * Outline shells reuse their mesh's geometry and material name, and come and go as the renderer rebuilds.
+ */
 export function materialMeshes(scene: THREE.Object3D, material: string): Array<{ mesh: THREE.Mesh; start?: number; count?: number }> {
   const name = materialBasename(material);
   const found: Array<{ mesh: THREE.Mesh; start?: number; count?: number }> = [];
   scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh) || isSkinRegionHelper(object)) return;
+    if (!(object instanceof THREE.Mesh) || isSkinRegionHelper(object) || object.userData.citadelNprOutline) return;
     if (!Array.isArray(object.material)) {
       if (materialBasename(object.material.name) === name) found.push({ mesh: object });
       return;
@@ -44,16 +47,41 @@ export function materialIslands(scene: THREE.Object3D, material: string): UvIsla
   if (!cache) { cache = new Map(); islandCache.set(scene, cache); }
   const key = materialBasename(material);
   if (cache.has(key)) return cache.get(key) ?? null;
-  const geometries: UvGeometry[] = [];
+  const geometries = materialGeometries(scene, material).flat();
+  const islands = geometries.length ? buildUvIslands(geometries) : null;
+  cache.set(key, islands);
+  return islands;
+}
+
+/** The geometry drawing `material`, one list per mesh in scene order. */
+function materialGeometries(scene: THREE.Object3D, material: string): UvGeometry[][] {
+  const meshes = new Map<THREE.Mesh, UvGeometry[]>();
   for (const { mesh, start, count } of materialMeshes(scene, material)) {
     const { uv, position } = mesh.geometry.attributes;
     if (!uv || !position) continue;
     const index = mesh.geometry.index;
-    geometries.push({ uv: readAttribute(uv, 2), position: readAttribute(position, 3), index: index ? Array.from({ length: index.count }, (_, i) => index.getX(i)) : null, start, count });
+    const list = meshes.get(mesh) ?? [];
+    list.push({ uv: readAttribute(uv, 2), position: readAttribute(position, 3), index: index ? Array.from({ length: index.count }, (_, i) => index.getX(i)) : null, start, count });
+    meshes.set(mesh, list);
   }
-  const islands = geometries.length ? buildUvIslands(geometries) : null;
-  cache.set(key, islands);
-  return islands;
+  return [...meshes.values()];
+}
+
+const shelledCache = new WeakMap<THREE.Object3D, Map<string, string | null>>();
+
+/**
+ * The layout fingerprint earlier versions recorded when outline shells were in the scene: each mesh's
+ * triangles counted twice, its shell's right after it. Same texture, so areas saved with it still fit.
+ */
+function shelledLayout(scene: THREE.Object3D, material: string): string | null {
+  let cache = shelledCache.get(scene);
+  if (!cache) { cache = new Map(); shelledCache.set(scene, cache); }
+  const key = materialBasename(material);
+  if (cache.has(key)) return cache.get(key) ?? null;
+  const geometries = materialGeometries(scene, material).flatMap((list) => [...list, ...list]);
+  const layout = geometries.length ? islandsFingerprint(buildUvIslands(geometries)) : null;
+  cache.set(key, layout);
+  return layout;
 }
 
 const texelCache = new WeakMap<THREE.Object3D, Map<string, Float32Array | null>>();
@@ -127,17 +155,24 @@ export interface RegionBaker {
   bake: (material: string, seeds: SkinRegionSeed[], width: number, height: number) => Promise<string | null>;
   /** The material's texture layout fingerprint, or null when it is not in this model. */
   layout: (material: string) => string | null;
+  /** True when an area saved with `layout` was picked on a different texture layout than this model's. */
+  stale: (material: string, layout: string) => boolean;
 }
 
 export function regionBaker(scene: THREE.Object3D): RegionBaker {
+  const layout = (material: string) => {
+    const islands = materialIslands(scene, material);
+    return islands ? islandsFingerprint(islands) : null;
+  };
   return {
     bake: async (material, seeds, width, height) => {
       const mask = regionMask(scene, material, seeds, width, height);
       return mask ? regionMaskPng(mask, width, height) : null;
     },
-    layout: (material) => {
-      const islands = materialIslands(scene, material);
-      return islands ? islandsFingerprint(islands) : null;
+    layout,
+    stale: (material, saved) => {
+      const current = layout(material);
+      return !!current && saved !== current && saved !== shelledLayout(scene, material);
     },
   };
 }
