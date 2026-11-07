@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useTranslation } from 'react-i18next';
 import { gameBananaCategoryLabel } from '../../lib/gameBananaCategories';
 import { RequirementWarning } from '../requirements/RequirementWarning';
-import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight } from 'lucide-react';
+import { Loader2, Trash2, AlertTriangle, FolderOpen, FilePlus, Files, ImagePlus, Download, Info, Check, Wrench, Hammer, Layers, Scissors, Share2, Beaker, PowerOff, Tag as TagIcon, Pencil, MoreHorizontal, Link2, Banana, Fingerprint, ExternalLink, Star, ArrowUpToLine, ImageDown, Link, Unlink, ArrowLeftRight, Rotate3d } from 'lucide-react';
 import type { EntrySwapTarget } from '../../lib/modEntries';
 import { MenuCheckboxItem, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuRoot, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../common/menu';
 import { showToast } from '../../stores/toastStore';
@@ -98,7 +98,13 @@ interface ModCardProps {
   updatableSourceCount?: number;
   onOpenDetails?: () => void;
   onOpenDoorStuck?: () => void;
+  /** Pins this card in the 3D preview panel. */
+  onPinPreview?: () => void;
   previewMetaKey?: string;
+  /** Files the Alt preview can cycle through with the wheel, in picker order. */
+  previewKeys?: string[];
+  /** Tooltip naming the Alt preview, set only when the card has something to preview. */
+  previewHint?: string;
   /** Open the mod author's GameBanana profile in the browser. Undefined for
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
@@ -703,7 +709,10 @@ export function ModCard({
   updatableSourceCount = 0,
   onOpenDetails,
   onOpenDoorStuck,
+  onPinPreview,
   previewMetaKey,
+  previewKeys,
+  previewHint,
   onViewAuthor,
   onToggle,
   swapTargets = [],
@@ -1106,6 +1115,7 @@ export function ModCard({
           {t('installed.imprintDetails.menuEntry')}
         </MenuItem>
       )}
+      {onPinPreview && <MenuItem icon={Rotate3d} onSelect={onPinPreview}>{t('installed.card.pinPreview')}</MenuItem>}
       {onOpenDoorStuck && <MenuItem icon={Hammer} onSelect={onOpenDoorStuck}>{t('installed.card.openDoorStuck')}</MenuItem>}
       {hasSecondaryActions && <MenuSeparator />}
       {onSoloLaunch && (
@@ -1337,8 +1347,9 @@ export function ModCard({
       ref={cardRef}
       data-mod-entry-key={entryKey}
       data-mod-preview-key={previewMetaKey ?? mod.metaKey}
+      data-mod-preview-variants={previewKeys && previewKeys.length > 1 ? JSON.stringify(previewKeys) : undefined}
       data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
-      title={onOpenDoorStuck ? t('installed.card.previewHint') : undefined}
+      title={previewHint}
       onPointerEnter={() => {
         pointerInside.current = true;
         if (shiftHeld && !selectMode) setHovered(true);
@@ -1479,6 +1490,7 @@ export function ModCard({
                   variant="overlay"
                   icon={AlertTriangle}
                   title={conflicts.map((c) => c.details).join(', ')}
+                  className="uppercase tracking-wide"
                 >
                   {t('installed.card.overlap')}
                 </Tag>

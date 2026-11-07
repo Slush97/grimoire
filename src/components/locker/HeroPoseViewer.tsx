@@ -316,7 +316,12 @@ function pickIdleClip(clips: THREE.AnimationClip[], heroName?: string): THREE.An
 /** Shared pointer-interaction state between OrbitControls and the model group:
  *  the turntable pauses while `dragging`. A mutable ref so it updates without
  *  re-rendering. */
-export type TurntableInteraction = { dragging: boolean; paused: boolean };
+export type TurntableInteraction = {
+  dragging: boolean;
+  paused: boolean;
+  /** When set, the model eases to this angle (radians, null is front-on) instead of spinning. */
+  turn?: RefObject<number | null>;
+};
 const normalizedScenes = new WeakMap<THREE.Object3D, HeroPreviewNormalization>();
 
 /** Scale, center and ground that fit a hero to the same height, from its rest pose when `bindPose`
@@ -378,7 +383,13 @@ function useTurntable(
   useEffect(() => { groupRef.current?.rotation.set(0, 0, 0); }, [groupRef, reset]);
   useFrame((_, delta) => {
     const g = groupRef.current;
-    if (!g || interaction.current.dragging || interaction.current.paused) return;
+    if (!g || interaction.current.dragging) return;
+    const turn = interaction.current.turn;
+    if (turn) {
+      g.rotation.y += ((turn.current ?? 0) - g.rotation.y) * (1 - Math.exp(-Math.min(delta, 0.1) * 14));
+      return;
+    }
+    if (interaction.current.paused) return;
     g.rotation.y += Math.min(delta, 0.1) * SPIN_SPEED;
   });
 }
@@ -1499,6 +1510,8 @@ export interface HeroPoseViewerProps {
   onRegionBaker?: (baker: RegionBaker | null) => void;
   compact?: boolean;
   active?: boolean;
+  /** Angle to hold the model at (radians), replacing the turntable spin. */
+  turn?: RefObject<number | null>;
   workspaceKey?: string;
   movementPreview?: MovementViewerPreview;
   initialScene?: HeroViewerScene;
@@ -1526,6 +1539,7 @@ export default function HeroPoseViewer({
   onRegionBaker,
   compact = false,
   active = true,
+  turn,
   workspaceKey,
   movementPreview,
   initialScene,
@@ -1579,7 +1593,7 @@ export default function HeroPoseViewer({
   const clothModel = loadedModel?.clothModel ?? null;
   const [animationUnavailable, setAnimationUnavailable] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate });
+  const interaction = useRef<TurntableInteraction>({ dragging: false, paused: compact ? false : !initialHeroPreviewFlags().autoRotate, turn });
   const [spinPaused, setSpinPaused] = useState(() => compact ? false : !initialHeroPreviewFlags().autoRotate);
   const [playback, setPlayback] = useFoundryDraft(`${viewKey}:playback`, z.object({ paused: z.boolean(), speed: z.number().finite().min(0.1).max(4) }), { paused: false, speed: 1 });
   // Selecting an area holds the pose and the turntable: picking on a moving model misses, and a still
@@ -1618,7 +1632,8 @@ export default function HeroPoseViewer({
     try { migrateViewerScene(localStorage, draftScope, viewKey); } catch { /* Storage may be unavailable. */ }
   });
   const [storedScene, setViewerScene] = useFoundryDraft<HeroViewerScene>(initialScene ? ownViewerSceneDraft(viewKey) : viewerSceneDraft(sceneSurface), heroViewerSceneSchema, defaultScene);
-  const chosenScene = compact ? 'studio' : storedScene;
+  // Compact (the Installed peek) renders like the full viewer's transparent scene: studio light, no backdrop.
+  const chosenScene = compact ? 'transparent' : storedScene;
   const wantsHideout = chosenScene === 'hideout';
   // A first hideout open builds its cache, which takes tens of seconds. Studio shows meanwhile; the
   // hideout takes over, loading as any first open does, unless another scene was chosen.
@@ -1703,7 +1718,7 @@ export default function HeroPoseViewer({
   }, [draftScope, viewKey]);
   const hideoutInfo = hideoutStatus.kind === 'failed' ? undefined : hideoutStatus.info;
   const [ambientProbe, setAmbientProbe] = useState<ViewerAmbientProbe>({ kind: 'pending' });
-  const previewExposure = viewerScene === 'hideout' ? hideoutInfo?.exposure ?? 1 : compact || viewerScene === 'midtown' ? 1.6 : 1.3;
+  const previewExposure = viewerScene === 'hideout' ? hideoutInfo?.exposure ?? 1 : viewerScene === 'midtown' ? 1.6 : 1.3;
   const lightScale = viewerLightScale(previewExposure);
   const ambientCube = useMemo(() => ambientProbe.kind === 'ready'
     ? viewerAmbientCube(ambientProbe.sh, VIEWER_ENVIRONMENT_INTENSITY[lighting], viewerScene !== 'hideout') : null, [ambientProbe, lighting, viewerScene]);
@@ -1799,11 +1814,10 @@ export default function HeroPoseViewer({
     cloth: devFlags.cloth,
     animated: devFlags.animated,
     bloom: devFlags.bloom,
-    ...(compact ? { animated: false, cloth: false, effects: false, bloom: false } : {}),
     ...(movementPreview ? { animated: true } : {}),
   };
-  const sourceParticlesEnabled = !compact && devFlags.effects && devFlags.sourceParticles && !movementPreview;
-  const effectPreviewEnabled = !compact && devFlags.effects && !devFlags.sourceParticles && !movementPreview;
+  const sourceParticlesEnabled = devFlags.effects && devFlags.sourceParticles && !movementPreview;
+  const effectPreviewEnabled = devFlags.effects && !devFlags.sourceParticles && !movementPreview;
   const clipNamesKey = clips.map((clip) => clip.name).join('|');
   // Follows the model on screen, so its particles stay with it until the next model swaps in.
   const sourceParticlesKey = `${loaded?.key ?? ''}|${clipNamesKey}`;
@@ -2224,12 +2238,12 @@ export default function HeroPoseViewer({
             except the hideout (which brings its own map lighting), Midtown
             included, reflects the studio room, and the NPR ambient probe
             samples that same room so diffuse and reflections agree. */}
-        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting] * lightScale} studio={!compact} onProbe={setAmbientProbe} />}
+        {viewerScene !== 'hideout' && <Environment intensity={VIEWER_ENVIRONMENT_INTENSITY[lighting] * lightScale} studio onProbe={setAmbientProbe} />}
         {viewerScene !== 'hideout' && <hemisphereLight args={[VIEWER_SKY_COLOR, VIEWER_GROUND_COLOR, VIEWER_HEMISPHERE_INTENSITY * lightScale]} />}
-        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={(compact || viewerScene === 'midtown' ? 2.2 : 1.4) * lightScale}
+        {viewerScene !== 'hideout' && <><directionalLight castShadow position={[-3, 4, 3]} intensity={(viewerScene === 'midtown' ? 2.2 : 1.4) * lightScale}
           color={viewerScene === 'midtown' ? new THREE.Color(254 / 255, 153 / 255, 91 / 255) : new THREE.Color(1, 1, 1)}
           shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
-        <directionalLight position={compact ? [3, 2, 3] : [3, 2, -3]} intensity={(compact ? 1.8 : 1.2) * lightScale} color={compact ? new THREE.Color(1, 1, 1) : new THREE.Color(0.65, 0.78, 1)} /></>}
+        <directionalLight position={[3, 2, -3]} intensity={1.2 * lightScale} color={new THREE.Color(0.65, 0.78, 1)} /></>}
         {viewerScene !== 'transparent' && viewerScene !== 'hideout' && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.02, 0]} receiveShadow>
             <planeGeometry args={[20, 20]} />
@@ -2288,7 +2302,7 @@ export default function HeroPoseViewer({
             exposure={previewExposure}
             ambientCube={ambientCube}
             mapProbe={viewerScene === 'hideout' && ambientProbe.kind === 'map' ? ambientProbe : null}
-            ambientTarget={compact ? 0.7 : NPR_AMBIENT_TARGET[lighting]}
+            ambientTarget={NPR_AMBIENT_TARGET[lighting]}
             partEdits={partEdits}
             authoredEmission={sourceParticlesEnabled || viewerScene === 'hideout'}
           />

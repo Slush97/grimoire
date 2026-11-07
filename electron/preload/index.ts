@@ -240,8 +240,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
-    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
-        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) =>
+        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry, options),
     getHeroShaderNoise: () => ipcRenderer.invoke('get-hero-shader-noise'),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
