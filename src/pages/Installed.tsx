@@ -4,7 +4,9 @@ import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
-import { installedDoorStuckTarget } from '../lib/installedSkinTarget';
+import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
+import { pinInstalledPreview } from '../lib/installedPreviewPin';
+import { installedPropTarget } from '../lib/installedPropPreview';
 import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
@@ -395,6 +397,14 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   })));
   const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
   const target = installedDoorStuckTarget(previewMod, taxonomyContext);
+  // Every file the Alt preview can show, in picker order. Alt+wheel steps through them.
+  const previewKeys = useMemo(() => (entry.kind === 'single' ? [entry.mod] : entry.variants)
+    .filter(variant => installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
+    .map(variant => variant.metaKey), [entry, taxonomyContext]);
+  const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
+  const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')
+    : previewKeys.length ? t('installed.card.previewHint') : undefined;
+  const pinPreview = previewKeys.length ? () => pinInstalledPreview(previewKeys, previewKey) : undefined;
   const openDoorStuck = doorStuckEnabled && target ? () => {
     if ('kind' in target && target.kind === 'movement') {
       const settings = useAppStore.getState().settings;
@@ -412,6 +422,9 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       <ModCard
         mod={mod}
         onOpenDoorStuck={openDoorStuck}
+        previewKeys={previewKeys}
+        previewHint={previewHint}
+        onPinPreview={pinPreview}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
         conflicts={conflicts}
@@ -483,7 +496,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   return (
     <ModCard
       onOpenDoorStuck={openDoorStuck}
-      previewMetaKey={previewMod.metaKey}
+      previewMetaKey={previewKey}
+      previewKeys={previewKeys}
+      previewHint={previewHint}
+      onPinPreview={pinPreview}
       mod={{
         ...entry.primary,
         safetyTarget,

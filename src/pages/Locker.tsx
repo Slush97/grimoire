@@ -43,10 +43,6 @@ const SoulContainerCanvas = lazy(() => import('../components/locker/SoulContaine
 // import from the global Locker tab, mirroring the Installed-page trigger.
 const SoulContainerImportModal = lazy(() => import('../components/locker/SoulContainerImportModal'));
 const SpiritUrnImportModal = lazy(() => import('../components/locker/SpiritUrnImportModal'));
-// Idol/urn model entry a Spirit Urn mod overrides; the 3D tile exports this entry
-// for an urn (vs the soul-container entry, the tile's default). Mirrors
-// URN_CONTAINER_ENTRY in the main-process soulContainerModels service.
-const URN_MODEL_ENTRY = 'models/props_gameplay/idol_urn/idol_urn.vmdl_c';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
@@ -108,6 +104,7 @@ import {
   type StableKeyPreferencesMigratedDetail,
 } from '../lib/stableKeyMigration';
 import { showToast } from '../stores/toastStore';
+import { SPIRIT_URN_MODEL } from '../lib/installedPropPreview';
 import { useCursorPackStore } from '../stores/cursorPackStore';
 import {
   appendHeroTypeaheadCharacter,
@@ -2594,7 +2591,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             <SoulContainerTile
                               tileId={mod.sha256 ?? mod.id}
                               modKey={mod.metaKey}
-                              entry={activeType === 'spirit-urn' ? URN_MODEL_ENTRY : undefined}
+                              entry={activeType === 'spirit-urn' ? SPIRIT_URN_MODEL : undefined}
                               thumbnailUrl={mod.thumbnailUrl}
                               name={mod.name}
                               nsfw={mod.nsfw}

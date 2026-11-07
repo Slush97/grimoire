@@ -160,6 +160,26 @@ export function stripGlbSkins(glb: Buffer): Buffer {
     return Buffer.concat([header, jsonBuf, rest]);
 }
 
+/**
+ * Strip skins only where they are degenerate: a skinned node whose mesh has a primitive without
+ * JOINTS_0 (the crash stripGlbSkins exists for). A real rig, like an animated Sinner's Sacrifice
+ * or urn, keeps its skin so its clips can play.
+ */
+export function stripDegenerateSkins(glb: Buffer): Buffer {
+    if (glb.length < 20 || glb.readUInt32LE(0) !== GLB_MAGIC || glb.readUInt32LE(16) !== GLB_JSON_CHUNK) return glb;
+    const jsonEnd = 20 + glb.readUInt32LE(12);
+    if (jsonEnd > glb.length) return glb;
+    let json: { nodes?: Array<{ skin?: number; mesh?: number }>; meshes?: Array<{ primitives?: Array<{ attributes?: Record<string, number> }> }> };
+    try {
+        json = JSON.parse(glb.toString('utf8', 20, jsonEnd));
+    } catch {
+        return glb;
+    }
+    const degenerate = (json.nodes ?? []).some((node) => node.skin !== undefined && node.mesh !== undefined
+        && (json.meshes?.[node.mesh]?.primitives ?? []).some((primitive) => primitive.attributes?.JOINTS_0 === undefined));
+    return degenerate ? stripGlbSkins(glb) : glb;
+}
+
 export interface SoulModelInfo {
     hasModel: boolean;
     /** mtime of the stored GLB, used to cache-bust the renderer URL on re-export. */
@@ -204,7 +224,8 @@ export async function exportSoulModel(
     deadlockPath: string,
     metaKey: string,
     cacheKey: string,
-    entry: string = SOUL_CONTAINER_ENTRY
+    entry: string = SOUL_CONTAINER_ENTRY,
+    options: { animated?: boolean } = {}
 ): Promise<SoulModelInfo> {
     const vpk = await resolveModVpk(deadlockPath, metaKey);
     if (!vpk) {
@@ -233,8 +254,9 @@ export async function exportSoulModel(
     // it as a plain mesh (see stripGlbSkins). Still required: as of vpkmerge
     // v0.11.0 the export carries 1 skin and 0 animations (verified 2026-06-09
     // against both the bundled and a fresh release build).
+    // An animated export (the Installed preview) keeps a real rig and its clips.
     const raw = await fs.readFile(out);
-    const patched = stripGlbSkins(raw);
+    const patched = options.animated ? stripDegenerateSkins(raw) : stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);
     await fs.writeFile(versionFile(cacheKey), SOUL_CACHE_VERSION);
 

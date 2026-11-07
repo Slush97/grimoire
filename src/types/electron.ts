@@ -983,8 +983,9 @@ export interface ElectronAPI {
     ) => Promise<{ variant: string; dataUrl: string }[]>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
     /** `entry` selects which model entry to export (soul container vs urn);
-     *  defaults to the soul-container model when omitted. */
-    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
+     *  defaults to the soul-container model when omitted. `animated` keeps a
+     *  real rig and its clips (the Installed preview); use its own cacheKey. */
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) => Promise<SoulModelInfo>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
     previewMovementFx: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementFxPreview>;
     previewMovementEngine: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementEnginePreview>;

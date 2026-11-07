@@ -1840,6 +1840,13 @@
       "hint": "Global mods load before every other mod, so they always win when two mods change the same file. Shuffling skins never turns them off.",
       "busy": "Moving..."
     },
+    "preview": {
+      "previousFile": "Previous file",
+      "nextFile": "Next file",
+      "pin": "Pin",
+      "resize": "Resize",
+      "unavailable": "No 3D preview for this file"
+    },
     "card": {
       "soundPreview": "Sound Preview",
       "chooseFilesFor": "Choose files for {{name}}",
@@ -1881,7 +1888,9 @@
       "soloLaunch": "Start with only this enabled",
       "openDoorStuck": "Open in Door Stuck",
       "preview3d": "3D preview of {{name}}",
-      "previewHint": "Hold Alt to preview in 3D",
+      "previewHint": "Hold Alt for a 3D preview. Drag to turn, click to pin",
+      "previewHintVariants": "Hold Alt for a 3D preview. Drag to turn, scroll to switch files, click to pin",
+      "pinPreview": "3D preview",
       "overlap": "Overlap",
       "openAuthorPageFailed": "Couldn't open author page: {{error}}",
       "installedAt": "Installed {{date}}",
