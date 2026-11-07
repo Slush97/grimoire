@@ -1,9 +1,8 @@
 import type { RestoreLocalVariantGroupReplacementArgs } from '../../../src/types/electron';
 import type {
-    LocalVariantGroupClassification,
     LocalVariantGroupMember,
 } from './localVariantGroup';
-import { assertCompatibleLocalVariantClassifications, resolveLocalVariantGroupProfile } from './localVariantGroup';
+import { resolveLocalVariantGroupProfile } from './localVariantGroup';
 
 export interface LocalVariantReplacementMember extends LocalVariantGroupMember {
     gameBananaFileId?: number;
@@ -12,7 +11,6 @@ export interface LocalVariantReplacementMember extends LocalVariantGroupMember {
 export interface LocalVariantReplacementPlan {
     groupId: string;
     modName: string;
-    classification?: LocalVariantGroupClassification;
     replacementMetaKeys: string[];
 }
 
@@ -81,29 +79,9 @@ export function planLocalVariantReplacementRestore(
         throw new Error('Replacement priority-folder placement does not match its variant group');
     }
 
-    for (const replacement of replacements) {
-        const classification = profile.classification;
-        let comparison = replacement;
-        if (classification?.lockerHero || classification?.globalType) {
-            // Retain the group's explicit choice over new automatic detection,
-            // but never silently replace a conflicting manual destination tag.
-            assertCompatibleLocalVariantClassifications(classification, {
-                lockerHero: replacement.lockerHeroSource === 'manual' ? replacement.lockerHero : undefined,
-                globalType: replacement.globalTypeSource === 'manual' ? replacement.globalType : undefined,
-            });
-            comparison = {
-                ...replacement,
-                resolvedHeroes: classification.lockerHero ? [classification.lockerHero] : [],
-                resolvedGlobalType: classification.globalType ?? undefined,
-            };
-        }
-        assertCompatibleLocalVariantClassifications(profile, comparison);
-    }
-
     return {
         groupId,
         modName: source.name,
-        ...(profile.classification ? { classification: profile.classification } : {}),
         replacementMetaKeys: replacements.map((member) => member.metaKey),
     };
 }

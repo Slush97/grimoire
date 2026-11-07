@@ -44,6 +44,7 @@ export function UnknownEmbeddedCard({
         gameBananaFileId: match.fileId,
         thumbnailUrl: match.thumbnailUrl,
         nsfw: match.nsfw,
+        categoryId: match.categoryId,
         categoryName: match.categoryName,
         sourceSection: match.section,
       });

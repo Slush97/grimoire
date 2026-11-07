@@ -41,12 +41,12 @@ export interface ModMetadata {
     lockerHero?: string;
     /** Provenance for lockerHero. Missing values are legacy inferred tags. */
     lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
-    /** Fingerprinted Sound, WiP, HUD, or conservative local-file hero detection. */
+    /** Fingerprinted hero detection and conservative payload General fallback. */
     heroDetection?: import('../../../src/types/mod').InstalledHeroDetection;
     /** Legacy local inference marker, retained with existing local metadata. */
     lockerHeroVpkChecked?: boolean;
     /** Preserved local General classification or an explicit manual override.
-     *  Linked submissions otherwise derive their classification from categories. */
+     *  Linked submissions use categories, then the cached payload fallback. */
     globalType?: import('../../../src/types/mod').GlobalModType | null;
     /** Identifies new manual choices, including null for explicitly unassigned. */
     globalTypeSource?: 'manual';

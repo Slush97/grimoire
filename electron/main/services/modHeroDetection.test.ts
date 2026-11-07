@@ -267,3 +267,180 @@ describe('original file text matching', () => {
             .toEqual([]);
     });
 });
+
+describe('HUD-root portrait packs', () => {
+    const metadata: ModMetadata = { gameBananaId: 610813, sourceSection: 'Mod', categoryId: 31713,
+        categoryName: 'HUD', modName: 'DEADLOCK TOASTED' };
+    const portraits = ['panorama/images/heroes/yamato_card_psd.vtex_c',
+        'panorama/images/heroes/haze_card_psd.vtex_c', 'panorama/images/npcs/patron_psd.vtex_c'];
+    const tree = buildCategoryPaths([{ id: 31713, name: 'HUD', itemCount: 1,
+        children: [{ id: 44745, name: 'Character HUD', itemCount: 1 }] }]);
+
+    it.each([undefined, tree])('refines the HUD root to Icons with cached ancestry or offline labels', paths => {
+        parser.read.mockReturnValue(portraits);
+        const result = resolveModClassification(mod, metadata, paths);
+        expect(result).toMatchObject({ globalType: 'icons', lockerHeroes: [], lockerHero: undefined });
+        expect(result.metadataPatch).toEqual({ heroDetection: expect.objectContaining({
+            source: 'vpk', heroes: [], globalType: 'icons',
+        }) });
+        expect(metadata.categoryName).toBe('HUD');
+        const cached = { ...metadata, ...result.metadataPatch };
+        parser.read.mockClear();
+        expect(needsModHeroDetection(mod, cached, paths)).toBe(false);
+        expect(resolveModClassification(mod, cached, paths).globalType).toBe('icons');
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the previous detector result rather than retaining its HUD hero list', () => {
+        parser.read.mockReturnValue(portraits);
+        const previous = detectModHeroes(mod, metadata)!;
+        const cached = { ...metadata, heroDetection: { ...previous, version: 2,
+            globalType: undefined, heroes: ['Haze', 'Yamato'] } };
+        expect(needsModHeroDetection(mod, cached, tree)).toBe(true);
+        expect(resolveModClassification(mod, cached, tree)).toMatchObject({ globalType: 'icons', lockerHeroes: [] });
+    });
+
+    it('keeps a functional HUD containing portraits on HUD', () => {
+        parser.read.mockReturnValue([...portraits, 'panorama/layout/hud/custom.vxml_c']);
+        expect(resolveModClassification(mod, metadata, tree))
+            .toMatchObject({ globalType: 'hud', lockerHeroes: ['Haze', 'Yamato'] });
+    });
+
+    it('does not carry a root refinement into a specific HUD child', () => {
+        parser.read.mockReturnValue(portraits);
+        const cached = { ...metadata, ...resolveModClassification(mod, metadata, tree).metadataPatch,
+            categoryId: 44745, categoryName: 'Character HUD' };
+        expect(needsModHeroDetection(mod, cached, tree)).toBe(true);
+        expect(resolveModClassification(mod, cached, tree))
+            .toMatchObject({ globalType: 'hud', lockerHeroes: ['Haze', 'Yamato'] });
+    });
+
+    it('keeps manual HUD, hero, and unassigned choices ahead of a cached Icons result', () => {
+        parser.read.mockReturnValue(portraits);
+        const cached = { ...metadata, ...resolveModClassification(mod, metadata, tree).metadataPatch };
+        expect(resolveModClassification(mod, { ...cached, globalType: 'hud', globalTypeSource: 'manual' }, tree))
+            .toMatchObject({ globalType: 'hud', lockerHeroes: ['Haze', 'Yamato'] });
+        expect(resolveModClassification(mod, { ...cached, lockerHero: 'Ivy', lockerHeroSource: 'manual' }, tree))
+            .toMatchObject({ globalType: undefined, lockerHeroes: ['Ivy'] });
+        expect(resolveModClassification(mod, { ...cached, globalType: null, globalTypeSource: 'manual' }, tree).globalType)
+            .toBeUndefined();
+    });
+});
+
+describe('broad category payload fallback', () => {
+    const metadata: ModMetadata = { gameBananaId: 7, sourceSection: 'Mod', categoryId: 33154,
+        categoryName: 'Model Replacement', modName: 'Freaky Hidout' };
+
+    it('assigns a root-filed Hideout texture mod without rewriting its category', () => {
+        parser.read.mockReturnValue(['models/hideout/materials/display.vtex_c']);
+        expect(isModHeroDetectionEligible(metadata)).toBe(true);
+        expect(needsModHeroDetection(mod, metadata)).toBe(true);
+        const result = resolveModClassification(mod, metadata);
+        expect(result).toMatchObject({ lockerHeroes: [], globalType: 'hideout' });
+        expect(result.metadataPatch).toEqual({ heroDetection: expect.objectContaining({
+            heroes: [], globalType: 'hideout', source: 'vpk',
+        }) });
+        expect(metadata.categoryName).toBe('Model Replacement');
+    });
+
+    it.each([
+        ['Skins', 'models/heroes_wip/vampirebat/vampirebat.vmdl_c', 'Mina'],
+        ['Model Replacement', 'particles/abilities/hornet/tracer.vpcf_c', 'Vindicta'],
+    ])('uses a payload hero for a skin filed directly under %s', (categoryName, path, hero) => {
+        parser.read.mockReturnValue([path]);
+        const result = resolveModClassification(mod, { ...metadata, categoryName, modName: 'Haze' });
+        expect(result).toMatchObject({ lockerHero: hero, lockerHeroes: [hero], lockerHeroSource: 'vpk', globalType: undefined });
+        expect(result.metadataPatch?.heroDetection).toMatchObject({ heroes: [hero], source: 'vpk' });
+    });
+
+    it('reuses and invalidates the General fallback cache with the payload and inputs', () => {
+        parser.read.mockReturnValue(['models/hideout/materials/display.vtex_c']);
+        const result = resolveModClassification(mod, metadata);
+        const cached = { ...metadata, ...result.metadataPatch };
+        parser.read.mockClear();
+        expect(needsModHeroDetection(mod, cached)).toBe(false);
+        expect(resolveModClassification(mod, cached).globalType).toBe('hideout');
+        expect(parser.read).not.toHaveBeenCalled();
+        expect(needsModHeroDetection({ ...mod, size: 124 }, cached)).toBe(true);
+        expect(needsModHeroDetection({ ...mod, installedAt: 'changed' }, cached)).toBe(true);
+        expect(needsModHeroDetection(mod, { ...cached, sourceFileName: 'changed' })).toBe(true);
+        expect(needsModHeroDetection(mod, { ...cached, categoryName: 'Skins' })).toBe(true);
+        expect(needsModHeroDetection(mod, { ...cached, heroDetection: { ...cached.heroDetection!, version: 1 } })).toBe(true);
+        parser.read.mockReturnValue(['models/heroes_wip/haze/body.vmdl_c']);
+        expect(resolveModClassification({ ...mod, size: 124 }, cached))
+            .toMatchObject({ lockerHeroes: ['Haze'], globalType: undefined });
+    });
+
+    it('uses specific ancestry even when an older broad-category cache exists', () => {
+        parser.read.mockReturnValue(['models/hideout/materials/display.vtex_c']);
+        const cached = { ...metadata, ...resolveModClassification(mod, metadata).metadataPatch };
+        const paths = buildCategoryPaths([{ id: 1, name: 'Skins', itemCount: 0,
+            children: [{ id: 33154, name: 'Ivy', itemCount: 0 }] }]);
+        parser.read.mockClear();
+        expect(needsModHeroDetection(mod, cached, paths)).toBe(false);
+        expect(resolveModClassification(mod, cached, paths)).toMatchObject({ lockerHeroes: ['Ivy'], globalType: undefined });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it('uses description, original filename, then title only without decisive paths', () => {
+        const labels = { ...metadata, fileDescription: 'Mina red version', sourceFileName: 'vindicta.zip', modName: 'Haze' };
+        expect(detectModHeroes(mod, labels)).toMatchObject({ heroes: ['Mina'], source: 'description' });
+        expect(detectModHeroes(mod, { ...labels, fileDescription: '' })).toMatchObject({ heroes: ['Vindicta'], source: 'file' });
+        expect(detectModHeroes(mod, { ...labels, fileDescription: '', sourceFileName: '' })).toMatchObject({ heroes: ['Haze'], source: 'name' });
+        expect(detectModHeroes(mod, { ...labels, fileDescription: 'Mina and Vindicta' })).toMatchObject({ heroes: [], source: 'description' });
+    });
+
+    it('does not replace ambiguous paths with a title guess and caches that outcome', () => {
+        parser.read.mockReturnValue(['models/heroes_wip/haze/body.vmdl_c', 'models/heroes_wip/wraith/body.vmdl_c']);
+        const named = { ...metadata, modName: 'Mina' };
+        const result = resolveModClassification(mod, named);
+        expect(result).toMatchObject({ lockerHeroes: [], globalType: undefined });
+        expect(needsModHeroDetection(mod, { ...named, ...result.metadataPatch })).toBe(false);
+    });
+
+    it('retries an unreadable VPK instead of keeping an old General assignment', () => {
+        parser.read.mockReturnValue(['models/hideout/materials/display.vtex_c']);
+        const cached = { ...metadata, ...resolveModClassification(mod, metadata).metadataPatch };
+        parser.read.mockReturnValue(null);
+        expect(resolveModClassification({ ...mod, size: 124 }, cached))
+            .toMatchObject({ lockerHeroes: [], globalType: undefined, metadataPatch: { heroDetection: undefined } });
+        expect(parser.invalidate).toHaveBeenCalledWith(mod.path);
+    });
+
+    it('preserves manual hero, General, and explicitly unassigned choices over cached inference', () => {
+        parser.read.mockReturnValue(['models/hideout/materials/display.vtex_c']);
+        const cached = { ...metadata, ...resolveModClassification(mod, metadata).metadataPatch };
+        parser.read.mockClear();
+        expect(resolveModClassification(mod, { ...cached, lockerHero: 'Ivy', lockerHeroSource: 'manual' }))
+            .toMatchObject({ lockerHeroes: ['Ivy'], globalType: undefined });
+        expect(resolveModClassification(mod, { ...cached, globalType: 'effects', globalTypeSource: 'manual' }))
+            .toEqual({ lockerHeroes: [], globalType: 'effects' });
+        const unassigned = { ...cached, globalType: null, globalTypeSource: 'manual' as const };
+        expect(resolveModClassification(mod, unassigned)).toMatchObject({ lockerHeroes: [], globalType: undefined });
+        expect(needsModHeroDetection(mod, unassigned)).toBe(false);
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+
+    it.each(['Quality of Life/Fixes', 'Gameplay Modifications', 'Accessibility', 'Other/Misc', 'Hideout'])(
+        'does not apply the broad-category fallback to %s', categoryName => {
+            expect(needsModHeroDetection(mod, { ...metadata, categoryName })).toBe(false);
+            const result = resolveModClassification(mod, { ...metadata, categoryName, modName: 'Haze' });
+            expect(result.lockerHeroes).toEqual([]);
+            expect(result.globalType).toBe(categoryName === 'Hideout' ? 'hideout' : undefined);
+            expect(parser.read).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each([undefined, 7])('routes multi-hero portrait packs for local or linked files (%s)', gameBananaId => {
+        parser.read.mockReturnValue(['panorama/images/heroes/haze_card_psd.vtex_c', 'panorama/images/heroes/wraith_card_psd.vtex_c']);
+        expect(resolveModClassification(mod, { gameBananaId, ...(gameBananaId ? metadata : {}) }))
+            .toMatchObject({ lockerHeroes: [], globalType: 'icons' });
+    });
+
+    it('honors explicitly unassigned local files without running a path fallback', () => {
+        const local: ModMetadata = { globalType: null, globalTypeSource: 'manual' };
+        expect(needsModHeroDetection(mod, local)).toBe(false);
+        expect(resolveModClassification(mod, local)).toMatchObject({ lockerHeroes: [], globalType: undefined });
+        expect(parser.read).not.toHaveBeenCalled();
+    });
+});

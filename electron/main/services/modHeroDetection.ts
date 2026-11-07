@@ -5,8 +5,9 @@ import type { ModMetadata } from './metadata';
 import { canonicalSupportedHeroName, supportedHeroNames } from './heroCodenames';
 import { inferHeroesFromVpkPaths, invalidateVpkParseCache, parseVpkDirectoryCached } from './vpk';
 import { inferHeroFromVpkTree } from './unknownModDetection';
+import { classifyModPayload } from './modPayloadClassification';
 
-export const MOD_HERO_DETECTION_VERSION = 1;
+export const MOD_HERO_DETECTION_VERSION = 3;
 
 type DetectionMod = { size: number; installedAt: string };
 
@@ -18,12 +19,36 @@ function isHudMod(metadata: ModMetadata, paths?: CategoryPaths): boolean {
     })) === 'hud';
 }
 
-/** Sound, WiP, and HUD payloads share the same per-file matching rules. */
-export function isModHeroDetectionEligible(metadata: ModMetadata | undefined, paths?: CategoryPaths): boolean {
-    return !!metadata && (metadata.sourceSection === 'Sound' || metadata.sourceSection === 'Wip' || isHudMod(metadata, paths));
+/** Only automatic root assignments can be refined from the payload. */
+function isAutomaticModRoot(metadata: ModMetadata, roots: readonly string[], paths?: CategoryPaths): boolean {
+    if ((metadata.sourceSection ?? 'Mod') !== 'Mod' || metadata.globalTypeSource === 'manual'
+        || !isLinked(metadata) && metadata.globalType
+        || metadata.lockerHeroSource === 'manual' && metadata.lockerHero?.trim()) return false;
+    const path = resolveCategoryPath(paths, { id: metadata.categoryId, name: metadata.categoryName ?? '' });
+    return path.length === 1 && roots.includes(path[0].name.toLowerCase());
 }
 
-function detectionInputs(metadata: ModMetadata, kind: 'tiered' | 'local' = 'tiered'): string {
+function isBroadMod(metadata: ModMetadata, paths?: CategoryPaths): boolean {
+    return isAutomaticModRoot(metadata, ['skins', 'model replacement'], paths);
+}
+
+function isHudRoot(metadata: ModMetadata, paths?: CategoryPaths): boolean {
+    return isAutomaticModRoot(metadata, ['hud'], paths);
+}
+
+/** Sound, WiP, HUD, and broadly categorized Mod files share per-file caching. */
+export function isModHeroDetectionEligible(metadata: ModMetadata | undefined, paths?: CategoryPaths): boolean {
+    return !!metadata && (metadata.sourceSection === 'Sound' || metadata.sourceSection === 'Wip'
+        || isHudMod(metadata, paths) || isBroadMod(metadata, paths));
+}
+
+type DetectionKind = 'tiered' | 'local' | 'broad' | 'hud-root';
+
+function tieredDetectionKind(metadata: ModMetadata, paths?: CategoryPaths): DetectionKind {
+    return isBroadMod(metadata, paths) ? 'broad' : isHudRoot(metadata, paths) ? 'hud-root' : 'tiered';
+}
+
+function detectionInputs(metadata: ModMetadata, kind: DetectionKind = 'tiered'): string {
     return JSON.stringify([
         kind,
         metadata.sourceSection,
@@ -31,10 +56,11 @@ function detectionInputs(metadata: ModMetadata, kind: 'tiered' | 'local' = 'tier
         metadata.sourceFileName ?? '',
         metadata.fileDescription ?? '',
         metadata.modName ?? '',
+        ...(kind === 'broad' || kind === 'hud-root' ? [metadata.categoryId, metadata.categoryName] : []),
     ]);
 }
 
-function needsDetection(mod: DetectionMod, metadata: ModMetadata, kind: 'tiered' | 'local' = 'tiered'): boolean {
+function needsDetection(mod: DetectionMod, metadata: ModMetadata, kind: DetectionKind = 'tiered'): boolean {
     const previous = metadata.heroDetection;
     return !previous || previous.version !== MOD_HERO_DETECTION_VERSION
         || previous.size !== mod.size || previous.modifiedAt !== mod.installedAt
@@ -45,7 +71,7 @@ function isLinked(metadata: ModMetadata): boolean {
     return typeof metadata.gameBananaId === 'number' && metadata.gameBananaId > 0;
 }
 
-/** Cold local files and tiered Sound/WiP/HUD detection share parse pre-warming. */
+/** Every payload fallback shares the existing worker-pool parse pre-warming. */
 export function needsModHeroDetection(mod: DetectionMod, metadata: ModMetadata | undefined, paths?: CategoryPaths): boolean {
     const data = metadata ?? {};
     if (data.globalType && data.globalType !== 'hud' && (data.globalTypeSource === 'manual'
@@ -53,8 +79,9 @@ export function needsModHeroDetection(mod: DetectionMod, metadata: ModMetadata |
     if (data.lockerHeroSource === 'manual' && data.lockerHero?.trim()
         && !(data.globalTypeSource === 'manual' && data.globalType)) return false;
     const tiered = isModHeroDetectionEligible(data, paths);
+    if (!tiered && data.globalTypeSource === 'manual') return false;
     if (!tiered && (isLinked(data) || data.lockerHero?.trim())) return false;
-    return needsDetection(mod, data, tiered ? 'tiered' : 'local');
+    return needsDetection(mod, data, tiered ? tieredDetectionKind(data, paths) : 'local');
 }
 
 const aliasesByHero = new Map(supportedHeroNames.map((name) => [name, new Set([name, name.replace(/\s+/g, '')])]));
@@ -93,16 +120,25 @@ export function detectModHeroes(
     categoryPaths?: CategoryPaths,
 ): InstalledHeroDetection | undefined {
     if (!metadata || !isModHeroDetectionEligible(metadata, categoryPaths)) return undefined;
-    if (!needsDetection(mod, metadata)) return metadata.heroDetection;
+    const kind = tieredDetectionKind(metadata, categoryPaths);
+    const broad = kind === 'broad';
+    if (!needsDetection(mod, metadata, kind)) return metadata.heroDetection;
     const paths = parseVpkDirectoryCached(mod.path);
     if (paths === null) {
         // A transient parse failure must not become a permanent checked result.
         invalidateVpkParseCache(mod.path);
         return undefined;
     }
-    let heroes = inferHeroesFromVpkPaths(paths);
+    const candidate = broad || kind === 'hud-root' ? classifyModPayload(paths) : undefined;
+    // HUD is also a broad root used by portrait packs. Refine pure multi-hero
+    // art to Icons, retaining normal HUD attribution for functional HUD files.
+    const payload = broad || candidate?.kind === 'general' && candidate.globalType === 'icons'
+        ? candidate : undefined;
+    let heroes = payload
+        ? payload.kind === 'hero' ? [payload.hero] : []
+        : inferHeroesFromVpkPaths(paths);
     let source: InstalledHeroDetection['source'] = 'vpk';
-    if (heroes.length === 0) {
+    if (heroes.length === 0 && (!payload || payload.kind === 'unknown')) {
         const textLevels: Array<{ source: InstalledHeroDetection['source']; texts: string[] }> = [
             { source: 'description', texts: [metadata.fileDescription ?? ''] },
             { source: 'file', texts: [metadata.archiveVpkPath ?? '', metadata.sourceFileName ?? ''] },
@@ -113,22 +149,35 @@ export function detectModHeroes(
             heroes = heroesMentionedInFileText(level.texts);
             if (heroes.length > 0) break;
         }
+        // A broad skin category does not establish ownership of several heroes.
+        if (broad && heroes.length > 1) heroes = [];
     }
     return {
         version: MOD_HERO_DETECTION_VERSION,
         heroes,
         source,
+        ...(payload?.kind === 'general' ? { globalType: payload.globalType } : {}),
         size: mod.size,
         modifiedAt: mod.installedAt,
-        inputs: detectionInputs(metadata),
+        inputs: detectionInputs(metadata, kind),
     };
 }
 
 function detectLocalHeroes(mod: DetectionMod & { path: string }, metadata: ModMetadata): InstalledHeroDetection | undefined {
     if (!needsDetection(mod, metadata, 'local')) return metadata.heroDetection;
-    if (parseVpkDirectoryCached(mod.path) === null) {
+    const paths = parseVpkDirectoryCached(mod.path);
+    if (paths === null) {
         invalidateVpkParseCache(mod.path);
         return undefined;
+    }
+    const payload = classifyModPayload(paths);
+    if (payload.kind !== 'unknown') {
+        return {
+            version: MOD_HERO_DETECTION_VERSION,
+            heroes: payload.kind === 'hero' ? [payload.hero] : [],
+            ...(payload.kind === 'general' ? { globalType: payload.globalType } : {}),
+            source: 'vpk', size: mod.size, modifiedAt: mod.installedAt, inputs: detectionInputs(metadata, 'local'),
+        };
     }
     let heroes: string[] = [];
     try {
@@ -154,7 +203,7 @@ export interface ResolvedModClassification {
     metadataPatch?: Pick<ModMetadata, 'heroDetection'>;
 }
 
-/** Shared runtime identity for library display and local-group compatibility. */
+/** Shared runtime identity for library display and per-file attribution. */
 export function resolveModClassification(
     mod: DetectionMod & { path: string },
     metadata: ModMetadata | undefined,
@@ -184,14 +233,16 @@ export function resolveModClassification(
             ?? path.map(category => canonicalSupportedHeroName(category.name)).find(Boolean);
         if (categoryHero) lockerHeroes = [canonicalSupportedHeroName(categoryHero) ?? categoryHero];
     }
-    if (!tiered && !isLinked(data) && lockerHeroes.length === 0) {
+    if (!tiered && !isLinked(data) && lockerHeroes.length === 0 && data.globalTypeSource !== 'manual') {
         detection = detectLocalHeroes(mod, data);
         checked = true;
         lockerHeroes = detection?.heroes ?? [];
         lockerHero = lockerHeroes[0];
         lockerHeroSource = lockerHero ? 'vpk' : undefined;
     }
-    const globalType = resolveInstalledGeneralType(data, paths, hud ? [] : lockerHeroes);
+    const iconPack = isHudRoot(data, paths) && detection?.globalType === 'icons';
+    const globalType = iconPack ? 'icons'
+        : resolveInstalledGeneralType(data, paths, hud ? [] : lockerHeroes) ?? detection?.globalType;
     if (globalType) {
         lockerHero = undefined;
         lockerHeroSource = undefined;
