@@ -63,8 +63,8 @@ export interface VpkHeroGuess {
  * classifier (models, materials,
  * particles, panorama, sounds), so it recognizes skins too. Pure local read:
  * uses the cached VPK parse, no GameBanana calls. Returns null when no hero is
- * found or when more than one hero shows a strong signal (ambiguous: better to
- * leave it untagged than guess wrong). Callers decide the confidence bar; the
+ * found or when the paths spread over many heroes with none dominating (a
+ * multi-hero pack: better untagged than guessed). Callers decide the confidence bar; the
  * Locker auto-tag only accepts strong/medium.
  */
 export function inferHeroFromVpkTree(vpkPath: string): VpkHeroGuess | null {
@@ -213,12 +213,15 @@ const CATEGORY_PATH_RULES: CategoryPathRule[] = [
     { pattern: /(?:^|\/)sounds?\//, points: { soundMisc: 80 } },
     { pattern: /(?:^|\/)scripts\//, points: { gameplay: 40, qol: 30, modMisc: 20 } },
     // Outscores the model rules (skins/modelReplacement reach 160 per path) so an
-    // animation-only mod lands in Animations, while a skin that merely bundles a
-    // few clips stays in Skins on its meshes and textures.
+    // animation-only mod lands in Animations. scoreCategories drops it when the
+    // VPK also ships art, so a skin's own clips never pull it out of Skins.
     { pattern: /\.(?:vnmskel|vnmclip|vnmgraph|vanmgrph|vanim|vagrp)_c$/, points: { animations: 200 } },
     { pattern: /\.vjs_c$|\.vxml_c$|\.vcss_c$/, points: { hud: 30 } },
 ];
 const MODEL_PATH_PATTERN = /(?:^|\/)(?:models\/|materials\/models\/|materials\/heroes(?:_wip|_staging)?\/|animgraphs\/animgraph2\/hero\/)/;
+const ART_FILE_PATTERN = /\.(?:vmdl|vmesh|vmat|vtex)_c$/;
+const PARTICLE_PATH_PATTERN = /(?:^|\/)particles\//;
+const PARTICLE_TWEAK_PATH_PATTERN = /(?:^|\/)(?:particles|materials)\//;
 
 const FAILED_RETRY_SECONDS = 6 * 60 * 60;
 
@@ -860,7 +863,7 @@ function buildUnknownGuessBase(modId: string, fileName: string, paths: string[])
     const normalized = paths.map((path) => path.replace(/\\/g, '/').toLowerCase());
     const hero = findHeroHint(normalized);
     const bucket = chooseSearchBuckets(paths)[0];
-    const ranked = scoreCategories(normalized);
+    const ranked = scoreCategories(normalized, hero);
 
     return {
         modId,
@@ -1060,7 +1063,7 @@ function sortCandidateFiles(files: UnknownCrcFile[]): UnknownCrcFile[] {
 function chooseSearchBuckets(paths: string[]): SearchBucket[] {
     const normalized = paths.map((path) => path.replace(/\\/g, '/').toLowerCase());
     const hero = findHeroHint(normalized);
-    const ranked = scoreCategories(normalized);
+    const ranked = scoreCategories(normalized, hero);
 
     if (ranked.length === 0) {
         ranked.push({ key: 'modMisc', points: 1 });
@@ -1090,9 +1093,10 @@ function chooseSearchBuckets(paths: string[]): SearchBucket[] {
     return buckets;
 }
 
-function scoreCategories(paths: string[]): Array<{ key: CategoryKey; points: number }> {
+function scoreCategories(paths: string[], hero: HeroHint | null): Array<{ key: CategoryKey; points: number }> {
     const scores = new Map<CategoryKey, number>();
     const hasModelPath = paths.some((path) => MODEL_PATH_PATTERN.test(path));
+    const shipsArt = paths.some((path) => ART_FILE_PATTERN.test(path));
     for (const path of paths) {
         for (const rule of CATEGORY_PATH_RULES) {
             if (!rule.pattern.test(path)) continue;
@@ -1103,9 +1107,18 @@ function scoreCategories(paths: string[]): Array<{ key: CategoryKey; points: num
         }
     }
 
+    // Hero-less tweaks that only touch particles (dash trails, ambient effects,
+    // clarity packs) are filed under Quality of Life/Fixes, which their paths
+    // can't tell apart from Model Replacement. QoL is small (about 170 mods, 4
+    // pages), so trying it first still leaves the runner-up half the budget.
+    const compiled = paths.filter((path) => path.endsWith('_c'));
+    if (!hero && compiled.some((path) => PARTICLE_PATH_PATTERN.test(path)) && compiled.every((path) => PARTICLE_TWEAK_PATH_PATTERN.test(path))) {
+        scores.set('qol', Math.max(...scores.values()) + 1);
+    }
+
     return [...scores.entries()]
         .map(([key, points]) => ({ key, points }))
-        .filter(({ key, points }) => points > 0 && !(hasModelPath && key === 'soundMisc'))
+        .filter(({ key, points }) => points > 0 && !(hasModelPath && key === 'soundMisc') && !(shipsArt && key === 'animations'))
         .sort((a, b) => b.points - a.points || categoryTieBreaker(a.key) - categoryTieBreaker(b.key));
 }
 
@@ -1156,34 +1169,41 @@ function shouldProbeArchive(file: UnknownCrcFile): boolean {
 }
 
 function findHeroHint(paths: string[]): HeroHint | null {
-    const scores = new Map<HeroHint, number>();
+    const exactScores = new Map<HeroHint, number>();
+    const fuzzyScores = new Map<HeroHint, number>();
 
     for (const path of paths) {
         const segments = path.split(/[/_.\s-]+/).filter(Boolean).map(normalizeHeroKey);
-        const compactPath = normalizeHeroKey(path);
+        // Each segment joined to the ones after it, so a match has to start on
+        // a segment boundary: "lady_geist" and "hornetskin" count, while "lash"
+        // inside "flash" does not.
+        const tails = segments.map((_, i) => segments.slice(i).join(''));
         for (const hero of HERO_HINTS) {
             const code = normalizeHeroKey(hero.code);
             const display = normalizeHeroKey(hero.display);
-            // An exact codename/display in a path *segment* is reliable. A bare
-            // substring match (e.g. a short code like "nano" landing inside an
-            // unrelated token) is not, so it counts for far less. This only
-            // steers which GameBanana bucket gets searched, the actual install
-            // is still gated on a CRC-32 match, so a wrong guess costs a miss,
-            // never a wrong match.
-            const exact = segments.includes(code) || segments.includes(display);
-            const fuzzy = !exact && (
-                (code.length > 3 && compactPath.includes(code)) ||
-                (display.length > 4 && compactPath.includes(display))
-            );
-            if (exact) {
-                scores.set(hero, (scores.get(hero) ?? 0) + scoreHeroPath(path));
-            } else if (fuzzy) {
-                scores.set(hero, (scores.get(hero) ?? 0) + 1);
+            // An exact codename/display in a path *segment* is reliable. A name
+            // glued to other text is not, so it only counts when no hero has an
+            // exact hit. This only steers which GameBanana bucket gets searched
+            // and the Locker hero of an unknown mod; installs are still gated on
+            // a CRC-32 match, so a wrong guess costs a miss, never a wrong match.
+            if (segments.includes(code) || segments.includes(display)) {
+                exactScores.set(hero, (exactScores.get(hero) ?? 0) + scoreHeroPath(path));
+            } else if (
+                (code.length > 3 && tails.some((tail) => tail.startsWith(code))) ||
+                (display.length > 4 && tails.some((tail) => tail.startsWith(display)))
+            ) {
+                fuzzyScores.set(hero, (fuzzyScores.get(hero) ?? 0) + 1);
             }
         }
     }
 
+    const scores = exactScores.size > 0 ? exactScores : fuzzyScores;
     const best = [...scores.entries()].sort((a, b) => b[1] - a[1])[0];
+    // A pack spread over many heroes (all-hero VFX cleanups, sound packs)
+    // belongs to none of them. A skin's own hero dominates its paths even when
+    // a few others show up.
+    const total = [...exactScores.values()].reduce((sum, points) => sum + points, 0);
+    if (exactScores.size >= 3 && best[1] * 2 < total) return null;
     return best?.[0] ?? null;
 }
 

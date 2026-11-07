@@ -453,17 +453,19 @@ export interface ApplyTrippySkinResult {
 /**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
  * alongside the per-hero piles. Linked submissions derive their General
- * destination from GameBanana category ancestry. Explicit manual assignments
+ * destination from category ancestry or a conservative cached payload fallback.
+ * Explicit manual assignments
  * and previously classified local files retain their chosen destination.
  */
 export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music' | 'effects' | 'animations' | 'maps';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
-/** Cached automatic hero matches for one installed payload. */
+/** Cached automatic hero matches and conservative General fallback for one payload. */
 export interface InstalledHeroDetection {
   version: number;
   heroes: string[];
   source: 'vpk' | 'description' | 'file' | 'name';
+  globalType?: 'hideout' | 'icons' | 'hud';
   size: number;
   modifiedAt: string;
   inputs: string;

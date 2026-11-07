@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  assertCompatibleLocalVariantClassifications,
   planLocalVariantGroup,
   resolveLocalVariantGroupProfile,
   type LocalVariantGroupMember,
@@ -160,165 +159,46 @@ describe('planLocalVariantGroup', () => {
     expect(plan.writes).toEqual([]);
   });
 
-  it('propagates a known Locker hero to an unclassified group member', () => {
+  it('groups mixed CompLock components without rewriting any per-file classification', () => {
     const all = [
-      member({
-        id: 'a',
-        lockerHero: 'Lady Geist',
-        lockerHeroSource: 'manual',
-        globalType: null,
-      }),
+      member({ id: 'map', name: 'CompLock', globalType: 'maps', globalTypeSource: 'manual' }),
+      member({ id: 'particles', lockerHero: 'Ivy', lockerHeroSource: 'manual', resolvedHeroes: ['Ivy'] }),
+      member({ id: 'outlines', globalType: 'hud', resolvedHeroes: [], resolvedGlobalType: 'hud' }),
+      member({ id: 'sound', resolvedHeroes: ['Haze', 'Wraith'] }),
+      member({ id: 'unknown', globalType: null, globalTypeSource: 'manual' }),
+    ];
+    const before = structuredClone(all);
+    const plan = planLocalVariantGroup(all, all.map(file => file.id), { mode: 'mint' }, mint);
+    expect(plan.writes).toEqual(all.map(file => ({
+      id: file.id, metaKey: file.metaKey, localGroupId: 'minted-uuid',
+      modName: file.name === 'CompLock' ? undefined : 'CompLock',
+    })));
+    expect(all).toEqual(before);
+    expect(resolveLocalVariantGroupProfile(all)).toEqual({ priorityMod: false });
+  });
+
+  it('adds a differently classified file to an already mixed group without changing existing members', () => {
+    const all = [
+      member({ id: 'a', name: 'CompLock', localGroupId: 'g', lockerHero: 'Ivy', lockerHeroSource: 'manual' }),
+      member({ id: 'b', name: 'CompLock', localGroupId: 'g', globalType: 'hud', globalTypeSource: 'manual' }),
+      member({ id: 'lowdetailmap', globalType: 'maps', resolvedHeroes: [] }),
+    ];
+    expect(planLocalVariantGroup(all, ['lowdetailmap'], { mode: 'join', groupId: 'g' }, mint).writes)
+      .toEqual([{ id: 'lowdetailmap', metaKey: 'lowdetailmap.vpk', localGroupId: 'g', modName: 'CompLock' }]);
+  });
+
+  it('does not give an unclassified incoming file a peer’s manual assignment', () => {
+    const all = [
+      member({ id: 'a', name: 'Pack', localGroupId: 'g', lockerHero: 'Ivy', lockerHeroSource: 'manual' }),
       member({ id: 'b' }),
     ];
-    const plan = planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint);
-    expect(plan.writes[1].classification).toEqual({
-      lockerHero: 'Lady Geist',
-      lockerHeroSource: 'manual',
-      globalType: undefined,
-      globalTypeSource: undefined,
-    });
+    expect(planLocalVariantGroup(all, ['b'], { mode: 'join', groupId: 'g' }, mint).writes)
+      .toEqual([{ id: 'b', metaKey: 'b.vpk', localGroupId: 'g', modName: 'Pack' }]);
   });
 
-  it('rejects conflicting Locker classifications before producing writes', () => {
-    const all = [
-      member({ id: 'a', lockerHero: 'Lady Geist' }),
-      member({ id: 'b', lockerHero: 'Ivy' }),
-    ];
-    expect(() => planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint))
-      .toThrow(/same Locker hero or Global classification/);
-  });
-
-  it('rejects mixed priority-root placement', () => {
+  it('rejects mixed priority-root placement without moving files', () => {
     const all = [member({ id: 'a', priorityMod: true }), member({ id: 'b' })];
     expect(() => planLocalVariantGroup(all, ['a', 'b'], { mode: 'mint' }, mint))
       .toThrow(/same Global priority-folder setting/);
-  });
-
-  it('resolves a stable Global profile for add-to-group imports', () => {
-    expect(resolveLocalVariantGroupProfile([
-      member({
-        id: 'a',
-        localGroupId: 'g',
-        globalType: 'hud',
-        priorityMod: true,
-      }),
-      member({ id: 'b', localGroupId: 'g', priorityMod: true }),
-    ])).toEqual({
-      priorityMod: true,
-      resolvedHeroes: [],
-      resolvedGlobalType: 'hud',
-      classification: {
-        globalType: 'hud',
-        globalTypeSource: 'manual',
-        lockerHero: undefined,
-        lockerHeroSource: undefined,
-      },
-    });
-  });
-
-  it('compares multi-hero sets without copying automatic identities to peers', () => {
-    const all = [
-      member({ id: 'a', resolvedHeroes: ['Ivy', 'Lady Geist'] }),
-      member({ id: 'b', resolvedHeroes: ['Lady Geist', 'Ivy', 'Ivy'] }),
-      member({ id: 'c', resolvedHeroes: [] }),
-    ];
-    const plan = planLocalVariantGroup(all, ['a', 'b', 'c'], { mode: 'mint' }, mint);
-    expect(plan.writes).toHaveLength(3);
-    expect(plan.writes.every((write) => write.classification === undefined)).toBe(true);
-    expect(resolveLocalVariantGroupProfile(all)).toMatchObject({ resolvedHeroes: ['Ivy', 'Lady Geist'] });
-    expect(() => resolveLocalVariantGroupProfile([
-      ...all,
-      member({ id: 'd', resolvedHeroes: ['Ivy'] }),
-    ])).toThrow(/same Locker hero or Global classification/);
-  });
-
-  it('keeps category-derived General classification comparison-only', () => {
-    const all = [
-      member({ id: 'a', gameBananaId: 7, localGroupId: 'g', resolvedHeroes: [], resolvedGlobalType: 'hud' }),
-      member({ id: 'b', resolvedHeroes: [], resolvedGlobalType: 'hud' }),
-    ];
-    expect(resolveLocalVariantGroupProfile(all)).toEqual({
-      priorityMod: false,
-      resolvedHeroes: [],
-      resolvedGlobalType: 'hud',
-    });
-    expect(planLocalVariantGroup(all, ['b'], { mode: 'join', groupId: 'g' }, mint).writes[0].classification)
-      .toBeUndefined();
-  });
-
-  it('preserves an explicit manual General override, including unassigned', () => {
-    expect(resolveLocalVariantGroupProfile([
-      member({ id: 'a', gameBananaId: 7, globalType: null, globalTypeSource: 'manual' }),
-    ]).classification).toEqual({
-      globalType: null,
-      globalTypeSource: 'manual',
-    });
-  });
-
-  it.each([['unassigned', 'hero'], ['hero', 'unassigned']])('keeps a positive manual group tag when selection order is %s then %s', (first, second) => {
-    const all = [
-      member({ id: 'unassigned', globalType: null, globalTypeSource: 'manual', resolvedHeroes: [] }),
-      member({ id: 'hero', lockerHero: 'Haze', lockerHeroSource: 'manual', resolvedHeroes: ['Haze'] }),
-    ];
-    const plan = planLocalVariantGroup(all, [first, second], { mode: 'mint' }, mint);
-    const classification = plan.writes.find(write => write.id === 'unassigned')?.classification;
-    expect(classification).toMatchObject({ lockerHero: 'Haze', lockerHeroSource: 'manual' });
-    expect(plan.writes.find(write => write.id === 'hero')?.classification).toBeUndefined();
-  });
-
-  it('preserves the positive manual tag when joining an existing group whose first row is unassigned', () => {
-    const all = [
-      member({ id: 'unassigned', localGroupId: 'g', name: 'Group', globalType: null, globalTypeSource: 'manual', resolvedHeroes: [] }),
-      member({ id: 'hero', localGroupId: 'g', name: 'Group', lockerHero: 'Haze', lockerHeroSource: 'manual', resolvedHeroes: ['Haze'] }),
-      member({ id: 'fresh', resolvedHeroes: [] }),
-    ];
-    const plan = planLocalVariantGroup(all, ['fresh'], { mode: 'join', groupId: 'g' }, mint);
-    expect(plan.writes.find(write => write.id === 'fresh')?.classification).toMatchObject({
-      lockerHero: 'Haze', lockerHeroSource: 'manual',
-    });
-    expect(plan.writes.find(write => write.id === 'hero')?.classification).toBeUndefined();
-  });
-
-  it('does not clear or copy automatic hero fields to share an unassigned General choice', () => {
-    const all = [
-      member({ id: 'unassigned', globalType: null, globalTypeSource: 'manual', resolvedHeroes: [] }),
-      member({ id: 'automatic', lockerHero: 'Haze', lockerHeroSource: 'vpk', resolvedHeroes: ['Haze'] }),
-    ];
-    const plan = planLocalVariantGroup(all, ['unassigned', 'automatic'], { mode: 'mint' }, mint);
-    expect(plan.writes.find(write => write.id === 'unassigned')?.classification).toBeUndefined();
-    expect(plan.writes.find(write => write.id === 'automatic')?.classification).toEqual({
-      globalType: null, globalTypeSource: 'manual',
-    });
-    expect(plan.writes.find(write => write.id === 'automatic')?.classification).not.toHaveProperty('lockerHero');
-    expect(all[1]).toMatchObject({ lockerHero: 'Haze', lockerHeroSource: 'vpk', resolvedHeroes: ['Haze'] });
-  });
-
-  it('still rejects a different positive automatic identity when joining a manually tagged group', () => {
-    const all = [
-      member({ id: 'hero', localGroupId: 'g', lockerHero: 'Haze', lockerHeroSource: 'manual', resolvedHeroes: ['Haze'] }),
-      member({ id: 'other', resolvedHeroes: ['Wraith'] }),
-    ];
-    expect(() => planLocalVariantGroup(all, ['other'], { mode: 'join', groupId: 'g' }, mint))
-      .toThrow(/same Locker hero or Global classification/);
-  });
-});
-
-describe('assertCompatibleLocalVariantClassifications', () => {
-  it('rejects a definite imported classification that conflicts with the group', () => {
-    expect(() =>
-      assertCompatibleLocalVariantClassifications(
-        { lockerHero: 'Lady Geist', globalType: null },
-        { lockerHero: 'Ivy', globalType: null },
-      )
-    ).toThrow(/same Locker hero or Global classification/);
-  });
-
-  it('allows an unclassified imported VPK to inherit the established profile', () => {
-    expect(() =>
-      assertCompatibleLocalVariantClassifications(
-        { lockerHero: 'Lady Geist', globalType: null },
-        { lockerHero: undefined, globalType: null },
-      )
-    ).not.toThrow();
   });
 });

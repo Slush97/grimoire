@@ -11,7 +11,6 @@ import { tmpdir } from 'os';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
     scanMods,
-    generateModId,
     scanModsAfterMutations,
     healModFolders,
     enableMod,
@@ -82,7 +81,7 @@ import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '.
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import { assertCompatibleLocalVariantClassifications, planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupMember, type LocalVariantGroupProfile } from '../services/localVariantGroup';
+import { planLocalVariantGroup, resolveLocalVariantGroupProfile, type LocalVariantGroupProfile } from '../services/localVariantGroup';
 import { refreshEmbedAfterMetadataChange, toLocalVariantGroupMember } from '../services/modReplacement';
 import { resolveImportedVariantLabel } from '../../../src/lib/customModImport';
 import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, LocalVariantGroupTarget, PreviewSoulContainerGlbArgs, SetLocalVariantGroupResult, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
@@ -185,8 +184,8 @@ function enrichMods(mods: readonly Mod[], categoryPaths = new Map<string, Catego
 /**
  * Will enrichMod crack open this mod's VPK? Mirrors (conservatively
  * over-approximates) the detection predicates above: ability sounds never
- * checked, Sound/WiP/HUD hero detection missing or stale, or a local mod whose
- * tree has not been hero-checked. The worker pool keeps cold parsing off the
+ * checked, Sound/WiP/HUD or broad-category detection missing or stale, or a local
+ * mod whose tree has not been checked. The worker pool keeps cold parsing off the
  * main thread.
  */
 function needsVpkParseForEnrich(mod: Mod, categoryPaths: Map<string, CategoryPaths | undefined>): boolean {
@@ -733,23 +732,14 @@ ipcMain.handle(
 
         const { groupId, renamed, snapshot } = await runExclusiveModMutation(async () => {
             const all = await scanMods(deadlockPath);
-            const selected = new Set(modIds ?? []);
-            const joinGroup = target.mode === 'join' ? target.groupId?.trim() : undefined;
-            const categoryPaths = new Map<string, CategoryPaths | undefined>();
-            const members: LocalVariantGroupMember[] = all.map(mod => {
-                const classify = target.mode !== 'clear' && (selected.has(mod.id)
-                    || !!joinGroup && getModMetadata(mod.metaKey)?.localGroupId?.trim() === joinGroup);
-                return toLocalVariantGroupMember(mod, categoryPaths, classify);
-            });
+            const members = all.map(mod => toLocalVariantGroupMember(mod, undefined, false));
 
             const plan = planLocalVariantGroup(members, modIds ?? [], target, randomUUID);
             const renamedMods: Mod[] = [];
             for (const write of plan.writes) {
-                const classification = write.classification ?? {};
                 const data = {
                     localGroupId: write.localGroupId,
                     ...(write.modName ? { modName: write.modName } : {}),
-                    ...classification,
                 };
                 const mod = all.find((candidate) => candidate.id === write.id);
                 if (write.localGroupId && mod && !getModMetadata(write.metaKey)?.sha256) {
@@ -1132,10 +1122,9 @@ async function installedLocalVariantGroupProfile(
     requireExisting: boolean
 ): Promise<LocalVariantGroupProfile | undefined> {
     const all = await scanMods(deadlockPath);
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
     const members = all
         .filter(mod => getModMetadata(mod.metaKey)?.localGroupId === groupId)
-        .map(mod => toLocalVariantGroupMember(mod, categoryPaths));
+        .map(mod => toLocalVariantGroupMember(mod, undefined, false));
     if (members.length === 0) {
         if (requireExisting) throw new Error('The local variant group no longer exists');
         return undefined;
@@ -1205,7 +1194,6 @@ async function importCustomModSource(
     // `name`, so the members stay name-unified without a second write.
     const localGroupId = joinGroupId?.trim() || (sourceVpks.length > 1 ? randomUUID() : undefined);
     let groupProfile: LocalVariantGroupProfile | undefined;
-    const categoryPaths = new Map<string, CategoryPaths | undefined>();
     const importWrites: LocalImportTransactionWrite[] = [];
     const thumbnailStart = thumbnailFetchTargets.length;
     let needsReview = false;
@@ -1279,33 +1267,9 @@ async function importCustomModSource(
                 setModMetadata(destMetaKey, adoptionPatch);
             }
 
-            // localGroupId is an explicit grouping decision, while an adopted
-            // GameBanana id is provenance/update identity. Keep both. The
-            // group's first member establishes one Locker profile; later
-            // members inherit it so one logical card cannot split across hero,
-            // General, or priority-root sections.
-            if (localGroupId) {
-                const stat = await fs.stat(destPath);
-                const candidate = toLocalVariantGroupMember({
-                    id: generateModId(destPath), metaKey: destMetaKey, path: destPath,
-                    fileName: basename(destPath), name: stampedName, enabled: false,
-                    priority: 0, size: stat.size, installedAt: stat.mtime.toISOString(),
-                }, categoryPaths);
-                const importedProfile = resolveLocalVariantGroupProfile([candidate]);
-                if (groupProfile) {
-                    assertCompatibleLocalVariantClassifications(groupProfile, candidate);
-                    if (!groupProfile.classification && !groupProfile.resolvedGlobalType
-                        && !groupProfile.resolvedHeroes?.length) {
-                        groupProfile = { ...importedProfile, priorityMod: groupProfile.priorityMod };
-                    }
-                } else {
-                    groupProfile = importedProfile;
-                }
-                setModMetadata(destMetaKey, {
-                    ...groupProfile.classification,
-                    priorityMod: groupProfile.priorityMod ? true : undefined,
-                });
-            }
+            // Membership is organizational. Adopted identity, manual tags, and
+            // payload detection stay on this file and never inherit a peer's
+            // Locker classification. Placement was set from the group above.
 
             // Stamp imprinted/imprintStale from the embed truth immediately,
             // so the toolbar button's pending count is honest without

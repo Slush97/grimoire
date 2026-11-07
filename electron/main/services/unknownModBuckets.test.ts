@@ -45,9 +45,9 @@ vi.mock('./unknownCrcCache', () => ({
 
 import { fetchGameBananaArchiveVpkCrcEntries } from './archiveCrc';
 import { fetchModsFilesMetadata, fetchSubmissions } from './gamebanana';
-import { parseVpkDirectory } from './vpk';
+import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
 import { upsertUnknownCrcFiles } from './unknownCrcCache';
-import { detectUnknownModFilters } from './unknownModDetection';
+import { detectUnknownModFilters, inferHeroFromVpkTree } from './unknownModDetection';
 
 const VINDICTA_MODEL = ['models/heroes_wip/hornet/hornet.vmdl_c'];
 
@@ -140,6 +140,34 @@ describe('unknown mod search buckets', () => {
         expect(searchedCategoryIds()[0]).toBe(47611);
     });
 
+    it('keeps a skin that ships its own clips out of Animations', async () => {
+        // Shape of a real Baba skin: hundreds of clips beside the hero model.
+        vi.mocked(parseVpkDirectory).mockReturnValue([
+            ...Array.from({ length: 50 }, (_, i) => `models/heroes_wip/werewolf/clips/c${i}.vnmclip_c`),
+            'models/heroes_wip/werewolf/werewolf.vmdl_c',
+        ]);
+        vi.mocked(fetchSubmissions).mockResolvedValue({ records: [], totalCount: 0, isComplete: true, perPage: 50 });
+
+        const guess = await detectUnknownModFilters('m4', 'pak01_dir.vpk', vpkPath);
+
+        expect(guess.contentHints.join()).not.toMatch(/Animations/);
+        expect(searchedCategoryIds()).not.toContain(47611);
+    });
+
+    it('tries Quality of Life/Fixes first for a hero-less particle tweak', async () => {
+        vi.mocked(parseVpkDirectory).mockReturnValue([
+            'particles/generic/dash_trail.vpcf_c',
+            'particles/abilities/generic_cast.vpcf_c',
+            'materials/dev/blank.vtex_c',
+        ]);
+        vi.mocked(fetchSubmissions).mockResolvedValue({ records: [], totalCount: 0, isComplete: true, perPage: 50 });
+
+        const guess = await detectUnknownModFilters('m5', 'pak01_dir.vpk', vpkPath);
+
+        expect(guess.categoryName).toBe('Quality of Life/Fixes');
+        expect(searchedCategoryIds()).toEqual([46154, 33154]);
+    });
+
     it('names Gameplay Modifications and falls through to Quality of Life/Fixes', async () => {
         vi.mocked(parseVpkDirectory).mockReturnValue(['scripts/abilities.vdata_c']);
         vi.mocked(fetchSubmissions).mockResolvedValue({ records: [], totalCount: 0, isComplete: true, perPage: 50 });
@@ -224,5 +252,40 @@ describe('unknown mod search buckets', () => {
         await detectUnknownModFilters('m6', 'pak01_dir.vpk', vpkPath);
 
         expect(searchedCategoryIds()).toEqual([33324, 33324, 33324, 33154, 33154, 33154, 33154, 33154]);
+    });
+});
+
+describe('VPK hero hint', () => {
+    it('does not read Lash into "flash"', () => {
+        vi.mocked(parseVpkDirectoryCached).mockReturnValue([
+            'particles/generic/wall_jump_directional_flash.vpcf_c',
+            'particles/weapon_fx/kelvin/kelvin_muzzle_flash_gas.vpcf_c',
+        ]);
+        expect(inferHeroFromVpkTree(vpkPath)?.name).toBe('Kelvin');
+    });
+
+    it('still takes a name glued to the text after it', () => {
+        vi.mocked(parseVpkDirectoryCached).mockReturnValue(['materials/custom/hornetskin_color.vtex_c']);
+        expect(inferHeroFromVpkTree(vpkPath)?.name).toBe('Vindicta');
+    });
+
+    it('gives a pack spread over many heroes no hero', () => {
+        vi.mocked(parseVpkDirectoryCached).mockReturnValue([
+            'particles/abilities/kelvin/a.vpcf_c',
+            'particles/abilities/haze/a.vpcf_c',
+            'particles/abilities/doorman/a.vpcf_c',
+            'particles/abilities/necro/a.vpcf_c',
+        ]);
+        expect(inferHeroFromVpkTree(vpkPath)).toBeNull();
+    });
+
+    it('keeps a skin\'s hero when a few other heroes show up', () => {
+        vi.mocked(parseVpkDirectoryCached).mockReturnValue([
+            ...VINDICTA_MODEL,
+            'materials/models/heroes_wip/hornet/hornet_color.vtex_c',
+            'particles/abilities/haze/a.vpcf_c',
+            'particles/abilities/doorman/a.vpcf_c',
+        ]);
+        expect(inferHeroFromVpkTree(vpkPath)?.name).toBe('Vindicta');
     });
 });

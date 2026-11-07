@@ -107,22 +107,22 @@ describe('localVariantSelectionEligibility', () => {
     ).toEqual({ eligible: false, reason: 'placement' });
   });
 
-  it('rejects two definite but different Locker classifications', () => {
+  it('allows different Locker hero and General classifications', () => {
     expect(
       localVariantSelectionEligibility([
         mod({ id: 'ivy', lockerHero: 'Ivy' }),
         mod({ id: 'geist', lockerHero: 'Lady Geist' }),
       ])
-    ).toEqual({ eligible: false, reason: 'classification' });
+    ).toEqual({ eligible: true });
     expect(
       localVariantSelectionEligibility([
         mod({ id: 'hud', globalType: 'hud' }),
         mod({ id: 'ivy', lockerHero: 'Ivy' }),
       ])
-    ).toEqual({ eligible: false, reason: 'classification' });
+    ).toEqual({ eligible: true });
   });
 
-  it('lets an unclassified mod inherit a classified peer, matching hero case-insensitively', () => {
+  it('allows unclassified files alongside classified files', () => {
     expect(
       localVariantSelectionEligibility([
         mod({ id: 'ivy', lockerHero: 'Ivy' }),
@@ -132,7 +132,7 @@ describe('localVariantSelectionEligibility', () => {
     ).toEqual({ eligible: true });
   });
 
-  it('compares complete effective hero sets independently of order, aliases and duplicate entries', () => {
+  it('allows different effective hero sets', () => {
     expect(localVariantSelectionEligibility([
       mod({ id: 'shared', lockerHeroes: ['Haze', 'The Doorman', 'Haze'], lockerHero: 'Wraith' }),
       mod({ id: 'matching', lockerHeroes: ['Doorman', 'haze'] }),
@@ -140,10 +140,10 @@ describe('localVariantSelectionEligibility', () => {
     expect(localVariantSelectionEligibility([
       mod({ id: 'shared', lockerHeroes: ['Haze', 'Wraith'] }),
       mod({ id: 'single', lockerHeroes: ['Haze'] }),
-    ])).toEqual({ eligible: false, reason: 'classification' });
+    ])).toEqual({ eligible: true });
   });
 
-  it('honors a resolved empty set and effective General classification ahead of raw legacy heroes', () => {
+  it('does not restrict grouping based on automatic or legacy classifications', () => {
     expect(localVariantSelectionEligibility([
       mod({ id: 'unclassified', lockerHero: 'Haze', lockerHeroes: [] }),
       mod({ id: 'wraith', lockerHeroes: ['Wraith'] }),
@@ -155,7 +155,7 @@ describe('localVariantSelectionEligibility', () => {
     expect(localVariantSelectionEligibility([
       mod({ id: 'hud', globalType: 'hud', lockerHero: 'Haze', lockerHeroes: [] }),
       mod({ id: 'hero', lockerHeroes: ['Haze'] }),
-    ])).toEqual({ eligible: false, reason: 'classification' });
+    ])).toEqual({ eligible: true });
   });
 });
 
