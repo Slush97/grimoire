@@ -1,25 +1,33 @@
 import {
     cloneElement,
     isValidElement,
+    useCallback,
+    useEffect,
     useId,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
     type InputHTMLAttributes,
     type ReactElement,
     type ReactNode,
     type Ref,
+    type RefObject,
     type SelectHTMLAttributes,
     type TextareaHTMLAttributes,
 } from 'react';
-import { ChevronDown, type LucideIcon } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Search, X, type LucideIcon } from 'lucide-react';
 
 // ============================================================================
 // Form primitives - the single styled surface for text inputs, textareas and
-// (native) selects, plus a FormField wrapper that wires a label + helper/error
+// native/custom selects, plus a FormField wrapper that wires a label + helper/error
 // text to its control for accessibility.
 //
 // Before this file, every page/modal hand-rolled `<input className="...">` and
 // the styles drifted (rounded-sm vs rounded-lg, different placeholder colors,
-// stray transitions). Reach for these instead of raw form elements. Domain
-// pickers (HeroSelect, DynamicSelect) intentionally stay separate.
+// stray transitions). Reach for these instead of raw form elements. HeroSelect
+// adds hero icons to DropdownSelect; DynamicSelect sizes a native select.
 //
 // Canonical control surface (see docs/ui-conventions.md):
 //   bg-bg-tertiary border border-hl/5 rounded-sm
@@ -84,7 +92,7 @@ export function Textarea({ inputSize = 'md', className = '', ref, ...props }: Te
 
 // ----------------------------------------------------------------------------
 // Select - generic native select styled to match. Pass <option>s as children.
-// Domain-specific dropdowns (HeroSelect) stay separate.
+// DropdownSelect below provides a custom option menu with optional search.
 // ----------------------------------------------------------------------------
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
@@ -103,6 +111,546 @@ export function Select({ inputSize = 'md', className = '', children, ref, ...pro
                 {children}
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" aria-hidden />
+        </div>
+    );
+}
+
+// ----------------------------------------------------------------------------
+// DropdownSelect - shared custom option menu, with optional icons and search.
+// ----------------------------------------------------------------------------
+
+export interface DropdownSelectOption {
+    value: string;
+    label: string;
+    icon?: ReactNode;
+    muted?: boolean;
+    disabled?: boolean;
+    ariaLabel?: string;
+}
+
+export interface DropdownSelectSearchConfig {
+    ariaLabel: string;
+    placeholder: string;
+    getEmptyMessage: (query: string) => string;
+    clearLabel: string;
+    /** An editable picker can reuse the input to create options. */
+    onSubmit?: (value: string) => void;
+    filterOptions?: boolean;
+    maxLength?: number;
+    value?: string;
+    onChange?: (value: string) => void;
+    inputRef?: RefObject<HTMLInputElement | null>;
+    disabled?: boolean;
+    actions?: ReactNode;
+    message?: ReactNode;
+}
+
+export interface DropdownSelectProps {
+    value: string;
+    /** When supplied, options toggle independently and the menu stays open. */
+    values?: readonly string[];
+    options: readonly DropdownSelectOption[];
+    onChange: (value: string) => void;
+    ariaLabel: string;
+    placeholder?: string;
+    className?: string;
+    size?: 'sm' | 'md' | 'lg';
+    /** Keep a toolbar select's content width and secondary surface. */
+    variant?: 'default' | 'toolbar';
+    icon?: LucideIcon;
+    /** Optional leading content, such as a compact stack of selected hero icons. */
+    leading?: ReactNode;
+    search?: DropdownSelectSearchConfig;
+    disabled?: boolean;
+    active?: boolean;
+    displayLabel?: string;
+    renderOption?: (option: DropdownSelectOption, selected: boolean) => ReactNode;
+    optionActions?: (option: DropdownSelectOption) => ReactNode;
+    onOptionContextMenu?: (value: string) => void;
+    onClose?: () => void;
+}
+
+const LISTBOX_GAP = 4;
+const VIEWPORT_PADDING = 8;
+const MAX_LISTBOX_HEIGHT = 288;
+/** Below this much room underneath the trigger, flipping up beats scrolling. */
+const MIN_DOWNWARD_SPACE = 160;
+
+export function DropdownSelect({
+    value,
+    values,
+    options,
+    onChange,
+    ariaLabel,
+    placeholder = ariaLabel,
+    className = '',
+    size = 'md',
+    variant = 'default',
+    icon: Icon,
+    leading,
+    search,
+    disabled = false,
+    active = false,
+    displayLabel,
+    renderOption,
+    optionActions,
+    onOptionContextMenu,
+    onClose,
+}: DropdownSelectProps) {
+    const toolbar = variant === 'toolbar';
+    const [open, setOpen] = useState(false);
+    const [internalSearchQuery, setInternalSearchQuery] = useState('');
+    const searchQuery = search?.value ?? internalSearchQuery;
+    const onSearchChange = search?.onChange;
+    const setSearchQuery = useCallback((value: string) => {
+        setInternalSearchQuery(value);
+        onSearchChange?.(value);
+    }, [onSearchChange]);
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const buttonRef = useRef<HTMLButtonElement | null>(null);
+    const listRef = useRef<HTMLDivElement | null>(null);
+    const fallbackSearchInputRef = useRef<HTMLInputElement | null>(null);
+    const searchInputRef = search?.inputRef ?? fallbackSearchInputRef;
+    const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const typeaheadRef = useRef('');
+    const typeaheadTimerRef = useRef<number | null>(null);
+    const pendingFocusIndexRef = useRef<number | null>(null);
+    const selected = useMemo(
+        () => options.find((option) => option.value === (values ? values[0] : value)),
+        [options, value, values]
+    );
+    const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+    const visibleOptions = useMemo(() => {
+        if (!search || search.filterOptions === false || !normalizedSearchQuery) return options;
+
+        return options.filter((option) =>
+            option.label.toLocaleLowerCase().includes(normalizedSearchQuery)
+        );
+    }, [normalizedSearchQuery, options, search]);
+    const selectedIndex = useMemo(() => {
+        const index = visibleOptions.findIndex((option) => (values ? values.includes(option.value) : option.value === value) && !option.disabled);
+        return index >= 0 ? index : visibleOptions.findIndex((option) => !option.disabled);
+    }, [value, values, visibleOptions]);
+    const searchEnabled = search !== undefined;
+    const closeSelect = useCallback(() => {
+        setOpen(false);
+        setSearchQuery('');
+        onClose?.();
+    }, [onClose, setSearchQuery]);
+    if (disabled && open) {
+        setOpen(false);
+        setInternalSearchQuery('');
+    }
+
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (event: PointerEvent) => {
+            const target = event.target as Node;
+            // The listbox is portaled to <body>, so it is not inside rootRef any
+            // more: without checking it too, clicking an option would read as an
+            // outside click and close the menu before the option could fire.
+            if (!rootRef.current?.contains(target) && !listRef.current?.contains(target)) {
+                closeSelect();
+            }
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [closeSelect, open]);
+
+    /**
+     * Measure the trigger and write the listbox's fixed position straight to the
+     * node. Imperative on purpose: holding the rect in state would re-render the
+     * whole select on every scroll tick, and the position is display-only.
+     */
+    const positionListbox = useCallback(() => {
+        const button = buttonRef.current;
+        const listbox = listRef.current;
+        if (!button || !listbox) return;
+
+        const rect = button.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom - LISTBOX_GAP - VIEWPORT_PADDING;
+        const spaceAbove = rect.top - LISTBOX_GAP - VIEWPORT_PADDING;
+        const flipUp = spaceBelow < MIN_DOWNWARD_SPACE && spaceAbove > spaceBelow;
+
+        listbox.style.width = toolbar ? 'max-content' : `${rect.width}px`;
+        listbox.style.minWidth = toolbar ? `${rect.width}px` : '';
+        listbox.style.maxWidth = toolbar ? `${window.innerWidth - VIEWPORT_PADDING * 2}px` : '';
+        const width = toolbar ? listbox.getBoundingClientRect().width : rect.width;
+        listbox.style.left = `${Math.max(VIEWPORT_PADDING, Math.min(rect.left, window.innerWidth - width - VIEWPORT_PADDING))}px`;
+        if (flipUp) {
+            listbox.style.top = 'auto';
+            listbox.style.bottom = `${window.innerHeight - rect.top + LISTBOX_GAP}px`;
+        } else {
+            listbox.style.bottom = 'auto';
+            listbox.style.top = `${rect.bottom + LISTBOX_GAP}px`;
+        }
+        const available = Math.max(0, flipUp ? spaceAbove : spaceBelow);
+        listbox.style.maxHeight = `${Math.min(available, MAX_LISTBOX_HEIGHT)}px`;
+    }, [toolbar]);
+
+    /**
+     * The listbox renders in a portal rather than as an absolutely-positioned
+     * child, so no ancestor's `overflow` can clip it (the Installed sort/filter
+     * popover scrolls, and an in-flow listbox was cut off at its edge). The cost
+     * of leaving the trigger's containing block is that position has to be
+     * measured and kept in sync with anything that can move the trigger.
+     *
+     * Layout effect, not a plain effect: this runs after the portal is in the DOM
+     * but before paint, so the listbox is never visible at an unpositioned spot.
+     */
+    useLayoutEffect(() => {
+        if (!open) return;
+        positionListbox();
+        // Capture phase so scrolling any ancestor (not just the window) is caught.
+        window.addEventListener('scroll', positionListbox, true);
+        window.addEventListener('resize', positionListbox);
+        return () => {
+            window.removeEventListener('scroll', positionListbox, true);
+            window.removeEventListener('resize', positionListbox);
+        };
+    }, [open, positionListbox]);
+
+    useEffect(() => {
+        if (!open) return;
+        window.requestAnimationFrame(() => {
+            if (listRef.current?.contains(document.activeElement)) return;
+            if (searchEnabled) {
+                searchInputRef.current?.focus();
+                return;
+            }
+            const focusIndex = pendingFocusIndexRef.current ?? selectedIndex;
+            pendingFocusIndexRef.current = null;
+            if (visibleOptions.length === 0) return;
+            const nextIndex = (focusIndex + visibleOptions.length) % visibleOptions.length;
+            optionRefs.current[nextIndex]?.focus();
+        });
+    }, [open, searchEnabled, searchInputRef, selectedIndex, visibleOptions.length]);
+
+    useEffect(() => {
+        return () => {
+            if (typeaheadTimerRef.current !== null) {
+                window.clearTimeout(typeaheadTimerRef.current);
+            }
+        };
+    }, []);
+
+    const selectOption = (optionValue: string) => {
+        if (options.find((option) => option.value === optionValue)?.disabled) return;
+        onChange(optionValue);
+        if (values) return;
+        closeSelect();
+        window.requestAnimationFrame(() => buttonRef.current?.focus());
+    };
+
+    const focusOption = (index: number, direction = 1) => {
+        const count = visibleOptions.length;
+        for (let offset = 0; offset < count; offset++) {
+            const nextIndex = (index + offset * direction + count) % count;
+            if (!visibleOptions[nextIndex].disabled) {
+                optionRefs.current[nextIndex]?.focus();
+                return;
+            }
+        }
+    };
+
+    const scheduleTypeaheadReset = () => {
+        if (typeaheadTimerRef.current !== null) {
+            window.clearTimeout(typeaheadTimerRef.current);
+        }
+        typeaheadTimerRef.current = window.setTimeout(() => {
+            typeaheadRef.current = '';
+            typeaheadTimerRef.current = null;
+        }, 750);
+    };
+
+    const findOptionByPrefix = (query: string) => {
+        const normalized = query.trim().toLowerCase();
+        if (!normalized) return -1;
+        return options.findIndex((option) => !option.disabled && option.label.toLowerCase().startsWith(normalized));
+    };
+
+    const isTypeaheadKey = (event: React.KeyboardEvent) =>
+        event.key.length === 1 && event.key !== ' ' && !event.altKey && !event.ctrlKey && !event.metaKey;
+
+    const handleTypeaheadKey = (event: React.KeyboardEvent) => {
+        event.preventDefault();
+        const key = event.key.toLowerCase();
+        let query = `${typeaheadRef.current}${key}`;
+        let nextIndex = findOptionByPrefix(query);
+
+        if (nextIndex === -1 && typeaheadRef.current) {
+            query = key;
+            nextIndex = findOptionByPrefix(query);
+        }
+
+        typeaheadRef.current = query;
+        scheduleTypeaheadReset();
+
+        if (nextIndex !== -1) {
+            if (open) {
+                pendingFocusIndexRef.current = null;
+                focusOption(nextIndex);
+            } else {
+                pendingFocusIndexRef.current = nextIndex;
+                setOpen(true);
+                window.requestAnimationFrame(() => focusOption(nextIndex));
+            }
+        } else {
+            pendingFocusIndexRef.current = null;
+        }
+    };
+
+    const handleButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (isTypeaheadKey(event)) {
+            if (searchEnabled) {
+                event.preventDefault();
+                setSearchQuery(event.key);
+                setOpen(true);
+                return;
+            }
+            handleTypeaheadKey(event);
+            return;
+        }
+
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+            window.requestAnimationFrame(() => {
+                optionRefs.current[selectedIndex]?.focus();
+            });
+        }
+    };
+
+    const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, optionValue: string, index: number) => {
+        if (isTypeaheadKey(event)) {
+            if (searchEnabled) {
+                event.preventDefault();
+                setSearchQuery(`${searchQuery}${event.key}`);
+                window.requestAnimationFrame(() => searchInputRef.current?.focus());
+                return;
+            }
+            handleTypeaheadKey(event);
+            return;
+        }
+
+        switch (event.key) {
+            case 'ArrowDown':
+                event.preventDefault();
+                focusOption(index + 1);
+                break;
+            case 'ArrowUp':
+                event.preventDefault();
+                focusOption(index - 1, -1);
+                break;
+            case 'Home':
+                event.preventDefault();
+                focusOption(0);
+                break;
+            case 'End':
+                event.preventDefault();
+                focusOption(visibleOptions.length - 1, -1);
+                break;
+            case 'Enter':
+            case ' ':
+                event.preventDefault();
+                selectOption(optionValue);
+                break;
+        }
+    };
+
+    const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        switch (event.key) {
+            case 'Enter':
+                if (search?.onSubmit && searchQuery.trim()) {
+                    event.preventDefault();
+                    if (search.disabled) return;
+                    search.onSubmit(searchQuery.trim());
+                    if (search.value === undefined) setSearchQuery('');
+                }
+                break;
+            case 'ArrowDown':
+                event.preventDefault();
+                focusOption(0);
+                break;
+            case 'ArrowUp':
+                event.preventDefault();
+                focusOption(visibleOptions.length - 1, -1);
+                break;
+        }
+    };
+
+    /**
+     * Escape is handled once, at the portal root, rather than per control.
+     *
+     * Two reasons. Focus can sit on things with no key handler of their own (the
+     * clear-search button, the empty-state button), and those used to leak the
+     * key. More importantly the native keydown must stop here: an ancestor
+     * popover dismisses on a window-level Escape listener (see AnchoredPopover),
+     * so a key that only closed this listbox was collapsing the whole filter
+     * panel with it.
+     */
+    const handleListboxKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeSelect();
+        buttonRef.current?.focus();
+    };
+
+    const clearSearch = () => {
+        setSearchQuery('');
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    };
+
+    const heightClass = size === 'sm' ? 'h-8 text-xs' : size === 'lg' ? 'h-10 text-sm' : 'h-9 text-xs';
+
+    return (
+        <div ref={rootRef} className={`relative ${toolbar ? 'inline-flex flex-shrink-0' : ''} ${className}`}>
+            <button
+                ref={buttonRef}
+                type="button"
+                aria-label={ariaLabel}
+                aria-haspopup={optionActions ? 'dialog' : 'listbox'}
+                aria-expanded={open}
+                disabled={disabled}
+                onClick={() => {
+                    if (open) closeSelect();
+                    else setOpen(true);
+                }}
+                onKeyDown={handleButtonKeyDown}
+                className={`${heightClass} border text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${active ? 'border-accent/40 bg-accent/10' : `border-border ${toolbar ? 'bg-bg-secondary' : 'bg-bg-tertiary'}`} ${toolbar ? 'px-3 rounded-lg hover:bg-bg-tertiary transition-colors' : 'w-full px-2.5 rounded-md hover:border-accent/60 disabled:hover:border-border'}`}
+            >
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {leading !== undefined ? <span className="inline-flex shrink-0 items-center">{leading}</span>
+                        : Icon ? <Icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" /> : selected?.icon}
+                    <span className={`min-w-0 flex-1 text-left truncate ${selected?.muted ? 'text-text-secondary' : ''}`}>
+                        {displayLabel ?? selected?.label ?? placeholder}
+                    </span>
+                </span>
+                <ChevronDown className={`flex-shrink-0 ${toolbar ? 'h-3.5 w-3.5' : 'h-4 w-4 text-text-secondary'}`} aria-hidden="true" />
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={listRef}
+                    role={optionActions ? 'dialog' : undefined}
+                    aria-label={optionActions ? ariaLabel : undefined}
+                    // The listbox is portaled outside any popover containing this select.
+                    // Keep its mouse gesture inside this logical boundary so an ancestor's
+                    // window-level outside-click listener cannot unmount us before click.
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onKeyDown={handleListboxKeyDown}
+                    // z-80 is the context-menu/popover rung of the ladder in index.css:
+                    // portaled to <body>, this has to clear modals and page chrome alike.
+                    // Positioned by positionListbox before paint; the inline top/left are
+                    // only a starting point so the node has a box to measure against.
+                    className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-bg-secondary shadow-xl"
+                    style={{ top: 0, left: 0 }}
+                >
+                    {search && (
+                        <div className="border-b border-border p-2">
+                          <div className="flex items-center gap-2">
+                            <div className="relative min-w-0 flex-1">
+                                <Search
+                                    className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary"
+                                    aria-hidden="true"
+                                />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    role={search.onSubmit ? 'textbox' : 'searchbox'}
+                                    aria-label={search.ariaLabel}
+                                    placeholder={search.placeholder}
+                                    maxLength={search.maxLength}
+                                    disabled={search.disabled}
+                                    value={searchQuery}
+                                    onChange={(event) => setSearchQuery(event.target.value)}
+                                    onKeyDown={handleSearchKeyDown}
+                                    className="h-8 w-full rounded-md border border-border bg-bg-tertiary pl-8 pr-8 text-xs text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent/70 focus-visible:ring-2 focus-visible:ring-accent/40"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        aria-label={search.clearLabel}
+                                        title={search.clearLabel}
+                                        onClick={clearSearch}
+                                        disabled={search.disabled}
+                                        className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-text-tertiary hover:bg-hl/10 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                                    </button>
+                                )}
+                            </div>
+                            {search.actions}
+                          </div>
+                          {search.message}
+                        </div>
+                    )}
+
+                    <div
+                        role={optionActions ? 'group' : 'listbox'}
+                        aria-label={ariaLabel}
+                        aria-multiselectable={values && !optionActions ? true : undefined}
+                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                    >
+                        {visibleOptions.map((option, index) => {
+                            const active = values ? values.includes(option.value) : option.value === value;
+                            const content = renderOption ? renderOption(option, active) : <span className="flex min-w-0 flex-1 items-center gap-2">
+                                {option.icon}
+                                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                            </span>;
+                            return (
+                                <div key={option.value} className="flex items-center">
+                                {optionActions && option.disabled ? <span className="flex h-8 min-w-0 flex-1 items-center px-2.5 text-xs text-text-primary">{content}</span> : <button
+                                    ref={(node) => {
+                                        optionRefs.current[index] = node;
+                                    }}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={active}
+                                    aria-label={option.ariaLabel}
+                                    disabled={option.disabled}
+                                    onClick={() => {
+                                        selectOption(option.value);
+                                    }}
+                                    onKeyDown={(event) => handleOptionKeyDown(event, option.value, index)}
+                                    onContextMenu={onOptionContextMenu ? event => {
+                                        event.preventDefault();
+                                        onOptionContextMenu(option.value);
+                                    } : undefined}
+                                    className={`min-w-0 flex-1 h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
+                                        active
+                                            ? 'bg-accent/15 text-text-primary'
+                                            : option.muted
+                                                ? 'text-text-secondary hover:bg-bg-tertiary'
+                                                : 'text-text-primary hover:bg-bg-tertiary'
+                                    }`}
+                                >
+                                    {content}
+                                </button>}
+                                {optionActions?.(option)}
+                                </div>
+                            );
+                        })}
+
+                        {search && normalizedSearchQuery && visibleOptions.length === 0 && (
+                            <div className="px-4 py-5 text-center" aria-live="polite">
+                                <p className="text-xs leading-5 text-text-secondary">
+                                    {search.getEmptyMessage(searchQuery.trim())}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={clearSearch}
+                                    className="mt-2 cursor-pointer text-xs font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                >
+                                    {search.clearLabel}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

@@ -17,8 +17,8 @@ ipcMain.handle('sync-section', async (_, section: string) => {
     return { success: true };
 });
 
-ipcMain.handle('refresh-catalog-head', async () => {
-    await syncCatalogHead();
+ipcMain.handle('refresh-catalog-head', async (_, sections?: string[]) => {
+    await syncCatalogHead(sections);
     return { success: true };
 });
 
@@ -47,8 +47,8 @@ ipcMain.handle('search-local-mods', (_, options: SearchOptions) => {
     return searchMods(options);
 });
 
-ipcMain.handle('get-cached-mod', (_, id: number) => {
-    return getModById(id);
+ipcMain.handle('get-cached-mod', (_, id: number, section?: string) => {
+    return getModById(id, section);
 });
 
 ipcMain.handle('get-local-mod-count', (_, section?: string) => {
@@ -64,21 +64,21 @@ ipcMain.handle('get-section-stats', () => {
 });
 
 // NSFW status handlers
-ipcMain.handle('get-mods-nsfw-status', (_, ids: number[]) => {
-    return getModsNsfwStatus(ids);
+ipcMain.handle('get-mods-nsfw-status', (_, ids: number[], section?: string) => {
+    return getModsNsfwStatus(ids, section);
 });
 
-ipcMain.handle('update-mod-nsfw', (_, modId: number, isNsfw: boolean) => {
-    updateModNsfw(modId, isNsfw);
+ipcMain.handle('update-mod-nsfw', (_, modId: number, isNsfw: boolean, section?: string) => {
+    updateModNsfw(modId, isNsfw, section);
 });
 
 // Download count handlers
-ipcMain.handle('get-mods-download-counts', (_, ids: number[]) => {
-    return getModsDownloadCounts(ids);
+ipcMain.handle('get-mods-download-counts', (_, ids: number[], section?: string) => {
+    return getModsDownloadCounts(ids, section);
 });
 
-ipcMain.handle('update-mod-download-count', (_, modId: number, downloadCount: number) => {
-    updateModDownloadCount(modId, downloadCount);
+ipcMain.handle('update-mod-download-count', (_, modId: number, downloadCount: number, section?: string) => {
+    updateModDownloadCount(modId, downloadCount, section);
 });
 
 console.log('[ModDatabase] IPC handlers registered');

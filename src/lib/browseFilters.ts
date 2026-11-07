@@ -1,4 +1,11 @@
 import type { BrowseUiState } from '../stores/appStore';
+import type { NsfwContentMode } from '../types/mod';
+
+export type BrowseContentMode = NsfwContentMode | 'only';
+
+export function browseNsfwFilter(mode: NsfwContentMode, onlyNsfw: boolean) {
+  return onlyNsfw ? 'nsfw' : mode === 'hide' ? 'sfw' : 'all';
+}
 
 export function browseRemoteFilters({
   section, search, heroCategoryId, selectedHeroName, effectiveCategoryId,

@@ -1,10 +1,12 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { isModLoadedInGame, isReorderBlocked } from '../lib/modLocks';
 import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
-import { installedDoorStuckTarget } from '../lib/installedSkinTarget';
+import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
+import { pinInstalledPreview } from '../lib/installedPreviewPin';
+import { installedPropTarget } from '../lib/installedPropPreview';
 import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
@@ -38,33 +40,23 @@ import {
   X,
   Search,
   Download,
-  List,
-  LayoutGrid,
-  Grid3x3,
-  Check,
   CheckSquare,
   Wrench,
   Layers,
   Beaker,
   Tag as TagIcon,
-  Wand2,
-  SlidersHorizontal,
   ArrowDownAZ,
-  ArrowDownUp,
-  HelpCircle,
   GripVertical,
-  ClipboardList,
-  Fingerprint,
-  FileWarning,
-  Camera,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { useModUpdatesStore } from '../stores/modUpdatesStore';
 import { useModUpdateCheckStore } from '../stores/modUpdateCheckStore';
-import { useHeroCategoryStore } from '../stores/heroCategoryStore';
-import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
+import { useCategoryStore } from '../stores/categoryStore';
+import { categoryModelForSection } from '../lib/categoryPaths';
+import type { InstalledTaxonomyContext } from '../lib/installedCardTaxonomy';
+import { getActiveDeadlockPath, getInstallationScope, shouldBlurNsfw } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, mergeMods, unmergeMod, extractMergeSource, addMergeSources, replaceMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImportCustomModArgs, ImportCustomModResult } from '../lib/api';
@@ -79,11 +71,6 @@ import {
 } from '../lib/mergeSourceUpdate';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { useInstalledRequirements } from '../components/requirements/useInstalledRequirements';
-import { RequirementsControl } from '../components/requirements/RequirementsControl';
-import { useRequirementOrderStore } from '../stores/requirementOrderStore';
-import { requirementOrderIssues } from '../lib/requirementLoadOrder';
-import { useRequirementsStore } from '../stores/requirementsStore';
-import { hasInstalledRequirementIssues, modRequirementRefs, requirementKey, skinRequirementSource } from '../lib/modRequirements';
 import ImportSourceMenu from '../components/interchange/ImportSourceMenu';
 import ExportModal from '../components/interchange/ExportModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -94,6 +81,7 @@ import MergedContentsModal from '../components/MergedContentsModal';
 import { deriveModNameFromPath } from '../lib/customModImport';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { HERO_NAMES_SORTED, GLOBAL_MOD_TYPE_ORDER, globalModTypeLabel, modLoadOrder } from '../lib/lockerUtils';
+import { gameBananaCategoryLabel } from '../lib/gameBananaCategories';
 import {
   canJoinLocalVariantGroup,
   localVariantSelectionEligibility,
@@ -116,6 +104,7 @@ import { useInstalledScrollActivity } from '../components/installed/useInstalled
 import { InstalledVirtualGrid } from '../components/installed/InstalledVirtualGrid';
 import { useInstalledScrollRestoration } from '../components/installed/useInstalledScrollRestoration';
 import { useInstalledEntryReveal } from '../components/installed/useInstalledEntryReveal';
+import { useInstalledModSwap } from '../components/installed/useInstalledModSwap';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
@@ -146,27 +135,27 @@ import {
 } from '../lib/modLists';
 import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
-import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { InstalledProfilesMenu } from '../components/installed/InstalledProfilesMenu';
 import { Button, IconButton } from '../components/common/ui';
-import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { ViewModeToggle, EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
+import { EmptyState, ConfirmModal, type ViewMode } from '../components/common/PageComponents';
 import { InstalledSection } from '../components/installed/InstalledSection';
 import { InstalledListGroups } from '../components/installed/InstalledListGroups';
-import { InstalledListControls, InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
+import { InstalledListSelectionMenu } from '../components/installed/InstalledListControls';
 import { buildInstalledListGroups, listSelectionEntries, visibleListOccurrences, readInstalledListPreferences, writeInstalledListPreferences, UNLISTED_GROUP_ID, type InstalledListView } from '../lib/installedListGroups';
 import { useInstalledSelection } from '../components/installed/useInstalledSelection';
 import { entrySelectionIds, visibleSelectionEntries } from '../components/installed/selection';
 import { useShiftKey } from '../components/installed/useShiftKey';
 import { HeroTagLabel } from '../components/installed/chips';
+import { InstalledFilterMenu } from '../components/installed/InstalledFilterMenu';
+import { sortInstalledEntries, type InstalledSortMode } from '../lib/installedSort';
+import { EMPTY_CUSTOM_TAGS, customTagsForMods, useInstalledTagsStore } from '../stores/installedTagsStore';
+import { InstalledOptionsMenu } from '../components/installed/InstalledOptionsMenu';
+import { InstalledIssuesModal } from '../components/installed/InstalledIssuesModal';
+import { useInstalledIssuesStore } from '../stores/installedIssuesStore';
 import { ModCard } from '../components/installed/ModCard';
 import { EMPTY_LIST_IDS } from '../components/installed/emptyIds';
 import { EditLocalModModal } from '../components/installed/EditLocalModModal';
-import { CompatibilityRepairsModal } from '../components/installed/CompatibilityRepairsModal';
-import { OutdatedVdataModal } from '../components/installed/OutdatedVdataModal';
-import { StaleModelsModal } from '../components/installed/StaleModelsModal';
-import { StatusIssues, type StatusIssue } from '../components/installed/StatusIssues';
 import { DeleteModsModal, type DeleteModsTarget } from '../components/installed/DeleteModsModal';
 import { ModBackupDeletePrompt } from '../components/installed/ModBackupsSubmenu';
 import { MakeCustomModModal } from '../components/installed/MakeCustomModModal';
@@ -175,7 +164,9 @@ import { UnknownFilterGuessModal, BulkUnknownFixModal } from '../components/inst
 import { type ImprintModalState, ImprintModal } from '../components/installed/imprint/ImprintModal';
 import { ImprintDetailsModal } from '../components/installed/imprint/ImprintDetailsModal';
 import { InstalledSkeleton } from '../components/installed/InstalledSkeleton';
-import { type ModEntry, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryInstalledAt, entrySize, entryIsLocal, OTHER_TAG_KEY, entryHeroNames, tagKeyDisplayLabel, entryTagKeys, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+import { type ModEntry, type InstalledTag, type EntrySwapTarget, buildModEntries, isEntryEnabled, entrySortPriority, entryName, entrySearchText, entryPrimaryMod, entryDetailsAnchor, entryIsLocal, entryHeroNames, entryTags, flattenEntries, entryRepresentativeId, entryDisabledPreferenceKey, buildCompactPriorityOrder } from '../lib/modEntries';
+
+const installedToolbarIconClass = 'inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -285,10 +276,6 @@ const StaticEntryCard = memo(function StaticEntryCard(cardProps: InstalledEntryC
 // Stable fallback for cards with no conflicts; a fresh [] per render would
 // defeat InstalledEntryCard's memo on every page-level state change.
 const EMPTY_CONFLICTS: ModConflict[] = [];
-/** Floor for the measured sort/filter popover height, so a very short window
- *  leaves it scrollable rather than collapsing it to nothing. */
-const MIN_FILTER_PANEL_HEIGHT = 160;
-
 interface InstalledEntryCardProps {
   entry: ModEntry;
   viewMode: ViewMode;
@@ -311,6 +298,8 @@ interface InstalledEntryCardProps {
   /** Opens the variant picker for a group, by its shared grouping key. */
   onOpenPicker: (groupKey: string) => void;
   onToggle: (entry: ModEntry) => Promise<boolean>;
+  swapTargets?: readonly EntrySwapTarget[];
+  onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
   onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
@@ -376,6 +365,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onViewAuthor,
   onOpenPicker,
   onToggle,
+  swapTargets,
+  onSwap,
   onSoloLaunch,
   onDelete,
   onEditLocal,
@@ -401,9 +392,19 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const doorStuckEnabled = useAppStore(state => state.settings?.experimentalFoundry);
-  const heroByCategoryId = useHeroCategoryStore(state => state.heroByCategoryId);
+  const taxonomyContext = useCategoryStore(useShallow(state => ({
+    heroByCategoryId: state.heroByCategoryId, heroNames: state.heroNames, pathsByModel: state.pathsByModel,
+  })));
   const previewMod = entry.kind === 'single' ? entry.mod : entry.enabledVariants[0] ?? entry.primary;
-  const target = installedDoorStuckTarget(previewMod, heroByCategoryId);
+  const target = installedDoorStuckTarget(previewMod, taxonomyContext);
+  // Every file the Alt preview can show, in picker order. Alt+wheel steps through them.
+  const previewKeys = useMemo(() => (entry.kind === 'single' ? [entry.mod] : entry.variants)
+    .filter(variant => installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
+    .map(variant => variant.metaKey), [entry, taxonomyContext]);
+  const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
+  const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')
+    : previewKeys.length ? t('installed.card.previewHint') : undefined;
+  const pinPreview = previewKeys.length ? () => pinInstalledPreview(previewKeys, previewKey) : undefined;
   const openDoorStuck = doorStuckEnabled && target ? () => {
     if ('kind' in target && target.kind === 'movement') {
       const settings = useAppStore.getState().settings;
@@ -421,6 +422,9 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       <ModCard
         mod={mod}
         onOpenDoorStuck={openDoorStuck}
+        previewKeys={previewKeys}
+        previewHint={previewHint}
+        onPinPreview={pinPreview}
         viewMode={viewMode}
         hideNsfwPreviews={hideNsfwPreviews}
         conflicts={conflicts}
@@ -434,6 +438,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
+        swapTargets={swapTargets}
+        onSwap={key => onSwap(entry, key)}
         onSoloLaunch={() => onSoloLaunch(entry)}
         soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
@@ -490,7 +496,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   return (
     <ModCard
       onOpenDoorStuck={openDoorStuck}
-      previewMetaKey={previewMod.metaKey}
+      previewMetaKey={previewKey}
+      previewKeys={previewKeys}
+      previewHint={previewHint}
+      onPinPreview={pinPreview}
       mod={{
         ...entry.primary,
         safetyTarget,
@@ -519,6 +528,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
+      swapTargets={swapTargets}
+      onSwap={key => onSwap(entry, key)}
       onSoloLaunch={() => onSoloLaunch(entry)}
       soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
@@ -555,6 +566,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onToggleList={(listId) => onToggleList(entry, listId)}
       onCreateList={() => onCreateList(entry)}
       group={{
+        variants: entry.variants,
         variantCount: entry.variants.length,
         // Display friendly names for enabled files when possible.
         enabledCount: entry.enabledVariants.length,
@@ -692,6 +704,9 @@ export default function Installed() {
     setBrowseUi: state.setBrowseUi,
   })));
   const activeDeadlockPath = getActiveDeadlockPath(settings);
+  const tagScope = getInstallationScope(settings);
+  const customTags = useInstalledTagsStore(state => tagScope ? state.byScope[tagScope] ?? EMPTY_CUSTOM_TAGS : EMPTY_CUSTOM_TAGS);
+  useEffect(() => { if (tagScope) useInstalledTagsStore.getState().load(tagScope); }, [tagScope]);
   const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
   // User-authored lists (see lib/modLists.ts). Membership never changes what
@@ -741,16 +756,13 @@ export default function Installed() {
   // Memoized so the array identity (and the entry identities derived from it)
   // only changes when `mods` does; the memoized card grid depends on that.
   const visibleMods = useMemo(() => visibleInstalledMods(mods), [mods]);
+  const unknownMods = useMemo(() => mods.filter(mod => mod.isUnknown).sort((a, b) => a.priority - b.priority), [mods]);
   useInstalledRequirements(visibleMods);
-  const requirementSnapshots = useRequirementsStore(state => state.snapshots);
-  const requirementFiles = useRequirementOrderStore(state => state.files);
-  const [requirementsOnly, setRequirementsOnly] = useState(false);
-  const requirementIssueIds = useMemo(() => new Set(visibleMods.filter(mod => {
-    const local = skinRequirementSource(mod, mods);
-    return (local && (hasInstalledRequirementIssues(mod, local.requirements, mods) || requirementOrderIssues(local, local.requirements, mods, requirementFiles).length > 0)) || modRequirementRefs(mod)
-      .some(target => hasInstalledRequirementIssues(mod, requirementSnapshots[requirementKey(target)], mods) || requirementOrderIssues(target, requirementSnapshots[requirementKey(target)], mods, requirementFiles).some(issue => issue.overlay.id === mod.id));
-  }).map(mod => mod.id)),
-  [visibleMods, mods, requirementSnapshots, requirementFiles]);
+  const issuesOpen = useInstalledIssuesStore(state => state.open);
+  const issuesUnread = useInstalledIssuesStore(state => state.hasUnread);
+  const issuesUnreadOutdated = useInstalledIssuesStore(state => state.hasUnreadOutdated);
+  const issuesBusy = useInstalledIssuesStore(state => state.busy);
+  const setIssuesOpen = useInstalledIssuesStore(state => state.setOpen);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
   // carry a stale embed (legacy format / sidecar drift, pending re-imprint).
@@ -780,35 +792,6 @@ export default function Installed() {
     setCardSizeMultiplierState(clampedMultiplier);
     localStorage.setItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY, String(clampedMultiplier));
   }, []);
-  // Style + card-size live behind a single dropdown so they don't eat a row of
-  // toolbar width. Same relative/click-outside pattern as the filter popover.
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!viewMenuOpen) return;
-    const onMouseDown = (event: MouseEvent) => {
-      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
-        setViewMenuOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setViewMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [viewMenuOpen]);
-  // Fix unknown can be dismissed by right-clicking it; right-clicking the small
-  // stub it leaves behind brings it back. Persisted so the choice sticks.
-  const [fixUnknownHidden, setFixUnknownHidden] = useState(
-    () => localStorage.getItem('installedFixUnknownHidden') === '1',
-  );
-  useEffect(() => {
-    localStorage.setItem('installedFixUnknownHidden', fixUnknownHidden ? '1' : '0');
-  }, [fixUnknownHidden]);
   const cardSizeGridStyle = useMemo(
     () => getCardSizeGridStyle(cardSizeMultiplier),
     [cardSizeMultiplier]
@@ -839,14 +822,8 @@ export default function Installed() {
     void refreshLockerOverrideCount();
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
-  // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
-  // and source persist across launches; hero/tag selections are library-specific
-  // so they reset per session. A non-default sort or any active filter turns the
-  // list into a read-only view (see viewIsReorderable) because the displayed
-  // order no longer maps to load-order priority.
-  const [filterOpen, setFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
-  const filterPanelRef = useRef<HTMLDivElement>(null);
+  // Non-default sorting or filtering makes the library a read-only view of
+  // load order. The menu owns its own presentation state.
   // Retroactive "Imprint installed mods" (path B). A single state machine drives
   // the shared modal through four phases: an up-front preflight dry-run that
   // classifies every candidate into buckets before the user commits, a live
@@ -867,9 +844,9 @@ export default function Installed() {
       imprintMountedRef.current = false;
     };
   }, []);
-  const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name' | 'size'>(() => {
+  const [sortMode, setSortMode] = useState<InstalledSortMode>(() => {
     const stored = localStorage.getItem('installedSortMode');
-    return stored === 'recent' || stored === 'name' || stored === 'size' ? stored : 'priority';
+    return stored === 'recent' || stored === 'name' || stored === 'hero' || stored === 'size' ? stored : 'priority';
   });
   // Source + status are independent toggles (both on = no filter). Source
   // persists; status resets per session like the type selection.
@@ -880,7 +857,7 @@ export default function Installed() {
         const valid = Array.from(
           new Set(stored.filter((v): v is 'gamebanana' | 'local' => v === 'gamebanana' || v === 'local'))
         );
-        if (valid.length > 0) return valid;
+        if (valid.length > 0 || stored.length === 0) return valid;
       }
     } catch {
       /* fall through to default */
@@ -888,8 +865,9 @@ export default function Installed() {
     return ['gamebanana', 'local'];
   });
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
-  const [heroFilter, setHeroFilter] = useState('all');
+  const [heroFilter, setHeroFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [excludedTagFilter, setExcludedTagFilter] = useState<string[]>([]);
   // Selected list ids. A separate axis from tagFilter (which holds derived
   // category keys) so the two AND together: "in my Ivy list AND tagged Skins"
   // is the useful reading, where folding lists into tagFilter would OR them.
@@ -901,9 +879,8 @@ export default function Installed() {
     setSearch(suspect.name);
     setSourceSel(['gamebanana', 'local']);
     setStatusSel(['enabled', 'disabled']);
-    setHeroFilter('all');
-    setTagFilter([]);
-    setRequirementsOnly(false);
+    setHeroFilter([]);
+    setTagFilter([]); setExcludedTagFilter([]);
     setListFilter([]);
     navigate(location.pathname, { replace: true, state: null });
   }, [location, mods, navigate]);
@@ -927,45 +904,6 @@ export default function Installed() {
   useEffect(() => {
     localStorage.setItem('installedSourceSel', JSON.stringify(sourceSel));
   }, [sourceSel]);
-  useEffect(() => {
-    if (!filterOpen) return;
-    const onMouseDown = (event: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setFilterOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFilterOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [filterOpen]);
-  // Cap the sort/filter popover to whatever room is left below the toolbar:
-  // uncapped, at short window heights everything below TAGS was cut off with no
-  // way to reach it (the inner lists scroll, the popover itself did not).
-  //
-  // Measured rather than a `calc(100vh - <constant>)`, because the toolbar's
-  // distance from the top of the viewport is not a constant: it moves with the
-  // header, the batch-import bar, browser zoom, and the native window frame on
-  // Windows. A stale constant either wastes space or lets the panel run off the
-  // bottom, which is the bug this is fixing.
-  useLayoutEffect(() => {
-    if (!filterOpen) return;
-    const panel = filterPanelRef.current;
-    if (!panel) return;
-    const applyMaxHeight = () => {
-      // Top-anchored, so this stays correct across repeated applications.
-      const { top } = panel.getBoundingClientRect();
-      panel.style.maxHeight = `${Math.max(MIN_FILTER_PANEL_HEIGHT, window.innerHeight - top - 12)}px`;
-    };
-    applyMaxHeight();
-    window.addEventListener('resize', applyMaxHeight);
-    return () => window.removeEventListener('resize', applyMaxHeight);
-  }, [filterOpen]);
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
   // every mod is in exactly one pair — when one mod conflicts with multiple
@@ -1113,13 +1051,6 @@ export default function Installed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectMode, clampSelectBarPos]);
 
-  // GB id of the group whose picker is open, or null. The actual entry is
-  // derived from live `mods` each render so per-file deletes inside the
-  // picker reflect immediately without juggling a separate snapshot.
-  // Open variant picker, held by the group's shared grouping key (see
-  // variantGroupKey): "gb:<id>" for GameBanana groups, "local:<uuid>" for
-  // locally imported multi-VPK archives.
-  const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   // The batch local-import dialog is mounted by Layout, not here: this page
   // early-returns an empty state when it has no mods, so hosting the dialog
   // would unmount it mid-batch on a first-ever import. Only the open flag lives
@@ -1282,11 +1213,24 @@ export default function Installed() {
   const updatableMergeSources = useModUpdateCheckStore(state => state.updatableMergeSources);
   const updatingModIds = useModUpdatesStore(state => state.state.updatingModIds);
   const submittingModIds = useModUpdatesStore(state => state.submittingModIds);
-  const heroByCategoryId = useHeroCategoryStore((state) => state.heroByCategoryId);
-  const loadHeroCategories = useHeroCategoryStore((state) => state.load);
+  const heroByCategoryId = useCategoryStore((state) => state.heroByCategoryId);
+  const heroNames = useCategoryStore((state) => state.heroNames);
+  const pathsByModel = useCategoryStore((state) => state.pathsByModel);
+  const loadCategoryTree = useCategoryStore((state) => state.load);
+  const taxonomyContext = useMemo<InstalledTaxonomyContext>(
+    () => ({ heroByCategoryId, heroNames, pathsByModel }),
+    [heroByCategoryId, heroNames, pathsByModel],
+  );
+  const lockerHeroNames = heroNames.length ? heroNames : HERO_NAMES_SORTED;
+  const categoryModelStamp = useMemo(() => [...new Set([
+    'ModCategory', ...visibleMods.map(mod => categoryModelForSection(mod.sourceSection)),
+  ])].sort().join(','), [visibleMods]);
   useEffect(() => {
-    void loadHeroCategories();
-  }, [loadHeroCategories]);
+    for (const model of categoryModelStamp.split(',')) {
+      // Offline with no cached tree: supplied category names remain usable.
+      void loadCategoryTree(model).catch(() => {});
+    }
+  }, [categoryModelStamp, loadCategoryTree]);
   const finishing = usePendingDownloadCompletions();
   const unavailableUpdateIds = useMemo(() => new Set([
     ...updatingModIds, ...submittingModIds,
@@ -1357,17 +1301,13 @@ export default function Installed() {
     setSearch('');
     setSourceSel(['gamebanana', 'local']);
     setStatusSel(['enabled', 'disabled']);
-    setHeroFilter('all');
-    setTagFilter([]);
+    setHeroFilter([]);
+    setTagFilter([]); setExcludedTagFilter([]);
     setListFilter([]);
-    setRequirementsOnly(false);
     setSortMode('priority');
     setEnabledCollapsed(false);
     setDisabledCollapsed(false);
   }, [requirementRevealId]);
-  const [compatibilityOpen, setCompatibilityOpen] = useState(false);
-  const [outdatedVdataOpen, setOutdatedVdataOpen] = useState(false);
-  const [staleModelsOpen, setStaleModelsOpen] = useState(false);
   const startUpdates = useModUpdatesStore((state) => state.start);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   useInstalledScrollActivity(installedScrollRef);
@@ -1395,7 +1335,7 @@ export default function Installed() {
     setDetailsGameBananaId(m.gameBananaId);
     setDetailsDates(null);
     setDetailsOffline(false);
-    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null);
+    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId, section).catch(() => null);
     try {
       const details = await getModDetails(m.gameBananaId, section, { includeSubmitter: true });
       const cached = await cachedPromise;
@@ -1494,7 +1434,7 @@ export default function Installed() {
     setDetailsSourceModId(source?.id ?? null);
     setDetailsDates(null);
 
-    const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
+    const cachedPromise = window.electronAPI.getCachedMod(item.id, item.section).catch(() => null);
     try {
       const details = await getModDetails(item.id, item.section, { includeSubmitter: true });
       const cached = await cachedPromise;
@@ -2059,8 +1999,12 @@ export default function Installed() {
   // stable even as `mods` updates after each toggle.
   const runBulkToggle = async (targets: Mod[], verb: 'Enabling' | 'Disabling') => {
     setBulkProgress({ verb, done: 0, total: targets.length });
+    const session = { bulk: true };
     for (let i = 0; i < targets.length; i++) {
-      const ok = await toggleMod(targets[i].id);
+      const key = modRestoreKey(targets[i]);
+      const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === key);
+      const enabled = verb === 'Enabling';
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id, session) : false;
       setBulkProgress({ verb, done: i + 1, total: targets.length });
       // Stop the batch as soon as we hit the 99-enabled cap rather than firing
       // a failing enable for every remaining selection.
@@ -2424,21 +2368,13 @@ export default function Installed() {
     clearModsNotice();
   }, [modsNotice, clearModsNotice]);
 
-  /**
-   * Flip a single variant's enabled state. Variants are independent — a
-   * mod's model VPK and its voice-lines VPK (same archive) or its red and
-   * blue uploads (different archives on the same mod page) can each be on
-   * or off without affecting the others. Sequential just because the store
-   * action is single-mod.
-   */
-  const toggleVariant = async (target: Mod) => {
-    return toggleMod(target.id);
-  };
-
+  /** Apply one state to every file represented by a grouped card. */
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
     const targets = group.variants.filter((v) => v.enabled !== enabled);
+    const session = { bulk: true };
     for (const v of targets) {
-      const ok = await toggleMod(v.id);
+      const current = useAppStore.getState().mods.find(mod => modRestoreKey(mod) === modRestoreKey(v));
+      const ok = current ? current.enabled === enabled || await toggleMod(current.id, session) : false;
       if (!ok) {
         return false;
       }
@@ -2604,6 +2540,7 @@ export default function Installed() {
   // rebuilding entries every render would re-render every card on each
   // page-level setState.
   const allEntries = useMemo(() => buildModEntries(visibleMods), [visibleMods]);
+  const { pickerGroupId, setPickerGroupId, swapTargets, beginSwap, toggleVariant } = useInstalledModSwap(allEntries, taxonomyContext);
   const enabledEntries = useMemo(
     () =>
       allEntries
@@ -2619,23 +2556,27 @@ export default function Installed() {
     [allEntries]
   );
 
-  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
-  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTags
+  // do real work per mod (category ancestry, canonical hero names,
   // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
   // hit them for every entry on every render - including drag-start renders that
-  // only flip draggingKey. Caching them here (rebuilt only when allEntries
-  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // only flip draggingKey. Rebuilding only for library or taxonomy changes
+  // keeps those passes to cheap Map lookups, so a drag pickup paints the
   // overlay without rescanning the whole library. Mirrors entryConflicts.
   const entryFacetMeta = useMemo(() => {
-    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    const byKey = new Map<string, { heroNames: string[]; tags: InstalledTag[] }>();
     for (const entry of allEntries) {
-      byKey.set(entry.key, { heroNames: entryHeroNames(entry, heroByCategoryId), tagKeys: entryTagKeys(entry) });
+      const members = entry.kind === 'single' ? [entry.mod] : entry.variants;
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry, taxonomyContext), tags: [
+        ...entryTags(entry, taxonomyContext),
+        ...customTagsForMods(customTags, members).map(tag => ({ key: `custom:${tag.id}`, label: tag.name })),
+      ] });
     }
     return byKey;
-  }, [allEntries, heroByCategoryId]);
+  }, [allEntries, taxonomyContext, customTags]);
 
   // List membership, deliberately kept OUT of entryFacetMeta: that cache is
-  // rebuilt only when allEntries changes, so folding list ids into it would
+  // independent of list assignments, so folding list ids into it would
   // either show stale membership after an assignment or force the whole facet
   // cache to be thrown away on every click. A separate index keyed the same way
   // stays correct and costs one Map lookup.
@@ -2710,7 +2651,7 @@ export default function Installed() {
   const viewEntryAuthor = useStableCallback(async (mod: Mod) => {
     if (!mod.gameBananaId) return;
     try {
-      const cached = await window.electronAPI.getCachedMod(mod.gameBananaId).catch(() => null);
+      const cached = await window.electronAPI.getCachedMod(mod.gameBananaId, mod.sourceSection ?? 'Mod').catch(() => null);
       let artist: BrowseArtistRef | undefined =
         cached?.submitterId && cached.submitterId > 0
           ? { id: cached.submitterId, name: cached.submitterName ?? t('modDetails.meta.artist'), profileUrl: cached.profileUrl }
@@ -3021,12 +2962,6 @@ export default function Installed() {
 
   const compactOrder = buildCompactPriorityOrder(allEntries);
   const conflictCount = conflictPairCount;
-  const unknownMods = mods
-    .filter((mod) => mod.isUnknown)
-    .sort((a, b) => a.priority - b.priority);
-  const outdatedVdataMods = mods.filter((mod) => mod.enabled && mod.outdatedVdata?.length);
-  // Disabled ones too: fixing is safe, and they break the camera once enabled.
-  const staleModelMods = visibleMods.filter((mod) => mod.staleModels?.length);
   const unknownFilterCacheById: Record<string, UnknownModFilterGuess> = {};
   for (const mod of unknownMods) {
     const cached = getUnknownCache(mod);
@@ -3053,32 +2988,44 @@ export default function Installed() {
   // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
   // compute if an entry somehow isn't in the cache.
   const heroNamesOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId);
-  const tagKeysOf = (entry: ModEntry): string[] =>
-    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, taxonomyContext);
+  const tagsOf = (entry: ModEntry): InstalledTag[] =>
+    entryFacetMeta.get(entry.key)?.tags ?? entryTags(entry, taxonomyContext);
 
   // Hero and tag buckets are built from allEntries (not the filtered view) so
   // the option lists stay stable as selections change.
   const heroOptionMap = new Map<string, number>();
-  const tagOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, { label: string; count: number; custom?: boolean }>(customTags.map(tag => [
+    `custom:${tag.id}`, { label: tag.name, count: 0, custom: true },
+  ]));
   for (const entry of allEntries) {
     for (const heroName of heroNamesOf(entry)) {
       heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
     }
-    for (const key of tagKeysOf(entry)) {
-      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    for (const tag of tagsOf(entry)) {
+      const previous = tagOptionMap.get(tag.key);
+      tagOptionMap.set(tag.key, { label: previous?.label ?? tag.label, count: (previous?.count ?? 0) + 1, custom: previous?.custom });
     }
   }
-  const heroOptions = HERO_NAMES_SORTED
-    .filter((name) => heroOptionMap.has(name))
-    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const heroOptions = Array.from(heroOptionMap, ([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const tagOptions = Array.from(tagOptionMap.entries())
-    .map(([key, count]) => ({ key, label: tagKeyDisplayLabel(key, t), count }))
-    .sort((a, b) => {
-      if (a.key === OTHER_TAG_KEY) return 1;
-      if (b.key === OTHER_TAG_KEY) return -1;
-      return a.label.localeCompare(b.label);
-    });
+    .map(([key, { label, count, custom }]) => ({ key, label: custom ? label : gameBananaCategoryLabel(label, t), count, custom }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const createCustomTag = (name: string) => {
+    if (!tagScope || tagOptions.some(tag => tag.label.toLocaleLowerCase() === name.trim().slice(0, 80).toLocaleLowerCase())) return false;
+    return useInstalledTagsStore.getState().create(tagScope, name);
+  };
+  const renameCustomTag = (key: string, name: string) => {
+    if (!tagScope || !key.startsWith('custom:') || tagOptions.some(tag => tag.key !== key && tag.label.toLocaleLowerCase() === name.trim().slice(0, 80).toLocaleLowerCase())) return false;
+    return useInstalledTagsStore.getState().rename(tagScope, key.slice(7), name);
+  };
+  const deleteCustomTag = (key: string) => {
+    if (!tagScope || !key.startsWith('custom:')) return;
+    useInstalledTagsStore.getState().remove(tagScope, key.slice(7));
+    setTagFilter(previous => previous.filter(tag => tag !== key));
+    setExcludedTagFilter(previous => previous.filter(tag => tag !== key));
+  };
   const localCount = allEntries.filter(entryIsLocal).length;
   const gbCount = allEntries.length - localCount;
   const enabledCount = enabledEntries.length;
@@ -3142,19 +3089,11 @@ export default function Installed() {
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
-  const heroActive = heroFilter !== 'all';
+  const heroActive = heroFilter.length > 0;
   const filtersActive =
-    sourceActive || statusActive || heroActive || tagFilter.length > 0 || listFilter.length > 0 || requirementsOnly;
+    sourceActive || statusActive || heroActive || tagFilter.length > 0 || excludedTagFilter.length > 0 || listFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !listsView && !searchNeedle && !filtersActive && !sortActive;
-  const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) +
-    (requirementsOnly ? 1 : 0) +
-    (statusActive ? 1 : 0) +
-    (heroActive ? 1 : 0) +
-    tagFilter.length +
-    listFilter.length +
-    (sortActive ? 1 : 0);
   const disabledAlphabetical = disabledSortMode === 'name';
   const { visibleEnabled, visibleDisabled } = useMemo(() => {
     const matchesSearchEntry = (entry: ModEntry) =>
@@ -3162,35 +3101,25 @@ export default function Installed() {
     const matchesSourceEntry = (entry: ModEntry) =>
       entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
     const matchesHeroEntry = (entry: ModEntry) =>
-      heroFilter === 'all' || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, heroByCategoryId)).includes(heroFilter);
-    const matchesTagEntry = (entry: ModEntry) =>
-      tagFilter.length === 0 || (entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry)).some((key) => tagFilter.includes(key));
+      heroFilter.length === 0 || (entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, taxonomyContext)).some(hero => heroFilter.includes(hero));
+    const matchesTagEntry = (entry: ModEntry) => {
+      const tags = entryFacetMeta.get(entry.key)?.tags ?? entryTags(entry, taxonomyContext);
+      return (tagFilter.length === 0 || tags.some(tag => tagFilter.includes(tag.key)))
+        && !tags.some(tag => excludedTagFilter.includes(tag.key));
+    };
     // Selecting several lists unions them (same as tags), but the list axis as a
     // whole ANDs with the others.
     const matchesListEntry = (entry: ModEntry) =>
       listFilter.length === 0 ||
       (entryListIds.get(entry.key) ?? EMPTY_LIST_IDS).some((id) => listFilter.includes(id));
     const matchesAllFilters = (entry: ModEntry) =>
-      (!requirementsOnly || (entry.kind === 'single' ? requirementIssueIds.has(entry.mod.id) : entry.variants.some(mod => requirementIssueIds.has(mod.id)))) &&
       matchesSearchEntry(entry) &&
       matchesSourceEntry(entry) &&
       matchesHeroEntry(entry) &&
       matchesTagEntry(entry) &&
       matchesListEntry(entry);
-    const sortEntries = (entries: ModEntry[]): ModEntry[] => {
-      if (sortMode === 'name') {
-        return [...entries].sort((a, b) =>
-          entryName(a).localeCompare(entryName(b), undefined, { sensitivity: 'base' })
-        );
-      }
-      if (sortMode === 'recent') {
-        return [...entries].sort((a, b) => entryInstalledAt(b).localeCompare(entryInstalledAt(a)));
-      }
-      if (sortMode === 'size') {
-        return [...entries].sort((a, b) => entrySize(b) - entrySize(a));
-      }
-      return entries; // 'priority' (already in load order).
-    };
+    const sortEntries = (entries: ModEntry[]) => sortInstalledEntries(entries, sortMode,
+      entry => entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry, taxonomyContext));
     const visibleEnabled = statusSel.includes('enabled')
       ? sortEntries(enabledEntries.filter(matchesAllFilters))
       : [];
@@ -3206,9 +3135,9 @@ export default function Installed() {
     const visibleDisabled = statusSel.includes('disabled')
       ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
           favorites: disabledFavorites,
-          manualOrder: disabledAlphabetical || sortMode !== 'priority' ? [] : disabledOrder,
+          manualOrder: sortActive || disabledAlphabetical ? [] : disabledOrder,
           keyOf: entryDisabledPreferenceKey,
-          fallback: disabledAlphabetical
+          fallback: !sortActive && disabledAlphabetical
             ? (left, right) =>
                 entryName(left).localeCompare(entryName(right), undefined, { sensitivity: 'base' })
             : (left, right) =>
@@ -3216,7 +3145,7 @@ export default function Installed() {
         }))
       : [];
     return { visibleEnabled, visibleDisabled };
-  }, [searchNeedle, sourceSel, heroFilter, tagFilter, listFilter, entryFacetMeta, heroByCategoryId, entryListIds, sortMode, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites, requirementsOnly, requirementIssueIds]);
+  }, [searchNeedle, sourceSel, heroFilter, tagFilter, excludedTagFilter, listFilter, entryFacetMeta, taxonomyContext, entryListIds, sortMode, sortActive, statusSel, enabledEntries, disabledEntries, disabledAlphabetical, disabledOrder, disabledFavorites]);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const listGroups = useMemo(() => buildInstalledListGroups([...visibleEnabled, ...visibleDisabled], modLists, listPreferences.unlistedOrder), [visibleEnabled, visibleDisabled, modLists, listPreferences.unlistedOrder]);
   const activeCollapsedLists = searchNeedle
@@ -3308,9 +3237,8 @@ export default function Installed() {
       setSearch('');
       setSourceSel(['gamebanana', 'local']);
       setStatusSel(['enabled', 'disabled']);
-      setHeroFilter('all');
-      setTagFilter([]);
-      setRequirementsOnly(false);
+      setHeroFilter([]);
+      setTagFilter([]); setExcludedTagFilter([]);
       setListFilter([]);
     }
     if (isEntryEnabled(entry)) setEnabledCollapsed(false);
@@ -3515,6 +3443,8 @@ export default function Installed() {
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
     onToggle: toggleEntry,
+    swapTargets: swapTargets.get(entry.key),
+    onSwap: beginSwap,
     onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
@@ -3658,120 +3588,6 @@ export default function Installed() {
     );
   }
 
-  // Issue buttons (outdated data, camera fix, conflicts, fix unknown) plus
-  // update-all. Rendered once, in the top action bar's right cluster (next to
-  // Fix Order). Two or more issues collapse into one dropdown.
-  const statusIssues: StatusIssue[] = [];
-  if (outdatedVdataMods.length > 0) {
-    statusIssues.push({
-      key: 'outdatedVdata',
-      variant: 'danger',
-      icon: FileWarning,
-      label: t('installed.outdatedData.button', { count: outdatedVdataMods.length }),
-      title: t('installed.outdatedData.buttonHint'),
-      count: outdatedVdataMods.length,
-      onOpen: () => setOutdatedVdataOpen(true),
-    });
-  }
-  if (staleModelMods.length > 0) {
-    statusIssues.push({
-      key: 'staleModels',
-      variant: 'warning',
-      icon: Camera,
-      label: t('installed.staleModels.button', { count: staleModelMods.length }),
-      title: t('installed.staleModels.buttonHint'),
-      count: staleModelMods.length,
-      onOpen: () => setStaleModelsOpen(true),
-    });
-  }
-  if (conflictCount > 0) {
-    statusIssues.push({
-      key: 'conflicts',
-      variant: 'warning',
-      icon: AlertTriangle,
-      label: t('installed.status.overlapCount', { count: conflictPairCount }),
-      count: conflictPairCount,
-      onOpen: () => navigate('/overlap'),
-    });
-  }
-  if (unknownMods.length > 0 && !fixUnknownHidden) {
-    statusIssues.push({
-      key: 'unknown',
-      variant: 'primary',
-      icon: HelpCircle,
-      label: t('installed.unknown.fixButton', { count: unknownMods.length }),
-      title: t('installed.unknown.fixButtonHint'),
-      count: unknownMods.length,
-      onOpen: () => openBulkUnknownFix(unknownMods),
-      onContextMenu: (e) => {
-        e.preventDefault();
-        setFixUnknownHidden(true);
-      },
-    });
-  }
-  const showUpdateButton = updateModCount > 0;
-  const hasStatusButtons = statusIssues.length > 0 || showUpdateButton || unknownMods.length > 0;
-  const statusButtons = hasStatusButtons ? (
-    <div className="flex flex-wrap items-center gap-2">
-      <StatusIssues issues={statusIssues} />
-      {showUpdateButton && (
-        <Button
-          variant="primary"
-          onClick={() => setUpdateAllConfirmOpen(true)}
-          icon={Download}
-          aria-live="polite"
-          title={t('installed.updateAll.hint')}
-        >
-          {t('installed.updateAll.updateCount', { count: updateModCount })}
-        </Button>
-      )}
-      {unknownMods.length > 0 && fixUnknownHidden && (
-        <button
-          type="button"
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setFixUnknownHidden(false);
-          }}
-          aria-label={t('installed.unknown.restoreFixButtonAria', { count: unknownMods.length })}
-          title={t('installed.unknown.fixHiddenHint')}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-secondary/40 transition-colors hover:text-text-secondary cursor-pointer"
-        >
-          <HelpCircle className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  ) : null;
-  const topStatusActions = (
-      <div className="flex flex-wrap items-center gap-2">
-        {statusButtons}
-        {enabledModCount > 0 && (
-          <Button variant="secondary" onClick={() => setCompatibilityOpen(true)}>
-            {t('installed.repairs.button')}
-          </Button>
-        )}
-        {/* After the status buttons: copy enabled names in load order. */}
-        {enabledModCount > 0 && (
-          <Button
-            variant="secondary"
-            onClick={handleCopyEnabledMods}
-            icon={ClipboardList}
-            className="!px-2.5"
-            aria-label={t('installed.actions.copyEnabled')}
-            title={t('installed.actions.copyEnabledHint')}
-          />
-        )}
-          <Button
-            variant="secondary"
-            disabled={!viewIsReorderable}
-            onClick={fixOrder}
-            icon={Wrench}
-            className="!px-2.5"
-            aria-label={t('installed.actions.fixOrder')}
-            title={t('installed.actions.fixOrderHint')}
-          />
-      </div>
-    );
-
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6 [scrollbar-gutter:stable]">
       <InstalledSkinPreview hideNsfw={installedHideNsfwPreviews} />
@@ -3782,382 +3598,72 @@ export default function Installed() {
             : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
         }`}
       >
-        {/* Narrow windows give search its own row so controls wrap together. */}
-        <div className="flex flex-col items-stretch gap-2 xl:flex-row xl:items-center xl:gap-3">
-          <div className="relative min-w-[11rem] flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setSearchListState({ query: '', collapsed: [] }); }}
-              placeholder={t('installed.filters.searchPlaceholder')}
-              className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
-            />
-            {search && (
-              <button
-                type="button"
+        <div className="flex flex-wrap items-center gap-2" data-installed-toolbar>
+          <div className="flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-2">
+            <div className="relative min-w-[11rem] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
+              <input type="text" value={search}
+                onChange={event => { setSearch(event.target.value); setSearchListState({ query: '', collapsed: [] }); }}
+                placeholder={t('installed.filters.searchPlaceholder')}
+                className={`h-[38px] w-full rounded-lg border border-border bg-bg-secondary pl-8 ${search ? 'pr-8' : 'pr-3'} text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent`} />
+              {search && <button type="button"
                 onClick={() => { setSearch(''); setSearchListState({ query: '', collapsed: [] }); }}
-                title={t('installed.filters.clearSearch')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+                aria-label={t('installed.filters.clearSearch')} title={t('installed.filters.clearSearch')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary">
+                <X className="h-3.5 w-3.5" />
+              </button>}
+            </div>
+            {conflictCount > 0 && <Button variant="warning" icon={AlertTriangle} className="h-[38px]! rounded-lg!" onClick={() => navigate('/overlap')}>
+              {t('installed.status.overlapCount', { count: conflictPairCount })}
+            </Button>}
+            {updateModCount > 0 && <Button variant="primary" icon={Download} className="h-[38px]! rounded-lg!" aria-live="polite"
+              title={t('installed.updateAll.hint')} onClick={() => setUpdateAllConfirmOpen(true)}>
+              {t('installed.updateAll.updateCount', { count: updateModCount })}
+            </Button>}
           </div>
-          <div className="flex flex-wrap items-center justify-start gap-2 xl:ml-auto xl:justify-end">
-            <InstalledListControls
-              view={listPreferences.view}
-              onView={setListView}
-              onManage={() => setManagingLists(true)}
-            />
-            {/* Contextual status + reorder actions ride the same row as the
-                view controls (wrapping together when cramped) instead of
-                claiming a second strip below the search. Copy-enabled sits
-                inside topStatusActions, immediately after Fix Unknown. */}
-            <RequirementsControl count={requirementIssueIds.size} active={requirementsOnly} onClick={() => setRequirementsOnly(value => !value)} />
-            {topStatusActions}
-            {/* Retroactive bulk imprint launcher (experimental, opt-in).
-                Icon-only, same shape/height as the other toolbar icon buttons
-                (copy enabled, fix order, filter) so it rides the cluster
-                without claiming its own strip. Name lives in the tooltip /
-                aria-label. Opens the preflight modal. */}
-            {/* Hide-when-done: the button only exists while something could
-                still be imprinted. After a successful bulk run loadMods()
-                refreshes the list, the count reaches zero, and the button
-                unmounts; the result modal stays up (it renders on
-                imprintState, not on this condition). */}
-            {settings?.experimentalVpkImprinting && pendingImprintCount > 0 && (
-              <Button
-                variant="secondary"
-                icon={Fingerprint}
-                className="!px-2.5"
-                onClick={() => { void openImprintModal(); }}
-                aria-label={t('installed.actions.imprintInstalledMods')}
-                title={t('installed.actions.imprintInstalledModsHint')}
-              />
-            )}
-            {/* Sort + filter: load order / recent / name, GameBanana vs local
-                import, hero, and metadata tags. The badge counts active
-                adjustments; while any are on, the list is read-only (no drag
-                reorder) so it can't be mistaken for load order. order-last keeps
-                it grouped with card size and layout controls at the row end. */}
-            <div className="relative order-last" ref={filterRef}>
-              <Button
-                variant={activeAdjustmentCount > 0 ? 'primary' : 'secondary'}
-                onClick={() => setFilterOpen((v) => !v)}
-                icon={SlidersHorizontal}
-                className="!px-2.5"
-                aria-label={t('installed.filters.sortAndFilter')}
-                title={t('installed.filters.sortAndFilterHint')}
-              />
-              {activeAdjustmentCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
-                  {activeAdjustmentCount}
-                </span>
-              )}
-              {filterOpen && (
-                // max-height is measured, not declared: see the layout effect
-                // above. HeroSelect portals its listbox, so the HERO dropdown
-                // overlays the page instead of clipping at this scroll edge.
-                <div
-                  ref={filterPanelRef}
-                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans"
-                >
-                  <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                    <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
-                  </div>
-                  <div className="space-y-1">
-                    {([
-                      ['priority', t('installed.filters.loadOrder')],
-                      ['recent', t('installed.filters.recentlyAdded')],
-                      ['name', t('browse.sort.nameAZ')],
-                      ['size', t('installed.filters.sizeLargest')],
-                    ] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setSortMode(value)}
-                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors cursor-pointer ${
-                          sortMode === value
-                            ? 'bg-accent/15 text-text-primary'
-                            : 'text-text-secondary hover:bg-hl/5 hover:text-text-primary'
-                        }`}
-                      >
-                        <span>{label}</span>
-                        {sortMode === value && <Check className="h-3.5 w-3.5 text-accent" />}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                      {t('installed.filters.source')}
-                    </div>
-                    <div className="flex gap-1">
-                      {([
-                        ['gamebanana', t('installed.filters.gamebanana'), gbCount],
-                        ['local', t('installed.filters.local'), localCount],
-                      ] as const).map(([value, label, count]) => {
-                        const on = sourceSel.includes(value);
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() =>
-                              setSourceSel((prev) =>
-                                prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-                              )
-                            }
-                            aria-pressed={on}
-                            className={`flex-1 rounded-md border px-1.5 py-1 text-2xs transition-colors cursor-pointer ${
-                              on
-                                ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
-                            }`}
-                          >
-                            {label}
-                            <span className="ml-1 opacity-60">{count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                      {t('installed.filters.status')}
-                    </div>
-                    <div className="flex gap-1">
-                      {([
-                        ['enabled', t('installed.filters.enabled'), enabledCount],
-                        ['disabled', t('locker.global.disabledBadge'), disabledCount],
-                      ] as const).map(([value, label, count]) => {
-                        const on = statusSel.includes(value);
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() =>
-                              setStatusSel((prev) =>
-                                prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-                              )
-                            }
-                            aria-pressed={on}
-                            className={`flex-1 rounded-md border px-1.5 py-1 text-2xs transition-colors cursor-pointer ${
-                              on
-                                ? 'border-accent/50 bg-accent/15 text-text-primary'
-                                : 'border-border text-text-secondary opacity-50 hover:border-hl/20 hover:text-text-primary'
-                            }`}
-                          >
-                            {label}
-                            <span className="ml-1 opacity-60">{count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {heroOptions.length > 0 && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.hero')}
-                        </span>
-                        {heroFilter !== 'all' && (
-                          <button
-                            type="button"
-                            onClick={() => setHeroFilter('all')}
-                            className="text-2xs text-accent hover:underline cursor-pointer"
-                          >
-                            {t('common.actions.clear')}
-                          </button>
-                        )}
-                      </div>
-                      <HeroSelect
-                        ariaLabel={t('browse.filters.filterByHero')}
-                        value={heroFilter}
-                        onChange={setHeroFilter}
-                        size="sm"
-                        options={[
-                          { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
-                          ...heroOptions.map((hero) => ({
-                            value: hero.name,
-                            label: `${hero.name} (${hero.count})`,
-                            heroName: hero.name,
-                          })),
-                        ]}
-                      />
-                    </div>
-                  )}
-
-                  {tagOptions.length > 1 && (
-                    <FilterCheckList
-                      label={t('installed.filters.tags')}
-                      options={tagOptions}
-                      selected={tagFilter}
-                      onToggle={(key) =>
-                        setTagFilter((prev) =>
-                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-                        )
-                      }
-                      onClear={() => setTagFilter([])}
-                    />
-                  )}
-
-                  {/* Rendered from modLists, not from the entry tag buckets, so
-                      a list you just created stays visible while it is empty. */}
-                  {modLists.length > 0 && (
-                    <FilterCheckList
-                      label={t('installed.filters.lists')}
-                      options={listFilterOptions}
-                      selected={listFilter}
-                      onToggle={(id) =>
-                        setListFilter((prev) =>
-                          prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id]
-                        )
-                      }
-                      onClear={() => setListFilter([])}
-                      action={
-                        <button
-                          type="button"
-                          onClick={() => setManagingLists(true)}
-                          className="text-2xs text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
-                        >
-                          {t('installed.lists.manage')}
-                        </button>
-                      }
-                    />
-                  )}
-
-                  {activeAdjustmentCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSortMode('priority');
-                        setSourceSel(['gamebanana', 'local']);
-                        setStatusSel(['enabled', 'disabled']);
-                        setHeroFilter('all');
-                        setTagFilter([]);
-    setRequirementsOnly(false);
-                        setListFilter([]);
-                      }}
-                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-2xs uppercase tracking-wider text-text-secondary transition-colors hover:border-hl/20 hover:text-text-primary cursor-pointer"
-                    >
-                      {t('common.actions.reset')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => openBatchImport()}
-              icon={FilePlus}
-              className="!px-2.5"
-              aria-label={t('installed.actions.addCustomMod')}
-              title={t('installed.actions.addCustomModHint')}
-            />
-            <ImportSourceMenu compact onImported={() => void loadMods()} onExport={() => setExportOpen(true)} />
-            <Button
-              variant="secondary"
-              onClick={() => openModsFolder().catch(() => {})}
-              icon={FolderOpen}
-              className="!px-2.5"
-              aria-label={t('installed.actions.openModsFolder')}
-              title={t('installed.actions.openModsFolder')}
-            />
-            <Button
-              variant={selectMode ? 'primary' : 'secondary'}
-              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-              icon={CheckSquare}
-              disabled={!!bulkProgress}
-              className="!px-2.5"
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" disabled={issuesBusy} onClick={() => setIssuesOpen(true)}
+              className={`inline-flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${issuesUnreadOutdated
+                ? 'border-state-danger/30 bg-state-danger/10 text-state-danger hover:border-state-danger/50 hover:bg-state-danger/20'
+                : issuesUnread ? 'border-state-warning/30 bg-state-warning/10 text-state-warning hover:border-state-warning/50 hover:bg-state-warning/20'
+                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-tertiary'}`}>
+              <Wrench className="h-4 w-4" aria-hidden />{t('installed.issues.title')}
+            </button>
+            <button type="button" onClick={() => openBatchImport()} className={installedToolbarIconClass}
+              aria-label={t('installed.actions.addCustomMod')} title={t('installed.actions.addCustomModHint')}>
+              <FilePlus className="h-4 w-4" aria-hidden />
+            </button>
+            <button type="button" onClick={() => void openModsFolder().catch(() => {})} className={installedToolbarIconClass}
+              aria-label={t('installed.actions.openModsFolder')} title={t('installed.actions.openModsFolder')}>
+              <FolderOpen className="h-4 w-4" aria-hidden />
+            </button>
+            <Button type="button" variant={selectMode ? 'primary' : 'toolbar'} icon={CheckSquare}
+              disabled={!!bulkProgress} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              aria-pressed={selectMode} className="h-[38px]! w-[38px]! shrink-0 rounded-lg! p-0!"
               aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
-              title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')}
-            />
-
-            {/* Locker overrides: hero cards + ability sounds + ability colors
-                applied off the mod list. The badge shows how many are active;
-                the popup reviews, previews, and removes them. */}
-            <div className="relative">
-              <Button
-                variant="secondary"
-                onClick={() => setLockerOverridesOpen(true)}
-                icon={Wand2}
-                className="!px-2.5"
-                aria-label={t('installed.actions.lockerOverrides')}
-                title={t('installed.actions.lockerOverridesHint')}
-              />
-              {lockerOverrideCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
-                  {lockerOverrideCount}
-                </span>
-              )}
-            </div>
-
-            {/* Style (grid vs list) + card size collapsed into one dropdown so
-                they don't claim a stretch of toolbar width. Card size is only
-                meaningful in grid, so it's disabled (and dimmed) while List is
-                active rather than hidden, keeping the popover from reflowing. */}
-            <div className="relative order-last" ref={viewMenuRef}>
-              <Button
-                variant="secondary"
-                onClick={() => setViewMenuOpen((v) => !v)}
-                icon={layout === 'list' ? List : LayoutGrid}
-                className="!px-2.5"
-                aria-label={t('installed.view.viewOptions')}
-                aria-expanded={viewMenuOpen}
-                title={t('installed.view.styleAndCardSize')}
-              />
-              {viewMenuOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans [&_input]:font-sans">
-                  <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                    {t('installed.view.style')}
-                  </div>
-                  <ViewModeToggle
-                    className="w-full"
-                    value={layout}
-                    options={[
-                      { value: 'grid', label: t('installed.view.grid'), icon: LayoutGrid },
-                      { value: 'list', label: t('installed.view.list'), icon: List },
-                    ]}
-                    onChange={(mode) => setLayout(mode === 'list' ? 'list' : 'grid')}
-                  />
-
-                  <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-secondary">
-                      {t('installed.view.cardSize')}
-                    </div>
-                    <div
-                      className={`flex items-center gap-2 transition-opacity ${
-                        layout === 'list' ? 'opacity-40' : ''
-                      }`}
-                      title={t('installed.view.cardSizeHint')}
-                    >
-                      <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                      <input
-                        type="range"
-                        min={CARD_SIZE_MULTIPLIER_MIN}
-                        max={CARD_SIZE_MULTIPLIER_MAX}
-                        step={CARD_SIZE_MULTIPLIER_STEP}
-                        value={cardSizeMultiplier}
-                        disabled={layout === 'list'}
-                        onChange={(e) => setCardSizeMultiplier(Number(e.currentTarget.value))}
-                        aria-label={t('installed.view.cardSize')}
-                        aria-valuetext={t('installed.view.cardSizeValue', { value: cardSizeMultiplier.toFixed(2) })}
-                        className="h-1.5 flex-1 cursor-pointer accent-accent disabled:cursor-default"
-                      />
-                      <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                    </div>
-                    {layout === 'list' && (
-                      <p className="mt-1.5 text-2xs text-text-secondary">
-                        {t('installed.view.cardSizeGridOnly')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+              title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')} />
+            <InstalledFilterMenu sortMode={sortMode} onSortModeChange={setSortMode}
+              view={listPreferences.view} onViewChange={setListView}
+              sourceSel={sourceSel} onSourceChange={setSourceSel} sourceCounts={{ gamebanana: gbCount, local: localCount }}
+              statusSel={statusSel} onStatusChange={setStatusSel} statusCounts={{ enabled: enabledCount, disabled: disabledCount }}
+              heroFilter={heroFilter} onHeroChange={setHeroFilter} heroOptions={heroOptions}
+              tagFilter={tagFilter} onTagChange={setTagFilter} excludedTagFilter={excludedTagFilter} onExcludedTagChange={setExcludedTagFilter} tagOptions={tagOptions}
+              onCreateTag={createCustomTag} onRenameTag={renameCustomTag} onDeleteTag={deleteCustomTag}
+              listFilter={listFilter} onListChange={setListFilter} listOptions={listFilterOptions}
+              onManageLists={() => setManagingLists(true)} active={filtersActive || listsView}
+              onReset={() => {
+                setListView('all');
+                setSourceSel(['gamebanana', 'local']); setStatusSel(['enabled', 'disabled']);
+                setHeroFilter([]); setTagFilter([]); setExcludedTagFilter([]); setListFilter([]);
+              }} />
+            <InstalledOptionsMenu layout={layout} onLayoutChange={setLayout}
+              cardSizeMultiplier={cardSizeMultiplier} onCardSizeChange={setCardSizeMultiplier}
+              cardSizeRange={{ min: CARD_SIZE_MULTIPLIER_MIN, max: CARD_SIZE_MULTIPLIER_MAX, step: CARD_SIZE_MULTIPLIER_STEP }}
+              lockerOverrideCount={lockerOverrideCount} onLockerOverrides={() => setLockerOverridesOpen(true)}
+              showImprint={!!settings?.experimentalVpkImprinting && pendingImprintCount > 0} onImprint={() => void openImprintModal()}
+              canFixOrder={viewIsReorderable} onFixOrder={fixOrder}
+              canCopyEnabled={enabledModCount > 0} onCopyEnabled={handleCopyEnabledMods}
+              onImported={() => void loadMods()} onExport={() => setExportOpen(true)} />
           </div>
         </div>
       </div>
@@ -4210,9 +3716,9 @@ export default function Installed() {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
-              setHeroFilter('all');
-              setTagFilter([]);
-    setRequirementsOnly(false);
+              setHeroFilter([]);
+              setTagFilter([]); setExcludedTagFilter([]);
+              setListFilter([]);
             }}
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
@@ -4278,13 +3784,14 @@ export default function Installed() {
             <button
               type="button"
               onClick={() => setDisabledSortMode(disabledAlphabetical ? 'custom' : 'name')}
+              disabled={sortActive}
               aria-pressed={disabledAlphabetical}
               title={
-                disabledAlphabetical
+                sortActive ? t('installed.sections.sortToolbarActiveHint') : disabledAlphabetical
                   ? t('installed.sections.sortCustomHint')
                   : t('installed.sections.sortAlphabeticalHint')
               }
-              className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-2xs font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+              className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-2xs font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50 ${
                 disabledAlphabetical
                   ? 'border-accent/40 bg-accent/10 text-accent'
                   : 'border-hl/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-hl/20 hover:text-text-primary'
@@ -4310,18 +3817,8 @@ export default function Installed() {
         />
       )}
 
-      <CompatibilityRepairsModal open={compatibilityOpen} onClose={() => setCompatibilityOpen(false)} mods={mods} />
-      <OutdatedVdataModal
-        mods={outdatedVdataMods}
-        open={outdatedVdataOpen}
-        onClose={() => setOutdatedVdataOpen(false)}
-      />
-
-      <StaleModelsModal
-        mods={staleModelMods}
-        open={staleModelsOpen}
-        onClose={() => setStaleModelsOpen(false)}
-      />
+      <InstalledIssuesModal open={issuesOpen} onClose={() => setIssuesOpen(false)} mods={mods}
+        onIdentifyUnknown={targets => openBulkUnknownFix(targets)} />
 
       <DeleteModsModal
         target={modToDelete}
@@ -4426,7 +3923,7 @@ export default function Installed() {
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
             conflictsByVariantId={conflictsByVariantId}
-            onToggle={(target) => toggleVariant(target)}
+            onToggle={toggleVariant}
             onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
@@ -4868,7 +4365,7 @@ export default function Installed() {
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       {t('installed.tag.hero')}
                     </div>
-                    {HERO_NAMES_SORTED.map((name) => (
+                    {lockerHeroNames.map((name) => (
                       <button
                         key={name}
                         type="button"

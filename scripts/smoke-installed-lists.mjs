@@ -36,7 +36,7 @@ for (let i = 0; i < count; i++) {
   await writeFile(join(i < 18 ? addons : join(addons, '.disabled'), file), bytes);
   metadata[file] = { modName: name, sha256: createHash('sha256').update(bytes).digest('hex'), gameBananaId: 900000 + i,
     thumbnailUrl: sample.thumbnailUrl, categoryName: sample.categoryName ?? 'Skins', sourceSection: 'Mod', nsfw: i === count - 1,
-    globalType: null, globalTypeClassifierVersion: 5, abilitySounds: null };
+    abilitySounds: null };
 }
 await writeFile(join(profile, 'mod-metadata.json'), JSON.stringify(metadata));
 await writeFile(join(profile, 'settings.json'), JSON.stringify({

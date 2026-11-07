@@ -1,19 +1,23 @@
 import { profileShuffleSchema, type ProfileShuffle } from '../lib/profileShuffle';
 import { create } from 'zustand';
+import type { BrowseSortOption } from '../lib/browseSections';
 import type { Mod, AppSettings, AppearanceSurface, DeleteModEntry, DeleteModsProgress, EditLocalModArgs, GlobalModType } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult, LocalVariantGroupTarget } from '../types/electron';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, getInstallationScope } from '../lib/appSettings';
+import { useInstalledTagsStore } from './installedTagsStore';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
-import { isGameRunningModLockError } from '../lib/modLocks';
+import { isGameRunningModLockError, isModLoadedInGame } from '../lib/modLocks';
 import { showToast } from './toastStore';
-import { buildHeroList, getLockerSkinKey, type HeroCategory } from '../lib/lockerUtils';
+import { buildHeroList, getLockerSkinKey, modLoadOrder, type HeroCategory } from '../lib/lockerUtils';
 import { modPreferenceKey } from '../lib/disabledModPrefs';
 import { pathDedupeKey } from '../lib/customModImport';
 import { acknowledgeDownloadCompletions, getPendingDownloadCompletions } from '../lib/downloadActivity';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import { reconcileMods } from '../lib/reconcileMods';
+import { installedModRequirements, modRequirementRefs, requiredModClosure } from '../lib/modRequirements';
+import { requestRequirementToggle, useRequirementsStore, type RequirementToggleChoice, type RequirementToggleSession } from './requirementsStore';
 import {
   SHUFFLE_ON_LAUNCH_KEY,
   planLaunchShuffle,
@@ -81,6 +85,49 @@ function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
     () => undefined
   );
   return run;
+}
+
+/** Review outside the mutation queue so dependency checkboxes can still write. */
+async function reviewModToggle(mod: Mod, enabled: boolean, readMods: () => Mod[], session?: RequirementToggleSession): Promise<{
+  choice: RequirementToggleChoice; changes: { key: string; enabled: boolean }[];
+}> {
+  const key = modRestoreKey(mod);
+  const cancelled = { choice: 'cancel' as const, changes: [] };
+  if (typeof window !== 'undefined' && typeof window.electronAPI?.getModRequirements === 'function') {
+    await useRequirementsStore.getState().load(readMods().flatMap(modRequirementRefs));
+  }
+  const reviewMods = readMods();
+  const current = reviewMods.find(mod => modRestoreKey(mod) === key);
+  if (!current) return cancelled;
+  const direction = enabled ? 'dependencies' : 'dependents';
+  const relatedKeys = requiredModClosure(current.id, reviewMods, useRequirementsStore.getState().snapshots, direction)
+    .map(id => reviewMods.find(mod => mod.id === id)!).map(modRestoreKey);
+  const choice = await requestRequirementToggle(current, enabled, reviewMods, useAppStore.getState().settings?.promptOptionalRequirements ?? false, session);
+  if (choice === 'cancel') return cancelled;
+  const mods = readMods();
+  const target = mods.find(mod => modRestoreKey(mod) === key);
+  if (!target) return cancelled;
+  const keys = new Set([key]);
+  if (choice === 'all') {
+    for (const related of relatedKeys) keys.add(related);
+    for (const id of requiredModClosure(target.id, mods, useRequirementsStore.getState().snapshots, direction)) {
+      const related = mods.find(mod => mod.id === id);
+      if (related) keys.add(modRestoreKey(related));
+    }
+  }
+  const changes = new Map([...keys].map(key => [key, enabled]));
+  if (choice === 'all' && enabled) {
+    for (const owner of mods.filter(mod => keys.has(modRestoreKey(mod)))) {
+      for (const { item, matches } of installedModRequirements(owner, mods, useRequirementsStore.getState().snapshots)) {
+        if (item.importance !== 'required' || item.state !== 'off') continue;
+        for (const match of matches) {
+          const incompatible = mods.find(mod => mod.id === match.modId);
+          if (incompatible && !keys.has(modRestoreKey(incompatible))) changes.set(modRestoreKey(incompatible), false);
+        }
+      }
+    }
+  }
+  return { choice, changes: [...changes].map(([key, enabled]) => ({ key, enabled })) };
 }
 
 function formerStandalonePreferenceKey(mod: Mod): string[] {
@@ -177,8 +224,8 @@ async function migrateLockerImagePreferences(
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
-export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 export type BrowseLayout = 'grid' | 'list';
+export type { BrowseSortOption } from '../lib/browseSections';
 
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
@@ -193,6 +240,8 @@ export interface BrowseUiState {
   addedWithin: BrowseTimeRange;
   addedFrom: string;
   addedTo: string;
+  // Only narrows Browse; Show, Blur and Hide remain app-wide preferences.
+  onlyNsfw: boolean;
   // 'none' is a Sound-only pseudo-hero: "show me sound mods whose title
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
@@ -277,6 +326,7 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   addedWithin: 'all',
   addedFrom: '',
   addedTo: '',
+  onlyNsfw: false,
   heroCategoryId: 'all',
   categoryId: 'all',
   categoryIdsBySection: {},
@@ -296,6 +346,9 @@ export interface BrowseSessionCache {
   hasMore: boolean;
   totalCount: number;
   scrollTop: number;
+  /** Time of the last successful query, not the time the tab was closed. */
+  fetchedAt?: number;
+  source?: 'local' | 'remote';
   /** Stamp of the filter state these mods belong to. If any filter changes
    *  while Browse is unmounted (impossible today, but defensive), we'll
    *  refetch instead of restoring stale results. */
@@ -430,7 +483,11 @@ interface AppState {
   setLoadedGameModIds: (ids: readonly string[]) => void;
   /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
    *  batch callers can stop early. */
-  toggleMod: (modId: string) => Promise<boolean>;
+  toggleMod: (modId: string, session?: RequirementToggleSession) => Promise<boolean>;
+  /** Apply explicit states after a requirements review, resolving renamed files
+   *  from their stable keys once earlier mutations have completed. */
+  setModEnabledStates: (changes: readonly { key: string; enabled: boolean }[]) => Promise<boolean>;
+  swapMods: (replacementKey: string, outgoingKeys: readonly string[], session?: RequirementToggleSession) => Promise<'swapped' | 'blocked' | 'cancelled' | 'failed'>;
   clearModsNotice: () => void;
   deleteMod: (mod: DeleteModEntry) => Promise<void>;
   /** Deletes the ids as one locked main-process batch, with a progress tick
@@ -852,51 +909,154 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
   // clicks resolve in order and each sees the previous one's renamed id.
-  toggleMod: (modId: string) => enqueueToggle(async () => {
-    const mod = get().mods.find((m) => m.id === modId);
-    if (!mod) return false;
+  toggleMod: async (modId: string, session) => {
+    const initial = get().mods.find(mod => mod.id === modId);
+    if (!initial) return false;
+    const key = modRestoreKey(initial);
+    const review = await reviewModToggle(initial, !initial.enabled, () => get().mods, session);
+    if (review.choice === 'cancel') return false;
+    if (review.choice === 'all' || review.choice === 'only') return get().setModEnabledStates(review.changes);
+    return enqueueToggle(async () => {
+      const mod = get().mods.find(candidate => modRestoreKey(candidate) === key);
+      if (!mod) return false;
+      const modId = mod.id;
 
+      try {
+        const updatedMod = mod.enabled
+          ? await api.disableMod(modId)
+          : await api.enableMod(modId);
+
+        invalidateModsReads();
+        set({
+          mods: get().mods.map((m) => (m.id === modId ? updatedMod : m)),
+        });
+        const outdated = updatedMod.enabled ? updatedMod.outdatedVdata?.[0] : undefined;
+        if (outdated) {
+          showToast(
+            i18n.t('installed.outdatedData.enabledToast', { name: updatedMod.name, count: outdated.missing, file: outdated.entry }),
+            { tone: 'warning', duration: 10000 }
+          );
+        }
+        return true;
+      } catch (err) {
+        // The 99-enabled cap is an expected, recoverable outcome - surface it as
+        // a transient notice (toast) instead of the full-page modsError screen.
+        if (isEnableCapError(err)) {
+          set({ modsNotice: enableCapNotice() });
+          return false;
+        }
+        if (isGameRunningModLockError(err)) {
+          return false;
+        }
+        // Stale id: a mod's id is its filename, which an enable/disable changes.
+        // When toggles for the same card fire faster than the store resyncs (the
+        // main process now serializes mutations, so the second runs after the file
+        // already moved), the second carries a dead id and the move throws "Mod not
+        // found". The desired state is whatever the folder already reflects, so
+        // resync silently instead of dropping the whole page to the error screen.
+        if (/Mod not found|MOD_SAFETY_/.test(String(err))) {
+          get().loadMods({ silent: true, force: true });
+          return false;
+        }
+        set({ modsError: String(err) });
+        return false;
+      }
+    });
+  },
+
+  setModEnabledStates: changes => enqueueToggle(async () => {
+    const desired = new Map(changes.map(change => [change.key, change.enabled]));
+    const mods = get().mods;
+    const matches = mods.filter(mod => desired.has(modRestoreKey(mod)));
+    const missing = [...desired.keys()].some(key => !matches.some(mod => modRestoreKey(mod) === key));
+    const enable = matches.filter(mod => !mod.enabled && desired.get(modRestoreKey(mod))).map(mod => mod.id);
+    const disable = matches.filter(mod => mod.enabled && !desired.get(modRestoreKey(mod))).map(mod => mod.id);
+    if (!enable.length && !disable.length) return !missing;
     try {
-      const updatedMod = mod.enabled
-        ? await api.disableMod(modId)
-        : await api.enableMod(modId);
-
+      const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
       invalidateModsReads();
-      set({
-        mods: get().mods.map((m) => (m.id === modId ? updatedMod : m)),
+      set(state => {
+        const mods = reconcileMods(state.mods, updated);
+        return mods === state.mods ? state : { mods };
       });
-      const outdated = updatedMod.enabled ? updatedMod.outdatedVdata?.[0] : undefined;
-      if (outdated) {
-        showToast(
-          i18n.t('installed.outdatedData.enabledToast', { name: updatedMod.name, count: outdated.missing, file: outdated.entry }),
-          { tone: 'warning', duration: 10000 }
-        );
+      const enabledKeys = new Set(matches.filter(mod => !mod.enabled && desired.get(modRestoreKey(mod))).map(modRestoreKey));
+      for (const mod of updated) {
+        const outdated = mod.enabled && enabledKeys.has(modRestoreKey(mod)) ? mod.outdatedVdata?.[0] : undefined;
+        if (outdated) showToast(i18n.t('installed.outdatedData.enabledToast', { name: mod.name, count: outdated.missing, file: outdated.entry }),
+          { tone: 'warning', duration: 10000 });
       }
-      return true;
-    } catch (err) {
-      // The 99-enabled cap is an expected, recoverable outcome - surface it as
-      // a transient notice (toast) instead of the full-page modsError screen.
-      if (isEnableCapError(err)) {
-        set({ modsNotice: enableCapNotice() });
-        return false;
-      }
-      if (isGameRunningModLockError(err)) {
-        return false;
-      }
-      // Stale id: a mod's id is its filename, which an enable/disable changes.
-      // When toggles for the same card fire faster than the store resyncs (the
-      // main process now serializes mutations, so the second runs after the file
-      // already moved), the second carries a dead id and the move throws "Mod not
-      // found". The desired state is whatever the folder already reflects, so
-      // resync silently instead of dropping the whole page to the error screen.
-      if (/Mod not found|MOD_SAFETY_/.test(String(err))) {
-        get().loadMods({ silent: true, force: true });
-        return false;
-      }
-      set({ modsError: String(err) });
+      if (failures.length) showToast(failures.join('\n'), { tone: 'error' });
+      return !missing && failures.length === 0;
+    } catch (error) {
+      if (isEnableCapError(error)) set({ modsNotice: enableCapNotice() });
+      else if (!isGameRunningModLockError(error)) showToast(String(error), { tone: 'error' });
+      void get().loadMods({ silent: true, force: true });
       return false;
     }
   }),
+
+  swapMods: async (replacementKey, outgoingKeys, session) => {
+    const stale = () => {
+      showToast(i18n.t('installed.swap.unavailable'), { tone: 'warning' });
+      return 'failed' as const;
+    };
+    const mods = get().mods;
+    const replacement = mods.find(mod => modRestoreKey(mod) === replacementKey && !mod.enabled);
+    const outgoing = mods.filter(mod => outgoingKeys.includes(modRestoreKey(mod)) && mod.enabled);
+    if (!replacement || !outgoing.length || outgoingKeys.includes(replacementKey)) return stale();
+    const locked = () => get().mods.some(mod => outgoingKeys.includes(modRestoreKey(mod)) && isModLoadedInGame(mod, get().loadedGameModIds));
+    if (locked()) {
+      showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
+      return 'blocked';
+    }
+    const incomingReview = await reviewModToggle(replacement, true, () => get().mods, session);
+    if (incomingReview.choice === 'cancel') return 'cancelled';
+    const changes = new Map(incomingReview.changes.map(change => [change.key, change.enabled]));
+    for (const source of outgoing) {
+      const review = await reviewModToggle(source, false, () => get().mods);
+      if (review.choice === 'cancel') return 'cancelled';
+      for (const change of review.changes) {
+        if (changes.has(change.key) && changes.get(change.key) !== change.enabled) {
+          showToast(i18n.t('installed.swap.requirementConflict'), { tone: 'warning' });
+          return 'cancelled';
+        }
+        changes.set(change.key, change.enabled);
+      }
+    }
+    return enqueueToggle(async () => {
+      if (locked()) {
+        showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
+        return 'blocked';
+      }
+      const mods = get().mods;
+      if ([...changes.keys()].some(key => !mods.some(mod => modRestoreKey(mod) === key))) return stale();
+      const replacement = mods.find(mod => modRestoreKey(mod) === replacementKey && !mod.enabled);
+      const anchor = mods.filter(mod => mod.enabled && outgoingKeys.includes(modRestoreKey(mod)))
+        .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))[0];
+      if (!replacement || !anchor) return stale();
+      const enable = mods.filter(mod => changes.get(modRestoreKey(mod)) === true).map(mod => mod.id);
+      const disable = mods.filter(mod => changes.get(modRestoreKey(mod)) === false).map(mod => mod.id);
+      try {
+        const updated = await api.swapMods(enable, disable, { incomingId: replacement.id, outgoingId: anchor.id });
+        invalidateModsReads();
+        set(state => ({ mods: reconcileMods(state.mods, updated) }));
+        for (const mod of updated) {
+          if (!mod.enabled || !mod.outdatedVdata?.[0] || mods.some(previous => previous.enabled && modRestoreKey(previous) === modRestoreKey(mod))) continue;
+          const outdated = mod.outdatedVdata[0];
+          showToast(i18n.t('installed.outdatedData.enabledToast', { name: mod.name, count: outdated.missing, file: outdated.entry }), { tone: 'warning', duration: 10000 });
+        }
+        return 'swapped';
+      } catch (error) {
+        invalidateModsReads();
+        await get().loadMods({ silent: true, force: true });
+        if (isGameRunningModLockError(error)) return 'blocked';
+        if (String(error).includes('MOD_SWAP_STALE')) return stale();
+        if (isEnableCapError(error)) set({ modsNotice: enableCapNotice() });
+        else showToast(String(error), { tone: 'error' });
+        return 'failed';
+      }
+    });
+  },
 
   clearModsNotice: () => set({ modsNotice: null }),
 
@@ -1205,7 +1365,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLocalVariantGroup: async (modIds, target) => {
     try {
       const before = get().mods;
+      const tagScope = getInstallationScope(get().settings);
       const { groupId, mods } = await api.setLocalVariantGroup(modIds, target);
+      if (tagScope && tagScope === getInstallationScope(get().settings)) useInstalledTagsStore.getState().regroup(tagScope, before, mods);
       const plans = stablePreferencePlans(before, mods);
       const migrated = migrateStoredStableKeyPreferences(
         plans.preferencePlan,

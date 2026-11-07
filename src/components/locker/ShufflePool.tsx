@@ -20,6 +20,7 @@ export default function ShufflePool() {
   const variants = useAppStore((s) => s.shuffleVariants);
   const remove = useAppStore((s) => s.toggleShuffleIncluded);
   const hideNsfw = useAppStore((s) => shouldBlurNsfw(s.settings));
+  const revealNsfwOnHover = useAppStore((s) => s.settings?.revealNsfwOnHover ?? false);
   const rows = useMemo(() => {
     const byKey = new Map<string, Mod>();
     for (const mod of mods) byKey.set(shufflePoolKey(mod), mod);
@@ -45,7 +46,7 @@ export default function ShufflePool() {
         {rows.length > 0 && <Input aria-label={t('locker.randomize.pool.search')} placeholder={t('locker.randomize.pool.search')} value={query} onChange={(event) => setQuery(event.target.value)} />}
         {filtered.length === 0 ? <p className="py-4 text-sm text-text-secondary">{t(rows.length === 0 ? 'locker.randomize.pool.empty' : 'locker.randomize.pool.noMatch')}</p> :
           <ul className="divide-y divide-border">
-            {filtered.map(({ key, mod }) => <li key={key} className="flex items-center gap-3 py-3">
+            {filtered.map(({ key, mod }) => <li key={key} data-nsfw-hover-reveal={revealNsfwOnHover || undefined} className="flex items-center gap-3 py-3">
               <div className="h-9 w-16 flex-shrink-0 overflow-hidden rounded-sm bg-bg-tertiary">
                 {mod ? <ModThumbnail
                   src={mod.thumbnailUrl}

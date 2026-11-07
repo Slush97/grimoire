@@ -3,10 +3,12 @@ import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
 import { parseGameBananaJson } from './gamebananaJson';
 import { fetchGameBananaApi } from './gamebananaTransport';
-import { parseRequirements } from '../../../src/lib/modRequirements';
+import { inferRequirementImportance, parseRequirements } from '../../../src/lib/modRequirements';
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
+import { BROWSE_REQUEST_SIZE } from '../../../src/lib/browseSections';
+import { buildCategoryPaths, type CategoryPaths } from '../../../src/lib/categoryPaths';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
 // build; re-exported so the many `from './gamebanana'` importers keep working.
@@ -111,7 +113,7 @@ interface CategoryNodeRaw {
     _sProfileUrl?: string;
     _nItemCount: number;
     _sIconUrl?: string;
-    _idParentRowId?: number;
+    _idParentRow?: number;
     _aChildren?: CategoryNodeRaw[];
 }
 
@@ -141,6 +143,7 @@ interface ModRaw {
             _sFile: string;
             _sFile220?: string;
             _sFile530?: string;
+            _sCaption?: string;
         }>;
         _aMetadata?: {
             _sAudioUrl?: string;
@@ -273,6 +276,7 @@ interface CollectionItemRaw {
     _aSubmitter?: ModRaw['_aSubmitter'];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
     _aRootCategory?: ModRaw['_aRootCategory'];
+    _aSubCategory?: ModRaw['_aSubCategory'];
     _aGame?: {
         _idRow?: number;
         _sName?: string;
@@ -442,9 +446,19 @@ function mapCategoryNode(raw: CategoryNodeRaw): GameBananaCategoryNode {
         profileUrl: raw._sProfileUrl,
         itemCount: raw._nItemCount,
         iconUrl: raw._sIconUrl,
-        parentId: raw._idParentRowId,
+        parentId: raw._idParentRow,
         children: raw._aChildren?.map(mapCategoryNode),
     };
+}
+
+function mapCategory(raw: ModRaw['_aRootCategory'] | null): GameBananaCategory | undefined {
+    return raw ? {
+        id: raw._idRow ?? categoryIdFromProfileUrl(raw._sProfileUrl),
+        name: raw._sName,
+        modelName: raw._sModelName,
+        profileUrl: raw._sProfileUrl,
+        iconUrl: raw._sIconUrl,
+    } : undefined;
 }
 
 /**
@@ -465,38 +479,9 @@ function mapMod(raw: ModRaw): GameBananaMod {
         // and correlates with NSFW status, so use it as fallback
         nsfw: raw._bIsNsfw ?? raw._bHasContentRatings ?? false,
         submitter: mapSubmitter(raw._aSubmitter),
-        previewMedia: (raw._aPreviewMedia?._aImages || raw._aPreviewMedia?._aMetadata)
-            ? {
-                images: raw._aPreviewMedia._aImages
-                    ?.filter((img) => img && img._sBaseUrl) // Filter out null/invalid images
-                    .map((img) => ({
-                        baseUrl: img._sBaseUrl,
-                        file: img._sFile,
-                        file220: img._sFile220,
-                        file530: img._sFile530,
-                    })),
-                metadata: raw._aPreviewMedia._aMetadata
-                    ? { audioUrl: raw._aPreviewMedia._aMetadata._sAudioUrl }
-                    : undefined,
-            }
-            : undefined,
-        rootCategory: raw._aRootCategory
-            ? {
-                id: raw._aRootCategory._idRow,
-                name: raw._aRootCategory._sName,
-                modelName: raw._aRootCategory._sModelName,
-                profileUrl: raw._aRootCategory._sProfileUrl,
-                iconUrl: raw._aRootCategory._sIconUrl,
-            }
-            : undefined,
-        subCategory: raw._aSubCategory
-            ? {
-                id: raw._aSubCategory._idRow ?? categoryIdFromProfileUrl(raw._aSubCategory._sProfileUrl),
-                name: raw._aSubCategory._sName,
-                profileUrl: raw._aSubCategory._sProfileUrl,
-                iconUrl: raw._aSubCategory._sIconUrl,
-            }
-            : undefined,
+        previewMedia: mapPreviewMedia(raw._aPreviewMedia),
+        rootCategory: mapCategory(raw._aRootCategory),
+        subCategory: mapCategory(raw._aSubCategory),
     };
 }
 
@@ -603,7 +588,21 @@ const CATEGORY_REFRESH_MS = 24 * 60 * 60 * 1000;
 const CATEGORY_REVALIDATE_MS = 60 * 60 * 1000;
 
 /** Refreshes already running, keyed by category model. */
-const categoryRefreshesInFlight = new Map<string, Promise<GameBananaCategoryNode[] | null>>();
+const categoryRefreshesInFlight = new Map<string, Promise<GameBananaCategoryNode[]>>();
+const categoryChangeListeners = new Set<(model: string) => void>();
+
+/** Observe successful tree changes, never cache reads or timestamp-only refreshes. */
+export function observeCategoryTreeChanges(listener: (model: string) => void): () => void {
+    categoryChangeListeners.add(listener);
+    return () => { categoryChangeListeners.delete(listener); };
+}
+
+/** An index of the existing SQLite payload, not a separate freshness cache. */
+const categoryIndexes = new Map<string, {
+    payload: string;
+    nodes: GameBananaCategoryNode[];
+    paths: CategoryPaths;
+}>();
 
 /**
  * Category tree with offline-first serving: return the locally cached tree
@@ -623,46 +622,60 @@ export async function fetchCategoryTreeCached(
     if (cached) {
         const age = Date.now() - cached.fetchedAt;
         if (revalidate && age > CATEGORY_REVALIDATE_MS) {
-            return (await refreshCategoryCache(categoryModel)) ?? cached.nodes;
+            return refreshCategoryCache(categoryModel).catch(() => cached.nodes);
         }
         if (age > CATEGORY_REFRESH_MS) {
-            void refreshCategoryCache(categoryModel);
+            void refreshCategoryCache(categoryModel).catch(() => undefined);
         }
         return cached.nodes;
     }
-    const nodes = await fetchCategoryTree(categoryModel);
-    persistCategoryCache(categoryModel, nodes);
-    return nodes;
+    return refreshCategoryCache(categoryModel);
 }
 
 function readCategoryCache(
     categoryModel: string
-): { fetchedAt: number; nodes: GameBananaCategoryNode[] } | null {
+): { fetchedAt: number; nodes: GameBananaCategoryNode[]; paths: CategoryPaths } | null {
     try {
         const row = getCachedCategoryTree(categoryModel);
         if (!row) return null;
+        const indexed = categoryIndexes.get(categoryModel);
+        if (indexed?.payload === row.payload) return { fetchedAt: row.fetchedAt, ...indexed };
         const nodes = JSON.parse(row.payload) as GameBananaCategoryNode[];
         if (!Array.isArray(nodes) || nodes.length === 0) return null;
-        return { fetchedAt: row.fetchedAt, nodes };
+        const index = { payload: row.payload, nodes, paths: buildCategoryPaths(nodes) };
+        categoryIndexes.set(categoryModel, index);
+        return { fetchedAt: row.fetchedAt, ...index };
     } catch {
         return null; // unreadable cache = no cache; the live fetch repairs it
     }
+}
+
+/** Synchronous enrichment and locked mutations reuse the tree without requests. */
+export function readCachedCategoryPaths(categoryModel = 'ModCategory'): CategoryPaths | undefined {
+    return readCategoryCache(categoryModel)?.paths;
 }
 
 function persistCategoryCache(
     categoryModel: string,
     nodes: GameBananaCategoryNode[]
 ): void {
+    let previousPayload: string | undefined;
+    try { previousPayload = getCachedCategoryTree(categoryModel)?.payload; } catch { /* The write can repair an unreadable cache. */ }
     try {
-        saveCachedCategoryTree(categoryModel, JSON.stringify(nodes));
+        const payload = JSON.stringify(nodes);
+        saveCachedCategoryTree(categoryModel, payload);
+        if (payload === previousPayload) return;
     } catch (err) {
         console.warn('[fetchCategoryTreeCached] failed to persist cache:', err);
+        return;
+    }
+    for (const listener of categoryChangeListeners) {
+        try { listener(categoryModel); } catch { /* Observers do not own category refreshes. */ }
     }
 }
 
-/** Refetch and persist a tree. Resolves null when offline or the API is down,
- *  so callers keep serving the stale tree. */
-function refreshCategoryCache(categoryModel: string): Promise<GameBananaCategoryNode[] | null> {
+/** Share cold loads and refreshes, preserving failures for callers without a cache. */
+function refreshCategoryCache(categoryModel: string): Promise<GameBananaCategoryNode[]> {
     const inFlight = categoryRefreshesInFlight.get(categoryModel);
     if (inFlight) return inFlight;
     const refresh = (async () => {
@@ -672,7 +685,7 @@ function refreshCategoryCache(categoryModel: string): Promise<GameBananaCategory
             return nodes;
         } catch (err) {
             debugGameBanana('[fetchCategoryTreeCached] refresh failed:', err);
-            return null;
+            throw err;
         } finally {
             categoryRefreshesInFlight.delete(categoryModel);
         }
@@ -695,6 +708,7 @@ export async function fetchSubmissions(
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
+    const requestSize = Number.isFinite(perPage) ? Math.min(BROWSE_REQUEST_SIZE, Math.max(1, Math.floor(perPage))) : BROWSE_REQUEST_SIZE;
     // GameBanana's default list order (no _sSort) is by date *modified*, not date
     // added, so "Recently Added" (recent) has to request Generic_Newest explicitly
     // or it silently mirrors "Recently Updated". 'updated' maps to
@@ -728,7 +742,7 @@ export async function fetchSubmissions(
         params.set('_sModelName', model);
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[itemtype]', model);
-        params.set('_nPerpage', String(perPage));
+        params.set('_nPerpage', String(requestSize));
         params.set('_nPage', String(page));
         params.set('_csvProperties', fields);
 
@@ -750,7 +764,7 @@ export async function fetchSubmissions(
         // Some endpoints ignore Generic_Game without an explicit game id.
         params.set('_idGameRow', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
-        params.set('_nPerpage', String(perPage));
+        params.set('_nPerpage', String(requestSize));
         params.set('_nPage', String(page));
         params.set('_csvProperties', fields);
 
@@ -781,7 +795,7 @@ export async function fetchSubmissions(
         records: records.map(mapMod),
         totalCount: metadata?._nRecordCount ?? records.length,
         isComplete: metadata?._bIsComplete ?? true,
-        perPage: metadata?._nPerpage ?? perPage,
+        perPage: metadata?._nPerpage ?? requestSize,
     };
 }
 
@@ -800,14 +814,19 @@ export async function fetchModRequirements(modId: number, section = 'Mod') {
 }
 
 async function normalizeRequirements(raw: unknown, modId: number, section: string) {
-    const snapshot = parseRequirements(raw);
+    let snapshot = parseRequirements(raw);
     if (snapshot.status === 'loaded' && snapshot.items.some(item => item.state === 'unknown' || item.importance === 'unknown')) {
         try {
             const profile = await fetchJson<{ _aRequirements?: unknown }>(`${GAMEBANANA_API_BASE}/${section}/${modId}/ProfilePage`);
-            return parseRequirements(profile._aRequirements);
-        } catch { /* Preserve unknown enums for manual review when labels are unavailable. */ }
+            const labeled = parseRequirements(profile._aRequirements);
+            if (labeled.status === 'loaded') snapshot = labeled;
+        } catch { /* Infer missing importance from the name if labels are unavailable. */ }
     }
-    return snapshot;
+    return snapshot.status === 'loaded' ? {
+        ...snapshot,
+        items: snapshot.items.map(item => item.importance === 'unknown'
+            ? { ...item, importance: inferRequirementImportance(item.name) } : item),
+    } : snapshot;
 }
 
 export async function fetchModDetails(
@@ -846,15 +865,7 @@ export async function fetchModDetails(
         nsfw: raw._bIsNsfw ?? false,
         gameId: raw._aGame?._idRow,
         gameName: raw._aGame?._sName,
-        category: raw._aCategory
-            ? {
-                id: raw._aCategory._idRow,
-                name: raw._aCategory._sName,
-                modelName: raw._aCategory._sModelName,
-                profileUrl: raw._aCategory._sProfileUrl,
-                iconUrl: raw._aCategory._sIconUrl,
-            }
-            : undefined,
+        category: mapCategory(raw._aCategory),
         files: raw._aFiles?.map((f) => ({
             id: f._idRow,
             fileName: f._sFile,
@@ -865,19 +876,7 @@ export async function fetchModDetails(
             description: f._sDescription,
             isArchived: f._bIsArchived ?? false,
         })),
-        previewMedia: raw._aPreviewMedia
-            ? {
-                images: raw._aPreviewMedia._aImages?.map((img) => ({
-                    baseUrl: img._sBaseUrl,
-                    file: img._sFile,
-                    file220: img._sFile220,
-                    file530: img._sFile530,
-                })),
-                metadata: raw._aPreviewMedia._aMetadata
-                    ? { audioUrl: raw._aPreviewMedia._aMetadata._sAudioUrl }
-                    : undefined,
-            }
-        : undefined,
+        previewMedia: mapPreviewMedia(raw._aPreviewMedia),
         submitter: mapSubmitter(raw._aSubmitter),
     };
 }
@@ -1228,6 +1227,7 @@ function mapPreviewMedia(raw: ModRaw['_aPreviewMedia']): GameBananaPreviewMedia 
                 file: img._sFile,
                 file220: img._sFile220,
                 file530: img._sFile530,
+                caption: img._sCaption?.trim() || undefined,
             })),
         metadata: raw._aMetadata ? { audioUrl: raw._aMetadata._sAudioUrl } : undefined,
     };
@@ -1309,15 +1309,8 @@ export async function fetchCollectionItems(
         gameName: item._aGame?._sName,
         submitter: mapSubmitter(item._aSubmitter),
         previewMedia: mapPreviewMedia(item._aPreviewMedia),
-        rootCategory: item._aRootCategory
-            ? {
-                id: item._aRootCategory._idRow,
-                name: item._aRootCategory._sName,
-                modelName: item._aRootCategory._sModelName,
-                profileUrl: item._aRootCategory._sProfileUrl,
-                iconUrl: item._aRootCategory._sIconUrl,
-            }
-            : undefined,
+        rootCategory: mapCategory(item._aRootCategory),
+        subCategory: mapCategory(item._aSubCategory),
     }));
 
     return {

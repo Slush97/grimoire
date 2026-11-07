@@ -58,9 +58,6 @@
   "src/components/common/ErrorBoundary.tsx": {
     "raw-palette": 3
   },
-  "src/components/common/HeroSelect.tsx": {
-    "focus-ring": 2
-  },
   "src/components/common/ToastStack.tsx": {
     "raw-palette": 6
   },
@@ -78,8 +75,7 @@
     "raw-palette": 2
   },
   "src/components/installed/ModCard.tsx": {
-    "raw-palette": 5,
-    "em-dash": 1
+    "raw-palette": 2
   },
   "src/components/installed/unknown/UnknownFileList.tsx": {
     "raw-palette": 2
@@ -195,8 +191,7 @@
     "em-dash": 1
   },
   "src/pages/Installed.tsx": {
-    "focus-ring": 2,
-    "em-dash": 8
+    "em-dash": 7
   },
   "src/pages/Locker.tsx": {
     "raw-hex": 1,

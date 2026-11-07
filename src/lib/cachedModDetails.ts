@@ -30,14 +30,20 @@ export function buildCachedModDetails(
 
   const thumbnailUrl = cached?.thumbnailUrl;
   const slash = thumbnailUrl?.lastIndexOf('/') ?? -1;
+  const rootCategory = cached?.categoryId || cached?.categoryName
+    ? { id: cached.categoryId ?? undefined, name: cached.categoryName ?? '' }
+    : undefined;
 
   return {
     id: gbId,
     name,
     nsfw: cached?.isNsfw ?? false,
-    category: cached?.categoryName
-      ? { id: cached.categoryId ?? undefined, name: cached.categoryName }
-      : undefined,
+    // The catalog stores the leaf ID, but only the root's name. The shared
+    // category tree resolves the leaf name without labeling it as the root.
+    category: cached?.subCategoryId
+      ? { id: cached.subCategoryId, name: '' }
+      : rootCategory,
+    ...(cached?.subCategoryId ? { rootCategory } : {}),
     submitter:
       cached?.submitterName && cached.submitterId
         ? { id: cached.submitterId, name: cached.submitterName }

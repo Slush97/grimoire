@@ -12,7 +12,7 @@ Deadlock modding integrations primarily rely on the GameBanana API. Due to the p
 ### ⚠️ Critical Implementation Notes
 - **Empty JSON Responses**: The API frequently returns empty responses (0 bytes) instead of JSON errors. Validating the response body before parsing is mandatory.
 - **Sparse Responses**: List endpoints (Search, Subfeed) return minimal data. Important flags like `_bIsNsfw` are often missing from lists and only appear in Detail requests.
-- **Deadlock Categories**: Native category endpoints often fail for Deadlock. Category data must be extracted from individual mod records (see [Category Discovery](#category-discovery)).
+- **Deadlock Categories**: Use the nested category tree and the root/leaf references already returned by listings. See [Category Discovery](#4-category-discovery).
 - **Item Types**: Deadlock content is split between `Mod` (visuals) and `Sound` (audio). You must query BOTH to get all content.
 
 ---
@@ -71,14 +71,25 @@ GET https://gamebanana.com/apiv11/Util/Search/Results?_sSearchString=hud&_idGame
 ```
 
 #### Mod Details
-Retrieves full metadata for a specific mod. This is the **most reliable** source of data, including file lists and NSFW status.
-`GET /Mod/{id}/ProfilePage`
+Retrieves selected metadata for a specific mod, including file lists, its assigned category, and NSFW status. Grimoire uses `GET /Mod/{id}?_csvProperties=...`; `/Mod/{id}/ProfilePage` is available when profile-specific fields are needed.
 
 **Response Includes**:
 - `_aPreviewMedia`: Full gallery of images.
 - `_aFiles`: List of downloadable files.
 - `_sText`: Full HTML description.
 - `_bIsNsfw`: Definitive NSFW boolean.
+
+Image entries in `_aPreviewMedia._aImages` can include an optional `_sCaption`.
+This is the author-written text shown below enlarged screenshots on GameBanana,
+not the HTML `alt` attribute. It is also returned by the existing
+`/Mod/{id}?_csvProperties=_aPreviewMedia` request, so no extra request is needed.
+Grimoire maps it to `GameBananaImage.caption` and displays it as plain text below
+the image in the mod-details lightbox. Missing or blank captions are hidden.
+Scroll over the full-size viewer to zoom toward the pointer, up to 8x the fitted
+size. Zooming hides the controls with a short fade; dragging pans the enlarged
+image within its edges. At fitted size, clicking the image toggles the controls.
+Zooming back out restores them. Switching images or reopening the viewer resets
+zoom and pan. Captions remain selectable, and their own scrolling is preserved.
 
 ---
 
@@ -130,73 +141,17 @@ GET https://gamebanana.com/apiv11/Util/Search/Results?_sSearchString=abrams&_idG
 
 ---
 
-## 3. Hero Filtering Limitations
+## 3. Hero and Category Filtering
 
-> [!IMPORTANT]
-> **There are NO hero-specific categories in GameBanana for Deadlock.**
->
-> All hero mods are stored in generic categories like "Skins" or "Model Replacement".
-> The hero association only exists in the mod's **title**, **tags**, or **description**.
+Deadlock Mod categories are hierarchical. Skins contains hero categories, which can themselves contain nested variants or types such as RatKing Flag and Faithful/Vanilla+.
 
-### Why This Matters
-- You **cannot** filter the Subfeed or Mod/Index by hero
-- You **must** use the Search endpoint to find hero-specific content
-- Even then, search is text-based (matches title + description + tags)
+- Use `/Util/{categoryModel}/NestedStructure?_idGameRow=20948` for the dynamic tree.
+- Remote listings can filter by category using `_aFilters[Generic_Category]`; a hero category includes its descendants.
+- The local catalog stores the deepest `sub_category_id`. Filter it against the selected hero's full subtree rather than matching the title of Mod skins.
+- Sound and Wip currently use title matching when their category trees provide no corresponding hero category.
+- Category paths and hero icons use explicit category metadata. A title mentioning a hero does not change the submission's assigned categories.
 
-### Hero Filtering Strategies
-
-#### Strategy 1: Search API (Recommended)
-```javascript
-const searchHero = async (heroName) => {
-  const url = `https://gamebanana.com/apiv11/Util/Search/Results?_sSearchString=${heroName}&_idGameRow=20948`;
-  const response = await fetch(url);
-  const data = await response.json();
-  return data._aRecords;
-};
-```
-
-#### Strategy 2: Client-Side Tag Filtering
-If you've already fetched all mods (e.g., from Subfeed), filter locally:
-```javascript
-const filterByHero = (mods, heroName) => {
-  const normalized = heroName.toLowerCase();
-  return mods.filter(mod => {
-    // Check tags
-    const hasTag = mod._aTags?.some(tag => 
-      tag.toLowerCase().includes(normalized)
-    );
-    // Check title
-    const inTitle = mod._sName?.toLowerCase().includes(normalized);
-    return hasTag || inTitle;
-  });
-};
-```
-
-#### Strategy 3: Pre-Index on Sync
-During a full sync, build a local hero-to-mod mapping:
-```javascript
-const heroIndex = {}; // { 'abrams': [modId1, modId2], 'ivy': [...] }
-
-for (const mod of allMods) {
-  const heroes = extractHeroesFromMod(mod);
-  for (const hero of heroes) {
-    if (!heroIndex[hero]) heroIndex[hero] = [];
-    heroIndex[hero].push(mod._idRow);
-  }
-}
-```
-
-### What Search Matches
-The Search API matches your query against:
-1. **Title** (`_sName`)
-2. **Description** (`_sText`) 
-3. **Tags** (`_aTags`)
-4. **Submitter name** (sometimes)
-
-It does **NOT** match against:
-- Category names
-- File names inside archives
-- Comments
+See [Category Discovery](#4-category-discovery) for field shapes and cache reuse.
 
 ## 2. Core API (Legacy)
 **Base URL**: `https://api.gamebanana.com`
@@ -224,7 +179,9 @@ Core allowed fields available in `_csvProperties` or detail responses.
 | `_idRow` | Int | Unique Mod ID. |
 | `_sName` | String | Title of the mod. |
 | `_sProfileUrl` | String | Full URL to the mod page. |
-| `_aRootCategory` | Object | Contains `_sName`, `_idRow` (Category), `_sIconUrl`. |
+| `_aRootCategory` | Object | Root category reference. List responses often omit `_idRow`; parse `_sProfileUrl`. |
+| `_aSubCategory` | Object/null | Assigned category on listings/search, including deeply nested children; null for root-only items. |
+| `_aCategory` | Object | Assigned category on detail responses. |
 | `_aPreviewMedia` | Object | Contains `_aImages` array (screenshots). |
 | `_bIsNsfw` | Boolean | **Crucial**: True if content is mature. *Often missing in List views.* |
 | `_bHasContentRatings` | Boolean | **Proxy**: Reliable indicator of NSFW content in List views where `_bIsNsfw` is null. |
@@ -252,53 +209,34 @@ Fields specific to the Game entity (Deadlock).
 
 ## 4. Category Discovery
 
-### The "Missing Category" Problem
-Querying `GET /Mod/Categories?_aGameRowIds[]=20948` often returns `400 Bad Request` or empty data for Deadlock. You cannot reliably fetch a tree of categories strictly from the API.
+Use the live nested tree rather than a hardcoded list or per-submission discovery:
 
-### Solution: Extraction Strategy
-Categories must be discovered by parsing the `_aRootCategory` field from mod listings.
+```http
+GET https://gamebanana.com/apiv11/Util/ModCategory/NestedStructure?_idGameRow=20948
+```
 
-**The Definitive Deadlock Category Map (Verified)**
-*Generated from exhaustive crawl of all 1,579 submissions*
+`/Game/20948/CategoryTree` lists sections and their category model names. NestedStructure returns `_aChildren` and the optional `_idParentRow`, allowing complete root-to-leaf paths.
 
-| ID | Name | Count | Parent Type | Notes |
-| :--- | :--- | ---: | :--- | :--- |
-| `5815` | **Other/Misc** | 468 | Sound | **Largest bucket** - misc audio. |
-| `33295` | **Skins** | 454 | Mod | Hero skins (Primary). |
-| `5842` | **Music** | 226 | Sound | Soundtrack replacements. |
-| `31713` | **HUD** | 98 | Mod | UI/Reticle changes. |
-| `33154` | **Model Replacement** | 95 | Mod | Model swaps. |
-| `31710` | **Other/Misc** | 71 | Mod | Generic mods. |
-| `3366` | **Other/Misc** | 57 | Mod | Legacy misc. |
-| `3807` | **Skins** | 41 | Mod | Secondary skins (Legacy). |
-| `2114` | **Other/Misc** | 22 | Mod | |
-| `5843` | **Killsounds** | 14 | Sound | Audio on kill. |
-| `5895` | **Killstreak Music** | 9 | Sound | Audio on streaks. |
-| `33331` | **Gameplay Modifications** | 6 | Mod | Scripts/gameplay tweaks. |
-| `37225` | **Maps** | 4 | Mod | Level edits. |
-| `5546` | **Other/Misc** | 3 | Sound | |
-| `1932` | **Modding** | 3 | Tool | Modding tools/resources. |
-| `2957` | **Other/Misc** | 2 | Mod | |
-| `3616` | **Other/Misc** | 2 | Mod | |
-| `2855` | **Maps** | 1 | Mod | Secondary maps category. |
-| `804` | **Other/Misc** | 1 | Mod | |
-| `5262` | **Other/Misc** | 1 | Sound | |
-| `1922` | **Other/Misc** | 1 | Mod | |
+Listings and searches already select `_aRootCategory` and `_aSubCategory`. The latter identifies the assigned leaf, even below a hero category. Both references often omit `_idRow`; parse their `_sProfileUrl` to recover it. `_aSubCategory` is null for root-only submissions.
 
-### Hero Identification
-Deadlock does **NOT** use sub-categories for heroes. Instead, heroes are identified via the `_aTags` array.
+The details request already selects `_aCategory`, the assigned leaf. `_aSuperCategory` represents only its immediate parent and is unnecessary when resolving through the shared tree.
 
-**Known Hero Tags** (extracted from 131 unique tags):
-- `character: lash`, `character: drifter`
-- `geist`, `ivy`, `hades`, `viscous`, `yamato`, `mcginnis`
-- `mo & krill`, `mo and krill`, `mo&krill`
-- `hero: mo & krill`
+Grimoire reuses `fetchCategoryTreeCached` and the SQLite `category_cache` table. It serves stored trees offline, refreshes after 24 hours, and shares simultaneous requests for a model. Catalog rows already retain the deepest `sub_category_id`, so category paths on Browse cards require no per-mod details calls or new cache schema.
 
-> **Implementation**: Parse `_aTags` and match against a known hero list to categorize mods by character.
-
-*Note: The app should dynamically build its category filter list based on what it sees in the feed to handle new categories automatically.*
+See [GameBanana Categories Reference](gamebanana_categories_reference.md) for a verified nested example, field definitions, and offline fallbacks.
 
 ---
+
+### Requirement labels
+
+The raw `_aRequirements` rows contain `[name, url, importance, state]`. Verified importance codes are `1` (Required) and `2` (Recommended). `ProfilePage` expands this to `[name, url, stateLabel, stateColor, importanceLabel, importanceColor]`. Keep Recommended separate from Required; only Required entries participate in missing-dependency and load-order warnings.
+
+Installed, Enabled, Present, and On are state labels, separate from importance. Older two-column `[name, url]` entries have no importance label: infer Optional from the whole word `optional` in the name first, then Recommended from `recommended`, ignoring case. Otherwise default to Required. Explicit API labels take precedence over the name. Unknown codes use the existing ProfilePage label request before applying the same fallback to any unresolved importance.
+
+### Reference responses
+
+- [Required and Recommended with different states](https://gamebanana.com/apiv11/Mod/589554/ProfilePage?_csvProperties=_aRequirements)
+- [Raw importance and state codes](https://gamebanana.com/apiv11/Mod/589554?_csvProperties=_aRequirements)
 
 ## 5. File Downloads
 
@@ -314,6 +252,44 @@ Downloading is a multi-step process to ensure valid links.
 
 ## 6. Best Practices
 
+### Browse pagination
+
+Browse requests 50 records per page, capped in the main process before reaching
+the existing GameBanana rate limiter. The grid reveals only complete rows while
+more results are available, keeping the remaining records in memory. It includes
+the remaining records when results end or loading pauses after an error, and
+reuses buffered records on resize.
+One request at a time starts within 900px of the bottom; a small `Loading...`
+label appears there only if scrolling catches up with the pending page.
+Navigation saves only completed pages, and resuming an identical pending request
+shares its response instead of issuing another listing request.
+
+Continuation uses the response's page-size metadata. In particular, live search
+can report 15 records per page and return a shorter nonempty page even before
+the end. Repeated section/item identities refresh the existing record and
+explicit sorts reorder the loaded set. Saved results expire after five minutes
+when reused; navigation does not extend their original fetch time. There is no
+periodic Browse polling. New unseen entries moving above an already-fetched
+page still require Refresh or a fresh query because the remote API has no stable
+pagination snapshot.
+
+Changing between live API and local catalog results restarts at page one because
+their page sizes and ordering can differ. Session caches identify the completed
+query and its source, preserving scroll offset through the virtualizer.
+
+Toolbar Refresh fetches one fresh listing for live results. Catalog-backed
+filters first refresh only page one of each selected section, sharing pending
+head requests, then replace the local results. Refresh does not run a full sync
+or change the full-sync timestamp. The refresh icon finishes each eased full
+revolution before resting once the replacement results arrive.
+
+The catalog identifies entries by `(section, id)` and uses a separate `row_id`
+for FTS indexing. Cached details, content flags and download counts also scope
+their lookups to the section. Existing numeric-key caches migrate atomically,
+retaining rows, enrichment and category trees while rebuilding search. The
+migration marks the full mirror stale so the next normal sync can recover
+entries that an older cache may have overwritten.
+
 ### NSFW Handling
 Deadlock has a significant number of NSFW submissions.
 1. **List View**: Check `_bIsNsfw`. If missing, check `_bHasContentRatings`. If `true`, treat as potentially NSFW (blur it).
@@ -322,8 +298,9 @@ Deadlock has a significant number of NSFW submissions.
 ### Data Caching
 - **Thumbnails**: Cache aggressively. Use the `_wFile###` fields (e.g., `_sFile220`, `_sFile530`) to select appropriate sizes and save bandwidth.
 - **Feed**: Cache the subfeed response for 1-5 minutes to avoid hitting rate limits on frequent tab switches.
+- **Categories**: Reuse the persistent tree cache and catalog leaf IDs; resolve ancestors locally rather than fetching each Browse card's details.
 
 ### Rate Limiting
 - No official published hard limit, but aggressive polling causes temporary IP bans (429).
-- **Rule of Thumb**: Max 1 request per second per client.
+- Grimoire routes API requests through `gamebananaRateLimiter` (10 requests/second, burst 20). This is a client-side limit, not a published server allowance.
 - **Search**: Debounce user input by at least 500ms.

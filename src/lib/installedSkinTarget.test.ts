@@ -21,7 +21,7 @@ it('previews categorized skins whose titles do not name their hero', () => {
 it('resolves hero subcategories before ambiguous title matches', () => {
   const mod: Mod = { ...base, name: 'Mina cosplay', lockerHero: undefined, sourceSection: 'Mod',
     categoryId: 50570, categoryName: 'Faithful/Vanilla+' };
-  const categories = new Map([[50570, 'Viscous']]);
+  const categories = { heroByCategoryId: new Map([[50570, 'Viscous']]) };
   expect(installedSkinPreviewTarget(mod, [mod], categories)?.heroName).toBe('Viscous');
   expect(installedDoorStuckTarget(mod, categories)).toMatchObject({ heroName: 'Viscous' });
   expect(installedSkinTarget({ ...mod, lockerHero: 'Calico' }, categories)?.heroName).toBe('Calico');
@@ -33,7 +33,7 @@ it('rejects unrelated categories and sound sections without guessing a hero', ()
     categoryId: 50570, categoryName: 'Faithful/Vanilla+' };
   expect(installedSkinTarget(mod)).toBeNull();
   expect(installedSkinTarget({ ...mod, categoryName: 'Definitely Paradox-like props' })).toBeNull();
-  expect(installedSkinTarget({ ...mod, sourceSection: 'Sound', categoryName: 'Paradox' }, new Map([[50570, 'Viscous']]))).toBeNull();
+  expect(installedSkinTarget({ ...mod, sourceSection: 'Sound', categoryName: 'Paradox' }, { heroByCategoryId: new Map([[50570, 'Viscous']]) })).toBeNull();
 });
 
 it('opens enabled or disabled global movement effects without requiring a hero tag', () => {

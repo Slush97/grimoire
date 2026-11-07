@@ -78,6 +78,24 @@ describe('buildCachedModDetails', () => {
     });
   });
 
+  it('retains the deepest category ID separately from the cached root name', () => {
+    expect(buildCachedModDetails(42, cachedMod({
+      categoryId: null,
+      categoryName: 'Skins',
+      subCategoryId: 49852,
+    }))).toMatchObject({
+      category: { id: 49852, name: '' },
+      rootCategory: { name: 'Skins' },
+    });
+  });
+
+  it('retains category IDs when the cached labels are missing', () => {
+    expect(buildCachedModDetails(42, cachedMod({ categoryName: null })))
+      .toMatchObject({ category: { id: 7, name: '' } });
+    expect(buildCachedModDetails(42, cachedMod({ categoryName: null, subCategoryId: 49852 })))
+      .toMatchObject({ category: { id: 49852, name: '' }, rootCategory: { id: 7, name: '' } });
+  });
+
   it('cannot build linked-item details without a cached name', () => {
     expect(buildCachedModDetails(42, null)).toBeNull();
   });

@@ -1,5 +1,4 @@
 import type { BrowserWindow } from 'electron';
-import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import type { DownloadModArgs, RestoreLocalVariantGroupReplacementArgs } from '../../../src/types/electron';
 import type { Mod } from '../../../src/types/mod';
 import { planLocalVariantUpdateRestore } from '../../../src/lib/localVariantUpdateRestore';
@@ -24,7 +23,9 @@ import { getActiveDeadlockPath, loadSettings } from './settings';
 import { hasAnyImprint, imprintOneMod } from './imprintMods';
 import { planLocalVariantReplacementRestore } from './localVariantReplacement';
 import type { LocalVariantGroupMember } from './localVariantGroup';
-import { GLOBAL_CLASSIFIER_VERSION } from './vpk';
+import { readCachedCategoryPaths } from './gamebanana';
+import { categoryModelForSection, type CategoryPaths } from '../../../src/lib/categoryPaths';
+import { detectModHeroes, isModHeroDetectionEligible, resolveModClassification } from './modHeroDetection';
 
 /** Update planning needs stored identity, without running the UI's lazy VPK classifiers. */
 export async function readReplacementMods(deadlockPath: string): Promise<Mod[]> {
@@ -52,24 +53,29 @@ export async function readReplacementMods(deadlockPath: string): Promise<Mod[]> 
     });
 }
 
-export function toLocalVariantGroupMember(mod: FilesystemMod): LocalVariantGroupMember {
+export function toLocalVariantGroupMember(
+    mod: FilesystemMod,
+    categoryPaths = new Map<string, CategoryPaths | undefined>(),
+    resolveClassification = true,
+): LocalVariantGroupMember {
     const meta = getModMetadata(mod.metaKey);
-    const categoryHero = !meta?.lockerHero
-        ? inferHeroFromTitle(meta?.categoryName || '') ?? undefined
-        : undefined;
+    const member: LocalVariantGroupMember = {
+        id: mod.id, metaKey: mod.metaKey, name: meta?.modName ?? mod.name,
+        gameBananaId: meta?.gameBananaId, localGroupId: meta?.localGroupId,
+        lockerHero: meta?.lockerHero, lockerHeroSource: meta?.lockerHeroSource,
+        globalType: meta?.globalType, globalTypeSource: meta?.globalTypeSource,
+        priorityMod: meta?.priorityMod, merged: !!meta?.merged,
+    };
+    if (!resolveClassification) return member;
+    const model = categoryModelForSection(meta?.sourceSection);
+    if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
+    const classification = resolveModClassification(mod, meta, categoryPaths.get(model));
     return {
-        id: mod.id,
-        metaKey: mod.metaKey,
-        name: meta?.modName ?? mod.name,
-        gameBananaId: meta?.gameBananaId,
-        localGroupId: meta?.localGroupId,
-        lockerHero: meta?.lockerHero ?? categoryHero,
-        lockerHeroSource: meta?.lockerHeroSource ?? (categoryHero ? 'title' : undefined),
-        lockerHeroVpkChecked: meta?.lockerHeroVpkChecked,
-        globalType: meta?.globalType,
-        globalTypeClassifierVersion: meta?.globalTypeClassifierVersion,
-        priorityMod: meta?.priorityMod,
-        merged: !!meta?.merged,
+        ...member,
+        lockerHero: classification.lockerHero,
+        lockerHeroSource: classification.lockerHeroSource,
+        resolvedHeroes: classification.lockerHeroes,
+        resolvedGlobalType: classification.globalType,
     };
 }
 
@@ -95,19 +101,20 @@ export async function restoreLocalVariantGroupReplacementUnlocked(
     args: RestoreLocalVariantGroupReplacementArgs,
 ): Promise<FilesystemMod[]> {
     const all = await scanMods(deadlockPath);
-    const members = all.map((mod) => ({
-        ...toLocalVariantGroupMember(mod),
+    const source = all.find(mod => mod.id === args.sourceModId);
+    const groupId = source && getModMetadata(source.metaKey)?.localGroupId?.trim();
+    const replacementIds = new Set(args.replacementModIds);
+    const categoryPaths = new Map<string, CategoryPaths | undefined>();
+    const members = all.filter(mod => mod.id === args.sourceModId || replacementIds.has(mod.id)
+        || (groupId && getModMetadata(mod.metaKey)?.localGroupId?.trim() === groupId)).map((mod) => ({
+        ...toLocalVariantGroupMember(mod, categoryPaths),
         gameBananaFileId: getModMetadata(mod.metaKey)?.gameBananaFileId,
     }));
     const plan = planLocalVariantReplacementRestore(members, args);
-    const classification = {
-        ...plan.classification,
-        globalTypeClassifierVersion: plan.classification.globalTypeClassifierVersion ?? GLOBAL_CLASSIFIER_VERSION,
-    };
     return plan.replacementMetaKeys.map((metaKey) => {
         const mod = all.find((candidate) => candidate.metaKey === metaKey);
         if (!mod) throw new Error(`Replacement metadata target disappeared: ${metaKey}`);
-        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName, ...classification });
+        setModMetadata(metaKey, { localGroupId: plan.groupId, modName: plan.modName, ...plan.classification });
         return mod;
     });
 }
@@ -204,6 +211,18 @@ export function queueModReplacement(
                     mod.gameBananaId === args.modId && mod.gameBananaFileId === args.fileId,
                 );
                 if (replacements.length === 0) throw new Error('The replacement mod was not installed.');
+
+                if (options.promoteExisting) {
+                    const categoryPaths = new Map<string, CategoryPaths | undefined>();
+                    for (const replacement of replacements) {
+                        const metadata = getModMetadata(replacement.metaKey);
+                        const model = categoryModelForSection(metadata?.sourceSection);
+                        if (!categoryPaths.has(model)) categoryPaths.set(model, readCachedCategoryPaths(model));
+                        if (!isModHeroDetectionEligible(metadata, categoryPaths.get(model))) continue;
+                        const heroDetection = detectModHeroes(replacement, { ...metadata, heroDetection: undefined }, categoryPaths.get(model));
+                        setModMetadata(replacement.metaKey, { heroDetection });
+                    }
+                }
 
                 const grouped = sources.some((source) => !!source.localGroupId);
                 let group = planLocalVariantUpdateRestore(sources, installed, targetIds, args.modId, args.fileId);

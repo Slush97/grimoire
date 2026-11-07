@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle } from './lockerUtils';
+import { getEffectiveGlobalType, groupGlobalMods, countLockerSkins, groupLockerSkins, groupModsByCategory, modLoadOrder, activeLockerSkin, buildHeroList, buildHeroByCategoryId, heroListMissesRoster, HERO_NAMES_SORTED, inferHeroFromTitle, isLockerManagedMod, isLockerManagedSound } from './lockerUtils';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 
 const skinCategories: GameBananaCategoryNode[] = [{
@@ -117,10 +117,28 @@ describe('groupModsByCategory', () => {
     expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33301, [skin]]]);
   });
 
-  it('uses the title when a cached tree does not know the new category', () => {
+  it('does not infer a hero from a submission title when its category is unknown', () => {
     const skin = mod({ id: 'skin', metaKey: 'pak01_dir.vpk', priority: 1,
       name: 'Viscous Redesign', categoryId: 99999, categoryName: 'Faithful/Vanilla+' });
-    expect([...groupModsByCategory([skin], heroes).map.entries()]).toEqual([[33325, [skin]]]);
+    expect(groupModsByCategory([skin], heroes).unassigned).toEqual([skin]);
+  });
+
+  it.each(['Sound', 'Wip'])('files a shared %s payload under each resolved hero once', (sourceSection) => {
+    const shared = mod({ id: 'shared', metaKey: 'shared.vpk', priority: 1,
+      sourceSection, lockerHeroes: ['Viscous', 'Haze', 'Viscous'] });
+    const grouped = groupModsByCategory([shared], heroes);
+    expect([...grouped.map.entries()]).toEqual([[33325, [shared]], [33301, [shared]]]);
+    expect(grouped.unassigned).toEqual([]);
+    expect(sourceSection === 'Sound' ? isLockerManagedSound(shared) : isLockerManagedMod(shared)).toBe(true);
+    expect(countLockerSkins([shared])).toBe(1);
+  });
+
+  it('honors an explicitly resolved empty set and keeps category models separate', () => {
+    const empty = mod({ id: 'empty', metaKey: 'a', priority: 1,
+      categoryId: 33325, lockerHero: 'Haze', lockerHeroes: [] });
+    const sound = mod({ id: 'sound', metaKey: 'b', priority: 2,
+      sourceSection: 'Sound', categoryId: 33325 });
+    expect(groupModsByCategory([empty, sound], heroes).unassigned).toEqual([empty, sound]);
   });
 
   it('keeps an unknown category visible in Unassigned when no hero matches', () => {

@@ -104,7 +104,7 @@ ipcMain.handle(
 
         // Enrich local cache with the NSFW flag from detail response
         try {
-            updateModNsfw(modId, details.nsfw);
+            updateModNsfw(modId, details.nsfw, section);
         } catch (err) {
             // Don't fail the request if cache update fails
             console.warn('[get-mod-details] Failed to update NSFW cache:', err);

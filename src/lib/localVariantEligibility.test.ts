@@ -131,6 +131,32 @@ describe('localVariantSelectionEligibility', () => {
       ])
     ).toEqual({ eligible: true });
   });
+
+  it('compares complete effective hero sets independently of order, aliases and duplicate entries', () => {
+    expect(localVariantSelectionEligibility([
+      mod({ id: 'shared', lockerHeroes: ['Haze', 'The Doorman', 'Haze'], lockerHero: 'Wraith' }),
+      mod({ id: 'matching', lockerHeroes: ['Doorman', 'haze'] }),
+    ])).toEqual({ eligible: true });
+    expect(localVariantSelectionEligibility([
+      mod({ id: 'shared', lockerHeroes: ['Haze', 'Wraith'] }),
+      mod({ id: 'single', lockerHeroes: ['Haze'] }),
+    ])).toEqual({ eligible: false, reason: 'classification' });
+  });
+
+  it('honors a resolved empty set and effective General classification ahead of raw legacy heroes', () => {
+    expect(localVariantSelectionEligibility([
+      mod({ id: 'unclassified', lockerHero: 'Haze', lockerHeroes: [] }),
+      mod({ id: 'wraith', lockerHeroes: ['Wraith'] }),
+    ])).toEqual({ eligible: true });
+    expect(localVariantSelectionEligibility([
+      mod({ id: 'hud', globalType: 'hud', lockerHero: 'Haze', lockerHeroes: [] }),
+      mod({ id: 'hud2', globalType: 'hud', lockerHero: 'Wraith', lockerHeroes: [] }),
+    ])).toEqual({ eligible: true });
+    expect(localVariantSelectionEligibility([
+      mod({ id: 'hud', globalType: 'hud', lockerHero: 'Haze', lockerHeroes: [] }),
+      mod({ id: 'hero', lockerHeroes: ['Haze'] }),
+    ])).toEqual({ eligible: false, reason: 'classification' });
+  });
 });
 
 describe('installedVariantGroupKey', () => {

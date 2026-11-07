@@ -123,6 +123,24 @@ export default function PrivacySection() {
             />
           </FilterItem>
 
+          <FilterItem id="settings-reveal-nsfw-on-hover">
+            <Toggle
+              checked={settings?.revealNsfwOnHover ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, revealNsfwOnHover: checked })}
+              label={t('settings.privacy.revealNsfwOnHover')}
+              description={t('settings.privacy.revealNsfwOnHoverDescription')}
+            />
+          </FilterItem>
+
+          <FilterItem id="settings-browse-always-show-nsfw-tag">
+            <Toggle
+              checked={settings?.browseAlwaysShowNsfwTag ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, browseAlwaysShowNsfwTag: checked })}
+              label={t('settings.privacy.alwaysShowNsfwTag')}
+              description={t('settings.privacy.alwaysShowNsfwTagDescription')}
+            />
+          </FilterItem>
+
           <FilterDivider className="h-px bg-hl/5" />
 
           <FilterItem id="settings-privacy-settings-preferences-contributeMatchData-toggle">

@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, DeleteModEntry, DeleteModsProgress, DeleteModsResult, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { Mod, AppSettings, DeleteModEntry, ModSwapPlacement, DeleteModsProgress, DeleteModsResult, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, AddMergeSourcesResult, MergeSourceReplacement, ReplaceMergeSourcesResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type {
   InterchangeDocument,
   InterchangeExportReport,
@@ -146,6 +146,10 @@ export async function enableMod(modId: string): Promise<Mod> {
 
 export async function disableMod(modId: string): Promise<Mod> {
   return withGameRunningWarning(() => window.electronAPI.disableMod(modId));
+}
+
+export async function swapMods(enableIds: string[], disableIds: string[], placement: ModSwapPlacement): Promise<Mod[]> {
+  return withGameRunningWarning(() => window.electronAPI.swapMods(enableIds, disableIds, placement));
 }
 
 function toDeleteEntry({ id, size, installedAt }: DeleteModEntry): DeleteModEntry {
@@ -325,8 +329,8 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
  *  SOURCE VPK is located by `metaKey` (folder-qualified for overflow mods); the
  *  cache is keyed by `cacheKey` (the mod's content-stable sha256) so an
  *  enable/disable rename can't serve a different soul's stale export. */
-export async function exportSoulModel(metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry);
+export async function exportSoulModel(metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry, options);
 }
 
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
@@ -902,6 +906,9 @@ export function onVanillaRestoreComplete(
 }
 
 // GameBanana
+// Tab navigation can resume a page whose original IPC request is still pending.
+const pendingBrowseRequests = new Map<string, Promise<GameBananaModsResponse>>();
+
 export async function browseMods(
   page: number,
   perPage: number,
@@ -911,7 +918,14 @@ export async function browseMods(
   sort?: string,
   submitterId?: number
 ): Promise<GameBananaModsResponse> {
-  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort, submitterId });
+  const args = { page, perPage, search, section, categoryId, sort, submitterId };
+  const key = JSON.stringify(args);
+  const pending = pendingBrowseRequests.get(key);
+  if (pending) return pending;
+  const request = window.electronAPI.browseMods(args);
+  pendingBrowseRequests.set(key, request);
+  try { return await request; }
+  finally { if (pendingBrowseRequests.get(key) === request) pendingBrowseRequests.delete(key); }
 }
 
 export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {

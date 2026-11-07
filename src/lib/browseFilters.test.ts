@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { browseRemoteFilters } from './browseFilters';
+import { browseNsfwFilter, browseRemoteFilters } from './browseFilters';
 
 describe('Browse remote hero filters', () => {
   it('uses the hero category for Mods', () => {
@@ -21,5 +21,17 @@ describe('Browse remote hero filters', () => {
       section: 'Sound', search: '', heroCategoryId: 'none',
       selectedHeroName: undefined, effectiveCategoryId: 7,
     })).toEqual({ search: undefined, categoryId: 7 });
+  });
+});
+
+describe('Browse NSFW filters', () => {
+  it('preserves the app-wide Show, Blur and Hide modes outside Only', () => {
+    expect(browseNsfwFilter('show', false)).toBe('all');
+    expect(browseNsfwFilter('blur', false)).toBe('all');
+    expect(browseNsfwFilter('hide', false)).toBe('sfw');
+  });
+
+  it.each(['show', 'blur', 'hide'] as const)('selects only NSFW results with the %s preference', mode => {
+    expect(browseNsfwFilter(mode, true)).toBe('nsfw');
   });
 });

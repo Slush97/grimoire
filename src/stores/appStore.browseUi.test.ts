@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppSettings } from '../types/mod';
 import { useAppStore, type BrowseArtistRef } from './appStore';
 
 vi.mock('../i18n', () => ({
@@ -20,6 +21,58 @@ describe('appStore Browse section filters', () => {
       search: 'blue', heroCategoryId: 42, categoryId: 'all',
     });
   });
+
+  it('keeps Only NSFW across sections until the Browse filters are reset', () => {
+    const { setBrowseUi, resetBrowseUi } = useAppStore.getState();
+    setBrowseUi({ onlyNsfw: true });
+    setBrowseUi({ selectedSections: ['Mod', 'Sound'] });
+    expect(useAppStore.getState().browseUi.onlyNsfw).toBe(true);
+    setBrowseUi({ section: 'Wip' });
+    expect(useAppStore.getState().browseUi.onlyNsfw).toBe(true);
+    resetBrowseUi();
+    expect(useAppStore.getState().browseUi.onlyNsfw).toBe(false);
+  });
+
+  it.each(['show', 'blur', 'hide'] as const)(
+    'resets Only NSFW after a fresh store load without changing the saved %s mode',
+    async (nsfwContentMode) => {
+      const savedSettings = {
+        nsfwContentMode, dateFormat: 'MM/DD/YYYY', language: null,
+      } as AppSettings;
+      const storage = new Map<string, string>();
+      const setItem = vi.fn((key: string, value: string) => storage.set(key, value));
+      const setSettings = vi.fn();
+      vi.stubGlobal('localStorage', {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem,
+      });
+      vi.stubGlobal('window', {
+        electronAPI: { getSettings: vi.fn(async () => savedSettings), setSettings },
+      });
+
+      try {
+        vi.resetModules();
+        const { useAppStore: sessionStore } = await import('./appStore');
+        await sessionStore.getState().loadSettings();
+        sessionStore.getState().setBrowseUi({ onlyNsfw: true });
+        expect(sessionStore.getState().browseUi.onlyNsfw).toBe(true);
+        expect(sessionStore.getState().settings).toEqual(savedSettings);
+        expect(setItem).not.toHaveBeenCalled();
+        expect(setSettings).not.toHaveBeenCalled();
+
+        vi.resetModules();
+        const { useAppStore: restartedStore } = await import('./appStore');
+        await restartedStore.getState().loadSettings();
+        expect(restartedStore.getState().browseUi.onlyNsfw).toBe(false);
+        expect(restartedStore.getState().settings?.nsfwContentMode).toBe(nsfwContentMode);
+        expect(setItem).not.toHaveBeenCalled();
+        expect(setSettings).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+        vi.resetModules();
+      }
+    },
+  );
 
   it('returns to one section for explicit item or artist navigation', () => {
     const { setBrowseUi } = useAppStore.getState();

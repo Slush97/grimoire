@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
-import { shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
+import { getManualOnlyShuffleKeys, shuffleExclusionKey, shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
 import { shakeElement } from '../../lib/shakeElement';
 import { isModLoadedInGame, isReorderBlocked } from '../../lib/modLocks';
 import { useAppStore } from '../../stores/appStore';
@@ -221,6 +221,7 @@ function LoadOrderRow({
     id: group.key,
     disabled,
   });
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const primary = group.primary;
   const enabledCount = groupEnabledVariants(group).length;
   // The whole row is the drag handle (and keyboard-focusable via the sortable
@@ -229,6 +230,7 @@ function LoadOrderRow({
   return (
     <div
       ref={setNodeRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       {...(disabled ? {} : attributes)}
       {...(disabled ? {} : listeners)}
       role={disabled ? undefined : 'button'}
@@ -437,6 +439,7 @@ function SkinGroupCard({
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   // Close the variant picker on Escape or any click outside the card.
   useEffect(() => {
@@ -464,6 +467,7 @@ function SkinGroupCard({
   return (
     <div
       ref={cardRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
           ? 'border-accent bg-hl/[0.02] hover:bg-hl/[0.04]'
@@ -779,9 +783,11 @@ function SkinGroupRow({
   // The user's chosen image wins over the uploader's thumbnail (issue #208).
   const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const rowRef = useRef<HTMLDivElement>(null);
+  const revealNsfwOnHover = useAppStore((state) => state.settings?.revealNsfwOnHover ?? false);
   return (
     <div
       ref={rowRef}
+      data-nsfw-hover-reveal={revealNsfwOnHover || undefined}
       className={`group/row relative rounded-md border transition-colors ${
         groupActive
           ? 'border-accent/60 bg-hl/[0.04] backdrop-blur-sm'
@@ -980,6 +986,11 @@ export default function HeroSkinsPanel({
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
+  const libraryMods = useAppStore((s) => s.mods);
+  const excludedShuffleKeys = useMemo(
+    () => getManualOnlyShuffleKeys([...libraryMods, ...mods]),
+    [libraryMods, mods],
+  );
   const lockerModImages = useAppStore((s) => s.lockerModImages);
   // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
   const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
@@ -1037,14 +1048,15 @@ export default function HeroSkinsPanel({
    */
   const shufflePropsFor = (group: SkinGroup) => {
     const key = shuffleSkinKey(group.primary);
+    const excluded = excludedShuffleKeys.has(shuffleExclusionKey(group.primary));
     const pinned = !!group.primary.priorityMod && !!onToggleShuffleIncluded;
     return {
-      isIncluded: pinned ? false : includedSkinKeys?.has(key),
+      isIncluded: pinned || excluded ? false : includedSkinKeys?.has(key),
       onToggleIncluded:
-        onToggleShuffleIncluded && !pinned ? () => onToggleShuffleIncluded(key) : undefined,
+        onToggleShuffleIncluded && !pinned && !excluded ? () => onToggleShuffleIncluded(key) : undefined,
       shufflePinned: pinned,
-      shuffleVariantChoice: shuffleVariantChoices?.get(key),
-      onSetShuffleVariant: onSetShuffleVariant
+      shuffleVariantChoice: excluded ? undefined : shuffleVariantChoices?.get(key),
+      onSetShuffleVariant: onSetShuffleVariant && !excluded
         ? (choice: VariantChoice | null) => onSetShuffleVariant(key, choice)
         : undefined,
       shuffleArmed,
