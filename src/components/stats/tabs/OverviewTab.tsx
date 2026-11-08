@@ -16,7 +16,7 @@ export function OverviewTab() {
     const ranks = useHeroStore((s) => s.ranks)
     const heroName = useHeroName()
 
-    const { mmr, mmrHistory, heroStats, matchHistory, aggregated, localMMRHistory } = playerData.data
+    const { rank, heroStats, matchHistory, aggregated, localMMRHistory } = playerData.data
 
     const winRate =
         aggregated && aggregated.total_matches > 0
@@ -35,17 +35,15 @@ export function OverviewTab() {
         [heroStats, byId]
     )
 
-    const rankBadge = mmr
-        ? (ranks[mmr.division]?.subrank_urls[mmr.division_tier - 1] ??
-          ranks[mmr.division]?.badge_url ??
-          null)
+    const rankBadge = rank?.badge
+        ? (ranks[rank.rank]?.subrank_urls[rank.subrank - 1] ?? ranks[rank.rank]?.badge_url ?? null)
         : null
 
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    label={t('stats.overview.rankedScore')}
+                    label={t('stats.overview.rank')}
                     tone="accent"
                     value={
                         <span className="inline-flex items-center justify-center gap-2">
@@ -56,10 +54,9 @@ export function OverviewTab() {
                                     className="w-9 h-9 object-contain"
                                 />
                             )}
-                            {mmr?.player_score?.toFixed(0) ?? '--'}
+                            {rank ? rankLabel(rank.rank, rank.subrank) : '--'}
                         </span>
                     }
-                    sub={mmr ? rankLabel(mmr.division, mmr.division_tier) : undefined}
                 />
                 <StatCard
                     label={t('stats.tabs.matches')}
@@ -91,7 +88,7 @@ export function OverviewTab() {
                 icon={TrendingUp}
                 description={t('stats.overview.rankedTrajectoryDescription')}
             >
-                <MmrChart key={accountId} history={mmrHistory} snapshots={localMMRHistory} />
+                <MmrChart key={accountId} matches={matchHistory?.matches ?? []} snapshots={localMMRHistory} />
             </Card>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

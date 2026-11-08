@@ -764,12 +764,12 @@
       "playerDataTitle": "Не удалось загрузить данные игрока"
     },
     "overview": {
-      "rankedScore": "Ранговый счёт",
+      "rank": "Ранг",
       "winLoss": "{{wins}} поб. / {{losses}} пор.",
       "winRate": "Процент побед",
       "bestStreak": "Лучшая серия: {{count}}",
       "rankedTrajectory": "Динамика ранга",
-      "rankedTrajectoryDescription": "Счёт после каждого рангового матча за всю историю аккаунта",
+      "rankedTrajectoryDescription": "Ранг после каждого рангового матча за всю историю аккаунта",
       "recentMatches": "Недавние матчи",
       "lastMatches": "Последние матчи: {{count}}",
       "noRecentMatches": "Нет недавних матчей",
@@ -808,11 +808,11 @@
       "all": "Всё",
       "localDailySnapshots": "(ежедневные локальные снимки)",
       "noMatchesInRange": "В этом диапазоне нет ранговых матчей. Попробуйте диапазон шире.",
-      "noScoreHistory": "У этого игрока пока нет истории рангового счёта.",
+      "noRankHistory": "У этого игрока пока нет ранговых матчей.",
       "rangeDays": "{{days}} дн",
       "divisionFallback": "Дивизион {{division}}",
       "dateRange": "с {{from}} по {{to}}",
-      "scoreRangeAria": "Ранговый счёт: от {{fromScore}} ({{fromRank}}) до {{toScore}} ({{toRank}})"
+      "rankRangeAria": "Ранг: от {{fromRank}} до {{toRank}}"
     },
     "matches": {
       "matchHistory": "История матчей",
@@ -840,11 +840,11 @@
     "ranks": {
       "initiate": "Послушник",
       "seeker": "Искатель",
-      "alchemist": "Алхимик",
-      "arcanist": "Чародей",
+      "acolyte": "Аколит",
+      "sentinel": "Страж",
+      "mystic": "Мистик",
       "ritualist": "Ритуалист",
       "emissary": "Эмиссар",
-      "archon": "Архонт",
       "oracle": "Оракул",
       "phantom": "Фантом",
       "ascendant": "Владыка",

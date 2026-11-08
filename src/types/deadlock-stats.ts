@@ -6,31 +6,29 @@
 // ============================================
 
 /**
- * MMR data from /players/mmr endpoint
- * API returns array of these
+ * Rank from /players/rank: the badge after the player's latest ranked match.
+ * All zero with a null last_match when no recent ranked match reports one.
  */
-export interface PlayerMMR {
+export interface PlayerRank {
   account_id: number
-  match_id: number
-  start_time: number
-  player_score: number  // This is the "MMR" value
-  rank: number
-  division: number      // Badge level (was rank_badge)
-  division_tier: number // Subtier within division
+  badge: number   // tier * 10 + subrank
+  rank: number    // tier, 1 (Initiate) to 11 (Eternus)
+  subrank: number // 1 to 6
+  last_match: LastRankedMatch | null
 }
 
-/**
- * One entry from /players/{id}/mmr-history. The API returns a flat array of
- * these (one per ranked match), same field names as PlayerMMR.
- */
-export interface PlayerMMRHistoryEntry {
-  account_id: number
+export interface LastRankedMatch {
   match_id: number
   start_time: number
-  player_score: number
-  rank: number
-  division: number
-  division_tier: number
+  player_rank_initial_display_rank: number
+  player_rank_initial_flat_progress: number | null
+  player_rank_final_flat_progress: number | null
+  player_rank_desired_progress_change: number | null
+  player_rank_initial_calibration_games: number | null
+  player_rank_initial_demotion_protection_games: number | null
+  player_rank_consumed_demotion_protection: boolean | null
+  player_rank_initial_win_streak: number | null
+  rank_interval: number | null
 }
 
 /**
@@ -106,6 +104,10 @@ export interface PlayerMatch {
   objectives_mask_team0: number
   objectives_mask_team1: number
   username: string
+  // Set on ranked matches only: the badge shown after the match
+  // (tier * 10 + subrank) and the rank progress it awarded.
+  ranked_display_badge?: number | null
+  ranked_delta?: number | null
   // Computed fields (added by service layer)
   hero_name?: string
   match_outcome?: 'Win' | 'Loss'
@@ -479,7 +481,7 @@ export interface StatsSettings {
 // ============================================
 
 /**
- * Trimmed hero record from assets.deadlock-api.com/v2/heroes, the source of
+ * Trimmed hero record from api.deadlock-api.com/v1/assets/heroes, the source of
  * truth for hero id -> name/icon mapping and for which heroes are real
  * (in_development=true marks test heroes like Gunslinger/hero_testhero).
  * Fetched live via stats:getHeroes; HERO_NAMES below is the offline fallback.
@@ -495,7 +497,7 @@ export interface HeroAsset {
 }
 
 /**
- * Trimmed rank record from assets.deadlock-api.com/v2/ranks. `tier` is the
+ * Trimmed rank record from api.deadlock-api.com/v1/assets/ranks. `tier` is the
  * division number (0 Obscurus .. 11 Eternus). Ranked score maps onto
  * divisions at 6 points per division: division d spans [(d-1)*6, d*6).
  */

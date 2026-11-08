@@ -740,12 +740,12 @@
       "playerDataTitle": "Failed to load player data"
     },
     "overview": {
-      "rankedScore": "Ranked Score",
+      "rank": "Rank",
       "winLoss": "{{wins}}W / {{losses}}L",
       "winRate": "Win Rate",
       "bestStreak": "Best streak: {{count}}",
       "rankedTrajectory": "Ranked Trajectory",
-      "rankedTrajectoryDescription": "Score per ranked match, from the full account history",
+      "rankedTrajectoryDescription": "Rank after each ranked match, from the full account history",
       "recentMatches": "Recent Matches",
       "lastMatches": "Last {{count}} matches",
       "noRecentMatches": "No recent matches",
@@ -784,11 +784,11 @@
       "all": "All",
       "localDailySnapshots": "(local daily snapshots)",
       "noMatchesInRange": "No ranked matches in this range. Try a wider one.",
-      "noScoreHistory": "No ranked score history for this player yet.",
+      "noRankHistory": "No ranked matches for this player yet.",
       "rangeDays": "{{days}}D",
       "divisionFallback": "Division {{division}}",
       "dateRange": "{{from}} to {{to}}",
-      "scoreRangeAria": "Ranked score from {{fromScore}} ({{fromRank}}) to {{toScore}} ({{toRank}})"
+      "rankRangeAria": "Rank from {{fromRank}} to {{toRank}}"
     },
     "matches": {
       "matchHistory": "Match History",
@@ -816,11 +816,11 @@
     "ranks": {
       "initiate": "Initiate",
       "seeker": "Seeker",
-      "alchemist": "Alchemist",
-      "arcanist": "Arcanist",
+      "acolyte": "Acolyte",
+      "sentinel": "Sentinel",
+      "mystic": "Mystic",
       "ritualist": "Ritualist",
       "emissary": "Emissary",
-      "archon": "Archon",
       "oracle": "Oracle",
       "phantom": "Phantom",
       "ascendant": "Ascendant",

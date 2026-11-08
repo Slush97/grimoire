@@ -4,8 +4,7 @@
 import type {
     HeroAsset,
     RankAsset,
-    PlayerMMR,
-    PlayerMMRHistoryEntry,
+    PlayerRank,
     PlayerHeroStats,
     PlayerHeroStat,
     PlayerMatchHistory,
@@ -123,10 +122,10 @@ async function fetchFromAPI<T>(
 }
 
 // ============================================
-// Hero Assets (assets.deadlock-api.com)
+// Hero Assets
 // ============================================
 
-const ASSETS_API_HEROES = 'https://assets.deadlock-api.com/v2/heroes'
+const ASSETS_API_HEROES = `${DEADLOCK_API_BASE}/assets/heroes`
 const HERO_ASSETS_TTL_MS = 24 * 60 * 60 * 1000
 
 interface RawHeroAsset {
@@ -185,7 +184,7 @@ export async function getHeroAssets(): Promise<HeroAsset[]> {
     return heroAssetsInflight
 }
 
-const ASSETS_API_RANKS = 'https://assets.deadlock-api.com/v2/ranks'
+const ASSETS_API_RANKS = `${DEADLOCK_API_BASE}/assets/ranks`
 
 interface RawRankAsset {
     tier: number
@@ -246,35 +245,20 @@ export async function getRankAssets(): Promise<RankAsset[]> {
 // ============================================
 
 /**
- * Get MMR for multiple players
+ * Get the rank each player held after their latest ranked match
  */
-export async function getPlayerMMR(
+export async function getPlayerRank(
     accountIds: number[],
     options?: FetchOptions
-): Promise<PlayerMMR[]> {
+): Promise<PlayerRank[]> {
     if (accountIds.length === 0) return []
     if (accountIds.length > 1000) {
         throw new Error('Maximum 1000 account IDs per request')
     }
 
-    return fetchFromAPI<PlayerMMR[]>(
-        '/players/mmr',
+    return fetchFromAPI<PlayerRank[]>(
+        '/players/rank',
         { account_ids: accountIds.join(',') },
-        options
-    )
-}
-
-/**
- * Get MMR history for a player. The API returns a flat array with one entry
- * per ranked match, oldest first.
- */
-export async function getPlayerMMRHistory(
-    accountId: number,
-    options?: FetchOptions
-): Promise<PlayerMMRHistoryEntry[]> {
-    return fetchFromAPI<PlayerMMRHistoryEntry[]>(
-        `/players/${accountId}/mmr-history`,
-        undefined,
         options
     )
 }
@@ -470,16 +454,6 @@ export async function getPlayerTeammateStats(
     options?: FetchOptions
 ): Promise<unknown> {
     return fetchFromAPI(`/players/${accountId}/mate-stats`, undefined, options)
-}
-
-/**
- * Get party stats for a player
- */
-export async function getPlayerPartyStats(
-    accountId: number,
-    options?: FetchOptions
-): Promise<unknown> {
-    return fetchFromAPI(`/players/${accountId}/party-stats`, undefined, options)
 }
 
 // ============================================
@@ -678,11 +652,11 @@ export async function getBadgeDistribution(options?: FetchOptions): Promise<Badg
     const rankGroups: Record<number, { name: string; color: string }> = {
         1: { name: 'Initiate', color: '#9ca3af' },       // Silver
         2: { name: 'Seeker', color: '#a16207' },         // Bronze/brown
-        3: { name: 'Alchemist', color: '#fbbf24' },      // Gold
-        4: { name: 'Arcanist', color: '#22c55e' },       // Green
-        5: { name: 'Ritualist', color: '#06b6d4' },      // Cyan
-        6: { name: 'Emissary', color: '#3b82f6' },       // Blue
-        7: { name: 'Archon', color: '#8b5cf6' },         // Purple
+        3: { name: 'Acolyte', color: '#fbbf24' },        // Gold
+        4: { name: 'Sentinel', color: '#22c55e' },       // Green
+        5: { name: 'Mystic', color: '#06b6d4' },         // Cyan
+        6: { name: 'Ritualist', color: '#3b82f6' },      // Blue
+        7: { name: 'Emissary', color: '#8b5cf6' },       // Purple
         8: { name: 'Oracle', color: '#ec4899' },         // Pink
         9: { name: 'Phantom', color: '#ef4444' },        // Red
         10: { name: 'Ascendant', color: '#f97316' },     // Orange
@@ -717,13 +691,6 @@ export async function getBadgeDistribution(options?: FetchOptions): Promise<Badg
             }
         })
         .sort((a, b) => a.badge_level - b.badge_level)  // Sort by rank ascending
-}
-
-/**
- * Get MMR distribution
- */
-export async function getMMRDistribution(options?: FetchOptions): Promise<unknown> {
-    return fetchFromAPI('/players/mmr/distribution', undefined, options)
 }
 
 // ============================================
@@ -791,7 +758,7 @@ export async function getAPIInfo(options?: FetchOptions): Promise<unknown> {
 }
 
 // ============================================
-// Extended MMR Endpoints
+// Shared Filters
 // ============================================
 
 // Type alias for API params that's compatible with fetchFromAPI
@@ -810,53 +777,6 @@ export interface AnalyticsFilter {
     max_networth?: number
     account_ids?: number[]
     hero_ids?: number[]
-}
-
-/**
- * Get hero-specific MMR for players
- */
-export async function getHeroMMR(
-    accountIds: number[],
-    heroId: number,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(
-        `/players/mmr/${heroId}`,
-        { account_ids: accountIds.join(',') },
-        options
-    )
-}
-
-/**
- * Get hero-specific MMR history for a player
- */
-export async function getHeroMMRHistory(
-    accountId: number,
-    heroId: number,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(`/players/${accountId}/mmr-history/${heroId}`, undefined, options)
-}
-
-/**
- * Get global MMR distribution
- */
-export async function getMMRDistributionGlobal(
-    filters?: AnalyticsFilter,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI('/players/mmr/distribution', filters as APIParams, options)
-}
-
-/**
- * Get hero-specific MMR distribution
- */
-export async function getHeroMMRDistribution(
-    heroId: number,
-    filters?: AnalyticsFilter,
-    options?: FetchOptions
-): Promise<unknown[]> {
-    return fetchFromAPI(`/players/mmr/distribution/${heroId}`, filters as APIParams, options)
 }
 
 // ============================================
@@ -888,13 +808,6 @@ export interface MateStats {
     matches: number[]
 }
 
-export interface PartyStats {
-    party_size: number
-    wins: number
-    matches_played: number
-    matches: number[]
-}
-
 /**
  * Get enemy stats - win rates against specific opponents
  */
@@ -920,21 +833,6 @@ export async function getMateStats(
 ): Promise<MateStats[]> {
     return fetchFromAPI(
         `/players/${accountId}/mate-stats`,
-        filters as APIParams,
-        options
-    )
-}
-
-/**
- * Get party stats - performance by party size
- */
-export async function getPartyStats(
-    accountId: number,
-    filters?: PlayerStatsFilter,
-    options?: FetchOptions
-): Promise<PartyStats[]> {
-    return fetchFromAPI(
-        `/players/${accountId}/party-stats`,
         filters as APIParams,
         options
     )
