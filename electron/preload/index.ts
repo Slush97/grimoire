@@ -507,6 +507,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
     getPerformanceConfigStatus: () => ipcRenderer.invoke('get-performance-config-status'),
     listPerformancePresets: () => ipcRenderer.invoke('list-performance-presets'),
+    importPerformancePreset: (input) => ipcRenderer.invoke('import-performance-preset', input),
+    inspectPerformanceRepository: (repository) => ipcRenderer.invoke('inspect-performance-repository', repository),
+    deletePerformancePreset: (id) => ipcRenderer.invoke('delete-performance-preset', id),
+    savePerformancePresetToggles: (id, toggles) => ipcRenderer.invoke('save-performance-preset-toggles', id, toggles),
+    importPerformanceAddon: (id, path) => ipcRenderer.invoke('import-performance-addon', id, path),
     applyPerformanceConfig: (
         presetId?: string,
         optIns?: string[],

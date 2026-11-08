@@ -1,4 +1,5 @@
-import { ipcMain, shell } from 'electron';
+import { ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
+import { markPerformanceAddonImported, preparePerformanceAddon } from '../services/performanceCustom';
 import { modSafetySnapshot } from '../services/modSafety';
 import { checkOutdatedVdata, outdatedVdataSnapshot, staleModelsSnapshot } from '../services/vdataCheck';
 import { healModAttachments } from '../services/attachmentHeal';
@@ -1366,9 +1367,7 @@ function fireAdoptedThumbnailFetches(targets: AdoptedThumbnailTarget[]): void {
 // landed, and the renderer needs to know which rows survived. Progress is
 // streamed to the requesting renderer via 'import-custom-mods-progress' so long
 // copies aren't a frozen dialog.
-ipcMain.handle(
-    'import-custom-mods',
-    async (event, args: ImportCustomModsBatchArgs): Promise<ImportCustomModsBatchResult> => {
+async function importCustomModsBatch(event: IpcMainInvokeEvent, args: ImportCustomModsBatchArgs): Promise<ImportCustomModsBatchResult> {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
@@ -1439,8 +1438,18 @@ ipcMain.handle(
         const result = enrichMods(mods);
         fireAdoptedThumbnailFetches(thumbnailFetchTargets);
         return { mods: result, results };
+}
+
+ipcMain.handle('import-custom-mods', importCustomModsBatch);
+ipcMain.handle('import-performance-addon', async (event, id: string, path: string) => {
+    const download = await preparePerformanceAddon(id, path);
+    try {
+        const result = await importCustomModsBatch(event, { items: [download.item] });
+        if (result.results.length && result.results.every((entry) => entry.ok)) markPerformanceAddonImported(id, path);
+        return result;
     }
-);
+    finally { await download.cleanup(); }
+});
 
 // foundry:swapSound
 // Build a hero sound-swap addon VPK (drop your own MP3 onto a hero gameplay

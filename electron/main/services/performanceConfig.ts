@@ -72,9 +72,10 @@ function resolvePreset(
     version?: string | null
 ): PerformancePreset {
     const id = presetId ?? DEFAULT_PRESET_ID;
-    if (version && !hasVersion(id, version)) {
+    if (id.startsWith('custom-') || (version && !hasVersion(id, version))) {
         const extra = extraPresetResolver?.(id, version);
         if (extra && extra.id === id) return extra;
+        if (id.startsWith('custom-')) throw new Error('Custom performance preset is unavailable.');
     }
     return getPreset(presetId, version === 'latest' ? null : version);
 }
@@ -578,7 +579,9 @@ export function applyPerformanceConfig(
         return status('error', 'gameinfo.gi not found. Configure your Deadlock path first.');
     }
 
-    const preset = resolvePreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version);
+    let preset: PerformancePreset;
+    try { preset = resolvePreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version); }
+    catch (error) { return status('error', String(error)); }
     const optIns = (opts?.optIns ?? creatorDefaultOptIns(preset)).filter((key) =>
         preset.optIn.some((control) => control.key === key)
     );
@@ -1228,6 +1231,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             // sidecar can be stale or absent (hand-installed, restored backup).
             const appliedId = begin[1];
             const known = PRESETS.find((p) => p.id === appliedId) ?? null;
+            const custom = appliedId.startsWith('custom-') ? resolvePreset(appliedId, begin[2]) : null;
             const appliedOverrides = allOverrides(sidecar)[appliedId] ?? {};
             const overrideCount = Object.keys(appliedOverrides).length;
             const savedConvarValues: Record<string, string> = {};
@@ -1238,10 +1242,10 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             }
             const video = videoStatus(deadlockPath, sidecar?.video);
             const outdated =
-                !!known &&
+                (!!known || !!custom) &&
                 (!isCurrentDefinition(resolvePreset(appliedId, begin[2]), readMarker(begin)) ||
                     (sidecar !== null && sidecar.classification !== CLASSIFICATION_HASH));
-            const appliedName = known?.name ?? appliedId;
+            const appliedName = known?.name ?? custom?.name ?? appliedId;
             // "Newest we bundle", not "the one the user picked": the selection
             // lives in renderer settings, so the card decides whether a newer
             // release is a nag ("you are behind") or a note ("you rolled back
@@ -1275,7 +1279,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 ...(outdated ? { outdated } : {}),
                 overrideCount,
                 ...(video ? { video } : {}),
-                videoAvailable: known ? resolvePreset(appliedId, begin[2]).video.length : 0,
+                videoAvailable: known || custom ? resolvePreset(appliedId, begin[2]).video.length : 0,
                 ...(existsSync(getVideoPath(deadlockPath)) ? {} : { videoFileMissing: true }),
                 message: handEdited
                     ? `${base}${overrideNote} The file has manual edits: Reapply folds them into your overrides.`

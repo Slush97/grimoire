@@ -1317,6 +1317,8 @@ export interface AppSettings {
    *  generated default. This is the pre-apply choice; what is actually in
    *  gameinfo.gi right now comes from the file's own marker. */
   performanceConfigPresetId?: string;
+  /** Hide bundled choices in the performance picker, retaining an active one. */
+  performanceHideBuiltIns?: boolean;
   /** Which bundled upstream release of a preset the user picked, per preset id.
    *  Absent (or naming a release this build no longer bundles) means the newest
    *  one. Kept per preset so rolling one preset back does not pin the others,
