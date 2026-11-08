@@ -97,10 +97,15 @@ export function worldZAlignedBasis(roll: number, yaw: number): Basis {
 /**
  * ALIGN_TO_PARTICLE_NORMAL: quad plane perpendicular to the particle normal. The reference axis is
  * world -Y once the normal tilts at all off horizontal, and world +Z only while it is nearly horizontal.
+ *
+ * DEVIATION from VRF: the card is turned half a turn from VRF's axes. The game draws the parry's shield
+ * glyph (melee_parry_symbol: a horizontal normal from its orbit velocity, rolled 90 degrees) the right way
+ * up, checked in game with an asymmetric image stamped in its place (2026-11-08); VRF's axes put it upside
+ * down. The game's own glyphs are symmetric, which hid it.
  */
 export function particleNormalBasis(normal: Vector3, roll: number, yaw: number): Basis {
   const reference = Math.abs(normal.z) > 0.1 ? new Vector3(0, -1, 0) : new Vector3(0, 0, 1);
-  const up = normalize(cross(normal, reference));
+  const up = normalize(cross(reference, normal));
   const right = cross(up, normal);
   return quadBasis(right, up, roll, yaw);
 }

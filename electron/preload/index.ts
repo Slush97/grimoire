@@ -242,6 +242,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) =>
         ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry, options),
+    exportAnimationModPreview: (metaKey: string) => ipcRenderer.invoke('export-animation-mod-preview', metaKey),
     getHeroShaderNoise: () => ipcRenderer.invoke('get-hero-shader-noise'),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
@@ -264,10 +265,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveHideoutSnapshot: (key, name, bytes) => ipcRenderer.invoke('viewer:hideoutSnapshot', key, name, bytes),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
         ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
-    getRiggedHeroPose: (heroName: string, skinSources?: unknown[]) =>
-        ipcRenderer.invoke('get-rigged-hero-pose', heroName, skinSources),
-    exportRiggedHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
-        ipcRenderer.invoke('export-rigged-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
+    getRiggedHeroPose: (heroName: string, skinSources?: unknown[], meshGroup?: string) =>
+        ipcRenderer.invoke('get-rigged-hero-pose', heroName, skinSources, meshGroup),
+    exportRiggedHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string, meshGroup?: string) =>
+        ipcRenderer.invoke('export-rigged-hero-pose', heroName, skinSources, fallbackSkinMetaKey, meshGroup),
     getHeroEffectInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-effect-info', heroName, skinSources),
     exportHeroEffect: (heroName: string, skinSources?: unknown[]) =>

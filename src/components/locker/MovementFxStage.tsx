@@ -2,20 +2,29 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { ParticleEffect } from './ParticleEffect';
-import type { MovementFxPreview, MovementFxChoice, MovementFxPreviewRequest } from '../../lib/movementFx';
+import type { MovementEnginePreview, MovementFxPreview, MovementFxChoice, MovementFxPreviewRequest } from '../../lib/movementFx';
 import { movementFrame, MOVEMENT_DISTANCE } from '../../lib/movementMotion';
 import { MovementClock } from '../../lib/movementClock';
 import type { ParticleBundle } from '../../lib/particles/host/bundle';
 import type { EffectTimeline } from '../../lib/particles/host/effectTimeline';
+import type { StagedActorMount } from './StagedActors';
 
 /** The faithful runtime's staging of a movement preview: the hero's bundle and the timeline it plays. */
 export interface MovementEngineMount {
   bundle: ParticleBundle;
   textureBaseUrl: string;
   timeline: EffectTimeline;
+  /** Other heroes on the stage (the attacker a parry catches), loaded and placed. */
+  actors?: StagedActorMount[];
+  /** What the live recolour edits in `bundle` (the game's own), see MovementEnginePreview. */
+  recolour?: MovementEnginePreview['recolour'];
 }
 
-export interface MovementViewerPreview extends MovementFxPreview {
+/**
+ * A movement preview: the engine one (recoloured live from `request`), or, without it, the bake's descriptor
+ * (`key`, `descriptor`, `textureBaseUrl`) once loaded.
+ */
+export interface MovementViewerPreview extends Partial<MovementFxPreview> {
   kind: MovementFxChoice['kind']; revision: number; loop: boolean;
   /** What the engine preview is built from, when the viewer may run it ("Engine particles"). */
   request?: MovementFxPreviewRequest;
@@ -53,14 +62,19 @@ export function MovementFxStage({ preview, scene, paused, speed, children, contr
   const elapsed = useRef(0);
   const cycle = useRef(0);
   const [generation, setGeneration] = useState(0);
+  // A recolour's new effects (another key or engine bundle) keep the loop going: the engine path starts over
+  // only for another hero, kind or replay
+  const hasEngine = !!engine;
+  const engineYaw = engine?.timeline.yaw ?? 0;
+  const runKey = hasEngine ? preview?.request?.heroName : preview?.key;
   useEffect(() => {
     elapsed.current = 0; cycle.current = 0;
     if (actor.current) {
-      actor.current.position.set(kind === 'dash' && !engine ? -MOVEMENT_DISTANCE / 2 : 0, 0, 0);
-      actor.current.rotation.y = engine ? engine.timeline.yaw : kind === 'dash' ? Math.PI / 2 : 0;
+      actor.current.position.set(kind === 'dash' && !hasEngine ? -MOVEMENT_DISTANCE / 2 : 0, 0, 0);
+      actor.current.rotation.y = hasEngine ? engineYaw : kind === 'dash' ? Math.PI / 2 : 0;
       actor.current.updateMatrixWorld(true);
     }
-  }, [kind, preview?.key, preview?.revision, engine]);
+  }, [kind, runKey, preview?.revision, hasEngine, engineYaw]);
   useFrame((_, delta) => {
     if (effects.current && scene.parent) effects.current.scale.copy(scene.parent.getWorldScale(scale.current));
     if (!preview || !actor.current || paused) return;
@@ -84,9 +98,9 @@ export function MovementFxStage({ preview, scene, paused, speed, children, contr
   return <MovementClock.Provider value={elapsed}>
     {controls}
     <group ref={actor}>{children}</group>
-    <group ref={effects}>{preview && descriptor && <ParticleEffect key={`${preview.key}:${preview.revision}:${generation}`} descriptor={descriptor}
+    <group ref={effects}>{preview?.textureBaseUrl && descriptor && <ParticleEffect key={`${preview.key}:${preview.revision}:${generation}`} descriptor={descriptor}
       textureBaseUrl={preview.textureBaseUrl} model={scene} playback={{ paused, speed }} motionDirection={preview.kind === 'dash' ? motionDirection : undefined} />}
-      {preview && returnDescriptor && <ParticleEffect key={`return:${preview.key}:${preview.revision}:${generation}`} descriptor={returnDescriptor}
+      {preview?.textureBaseUrl && returnDescriptor && <ParticleEffect key={`return:${preview.key}:${preview.revision}:${generation}`} descriptor={returnDescriptor}
         textureBaseUrl={preview.textureBaseUrl} model={scene} playback={{ paused, speed }} motionDirection={returnDirection} />}</group>
   </MovementClock.Provider>;
 }

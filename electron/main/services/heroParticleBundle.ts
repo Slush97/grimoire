@@ -38,7 +38,8 @@ const LIMITS = {
 
 const SYSTEM_PATH = /^particles\/[a-zA-Z0-9_./-]+\.vpcf$/;
 const SNAPSHOT_PATH = /^particles\/[a-zA-Z0-9_./-]+\.vsnap$/;
-const TEXTURE_PATH = /^(?:materials|models)\/[a-zA-Z0-9_./-]+\.vtex$/;
+// Any root: particles also sample textures outside materials/ (the stun icon's dev/vgui/ icon sheet)
+const TEXTURE_PATH = /^[a-zA-Z0-9_]+\/[a-zA-Z0-9_./-]+\.vtex$/;
 const MODEL_PATH = /^models\/[a-zA-Z0-9_./-]+\.vmdl$/;
 const MATERIAL_PATH = /^(?:materials|models)\/[a-zA-Z0-9_./-]+\.vmat$/;
 
@@ -120,6 +121,8 @@ export interface ExportBundleOptions {
     /** The directory the bundle is written to; its `tex/` is replaced. */
     outDir: string;
     vpkmerge: VpkmergeRunner;
+    /** Other heroes a timeline stages, by actor id: their compiled model paths. */
+    actors?: Record<string, string>;
 }
 
 export async function exportParticleBundle(stack: PackageStack, discovery: AmbientDiscovery, options: ExportBundleOptions): Promise<ParticleBundle> {
@@ -140,6 +143,14 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
     })();
     // Observe a failure immediately, including while another export stage is still awaiting a CLI.
     const modelReady = modelResult.then((value) => ({ value }), (error: unknown) => ({ error }));
+    const actorsResult = Promise.all(Object.entries(options.actors ?? {}).map(async ([id, modelEntry]) => {
+        if (!MODEL_PATH.test(modelEntry.replace(/_c$/, '')) || modelEntry.includes('..')) throw new Error(`Invalid actor model ${modelEntry}.`);
+        const bytes = stack.read(modelEntry);
+        if (!bytes) throw new Error(`${modelEntry} is not in any mounted package.`);
+        const { model, attachments } = await readParticleModel(bytes, (resource) => stack.decodeLoose(resource), (path) => stack.decode(path));
+        return [id, { modelEntry, model, attachments }] as const;
+    }));
+    const actorsReady = actorsResult.then((value) => ({ value }), (error: unknown) => ({ error }));
     const mipSupport = stack.supportsMips();
 
     try {
@@ -304,6 +315,8 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
     const result = await modelReady;
     if ('error' in result) throw result.error;
     const { model, attachments } = result.value;
+    const actors = await actorsReady;
+    if ('error' in actors) throw actors.error;
     const bundle: ParticleBundle = {
         version: PARTICLE_BUNDLE_VERSION,
         hero: options.hero,
@@ -316,6 +329,7 @@ export async function exportParticleBundle(stack: PackageStack, discovery: Ambie
         ...(Object.keys(materials).length > 0 ? { materials } : {}),
         model,
         attachments,
+        ...(actors.value.length > 0 ? { actors: Object.fromEntries(actors.value) } : {}),
         diagnostics,
     };
     await fs.writeFile(join(options.outDir, BUNDLE_FILENAME), JSON.stringify(bundle));

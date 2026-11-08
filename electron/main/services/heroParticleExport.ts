@@ -81,7 +81,10 @@ export async function exportParticleBundle(pak: string, entry: string, descripto
   const load = async (path: string, ancestors: Set<string>, inherited: FxControlPoint[] = [], mapFrames: (group: number) => FxControlPoint[] = () => []): Promise<FxDescriptor> => {
     if (++systems > 32 || ancestors.size > 4 || ancestors.has(path)) throw new Error('Particle graph exceeds preview limits.');
     if (!/^particles\/[a-zA-Z0-9_./-]+\.vpcf_c$/.test(path) || path.includes('..')) throw new Error('Invalid particle resource path.');
-    const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', pak]));
+    // From the first package that has it: a bake may override only some systems of the tree (a recolour
+    // that keeps a part's original colours leaves that part's systems to the game)
+    const owner = [...new Set([pak, ...texturePaks])].find((p) => vpkHasEntry(p, path)) ?? pak;
+    const raw: unknown = JSON.parse(await runVpkmergeStdout(['soundevents', path, '--from-vpk', owner]));
     const d = particleDescriptor(raw, path, configuration);
     for (const renderer of d.renderers) {
       // Source spritecards use base_sprite when an enabled layer names no texture.

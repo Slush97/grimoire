@@ -7,6 +7,7 @@ import InstalledSkinPreview from '../components/installed/InstalledSkinPreview';
 import { installedDoorStuckTarget, installedSkinTarget } from '../lib/installedSkinTarget';
 import { pinInstalledPreview } from '../lib/installedPreviewPin';
 import { installedPropTarget } from '../lib/installedPropPreview';
+import { installedMotionTarget } from '../lib/installedMotionPreview';
 import { restoreMovementFxDraft } from '../lib/foundryDrafts';
 import {
   DndContext,
@@ -399,7 +400,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   const target = installedDoorStuckTarget(previewMod, taxonomyContext);
   // Every file the Alt preview can show, in picker order. Alt+wheel steps through them.
   const previewKeys = useMemo(() => (entry.kind === 'single' ? [entry.mod] : entry.variants)
-    .filter(variant => installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
+    .filter(variant => installedMotionTarget(variant) || installedSkinTarget(variant, taxonomyContext) || installedPropTarget(variant))
     .map(variant => variant.metaKey), [entry, taxonomyContext]);
   const previewKey = previewKeys.includes(previewMod.metaKey) ? previewMod.metaKey : previewKeys[0] ?? previewMod.metaKey;
   const previewHint = previewKeys.length > 1 ? t('installed.card.previewHintVariants')

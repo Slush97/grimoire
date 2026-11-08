@@ -263,6 +263,17 @@ export abstract class ParticleFunctionInitializer extends ParticleFunction {
   }
 
   /**
+   * After a live edit of its definition (ParticleSystemSimulation.swapDefinitions): sets again, for the
+   * live particles, what `previous` (the same class, the definition before) set on them at spawn, from
+   * what it recorded then. The default sets nothing: live particles keep their values and only new ones
+   * take the edit.
+   */
+  adoptLive(_previous: ParticleFunctionInitializer, _particles: ParticleCollection, _state: ParticleSystemState): void {}
+
+  /** The particles at `first`..`first + count` have their ids (`ids`, by particle index) now that every initializer ran. */
+  spawned(_ids: Int32Array, _first: number, _count: number): void {}
+
+  /**
    * Runs the initializer over the particles one emission created, in the calls splitIntoCalls gives,
    * each with its inputs evaluated afresh.
    */

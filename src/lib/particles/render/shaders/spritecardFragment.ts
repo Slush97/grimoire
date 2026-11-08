@@ -99,6 +99,15 @@ uniform bool uHasSceneDepth;
 uniform sampler2D uSceneDepth;
 uniform vec2 uSceneDepthNearFar;
 uniform vec2 uViewportSize;
+// The viewport being drawn, in pixels of the bound framebuffer (x, y, width, height). The scene colour and
+// depth copies cover the same view at their own size, so they are read at the fragment's place in it, not
+// at its pixel: the frame may be drawn into a buffer of another size (post processing, the pixel ratio).
+uniform vec4 uScreenRect;
+
+vec2 ScreenUv()
+{
+    return (gl_FragCoord.xy - uScreenRect.xy) / uScreenRect.zw;
+}
 
 uniform bool uSaturateColor; // m_bSaturateColorPreAlphaBlend
 uniform bool uUnsignedBlendAlpha; // spritecard shaders with texture layers
@@ -448,7 +457,7 @@ vec2 SampleFlow(vec2 uv)
 vec3 SampleRefraction(vec4 texel)
 {
     vec2 pixelSize = 1.0 / vec2(textureSize(g_tSceneColor, 0));
-    vec2 uv = (gl_FragCoord.xy * pixelSize) - (((texel.xy - vec2(0.5)) * 2.0) * (uRefractAmount * texel.a));
+    vec2 uv = ScreenUv() - (((texel.xy - vec2(0.5)) * 2.0) * (uRefractAmount * texel.a));
 
     if (uRefractBlurRadius <= 0)
     {
@@ -505,7 +514,8 @@ float AlphaReference(float textureAlpha, float vertexAlpha)
 // The opaque scene's position under the fragment, along the ray from the camera through it
 vec3 SceneWorldPosition(vec3 toFragment)
 {
-    float depth = texelFetch(uSceneDepth, ivec2(gl_FragCoord.xy), 0).x;
+    ivec2 depthSize = textureSize(uSceneDepth, 0);
+    float depth = texelFetch(uSceneDepth, clamp(ivec2(ScreenUv() * vec2(depthSize)), ivec2(0), depthSize - 1), 0).x;
     float near = uSceneDepthNearFar.x;
     float far = uSceneDepthNearFar.y;
 

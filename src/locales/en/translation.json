@@ -173,6 +173,7 @@
     "workshop": {
       "appearance": "Appearance",
       "abilities": "Abilities",
+      "mechanics": "Mechanics",
       "voice": "Voice",
       "icons": "Icons & Textures",
       "back": "All heroes",
@@ -502,8 +503,6 @@
       "keepAvailable": "Keep available parts"
     },
     "movement": {
-      "title": "Movement effects",
-      "sounds": "Gameplay sounds",
       "dash": "Dash trails",
       "heavy-melee": "Heavy melee",
       "globalHint": "Applies to all heroes.",
@@ -514,7 +513,6 @@
       "upload": "Choose an image",
       "originalTrail": "Original trail",
       "imageTrail": "Emoji / image",
-      "updating": "Updating effect…",
       "replay": "Replay effect",
       "loop": "Loop",
       "export": "Export VPK",
@@ -529,7 +527,24 @@
       "brightness": "Brightness",
       "illuminated": "Illuminated",
       "outline": "Image outline",
-      "outlineColor": "Outline color"
+      "outlineColor": "Outline color",
+      "parry": "Parry",
+      "shieldImage": "Shield symbol",
+      "stunImage": "Stun icon",
+      "originalSymbol": "Original",
+      "effectFinish": "Finish",
+      "parrySounds": "Sounds",
+      "parrySound": "Parry",
+      "parrySuccessSound": "Successful parry",
+      "parts": "Parry parts",
+      "part": {
+        "shield": "Shield",
+        "catch": "Catch",
+        "stun": "Stun"
+      },
+      "linkParts": "Use one color for every part",
+      "unlinkParts": "Color each part separately",
+      "keepOriginal": "Keep original"
     }
   },
   "autoexec": {
@@ -1846,7 +1861,9 @@
       "nextFile": "Next file",
       "pin": "Pin",
       "resize": "Resize",
-      "unavailable": "No 3D preview for this file"
+      "unavailable": "No 3D preview for this file",
+      "clips": "Clips",
+      "allClips": "All"
     },
     "card": {
       "soundPreview": "Sound Preview",

@@ -50,13 +50,19 @@ import {
 import { disposeTexture, loadGltfPreview, materialTextures } from '../../lib/loadGltfPreview';
 import { prepareSource2VertexColors } from '../../lib/source2VertexColors';
 import { loadRiggedHeroPreview } from '../../lib/loadRiggedHeroPreview';
+import { concatAnimationClips } from '../../lib/concatAnimationClips';
 import { ParticleEffect } from './ParticleEffect';
 import { SourceParticleLayer } from './sourceParticles/SourceParticleLayer';
 import type { ParticleBundle } from '../../lib/particles/host/bundle';
-import type { MovementEnginePreview } from '../../lib/movementFx';
-import { buildMovementTimeline } from '../../lib/movementStaging';
+import type { MovementEnginePreview, MovementFxChoice, MovementFxPreview, MovementFxPreviewRequest } from '../../lib/movementFx';
+import { applyMovementRecolour } from '../../lib/movementRecolour';
+import { buildMovementTimeline, movementActors } from '../../lib/movementStaging';
 import { MovementFxStage, type MovementViewerPreview } from './MovementFxStage';
 import { TimelineParticleLayer } from './sourceParticles/TimelineParticleLayer';
+import { StagedActorModel, type StagedActorMount } from './StagedActors';
+import { actorPlacement, actorPlacementAt, actorShiftAt, sourceFrame, travelTurns } from '../../lib/stagedActorPlacement';
+import { matchingClipTime } from '../../lib/clipPoseMatch';
+import type { TimelineActor } from '../../lib/particles/host/effectTimeline';
 import { clipWeightsAt, configurationAttachment, timelineTime } from '../../lib/particles/host/effectTimeline';
 import { MovementClock } from '../../lib/movementClock';
 import { movementFrame, MOVEMENT_DISTANCE } from '../../lib/movementMotion';
@@ -307,6 +313,9 @@ function enableVertexColors(scene: THREE.Object3D): void {
   });
 }
 
+/** The name of an override's clips joined back to back. */
+const OVERRIDE_ALL_CLIPS = 'grimoire_clip_override';
+
 /** Prefer an idle loop from the exported animation menu. */
 function pickIdleClip(clips: THREE.AnimationClip[], heroName?: string): THREE.AnimationClip | null {
   const valid = clips.filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
@@ -483,7 +492,8 @@ export function RiggedModel({
   const movementActions = useRef(new Map<string, THREE.AnimationAction>());
   const sampledMotionTime = useRef(0);
   const timelineTimeRef = useRef(0);
-  const movementResetKey = movementPreview ? `${movementPreview.key}:${movementPreview.revision}` : '';
+  // The loop starts over on a replay, another kind or another hero, not when a recolour swaps the effects in
+  const movementResetKey = movementPreview ? `${movementPreview.kind}:${movementPreview.request?.heroName ?? movementPreview.key}:${movementPreview.revision}` : '';
   const selectedClip = useMemo(() => clips.find((c) => c.name === clipName) ?? pickIdleClip(clips, heroName), [clips, clipName, heroName]);
 
   // Normalize from the BIND/rest pose, once. Force the skeleton to bind pose and
@@ -638,9 +648,12 @@ export function RiggedModel({
         {effect && (
           <ParticleEffect key={`${clipName}:${seek?.revision ?? 0}`} descriptor={effect.descriptor} textureBaseUrl={effect.baseUrl} model={scene} playback={playback} />
         )}
+        {movementEngine?.actors?.map((mount) => (
+          <StagedActorModel key={`${mount.id}:${movementResetKey}`} mount={mount} timeline={movementEngine.timeline} timeRef={timelineTimeRef} clothEnabled={clothEnabled} />
+        ))}
         {movementEngine && (
           <TimelineParticleLayer key={movementResetKey} bundle={movementEngine.bundle} textureBaseUrl={movementEngine.textureBaseUrl}
-            timeline={movementEngine.timeline} model={scene} playback={playback} timeRef={timelineTimeRef} />
+            timeline={movementEngine.timeline} model={scene} playback={playback} timeRef={timelineTimeRef} actors={movementEngine.actors} />
         )}
         {sourceParticles && (
           <SourceParticleLayer key={seek?.revision ?? 0} bundle={sourceParticles.bundle} textureBaseUrl={sourceParticles.textureBaseUrl} model={scene}
@@ -655,6 +668,9 @@ export function RiggedModel({
  *  controls don't fight it; dragging just reorients the camera. */
 /** While painting, the primary button belongs to the brush: the right button turns and the middle button pans. */
 const PAINT_MOUSE_BUTTONS = { MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+
+/** The room left above a staged actor when framing, as a fraction of its height. */
+const ACTOR_HEADROOM = 0.6;
 
 export function Controls({ interaction, reset, label, model, fitKey, readSavedView, onViewChange, focusMaterial, movement, painting = false, hideout = false }: {
   interaction: RefObject<TurntableInteraction>; reset: number; label: string; model: THREE.Object3D; fitKey: string;
@@ -684,6 +700,8 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
     if (length > allowed) camera.position.copy(controls.target).addScaledVector(offset, allowed / length);
   });
   const pendingFit = useRef(true);
+  // What the fit frames: the engine stage and its actors, not the effects a recolour swaps
+  const stageFitKey = movement?.engine ? `engine:${(movement.engine.actors ?? []).map((actor) => `${actor.id}:${actor.hero}`).join('|')}` : 'overlay';
   // The viewer outlives a hero, so each model that arrives restores its view's camera.
   const restoredModel = useRef<THREE.Object3D | null>(null);
   const cameraCommit = useMemo(() => deferredCommit<ViewerCameraDraft>(view => onViewChange?.(view)), [onViewChange]);
@@ -703,7 +721,7 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
   }, [camera, cameraCommit]);
   useEffect(() => {
     pendingFit.current = true;
-  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, movement?.engine, hideout]);
+  }, [camera, model, fitKey, reset, viewportSize.width, viewportSize.height, focusMaterial, movement?.kind, movement?.loop, stageFitKey, hideout]);
   // Fit after the mounted figure has updated its pose and wrapper transforms.
   // OrbitControls can mount after this component's effects, so retry until its
   // ref is ready and keep the fitted target under imperative control.
@@ -726,6 +744,30 @@ export function Controls({ interaction, reset, label, model, fitKey, readSavedVi
       bounds = partBounds && !partBounds.isEmpty() ? partBounds : heroPreviewBounds(model, normalizedScenes.get(model)?.bounds);
       if (bounds.isEmpty()) return;
       if (!movement) fitted[fitId] = [...bounds.min.toArray(), ...bounds.max.toArray()];
+    }
+    // Other heroes on the stage are framed with the hero, with room above them for what plays over their
+    // heads (a parried attacker's stun marker floats about half its height above it)
+    const engineTimeline = movement?.engine?.timeline;
+    for (const actor of movement?.engine?.actors ?? []) {
+      // Framed wherever it stands over the loop (it and the hero move along lines, so where their travel
+      // turns is enough): measured where it stands now, then moved to each of those places
+      const holder = actor.scene.parent;
+      holder?.updateMatrixWorld(true);
+      actor.scene.updateMatrixWorld(true);
+      const measured = heroPreviewBounds(actor.scene);
+      if (measured.isEmpty()) continue;
+      measured.max.y += (measured.max.y - measured.min.y) * ACTOR_HEADROOM;
+      const staged = engineTimeline?.actors?.find((candidate) => candidate.id === actor.id);
+      if (!holder?.parent || !engineTimeline || !staged) {
+        bounds = bounds.clone().union(measured);
+        continue;
+      }
+      const toLocal = new THREE.Matrix4().copy(holder.matrixWorld).invert();
+      for (const time of travelTurns(engineTimeline)) {
+        const placed = new THREE.Matrix4().multiplyMatrices(holder.parent.matrixWorld,
+          actorPlacementAt(actor.placement, actor.heroSourceFrame, actorShiftAt(engineTimeline, staged, time)));
+        bounds = bounds.clone().union(measured.clone().applyMatrix4(placed.multiply(toLocal)));
+      }
     }
     if (movement?.kind === 'dash' && movement.engine) {
       // The hero stays in place and the trail streams behind it: leave the same room the travel had
@@ -1037,6 +1079,17 @@ function TrippyPaint({
  *  instance serves both PosedModel and RiggedModel (both render the same scene).
  *  Restores originals and disposes its CSM wrappers + mask clones on cleanup.
  *  No-op when disabled or when no material carries morphic data. */
+/** Another hero a movement timeline stages, as loaded: its rig, clips and cloth. */
+interface LoadedStagedActor {
+  actor: TimelineActor;
+  scene: THREE.Object3D;
+  clips: THREE.AnimationClip[];
+  clothModel: ClothModel | null;
+}
+
+/** A staged actor's materials take no skin part edits. */
+const NO_PART_EDITS: SkinPartEdit[] = [];
+
 function NprMaterials({
   scene,
   enabled,
@@ -1514,6 +1567,11 @@ export interface HeroPoseViewerProps {
   turn?: RefObject<number | null>;
   workspaceKey?: string;
   movementPreview?: MovementViewerPreview;
+  /** Clips to play instead of the model's own (an animation mod's preview): all of them back to back in a
+   *  loop, or only `clip`. `paused` holds the pose. Neither is saved, unlike a clip picked in the viewer. */
+  clipOverride?: { key: string; url: string; clip?: string | null; paused?: boolean };
+  /** A body group choice to show instead of the default body (Seven without his gun during his ult). */
+  meshGroup?: string;
   initialScene?: HeroViewerScene;
   /** Which scene choice this viewer remembers and opens on, unless `initialScene` fixes one. */
   sceneSurface?: ViewerSceneSurface;
@@ -1542,6 +1600,8 @@ export default function HeroPoseViewer({
   turn,
   workspaceKey,
   movementPreview,
+  clipOverride,
+  meshGroup,
   initialScene,
   sceneSurface = 'preview',
   initialBackground = 'broadway',
@@ -1588,7 +1648,13 @@ export default function HeroPoseViewer({
   if (loaded && scene !== null && revealed === scene && drawnHero !== loaded.heroName) setDrawnHero(loaded.heroName);
   const displayedHero = slowSwitch ? heroName : drawnHero ?? heroName;
   useEffect(() => { onShownHeroChange?.(displayedHero); }, [displayedHero, onShownHeroChange]);
-  const clips = loadedModel?.clips ?? NO_CLIPS;
+  const modelClips = loadedModel?.clips ?? NO_CLIPS;
+  // An override plays its one chosen clip (all of them joined by default), whatever the viewer has saved.
+  const overrideClip = clipOverride ? clipOverride.clip ?? OVERRIDE_ALL_CLIPS : null;
+  const clips = useMemo(() => {
+    const chosen = overrideClip === null ? null : modelClips.find((clip) => clip.name === overrideClip);
+    return chosen ? [chosen] : modelClips;
+  }, [modelClips, overrideClip]);
   const rigged = loadedModel?.rigged ?? false;
   const clothModel = loadedModel?.clothModel ?? null;
   const [animationUnavailable, setAnimationUnavailable] = useState(false);
@@ -1602,7 +1668,9 @@ export default function HeroPoseViewer({
   // The outgoing model also holds still while the next one loads, leaving the frame time to its load.
   const switching = loaded !== null && !current;
   const holdPlayback = holdPose || switching;
-  const heldPlayback = useMemo(() => holdPlayback && !playback.paused ? { ...playback, paused: true } : playback, [holdPlayback, playback]);
+  const overridePaused = !!clipOverride?.paused;
+  const heldPlayback = useMemo(() => (holdPlayback || overridePaused) && !playback.paused ? { ...playback, paused: true } : playback,
+    [holdPlayback, overridePaused, playback]);
   useEffect(() => {
     if (!holdPose) return;
     const turntable = interaction.current;
@@ -1792,9 +1860,6 @@ export default function HeroPoseViewer({
   }
   const [effect, setEffect] = useState<EffectMount | null>(null);
   const [effectUnavailable, setEffectUnavailable] = useState(false);
-  const activeDescriptor = movementPreview?.descriptor ?? effect?.descriptor;
-  const partialEffect = useMemo(() => activeDescriptor ? fxPreviewIssues(activeDescriptor).length > 0
-    || (scene ? particleAttachmentIssues(activeDescriptor, scene).length > 0 : false) : false, [activeDescriptor, scene]);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
   const gifError = useCallback(() => setViewerError(t('locker.pose.gifFailed')), [t]);
   const gif = useViewerGif(canvasRef, `${heroName}:${sourceKey}:${scene?.uuid ?? ''}`, heroName, gifError);
@@ -1816,8 +1881,9 @@ export default function HeroPoseViewer({
     bloom: devFlags.bloom,
     ...(movementPreview ? { animated: true } : {}),
   };
-  const sourceParticlesEnabled = devFlags.effects && devFlags.sourceParticles && !movementPreview;
-  const effectPreviewEnabled = devFlags.effects && !devFlags.sourceParticles && !movementPreview;
+  // The hero's own ambient effects keep playing under a movement preview (Celeste's horn through a dash)
+  const sourceParticlesEnabled = devFlags.effects && devFlags.sourceParticles;
+  const effectPreviewEnabled = devFlags.effects && !devFlags.sourceParticles;
   const clipNamesKey = clips.map((clip) => clip.name).join('|');
   // Follows the model on screen, so its particles stay with it until the next model swaps in.
   const sourceParticlesKey = `${loaded?.key ?? ''}|${clipNamesKey}`;
@@ -1827,24 +1893,118 @@ export default function HeroPoseViewer({
   const sourceParticles = sourceParticlesEnabled && loadedSourceParticles?.key === sourceParticlesKey ? loadedSourceParticles.mount : null;
 
   // A movement preview on the faithful runtime: the hero's clips and the game's data stage the effects
-  const movementEngineEnabled = !compact && devFlags.effects && devFlags.sourceParticles && !!movementPreview?.request;
-  const movementEngineKey = movementPreview?.request ? `${movementPreview.key}|${movementPreview.request.heroName}` : '';
-  const [loadedMovementEngine, setLoadedMovementEngine] = useState<{ key: string; preview: MovementEnginePreview; bundle: ParticleBundle } | null>(null);
+  // Compact viewers play it too: the Installed preview of a saved dash or heavy melee effect.
+  const movementEngineEnabled = devFlags.effects && devFlags.sourceParticles && !!movementPreview?.request;
+  // One engine preview per kind and hero: the choice recolours it in memory
+  const movementEngineKey = movementPreview?.request ? `${movementPreview.kind}|${movementPreview.request.heroName}` : '';
+  // The last engine preview loaded: it keeps playing, for the same hero and kind, while a recolour's loads
+  const [loadedMovementEngine, setLoadedMovementEngine] = useState<{
+    key: string; kind: MovementFxChoice['kind']; heroName: string; preview: MovementEnginePreview; bundle: ParticleBundle;
+  } | null>(null);
+  // Other heroes the timeline stages (the attacker a parry catches): vanilla rigs, loaded like the hero's
+  const movementKindForActors = movementEngineEnabled ? movementPreview?.kind : undefined;
+  const stagedActors = useMemo(() => movementKindForActors ? movementActors(movementKindForActors) : [], [movementKindForActors]);
+  const stagedActorsKey = stagedActors.map((actor) => `${actor.id}:${actor.hero}`).join('|');
+  const [loadedActors, setLoadedActors] = useState<{ key: string; actors: LoadedStagedActor[] } | null>(null);
+  useEffect(() => {
+    if (!stagedActorsKey) return;
+    let cancelled = false;
+    const scenes: THREE.Object3D[] = [];
+    (async () => {
+      const actors: LoadedStagedActor[] = [];
+      for (const actor of stagedActors) {
+        try {
+          let rig = await getRiggedHeroPose(actor.hero, []);
+          if (!rig.hasModel && !cancelled) rig = await exportRiggedHeroPose(actor.hero, []);
+          if (cancelled) return;
+          if (!rig.hasModel) continue;
+          // With its cloth sidecar: a coat drapes as the hero's does
+          const { gltf, clothModel: actorCloth } = await loadRiggedHeroPreview(rig, true, true);
+          scenes.push(gltf.scene);
+          if (cancelled) return;
+          installFastSkinnedBounds(gltf.scene);
+          enableVertexColors(gltf.scene);
+          actors.push({ actor, scene: gltf.scene, clothModel: actorCloth, clips: (gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001) });
+        } catch (error) {
+          // The timeline still stages the actor's effects where it would stand
+          console.warn('[HeroPoseViewer] staged actor unavailable:', actor.hero, error);
+        }
+      }
+      if (!cancelled) setLoadedActors({ key: stagedActorsKey, actors });
+    })();
+    return () => { cancelled = true; for (const actorScene of scenes) disposeScene(actorScene); };
+    // stagedActorsKey covers the actors
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedActorsKey]);
+  const actorLoads = useMemo(() => !stagedActorsKey ? [] : loadedActors?.key === stagedActorsKey && scene ? loadedActors.actors : null,
+    [stagedActorsKey, loadedActors, scene]);
+  const movementHeroName = movementPreview?.request?.heroName;
   const movementEngine = useMemo(() => {
     const kind = movementPreview?.kind;
-    if (!movementEngineEnabled || !kind || loadedMovementEngine?.key !== movementEngineKey) return undefined;
+    // The timeline waits for the staged actors: their clips time it
+    if (!movementEngineEnabled || !kind || !loadedMovementEngine || loadedMovementEngine.kind !== kind
+      || loadedMovementEngine.heroName !== movementHeroName || !actorLoads || !scene) return undefined;
     const { preview, bundle } = loadedMovementEngine;
+    const movementClips = (list: THREE.AnimationClip[]) => new Map(list.filter((clip) => clip.name.startsWith('movement_')).map((clip) => [clip.name, clip.duration]));
     const timeline = buildMovementTimeline({
       kind,
       data: preview.data,
-      clipDurations: new Map(clips.filter((clip) => clip.name.startsWith('movement_')).map((clip) => [clip.name, clip.duration])),
+      clipDurations: movementClips(clips),
       fallbackMeleeAttachment: configurationAttachment(bundle, preview.data.melee?.holdBegin ?? null, 1),
+      actorClipDurations: new Map(actorLoads.map((loaded) => [loaded.actor.id, movementClips(loaded.clips)])),
+      actorData: new Map(Object.entries(preview.actors ?? {})),
+      continueClip: (fromName, fromTime, toName) => {
+        const from = clips.find((clip) => clip.name === fromName), to = clips.find((clip) => clip.name === toName);
+        return from && to ? matchingClipTime(from, fromTime, to) : 0;
+      },
     });
-    return timeline ? { bundle, textureBaseUrl: preview.textureBaseUrl, timeline } : undefined;
-  }, [movementEngineEnabled, movementPreview?.kind, loadedMovementEngine, movementEngineKey, clips]);
-  const stagedMovementPreview = useMemo(() => movementPreview && movementEngine ? { ...movementPreview, engine: movementEngine } : movementPreview,
-    [movementPreview, movementEngine]);
+    if (!timeline) return undefined;
+    // Each actor where the timeline stands it (the heavy melee's target past the lunge)
+    const heroSourceFrame = sourceFrame(scene);
+    const actors = actorLoads.flatMap(({ actor, scene: actorScene, clips: actorClips, clothModel: actorCloth }): StagedActorMount[] => {
+      const staged = timeline.actors?.find((candidate) => candidate.id === actor.id);
+      return staged ? [{ id: actor.id, hero: actor.hero, scene: actorScene, clips: actorClips, clothModel: actorCloth,
+        placement: actorPlacement(scene, actorScene, staged), heroSourceFrame }] : [];
+    });
+    return { bundle, textureBaseUrl: preview.textureBaseUrl, timeline, actors, recolour: preview.recolour };
+  }, [movementEngineEnabled, movementPreview?.kind, loadedMovementEngine, movementHeroName, clips, actorLoads, scene]);
+  // The choice applied to the game's effects in memory, as the bake applies it: a colour change shows at once
+  const movementChoice = movementPreview?.request?.choice;
+  const liveMovementBundle = useMemo(() => {
+    if (!movementEngine?.recolour || !movementChoice || movementChoice.kind !== movementPreview?.kind) return movementEngine?.bundle;
+    try {
+      return applyMovementRecolour(movementEngine.bundle, movementEngine.recolour, movementChoice);
+    } catch (error) {
+      console.warn('[HeroPoseViewer] movement recolour:', error);
+      return movementEngine.bundle;
+    }
+  }, [movementEngine, movementChoice, movementPreview?.kind]);
+  // Without the engine (Engine particles off, or its preview failed) the bake's descriptor plays instead
+  const [movementEngineFailed, setMovementEngineFailed] = useState<string | null>(null);
   const movementRequest = movementPreview?.request;
+  const legacyMovementRequest = movementRequest && (!movementEngineEnabled || movementEngineFailed === movementEngineKey) ? movementRequest : null;
+  const [legacyMovement, setLegacyMovement] = useState<{ request: MovementFxPreviewRequest; value: MovementFxPreview } | null>(null);
+  useEffect(() => {
+    if (!legacyMovementRequest) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      window.electronAPI.previewMovementFx(legacyMovementRequest)
+        .then((value) => { if (!cancelled) setLegacyMovement({ request: legacyMovementRequest, value }); },
+          (error: unknown) => console.warn('[HeroPoseViewer] movement preview unavailable:', error));
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [legacyMovementRequest]);
+  const stagedMovementPreview = useMemo((): MovementViewerPreview | undefined => {
+    if (!movementPreview) return undefined;
+    if (movementEngine && liveMovementBundle) return { ...movementPreview, engine: { ...movementEngine, bundle: liveMovementBundle } };
+    // The last descriptor loaded keeps playing while the next one bakes
+    const legacy = legacyMovement && legacyMovement.request.heroName === movementRequest?.heroName && legacyMovement.request.choice.kind === movementPreview.kind
+      ? legacyMovement.value : null;
+    return legacy ? { ...movementPreview, ...legacy } : movementPreview;
+  }, [movementPreview, movementEngine, liveMovementBundle, legacyMovement, movementRequest?.heroName]);
+  const activeDescriptor = stagedMovementPreview?.descriptor ?? effect?.descriptor;
+  const partialEffect = useMemo(() => activeDescriptor ? fxPreviewIssues(activeDescriptor).length > 0
+    || (scene ? particleAttachmentIssues(activeDescriptor, scene).length > 0 : false) : false, [activeDescriptor, scene]);
   useEffect(() => {
     if (!movementEngineEnabled || !movementRequest) return;
     let cancelled = false;
@@ -1852,12 +2012,13 @@ export default function HeroPoseViewer({
       try {
         const preview = await window.electronAPI.previewMovementEngine(movementRequest);
         const res = await fetch(preview.bundleUrl);
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(`${res.status} ${preview.bundleUrl}`);
         const bundle = (await res.json()) as ParticleBundle;
-        if (!cancelled) setLoadedMovementEngine({ key: movementEngineKey, preview, bundle });
+        if (!cancelled) setLoadedMovementEngine({ key: movementEngineKey, kind: movementRequest.choice.kind, heroName: movementRequest.heroName, preview, bundle });
       } catch (error) {
-        // The engine preview is optional; the curated overlay stays
+        // The engine preview is optional; the bake's overlay stands in
         console.warn('[HeroPoseViewer] movement engine preview unavailable:', error);
+        if (!cancelled) setMovementEngineFailed(movementEngineKey);
       }
     })();
     return () => { cancelled = true; };
@@ -1938,16 +2099,16 @@ export default function HeroPoseViewer({
         // fall back to the standard static menu pose.
         if (features.riggedPreviewEnabled) {
           try {
-            let rig = await getRiggedHeroPose(heroName, skinSources);
+            let rig = await getRiggedHeroPose(heroName, skinSources, meshGroup);
             if (cancelled) return;
             if (!rig.hasModel) {
               setGenerating(true);
-              rig = await exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey);
+              rig = await exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey, meshGroup);
               if (cancelled) return;
               setGenerating(false);
             }
             if (rig.hasModel) {
-              const cacheKey = JSON.stringify(['rigged', rig.key, rig.mtimeMs, features.clothPreviewEnabled, !!movementKind]);
+              const cacheKey = JSON.stringify(['rigged', rig.key, rig.mtimeMs, features.clothPreviewEnabled, !!movementKind, clipOverride?.key ?? null]);
               let model = recentModels.current.get(cacheKey);
               if (model) recentModels.current.delete(cacheKey);
               else {
@@ -1963,7 +2124,25 @@ export default function HeroPoseViewer({
                 installFastSkinnedBounds(gltf.scene);
                 // Known before the first frame, so a loaded room takes this hero's scale with it.
                 heroNormalization(gltf.scene, true);
-                const clips = (gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
+                let clips = (gltf.animations ?? []).filter((c) => Number.isFinite(c.duration) && c.duration > 0.001);
+                if (clipOverride) {
+                  const override = await loadGltfPreview(clipOverride.url).catch((error: unknown) => {
+                    disposeScene(gltf.scene);
+                    throw error;
+                  });
+                  if (cancelled) {
+                    disposeScene(gltf.scene);
+                    return;
+                  }
+                  // Bound by bone name; tracks for bones this model lacks would only warn every frame.
+                  for (const clip of override.animations) {
+                    clip.tracks = clip.tracks.filter((track) => !!gltf.scene.getObjectByName(track.name.slice(0, track.name.lastIndexOf('.'))));
+                  }
+                  const played = override.animations.filter((c) => c.duration > 0.001);
+                  const joined = concatAnimationClips(played, OVERRIDE_ALL_CLIPS);
+                  joined.userData = { grimoireDefault: true };
+                  clips = joined.duration > 0.001 ? [joined, ...played] : clips;
+                }
                 model = { cacheKey, scene: gltf.scene, clothModel, clips, rigged: true, bytes: heroModelBytes(gltf.scene, clips) };
               }
               const modelClips = model.clips;
@@ -2030,6 +2209,8 @@ export default function HeroPoseViewer({
     features.riggedPreviewEnabled,
     features.clothPreviewEnabled,
     !!movementKind,
+    clipOverride?.key,
+    meshGroup,
   ]);
 
   // Dispose in the commit that drops the scene from the Canvas. Disposing in the
@@ -2282,6 +2463,16 @@ export default function HeroPoseViewer({
         </MovementFxStage>
         </group>}
         {scene && <Source2DrawState scene={scene} debug={features.nprDebugEnabled} />}
+        {movementEngine?.actors?.map((mount) => <Source2DrawState key={mount.id} scene={mount.scene} debug={features.nprDebugEnabled} />)}
+        {features.source2ShaderHintsEnabled && movementEngine?.actors?.map((mount) => (
+          <Source2MaterialHints key={mount.id} scene={mount.scene} enabled={features.source2ShaderHintsEnabled} debug={features.nprDebugEnabled} skipNpr={features.source2SkipNpr} />
+        ))}
+        {features.nprMaterialsEnabled && movementEngine?.actors?.map((mount) => (
+          <NprMaterials key={mount.id} scene={mount.scene} enabled={features.nprMaterialsEnabled} tint={null} unified={features.unifiedEnabled}
+            source2Active={features.source2ShaderHintsEnabled} celV2={features.celV2Enabled} citadel={features.citadelEnabled} exposure={previewExposure}
+            ambientCube={ambientCube} mapProbe={viewerScene === 'hideout' && ambientProbe.kind === 'map' ? ambientProbe : null}
+            ambientTarget={NPR_AMBIENT_TARGET[lighting]} partEdits={NO_PART_EDITS} authoredEmission={sourceParticlesEnabled || viewerScene === 'hideout'} />
+        ))}
         {features.source2ShaderHintsEnabled && scene && (
           <Source2MaterialHints
             scene={scene}

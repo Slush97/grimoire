@@ -70,6 +70,8 @@ export interface HeroPoseSkinSource {
 export interface HeroPoseInfo {
   hasAnimationFallback?: boolean;
   hasMovement?: boolean;
+  /** How many parts the standing action bundle has (`movement.glb`, `movement-2.glb`, ...). */
+  movementParts?: number;
   hasModel: boolean;
   mtimeMs: number | null;
   key: string;

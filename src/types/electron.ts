@@ -986,6 +986,8 @@ export interface ElectronAPI {
      *  defaults to the soul-container model when omitted. `animated` keeps a
      *  real rig and its clips (the Installed preview); use its own cacheKey. */
     exportSoulModel: (metaKey: string, cacheKey: string, entry?: string, options?: { animated?: boolean }) => Promise<SoulModelInfo>;
+    /** An animation mod's clips exported onto its hero (the Installed preview); null when it has none to play. */
+    exportAnimationModPreview: (metaKey: string) => Promise<{ heroName: string; key: string; clips: string[]; meshGroup: string | null } | null>;
     getSkinEditInfo: (source: import('./skinEditor').SkinEditSource) => Promise<import('./skinEditor').SkinEditInfo>;
     previewMovementFx: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementFxPreview>;
     previewMovementEngine: (request: import('../lib/movementFx').MovementFxPreviewRequest) => Promise<import('../lib/movementFx').MovementEnginePreview>;
@@ -1015,12 +1017,14 @@ export interface ElectronAPI {
     ) => Promise<HeroPoseInfo>;
     getRiggedHeroPose: (
         heroName: string,
-        skinSources?: HeroPoseSkinSource[]
+        skinSources?: HeroPoseSkinSource[],
+        meshGroup?: string
     ) => Promise<HeroPoseInfo>;
     exportRiggedHeroPose: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[],
-        fallbackSkinMetaKey?: string
+        fallbackSkinMetaKey?: string,
+        meshGroup?: string
     ) => Promise<HeroPoseInfo>;
     getHeroEffectInfo: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
     exportHeroEffect: (heroName: string, skinSources?: HeroPoseSkinSource[]) => Promise<HeroEffectInfo>;
