@@ -1,22 +1,11 @@
 import type { Mod } from '../types/mod';
 import { variantGroupKey } from './variantGroups';
-import { modHeroNames } from './lockerUtils';
 
 export type LocalVariantSelectionIneligibility =
   | 'minimum'
   | 'merged'
   | 'gamebanana'
-  | 'placement'
-  | 'classification';
-
-/** Mirrors classificationKey in electron/main/services/localVariantGroup.ts:
- * the main-process planner refuses two definite but different Locker axes,
- * while an unclassified VPK inherits the established group profile. */
-function classificationKey(mod: Mod): string | undefined {
-  if (mod.globalType) return `global:${mod.globalType}`;
-  const heroes = modHeroNames(mod).map(hero => hero.toLowerCase()).sort();
-  return heroes.length > 0 ? `hero:${JSON.stringify(heroes)}` : undefined;
-}
+  | 'placement';
 
 export type LocalVariantSelectionEligibility =
   | { eligible: true }
@@ -47,16 +36,10 @@ export function localVariantSelectionEligibility(
   if (mods.some((mod) => !canJoinLocalVariantGroup(mod))) {
     return { eligible: false, reason: 'gamebanana' };
   }
-  // Mirror the two rules resolveLocalVariantGroupProfile enforces in main, so
+  // Mirror the placement rule resolveLocalVariantGroupProfile enforces in main, so
   // the Group button disables with a hint instead of surfacing a raw IPC error.
   if (mods.some((mod) => !!mod.priorityMod !== !!mods[0].priorityMod)) {
     return { eligible: false, reason: 'placement' };
-  }
-  const classifications = new Set(
-    mods.map(classificationKey).filter((key): key is string => !!key)
-  );
-  if (classifications.size > 1) {
-    return { eligible: false, reason: 'classification' };
   }
   return { eligible: true };
 }

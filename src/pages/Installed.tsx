@@ -4311,9 +4311,7 @@ export default function Installed() {
                       ? t('installed.select.groupVariantsMergedHint')
                       : groupSelectionEligibility.reason === 'placement'
                         ? t('installed.select.groupVariantsPlacementHint')
-                        : groupSelectionEligibility.reason === 'classification'
-                          ? t('installed.select.groupVariantsClassificationHint')
-                          : t('installed.select.groupVariantsLocalHint')
+                        : t('installed.select.groupVariantsLocalHint')
                 }
               >
                 {t('installed.select.groupVariants')}
