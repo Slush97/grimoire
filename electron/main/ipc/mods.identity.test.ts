@@ -1,24 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { ModMetadata } from '../services/metadata';
 import type { Mod } from '../services/mods';
 import { buildCategoryPaths } from '../../../src/lib/categoryPaths';
 
 const h = vi.hoisted(() => ({
     handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
-    path: '/normal', devMode: false, locked: false,
+    path: '/normal', devMode: false, locked: false, safety: false,
     lockGate: null as Promise<void> | null,
     metadata: new Map<string, ModMetadata>(),
     ignoredConflicts: [] as string[],
     reorder: vi.fn(), priority: vi.fn(), swap: vi.fn(), migrateConflicts: vi.fn(), saveSettings: vi.fn(),
     scan: vi.fn(), parse: vi.fn(), heal: vi.fn(), enterLock: vi.fn(), write: vi.fn(), refresh: vi.fn(), download: vi.fn(), remove: vi.fn(), enable: vi.fn(),
     patch: vi.fn(), paths: vi.fn(), categoryPaths: vi.fn(), localHero: vi.fn(), loadMetadata: vi.fn(), cachedMod: vi.fn(),
+    importVpk: vi.fn(), adoption: vi.fn(),
 }));
 vi.mock('electron', () => ({
     ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => h.handlers.set(name, handler) },
 }));
 vi.mock('../index', () => ({ getMainWindow: () => null }));
 vi.mock('../services/settings', () => ({
-    loadSettings: () => ({ devMode: h.devMode, ignoredConflicts: h.ignoredConflicts }),
+    loadSettings: () => ({ devMode: h.devMode, ignoredConflicts: h.ignoredConflicts, experimentalModSafety: h.safety }),
     getActiveDeadlockPath: () => h.path,
     saveSettings: h.saveSettings,
 }));
@@ -45,6 +49,7 @@ vi.mock('../services/metadata', () => ({
     getModMetadata: (key: string) => h.metadata.get(key),
     setModMetadataWithHash: h.write,
     setModMetadata: h.patch,
+    removeModMetadata: (key: string) => h.metadata.delete(key),
 }));
 vi.mock('../services/modReplacement', async original => ({
     ...await original<typeof import('../services/modReplacement')>(), refreshEmbedAfterMetadataChange: h.refresh,
@@ -63,8 +68,8 @@ vi.mock('../services/modSafety', () => ({ modSafetySnapshot: () => undefined }))
 vi.mock('../services/vdataCheck', () => ({ outdatedVdataSnapshot: () => undefined, staleModelsSnapshot: () => undefined,
     checkOutdatedVdata: () => {} }));
 vi.mock('../services/attachmentHeal', () => ({}));
-vi.mock('../services/importDisabledVpk', () => ({}));
-vi.mock('../services/deadlock', () => ({}));
+vi.mock('../services/importDisabledVpk', () => ({ importDisabledVpk: h.importVpk }));
+vi.mock('../services/deadlock', () => ({ metaKeyFor: (path: string) => basename(path) }));
 vi.mock('../services/abilitySounds', () => ({ classifyAbilitySoundsFromVpk: () => null }));
 vi.mock('../services/modChangeObservation', () => ({ notifyModChanges: () => {} }));
 vi.mock('../services/conflicts', () => ({ migrateIgnoredConflictKeysForMods: h.migrateConflicts }));
@@ -74,10 +79,12 @@ vi.mock('../services/unknownModDetection', () => ({ inferHeroFromVpkTree: h.loca
 vi.mock('../services/adoptedThumbnail', () => ({}));
 vi.mock('../services/modDatabase', () => ({ getModById: h.cachedMod }));
 vi.mock('../services/extract', () => ({}));
-vi.mock('../services/importVariantGroups', () => ({}));
-vi.mock('../services/localImportTransaction', () => ({}));
 vi.mock('../services/modMerger', () => ({}));
-vi.mock('../services/imprintMods', () => ({}));
+vi.mock('../services/imprintMods', () => ({
+    computeAdoptionPatchAt: h.adoption,
+    hasAdoptionFields: (patch: object) => Object.keys(patch).length > 0,
+    hasAnyImprint: () => false,
+}));
 vi.mock('../services/vpkIdentity', () => ({}));
 vi.mock('../services/modinfoFormat', () => ({}));
 vi.mock('../services/foundryCatalog', () => ({}));
@@ -109,6 +116,9 @@ beforeEach(() => {
     h.path = '/normal';
     h.devMode = false;
     h.locked = false;
+    h.safety = false;
+    h.importVpk.mockReset();
+    h.adoption.mockReset().mockReturnValue({});
     h.lockGate = null;
     h.ignoredConflicts = [];
     h.reorder.mockResolvedValue(undefined);
@@ -140,6 +150,48 @@ beforeEach(() => {
     h.enable.mockImplementation(async () => {
         expect(h.locked).toBe(true);
         return { ...replacement, enabled: true };
+    });
+});
+
+describe('importing into a mixed local variant group', () => {
+    it('imports an imprinted Lowdetailmap without requiring CompLock members to share classifications', async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'grimoire-variant-import-'));
+        try {
+            const file = join(directory, 'Lowdetailmap.vpk');
+            await writeFile(file, 'fixture');
+            h.safety = true;
+            const components = [source, { ...source, id: 'particles', metaKey: 'particles.vpk' },
+                { ...source, id: 'outlines', metaKey: 'outlines.vpk' }];
+            h.scan.mockResolvedValue(components);
+            const identities: ModMetadata[] = [
+                { lockerHero: 'Ivy', lockerHeroSource: 'manual' },
+                { lockerHero: 'Haze', lockerHeroSource: 'manual' },
+                { globalType: 'hud', globalTypeSource: 'manual' },
+            ];
+            components.forEach((component, index) => h.metadata.set(component.metaKey, {
+                modName: 'CompLock', localGroupId: 'complock', abilitySounds: null, ...identities[index],
+            }));
+            const originalMetadata = components.map(component => structuredClone(h.metadata.get(component.metaKey)));
+            h.importVpk.mockImplementation(async () => {
+                expect(h.locked).toBe(true);
+                components.push({ ...source, id: 'new-map', metaKey: 'Lowdetailmap.vpk', path: file, fileName: 'Lowdetailmap.vpk' });
+                return file;
+            });
+            h.adoption.mockReturnValue({ gameBananaId: 7, sourceSection: 'Mod', categoryName: 'Maps',
+                categoryId: 37225, thumbnailUrl: 'https://example.com/map.png' });
+            const result = await h.handlers.get('import-custom-mods')!({ sender: { isDestroyed: () => false, send: vi.fn() } }, {
+                items: [{ vpkPath: file, name: 'CompLock', localGroupId: 'complock' }],
+            }) as { results: Array<{ ok: boolean; imported: number }> };
+            expect(result.results).toMatchObject([{ ok: true, imported: 1 }]);
+            const imported = h.metadata.get('Lowdetailmap.vpk');
+            expect(imported).toMatchObject({ modName: 'CompLock', localGroupId: 'complock',
+                gameBananaId: 7, categoryId: 37225, categoryName: 'Maps' });
+            expect(imported).not.toHaveProperty('lockerHero');
+            expect(imported).not.toHaveProperty('globalType');
+            expect(components.slice(0, 3).map(component => h.metadata.get(component.metaKey))).toMatchObject(originalMetadata);
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
     });
 });
 

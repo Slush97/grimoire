@@ -491,9 +491,14 @@ describe('queued mod replacements', () => {
         add('unrelated-cold-local', { gameBananaId: undefined, modName: 'Unrelated local mod' });
         state.settings.experimentalVpkImprinting = true;
         const queued = queueModReplacement('/game', args, ['old'], null);
-        await run();
+        await run(0, () => {
+            add('fresh', { gameBananaFileId: 20, globalType: 'hud', globalTypeSource: 'manual' });
+        });
         await queued;
-        expect(state.metadata.get('fresh.vpk')).toMatchObject({ localGroupId: 'group', modName: 'My variants', lockerHero: 'Ivy' });
+        expect(state.metadata.get('fresh.vpk')).toMatchObject({
+            localGroupId: 'group', modName: 'My variants', globalType: 'hud', globalTypeSource: 'manual',
+        });
+        expect(state.metadata.get('fresh.vpk')?.lockerHero).toBeUndefined();
         expect(state.events).toEqual(['lock', 'delete', 'unlock', 'imprint']);
         expect(mocks.inferLocalHero).not.toHaveBeenCalled();
     });
