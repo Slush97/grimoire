@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
+import BenchmarkLaunch from './benchmark/BenchmarkLaunch';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -1104,6 +1105,8 @@ export default function Sidebar() {
               />
             </div>
           ))}
+
+          {settings?.experimentalBenchmark && <BenchmarkLaunch collapsed={collapsed} gameRunning={gameRunning} />}
 
           {gameRunning || stopPending ? (
             <button

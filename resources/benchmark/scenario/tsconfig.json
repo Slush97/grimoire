@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"es2023","module":"esnext","moduleResolution":"bundler","lib":["es2023"],"types":[],"jsx":"react-jsx","jsxImportSource":"modlock","strict":true,"noEmit":true},"exclude":["build","node_modules"]}

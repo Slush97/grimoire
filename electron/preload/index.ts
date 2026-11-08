@@ -449,6 +449,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),
+    getBenchmarkStatus: () => ipcRenderer.invoke('benchmark-status'),
+    getBenchmarkResult: () => ipcRenderer.invoke('benchmark-result'),
+    launchBenchmark: (resolution) => ipcRenderer.invoke('benchmark-launch', resolution),
+    stopBenchmark: () => ipcRenderer.invoke('benchmark-stop'),
+    openBenchmarkLogs: () => ipcRenderer.invoke('benchmark-open-logs'),
     launchVanilla: () => ipcRenderer.invoke('launch-vanilla'),
     getGameRunningStatus: () => ipcRenderer.invoke('get-game-running-status'),
     stopGame: () => ipcRenderer.invoke('stop-game'),

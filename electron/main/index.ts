@@ -101,6 +101,8 @@ import './ipc/cursorPacks';
 import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';
+import './ipc/benchmark';
+import { getBenchmarkStatus, stopBenchmark } from './services/benchmark';
 import './ipc/social';
 import './ipc/locales';
 import './ipc/diagnostics';
@@ -699,9 +701,15 @@ if (!gotTheLock) {
 
     // Close the Discord RPC IPC socket cleanly so the activity drops off the
     // user's profile the moment Grimoire quits (no-op if RPC was never enabled).
-    app.on('before-quit', () => {
+    let benchmarkQuitPending = false;
+    app.on('before-quit', (event) => {
         destroyDiscordRpc();
         void stopForgeBridge();
+        if (getBenchmarkStatus().active && !benchmarkQuitPending) {
+            event.preventDefault();
+            benchmarkQuitPending = true;
+            void stopBenchmark().catch(error => console.error('[benchmark] Quit cleanup failed:', error)).finally(() => app.quit());
+        }
     });
 }
 
