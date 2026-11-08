@@ -1,16 +1,21 @@
 # Performance config integration
 
-How Grimoire integrates community gameinfo.gi performance configs, and why the
-strategy is "curate one upstream" rather than "ingest any config from
-GameBanana." Read this before touching `performanceConfig.ts`,
-`performanceConfigData.ts`, or building the planned manifest/preset UI.
+How Grimoire integrates community gameinfo.gi performance configs. Read this
+before touching `performanceConfig.ts`, `performanceConfigData.ts`, or the
+custom preset UI.
+
+The original curation decision below records why whole-file config replacement
+is unsafe. User-managed imports now use constrained settings extraction instead;
+see [User-managed GitHub presets](#user-managed-github-presets). The next phase is
+mapped in [GameBanana sources and universal import plan](performance-config-sources.md),
+including the 2026-11-07 archive inventory and verified GitHub overlaps.
 
 Status: seven selectable presets shipped, generated from pinned upstream commits.
 The research that drove the scope decision is recorded below and still holds;
 "What shipped" records where the delivered design differs from the plan it
 replaced.
 
-## TL;DR decision
+## Original curation decision
 
 - **Curate a small set of pinned upstreams.** Two projects publish real
   `gameinfo.gi` configs under a bundle-able license: `Sqooky/OptimizationLock`
@@ -18,8 +23,9 @@ replaced.
   perf-addon VPKs) and `dacooderr/OptiLock` (GPL-3.0, genuinely different
   tuning, publishes git tags). Everything else is unlicensed, stale, or a
   dormant fork.
-- **Do NOT build a generic "apply any GameBanana gameinfo.gi config" ingester.**
-  The research below shows it cannot be made safe or low-maintenance.
+- **Do not apply arbitrary uploaded gameinfo.gi files wholesale.** The research
+  below explains the failure modes. User-managed imports must extract supported
+  settings and preserve the local file's structure, mod paths and display setup.
 - **Do nothing for QOL Lock.** The single most popular optimization mod is a
   plain VPK; the normal mod pipeline already handles it.
 

@@ -1,0 +1,4131 @@
+{
+  "schemaVersion": 1,
+  "surveyDate": "2026-11-07",
+  "game": {
+    "name": "Deadlock",
+    "gamebananaId": 20948
+  },
+  "scope": "Public keyword search plus complete returned pages for four relevant Mod categories and Script, Tool, Tutorial, Wip indexes. Not a guarantee of private, withheld, deleted, or unindexed coverage. Metadata and archives are time-specific snapshots.",
+  "coverage": {
+    "coverage": [
+      {
+        "source": "search-config",
+        "reported": 42,
+        "read": 41,
+        "pages": 3
+      },
+      {
+        "source": "search-cfg",
+        "reported": 12,
+        "read": 12,
+        "pages": 1
+      },
+      {
+        "source": "search-optimization",
+        "reported": 20,
+        "read": 19,
+        "pages": 2
+      },
+      {
+        "source": "search-optimisation",
+        "reported": 0,
+        "read": 0,
+        "pages": 1
+      },
+      {
+        "source": "search-performance",
+        "reported": 52,
+        "read": 50,
+        "pages": 4
+      },
+      {
+        "source": "search-fps",
+        "reported": 46,
+        "read": 45,
+        "pages": 4
+      },
+      {
+        "source": "search-potato",
+        "reported": 14,
+        "read": 14,
+        "pages": 1
+      },
+      {
+        "source": "search-complock",
+        "reported": 2,
+        "read": 2,
+        "pages": 1
+      },
+      {
+        "source": "search-competitive",
+        "reported": 16,
+        "read": 16,
+        "pages": 2
+      },
+      {
+        "source": "category-46154",
+        "reported": 165,
+        "read": 165,
+        "pages": 4
+      },
+      {
+        "source": "category-31710",
+        "reported": 154,
+        "read": 154,
+        "pages": 4
+      },
+      {
+        "source": "category-33331",
+        "reported": 35,
+        "read": 35,
+        "pages": 1
+      },
+      {
+        "source": "category-37225",
+        "reported": 44,
+        "read": 44,
+        "pages": 1
+      },
+      {
+        "source": "index-Script",
+        "reported": 10,
+        "read": 10,
+        "pages": 1
+      },
+      {
+        "source": "index-Tool",
+        "reported": 26,
+        "read": 26,
+        "pages": 1
+      },
+      {
+        "source": "index-Tutorial",
+        "reported": 12,
+        "read": 12,
+        "pages": 1
+      },
+      {
+        "source": "index-Wip",
+        "reported": 100,
+        "read": 100,
+        "pages": 2
+      }
+    ],
+    "failures": []
+  },
+  "uniqueListingsConsidered": 615,
+  "summary": {
+    "config-package": 16,
+    "related-asset-package": 15,
+    "script-source": 3,
+    "guide": 1,
+    "external-installer": 1,
+    "false-positive": 3
+  },
+  "sources": [
+    {
+      "model": "Mod",
+      "id": 650519,
+      "name": "Optimisationlock - Competitive FPS Optimisations",
+      "url": "https://gamebanana.com/mods/650519",
+      "author": "Maidehnless",
+      "version": "1.4",
+      "obsolete": false,
+      "modified": 1780264233,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 5,
+      "files": [
+        {
+          "id": 1670702,
+          "name": "optilock_-_low_end.rar",
+          "size": 13380,
+          "version": "1.4",
+          "added": 1775645819,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1670702"
+        },
+        {
+          "id": 1670703,
+          "name": "optilock_-_standard.rar",
+          "size": 7682,
+          "version": "1.4",
+          "added": 1775645819,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1670703"
+        }
+      ],
+      "inspectedFileIds": [
+        1670702,
+        1670703
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 730862,
+      "name": "best fps cfg ngl",
+      "url": "https://gamebanana.com/mods/730862",
+      "author": "bigego11",
+      "version": "1.5",
+      "obsolete": false,
+      "modified": 1793993229,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1879015,
+          "name": "fps15.zip",
+          "size": 13439,
+          "version": "1.5",
+          "added": 1793986681,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1879015"
+        },
+        {
+          "id": 1859481,
+          "name": "fps.7z",
+          "size": 12813,
+          "version": "1.0",
+          "added": 1792688095,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1859481"
+        }
+      ],
+      "inspectedFileIds": [
+        1879015,
+        1859481
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 673077,
+      "name": "Max Fps but with Small Changes",
+      "url": "https://gamebanana.com/mods/673077",
+      "author": "Tysen98",
+      "version": "",
+      "obsolete": false,
+      "modified": 1780264134,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1688726,
+          "name": "maxfps_slightchanges_c358b.zip",
+          "size": 20312,
+          "version": null,
+          "added": 1777486685,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1688726"
+        },
+        {
+          "id": 1709954,
+          "name": "maxfps_slightchanges_f8f97.zip",
+          "size": 20313,
+          "version": null,
+          "added": 1779623226,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1709954"
+        }
+      ],
+      "inspectedFileIds": [
+        1688726,
+        1709954
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 658776,
+      "name": "Deadlock Competitive Config",
+      "url": "https://gamebanana.com/mods/658776",
+      "author": "SHR1KN",
+      "version": "1.0",
+      "obsolete": false,
+      "modified": 1780264283,
+      "githubLinks": [
+        "https://github.com/SHR1KN/Deadlock-Competitive-Config"
+      ],
+      "alternateSources": [
+        {
+          "url": "https://github.com/SHR1KN/Deadlock-Competitive-Config",
+          "description": "Github"
+        }
+      ],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1644456,
+          "name": "deadlock_competitive_config_v10_compatible_with_patch_2026-03-07_93625.rar",
+          "size": 25722,
+          "version": null,
+          "added": 1773169511,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1644456"
+        }
+      ],
+      "inspectedFileIds": [
+        1644456
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 656341,
+      "name": "Optimizationlock/Sqooky fps config HAPPY THANKSGIV",
+      "url": "https://gamebanana.com/mods/656341",
+      "author": "Sqooky!",
+      "version": "3.9 and 1.1",
+      "obsolete": false,
+      "modified": 1793813113,
+      "githubLinks": [
+        "https://github.com/Sqooky/Deadlock-Optimization-Resources",
+        "https://github.com/Sqooky/OptimizationLock",
+        "https://github.com/Sqooky/OptimizationLock#editing-gameinfogi",
+        "https://github.com/Sqooky/OptimizationLock#faq",
+        "https://github.com/Sqooky/OptimizationLock#gameinfogi-is-getting-reset",
+        "https://github.com/Sqooky/OptimizationLock#how-do-i-manually-add-convars",
+        "https://github.com/Sqooky/OptimizationLock#my-game-doesnt-open-with-the-config-something-is-broken-disabling-mods",
+        "https://github.com/Sqooky/OptimizationLock/",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_bulgarian.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_chinese.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_french.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_hungarian.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_italian.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_portuguese.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_russian.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_spanish.md",
+        "https://github.com/Sqooky/OptimizationLock/blob/main/translations/README_ukrainian.md"
+      ],
+      "alternateSources": [
+        {
+          "url": "https://github.com/Sqooky/OptimizationLock",
+          "description": "Upstream Url"
+        }
+      ],
+      "classification": "config-package",
+      "archivedFileCount": 1,
+      "files": [
+        {
+          "id": 1876480,
+          "name": "sqooky_s_performance_config_v3_9.7z",
+          "size": 27063,
+          "version": "3.9",
+          "added": 1793802973,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1876480"
+        },
+        {
+          "id": 1865463,
+          "name": "performance_improving_mods_fb331.7z",
+          "size": 7690976,
+          "version": null,
+          "added": 1793073057,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865463"
+        },
+        {
+          "id": 1876479,
+          "name": "sqooky_s_maxfps_config_v1_8.7z",
+          "size": 27138,
+          "version": "1.8",
+          "added": 1793802966,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1876479"
+        },
+        {
+          "id": 1858321,
+          "name": "kaizuchaneru_s_max_fps_config_39ba7.7z",
+          "size": 16209,
+          "version": "2.5",
+          "added": 1792606613,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1858321"
+        },
+        {
+          "id": 1776198,
+          "name": "auto_updater_python_script.7z",
+          "size": 8748,
+          "version": "1",
+          "added": 1786055207,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1776198"
+        },
+        {
+          "id": 1876549,
+          "name": "eskay_s_config_v1_1.7z",
+          "size": 26999,
+          "version": "1.1",
+          "added": 1793808108,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1876549"
+        },
+        {
+          "id": 1838157,
+          "name": "piggy_s_config.7z",
+          "size": 9541,
+          "version": null,
+          "added": 1791181843,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1838157"
+        },
+        {
+          "id": 1865000,
+          "name": "auto_updater_00065.7z",
+          "size": 12738,
+          "version": "1.3",
+          "added": 1793044361,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865000"
+        },
+        {
+          "id": 1865013,
+          "name": "texture_downscaler_mod.7z",
+          "size": 641915469,
+          "version": null,
+          "added": 1793045085,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865013"
+        }
+      ],
+      "inspectedFileIds": [
+        1876480,
+        1865463,
+        1876479,
+        1858321,
+        1876549,
+        1838157
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 692484,
+      "name": "Potato Lock - Reduced Graphics for Performance",
+      "url": "https://gamebanana.com/mods/692484",
+      "author": "abuzitin2000",
+      "version": "1.1.3",
+      "obsolete": false,
+      "modified": 1793933717,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 9,
+      "files": [
+        {
+          "id": 1878361,
+          "name": "main_file_classic_ecc47.zip",
+          "size": 500525,
+          "version": "1.1.3",
+          "added": 1793933082,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1878361"
+        },
+        {
+          "id": 1878362,
+          "name": "main_file_vibrant_3fd87.zip",
+          "size": 499848,
+          "version": "1.1.3",
+          "added": 1793933082,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1878362"
+        },
+        {
+          "id": 1878363,
+          "name": "optional_heroes_8d10e.zip",
+          "size": 1495993,
+          "version": "1.1.3",
+          "added": 1793933084,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1878363"
+        },
+        {
+          "id": 1748480,
+          "name": "optional_hideout_texts.zip",
+          "size": 1735,
+          "version": "1.0",
+          "added": 1783471104,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1748480"
+        }
+      ],
+      "inspectedFileIds": [
+        1878361,
+        1878362,
+        1878363,
+        1748480
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 729604,
+      "name": "FPS Config with minimal visual changes",
+      "url": "https://gamebanana.com/mods/729604",
+      "author": "DirBiLike",
+      "version": "",
+      "obsolete": false,
+      "modified": 1792402247,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1855363,
+          "name": "gameinfo.7z",
+          "size": 6719,
+          "version": "1",
+          "added": 1792399036,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1855363"
+        },
+        {
+          "id": 1855385,
+          "name": "pak12_dir_97ec6.7z",
+          "size": 17962342,
+          "version": "1",
+          "added": 1792401605,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1855385"
+        }
+      ],
+      "inspectedFileIds": [
+        1855363,
+        1855385
+      ]
+    },
+    {
+      "model": "Script",
+      "id": 12939,
+      "name": "true FPS boost config",
+      "url": "https://gamebanana.com/scripts/12939",
+      "author": "bap3ak",
+      "version": null,
+      "obsolete": false,
+      "modified": 1770976078,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "script-source",
+      "archivedFileCount": 0,
+      "files": [],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 609804,
+      "name": "Fps config For Competitive",
+      "url": "https://gamebanana.com/mods/609804",
+      "author": "Hanturaya",
+      "version": "v13.1",
+      "obsolete": false,
+      "modified": 1792318246,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 14,
+      "files": [
+        {
+          "id": 1617717,
+          "name": "example_of_mine_v13.7z",
+          "size": 8996,
+          "version": null,
+          "added": 1770275370,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1617717"
+        }
+      ],
+      "inspectedFileIds": [
+        1617717
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 698885,
+      "name": "Freak Config by ascc (OUTDATED)",
+      "url": "https://gamebanana.com/mods/698885",
+      "author": "ascc 0_0",
+      "version": "1.2",
+      "obsolete": false,
+      "modified": 1790755176,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 2,
+      "files": [
+        {
+          "id": 1786923,
+          "name": "cfg_2e8a2.rar",
+          "size": 74912063,
+          "version": "1.2",
+          "added": 1786923463,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1786923"
+        },
+        {
+          "id": 1786926,
+          "name": "cfg_ru_d9620.rar",
+          "size": 74916414,
+          "version": "1.2",
+          "added": 1786923704,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1786926"
+        }
+      ],
+      "inspectedFileIds": [
+        1786923
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 722944,
+      "name": "SideLock[mb best fps cfg]",
+      "url": "https://gamebanana.com/mods/722944",
+      "author": "hitmeupwhenyourelonely",
+      "version": "",
+      "obsolete": false,
+      "modified": 1790890179,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1833750,
+          "name": "cfg.zip",
+          "size": 11266,
+          "version": "1.0.0",
+          "added": 1790889815,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1833750"
+        }
+      ],
+      "inspectedFileIds": [
+        1833750
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 723276,
+      "name": "Softer New York map",
+      "url": "https://gamebanana.com/mods/723276",
+      "author": "kaleina_nyan",
+      "version": "1.5",
+      "obsolete": false,
+      "modified": 1792236769,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 5,
+      "files": [
+        {
+          "id": 1852194,
+          "name": "lightlock-shadows-v1-6793.7z",
+          "size": 815329576,
+          "version": null,
+          "added": 1792235834,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1852194"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 671812,
+      "name": "config \"OptimizationDL\" - competitive by back3p",
+      "url": "https://gamebanana.com/mods/671812",
+      "author": "back3p",
+      "version": "2.2",
+      "obsolete": false,
+      "modified": 1781439843,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1684045,
+          "name": "b3b3zxc_-_config_v20_677d6.rar",
+          "size": 39572,
+          "version": "2.0",
+          "added": 1776971000,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1684045"
+        },
+        {
+          "id": 1684553,
+          "name": "b3b3zxc_-_config_v20_540b9.rar",
+          "size": 39648,
+          "version": null,
+          "added": 1777040158,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1684553"
+        },
+        {
+          "id": 1724171,
+          "name": "b3b3zxc_-_config_8a6f0.rar",
+          "size": 40068,
+          "version": null,
+          "added": 1781017046,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1724171"
+        },
+        {
+          "id": 1728314,
+          "name": "b3b3zxc_-_config_d6b1b.rar",
+          "size": 130728,
+          "version": "2.2",
+          "added": 1781439827,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1728314"
+        }
+      ],
+      "inspectedFileIds": [
+        1684045,
+        1684553,
+        1724171,
+        1728314
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 690233,
+      "name": "OptiLock FPS Configs (Nurse Harrow Fix!)",
+      "url": "https://gamebanana.com/mods/690233",
+      "author": "dacooderr",
+      "version": "1",
+      "obsolete": false,
+      "modified": 1793645459,
+      "githubLinks": [
+        "https://github.com/dacooderr/OptiLock",
+        "https://github.com/dacooderr/OptiLock#base-instructions"
+      ],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1873182,
+          "name": "optilock_fps_configs_025f2.zip",
+          "size": 181380,
+          "version": "6.1d",
+          "added": 1793568837,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1873182"
+        },
+        {
+          "id": 1872702,
+          "name": "essentialfixes_721e2.zip",
+          "size": 794948,
+          "version": "1",
+          "added": 1793545333,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1872702"
+        }
+      ],
+      "inspectedFileIds": [
+        1873182,
+        1872702
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 664234,
+      "name": "Full FPS UP cfg // skybox",
+      "url": "https://gamebanana.com/mods/664234",
+      "author": "Sadie Sinks Husband",
+      "version": "",
+      "obsolete": false,
+      "modified": 1790843721,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1833127,
+          "name": "full_fps_up_cfg_ssh.rar",
+          "size": 65585704,
+          "version": "2.0",
+          "added": 1790843654,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1833127"
+        }
+      ],
+      "inspectedFileIds": [
+        1833127
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 727681,
+      "name": "Blackout: More FPS, No Glare | 4:3 Fix, HP Bars",
+      "url": "https://gamebanana.com/mods/727681",
+      "author": "resurrect",
+      "version": "2.0.8",
+      "obsolete": false,
+      "modified": 1793878241,
+      "githubLinks": [
+        "https://github.com/resrct/deadlock-blackout/releases/latest"
+      ],
+      "alternateSources": [
+        {
+          "url": "https://github.com/resrct/deadlock-blackout/releases/latest",
+          "description": "Full version: dark maps, config, auto-update"
+        }
+      ],
+      "classification": "config-package",
+      "archivedFileCount": 10,
+      "files": [
+        {
+          "id": 1877452,
+          "name": "blackout_maps_effects_a3eda.zip",
+          "size": 839950777,
+          "version": "2.0.8",
+          "added": 1793873201,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1877452"
+        },
+        {
+          "id": 1877479,
+          "name": "blackout_health_bars_4c6f3.zip",
+          "size": 24044,
+          "version": "2.0.8",
+          "added": 1793875763,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1877479"
+        },
+        {
+          "id": 1877480,
+          "name": "blackout_black_damage_2367e.zip",
+          "size": 20249,
+          "version": "2.0.8",
+          "added": 1793875763,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1877480"
+        },
+        {
+          "id": 1877481,
+          "name": "blackout_4x3_16x10_fix_9a935.zip",
+          "size": 98765,
+          "version": "2.0.8",
+          "added": 1793875763,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1877481"
+        },
+        {
+          "id": 1856071,
+          "name": "blackout_config_gameinfo.zip",
+          "size": 10415,
+          "version": "2.0.6",
+          "added": 1792449789,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1856071"
+        },
+        {
+          "id": 1877505,
+          "name": "deadlock_blackout_208.zip",
+          "size": 52319715,
+          "version": "2.0.8",
+          "added": 1793878161,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1877505"
+        },
+        {
+          "id": 1857333,
+          "name": "deadlock_blackout_206_source.zip",
+          "size": 2779459,
+          "version": "2.0.6",
+          "added": 1792539827,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1857333"
+        }
+      ],
+      "inspectedFileIds": [
+        1856071
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 616141,
+      "name": "configuration optimization from dyson",
+      "url": "https://gamebanana.com/mods/616141",
+      "author": "dyson behind",
+      "version": "21.4",
+      "obsolete": false,
+      "modified": 1792115260,
+      "githubLinks": [],
+      "alternateSources": [
+        {
+          "url": "https://t.me/wokeupinthemorning",
+          "description": "telegram"
+        },
+        {
+          "url": "https://discord.gg/ahpXBZ2yr6",
+          "description": "my discord"
+        },
+        {
+          "url": "https://www.youtube.com/@dysonpeek",
+          "description": "youtube"
+        }
+      ],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1513401,
+          "name": "gameinfo_70.rar",
+          "size": 9281,
+          "version": "7.0",
+          "added": 1757257915,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1513401"
+        },
+        {
+          "id": 1515943,
+          "name": "gameinfo_82.rar",
+          "size": 12019,
+          "version": "8.0",
+          "added": 1757612721,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1515943"
+        },
+        {
+          "id": 1523959,
+          "name": "gameinfo_90_365f1.rar",
+          "size": 9452,
+          "version": "9.0",
+          "added": 1758642878,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1523959"
+        },
+        {
+          "id": 1529324,
+          "name": "gameinfo_102_fix.rar",
+          "size": 9928,
+          "version": "10.2",
+          "added": 1759300992,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1529324"
+        },
+        {
+          "id": 1532209,
+          "name": "dyson_build_110.rar",
+          "size": 10818,
+          "version": "11.0",
+          "added": 1759652144,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1532209"
+        },
+        {
+          "id": 1537181,
+          "name": "dyson_120.rar",
+          "size": 10267,
+          "version": "12.0",
+          "added": 1760268199,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1537181"
+        },
+        {
+          "id": 1564335,
+          "name": "gameinfo_56202.rar",
+          "size": 10860,
+          "version": "13.5",
+          "added": 1763584058,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1564335"
+        },
+        {
+          "id": 1573885,
+          "name": "dyson_150.rar",
+          "size": 12127,
+          "version": "15.0",
+          "added": 1764798521,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1573885"
+        },
+        {
+          "id": 1611603,
+          "name": "166.rar",
+          "size": 11772,
+          "version": "16.6",
+          "added": 1769542138,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1611603"
+        },
+        {
+          "id": 1640813,
+          "name": "170_a0e85.rar",
+          "size": 12732,
+          "version": "17.0",
+          "added": 1772765659,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1640813"
+        },
+        {
+          "id": 1652718,
+          "name": "182.rar",
+          "size": 13372,
+          "version": "18.2",
+          "added": 1774016664,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1652718"
+        },
+        {
+          "id": 1654919,
+          "name": "185.rar",
+          "size": 13992,
+          "version": "18.5",
+          "added": 1774204094,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1654919"
+        },
+        {
+          "id": 1656271,
+          "name": "190.rar",
+          "size": 27571,
+          "version": "19.0",
+          "added": 1774322498,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1656271"
+        },
+        {
+          "id": 1660061,
+          "name": "196.rar",
+          "size": 35989,
+          "version": "19.6",
+          "added": 1774673470,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1660061"
+        },
+        {
+          "id": 1690836,
+          "name": "dyson_build_28a62.rar",
+          "size": 17261134,
+          "version": "20.7",
+          "added": 1777699251,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1690836"
+        },
+        {
+          "id": 1719219,
+          "name": "dyson_build_c26f7.zip",
+          "size": 248152,
+          "version": "21.0",
+          "added": 1780512321,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1719219"
+        },
+        {
+          "id": 1771890,
+          "name": "dyson_build_e4a77.zip",
+          "size": 31080,
+          "version": "21.2",
+          "added": 1785683556,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1771890"
+        },
+        {
+          "id": 1849988,
+          "name": "dyson_build_45ccf.zip",
+          "size": 31308,
+          "version": "21.4",
+          "added": 1792115249,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1849988"
+        }
+      ],
+      "inspectedFileIds": [
+        1849988
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 650634,
+      "name": "QOL Lock [INSTANT SAVE/LOAD UPDATE]",
+      "url": "https://gamebanana.com/mods/650634",
+      "author": "civo",
+      "version": "4.0.5",
+      "obsolete": false,
+      "modified": 1792185447,
+      "githubLinks": [
+        "https://github.com/civo7/QOLLOCK"
+      ],
+      "alternateSources": [
+        {
+          "url": "https://github.com/civo7/QOLLOCK"
+        }
+      ],
+      "classification": "related-asset-package",
+      "archivedFileCount": 3,
+      "files": [
+        {
+          "id": 1850914,
+          "name": "qollock_405_16october.zip",
+          "size": 10116149,
+          "version": null,
+          "added": 1792185439,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1850914"
+        },
+        {
+          "id": 1680726,
+          "name": "optional_announcer_slot1_seven_josefumivo.zip",
+          "size": 1323205,
+          "version": null,
+          "added": 1776598953,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1680726"
+        },
+        {
+          "id": 1641691,
+          "name": "optional_announcer_slot2__graves_bregraham.zip",
+          "size": 1893205,
+          "version": null,
+          "added": 1772855812,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1641691"
+        },
+        {
+          "id": 1641703,
+          "name": "optional_announcer_slot3_drifter_viewtifulvalentine.zip",
+          "size": 1645683,
+          "version": null,
+          "added": 1772856856,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1641703"
+        },
+        {
+          "id": 1641769,
+          "name": "optional_announcer_slot4_viscous_josefumivo.zip",
+          "size": 1625546,
+          "version": null,
+          "added": 1772864039,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1641769"
+        },
+        {
+          "id": 1680727,
+          "name": "optional_announcer_slot5_rem_zmpixie.zip",
+          "size": 1760605,
+          "version": null,
+          "added": 1776598954,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1680727"
+        }
+      ],
+      "inspectedFileIds": [
+        1850914
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 730134,
+      "name": "Ultra Competitive Clean Map & FPS Boost",
+      "url": "https://gamebanana.com/mods/730134",
+      "author": "YShiroY",
+      "version": "",
+      "obsolete": false,
+      "modified": 1792525178,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1856987,
+          "name": "ultra_competitive_clean_deadlock_mod.zip",
+          "size": 23043,
+          "version": null,
+          "added": 1792522573,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1856987"
+        }
+      ],
+      "inspectedFileIds": [
+        1856987
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 678180,
+      "name": "dacooderr's QoL Lite (CNS Ready!)",
+      "url": "https://gamebanana.com/mods/678180",
+      "author": "dacooderr",
+      "version": "1",
+      "obsolete": false,
+      "modified": 1794019189,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1879651,
+          "name": "qollite_0e389.zip",
+          "size": 2881424,
+          "version": "1",
+          "added": 1794019183,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1879651"
+        }
+      ],
+      "inspectedFileIds": [
+        1879651
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 717477,
+      "name": "MOGLOCK",
+      "url": "https://gamebanana.com/mods/717477",
+      "author": "zaralxbanana",
+      "version": "1.3.2",
+      "obsolete": false,
+      "modified": 1792218860,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1851776,
+          "name": "moglock_v132.zip",
+          "size": 2141149,
+          "version": "1.3.2",
+          "added": 1792218781,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1851776"
+        },
+        {
+          "id": 1851777,
+          "name": "moglock_v132_installer_customize.zip",
+          "size": 4292324,
+          "version": "1.3.2",
+          "added": 1792218786,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1851777"
+        },
+        {
+          "id": 1844537,
+          "name": "moglock_v131.zip",
+          "size": 2066240,
+          "version": "1.3.1",
+          "added": 1791677032,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1844537"
+        },
+        {
+          "id": 1844538,
+          "name": "moglock_v131_installer_customize.zip",
+          "size": 4142038,
+          "version": "1.3.1",
+          "added": 1791677037,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1844538"
+        },
+        {
+          "id": 1842626,
+          "name": "moglock_v13.zip",
+          "size": 2031829,
+          "version": null,
+          "added": 1791540550,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1842626"
+        },
+        {
+          "id": 1842627,
+          "name": "moglock_v13_installer_customize.zip",
+          "size": 4073265,
+          "version": null,
+          "added": 1791540555,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1842627"
+        },
+        {
+          "id": 1819119,
+          "name": "moglock_v12.zip",
+          "size": 1595198,
+          "version": null,
+          "added": 1789667270,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1819119"
+        },
+        {
+          "id": 1819120,
+          "name": "moglock_v12_installer_customize.zip",
+          "size": 3200438,
+          "version": null,
+          "added": 1789667274,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1819120"
+        },
+        {
+          "id": 1818173,
+          "name": "moglock_v11.zip",
+          "size": 1592252,
+          "version": null,
+          "added": 1789572904,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1818173"
+        },
+        {
+          "id": 1818172,
+          "name": "moglock_v11_installer_customize.zip",
+          "size": 3194840,
+          "version": null,
+          "added": 1789572904,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1818172"
+        },
+        {
+          "id": 1817232,
+          "name": "moglock_v10.zip",
+          "size": 1590060,
+          "version": null,
+          "added": 1789477159,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1817232"
+        },
+        {
+          "id": 1817233,
+          "name": "moglock_v10_installer_customize.zip",
+          "size": 3190363,
+          "version": null,
+          "added": 1789477163,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1817233"
+        }
+      ],
+      "inspectedFileIds": [
+        1851776
+      ]
+    },
+    {
+      "model": "Tutorial",
+      "id": 19360,
+      "name": "How to make an autoexec.cfg",
+      "url": "https://gamebanana.com/tuts/19360",
+      "author": "Maidehnless",
+      "version": null,
+      "obsolete": false,
+      "modified": 1767398160,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "guide",
+      "archivedFileCount": 0,
+      "files": [],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 724992,
+      "name": "best cfg for high-end pc again",
+      "url": "https://gamebanana.com/mods/724992",
+      "author": "shintt",
+      "version": "",
+      "obsolete": false,
+      "modified": 1791356551,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1840339,
+          "name": "shinttcfg2.7z",
+          "size": 10158,
+          "version": null,
+          "added": 1791356539,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1840339"
+        }
+      ],
+      "inspectedFileIds": [
+        1840339
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 722853,
+      "name": "Clutter Be Gone",
+      "url": "https://gamebanana.com/mods/722853",
+      "author": "laund_",
+      "version": "3.1",
+      "obsolete": false,
+      "modified": 1793982457,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1870273,
+          "name": "all_c7614.zip",
+          "size": 80852,
+          "version": "3.1",
+          "added": 1793402687,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1870273"
+        },
+        {
+          "id": 1870274,
+          "name": "abilities_c916e.zip",
+          "size": 76886,
+          "version": "3.1",
+          "added": 1793402687,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1870274"
+        },
+        {
+          "id": 1865189,
+          "name": "all-no-abilities.zip",
+          "size": 15541,
+          "version": "3.0",
+          "added": 1793055508,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865189"
+        },
+        {
+          "id": 1870268,
+          "name": "halloween_69be6.zip",
+          "size": 2794,
+          "version": "1.0",
+          "added": 1793402509,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1870268"
+        },
+        {
+          "id": 1857225,
+          "name": "screenspace_city_39545.zip",
+          "size": 6141,
+          "version": "2.1",
+          "added": 1792536100,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1857225"
+        },
+        {
+          "id": 1837729,
+          "name": "screenspace.zip",
+          "size": 4276,
+          "version": "1.0",
+          "added": 1791156849,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1837729"
+        },
+        {
+          "id": 1857226,
+          "name": "city_ambient_d6412.zip",
+          "size": 3452,
+          "version": "2.1",
+          "added": 1792536100,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1857226"
+        },
+        {
+          "id": 1842128,
+          "name": "clean_door.zip",
+          "size": 5314,
+          "version": "1.0",
+          "added": 1791494549,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1842128"
+        },
+        {
+          "id": 1854623,
+          "name": "walker_e10ca.zip",
+          "size": 4110,
+          "version": "2.0",
+          "added": 1792356295,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1854623"
+        },
+        {
+          "id": 1854627,
+          "name": "pickups.zip",
+          "size": 2429,
+          "version": "2.0",
+          "added": 1792356295,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1854627"
+        },
+        {
+          "id": 1865187,
+          "name": "movement_76ebc.zip",
+          "size": 3166,
+          "version": "3.0",
+          "added": 1793055508,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865187"
+        },
+        {
+          "id": 1865188,
+          "name": "remove_dash_trail.zip",
+          "size": 2391,
+          "version": "3.0",
+          "added": 1793055508,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865188"
+        },
+        {
+          "id": 1865195,
+          "name": "unplayable_absolutely_everything.zip",
+          "size": 288516,
+          "version": "v0.999 alpha dontuse",
+          "added": 1793055664,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1865195"
+        }
+      ],
+      "inspectedFileIds": [
+        1870273,
+        1870274,
+        1865189,
+        1870268,
+        1857225,
+        1837729,
+        1857226,
+        1842128,
+        1854623,
+        1854627,
+        1865187,
+        1865188,
+        1865195
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 690514,
+      "name": "Optimized McGinnis Wall",
+      "url": "https://gamebanana.com/mods/690514",
+      "author": "dacooderr",
+      "version": "",
+      "obsolete": false,
+      "modified": 1782880797,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1742094,
+          "name": "optimizedmcginniswall.zip",
+          "size": 3049666,
+          "version": "1",
+          "added": 1782860930,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1742094"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 600780,
+      "name": "Optimized Soul Container",
+      "url": "https://gamebanana.com/mods/600780",
+      "author": "Jayie",
+      "version": "1.1",
+      "obsolete": false,
+      "modified": 1776032324,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1459317,
+          "name": "soul_container_6fe31.zip",
+          "size": 8587460,
+          "version": null,
+          "added": 1750023863,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1459317"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Tool",
+      "id": 22000,
+      "name": "Deadlock Optimized Launcher",
+      "url": "https://gamebanana.com/tools/22000",
+      "author": "maiblemoccasin",
+      "version": null,
+      "obsolete": false,
+      "modified": 1772315495,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "external-installer",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1636853,
+          "name": "deadlock_optimized_launcher_369ba.exe",
+          "size": 81824615,
+          "version": "v3.0",
+          "added": 1772315247,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1636853"
+        },
+        {
+          "id": 1634302,
+          "name": "deadlock_optimized_launcher_032a6.exe",
+          "size": 89117312,
+          "version": "v2.0",
+          "added": 1772036609,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1634302"
+        },
+        {
+          "id": 1633648,
+          "name": "deadlock_optimized_launcher_b1d2f.exe",
+          "size": 89055773,
+          "version": "v1.0",
+          "added": 1771958142,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1633648"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 725810,
+      "name": "Potato lowPoly troopers",
+      "url": "https://gamebanana.com/mods/725810",
+      "author": "aglow",
+      "version": "",
+      "obsolete": false,
+      "modified": 1791557932,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1842807,
+          "name": "potatotroopers.zip",
+          "size": 1091162,
+          "version": null,
+          "added": 1791557884,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1842807"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 729664,
+      "name": "dacooderr's Anti-Clutter",
+      "url": "https://gamebanana.com/mods/729664",
+      "author": "dacooderr",
+      "version": "0.3",
+      "obsolete": false,
+      "modified": 1792991479,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1864424,
+          "name": "anticlutter_d2e8c.zip",
+          "size": 3082808,
+          "version": "0.3",
+          "added": 1792991474,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1864424"
+        }
+      ],
+      "inspectedFileIds": [
+        1864424
+      ]
+    },
+    {
+      "model": "Script",
+      "id": 12873,
+      "name": "Maidehnless' autoexec.cgf",
+      "url": "https://gamebanana.com/scripts/12873",
+      "author": "Maidehnless",
+      "version": null,
+      "obsolete": false,
+      "modified": 1769324425,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "script-source",
+      "archivedFileCount": 0,
+      "files": [],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 724964,
+      "name": "OP Neon Crates & Smoke Vents | NO FPS impact",
+      "url": "https://gamebanana.com/mods/724964",
+      "author": "T1FFANNY",
+      "version": "1.1.0",
+      "obsolete": false,
+      "modified": 1791384994,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "false-positive",
+      "archivedFileCount": 1,
+      "files": [
+        {
+          "id": 1840565,
+          "name": "neoncrate_947e3.zip",
+          "size": 29654076,
+          "version": "1.1.0",
+          "added": 1791384274,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1840565"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 728445,
+      "name": "Graphics Lab",
+      "url": "https://gamebanana.com/mods/728445",
+      "author": "cheenn1",
+      "version": "0.8.0",
+      "obsolete": false,
+      "modified": 1793479391,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 1,
+      "files": [
+        {
+          "id": 1871711,
+          "name": "graphics_lab_080.rar",
+          "size": 405988,
+          "version": "0.8.0",
+          "added": 1793478859,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1871711"
+        }
+      ],
+      "inspectedFileIds": [
+        1871711
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 661925,
+      "name": "Divine's FPS user friendly Crosshair",
+      "url": "https://gamebanana.com/mods/661925",
+      "author": "divinedl",
+      "version": "",
+      "obsolete": false,
+      "modified": 1781459494,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "false-positive",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1652665,
+          "name": "divine_s_true_dot_v24.zip",
+          "size": 20018,
+          "version": null,
+          "added": 1774011188,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1652665"
+        },
+        {
+          "id": 1658487,
+          "name": "divine_s_true_dot_thick.zip",
+          "size": 20326,
+          "version": null,
+          "added": 1774530644,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1658487"
+        },
+        {
+          "id": 1660369,
+          "name": "divine_s_kovaak_s_zeeq_crosshair_v12.zip",
+          "size": 20414,
+          "version": null,
+          "added": 1774705530,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1660369"
+        },
+        {
+          "id": 1728560,
+          "name": "normal_dot_v1.zip",
+          "size": 20376,
+          "version": null,
+          "added": 1781459492,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1728560"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 726666,
+      "name": "Clean FX: Low-Particle FPS Pack",
+      "url": "https://gamebanana.com/mods/726666",
+      "author": "Tonytonymm",
+      "version": "2",
+      "obsolete": false,
+      "modified": 1791737511,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1845341,
+          "name": "pak98_dir_1_.zip",
+          "size": 63718,
+          "version": "2",
+          "added": 1791737403,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1845341"
+        }
+      ],
+      "inspectedFileIds": [
+        1845341
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 729361,
+      "name": "FPS Boost Map (Vanilla/Potato) + Black Skybox",
+      "url": "https://gamebanana.com/mods/729361",
+      "author": "haworitto",
+      "version": "1.4",
+      "obsolete": false,
+      "modified": 1792531614,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1856826,
+          "name": "black_skybox.zip",
+          "size": 27918,
+          "version": "1.0",
+          "added": 1792512603,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1856826"
+        },
+        {
+          "id": 1857142,
+          "name": "vanilla_11d5b.zip",
+          "size": 2429399,
+          "version": "1.4",
+          "added": 1792531593,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1857142"
+        },
+        {
+          "id": 1857143,
+          "name": "potato_0a4b9.zip",
+          "size": 6315438,
+          "version": "1.4",
+          "added": 1792531602,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1857143"
+        }
+      ],
+      "inspectedFileIds": [
+        1856826,
+        1857142,
+        1857143
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 719753,
+      "name": "Glados Potato Soul Container",
+      "url": "https://gamebanana.com/mods/719753",
+      "author": "aqua_dz",
+      "version": "",
+      "obsolete": false,
+      "modified": 1790091554,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "false-positive",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1823704,
+          "name": "glados_potato_b98f9.rar",
+          "size": 2267167,
+          "version": null,
+          "added": 1790091552,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1823704"
+        }
+      ],
+      "inspectedFileIds": []
+    },
+    {
+      "model": "Mod",
+      "id": 680079,
+      "name": "Deadlock 4:3 fully optimized by Soyer",
+      "url": "https://gamebanana.com/mods/680079",
+      "author": "soyerfps",
+      "version": "",
+      "obsolete": false,
+      "modified": 1780287304,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "related-asset-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1712198,
+          "name": "pak90_dir_44f31.rar",
+          "size": 84447,
+          "version": null,
+          "added": 1779835553,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1712198"
+        }
+      ],
+      "inspectedFileIds": [
+        1712198
+      ]
+    },
+    {
+      "model": "Mod",
+      "id": 729235,
+      "name": "dx11 to vulkan/IGPU Optimizations",
+      "url": "https://gamebanana.com/mods/729235",
+      "author": "KingOfNoob7",
+      "version": "",
+      "obsolete": false,
+      "modified": 1792335835,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "config-package",
+      "archivedFileCount": 0,
+      "files": [
+        {
+          "id": 1854129,
+          "name": "igpu_fix_for_optilock.zip",
+          "size": 6745024,
+          "version": "1.0.0",
+          "added": 1792334896,
+          "archived": false,
+          "downloadUrl": "https://gamebanana.com/dl/1854129"
+        }
+      ],
+      "inspectedFileIds": [
+        1854129
+      ]
+    },
+    {
+      "model": "Script",
+      "id": 12679,
+      "name": "FOG Removal",
+      "url": "https://gamebanana.com/scripts/12679",
+      "author": "Paranoidlul",
+      "version": null,
+      "obsolete": false,
+      "modified": 1757926323,
+      "githubLinks": [],
+      "alternateSources": [],
+      "classification": "script-source",
+      "archivedFileCount": 0,
+      "files": [],
+      "inspectedFileIds": []
+    }
+  ],
+  "archives": [
+    {
+      "submissionId": 650519,
+      "fileId": 1670702,
+      "filename": "optilock_-_low_end.rar",
+      "size": 13380,
+      "sha256": "213aa773f95b5abcac90e4297cd3ebc3f9990c110cae9a77d63c6cc7c7c5f0fe",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "kaizuchaneru's minimum spec/gameinfo.gi",
+          "size": 35365
+        }
+      ],
+      "config": [
+        "kaizuchaneru's minimum spec/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 650519,
+      "fileId": 1670703,
+      "filename": "optilock_-_standard.rar",
+      "size": 7682,
+      "sha256": "993db20eb568ec60f95ab39dbb4e8835886b74be40928dd0e6a67c085ab02e94",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "piggy's config/gameinfo.gi",
+          "size": 19736
+        }
+      ],
+      "config": [
+        "piggy's config/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 730862,
+      "fileId": 1879015,
+      "filename": "fps15.zip",
+      "size": 13439,
+      "sha256": "75cb8a458f52bdb73d1024a59b50b9d9d124559c93edffb64f3e109f80a2d296",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "autoexec.cfg",
+          "size": 592
+        },
+        {
+          "path": "gameinfo.gi",
+          "size": 47982
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [
+        "autoexec.cfg"
+      ],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 730862,
+      "fileId": 1859481,
+      "filename": "fps.7z",
+      "size": 12813,
+      "sha256": "9e4904560316122403890ed54ac07c7bb99ef78ff46ee6f2e31fa9ea146266a4",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "fps/autoexec.cfg",
+          "size": 605
+        },
+        {
+          "path": "fps/gameinfo.gi",
+          "size": 50310
+        }
+      ],
+      "config": [
+        "fps/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [
+        "fps/autoexec.cfg"
+      ],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 673077,
+      "fileId": 1688726,
+      "filename": "maxfps_slightchanges_c358b.zip",
+      "size": 20312,
+      "sha256": "eba7f869f3c5e1882d5fa71b4e67535272a6cf2f536d51e2e5d303c04a915d8b",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 68692
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 673077,
+      "fileId": 1709954,
+      "filename": "maxfps_slightchanges_f8f97.zip",
+      "size": 20313,
+      "sha256": "0ea63a4876982a4b656d0bd5aad281e0b763305000d049e07962f7d50688d71e",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 68688
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 658776,
+      "fileId": 1644456,
+      "filename": "deadlock_competitive_config_v10_compatible_with_patch_2026-03-07_93625.rar",
+      "size": 25722,
+      "sha256": "9ea8093af024f5b1fb24a706f571a71b19463bc035b2260890858b5ed4113cbc",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "addons/pak99_dir.vpk",
+          "size": 11275
+        },
+        {
+          "path": "cfg/video.txt",
+          "size": 5016
+        },
+        {
+          "path": "gameinfo.gi",
+          "size": 51726
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [
+        "cfg/video.txt"
+      ],
+      "cfg": [],
+      "vpk": [
+        "addons/pak99_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876480,
+      "filename": "sqooky_s_performance_config_v3_9.7z",
+      "size": 27063,
+      "sha256": "1799ec84b186f85fcae6da53ca96e7f4c6a14557984e7529898a4c913db327c6",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 102485
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1865463,
+      "filename": "performance_improving_mods_fb331.7z",
+      "size": 7690976,
+      "sha256": "bdbba7a6b313c0249b65aa2d81d0b57e0a06005d3717b2b8bd4c52abe79a5e05",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "Performance Improving Mods/Blur Disabler/README.md",
+          "size": 467
+        },
+        {
+          "path": "Performance Improving Mods/Blur Disabler/pak97_dir.vpk",
+          "size": 198723
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/README.md",
+          "size": 2654
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/abilities/pak02_dir.vpk",
+          "size": 5283529
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/all/pak02_dir.vpk",
+          "size": 5595541
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/all-no-abilities/pak02_dir.vpk",
+          "size": 677501
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/city_ambient/pak02_dir.vpk",
+          "size": 71785
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/clean_door/pak02_dir.vpk",
+          "size": 26685
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/movement/pak02_dir.vpk",
+          "size": 67574
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/pickups/pak02_dir.vpk",
+          "size": 16239
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/remove_dash_trail/pak02_dir.vpk",
+          "size": 16147
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/screenspace/pak02_dir.vpk",
+          "size": 142421
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/screenspace_city/pak02_dir.vpk",
+          "size": 227616
+        },
+        {
+          "path": "Performance Improving Mods/Clutter be Gone/walker/pak02_dir.vpk",
+          "size": 128351
+        },
+        {
+          "path": "Performance Improving Mods/Optimized Soul Container/pak01_dir.vpk",
+          "size": 22531445
+        },
+        {
+          "path": "Performance Improving Mods/Optimized Soul Container/readme.md",
+          "size": 463
+        },
+        {
+          "path": "Performance Improving Mods/Sinner Light Fix Mod/README.md",
+          "size": 522
+        },
+        {
+          "path": "Performance Improving Mods/Sinner Light Fix Mod/pak26_dir.vpk",
+          "size": 1175954
+        },
+        {
+          "path": "Performance Improving Mods/Texure Downscaler wip/README.md",
+          "size": 729
+        },
+        {
+          "path": "Performance Improving Mods/Vindicta Scope Downscale/pak89_dir.vpk",
+          "size": 4669817
+        },
+        {
+          "path": "Performance Improving Mods/Vindicta Scope Downscale/readme.md",
+          "size": 630
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "Performance Improving Mods/Blur Disabler/pak97_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/abilities/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/all/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/all-no-abilities/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/city_ambient/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/clean_door/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/movement/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/pickups/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/remove_dash_trail/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/screenspace/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/screenspace_city/pak02_dir.vpk",
+        "Performance Improving Mods/Clutter be Gone/walker/pak02_dir.vpk",
+        "Performance Improving Mods/Optimized Soul Container/pak01_dir.vpk",
+        "Performance Improving Mods/Sinner Light Fix Mod/pak26_dir.vpk",
+        "Performance Improving Mods/Vindicta Scope Downscale/pak89_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876479,
+      "filename": "sqooky_s_maxfps_config_v1_8.7z",
+      "size": 27138,
+      "sha256": "e7d331003257f8a209467ea8aa941458e10a2c1e9e1afe1cced3797685ad2fa8",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 102820
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1858321,
+      "filename": "kaizuchaneru_s_max_fps_config_39ba7.7z",
+      "size": 16209,
+      "sha256": "8fad242b5fc514c884445d4f6dc85cb1cd6a92fce47da2021fa05d82e0016406",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo-EXTREME-LOW.gi",
+          "size": 53231
+        },
+        {
+          "path": "gameinfo.gi",
+          "size": 53232
+        }
+      ],
+      "config": [
+        "gameinfo-EXTREME-LOW.gi",
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876549,
+      "filename": "eskay_s_config_v1_1.7z",
+      "size": 26999,
+      "sha256": "696a08559584bcd5ce3e1327e6859f35066d434590a52e26783170ad96bc6732",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 102423
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1838157,
+      "filename": "piggy_s_config.7z",
+      "size": 9541,
+      "sha256": "3d7d7dd1b194995c284505f762b9dc063e6aff3f240a6edcde653266bda9c030",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "Piggy's config/README.md",
+          "size": 1143
+        },
+        {
+          "path": "Piggy's config/gameinfo.gi",
+          "size": 31348
+        },
+        {
+          "path": "Piggy's config/video.txt",
+          "size": 2262
+        }
+      ],
+      "config": [
+        "Piggy's config/gameinfo.gi"
+      ],
+      "video": [
+        "Piggy's config/video.txt"
+      ],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 692484,
+      "fileId": 1878361,
+      "filename": "main_file_classic_ecc47.zip",
+      "size": 500525,
+      "sha256": "4ca45ea13a59227619550adda7b3d2ae531973733942e377965e6cbc98692394",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak31_dir.vpk",
+          "size": 4135302
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak31_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 692484,
+      "fileId": 1878362,
+      "filename": "main_file_vibrant_3fd87.zip",
+      "size": 499848,
+      "sha256": "c27998bfb869f513ad10117403638020a21f86dd9f4fce73855d9834c1c0fa63",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak31_dir.vpk",
+          "size": 4133606
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak31_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 692484,
+      "fileId": 1878363,
+      "filename": "optional_heroes_8d10e.zip",
+      "size": 1495993,
+      "sha256": "14e0535615e305e76ab37e786c52418b61d835c1827c0cdf382192901c72b260",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak33_dir.vpk",
+          "size": 5714638
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak33_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 692484,
+      "fileId": 1748480,
+      "filename": "optional_hideout_texts.zip",
+      "size": 1735,
+      "sha256": "63a8b19b9f51fa02acef1892fafbb3fe3cf4b3950c8a2ebff439c15335114781",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak32_dir.vpk",
+          "size": 2123
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak32_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729604,
+      "fileId": 1855363,
+      "filename": "gameinfo.7z",
+      "size": 6719,
+      "sha256": "4c1acd6c8fc4872eb3d2886d4ee99d8c318c3cf312c8f591ba56ddf6c41f450c",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 18631
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729604,
+      "fileId": 1855385,
+      "filename": "pak12_dir_97ec6.7z",
+      "size": 17962342,
+      "sha256": "a48d2313eb47c528c7b95d5355d031d35f0a995503b0e925fab798833968aa68",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak12_dir.vpk",
+          "size": 67112634
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak12_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 609804,
+      "fileId": 1617717,
+      "filename": "example_of_mine_v13.7z",
+      "size": 8996,
+      "sha256": "4704c969516e8d356550b645993b5048075078bd5cfb87f9422587c9f5cf46a4",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 25116
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 698885,
+      "fileId": 1786923,
+      "filename": "cfg_2e8a2.rar",
+      "size": 74912063,
+      "sha256": "7775d72d05c82d2195d60fa3d1a28738bb9cdd6bfd20f6a9699b2d70427c1eb8",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak01_dir.vpk",
+          "size": 129432895
+        },
+        {
+          "path": "pak02_dir.vpk",
+          "size": 8916136
+        },
+        {
+          "path": "pak03_dir.vpk",
+          "size": 545070
+        },
+        {
+          "path": "pak04_dir.vpk",
+          "size": 8392368
+        },
+        {
+          "path": "pak05_dir.vpk",
+          "size": 15410229
+        },
+        {
+          "path": "video.txt",
+          "size": 5014
+        },
+        {
+          "path": "!!!_READ_ME_OR_GAME_BREAKS.txt",
+          "size": 5319
+        },
+        {
+          "path": "gameinfo.gi",
+          "size": 43065
+        },
+        {
+          "path": "ingame_settings.jpg",
+          "size": 90452
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [
+        "video.txt"
+      ],
+      "cfg": [],
+      "vpk": [
+        "pak01_dir.vpk",
+        "pak02_dir.vpk",
+        "pak03_dir.vpk",
+        "pak04_dir.vpk",
+        "pak05_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722944,
+      "fileId": 1833750,
+      "filename": "cfg.zip",
+      "size": 11266,
+      "sha256": "c5d3ac76c975b1f78d1cf398986a9cf8a4bad902dcbc1e039640445cb6a41027",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 33412
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1684045,
+      "filename": "b3b3zxc_-_config_v20_677d6.rar",
+      "size": 39572,
+      "sha256": "363292d1cba3a3cee4baac92f8a92896dd32c4a2c706a6e80c9e5b5c110dc65c",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "qq/pak10_dir.vpk",
+          "size": 11275
+        },
+        {
+          "path": "qq/pak19_dir.vpk",
+          "size": 8392368
+        },
+        {
+          "path": "qq/Свойство Параметры Запуска Steam.txt",
+          "size": 308
+        },
+        {
+          "path": "qq/gameinfo.gi",
+          "size": 37858
+        },
+        {
+          "path": "qq/pak09_dir.vpk",
+          "size": 22486
+        }
+      ],
+      "config": [
+        "qq/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "qq/pak10_dir.vpk",
+        "qq/pak19_dir.vpk",
+        "qq/pak09_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1684553,
+      "filename": "b3b3zxc_-_config_v20_540b9.rar",
+      "size": 39648,
+      "sha256": "73ad35a6bf602cc5cd39efccb2254c055478f21448e7fb5ff6abe1a635def715",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "qq/pak10_dir.vpk",
+          "size": 11275
+        },
+        {
+          "path": "qq/pak19_dir.vpk",
+          "size": 8392368
+        },
+        {
+          "path": "qq/Свойство Параметры Запуска Steam.txt",
+          "size": 411
+        },
+        {
+          "path": "qq/gameinfo.gi",
+          "size": 37858
+        },
+        {
+          "path": "qq/pak09_dir.vpk",
+          "size": 22486
+        }
+      ],
+      "config": [
+        "qq/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "qq/pak10_dir.vpk",
+        "qq/pak19_dir.vpk",
+        "qq/pak09_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1724171,
+      "filename": "b3b3zxc_-_config_8a6f0.rar",
+      "size": 40068,
+      "sha256": "7f0e6d167b2728b7dbe2ba6350248fc16529fe07a83a9eaf241998ad5cd40763",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "qq/pak10_dir.vpk",
+          "size": 11275
+        },
+        {
+          "path": "qq/pak19_dir.vpk",
+          "size": 8392368
+        },
+        {
+          "path": "qq/Свойство Параметры Запуска Steam.txt",
+          "size": 411
+        },
+        {
+          "path": "qq/gameinfo.gi",
+          "size": 39986
+        },
+        {
+          "path": "qq/pak09_dir.vpk",
+          "size": 22486
+        }
+      ],
+      "config": [
+        "qq/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "qq/pak10_dir.vpk",
+        "qq/pak19_dir.vpk",
+        "qq/pak09_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1728314,
+      "filename": "b3b3zxc_-_config_d6b1b.rar",
+      "size": 130728,
+      "sha256": "32776482f99894c457b3a32bf12dda5aff3020691f6c5c72c4db95e4e3e7c45a",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "qq/pak59_dir.vpk",
+          "size": 162321
+        },
+        {
+          "path": "qq/pak19_dir.vpk",
+          "size": 8392368
+        },
+        {
+          "path": "qq/Свойство Параметры Запуска Steam.txt",
+          "size": 575
+        },
+        {
+          "path": "qq/gameinfo.gi",
+          "size": 40042
+        },
+        {
+          "path": "qq/pak09_dir.vpk",
+          "size": 22486
+        },
+        {
+          "path": "qq/pak40_dir.vpk",
+          "size": 78242
+        },
+        {
+          "path": "qq/pak10_dir.vpk",
+          "size": 11275
+        }
+      ],
+      "config": [
+        "qq/gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "qq/pak59_dir.vpk",
+        "qq/pak19_dir.vpk",
+        "qq/pak09_dir.vpk",
+        "qq/pak40_dir.vpk",
+        "qq/pak10_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1873182,
+      "filename": "optilock_fps_configs_025f2.zip",
+      "size": 181380,
+      "sha256": "f6e812440f767209e4c0dbf4074c52e26a99b39629895abd5cf4192285b99c07",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "OptiLock FPS Config (Recommended)/gameinfo.gi",
+          "size": 47990
+        },
+        {
+          "path": "OptiLock FPS Config (Recommended)/readme.md",
+          "size": 909
+        },
+        {
+          "path": "OptiLock FPS Config (Recommended)/video.txt",
+          "size": 2943
+        },
+        {
+          "path": "OptiLock FPS Config (Recommended)/videotxtexample.png",
+          "size": 46085
+        },
+        {
+          "path": "OptiLock Potato Config/gameinfo.gi",
+          "size": 47975
+        },
+        {
+          "path": "OptiLock Potato Config/readme.md",
+          "size": 706
+        },
+        {
+          "path": "OptiLock Potato Config/video.txt",
+          "size": 2945
+        },
+        {
+          "path": "OptiLock Potato Config/videotxtexample.png",
+          "size": 46085
+        },
+        {
+          "path": "OptiLock Ultra Potato Config/gameinfo.gi",
+          "size": 47946
+        },
+        {
+          "path": "OptiLock Ultra Potato Config/readme.md",
+          "size": 739
+        },
+        {
+          "path": "OptiLock Ultra Potato Config/video(No Shadows).txt",
+          "size": 2923
+        },
+        {
+          "path": "OptiLock Ultra Potato Config/video.txt",
+          "size": 2945
+        },
+        {
+          "path": "OptiLock Ultra Potato Config/videotxtexample.png",
+          "size": 46085
+        }
+      ],
+      "config": [
+        "OptiLock FPS Config (Recommended)/gameinfo.gi",
+        "OptiLock Potato Config/gameinfo.gi",
+        "OptiLock Ultra Potato Config/gameinfo.gi"
+      ],
+      "video": [
+        "OptiLock FPS Config (Recommended)/video.txt",
+        "OptiLock Potato Config/video.txt",
+        "OptiLock Ultra Potato Config/video(No Shadows).txt",
+        "OptiLock Ultra Potato Config/video.txt"
+      ],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1872702,
+      "filename": "essentialfixes_721e2.zip",
+      "size": 794948,
+      "sha256": "241abdc8a2fabc0c3137ba206e1b584aca67c8c29b53815ead2441904be80d67",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak01_dir.vpk",
+          "size": 2123337
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak01_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 664234,
+      "fileId": 1833127,
+      "filename": "full_fps_up_cfg_ssh.rar",
+      "size": 65585704,
+      "sha256": "91ff9218b76657785d7a606d2df0e4fdd1a214a082ee813185810d5991b4aa75",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "Full FPS UP cfg SSH/autoexec.cfg",
+          "size": 2499
+        },
+        {
+          "path": "Full FPS UP cfg SSH/gameinfo.gi",
+          "size": 28691
+        },
+        {
+          "path": "Full FPS UP cfg SSH/pak01_dir.vpk",
+          "size": 125160379
+        },
+        {
+          "path": "Full FPS UP cfg SSH/video.txt",
+          "size": 1263
+        }
+      ],
+      "config": [
+        "Full FPS UP cfg SSH/gameinfo.gi"
+      ],
+      "video": [
+        "Full FPS UP cfg SSH/video.txt"
+      ],
+      "cfg": [
+        "Full FPS UP cfg SSH/autoexec.cfg"
+      ],
+      "vpk": [
+        "Full FPS UP cfg SSH/pak01_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 727681,
+      "fileId": 1856071,
+      "filename": "blackout_config_gameinfo.zip",
+      "size": 10415,
+      "sha256": "b0d05ea3d819de59675396aaaa41c5c7f7a6375dcbaf8dcdfdbf4cc5f6b5579c",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 25869
+        },
+        {
+          "path": "README.txt",
+          "size": 2406
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 616141,
+      "fileId": 1849988,
+      "filename": "dyson_build_45ccf.zip",
+      "size": 31308,
+      "sha256": "fc69ba199e4bb126f2d253fa14792985d0c80b778f1ffc57d2f79b0ed4c65a11",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "dyson build/fix fps doorman door/desktop.ini",
+          "size": 130
+        },
+        {
+          "path": "dyson build/fix fps doorman door/pak25_dir.vpk",
+          "size": 15620
+        },
+        {
+          "path": "dyson build/gameinfo/desktop.ini",
+          "size": 130
+        },
+        {
+          "path": "dyson build/gameinfo/russian/gameinfo.gi",
+          "size": 53511
+        },
+        {
+          "path": "dyson build/gameinfo/russian/please check.txt",
+          "size": 209
+        },
+        {
+          "path": "dyson build/gameinfo default.gi",
+          "size": 14874
+        },
+        {
+          "path": "dyson build/readme eu.txt",
+          "size": 2692
+        },
+        {
+          "path": "dyson build/readme ru.txt",
+          "size": 4158
+        }
+      ],
+      "config": [
+        "dyson build/gameinfo/russian/gameinfo.gi",
+        "dyson build/gameinfo default.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "dyson build/fix fps doorman door/pak25_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 650634,
+      "fileId": 1850914,
+      "filename": "qollock_405_16october.zip",
+      "size": 10116149,
+      "sha256": "37305b0b7227d4097c4ddf990c1371d1dc70745420af11b4917707d69dbf43fb",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak03_dir.vpk",
+          "size": 27945090
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak03_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 730134,
+      "fileId": 1856987,
+      "filename": "ultra_competitive_clean_deadlock_mod.zip",
+      "size": 23043,
+      "sha256": "8cee0c6cb247fb4ee8a793c1922afa5a16c28b96818312ecde97826eba171126",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak01_dir.vpk",
+          "size": 117577
+        },
+        {
+          "path": "autoexec.cfg",
+          "size": 4411
+        },
+        {
+          "path": "README.txt",
+          "size": 786
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [
+        "autoexec.cfg"
+      ],
+      "vpk": [
+        "pak01_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 678180,
+      "fileId": 1879651,
+      "filename": "qollite_0e389.zip",
+      "size": 2881424,
+      "sha256": "86d35461df7c1562ae558ab5e129f04fe5b9ca09f9932f9bb4eb2ac5946cc986",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak01_dir.vpk",
+          "size": 11662414
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak01_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 717477,
+      "fileId": 1851776,
+      "filename": "moglock_v132.zip",
+      "size": 2141149,
+      "sha256": "2bb40116a28def1666dff980a7857f328efbdb3edbb191a815e1e8d2339bf880",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak50_dir.vpk",
+          "size": 10764802
+        },
+        {
+          "path": "README.txt",
+          "size": 3292
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak50_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 724992,
+      "fileId": 1840339,
+      "filename": "shinttcfg2.7z",
+      "size": 10158,
+      "sha256": "8549a39f15d7d5ebcccedfe2c1fac44accefc2f58260225dc0d7befa1be719b7",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "gameinfo.gi",
+          "size": 41771
+        }
+      ],
+      "config": [
+        "gameinfo.gi"
+      ],
+      "video": [],
+      "cfg": [],
+      "vpk": [],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1870273,
+      "filename": "all_c7614.zip",
+      "size": 80852,
+      "sha256": "17f6d25ca479af0733ddd293ff1a9f0170d3305d06dca8a97d4d4d71c4ac30d9",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 5593087
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1870274,
+      "filename": "abilities_c916e.zip",
+      "size": 76886,
+      "sha256": "7778e1c9da47d40c18523640ce897209ed40fb7e383b15cb5daafbe2c5cd665b",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 5271191
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1865189,
+      "filename": "all-no-abilities.zip",
+      "size": 15541,
+      "sha256": "9aaabe5ff7546fdbec73b00322e0ef865fabf536f7ce84e30f78c69d337093a5",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 677501
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1870268,
+      "filename": "halloween_69be6.zip",
+      "size": 2794,
+      "sha256": "bbf1120a14a5e95ae5f9f0100935e1b8fa8797bb4314c64184e58a83933c144f",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 37373
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1857225,
+      "filename": "screenspace_city_39545.zip",
+      "size": 6141,
+      "sha256": "03484d9cd5f86a645d0a4601cfeb1b525c987a47bcb543669290c24aa7235f03",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 227616
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1837729,
+      "filename": "screenspace.zip",
+      "size": 4276,
+      "sha256": "2a844514673f636d4c3b75ba49e70fd9ecff541734f1f5114e1b81ffb477fa8c",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 142421
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1857226,
+      "filename": "city_ambient_d6412.zip",
+      "size": 3452,
+      "sha256": "6c027a64b4a4adc171b92f461f0f96e743a29cfad13f708ab94cd79135586fac",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 71785
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1842128,
+      "filename": "clean_door.zip",
+      "size": 5314,
+      "sha256": "fc39f5f6568c70c33ef99c0af08dff5024d568885c092d796409b05a02c2bc04",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 26685
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1854623,
+      "filename": "walker_e10ca.zip",
+      "size": 4110,
+      "sha256": "1797ced79d5bc8148d7e829c78c68889c89d641dcf1f7499333214fdf4b6caee",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 128351
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1854627,
+      "filename": "pickups.zip",
+      "size": 2429,
+      "sha256": "9447c2ea95d310db10a7f7e0da82767947553fa7e9a45e6f871c63b50eee1c6b",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 16239
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1865187,
+      "filename": "movement_76ebc.zip",
+      "size": 3166,
+      "sha256": "18f06e3233a496a94205e53fb3eb664c3c6698d1a79d034df6b73861afc8964e",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 67574
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1865188,
+      "filename": "remove_dash_trail.zip",
+      "size": 2391,
+      "sha256": "92aa5d51a755809e10174aeeb6918d36793f682fc436d9992d7824a514b1db53",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 16147
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 722853,
+      "fileId": 1865195,
+      "filename": "unplayable_absolutely_everything.zip",
+      "size": 288516,
+      "sha256": "eed3f3cb43ab5f8f331252e7893fe52f06d9875200351a6edb4732535d96526e",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak02_dir.vpk",
+          "size": 22314738
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak02_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729664,
+      "fileId": 1864424,
+      "filename": "anticlutter_d2e8c.zip",
+      "size": 3082808,
+      "sha256": "0909d5b28f2395808e2971f40669f68e9ac3e549cf3fad7c26ceffad4a7948d5",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak01_dir.vpk",
+          "size": 8066673
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak01_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 728445,
+      "fileId": 1871711,
+      "filename": "graphics_lab_080.rar",
+      "size": 405988,
+      "sha256": "93f752347da6addfb988b84244005aadd526ed24c100ca91d2695f209cc8756e",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "graphics_lab_080_CN_dir.vpk",
+          "size": 489407
+        },
+        {
+          "path": "graphics_lab_080_DE_dir.vpk",
+          "size": 490913
+        },
+        {
+          "path": "graphics_lab_080_EN_dir.vpk",
+          "size": 489786
+        },
+        {
+          "path": "graphics_lab_080_FR_dir.vpk",
+          "size": 491674
+        },
+        {
+          "path": "graphics_lab_080_POTATO_dir.vpk",
+          "size": 2655932
+        },
+        {
+          "path": "graphics_lab_080_RU_dir.vpk",
+          "size": 496101
+        },
+        {
+          "path": "graphics_lab_080_TR_dir.vpk",
+          "size": 491101
+        },
+        {
+          "path": "graphics_lab_080_UA_dir.vpk",
+          "size": 496109
+        },
+        {
+          "path": "README.txt",
+          "size": 5471
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "graphics_lab_080_CN_dir.vpk",
+        "graphics_lab_080_DE_dir.vpk",
+        "graphics_lab_080_EN_dir.vpk",
+        "graphics_lab_080_FR_dir.vpk",
+        "graphics_lab_080_POTATO_dir.vpk",
+        "graphics_lab_080_RU_dir.vpk",
+        "graphics_lab_080_TR_dir.vpk",
+        "graphics_lab_080_UA_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 726666,
+      "fileId": 1845341,
+      "filename": "pak98_dir_1_.zip",
+      "size": 63718,
+      "sha256": "5adb0e9ef2c0f9a144e6937fdf8a7d54b350fa20e8e8a89081ab9060135b4401",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak98_dir (1).vpk",
+          "size": 4970375
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak98_dir (1).vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729361,
+      "fileId": 1856826,
+      "filename": "black_skybox.zip",
+      "size": 27918,
+      "sha256": "e0f7e9648db8fdf17a247bbdba576c67564109df5b056bf00fe855081efdb8dd",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "black skybox/pak21_dir.vpk",
+          "size": 8495088
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "black skybox/pak21_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729361,
+      "fileId": 1857142,
+      "filename": "vanilla_11d5b.zip",
+      "size": 2429399,
+      "sha256": "a374c20d6af3f5c8ce4e31d95be16bb8e8e6159520e1d0bb1636f3fa6ab9c305",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "vanilla/vanilla_black_skybox.vpk",
+          "size": 19775644
+        },
+        {
+          "path": "vanilla/vanilla_original_skybox_dir.vpk",
+          "size": 11280644
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "vanilla/vanilla_black_skybox.vpk",
+        "vanilla/vanilla_original_skybox_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729361,
+      "fileId": 1857143,
+      "filename": "potato_0a4b9.zip",
+      "size": 6315438,
+      "sha256": "00bba32fa35c4468b0f719497571ac93ee044805db6c191fd0a8c42829373aa9",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "potato/potato_black_skybox.vpk",
+          "size": 25114867
+        },
+        {
+          "path": "potato/potato_original_skybox_dir.vpk",
+          "size": 16620155
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "potato/potato_black_skybox.vpk",
+        "potato/potato_original_skybox_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 680079,
+      "fileId": 1712198,
+      "filename": "pak90_dir_44f31.rar",
+      "size": 84447,
+      "sha256": "4f12f0f5e3c995d83d45a76fc4625544fe670a81b0c8492b1535e78f5baa9d27",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "pak90_dir.vpk",
+          "size": 225354
+        }
+      ],
+      "config": [],
+      "video": [],
+      "cfg": [],
+      "vpk": [
+        "pak90_dir.vpk"
+      ],
+      "programs": [],
+      "nestedArchives": []
+    },
+    {
+      "submissionId": 729235,
+      "fileId": 1854129,
+      "filename": "igpu_fix_for_optilock.zip",
+      "size": 6745024,
+      "sha256": "ead91ca9ac1bd5121ba6e9570afa67d90b883dbad1d65669e6aefa87530556a0",
+      "sizeMatches": true,
+      "entries": [
+        {
+          "path": "game\\bin\\win64\\d3d11.dll",
+          "size": 4399118
+        },
+        {
+          "path": "game\\bin\\win64\\dxgi.dll",
+          "size": 2891790
+        },
+        {
+          "path": "game\\bin\\win64\\dxvk.conf",
+          "size": 312
+        },
+        {
+          "path": "game\\citadel\\gameinfo.gi",
+          "size": 69029
+        },
+        {
+          "path": "game\\citadel\\addons\\EssentialFixesPlus.vpk",
+          "size": 10011456
+        },
+        {
+          "path": "game\\citadel\\cfg\\autoexec.cfg",
+          "size": 16420
+        },
+        {
+          "path": "game\\citadel\\cfg\\boot.vcfg",
+          "size": 49
+        },
+        {
+          "path": "README-INSTALL.txt",
+          "size": 2980
+        },
+        {
+          "path": "video-TEMPLATE.txt",
+          "size": 3001
+        }
+      ],
+      "config": [
+        "game\\citadel\\gameinfo.gi"
+      ],
+      "video": [
+        "video-TEMPLATE.txt"
+      ],
+      "cfg": [
+        "game\\citadel\\cfg\\autoexec.cfg"
+      ],
+      "vpk": [
+        "game\\citadel\\addons\\EssentialFixesPlus.vpk"
+      ],
+      "programs": [
+        "game\\bin\\win64\\d3d11.dll",
+        "game\\bin\\win64\\dxgi.dll"
+      ],
+      "nestedArchives": []
+    }
+  ],
+  "parserSmoke": [
+    {
+      "submissionId": 650519,
+      "fileId": 1670702,
+      "configPath": "kaizuchaneru's minimum spec/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "16dfdddf2a1d0fd8bfd75860fef0684bb2d2c252573181c1fc85ab96eaaea984",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 292,
+      "videoSettings": 0,
+      "withheld": 2
+    },
+    {
+      "submissionId": 650519,
+      "fileId": 1670703,
+      "configPath": "piggy's config/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "9410fd19b1fc74e3927f3fe9b64dac08c2ec3213b8092c1ed751add00608e204",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 55,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 730862,
+      "fileId": 1879015,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "0788b97d9ccd723f6f62c6fffdce7b67be9b8f01e7c6a53a35187281d2a4e212",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 711,
+      "videoSettings": 0,
+      "withheld": 13
+    },
+    {
+      "submissionId": 730862,
+      "fileId": 1859481,
+      "configPath": "fps/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "1918b0fa9a11cc5155c2cdde6d65b2e1506272ded8f280dfe4946e56e750c5c9",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 711,
+      "videoSettings": 0,
+      "withheld": 13
+    },
+    {
+      "submissionId": 673077,
+      "fileId": 1688726,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "98715c542e9ab0e2733f885f5a3a97bea167bfb27bf2f1c4d5086ac73246c2b1",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 367,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 673077,
+      "fileId": 1709954,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "66cae728e93833303a1b8ec13c4441bdbbf6e3c6aa02d452c0f5d0a65b3939b9",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 367,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 658776,
+      "fileId": 1644456,
+      "configPath": "gameinfo.gi",
+      "videoPath": "cfg/video.txt",
+      "configSha256": "6cd2b4d6cbdab011499a6890475251e522644c90d431023651b0e1d11da0c57c",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 277,
+      "videoSettings": 47,
+      "withheld": 3
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876480,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "da82f0b327fae9ebefb81dc62b32bfd96cbfae68481e41800fbc5d0b91415801",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 337,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876479,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "0f57b42df8b71314a2e4843d33be63ec3e8b3e7483e975d8bea396e128d43b8b",
+      "githubTextMatches": [
+        {
+          "repo": "Sqooky/OptimizationLock",
+          "path": "maximumfps or minimum spec config and resources here/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 340,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1858321,
+      "configPath": "gameinfo-EXTREME-LOW.gi",
+      "videoPath": null,
+      "configSha256": "e81f08c55dea0d10f9a6d8bd3ad3a0a676a449d0e9c971d981e3edbbbb42bd25",
+      "githubTextMatches": [
+        {
+          "repo": "Sqooky/OptimizationLock",
+          "path": "kaizuchanerus minimum spec/gameinfo-EXTREME-LOW.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 241,
+      "videoSettings": 0,
+      "withheld": 3
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1858321,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "7a5118c5bc2b3d5da8d982b71477ba661aa48ed9dd45ec79abf80aaaf05bff52",
+      "githubTextMatches": [
+        {
+          "repo": "Sqooky/OptimizationLock",
+          "path": "kaizuchanerus minimum spec/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 238,
+      "videoSettings": 0,
+      "withheld": 3
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1876549,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "d97843df870ea5ed5cd92d2fb77eb86e74c66ec080f0125f2273b096b280c80b",
+      "githubTextMatches": [
+        {
+          "repo": "Sqooky/OptimizationLock",
+          "path": "Eskay's config/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 335,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 656341,
+      "fileId": 1838157,
+      "configPath": "Piggy's config/gameinfo.gi",
+      "videoPath": "Piggy's config/video.txt",
+      "configSha256": "ef040eada5611f01b2f4885965c0534dbe96e408215c90f6a9fb58f9f513b7e5",
+      "githubTextMatches": [
+        {
+          "repo": "Sqooky/OptimizationLock",
+          "path": "Piggy's config/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 81,
+      "videoSettings": 42,
+      "withheld": 1
+    },
+    {
+      "submissionId": 729604,
+      "fileId": 1855363,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "fe8935173831c7fbdbb12e5a43533a6266f21c7dbf443d43945730d66c737f3c",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 5,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 609804,
+      "fileId": 1617717,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "56101d4c4387e28ca104735898f49be1e702514ea641aaa0b0bee7d1cb5cbe02",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 177,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 698885,
+      "fileId": 1786923,
+      "configPath": "gameinfo.gi",
+      "videoPath": "video.txt",
+      "configSha256": "8c6e2487bb1b62bed1d11ae029f2f8ccba6ba9a2c8d933180e38943ca0e6ecc8",
+      "githubTextMatches": [],
+      "ok": false,
+      "error": "Error: Unsupported config value: setting.r_texture_stream_mip_bias"
+    },
+    {
+      "submissionId": 722944,
+      "fileId": 1833750,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "a895885ad0fb71d203b8b2506c32ffd90be2adb4f04c1c4f78b9027ea05e057c",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 382,
+      "videoSettings": 0,
+      "withheld": 5
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1684045,
+      "configPath": "qq/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "607429bcfe455ea7d888bdcf665048af35effd0676123d70ef938e10d445fa78",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 190,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1684553,
+      "configPath": "qq/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "607429bcfe455ea7d888bdcf665048af35effd0676123d70ef938e10d445fa78",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 190,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1724171,
+      "configPath": "qq/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "d684794e40d1e4a67327ffee0bbcfcdae0a46f297abaaf128c5650458673bf5d",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 189,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 671812,
+      "fileId": 1728314,
+      "configPath": "qq/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "7ea200b6f1ae318ed4ad6ab9312ef7cbecebda5dc309daa112fc7426f3c8d65d",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 189,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1873182,
+      "configPath": "OptiLock FPS Config (Recommended)/gameinfo.gi",
+      "videoPath": "OptiLock FPS Config (Recommended)/video.txt",
+      "configSha256": "6a3f7c4b709ef9e191b1e929c1a06553345fe64ef592c93b3559e4438dc9648b",
+      "githubTextMatches": [
+        {
+          "repo": "dacooderr/OptiLock",
+          "path": "OptiLock FPS Config (Recommended)/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 400,
+      "videoSettings": 57,
+      "withheld": 2
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1873182,
+      "configPath": "OptiLock Potato Config/gameinfo.gi",
+      "videoPath": "OptiLock Potato Config/video.txt",
+      "configSha256": "2088fd8596be32e21804736d7ee9a9f205d0eaf85ed86424bea7ec52eaeccf18",
+      "githubTextMatches": [
+        {
+          "repo": "dacooderr/OptiLock",
+          "path": "OptiLock Potato Config/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 400,
+      "videoSettings": 57,
+      "withheld": 2
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1873182,
+      "configPath": "OptiLock Ultra Potato Config/gameinfo.gi",
+      "videoPath": "OptiLock Ultra Potato Config/video(No Shadows).txt",
+      "configSha256": "caa73d16b1d49f5212b9259c2cbe3420c6864d7ef77b017b26937086f610bf0d",
+      "githubTextMatches": [
+        {
+          "repo": "dacooderr/OptiLock",
+          "path": "OptiLock Ultra Potato Config/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 400,
+      "videoSettings": 57,
+      "withheld": 2
+    },
+    {
+      "submissionId": 690233,
+      "fileId": 1873182,
+      "configPath": "OptiLock Ultra Potato Config/gameinfo.gi",
+      "videoPath": "OptiLock Ultra Potato Config/video.txt",
+      "configSha256": "caa73d16b1d49f5212b9259c2cbe3420c6864d7ef77b017b26937086f610bf0d",
+      "githubTextMatches": [
+        {
+          "repo": "dacooderr/OptiLock",
+          "path": "OptiLock Ultra Potato Config/gameinfo.gi"
+        }
+      ],
+      "ok": true,
+      "convars": 400,
+      "videoSettings": 57,
+      "withheld": 2
+    },
+    {
+      "submissionId": 664234,
+      "fileId": 1833127,
+      "configPath": "Full FPS UP cfg SSH/gameinfo.gi",
+      "videoPath": "Full FPS UP cfg SSH/video.txt",
+      "configSha256": "6e643c90a529943dd0f7df604965bb469ec680ebafbb7ac2d2378b98fcddc872",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 173,
+      "videoSettings": 21,
+      "withheld": 2
+    },
+    {
+      "submissionId": 727681,
+      "fileId": 1856071,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "3f38b8e599dcbfb9c7c2d8a8b473430a8c61a0f367232df77d2f32b609d98873",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 214,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 616141,
+      "fileId": 1849988,
+      "configPath": "dyson build/gameinfo/russian/gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "33d0ecf2d99478f06536a1578e39daf23c46b73f54ff35a583301b0760987d0a",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 648,
+      "videoSettings": 0,
+      "withheld": 12
+    },
+    {
+      "submissionId": 616141,
+      "fileId": 1849988,
+      "configPath": "dyson build/gameinfo default.gi",
+      "videoPath": null,
+      "configSha256": "4ab7becabb5667bf0861015b43505dc7f74d4b703c3cc0cd84b9d079e2e92dab",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 3,
+      "videoSettings": 0,
+      "withheld": 0
+    },
+    {
+      "submissionId": 724992,
+      "fileId": 1840339,
+      "configPath": "gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "6e6ec710241e19f42a41d0a844c72e92241345ef1f1af6670f0edea58e5f3476",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 248,
+      "videoSettings": 0,
+      "withheld": 1
+    },
+    {
+      "submissionId": 729235,
+      "fileId": 1854129,
+      "configPath": "game\\citadel\\gameinfo.gi",
+      "videoPath": null,
+      "configSha256": "ca02751cbfa43960074fe28a4bbed26b0f7b49394b4c6d893065dfc29a2e03aa",
+      "githubTextMatches": [],
+      "ok": true,
+      "convars": 483,
+      "videoSettings": 0,
+      "withheld": 1
+    }
+  ],
+  "limitations": [
+    "Archive selection favors config variants; not all historical files, installers, or large asset packs were downloaded.",
+    "Parser acceptance is not proof of in-game behavior or an FPS gain.",
+    "GitHub matches compare LF-normalized config text with snapshots from the earlier same-day repository audit.",
+    "GameBanana may report more search records than it returns; all available pages were followed until complete."
+  ],
+  "parserEnvironment": {
+    "builder": "buildCustomPerformancePreset",
+    "builderSource": "electron/main/services/performanceCustomCore.ts",
+    "implementationCommit": "17b389c0",
+    "baselineCommit": "e2e9925cdd9d564a1a0bb19f28185211fb0dea75",
+    "baselineSha256": "b96954f5607e381b94b3d5ba2214bf1bcee2b65a16bb1a231b5f840586466955",
+    "githubComparisonSnapshots": [
+      {
+        "repo": "Sqooky/OptimizationLock",
+        "commit": "1dbf67941fff4c92881119f92b548f13c5175225",
+        "date": "2026-11-04T21:04:11Z"
+      },
+      {
+        "repo": "dacooderr/OptiLock",
+        "commit": "77489664c3e2367c486a81ffd62b0f3f28d3454d",
+        "date": "2026-11-01T21:21:26Z"
+      },
+      {
+        "repo": "haloshiroe/complock-mirror",
+        "commit": "d2280345e9b09cd5ff8a9be331a94b0f9cf56e68",
+        "date": "2026-11-07T21:23:48Z"
+      },
+      {
+        "repo": "7liv/compylock",
+        "commit": "e69ac8a7a7065af4d507dc2a2e488ff03f1be286",
+        "date": "2026-10-10T18:45:36Z"
+      }
+    ],
+    "comparisonNormalization": "CRLF to LF only; configSha256 records the original decoded UTF-8 text without normalization.",
+    "executionScope": "Parsing and classification only. No game files changed and no commands or downloaded programs executed."
+  }
+}
