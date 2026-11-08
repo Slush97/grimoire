@@ -839,7 +839,8 @@
       "damage": "урон",
       "viewMatchOnStatlocker": "Открыть матч на Statlocker",
       "rankPoints": "Очки ранга",
-      "rankPointsProtected": "Очки ранга. Активирована защита от потери ранга."
+      "rankPointsProtected": "Очки ранга. Активирована защита от потери ранга.",
+      "brawl": "Стычка"
     },
     "scoreboard": {
       "open": "Открыть таблицу матча",
@@ -866,7 +867,9 @@
       "asia": "Азия",
       "topPlayers": "Лучшие игроки",
       "valveLeaderboardUpdatedHourly": "Таблица лидеров Valve, обновляется каждый час",
-      "noDataForRegion": "Для этого региона нет данных таблицы лидеров"
+      "noDataForRegion": "Для этого региона нет данных таблицы лидеров",
+      "season": "Сезон",
+      "trackedPosition": "{{name}} #{{rank}}"
     },
     "ranks": {
       "initiate": "Послушник",

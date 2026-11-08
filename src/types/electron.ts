@@ -1566,7 +1566,7 @@ export interface ElectronAPI {
         getActiveMatches: () => Promise<unknown[]>;
 
         // Leaderboards
-        getLeaderboard: (region: string) => Promise<unknown[]>;
+        getLeaderboard: (region: string, leaderboardId?: number) => Promise<unknown[]>;
         getHeroLeaderboard: (region: string, heroId: number) => Promise<unknown[]>;
 
         // Analytics

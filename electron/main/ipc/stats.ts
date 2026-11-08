@@ -293,8 +293,8 @@ ipcMain.handle('stats:getActiveMatches', async () => {
 // Leaderboards (API)
 // ============================================
 
-ipcMain.handle('stats:getLeaderboard', async (_, region: LeaderboardRegion) => {
-    return statsApi.getLeaderboard(region)
+ipcMain.handle('stats:getLeaderboard', async (_, region: LeaderboardRegion, leaderboardId?: number) => {
+    return statsApi.getLeaderboard(region, leaderboardId)
 })
 
 ipcMain.handle(

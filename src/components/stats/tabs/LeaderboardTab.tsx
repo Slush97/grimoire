@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Trophy } from 'lucide-react'
-import { Card, Button } from '../../common/ui'
+import { Card, Button, SegmentedControl } from '../../common/ui'
 import { useLeaderboardStore } from '../../../stores/stats/leaderboardStore'
+import { usePlayerStore } from '../../../stores/stats/playerStore'
 import type { LeaderboardRegion } from '../../../types/deadlock-stats'
 import { AsyncSection, HeroChip } from '../primitives'
 import { rankLabelFromBadge } from '../format'
@@ -20,6 +21,14 @@ export function LeaderboardTab() {
     const region = useLeaderboardStore((s) => s.region)
     const leaderboard = useLeaderboardStore((s) => s.leaderboard)
     const loadLeaderboard = useLeaderboardStore((s) => s.loadLeaderboard)
+    const seasons = useLeaderboardStore((s) => s.seasons)
+    const season = useLeaderboardStore((s) => s.season)
+    const accountId = usePlayerStore((s) => s.selectedAccountId)
+    // Leaderboard names are matched to accounts by Steam name, so an entry can
+    // carry several possible ids. Good enough to point out the tracked player.
+    const isTracked = (entry: { possible_account_ids?: number[] }) =>
+        accountId !== null && (entry.possible_account_ids ?? []).includes(accountId)
+    const trackedEntry = leaderboard.data.find(isTracked)
 
     useEffect(() => {
         if (leaderboard.status === 'idle') loadLeaderboard()
@@ -27,20 +36,44 @@ export function LeaderboardTab() {
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2">
-                {REGIONS.map((r) => (
-                    <Button
-                        key={r.value}
-                        variant={region === r.value ? 'primary' : 'secondary'}
-                        size="sm"
-                        onClick={() => loadLeaderboard(r.value)}
-                    >
-                        {r.value === 'Asia' ? t('stats.leaderboard.asia') : r.label}
-                    </Button>
-                ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-2">
+                    {REGIONS.map((r) => (
+                        <Button
+                            key={r.value}
+                            variant={region === r.value ? 'primary' : 'secondary'}
+                            size="sm"
+                            onClick={() => loadLeaderboard(r.value)}
+                        >
+                            {r.value === 'Asia' ? t('stats.leaderboard.asia') : r.label}
+                        </Button>
+                    ))}
+                </div>
+                {seasons.length > 1 && (
+                    <SegmentedControl
+                        options={seasons.map((s) => ({ value: String(s.id), label: s.name }))}
+                        value={String(season ?? seasons[0].id)}
+                        onChange={(v) => loadLeaderboard(undefined, Number(v))}
+                        label={t('stats.leaderboard.season')}
+                    />
+                )}
             </div>
 
-            <Card title={t('stats.leaderboard.topPlayers')} icon={Trophy} description={t('stats.leaderboard.valveLeaderboardUpdatedHourly')}>
+            <Card
+                title={t('stats.leaderboard.topPlayers')}
+                icon={Trophy}
+                description={t('stats.leaderboard.valveLeaderboardUpdatedHourly')}
+                action={
+                    trackedEntry ? (
+                        <span className="rounded-sm bg-accent/15 px-2 py-1 text-xs font-medium text-accent">
+                            {t('stats.leaderboard.trackedPosition', {
+                                name: trackedEntry.account_name,
+                                rank: trackedEntry.rank,
+                            })}
+                        </span>
+                    ) : undefined
+                }
+            >
                 <AsyncSection
                     state={leaderboard}
                     onRetry={() => loadLeaderboard()}
@@ -53,7 +86,9 @@ export function LeaderboardTab() {
                             {entries.slice(0, 50).map((entry) => (
                                 <div
                                     key={`${entry.rank}-${entry.account_name}`}
-                                    className="flex items-center justify-between gap-3 p-3 bg-bg-tertiary rounded-sm"
+                                    className={`flex items-center justify-between gap-3 p-3 rounded-sm border-l-2 ${
+                                        isTracked(entry) ? 'border-accent bg-accent/10' : 'border-transparent bg-bg-tertiary'
+                                    }`}
                                 >
                                     <div className="flex items-center gap-3 min-w-0">
                                         <span className="w-9 text-right font-mono text-accent shrink-0">
@@ -79,9 +114,11 @@ export function LeaderboardTab() {
                                             columns never rendered and their strings were dead copy
                                             shipped to translators. Re-add with the data if the endpoint
                                             ever provides them. */}
-                                        <span className="text-accent w-28 text-right">
-                                            {rankLabelFromBadge(entry.badge_level)}
-                                        </span>
+                                        {entry.badge_level ? (
+                                            <span className="text-accent w-28 text-right">
+                                                {rankLabelFromBadge(entry.badge_level)}
+                                            </span>
+                                        ) : null}
                                     </div>
                                 </div>
                             ))}

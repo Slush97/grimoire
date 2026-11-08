@@ -10,6 +10,8 @@ import { MmrChart } from '../MmrChart'
 import { RankDetails } from '../RankDetails'
 import { MatchScoreboardDialog } from '../MatchScoreboardDialog'
 
+const STREET_BRAWL = 4
+
 export function OverviewTab() {
     const { t } = useTranslation()
     const playerData = usePlayerStore((s) => s.playerData)
@@ -127,6 +129,7 @@ export function OverviewTab() {
                                     startTime={match.start_time}
                                     rankDelta={match.ranked_delta}
                                     rankProtected={match.ranked_used_demotion_protection === true}
+                                    brawl={match.game_mode === STREET_BRAWL}
                                     onOpen={() => setOpenMatch(match.match_id)}
                                     compact
                                 />

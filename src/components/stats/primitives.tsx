@@ -150,6 +150,8 @@ interface MatchRowProps {
     rankDelta?: number | null
     /** Demotion protection absorbed this loss. */
     rankProtected?: boolean
+    /** Street Brawl, tagged because its souls and K/D don't compare with normal games. */
+    brawl?: boolean
     /** Opens the match scoreboard. Makes the whole row clickable. */
     onOpen?: () => void
     compact?: boolean
@@ -168,6 +170,7 @@ export function MatchRow({
     damage,
     rankDelta,
     rankProtected = false,
+    brawl = false,
     onOpen,
     compact = false,
 }: MatchRowProps) {
@@ -201,6 +204,14 @@ export function MatchRow({
                     <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-state-danger'}`}>
                         {won ? t('stats.primitives.win') : t('stats.primitives.loss')}
                     </span>
+                    {brawl && (
+                        <span
+                            className="rounded-sm border border-hl/10 px-1 text-2xs text-text-secondary"
+                            title={t('stats.scoreboard.mode.brawl')}
+                        >
+                            {t('stats.primitives.brawl')}
+                        </span>
+                    )}
                     {rankDelta != null && rankDelta !== 0 && (
                         <span
                             className={`inline-flex items-center gap-0.5 font-mono text-2xs tabular-nums ${

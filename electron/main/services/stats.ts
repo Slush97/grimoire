@@ -610,10 +610,16 @@ export async function getActiveMatches(options?: FetchOptions): Promise<ActiveMa
  */
 export async function getLeaderboard(
     region: LeaderboardRegion,
+    leaderboardId?: number,
     options?: FetchOptions
 ): Promise<LeaderboardEntry[]> {
-    // API returns { entries: [...] }, unwrap and transform
-    const response = await fetchFromAPI<LeaderboardResponse>(`/leaderboard/${region}`, undefined, options)
+    // API returns { entries: [...] }, unwrap and transform. Without an id it
+    // serves the current season's board.
+    const response = await fetchFromAPI<LeaderboardResponse>(
+        `/leaderboard/${region}`,
+        leaderboardId ? { leaderboard_id: leaderboardId } : undefined,
+        options
+    )
 
     return (response.entries || []).map(entry => ({
         ...entry,

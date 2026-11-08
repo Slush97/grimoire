@@ -899,8 +899,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getActiveMatches: () => ipcRenderer.invoke('stats:getActiveMatches'),
 
         // Leaderboards
-        getLeaderboard: (region: string) =>
-            ipcRenderer.invoke('stats:getLeaderboard', region),
+        getLeaderboard: (region: string, leaderboardId?: number) =>
+            ipcRenderer.invoke('stats:getLeaderboard', region, leaderboardId),
         getHeroLeaderboard: (region: string, heroId: number) =>
             ipcRenderer.invoke('stats:getHeroLeaderboard', region, heroId),
 

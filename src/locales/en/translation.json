@@ -813,7 +813,8 @@
       "damage": "damage",
       "viewMatchOnStatlocker": "View match on Statlocker",
       "rankPoints": "Rank points",
-      "rankPointsProtected": "Rank points. Demotion protection was used."
+      "rankPointsProtected": "Rank points. Demotion protection was used.",
+      "brawl": "Brawl"
     },
     "scoreboard": {
       "open": "Open scoreboard",
@@ -840,7 +841,9 @@
       "asia": "Asia",
       "topPlayers": "Top Players",
       "valveLeaderboardUpdatedHourly": "Valve leaderboard, updated hourly",
-      "noDataForRegion": "No leaderboard data for this region"
+      "noDataForRegion": "No leaderboard data for this region",
+      "season": "Season",
+      "trackedPosition": "{{name}} #{{rank}}"
     },
     "ranks": {
       "initiate": "Initiate",

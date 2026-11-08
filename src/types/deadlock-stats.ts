@@ -20,7 +20,7 @@ export interface PlayerRank {
 /** One season from /assets/ranked-seasons, trimmed to what the rank card uses. */
 export interface RankedSeason {
   name: string
-  intervals: { interval: number; start_timestamp: number; end_timestamp: number }[]
+  intervals: { interval: number; start_timestamp: number; end_timestamp: number; leaderboard_id?: number }[]
   /** First entry carries sub_rank_xp: points per subrank 1-6, the same for every tier. */
   rank_info: { sub_rank_xp?: number[] }[]
 }
@@ -276,9 +276,10 @@ export interface LeaderboardEntry {
   possible_account_ids: number[]
   rank: number
   top_hero_ids: number[]
-  badge_level: number
-  ranked_rank: number
-  ranked_subrank: number
+  // No longer sent since the 2026-11 API rework. Kept optional for older responses.
+  badge_level?: number
+  ranked_rank?: number
+  ranked_subrank?: number
   // Computed fields for backwards compatibility
   account_id?: number
   persona_name?: string
