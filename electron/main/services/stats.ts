@@ -5,6 +5,8 @@ import type {
     HeroAsset,
     RankAsset,
     PlayerRank,
+    RankedSeason,
+    RankDistributionEntry,
     PlayerHeroStats,
     PlayerHeroStat,
     PlayerMatchHistory,
@@ -22,6 +24,7 @@ import type {
     HeroStatsParams,
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
+import { currentInterval } from '../../../src/lib/rankProgress'
 import { GRIMOIRE_USER_AGENT } from './userAgent'
 import { statsApiRateLimiter, steamCommunityRateLimiter } from './rateLimiter'
 
@@ -261,6 +264,55 @@ export async function getPlayerRank(
         { account_ids: accountIds.join(',') },
         options
     )
+}
+
+// ============================================
+// Crosshair Share Codes
+// ============================================
+
+/** Encode crosshair settings (API field names) as the game's share code. */
+export async function encodeCrosshairShareCode(params: Record<string, number | boolean>): Promise<string> {
+    const { code } = await fetchFromAPI<{ code: string }>('/crosshair/settings/code', params)
+    return code
+}
+
+/** Decode a game share code into crosshair settings (API field names). */
+export async function decodeCrosshairShareCode(code: string): Promise<Record<string, unknown>> {
+    return fetchFromAPI<Record<string, unknown>>('/crosshair/code/settings', { code })
+}
+
+let seasonsCache: { data: RankedSeason[]; fetchedAt: number } | null = null
+
+/** Ranked seasons with their point scales, cached like the hero assets. */
+export async function getRankedSeasons(): Promise<RankedSeason[]> {
+    if (seasonsCache && Date.now() - seasonsCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return seasonsCache.data
+    }
+    const data = await fetchFromAPI<RankedSeason[]>('/assets/ranked-seasons')
+    seasonsCache = { data, fetchedAt: Date.now() }
+    return data
+}
+
+const DISTRIBUTION_TTL_MS = 60 * 60 * 1000
+let distributionCache: { since: number; data: RankDistributionEntry[]; fetchedAt: number } | null = null
+
+/**
+ * Players per badge in the current season. The endpoint allows 5 requests a
+ * minute per IP, so the result is kept for an hour.
+ */
+export async function getSeasonRankDistribution(): Promise<RankDistributionEntry[]> {
+    const interval = currentInterval(await getRankedSeasons(), Date.now() / 1000)
+    const since = interval?.start_timestamp ?? 0
+    if (distributionCache && distributionCache.since === since &&
+        Date.now() - distributionCache.fetchedAt < DISTRIBUTION_TTL_MS) {
+        return distributionCache.data
+    }
+    const data = await fetchFromAPI<RankDistributionEntry[]>(
+        '/players/rank/distribution',
+        since ? { min_unix_timestamp: since } : undefined
+    )
+    distributionCache = { since, data, fetchedAt: Date.now() }
+    return data
 }
 
 /**

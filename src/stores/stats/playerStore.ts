@@ -3,6 +3,8 @@ import { shallow } from 'zustand/shallow'
 import type {
     TrackedPlayer,
     PlayerRank,
+    RankedSeason,
+    RankDistributionEntry,
     PlayerHeroStats,
     PlayerMatchHistory,
     AggregatedStats,
@@ -16,6 +18,9 @@ import { type Async, asyncIdle, asyncLoading, asyncLoaded, asyncError, toErrorMe
 // the tabs share one loading/error state for player-scoped data.
 export interface PlayerDataBundle {
     rank: PlayerRank | null
+    rankedSeasons: RankedSeason[]
+    // Current season, for the rank card's "top X%". Null when unavailable.
+    rankDistribution: RankDistributionEntry[] | null
     heroStats: PlayerHeroStats | null
     matchHistory: PlayerMatchHistory | null
     aggregated: AggregatedStats | null
@@ -25,6 +30,8 @@ export interface PlayerDataBundle {
 
 const EMPTY_BUNDLE: PlayerDataBundle = {
     rank: null,
+    rankedSeasons: [],
+    rankDistribution: null,
     heroStats: null,
     matchHistory: null,
     aggregated: null,
@@ -63,11 +70,16 @@ interface PlayerState {
 }
 
 async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
-    const [ranks, heroStats, matchHistory, localMMR] = await Promise.all([
+    const [ranks, heroStats, matchHistory, localMMR, rankedSeasons, rankDistribution] = await Promise.all([
         window.electronAPI.stats.getPlayerRank([accountId]) as Promise<PlayerRank[]>,
         window.electronAPI.stats.getPlayerHeroStats(accountId) as Promise<PlayerHeroStats>,
         window.electronAPI.stats.getPlayerMatchHistory(accountId, 20) as Promise<PlayerMatchHistory>,
         window.electronAPI.stats.getLocalMMRHistory(accountId, 60) as Promise<MMRSnapshot[]>,
+        // Rank card extras: without them the card still shows the rank.
+        (window.electronAPI.stats.getRankedSeasons() as Promise<RankedSeason[]>)
+            .catch(() => [] as RankedSeason[]),
+        (window.electronAPI.stats.getSeasonRankDistribution() as Promise<RankDistributionEntry[]>)
+            .catch(() => null),
     ])
 
     // Persist the freshly fetched live matches into the local recorded history
@@ -83,6 +95,8 @@ async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
     ])
     return {
         rank: ranks[0] || null,
+        rankedSeasons,
+        rankDistribution,
         heroStats,
         matchHistory,
         aggregated,

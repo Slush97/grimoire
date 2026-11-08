@@ -173,6 +173,14 @@ ipcMain.handle('stats:getPlayerRank', async (_, accountIds: number[]) => {
     return ranks
 })
 
+ipcMain.handle('stats:getRankedSeasons', async () => {
+    return statsApi.getRankedSeasons()
+})
+
+ipcMain.handle('stats:getSeasonRankDistribution', async () => {
+    return statsApi.getSeasonRankDistribution()
+})
+
 ipcMain.handle('stats:getHeroes', async () => {
     return statsApi.getHeroAssets()
 })

@@ -742,6 +742,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoexecStatus: (gamePath: string) => ipcRenderer.invoke('crosshair:getAutoexecStatus', gamePath),
     createAutoexec: (gamePath: string) => ipcRenderer.invoke('crosshair:createAutoexec', gamePath),
     importCrosshairFromGame: (gamePath: string) => ipcRenderer.invoke('crosshair:importFromGame', gamePath),
+    copyCrosshairShareCode: (settings: CrosshairSettings) => ipcRenderer.invoke('crosshair:copyShareCode', settings),
+    pasteCrosshairShareCode: (current: CrosshairSettings) => ipcRenderer.invoke('crosshair:pasteShareCode', current),
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
 
@@ -863,6 +865,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // Player Data (API)
         getPlayerRank: (accountIds: number[]) =>
             ipcRenderer.invoke('stats:getPlayerRank', accountIds),
+        getRankedSeasons: () => ipcRenderer.invoke('stats:getRankedSeasons'),
+        getSeasonRankDistribution: () => ipcRenderer.invoke('stats:getSeasonRankDistribution'),
         getHeroes: () => ipcRenderer.invoke('stats:getHeroes'),
         getRanks: () => ipcRenderer.invoke('stats:getRanks'),
         getPlayerHeroStats: (accountId: number) =>

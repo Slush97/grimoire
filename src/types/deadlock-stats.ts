@@ -17,6 +17,20 @@ export interface PlayerRank {
   last_match: LastRankedMatch | null
 }
 
+/** One season from /assets/ranked-seasons, trimmed to what the rank card uses. */
+export interface RankedSeason {
+  name: string
+  intervals: { interval: number; start_timestamp: number; end_timestamp: number }[]
+  /** First entry carries sub_rank_xp: points per subrank 1-6, the same for every tier. */
+  rank_info: { sub_rank_xp?: number[] }[]
+}
+
+/** Players per badge from /players/rank/distribution. */
+export interface RankDistributionEntry {
+  badge: number
+  players: number
+}
+
 export interface LastRankedMatch {
   match_id: number
   start_time: number
@@ -108,6 +122,7 @@ export interface PlayerMatch {
   // (tier * 10 + subrank) and the rank progress it awarded.
   ranked_display_badge?: number | null
   ranked_delta?: number | null
+  ranked_used_demotion_protection?: boolean | null
   // Computed fields (added by service layer)
   hero_name?: string
   match_outcome?: 'Win' | 'Loss'

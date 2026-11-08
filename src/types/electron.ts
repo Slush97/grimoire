@@ -1409,6 +1409,10 @@ export interface ElectronAPI {
     /** Read the player's live in-game crosshair from machine_convars.vcfg.
      *  settings is null when the file is missing or has no crosshair convars. */
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
+    /** Copy settings to the clipboard as the game's crosshair share code (via deadlock-api). */
+    copyCrosshairShareCode: (settings: CrosshairSettings) => Promise<void>;
+    /** Decode the share code on the clipboard, or null when it holds none (nothing is sent then). */
+    pasteCrosshairShareCode: (current: CrosshairSettings) => Promise<CrosshairSettings | null>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
@@ -1539,6 +1543,8 @@ export interface ElectronAPI {
 
         // Player Data (API)
         getPlayerRank: (accountIds: number[]) => Promise<unknown[]>;
+        getRankedSeasons: () => Promise<unknown[]>;
+        getSeasonRankDistribution: () => Promise<unknown[]>;
         getHeroes: () => Promise<unknown[]>;
         getRanks: () => Promise<unknown[]>;
         getPlayerHeroStats: (accountId: number) => Promise<unknown>;

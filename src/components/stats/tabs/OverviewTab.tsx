@@ -7,6 +7,7 @@ import { useHeroStore, isTestHero, useHeroName } from '../../../stores/stats/her
 import { StatCard, MatchRow, HeroChip } from '../primitives'
 import { rankLabel, winRateClass } from '../format'
 import { MmrChart } from '../MmrChart'
+import { RankDetails } from '../RankDetails'
 
 export function OverviewTab() {
     const { t } = useTranslation()
@@ -16,7 +17,8 @@ export function OverviewTab() {
     const ranks = useHeroStore((s) => s.ranks)
     const heroName = useHeroName()
 
-    const { rank, heroStats, matchHistory, aggregated, localMMRHistory } = playerData.data
+    const { rank, rankedSeasons, rankDistribution, heroStats, matchHistory, aggregated, localMMRHistory } =
+        playerData.data
 
     const winRate =
         aggregated && aggregated.total_matches > 0
@@ -56,6 +58,11 @@ export function OverviewTab() {
                             )}
                             {rank ? rankLabel(rank.rank, rank.subrank) : '--'}
                         </span>
+                    }
+                    sub={
+                        rank?.badge ? (
+                            <RankDetails rank={rank} seasons={rankedSeasons} distribution={rankDistribution} />
+                        ) : undefined
                     }
                 />
                 <StatCard
@@ -116,6 +123,8 @@ export function OverviewTab() {
                                     assists={match.assists ?? match.player_assists}
                                     durationS={match.duration_s ?? match.match_duration_s}
                                     startTime={match.start_time}
+                                    rankDelta={match.ranked_delta}
+                                    rankProtected={match.ranked_used_demotion_protection === true}
                                     compact
                                 />
                             ))}

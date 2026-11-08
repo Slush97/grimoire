@@ -741,6 +741,12 @@
     },
     "overview": {
       "rank": "Rank",
+      "rankProgressTitle": "{{points}} / {{needed}} points to {{next}}",
+      "topPercent": "Top {{percent}}%",
+      "topPercentTitle": "Share of this season's ranked players at or above this rank",
+      "winStreakTitle": "Win streak: {{count}}",
+      "protectionTitle_one": "Demotion protection: {{count}} shield left",
+      "protectionTitle_other": "Demotion protection: {{count}} shields left",
       "winLoss": "{{wins}}W / {{losses}}L",
       "winRate": "Win Rate",
       "bestStreak": "Best streak: {{count}}",
@@ -805,7 +811,9 @@
       "loss": "Loss",
       "souls": "souls",
       "damage": "damage",
-      "viewMatchOnStatlocker": "View match on Statlocker"
+      "viewMatchOnStatlocker": "View match on Statlocker",
+      "rankPoints": "Rank points",
+      "rankPointsProtected": "Rank points. Demotion protection was used."
     },
     "leaderboard": {
       "asia": "Asia",
@@ -1293,6 +1301,10 @@
     "actions": {
       "applyToGame": "Apply to Game",
       "copyCode": "Copy Code",
+      "copyCodeTitle": "Copy this crosshair as a code you can paste in the game's crosshair settings",
+      "copyCommands": "Copy Commands",
+      "pasteCode": "Paste Code",
+      "pasteCodeTitle": "Apply a crosshair code from your clipboard",
       "importFromGame": "Import from Game",
       "importTitle": "Load your current in-game crosshair settings into the editor",
       "saveCurrent": "Save current"
@@ -1302,7 +1314,9 @@
       "clearFailed": "Failed to clear crosshair. Check the game path in Settings.",
       "configureGamePath": "Please configure your Deadlock game path in Settings first.",
       "noSettingsFound": "No crosshair settings found in the game config. Change any crosshair setting in-game once, then try again.",
-      "readConfigFailed": "Failed to read the game config. Check the game path in Settings."
+      "readConfigFailed": "Failed to read the game config. Check the game path in Settings.",
+      "noShareCode": "The clipboard doesn't contain a crosshair code.",
+      "shareCodeFailed": "Couldn't reach deadlock-api.com. Try again in a moment."
     },
     "colors": {
       "blue": "Blue",
@@ -1335,7 +1349,7 @@
       "description": "Tune your crosshair and read it against a real scene"
     },
     "hints": {
-      "applyExplainer": "Copy Code pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart.",
+      "applyExplainer": "Copy Commands pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart.",
       "dotHidden": "The dot is fully transparent. Raise Opacity to see it.",
       "pressF7": "Press F7 in-game"
     },
@@ -1374,7 +1388,8 @@
       "lines": "Lines"
     },
     "status": {
-      "imported": "Imported"
+      "imported": "Imported",
+      "pasted": "Applied"
     },
     "toggles": {
       "staticGap": "Keep the gap fixed. Off lets it expand with weapon spread (not shown in preview).",
