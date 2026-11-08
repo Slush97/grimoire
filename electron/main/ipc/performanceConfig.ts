@@ -17,6 +17,8 @@ import {
 // Importing the service also registers its preset resolver with
 // performanceConfig, so markers written by a track-latest apply resolve.
 import { checkPerformanceLatest, getPerformanceLatestInfo } from '../services/performanceLatest';
+import { deleteCustomPerformancePreset, importPerformancePreset, inspectPerformanceRepository, listCustomPerformancePresets, saveCustomPerformanceToggles } from '../services/performanceCustom';
+import type { CustomPerformanceImport, CustomPerformanceToggle } from '../../../src/types/performanceCustom';
 import type {
     EditorCandidate,
     PerformanceConfigStatus,
@@ -61,7 +63,27 @@ ipcMain.handle('get-performance-config-status', (): PerformanceConfigStatus => {
 
 // list-performance-presets
 ipcMain.handle('list-performance-presets', (): PerformancePresetSummary[] => {
-    return listPerformancePresets();
+    return [...listPerformancePresets(), ...listCustomPerformancePresets()];
+});
+
+ipcMain.handle('import-performance-preset', (_event, input: CustomPerformanceImport) => importPerformancePreset(input));
+ipcMain.handle('inspect-performance-repository', (_event, repository: string) => inspectPerformanceRepository(repository));
+
+function assertCustomPresetInactive(id: string) {
+    const status = getPerformanceConfigStatus(getActiveDeadlockPath());
+    if (status.state === 'error' || ((status.state === 'applied' || status.state === 'wiped') && status.appliedPresetId === id)) {
+        throw new Error('Turn off this performance config before editing or removing its entry.');
+    }
+}
+
+ipcMain.handle('delete-performance-preset', (_event, id: string) => {
+    assertCustomPresetInactive(id);
+    deleteCustomPerformancePreset(id);
+});
+
+ipcMain.handle('save-performance-preset-toggles', (_event, id: string, toggles: CustomPerformanceToggle[]) => {
+    assertCustomPresetInactive(id);
+    saveCustomPerformanceToggles(id, toggles);
 });
 
 // apply-performance-config

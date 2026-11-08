@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
@@ -7,9 +7,12 @@ import EditorPickerModal from './EditorPickerModal';
 import VersionPicker from './VersionPicker';
 import GameplayOptIns from './GameplayOptIns';
 import ConvarOverrides from './ConvarOverrides';
+import CustomPresetManager from './CustomPresetManager';
+import CustomPresetOptions from './CustomPresetOptions';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import { showToast } from '../../stores/toastStore';
 import { useGameinfoStore } from '../../stores/gameinfoStore';
+import { useModSafetyStore } from '../../stores/modSafetyStore';
 import {
   applyPerformanceConfig,
   checkPerformanceLatest,
@@ -81,6 +84,8 @@ export default function PerformanceConfigCard() {
   const [busy, setBusy] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerEntryId, setManagerEntryId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const settings = useAppStore((s) => s.settings);
   const saveSettings = useAppStore((s) => s.saveSettings);
@@ -100,28 +105,27 @@ export default function PerformanceConfigCard() {
 
   // While a config is in the file, the file is the truth. Otherwise show the
   // saved choice, falling back to the recommended preset.
-  const selectedId =
+  const visiblePresets = presets.filter((preset) =>
+    !settings?.performanceHideBuiltIns || preset.custom ||
+    ((applied || wiped) && preset.id === status?.appliedPresetId));
+  const wantedId =
     (applied ? status?.appliedPresetId : null) ??
     settings?.performanceConfigPresetId ??
     presets.find((p) => p.isDefault)?.id ??
     presets[0]?.id ??
     '';
-  const selected = presets.find((p) => p.id === selectedId) ?? null;
-  const selectedVersion = useMemo(
-    () => (selected ? savedVersion(settings, selected) : ''),
-    [settings, selected]
-  );
+  const selected = visiblePresets.find((p) => p.id === wantedId) ?? visiblePresets.find((p) => p.isDefault) ?? visiblePresets[0] ?? null;
+  const selectedId = selected?.id ?? '';
+  const selectedVersion = selected ? savedVersion(settings, selected) : '';
   const selectedRelease =
     selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
-  const selectedOptIns = useMemo(
-    () => (selected ? savedOptIns(settings, selected, selectedVersion) : []),
-    [settings, selected, selectedVersion]
-  );
+  const selectedOptIns = selected ? savedOptIns(settings, selected, selectedVersion) : [];
+  const customToggleKeys = new Set(selected?.custom?.toggles.map((toggle) => toggle.key));
   const selectedVideoVariant = savedVideoVariant(settings, selectedId, selectedRelease);
 
   // Default on: these presets mirror living community configs. A deliberate
   // rollback to an older version still beats tracking.
-  const trackLatest = settings?.performanceTrackLatest !== false;
+  const trackLatest = !selected?.custom && settings?.performanceTrackLatest !== false;
   const pinned = !!selected && hasPinnedVersion(settings, selected);
   // The upstream release tracking writes, when no bundled release matches it.
   const trackedRelease =
@@ -226,7 +230,7 @@ export default function PerformanceConfigCard() {
     {
       restoreVideo = false,
       videoVariant,
-      track = trackLatest && !hasPinnedVersion(settings, preset),
+      track = !preset.custom && settings?.performanceTrackLatest !== false && !hasPinnedVersion(settings, preset),
     }: { restoreVideo?: boolean; videoVariant?: string | null; track?: boolean } = {}
   ) =>
     run(async () => {
@@ -263,7 +267,7 @@ export default function PerformanceConfigCard() {
     const version = savedVersion(next, preset);
     const result = await write(preset, version, savedOptIns(next, preset, version));
     if (result?.state !== 'applied') return;
-    showToast(t('performance.switched', { preset: t(`performance.preset.tier.${preset.tier}`) }), {
+    showToast(t('performance.switched', { preset: preset.custom ? preset.name : t(`performance.preset.tier.${preset.tier}`) }), {
       tone: 'success',
       actionLabel: t('common.actions.undo'),
       onAction: () => {
@@ -441,7 +445,7 @@ export default function PerformanceConfigCard() {
                       : null;
 
   const overrideCount = status?.overrideCount ?? 0;
-  const sortedPresets = sortPresetsByTier(presets);
+  const sortedPresets = sortPresetsByTier(visiblePresets);
 
   return (
     <Card
@@ -487,6 +491,11 @@ export default function PerformanceConfigCard() {
         </div>
       )}
 
+      <div className="flex justify-end border-b border-border px-5 py-3">
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setManagerEntryId(null); setManagerOpen(true); }}>{t('performance.custom.manage')}</Button>
+      </div>
+      {!visiblePresets.length && <p className="px-5 py-4 text-sm text-text-secondary">{t('performance.custom.empty')}</p>}
+
       <div
         role="radiogroup"
         aria-label={t('performance.presetsLabel')}
@@ -513,7 +522,7 @@ export default function PerformanceConfigCard() {
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium text-text-primary">
-                    {t(`performance.preset.tier.${preset.tier}`)}
+                    {preset.custom ? preset.name : t(`performance.preset.tier.${preset.tier}`)}
                   </span>
                   {preset.isDefault && (
                     <span className="text-xs text-text-secondary">{t('performance.preset.recommended')}</span>
@@ -537,14 +546,17 @@ export default function PerformanceConfigCard() {
                     {preset.author}
                   </span>
                 </span>
-                <span className="mt-2 block text-xs text-text-secondary">
-                  {t(`performance.preset.tierBlurb.${preset.tier}`)}
+                <span className="mt-2 block break-words text-xs text-text-secondary">
+                  {preset.custom ? (preset.custom.configPath ?? preset.custom.videoPath) : t(`performance.preset.tierBlurb.${preset.tier}`)}
                 </span>
               </span>
             </label>
           );
         })}
       </div>
+
+      {selected?.custom && <CustomPresetOptions key={selected.id} preset={selected} selected={selectedOptIns}
+        disabled={busy} onChange={(keys) => void onChangeOptIns(keys)} onEdit={() => { setManagerEntryId(selected.id); setManagerOpen(true); }} />}
 
       {selectedVideoVariant && selectedRelease?.videoVariants && (
         <div className="border-t border-hl/5 px-5 py-4">
@@ -603,13 +615,13 @@ export default function PerformanceConfigCard() {
               tracked={trackedRelease}
             />
 
-            <Toggle
+            {!selected.custom && <Toggle
               checked={trackLatest}
               onChange={(on) => void onToggleTrackLatest(on)}
               label={t('performance.trackLatest.label')}
               description={t('performance.trackLatest.description')}
               disabled={busy}
-            />
+            />}
 
             {videoCount > 0 && (
               <div>
@@ -637,9 +649,9 @@ export default function PerformanceConfigCard() {
             )}
 
             <GameplayOptIns
-              controls={selectedRelease.optIn}
-              selected={selectedOptIns}
-              onChange={(keys) => void onChangeOptIns(keys)}
+              controls={selectedRelease.optIn.filter((control) => !customToggleKeys.has(control.key))}
+              selected={selectedOptIns.filter((key) => !customToggleKeys.has(key))}
+              onChange={(keys) => void onChangeOptIns([...keys, ...selectedOptIns.filter((key) => customToggleKeys.has(key))])}
               fileValues={applied ? status?.managedConvarValues : undefined}
               savedValues={applied ? status?.savedConvarValues : undefined}
               disabled={busy}
@@ -685,7 +697,7 @@ export default function PerformanceConfigCard() {
 
             <p className="ml-auto flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
               <span>
-                {selected.upstream.credit} ({selected.upstream.license})
+                {selected.upstream.credit}{selected.upstream.license ? ` (${selected.upstream.license})` : ''}
               </span>
               <a
                 href={`${selected.upstream.url}/tree/${selectedRelease.commit}`}
@@ -717,6 +729,34 @@ export default function PerformanceConfigCard() {
           onChoose={(editorPath) => void onChooseEditor(editorPath)}
         />
       )}
+      {managerOpen && <CustomPresetManager presets={presets} activeId={applied || wiped ? status?.appliedPresetId ?? null : null}
+        initialEntryId={managerEntryId} hideBuiltIns={settings?.performanceHideBuiltIns}
+        selectsImported={!applied && !wiped}
+        onReviewAddons={() => { setManagerOpen(false); useModSafetyStore.setState({ detail: null }); navigate('/settings/mod-safety'); }}
+        onHideBuiltInsChange={async (hidden) => { if (settings) await saveSettings({ ...settings, performanceHideBuiltIns: hidden }); }}
+        onTurnOff={async () => {
+          const result = await run(removePerformanceConfig);
+          if (result?.state !== 'not-applied') throw new Error(result?.message || t('performance.custom.errors.generic'));
+        }}
+        onSaveToggles={async (preset, toggles) => {
+          const saved = settings?.performanceConfigOptIns?.[preset.id];
+          if (settings && saved) {
+            const previous = new Set(preset.custom!.toggles.map((toggle) => toggle.key));
+            const added = toggles.filter((toggle) => !previous.has(toggle.key)).map((toggle) => toggle.key);
+            // These settings were mandatory before becoming optional. Keep them on.
+            await saveSettings({ ...settings, performanceConfigOptIns: {
+              ...settings.performanceConfigOptIns, [preset.id]: [...new Set([...saved, ...added])],
+            } });
+          }
+          await window.electronAPI.savePerformancePresetToggles(preset.id, toggles);
+          setPresets(await listPerformancePresets());
+          await refresh();
+        }}
+        onClose={() => setManagerOpen(false)} onChanged={async (id) => {
+          setPresets(await listPerformancePresets());
+          if (id && settings && !applied && !wiped) await saveSettings({ ...settings, performanceConfigPresetId: id });
+          await refresh();
+        }} />}
     </Card>
   );
 }

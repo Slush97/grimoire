@@ -179,8 +179,7 @@ export type BuildLatestResult =
 
 /** Turn fetched upstream texts into a cached runtime release, or refuse with a
  *  reason. Refusal means the caller falls back to the bundled preset. */
-export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
-    const family = getFamily(input.presetId);
+export function buildLatestRelease(input: BuildLatestInput, family = getFamily(input.presetId)): BuildLatestResult {
     const verbatim = family.upstream.verbatimVideo === true;
     if (family.id !== input.presetId) {
         return { ok: false, error: `unknown preset id ${input.presetId}` };
@@ -286,8 +285,7 @@ export function buildLatestRelease(input: BuildLatestInput): BuildLatestResult {
 
 /** Adapt a runtime release into the flat shape the patcher applies. From here
  *  on, nothing downstream can tell it from a bundled release. */
-export function latestAsPreset(release: LatestRelease): PerformancePreset {
-    const family = getFamily(release.presetId);
+export function latestAsPreset(release: LatestRelease, family = getFamily(release.presetId)): PerformancePreset {
     const verbatim = family.upstream.verbatimVideo === true;
     const video = generateVideoBody(release.video ?? [], CLASSIFICATION, verbatim).settings;
     const defaultVariant = family.upstream.videoFiles?.[0].variant;

@@ -213,6 +213,109 @@ describe('PerformanceConfigCard', () => {
   const button = (label: string) =>
     [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
 
+  describe('custom presets', () => {
+    const custom = preset('custom-test', 'My custom config', 'balanced', 'person', {
+      custom: {
+        configPath: 'gameinfo.gi', toggles: [{ key: 'citadel_camera_fov', label: 'Camera choice' }],
+        availableConvars: [{ key: 'citadel_camera_fov', value: '100' }], addons: [], withheldCount: 0,
+      },
+    }, ['abc12345']);
+
+    it('hides built-ins while keeping custom entries selectable and offline', async () => {
+      api.listPerformancePresets.mockResolvedValue([...PRESETS, custom]);
+      await render({ performanceHideBuiltIns: true, performanceConfigPresetId: custom.id });
+      expect(cards()).toHaveLength(1);
+      expect(cards()[0].textContent).toContain(custom.name);
+      expect(api.checkPerformanceLatest).not.toHaveBeenCalled();
+      await click(powerSwitch());
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith(custom.id, CREATOR_DEFAULTS, 'abc12345', false, null);
+      const toggle = [...host.querySelectorAll('label')].find((label) => label.textContent?.includes('Camera choice'))?.querySelector('input');
+      await click(toggle);
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith(custom.id, CREATOR_DEFAULTS.filter((key) => key !== 'citadel_camera_fov'), 'abc12345', false, null);
+    });
+
+    it('keeps the active built-in reachable until it is turned off', async () => {
+      status = applied('sqooky-default');
+      await render({ performanceHideBuiltIns: true });
+      expect(cards()).toHaveLength(1);
+      expect(powerSwitch().checked).toBe(true);
+      await click(powerSwitch());
+      expect(cards()).toHaveLength(0);
+      expect(host.textContent).toContain('performance.custom.empty');
+      expect(button('performance.custom.manage')?.disabled).toBe(false);
+    });
+
+    it('keeps custom toggles enabled when a separate gameplay control changes', async () => {
+      api.listPerformancePresets.mockResolvedValue([...PRESETS, custom]);
+      status = applied(custom.id, 'abc12345');
+      await render({ performanceConfigPresetId: custom.id });
+      await click(button('performance.advanced'));
+      await click(host.querySelector('input[aria-label="citadel_trooper_glow_disabled"]'));
+      expect(api.applyPerformanceConfig).toHaveBeenLastCalledWith(custom.id, ['citadel_boss_glow_disabled', 'citadel_camera_fov'], 'abc12345', false, null);
+    });
+
+    it('disables schema editing and deletion for the active custom entry', async () => {
+      api.listPerformancePresets.mockResolvedValue([...PRESETS, custom]);
+      status = applied(custom.id, 'abc12345');
+      await render();
+      await click(button('performance.custom.manage'));
+      await click([...document.querySelectorAll('[role="dialog"] button')].find((action) => action.textContent?.includes(custom.name)));
+      const dialog = document.querySelector('[role="dialog"]')!;
+      const actions = [...dialog.querySelectorAll('button')];
+      expect(actions.find((action) => action.textContent === 'performance.custom.delete')?.disabled).toBe(true);
+      expect(actions.find((action) => action.textContent === 'performance.custom.editToggles')?.disabled).toBe(true);
+      await click(actions.find((action) => action.textContent === 'performance.custom.turnOffAction'));
+      expect(api.removePerformanceConfig).toHaveBeenCalledOnce();
+      expect([...dialog.querySelectorAll('button')].find((action) => action.textContent === 'performance.custom.editToggles')?.disabled).toBe(false);
+    });
+
+    it('keeps newly optional settings enabled while preserving existing opt-outs', async () => {
+      const editable = { ...custom, custom: { ...custom.custom!, availableConvars: [
+        ...custom.custom!.availableConvars, { key: 'new_setting', value: '1' },
+      ] } };
+      api.listPerformancePresets.mockResolvedValue([...PRESETS, editable]);
+      api.savePerformancePresetToggles = vi.fn(async () => undefined);
+      await render({ performanceConfigPresetId: custom.id, performanceConfigOptIns: { [custom.id]: [] } });
+      await click(button('performance.custom.details'));
+      await click([...document.querySelectorAll('button')].find((action) => action.textContent === 'performance.custom.editToggles'));
+      await click([...document.querySelectorAll('button')].find((action) => action.textContent === 'performance.custom.addToggle'));
+      const input = [...document.querySelectorAll<HTMLInputElement>('[role="dialog"] input')].at(-1)!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'New setting');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await click([...document.querySelectorAll('button')].find((action) => action.textContent === 'common.actions.save'));
+      expect(api.savePerformancePresetToggles).toHaveBeenCalledWith(custom.id, [
+        { key: 'citadel_camera_fov', label: 'Camera choice' }, { key: 'new_setting', label: 'New setting' },
+      ]);
+      expect(useAppStore.getState().settings?.performanceConfigOptIns?.[custom.id]).toEqual(['new_setting']);
+      expect(api.applyPerformanceConfig).not.toHaveBeenCalled();
+    });
+
+    it('deletes an inactive entry and refreshes the picker', async () => {
+      api.listPerformancePresets.mockResolvedValue([...PRESETS, custom]);
+      api.deletePerformancePreset = vi.fn(async () => { api.listPerformancePresets.mockResolvedValue(PRESETS); });
+      await render({ performanceConfigPresetId: custom.id });
+      await click(button('performance.custom.manage'));
+      await click([...document.querySelectorAll('[role="dialog"] button')].find((action) => action.textContent?.includes(custom.name)));
+      const dialog = document.querySelector('[role="dialog"]')!;
+      await click([...dialog.querySelectorAll('button')].find((action) => action.textContent === 'performance.custom.delete'));
+      expect(api.deletePerformancePreset).not.toHaveBeenCalled();
+      const confirmation = [...document.querySelectorAll('[role="dialog"]')].at(-1)!;
+      await click([...confirmation.querySelectorAll('button')].find((action) => action.textContent === 'performance.custom.delete'));
+      expect(api.deletePerformancePreset).toHaveBeenCalledWith(custom.id);
+      expect(host.textContent).not.toContain(custom.name);
+      expect((radio('balanced') as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('falls back to a visible preset after the saved custom entry was deleted', async () => {
+      await render({ performanceConfigPresetId: 'custom-deleted' });
+      expect((radio('balanced') as HTMLInputElement).checked).toBe(true);
+      await click(powerSwitch());
+      expect(api.applyPerformanceConfig.mock.calls[0][0]).toBe('sqooky-default');
+    });
+  });
+
   describe('layout', () => {
     it('lists every config mildest to strongest with the recommended one selected', async () => {
       await render();

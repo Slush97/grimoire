@@ -204,6 +204,7 @@ export interface PerformancePresetVersion {
  *  ignores `versions` behaves exactly as it did before version selection
  *  existed. */
 export interface PerformancePresetSummary {
+    custom?: import('./performanceCustom').CustomPerformanceDetails;
     id: string;
     name: string;
     /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
@@ -1244,6 +1245,11 @@ export interface ElectronAPI {
     fixGameinfo: () => Promise<GameinfoStatus>;
     getPerformanceConfigStatus: () => Promise<PerformanceConfigStatus>;
     listPerformancePresets: () => Promise<PerformancePresetSummary[]>;
+    importPerformancePreset: (input: import('./performanceCustom').CustomPerformanceImport) => Promise<PerformancePresetSummary>;
+    inspectPerformanceRepository: (repository: string) => Promise<import('./performanceCustom').PerformanceRepositoryInspection>;
+    deletePerformancePreset: (id: string) => Promise<void>;
+    savePerformancePresetToggles: (id: string, toggles: import('./performanceCustom').CustomPerformanceToggle[]) => Promise<void>;
+    importPerformanceAddon: (id: string, path: string) => Promise<ImportCustomModsBatchResult>;
     applyPerformanceConfig: (
         presetId?: string,
         optIns?: string[],

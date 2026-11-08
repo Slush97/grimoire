@@ -11,6 +11,7 @@ export type { AppSettings };
 const DEFAULT_SETTINGS: AppSettings = {
     updateChannel: 'stable',
     autoCheckAppUpdates: true,
+    performanceHideBuiltIns: false,
     deadlockPath: null,
     lastDialogDirectory: null,
     devMode: false,

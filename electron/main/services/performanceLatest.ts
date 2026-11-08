@@ -31,6 +31,7 @@ import {
     type LatestRelease,
 } from './performanceLatestCore';
 import { setExtraPresetResolver } from './performanceConfig';
+import { resolveCustomPerformancePreset } from './performanceCustom';
 import { githubRateLimiter } from './rateLimiter';
 import type { PerformanceLatestInfo } from '../../../src/types/electron';
 
@@ -46,7 +47,8 @@ function cacheDir(): string {
 // Markers written by a track-latest apply carry a version the bundle does not
 // know; this lets the patcher's harvest/status paths resolve them from the
 // cache instead of falling back to a definition that never wrote the file.
-setExtraPresetResolver((presetId, version) => resolveCachedPreset(cacheDir(), presetId, version));
+setExtraPresetResolver((presetId, version) =>
+    resolveCustomPerformancePreset(presetId, version) ?? resolveCachedPreset(cacheDir(), presetId, version));
 
 async function githubFetch(url: string, accept: string): Promise<Response> {
     await githubRateLimiter.acquire();
