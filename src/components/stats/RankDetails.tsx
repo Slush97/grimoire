@@ -1,12 +1,15 @@
+import { Fragment, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Flame, ShieldCheck } from 'lucide-react'
 import type { PlayerRank, RankDistributionEntry, RankedSeason } from '../../types/deadlock-stats'
 import { protectionLeft, subrankProgress, topPercent, winStreak } from '../../lib/rankProgress'
 import { rankLabel } from './format'
 
-// Under the rank card's badge: progress toward the next subrank, then chips for
-// the season percentile, the ranked win streak and demotion protection. Each
-// piece hides itself when the API has nothing for it.
+// The rank card's sub-line, styled like its neighbours' ("418W / 297L"):
+// season percentile, win streak and demotion shields, each only when the API
+// has it. Progress toward the next subrank is a thin bar along the card's
+// bottom edge (StatCard is the positioned ancestor), with the points in its
+// tooltip, so the card keeps the same shape as the others.
 
 interface RankDetailsProps {
     rank: PlayerRank
@@ -24,49 +27,68 @@ export function RankDetails({ rank, seasons, distribution }: RankDetailsProps) {
     const top = distribution ? topPercent(distribution, rank.badge) : null
     const streak = winStreak(rank.last_match)
     const shields = protectionLeft(rank.last_match)
-    if (!progress && top === null && streak < 2 && shields === 0) return null
+
+    const parts: { key: string; title: string; node: ReactNode }[] = []
+    if (top !== null) {
+        parts.push({
+            key: 'top',
+            title: t('stats.overview.topPercentTitle'),
+            node: t('stats.overview.topPercent', { percent: formatPercent(top) }),
+        })
+    }
+    if (streak >= 2) {
+        parts.push({
+            key: 'streak',
+            title: t('stats.overview.winStreakTitle', { count: streak }),
+            node: (
+                <>
+                    <Flame className="h-3 w-3 text-accent" />
+                    {streak}
+                </>
+            ),
+        })
+    }
+    if (shields > 0) {
+        parts.push({
+            key: 'shields',
+            title: t('stats.overview.protectionTitle', { count: shields }),
+            node: (
+                <>
+                    <ShieldCheck className="h-3 w-3" />
+                    {shields}
+                </>
+            ),
+        })
+    }
+    if (parts.length === 0 && !progress) return null
 
     const next = rank.subrank >= 6 ? rankLabel(rank.rank + 1, 1) : rankLabel(rank.rank, rank.subrank + 1)
-    const chip = 'inline-flex items-center gap-1 rounded-sm bg-bg-tertiary px-1.5 py-0.5 text-2xs tabular-nums'
 
     return (
-        <div className="mt-2.5 space-y-2">
+        <>
+            {parts.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                    {parts.map((part, i) => (
+                        <Fragment key={part.key}>
+                            {i > 0 && <span className="text-text-secondary/40">·</span>}
+                            <span className="inline-flex items-center gap-0.5" title={part.title}>
+                                {part.node}
+                            </span>
+                        </Fragment>
+                    ))}
+                </span>
+            )}
             {progress && (
-                <div
-                    className="flex items-center gap-2"
+                <span
+                    className="absolute inset-x-0 bottom-0 h-1 bg-hl/5"
                     title={t('stats.overview.rankProgressTitle', { ...progress, next })}
                 >
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-primary">
-                        <div
-                            className="h-full rounded-full bg-accent"
-                            style={{ width: `${(progress.points / progress.needed) * 100}%` }}
-                        />
-                    </div>
-                    <span className="font-mono text-2xs tabular-nums">
-                        {progress.points}
-                        <span className="text-text-secondary/60">/{progress.needed}</span>
-                    </span>
-                </div>
+                    <span
+                        className="block h-full bg-accent/80"
+                        style={{ width: `${(progress.points / progress.needed) * 100}%` }}
+                    />
+                </span>
             )}
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-                {top !== null && (
-                    <span className={`${chip} text-text-primary`} title={t('stats.overview.topPercentTitle')}>
-                        {t('stats.overview.topPercent', { percent: formatPercent(top) })}
-                    </span>
-                )}
-                {streak >= 2 && (
-                    <span className={`${chip} text-accent`} title={t('stats.overview.winStreakTitle', { count: streak })}>
-                        <Flame className="h-3 w-3" />
-                        {streak}
-                    </span>
-                )}
-                {shields > 0 && (
-                    <span className={chip} title={t('stats.overview.protectionTitle', { count: shields })}>
-                        <ShieldCheck className="h-3 w-3" />
-                        {shields}
-                    </span>
-                )}
-            </div>
-        </div>
+        </>
     )
 }
