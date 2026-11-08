@@ -203,6 +203,49 @@ export interface MatchMetadata {
   objectives: MatchObjective[]
 }
 
+/** A match trimmed for the scoreboard dialog (built in lib/matchScoreboard). */
+export interface MatchScoreboard {
+  match_id: number
+  start_time: number
+  duration_s: number
+  winning_team: number
+  mode: 'ranked' | 'standard' | 'brawl'
+  banned_hero_ids: number[]
+  /** Team souls at each stats sample, oldest first. */
+  souls: { t: number; team0: number; team1: number }[]
+  players: ScoreboardPlayer[]
+  /** The items any player ended with, by item id. */
+  items: Record<number, ScoreboardItem>
+}
+
+export interface ScoreboardPlayer {
+  account_id: number
+  name: string | null
+  team: number
+  hero_id: number
+  kills: number
+  deaths: number
+  assists: number
+  net_worth: number
+  last_hits: number
+  denies: number
+  level: number
+  damage: number | null
+  healing: number | null
+  /** Badge the player entered a ranked match with. */
+  badge: number | null
+  mvp_rank: number | null
+  /** Final build, weapon then vitality then spirit. */
+  items: number[]
+}
+
+export interface ScoreboardItem {
+  name: string
+  slot: 'weapon' | 'vitality' | 'spirit' | null
+  tier: number | null
+  image: string | null
+}
+
 export interface ActiveMatchPlayer {
   account_id: number
   hero_id: number

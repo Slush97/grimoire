@@ -150,6 +150,8 @@ interface MatchRowProps {
     rankDelta?: number | null
     /** Demotion protection absorbed this loss. */
     rankProtected?: boolean
+    /** Opens the match scoreboard. Makes the whole row clickable. */
+    onOpen?: () => void
     compact?: boolean
 }
 
@@ -166,6 +168,7 @@ export function MatchRow({
     damage,
     rankDelta,
     rankProtected = false,
+    onOpen,
     compact = false,
 }: MatchRowProps) {
     const { t } = useTranslation()
@@ -177,7 +180,19 @@ export function MatchRow({
         <div
             className={`group flex items-center gap-3 p-2.5 bg-bg-tertiary rounded-sm border-l-2 transition-colors ${
                 won ? 'border-green-400/60' : 'border-red-400/60'
-            } hover:bg-hl/5`}
+            } hover:bg-hl/5 ${onOpen ? 'cursor-pointer' : ''}`}
+            {...(onOpen && {
+                role: 'button',
+                tabIndex: 0,
+                title: t('stats.scoreboard.open'),
+                onClick: onOpen,
+                onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpen()
+                    }
+                },
+            })}
         >
             <HeroChip heroId={heroId} size="md" />
             <div className="flex-1 min-w-0">
@@ -235,6 +250,7 @@ export function MatchRow({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={t('stats.primitives.viewMatchOnStatlocker')}
+                onClick={(e) => e.stopPropagation()}
                 className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all shrink-0"
             >
                 <ExternalLink className="w-4 h-4" />

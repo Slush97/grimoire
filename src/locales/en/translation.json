@@ -815,6 +815,27 @@
       "rankPoints": "Rank points",
       "rankPointsProtected": "Rank points. Demotion protection was used."
     },
+    "scoreboard": {
+      "open": "Open scoreboard",
+      "title": "Match",
+      "loadFailed": "Couldn't load this match. deadlock-api may not have it yet.",
+      "mode": {
+        "ranked": "Ranked",
+        "standard": "Standard Match",
+        "brawl": "Street Brawl"
+      },
+      "soulsLead": "Souls lead",
+      "minutes": "{{minutes}}m",
+      "yourTeam": "Your team",
+      "enemyTeam": "Enemy team",
+      "farm": "LH/DN",
+      "farmTitle": "Last hits / denies",
+      "healing": "Healing",
+      "build": "Build",
+      "mvp": "MVP #{{rank}}",
+      "level": "Level {{level}}",
+      "bans": "Bans"
+    },
     "leaderboard": {
       "asia": "Asia",
       "topPlayers": "Top Players",

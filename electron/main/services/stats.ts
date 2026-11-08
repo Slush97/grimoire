@@ -7,6 +7,8 @@ import type {
     PlayerRank,
     RankedSeason,
     RankDistributionEntry,
+    MatchScoreboard,
+    ScoreboardItem,
     PlayerHeroStats,
     PlayerHeroStat,
     PlayerMatchHistory,
@@ -25,6 +27,7 @@ import type {
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
 import { currentInterval } from '../../../src/lib/rankProgress'
+import { buildScoreboard, type RawMatchMetadata } from '../../../src/lib/matchScoreboard'
 import { GRIMOIRE_USER_AGENT } from './userAgent'
 import { statsApiRateLimiter, steamCommunityRateLimiter } from './rateLimiter'
 
@@ -520,6 +523,56 @@ export async function getMatchMetadata(
     options?: FetchOptions
 ): Promise<MatchMetadata> {
     return fetchFromAPI<MatchMetadata>(`/matches/${matchId}/metadata`, undefined, options)
+}
+
+interface RawUpgradeItem {
+    id: number
+    name: string
+    item_slot_type?: string | null
+    item_tier?: number | null
+    shop_image_webp?: string | null
+    shop_image?: string | null
+}
+
+let itemCatalogCache: { data: Record<number, ScoreboardItem>; fetchedAt: number } | null = null
+
+/** Shop items by id, for build icons. About 2 MB, so cached like the hero assets. */
+async function getItemCatalog(): Promise<Record<number, ScoreboardItem>> {
+    if (itemCatalogCache && Date.now() - itemCatalogCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return itemCatalogCache.data
+    }
+    const raw = await fetchFromAPI<RawUpgradeItem[]>('/assets/items/by-type/upgrade')
+    const data: Record<number, ScoreboardItem> = {}
+    for (const i of raw) {
+        const slot = i.item_slot_type
+        data[i.id] = {
+            name: i.name,
+            slot: slot === 'weapon' || slot === 'vitality' || slot === 'spirit' ? slot : null,
+            tier: i.item_tier ?? null,
+            // The shop art the game shows. `image` is an old glyph that often
+            // belongs to a different item.
+            image: i.shop_image_webp ?? i.shop_image ?? null,
+        }
+    }
+    itemCatalogCache = { data, fetchedAt: Date.now() }
+    return data
+}
+
+/**
+ * A match's scoreboard: the metadata trimmed to what the dialog draws, plus
+ * player names and item icons. Names and icons are optional; without them
+ * the rows fall back to hero names and drop the build.
+ */
+export async function getMatchScoreboard(matchId: number): Promise<MatchScoreboard> {
+    const raw = await fetchFromAPI<RawMatchMetadata>(`/matches/${matchId}/metadata`)
+    const ids = raw.match_info.players.map((p) => p.account_id)
+    const [profiles, catalog] = await Promise.all([
+        getPlayerSteamProfiles(ids).catch(() => [] as PlayerSteamProfile[]),
+        getItemCatalog().catch(() => ({}) as Record<number, ScoreboardItem>),
+    ])
+    const names: Record<number, string> = {}
+    for (const p of profiles) if (p.persona_name) names[p.account_id] = p.persona_name
+    return buildScoreboard(raw, names, catalog)
 }
 
 /**

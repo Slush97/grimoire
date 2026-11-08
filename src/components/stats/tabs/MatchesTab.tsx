@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { Gamepad2 } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Card } from '../../common/ui'
 import { usePlayerStore } from '../../../stores/stats/playerStore'
 import type { StoredMatch } from '../../../types/deadlock-stats'
 import { MatchRow } from '../primitives'
+import { MatchScoreboardDialog } from '../MatchScoreboardDialog'
 import { winRateClass } from '../format'
 
 function dayLabel(unixSeconds: number, t: TFunction, locale: string): string {
@@ -23,6 +24,8 @@ function dayLabel(unixSeconds: number, t: TFunction, locale: string): string {
 export function MatchesTab() {
     const { t, i18n } = useTranslation()
     const localMatchHistory = usePlayerStore((s) => s.playerData.data.localMatchHistory)
+    const accountId = usePlayerStore((s) => s.selectedAccountId)
+    const [openMatch, setOpenMatch] = useState<number | null>(null)
 
     const groups = useMemo(() => {
         const byDay: { label: string; matches: StoredMatch[] }[] = []
@@ -86,12 +89,16 @@ export function MatchesTab() {
                                         startTime={match.start_time}
                                         netWorth={match.net_worth}
                                         damage={match.player_damage}
+                                        onOpen={() => setOpenMatch(match.match_id)}
                                     />
                                 ))}
                             </div>
                         </div>
                     ))}
                 </div>
+            )}
+            {openMatch !== null && (
+                <MatchScoreboardDialog matchId={openMatch} accountId={accountId} onClose={() => setOpenMatch(null)} />
             )}
         </Card>
     )

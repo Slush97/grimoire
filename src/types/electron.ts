@@ -1544,6 +1544,7 @@ export interface ElectronAPI {
         // Player Data (API)
         getPlayerRank: (accountIds: number[]) => Promise<unknown[]>;
         getRankedSeasons: () => Promise<unknown[]>;
+        getMatchScoreboard: (matchId: number) => Promise<unknown>;
         getSeasonRankDistribution: () => Promise<unknown[]>;
         getHeroes: () => Promise<unknown[]>;
         getRanks: () => Promise<unknown[]>;

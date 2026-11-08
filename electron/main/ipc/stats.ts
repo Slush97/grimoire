@@ -173,6 +173,10 @@ ipcMain.handle('stats:getPlayerRank', async (_, accountIds: number[]) => {
     return ranks
 })
 
+ipcMain.handle('stats:getMatchScoreboard', async (_, matchId: number) => {
+    return statsApi.getMatchScoreboard(matchId)
+})
+
 ipcMain.handle('stats:getRankedSeasons', async () => {
     return statsApi.getRankedSeasons()
 })

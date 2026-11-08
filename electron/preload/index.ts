@@ -866,6 +866,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getPlayerRank: (accountIds: number[]) =>
             ipcRenderer.invoke('stats:getPlayerRank', accountIds),
         getRankedSeasons: () => ipcRenderer.invoke('stats:getRankedSeasons'),
+        getMatchScoreboard: (matchId: number) => ipcRenderer.invoke('stats:getMatchScoreboard', matchId),
         getSeasonRankDistribution: () => ipcRenderer.invoke('stats:getSeasonRankDistribution'),
         getHeroes: () => ipcRenderer.invoke('stats:getHeroes'),
         getRanks: () => ipcRenderer.invoke('stats:getRanks'),

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Gamepad2, Target, TrendingUp } from 'lucide-react'
 import { Card } from '../../common/ui'
@@ -8,6 +8,7 @@ import { StatCard, MatchRow, HeroChip } from '../primitives'
 import { rankLabel, winRateClass } from '../format'
 import { MmrChart } from '../MmrChart'
 import { RankDetails } from '../RankDetails'
+import { MatchScoreboardDialog } from '../MatchScoreboardDialog'
 
 export function OverviewTab() {
     const { t } = useTranslation()
@@ -16,6 +17,7 @@ export function OverviewTab() {
     const byId = useHeroStore((s) => s.byId)
     const ranks = useHeroStore((s) => s.ranks)
     const heroName = useHeroName()
+    const [openMatch, setOpenMatch] = useState<number | null>(null)
 
     const { rank, rankedSeasons, rankDistribution, heroStats, matchHistory, aggregated, localMMRHistory } =
         playerData.data
@@ -125,6 +127,7 @@ export function OverviewTab() {
                                     startTime={match.start_time}
                                     rankDelta={match.ranked_delta}
                                     rankProtected={match.ranked_used_demotion_protection === true}
+                                    onOpen={() => setOpenMatch(match.match_id)}
                                     compact
                                 />
                             ))}
@@ -211,6 +214,9 @@ export function OverviewTab() {
                     )}
                 </Card>
             </div>
+            {openMatch !== null && (
+                <MatchScoreboardDialog matchId={openMatch} accountId={accountId} onClose={() => setOpenMatch(null)} />
+            )}
         </div>
     )
 }

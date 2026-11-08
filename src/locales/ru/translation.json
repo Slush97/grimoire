@@ -841,6 +841,27 @@
       "rankPoints": "Очки ранга",
       "rankPointsProtected": "Очки ранга. Активирована защита от потери ранга."
     },
+    "scoreboard": {
+      "open": "Открыть таблицу матча",
+      "title": "Матч",
+      "loadFailed": "Не удалось загрузить матч. Возможно, на deadlock-api его ещё нет.",
+      "mode": {
+        "ranked": "Ранговый режим",
+        "standard": "Обычный матч",
+        "brawl": "Уличная стычка"
+      },
+      "soulsLead": "Перевес по душам",
+      "minutes": "{{minutes}} мин",
+      "yourTeam": "Ваша команда",
+      "enemyTeam": "Противники",
+      "farm": "Доб./укр.",
+      "farmTitle": "Добивания / укр. шаров",
+      "healing": "Лечение",
+      "build": "Сборка",
+      "mvp": "MVP #{{rank}}",
+      "level": "Уровень {{level}}",
+      "bans": "Баны"
+    },
     "leaderboard": {
       "asia": "Азия",
       "topPlayers": "Лучшие игроки",
