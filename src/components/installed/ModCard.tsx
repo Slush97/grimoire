@@ -168,8 +168,8 @@ interface ModCardProps {
   entryKey?: string;
   /** Present when this card represents grouped files that are variants of one
    *  mod (a GameBanana submission, or a locally imported multi-VPK archive).
-   *  Swaps the filename meta for an enabled/total count and routes the
-   *  card-body click to the picker modal. */
+   *  Swaps the filename meta for an enabled/total count and adds a "Choose
+   *  files" action that opens the picker modal. */
   group?: {
     variants?: readonly Mod[];
     variantCount: number;
@@ -177,6 +177,9 @@ interface ModCardProps {
     enabledCount: number;
     enabledLabels: string[];
     onOpenPicker: () => void;
+    /** `onOpenDetails` opens the picker rather than a details page (a local
+     *  group has no GameBanana page), so the menu skips its "View details". */
+    opensPicker?: boolean;
   };
 }
 
@@ -191,7 +194,7 @@ interface ModMediaPreviewProps {
   audioOverlayClasses: string;
   audioPlayerClassName: string;
   onOpenDetails?: () => void;
-  isGroupCard: boolean;
+  opensPicker: boolean;
 }
 
 function SoundPlaceholder() {
@@ -231,7 +234,7 @@ function ModMediaPreview({
   audioOverlayClasses,
   audioPlayerClassName,
   onOpenDetails,
-  isGroupCard,
+  opensPicker,
 }: ModMediaPreviewProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -242,7 +245,7 @@ function ModMediaPreview({
   const mediaDisabledClass = mod.enabled
     ? ''
     : 'grayscale-[0.6] opacity-[0.7] transition-[filter,opacity] duration-200';
-  const detailsLabel = canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined;
+  const detailsLabel = canOpen ? (opensPicker ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined;
   // Prefer an explicit mod thumbnail. For sound-only mods without one, fall
   // back to the inferred hero render before using the waveform placeholder.
   const soundHeroName = isSound && !mod.thumbnailUrl
@@ -366,7 +369,7 @@ interface ModListRowContentProps {
   onCommitPriority?: (newPosition: number) => Promise<void>;
   loadPosition?: number;
   loadCount?: number;
-  isGroupCard: boolean;
+  opensPicker: boolean;
   group?: ModCardProps['group'];
   variantStatusLabel: string | null;
   variantStatusTitle: string;
@@ -538,7 +541,7 @@ function ModListRowContent({
   onCommitPriority,
   loadPosition,
   loadCount,
-  isGroupCard,
+  opensPicker,
   group,
   variantStatusLabel,
   variantStatusTitle,
@@ -589,7 +592,7 @@ function ModListRowContent({
         className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-hl/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
-        aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
+        aria-label={canOpen ? (opensPicker ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
         data-card-action="true"
         data-mod-drag-surface
         draggable={false}
@@ -792,7 +795,6 @@ export function ModCard({
   }, [shiftHeld, selectMode]);
   const selectionPreview = shiftHeld && hovered && !selectMode;
   const hasConflicts = conflicts.length > 0;
-  const isGroupCard = !!group;
   const handleRevealInFolder = () => {
     revealModInFolder(mod.id).catch((err) => {
       console.error('[Installed] Failed to reveal mod in folder:', err);
@@ -823,7 +825,7 @@ export function ModCard({
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
-    ? t('installed.card.variantStatusTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') })
+    ? t('installed.card.variantFilesTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') })
     : '';
   const [menuBusy, setMenuBusy] = useState(false);
 
@@ -1013,7 +1015,7 @@ export function ModCard({
   // closed card's render.
   const hasTopActions =
     !!onEditLocal || !!onAddVariant || !!onUngroupVariants || !!onOpenDetails || !!onViewAuthor
-    || !!cardImageSource;
+    || !!cardImageSource || !!group;
   const hasSecondaryActions =
     !!onSoloLaunch || !!onSetPriority || !!onTagLocker || !!onTagGlobal || !!onFixUnknown
     || !!(mod.merged && (onCopyShareCode || onUnmerge));
@@ -1034,9 +1036,14 @@ export function ModCard({
           {t('installed.card.ungroupVariants')}
         </MenuItem>
       )}
-      {onOpenDetails && (
+      {onOpenDetails && !group?.opensPicker && (
         <MenuItem icon={Info} onSelect={onOpenDetails}>
           {t('installed.card.viewDetails')}
+        </MenuItem>
+      )}
+      {group && (
+        <MenuItem icon={Files} onSelect={group.onOpenPicker}>
+          {t('installed.card.chooseFiles')}
         </MenuItem>
       )}
       {(modRequirementRefs(mod).length > 0 || !!mod.skinEdit?.sources.length) && (
@@ -1406,7 +1413,7 @@ export function ModCard({
             onCommitPriority={onCommitPriority}
             loadPosition={loadPosition}
             loadCount={loadCount}
-            isGroupCard={isGroupCard}
+            opensPicker={!!group?.opensPicker}
             group={group}
             variantStatusLabel={variantStatusLabel}
             variantStatusTitle={variantStatusTitle}
@@ -1554,7 +1561,7 @@ export function ModCard({
             audioOverlayClasses={audioOverlayClasses}
             audioPlayerClassName={audioPlayerClassName}
             onOpenDetails={onOpenDetails}
-            isGroupCard={isGroupCard}
+            opensPicker={!!group?.opensPicker}
           />
         );
         })()}

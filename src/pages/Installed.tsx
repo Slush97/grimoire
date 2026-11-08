@@ -297,6 +297,8 @@ interface InstalledEntryCardProps {
   onViewAuthor: (mod: Mod) => void;
   /** Opens the variant picker for a group, by its shared grouping key. */
   onOpenPicker: (groupKey: string) => void;
+  /** Opens the GameBanana details for a group, anchored like details navigation. */
+  onOpenGroupDetails: (entry: ModEntry) => void;
   onToggle: (entry: ModEntry) => Promise<boolean>;
   swapTargets?: readonly EntrySwapTarget[];
   onSwap: (entry: ModEntry, outgoingEntryKey: string) => Promise<void>;
@@ -364,6 +366,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
+  onOpenGroupDetails,
   onToggle,
   swapTargets,
   onSwap,
@@ -488,7 +491,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   }
   // Group entry. Stand-in `mod` is the primary so the card visuals look
   // right; the `group` prop tells ModCard to swap filename for file
-  // selection metadata and route clicks to the picker.
+  // selection metadata and offer the file picker in the card menu. A click
+  // opens the GameBanana page like a single file's card does. A local group
+  // has no page, so its click opens the picker instead.
+  const groupOpensPicker = !entry.gameBananaId;
   const safetyTarget = entry.variants.find(v => v.safety?.report.verdict === 'blocked' || v.safety?.report.verdict === 'incomplete')
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust' && !v.safety.trusted)
     ?? entry.variants.find(v => v.safety?.report.verdict === 'requires-trust');
@@ -523,7 +529,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       soundVolume={soundVolume}
       updateAvailable={updateAvailable}
       entryKey={entry.key}
-      onOpenDetails={() => onOpenPicker(entry.groupKey)}
+      onOpenDetails={groupOpensPicker ? () => onOpenPicker(entry.groupKey) : () => onOpenGroupDetails(entry)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
@@ -577,6 +583,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
           variant.fileName
         ),
         onOpenPicker: () => onOpenPicker(entry.groupKey),
+        opensPicker: groupOpensPicker,
       }}
     />
   );
@@ -2636,6 +2643,9 @@ export default function Installed() {
   const openEntryPicker = useStableCallback((groupKey: string) => {
     setPickerGroupId(groupKey);
   });
+  const openEntryGroupDetails = useStableCallback((entry: ModEntry) => {
+    void openModDetails(entryDetailsAnchor(entry, (id) => updatesAvailable.has(id)));
+  });
   // Open an artist's page inside Grimoire by entering Browse's artist mode (the
   // grid scoped to that submitter), the same surface the artist card in a mod's
   // details opens.
@@ -3442,6 +3452,7 @@ export default function Installed() {
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
+    onOpenGroupDetails: openEntryGroupDetails,
     onToggle: toggleEntry,
     swapTargets: swapTargets.get(entry.key),
     onSwap: beginSwap,
