@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { getBenchmarkStatus, stopBenchmark } from '../services/benchmark';
 import type { GameRunningStatus } from '../../../src/types/electron';
 import { getActiveDeadlockPath, loadSettings } from '../services/settings';
 import {
@@ -94,6 +95,10 @@ ipcMain.handle('get-game-running-status', async (): Promise<GameRunningStatus> =
 ipcMain.handle('stop-game', async (): Promise<StopDeadlockResult & {
     restoreResult?: RestoreResult;
 }> => {
+    if (getBenchmarkStatus().active) {
+        await stopBenchmark();
+        return { wasRunning: true, stopped: true };
+    }
     const stopResult = await stopDeadlockGame();
     if (stopResult.stopped) {
         clearLoadedGameMods();

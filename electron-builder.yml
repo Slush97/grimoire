@@ -38,6 +38,12 @@ asarUnpack:
 # the asar so the OS can execute it directly. Resolved at runtime via
 # process.resourcesPath.
 extraResources:
+  - from: resources/benchmark
+    to: benchmark
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/build/**"
   - from: resources/vpkmerge
     to: vpkmerge
     filter:

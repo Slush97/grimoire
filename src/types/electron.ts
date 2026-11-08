@@ -1207,6 +1207,11 @@ export interface ElectronAPI {
 
     // Launch
     launchModded: () => Promise<void>;
+    getBenchmarkStatus: () => Promise<import('./benchmark').BenchmarkStatus>;
+    getBenchmarkResult: () => Promise<import('./benchmark').BenchmarkResult | null>;
+    launchBenchmark: (resolution?: import('./benchmark').BenchmarkResolution) => Promise<import('./benchmark').BenchmarkStatus>;
+    stopBenchmark: () => Promise<import('./benchmark').BenchmarkStatus>;
+    openBenchmarkLogs: () => Promise<void>;
     launchVanilla: () => Promise<void>;
     getGameRunningStatus: () => Promise<GameRunningStatus>;
     stopGame: () => Promise<StopGameResult>;

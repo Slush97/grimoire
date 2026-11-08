@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalVpkImprinting: false,
     experimentalModSafety: false,
     experimentalHideoutDefault: false,
+    experimentalBenchmark: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

@@ -70,6 +70,13 @@ export default function ExperimentalSection() {
             description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
           />
 
+          <Toggle id="settings-experimental-benchmark-toggle"
+            checked={settings?.experimentalBenchmark ?? false}
+            onChange={(checked) => update({ experimentalBenchmark: checked })}
+            label={t('benchmark.setting')}
+            description={t('benchmark.settingDescription')}
+          />
+
           <FilterDivider className="h-px bg-hl/5" />
 
           <Toggle id="settings-experimental-settings-experimental-crosshairDesigner-toggle"
