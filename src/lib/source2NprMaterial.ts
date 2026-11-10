@@ -6,6 +6,7 @@ import { resolveBlendMode } from './source2Preview/blendMode';
 import { decodedAlbedoAverage, source2TintPlan, sourceAlbedoAverage, SOURCE2_SATURATION_WEIGHTS } from './source2ColorCorrection';
 import { NPR_LIGHTING_GLSL, nprLightingUniforms } from './source2NprLighting';
 import { CITADEL_NPR_GLSL, citadelNprUniforms } from './citadelNprLighting';
+import { SOURCE2_ALT_REVEAL_PARS_GLSL, source2AltReveal } from './source2AltReveal';
 
 /**
  * Source 2 NPR (cel / rim / tint) restyle for the Locker hero preview.
@@ -64,6 +65,9 @@ export const SOURCE2_PREVIEW_TEXTURE_SLOTS = [
   'g_tPacked1',
   // environment_blend's world overlay color, projected in world space.
   'g_tColorWorldOverlay',
+  // pbr.vfx's alt albedo with its reveal mask in alpha (source2AltReveal.ts).
+  // Exported only for materials that can show it.
+  'g_tAltColor_Reveal',
 ] as const;
 
 /**
@@ -449,7 +453,8 @@ export async function resolveMorphicTextures(gltf: GLTF): Promise<void> {
             const tex = shared.clone();
             // Masks are LINEAR data (vpkmerge embeds them raw, no color-space
             // conversion). Reading them as sRGB would warp the rim/tint constants.
-            tex.colorSpace = THREE.NoColorSpace;
+            // The alt albedo is the one color texture here: sRGB with a linear alpha.
+            tex.colorSpace = slot === 'g_tAltColor_Reveal' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
             // Authored masks are full-size spatial textures, so filter them
             // smoothly to avoid shimmer on the turntable.
             tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -532,7 +537,13 @@ export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THR
   const staticGlass = pbr && flag(morphic, 'F_GLASS') && Number.isFinite(glassBlur)
     && !['g_flCloakBlurAmount', 'g_flCloakBlurFactorMinRoughness', 'g_flCloakBlurFactorMaxRoughness']
       .some((name) => !!morphic.dynamic_params?.[name]);
+  const altReveal = source2AltReveal(morphic);
   return {
+    // Declared only with the sampler they feed (applyNprMapDefines sets NPR_ALT_REVEAL).
+    ...(altReveal ? {
+      uAltRevealMap: { value: altReveal.texture },
+      uAltReveal: { value: new THREE.Vector2(altReveal.amount, altReveal.softness) },
+    } : {}),
     uVertexColorBeforeCsb: { value: !pbr || flag(morphic, 'g_bApplyTintToVertexColors') ? 1 : 0 },
     uMaskVertexColor: { value: pbr && scalar(morphic.ints?.g_bMaskVertexColorTint1, 1) !== 0 ? 1 : 0 },
     uMaskSource2ColorTint: { value: pbr && scalar(morphic.ints?.g_bMaskColorTint1, 1) !== 0 ? 1 : 0 },
@@ -560,15 +571,16 @@ export function citadelColorUniforms(morphic: MorphicExtras): Record<string, THR
   };
 }
 
-/** Compile the detail and jitter samplers only into materials that bind them.
- *  Hero materials sit close to WebGL's 16 fragment texture units. A fresh object,
- *  because a CSM shares its base material's defines object. */
+/** Compile the detail, jitter and alt albedo samplers only into materials that use
+ *  them. Hero materials sit close to WebGL's 16 fragment texture units. A fresh
+ *  object, because a CSM shares its base material's defines object. */
 export function applyNprMapDefines(material: THREE.Material, detail: boolean, jitter: boolean): void {
   const defines: Record<string, string> = { ...((material as THREE.Material & { defines?: Record<string, string> }).defines ?? {}) };
   if (detail) defines.NPR_DETAIL_MAP = '';
   if (jitter) defines.NPR_JITTER_MAP = '';
   const morphic = getMorphic(material);
   if (morphic && flag(morphic, 'F_GLASS') && firstNumber(morphic, ['g_flCloakBlurNoiseAmount'], 0.5) > 0) defines.NPR_GLASS_NOISE = '';
+  if (morphic && source2AltReveal(morphic)) defines.NPR_ALT_REVEAL = '';
   (material as THREE.Material & { defines?: Record<string, string> }).defines = defines;
 }
 
@@ -1223,6 +1235,7 @@ varying vec3 vNprSourcePosition;
 
 ${NPR_LIGHTING_GLSL}
 ${CITADEL_NPR_GLSL}
+${SOURCE2_ALT_REVEAL_PARS_GLSL}
 uniform float uCitadelHasTransmissive;
 uniform float uSelfIllumMaskFull;
 
@@ -1295,6 +1308,22 @@ void main() {
     if (uApplyVertexColor > 0.5 && uVertexColorBeforeCsb <= 0.5) {
       csm_DiffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
     }
+  #endif
+  // The alt albedo replaces the finished color: it takes the vertex tint but
+  // skips the color texture's correction and tint, as in pbr.vfx.
+  #ifdef NPR_ALT_REVEAL
+  {
+    #ifdef USE_MAP
+      vec4 altTexel = texture2D(uAltRevealMap, vMapUv);
+    #else
+      vec4 altTexel = texture2D(uAltRevealMap, vNprUv);
+    #endif
+    vec3 altColor = altTexel.rgb;
+    #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+      if (uApplyVertexColor > 0.5) altColor *= mix(vec3(1.0), vColor.rgb, vertexColorAmount);
+    #endif
+    csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, altColor, source2AltRevealFactor(altTexel.a));
+  }
   #endif
   // Detail (F5): apply only when CPU-side authoring + placeholder gates enabled
   // it. Add-self-illum mode is deferred to the post-light emission branch below.

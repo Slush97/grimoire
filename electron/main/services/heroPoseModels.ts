@@ -317,7 +317,9 @@ function riggedClothFile(key: string): string {
  * to the extras schema (model resolution, index offsets, ...).
  */
 // v17: opt into marked authored outline/jitter geometry.
-const POSE_PIPELINE_VERSION = '17';
+// v18: the alt albedo (g_tAltColor_Reveal) ships with materials that reveal it, and a
+// skin whose VPK spells its root directory as an empty string exports at all.
+const POSE_PIPELINE_VERSION = '18';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 /**
@@ -387,7 +389,8 @@ function versionFile(key: string): string {
 // v31: a graph pose that leaves the hero lying flat yields to the standing idle (Viscous).
 // v32: a skin missing a dangling hero bone chain takes the game's clips (2B on Yamato has
 // no ponytail); its v31 no-clip marker predates that.
-const RIGGED_PIPELINE_VERSION = '32';
+// v33: same alt albedo and empty root directory changes as POSE_PIPELINE_VERSION v18.
+const RIGGED_PIPELINE_VERSION = '33';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
