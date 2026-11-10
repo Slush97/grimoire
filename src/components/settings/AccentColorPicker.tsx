@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Check, Pipette } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { useAppStore } from '../../stores/appStore';
-import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../../lib/accentColor';
+import { ACCENT_PRESETS, ACCENT_SWATCH_RULES, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../../lib/accentColor';
+import { applyCustomSwatch, customSwatches, removeCustomSwatch, sameSwatches } from '../../lib/customSwatches';
+import RemovableSwatch from './RemovableSwatch';
 import { Button, ModalHeader } from '../common/ui';
 import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import Tx from '../translation/Tx';
@@ -12,7 +14,9 @@ const SWATCH_BASE =
   'relative flex items-center justify-center w-9 h-9 rounded-sm border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary';
 
 /**
- * The UI accent: preset swatches plus a custom hex pick.
+ * The UI accent: preset swatches, the user's own swatches, and a pipette that
+ * opens the hex picker. A picked color becomes a swatch of its own, so trying a
+ * preset never loses it (the rules are in lib/customSwatches).
  *
  * Picks apply optimistically (the CSS var is written before the settings
  * round-trip) so the app re-themes on click. The custom picker only writes
@@ -41,13 +45,27 @@ export default function AccentColorPicker() {
     setCustomDraft(color);
   };
 
+  const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
+  const custom = customSwatches(settings?.customAccentColors, current, ACCENT_SWATCH_RULES);
+
   const commitCustomDraft = useCallback(async () => {
     setCustomPickerOpen(false);
-    if (customDraft && settings && customDraft.toLowerCase() !== settings.accentColor?.toLowerCase()) {
-      await saveSettings({ ...settings, accentColor: customDraft });
-    }
+    const color = customDraft?.toLowerCase();
     setCustomDraft(null);
-  }, [customDraft, settings, saveSettings]);
+    if (!color || !settings) return;
+    const next = applyCustomSwatch(custom, current, color, ACCENT_SWATCH_RULES);
+    if (color === current && sameSwatches(next, settings.customAccentColors ?? [], ACCENT_SWATCH_RULES)) return;
+    await saveSettings({ ...settings, accentColor: color, customAccentColors: next });
+  }, [customDraft, settings, saveSettings, custom, current]);
+
+  const removeCustom = async (color: string) => {
+    if (!settings) return;
+    const next = removeCustomSwatch(custom, color, ACCENT_SWATCH_RULES);
+    // Removing the color in use falls back to the default accent.
+    const accentColor = color === current ? DEFAULT_ACCENT_COLOR : settings.accentColor;
+    applyAccentColor(accentColor);
+    await saveSettings({ ...settings, accentColor, customAccentColors: next });
+  };
 
   const openCustomPicker = () => {
     setCustomDraft(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
@@ -62,8 +80,6 @@ export default function AccentColorPicker() {
     setCustomPickerOpen(false);
   };
 
-  const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
-  const isCustomActive = !ACCENT_PRESETS.some((p) => p.color.toLowerCase() === current);
   const customDisplay = customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR;
 
   return (
@@ -99,19 +115,38 @@ export default function AccentColorPicker() {
           );
         })}
 
+        {custom.map((color) => {
+          const isActive = current === color;
+          const name = color.toUpperCase();
+          return (
+            <RemovableSwatch
+              key={color}
+              removeLabel={t('settings.appearance.removeYourColor', { color: name })}
+              onRemove={() => void removeCustom(color)}
+            >
+              <button
+                type="button"
+                onClick={() => handleAccentChange(color)}
+                title={name}
+                aria-label={t('settings.appearance.yourColor', { color: name })}
+                aria-pressed={isActive}
+                className={`${SWATCH_BASE} ${isActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
+                style={{ backgroundColor: color }}
+              >
+                {isActive && <Check className="w-4 h-4 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />}
+              </button>
+            </RemovableSwatch>
+          );
+        })}
+
         <button
           type="button"
           onClick={openCustomPicker}
           title={t('settings.appearance.pickCustomColor')}
           aria-label={t('settings.appearance.accentCustom')}
-          aria-pressed={isCustomActive}
           aria-haspopup="dialog"
-          className={`${SWATCH_BASE} ${isCustomActive ? 'border-hl/40' : 'border-hl/10 hover:border-hl/30'}`}
-          style={
-            isCustomActive
-              ? { backgroundColor: customDisplay }
-              : { background: 'conic-gradient(from 0deg, #ef4444, #f59e0b, #10b981, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)' }
-          }
+          className={`${SWATCH_BASE} border-hl/10 hover:border-hl/30`}
+          style={{ background: 'conic-gradient(from 0deg, #ef4444, #f59e0b, #10b981, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)' }}
         >
           <Pipette className="w-3.5 h-3.5 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />
         </button>

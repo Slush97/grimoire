@@ -1254,6 +1254,9 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
+  /** Accent colors the user picked themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customAccentColors?: string[];
   /** Use true black for the app canvas and near-black neutral surfaces. */
   oledMode: boolean;
   /** Hero render used as the active sidebar highlight background.
@@ -1272,6 +1275,9 @@ export interface AppSettings {
    *  (top-left, bottom-right) rather than a preset id, so a custom pick and a
    *  preset are the same shape. Null/absent leaves the flat background. */
   backgroundGradient?: { from: string; to: string } | null;
+  /** Background glows the user made themselves, kept as swatches beside the
+   *  presets (oldest first, at most MAX_CUSTOM_SWATCHES). */
+  customBackgroundGradients?: { from: string; to: string }[];
   /** Drop the sidebar's own panel background so it sits flush with the page
    *  background instead of reading as a separate dark grey column. The divider,
    *  nav art, and launch buttons are unaffected. Off by default. */

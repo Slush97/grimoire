@@ -6,6 +6,7 @@
 // real layer and the little preview tiles in Settings.
 
 import { BACKGROUND_BASE } from './oledMode';
+import type { SwatchRules } from './customSwatches';
 
 export interface BackgroundGradient {
   /** Color of the glow entering from the top-left corner. */
@@ -95,6 +96,12 @@ export function sameGradient(a: BackgroundGradient | null, b: BackgroundGradient
   if (!a || !b) return a === b;
   return a.from.toLowerCase() === b.from.toLowerCase() && a.to.toLowerCase() === b.to.toLowerCase();
 }
+
+/** How the user's own glow swatches compare with each other and with the presets. */
+export const BACKGROUND_SWATCH_RULES: SwatchRules<BackgroundGradient> = {
+  same: sameGradient,
+  isPreset: (gradient) => BACKGROUND_GRADIENT_PRESETS.some((preset) => sameGradient(preset, gradient)),
+};
 
 /**
  * Paint (or clear) the glow by writing the layer's background to the document

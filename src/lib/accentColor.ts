@@ -5,6 +5,8 @@
 // The default `Ember` is the original orange the app shipped with — picked as
 // the base so changing accents feels additive, not lossy.
 
+import type { SwatchRules } from './customSwatches';
+
 export interface AccentPreset {
   id: string;
   nameKey: string;
@@ -24,6 +26,14 @@ export const ACCENT_PRESETS: AccentPreset[] = [
 ];
 
 export const DEFAULT_ACCENT_COLOR = ACCENT_PRESETS[0].color;
+
+const sameColor = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** How the user's own accent swatches compare with each other and with the presets. */
+export const ACCENT_SWATCH_RULES: SwatchRules<string> = {
+  same: sameColor,
+  isPreset: (color) => ACCENT_PRESETS.some((preset) => sameColor(preset.color, color)),
+};
 
 function darken(hex: string, amount = 0.12): string {
   const m = hex.replace('#', '').match(/.{2}/g);

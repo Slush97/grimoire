@@ -1024,6 +1024,8 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
+      "yourColor": "Use your color {{color}}",
+      "removeYourColor": "Remove {{color}}",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
       "oled": {
@@ -1067,6 +1069,8 @@
         "description": "Tint the app background with light bleeding in from the top-left and bottom-right corners.",
         "none": "No glow",
         "custom": "Custom glow",
+        "yourGlow": "Use your glow {{number}}",
+        "removeYourGlow": "Remove your glow {{number}}",
         "customTitle": "Custom background glow",
         "topLeft": "Top left",
         "bottomRight": "Bottom right",
