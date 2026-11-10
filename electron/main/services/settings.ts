@@ -5,7 +5,7 @@ import { getSettingsPath } from '../utils/paths';
 // AppSettings is single-sourced in src/types/mod.ts (type-only import:
 // erased at build, so no renderer code is pulled into the main bundle).
 // Re-exported so existing `from './settings'` imports keep working.
-import type { AppSettings, NsfwContentMode } from '../../../src/types/mod';
+import { HIDDEN_NOTE_MAX_LENGTH, type AppSettings, type NsfwContentMode } from '../../../src/types/mod';
 export type { AppSettings };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -63,13 +63,18 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 /** One hidden creator/mod entry from user-editable settings.json, or null when
  *  its id or name is unusable. */
-function parseHiddenEntry(candidate: unknown): { id: number; name: string } | null {
+function parseHiddenEntry(candidate: unknown): { id: number; name: string; hiddenAt?: number; note?: string } | null {
     if (!candidate || typeof candidate !== 'object') return null;
-    const { id, name } = candidate as { id?: unknown; name?: unknown };
+    const { id, name, hiddenAt, note } = candidate as { id?: unknown; name?: unknown; hiddenAt?: unknown; note?: unknown };
     if (!Number.isSafeInteger(id) || (id as number) <= 0 || typeof name !== 'string') return null;
     const trimmedName = name.trim();
     if (!trimmedName) return null;
-    return { id: id as number, name: trimmedName.slice(0, 200) };
+    const entry: { id: number; name: string; hiddenAt?: number; note?: string } = { id: id as number, name: trimmedName.slice(0, 200) };
+    // Both are optional reminders: a bad value drops the reminder, never the entry.
+    if (Number.isSafeInteger(hiddenAt) && (hiddenAt as number) > 0) entry.hiddenAt = hiddenAt as number;
+    const trimmedNote = typeof note === 'string' ? note.trim().slice(0, HIDDEN_NOTE_MAX_LENGTH) : '';
+    if (trimmedNote) entry.note = trimmedNote;
+    return entry;
 }
 
 /** Normalize settings.json data into a small, deterministic creator list.
@@ -81,7 +86,11 @@ function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] 
     const byId = new Map<number, AppSettings['hiddenCreators'][number]>();
     for (const candidate of value) {
         const entry = parseHiddenEntry(candidate);
-        if (entry) byId.set(entry.id, entry);
+        if (!entry) continue;
+        const fromMod = parseHiddenEntry((candidate as { fromMod?: unknown }).fromMod);
+        const section = (candidate as { fromMod?: { section?: unknown } }).fromMod?.section;
+        byId.set(entry.id, fromMod && typeof section === 'string' && HIDDEN_MOD_SECTIONS.has(section)
+            ? { ...entry, fromMod: { id: fromMod.id, name: fromMod.name, section } } : entry);
     }
     return [...byId.values()];
 }

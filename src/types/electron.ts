@@ -725,6 +725,25 @@ export interface LocalSearchResult {
     limit: number;
 }
 
+/** What the local catalog knows about a hidden mod or one of a hidden creator's uploads. */
+export interface HiddenPreviewMod {
+    id: number;
+    section: string;
+    name: string;
+    thumbnailUrl: string | null;
+    isNsfw: boolean;
+    submitterName: string | null;
+}
+
+/** Previews for Settings' hidden lists, read from the local catalog only. A mod
+ *  or creator the catalog does not hold is simply absent. */
+export interface HiddenContentPreviews {
+    /** By creator id: how many uploads the catalog holds and its most liked few. */
+    creators: Record<number, { count: number; mods: HiddenPreviewMod[] }>;
+    /** By `${section}:${id}`. */
+    mods: Record<string, HiddenPreviewMod>;
+}
+
 export interface CachedMod {
     id: number;
     name: string;
@@ -1386,6 +1405,7 @@ export interface ElectronAPI {
     isSyncInProgress: () => Promise<boolean>;
     searchLocalMods: (options: SearchLocalModsOptions) => Promise<LocalSearchResult>;
     getCachedMod: (id: number, section?: string) => Promise<CachedMod | null>;
+    getHiddenContentPreviews: (creatorIds: number[], mods: Array<{ id: number; section: string }>) => Promise<HiddenContentPreviews>;
     getLocalModCount: (section?: string) => Promise<number>;
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;

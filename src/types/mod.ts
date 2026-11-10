@@ -1119,6 +1119,13 @@ export interface AppearanceBg {
 export interface HiddenCreator {
   id: number;
   name: string;
+  /** When the user hid them, in ms since the epoch. Entries hidden before this
+   *  was recorded have none. */
+  hiddenAt?: number;
+  /** The user's own reminder of why. */
+  note?: string;
+  /** The mod whose details the creator was hidden from, when there was one. */
+  fromMod?: { id: number; name: string; section: string };
 }
 
 /** A single GameBanana submission the user has hidden from Browse. GameBanana
@@ -1129,7 +1136,14 @@ export interface HiddenMod {
   name: string;
   /** GameBanana model name: "Mod", "Sound" or "Wip". */
   section: string;
+  /** When the user hid it, in ms since the epoch. */
+  hiddenAt?: number;
+  /** The user's own reminder of why. */
+  note?: string;
 }
+
+/** Longest note kept for a hidden creator or mod. */
+export const HIDDEN_NOTE_MAX_LENGTH = 140;
 
 export interface AppSettings {
   updateChannel: UpdateChannel;
