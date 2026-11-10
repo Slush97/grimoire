@@ -1071,6 +1071,8 @@ export interface PeekImprintResult {
   gamebananaId?: number;
   gamebananaFileId?: number;
   author?: string;
+  /** The label the imprint recorded for this file among its mod's files. */
+  variantLabel?: string;
   /** The recognized submission's art, from the local catalog mirror. */
   thumbnailUrl?: string;
   kind: 'mod' | 'merge';

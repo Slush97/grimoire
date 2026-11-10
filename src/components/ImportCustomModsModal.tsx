@@ -35,7 +35,9 @@ import {
   deriveModNameFromPath,
   deriveVariantLabel,
   fileNameOf,
+  imprintVariantLabel,
   pathDedupeKey,
+  suggestVariantGroupName,
 } from '../lib/customModImport';
 import { useAppStore } from '../stores/appStore';
 import { useNavigate } from 'react-router-dom';
@@ -47,8 +49,10 @@ interface ImportRow {
   /** Identity AND dedupe key: one row per source file, so the path is both. */
   path: string;
   name: string;
-  /** Optional name written to the grouped variant picker. */
+  /** Name typed for the grouped variant picker. Until the user types one, the
+   *  row shows `defaultVariantLabel`. */
   variantLabel: string;
+  labelTouched: boolean;
   /** The current name came from the user typing, not from a parse/peek fill. */
   nameTouched: boolean;
   imagePath: string;
@@ -87,10 +91,8 @@ interface ImportCustomModsModalProps {
 const newRow = (path: string): ImportRow => ({
   path,
   name: deriveModNameFromPath(path),
-  // Bare VPKs map one-to-one to picker rows, so make the current generated
-  // label directly editable. Archives stay blank because one source can expand
-  // into several members; typing there intentionally supplies a shared prefix.
-  variantLabel: path.toLowerCase().endsWith('.vpk') ? deriveVariantLabel(path) : '',
+  variantLabel: '',
+  labelTouched: false,
   nameTouched: false,
   imagePath: '',
   thumbnailDataUrl: '',
@@ -336,7 +338,11 @@ export default function ImportCustomModsModal({
     setGroupAsVariants((enabled) => {
       const next = !enabled;
       if (next && !variantGroupName.trim()) {
-        setVariantGroupName(rows[0]?.name.trim() ?? '');
+        setVariantGroupName(
+          suggestVariantGroupName(
+            rows.map((row) => ({ name: row.name, imprintTitle: row.recognized?.title }))
+          )
+        );
       }
       return next;
     });
@@ -355,6 +361,18 @@ export default function ImportCustomModsModal({
     if (!variantGroupId) setGroupAsVariants(false);
   };
   const usesSharedName = !!addToGroup || groupAsVariants;
+  // Bare VPKs map one-to-one to picker rows, so each shows its generated label
+  // ready to edit: the name from its imprint when that tells it apart, else its
+  // file name. Archives stay blank because one source can expand into several
+  // members; typing there intentionally supplies a shared prefix.
+  const imprints = rows.map((row) => row.recognized);
+  const sharedName = addToGroup ? addToGroup.modName : variantGroupName;
+  const defaultVariantLabel = (row: ImportRow): string =>
+    row.path.toLowerCase().endsWith('.vpk')
+      ? imprintVariantLabel(row.recognized, imprints, sharedName) ?? deriveVariantLabel(row.path)
+      : '';
+  const variantLabelOf = (row: ImportRow): string =>
+    row.labelTouched ? row.variantLabel : defaultVariantLabel(row);
   // In add-variants mode the group's name covers every row, so a row can never
   // be unnamed and nothing blocks the submit.
   const unnamedCount = addToGroup
@@ -381,7 +399,7 @@ export default function ImportCustomModsModal({
             : groupAsVariants
               ? variantGroupName.trim()
               : row.name.trim(),
-          variantLabel: usesSharedName ? row.variantLabel?.trim() || undefined : undefined,
+          variantLabel: usesSharedName ? variantLabelOf(row).trim() || undefined : undefined,
           thumbnailDataUrl: row.thumbnailDataUrl || undefined,
           nsfw: row.nsfw,
           localGroupId: groupAsVariants ? variantGroupId ?? undefined : undefined,
@@ -635,8 +653,10 @@ export default function ImportCustomModsModal({
                     {usesSharedName && (
                       <Input
                         inputSize="sm"
-                        value={row.variantLabel ?? deriveVariantLabel(row.path)}
-                        onChange={(e) => patchRow(row.path, { variantLabel: e.target.value })}
+                        value={variantLabelOf(row)}
+                        onChange={(e) =>
+                          patchRow(row.path, { variantLabel: e.target.value, labelTouched: true })
+                        }
                         placeholder={deriveVariantLabel(row.path)}
                         disabled={submitting}
                         aria-label={t('installed.batchImport.variantNameFor', {
