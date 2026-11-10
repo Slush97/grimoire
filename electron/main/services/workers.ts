@@ -279,14 +279,17 @@ function parseVpkDirectory(vpkPath) {
       const extension = extResult.str;
       let extensionProperlyTerminated = false;
 
+      // As in vpk.ts: an empty first directory is the root, not the end of the list.
+      let firstPath = true;
       while (offset < treeBuffer.length) {
         const pathResult = readNullTerminatedString(treeBuffer, offset);
         offset += pathResult.bytesRead;
 
-        if (pathResult.str === '') {
+        if (pathResult.str === '' && !firstPath) {
           extensionProperlyTerminated = true;
           break;
         }
+        firstPath = false;
 
         const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
         let pathProperlyTerminated = false;
