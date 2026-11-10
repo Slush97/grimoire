@@ -10,6 +10,8 @@
     },
     "unchecked": "Can't check",
     "uncheckedBody": "It stays disabled while Mod safety is on. Downloading it again won't change that, so please report it with a link to the mod.",
+    "enableAnyway": "Enable anyway",
+    "enableAnywayHint": "Grimoire can't tell what this mod does. Enable it only if you trust where it came from.",
     "incomplete": "Check incomplete",
     "incompleteBody": "Grimoire couldn't finish checking this mod. This isn't a finding about the mod. Check installed mods to try again.",
     "needsReview": "Review",
