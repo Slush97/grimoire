@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Power, PowerOff, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Power, PowerOff, X } from 'lucide-react';
 import { Modal, ModalBody, ModalFooter } from '../common/Modal';
 import { Button, CheckboxMark, IconButton, ModalHeader } from '../common/ui';
 import ModDetailsModal from '../ModDetailsModal';
-import { RequirementIdentity, RequirementsPanel } from './RequirementsPanel';
+import { RequirementIdentity, RequirementsPanel, RequirementTypeTag } from './RequirementsPanel';
 import { useAppStore } from '../../stores/appStore';
 import { checkQuickInstallRequirements, useRequirementsStore, type RequirementToggleChoice, type RequirementToggleReview } from '../../stores/requirementsStore';
 import { getModDetails, downloadMod } from '../../lib/api';
@@ -104,11 +104,19 @@ export function RequirementToggleDialog({ review }: { review: RequirementToggleR
     onClick={() => { void apply([{ key: review.key, enabled: review.mode === 'disable' }], 'cancel'); }}>
     {t(review.mode === 'disable' ? 'requirements.enable' : 'requirements.disable')}
   </Button>;
+  const modName = target?.name ?? review.mod.name;
+  const modPage = modRequirementRefs(target ?? review.mod)[0];
+  const managementTitle = modPage ? <button type="button" disabled={busy}
+    onClick={() => useRequirementsStore.getState().openTarget(modPage)} title={t('variantPicker.openModPage')}
+    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent disabled:cursor-default disabled:opacity-60">
+    <span className="min-w-0 truncate">{modName}</span>
+    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+  </button> : modName;
   return <Modal onClose={close} labelledBy="requirement-toggle-title" dismissable={!busy}
     backdropClassName="z-80" panelClassName="max-h-[85vh]">
-    <ModalHeader titleId="requirement-toggle-title" title={t(review.mode === 'enable' ? 'requirements.enableTitle'
-      : review.mode === 'disable' ? 'requirements.disableTitle' : 'requirements.manageTitle')}
-      subtitle={target?.name ?? review.mod.name} onClose={close} closeDisabled={busy} />
+    <ModalHeader titleId="requirement-toggle-title" title={review.mode === 'manage' ? managementTitle
+      : t(review.mode === 'enable' ? 'requirements.enableTitle' : 'requirements.disableTitle')}
+      subtitle={review.mode === 'manage' ? undefined : modName} onClose={close} closeDisabled={busy} />
     <ModalBody>
       <p className="mb-4 text-sm text-text-secondary">{t(review.mode === 'enable' ? 'requirements.enableHint'
         : review.mode === 'disable' ? 'requirements.disableHint' : 'requirements.manageHint')}</p>
@@ -123,13 +131,15 @@ export function RequirementToggleDialog({ review }: { review: RequirementToggleR
                 onChange={event => { if (row.modKey) void apply([{ key: row.modKey, enabled: event.currentTarget.checked }]); }} />
               <span className="rounded-sm peer-focus-visible:ring-2 peer-focus-visible:ring-accent"><CheckboxMark checked={mod?.enabled ?? false} /></span>
             </label>
-            <div className="min-w-0 flex-1 space-y-1">
-              <RequirementIdentity item={row.item} target={requirementTarget} installedMod={mod} />
-              <p className="text-xs text-text-secondary">{t(row.dependent ? 'requirements.requiredBy' : row.item.importance === 'required' ? 'requirements.required'
-                : row.item.importance === 'recommended' ? 'requirements.recommended' : row.item.importance === 'optional' ? 'requirements.optional' : 'requirements.review')}
-                {!mod && <span> · {t(requirementTarget || row.item.sha256 ? 'requirements.notInstalled' : 'requirements.manual')}</span>}
-                {row.item.state === 'off' && <span> · {t('requirements.mustBeOff')}</span>}</p>
-            </div>
+            <RequirementIdentity item={row.item} target={requirementTarget} installedMod={mod}
+              badge={<RequirementTypeTag importance={row.item.importance} />}
+              status={(row.dependent || !mod || row.item.state === 'off') && <p className="mt-1 text-xs text-text-secondary">
+                {[
+                  row.dependent ? t('requirements.requiredBy') : '',
+                  !mod ? t(requirementTarget || row.item.sha256 ? 'requirements.notInstalled' : 'requirements.manual') : '',
+                  row.item.state === 'off' ? t('requirements.mustBeOff') : '',
+                ].filter(Boolean).join(' · ')}
+              </p>} />
           </li>;
         })}
       </ul> : <p className="text-sm text-text-secondary">{t('requirements.none')}</p>}
@@ -139,7 +149,6 @@ export function RequirementToggleDialog({ review }: { review: RequirementToggleR
       {review.mode === 'manage' ? <>
         <Button variant="secondary" icon={PowerOff} disabled={busy || !target} onClick={() => all(false)}>{t('requirements.disableAll')}</Button>
         {allAction}
-        <Button variant="ghost" disabled={busy} onClick={close}>{t('common.actions.close')}</Button>
       </> : review.mode === 'enable'
         ? <>{declineAction}{onlyAction}{allAction}</>
         : <>{allAction}{onlyAction}{declineAction}</>}

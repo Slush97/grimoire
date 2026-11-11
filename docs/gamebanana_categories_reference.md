@@ -95,7 +95,12 @@ prompt does not save a choice, and disable confirmations still apply individuall
 **View requirements** appears in a mod's context menu only when it has declared
 requirements, including optional entries and locally generated skin dependencies.
 It opens the same list with
-**Disable all** and **Enable all** actions. It also lists enabled mods that require
+**Disable all** and **Enable all** actions, in that order, with only the header X
+to close it. Its linked mod-name title opens the mod page, like the variant picker.
+Thumbnails keep a 40px height and the shared video aspect ratio. Colored Required,
+Recommended and Optional tags start the description line below each requirement
+name, including when there is no description. Long descriptions flow beneath the
+tag. It also lists enabled mods that require
 this mod, marking them as **Requires this mod**. The requirements icon also opens it.
 Required dependency problems on an enabled mod use a yellow icon; disabled mods
 and optional-only requirements use light gray. Requirements do not appear in

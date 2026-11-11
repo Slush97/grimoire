@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowDownUp, ArrowUp, Check, ChevronRight, ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import { Button, Tag } from '../common/ui';
@@ -16,7 +16,17 @@ import ModThumbnail from '../ModThumbnail';
 import { shouldBlurNsfw } from '../../lib/appSettings';
 import { modRestoreKey } from '../../lib/soloRestore';
 
-export function RequirementIdentity({ item, target, installedMod }: { item: ModRequirement; target: GameBananaItemRef | null; installedMod?: Mod }) {
+export function RequirementTypeTag({ importance }: Pick<ModRequirement, 'importance'>) {
+  const { t } = useTranslation();
+  return <Tag tone={importance === 'required' ? 'danger' : importance === 'recommended' ? 'warning' : importance === 'optional' ? 'info' : 'neutral'} className="shrink-0 align-middle">
+    {t(importance === 'required' ? 'requirements.required' : importance === 'recommended' ? 'requirements.recommended'
+      : importance === 'optional' ? 'requirements.optional' : 'requirements.review')}
+  </Tag>;
+}
+
+export function RequirementIdentity({ item, target, installedMod, badge, status }: {
+  item: ModRequirement; target: GameBananaItemRef | null; installedMod?: Mod; badge?: ReactNode; status?: ReactNode;
+}) {
   const { t } = useTranslation();
   const [cached, setCached] = useState<CachedMod | null>(null);
   const settings = useAppStore(state => state.settings);
@@ -35,9 +45,11 @@ export function RequirementIdentity({ item, target, installedMod }: { item: ModR
   const label = t(target ? 'requirements.view' : 'requirements.openLink');
   const thumbnailUrl = installedMod?.thumbnailUrl ?? cached?.thumbnailUrl;
   const thumbnail = thumbnailUrl ? <ModThumbnail src={thumbnailUrl} alt="" nsfw={installedMod?.nsfw ?? cached?.isNsfw}
-    hideNsfw={shouldBlurNsfw(settings)} className="h-10 w-10 overflow-hidden rounded-sm" width={40} height={40} enableImageContextMenu={false} />
-    : <span className="flex h-10 w-10 items-center justify-center rounded-sm bg-hl/5 text-text-muted"><Link2 className="h-4 w-4" /></span>;
-  const name = <span className="min-w-0 break-words">{installedMod?.name ?? cached?.name ?? item.name}</span>;
+    hideNsfw={shouldBlurNsfw(settings)} className="aspect-video h-10 overflow-hidden rounded-sm" width={72} height={40} enableImageContextMenu={false} />
+    : <span className="flex aspect-video h-10 items-center justify-center rounded-sm bg-hl/5 text-text-muted"><Link2 className="h-4 w-4" /></span>;
+  const displayName = installedMod?.name ?? cached?.name ?? item.name;
+  const description = displayName !== item.name ? item.name : '';
+  const name = <span className="min-w-0 break-words">{displayName}</span>;
   return <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
     {open ? <button type="button" aria-label={label} onClick={open}
       className="peer/thumbnail shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-accent">{thumbnail}</button>
@@ -47,7 +59,10 @@ export function RequirementIdentity({ item, target, installedMod }: { item: ModR
         className={`group/requirement inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left text-sm transition-colors hover:text-accent focus-visible:text-accent focus-visible:outline-2 focus-visible:outline-accent ${cached ? 'font-mod-title leading-snug' : ''}`}>
         {name}<ExternalLink className="h-3.5 w-3.5 shrink-0 text-text-tertiary transition-colors group-hover/requirement:text-accent group-focus-visible/requirement:text-accent" aria-hidden />
       </button> : <span className={`text-sm ${cached ? 'font-mod-title leading-snug' : ''}`}>{name}</span>}
-      {cached && cached.name !== item.name && <p className="text-xs text-text-secondary break-words">{item.name}</p>}
+      {(badge || description) && <p className="mt-1 break-words text-xs leading-relaxed text-text-secondary">
+        {badge}{badge && description ? ' ' : ''}{description}
+      </p>}
+      {status}
     </div>
   </div>;
 }
@@ -110,10 +125,7 @@ export function RequirementsPanel({ source, onLocate }: { source: RequirementSou
         <div className="flex flex-wrap items-center gap-3">
         <RequirementIdentity item={item} target={target} />
         <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-          <Tag tone={item.importance === 'required' ? 'danger' : item.importance === 'recommended' ? 'warning' : item.importance === 'optional' ? 'info' : 'neutral'} className="shrink-0">
-            {item.importance === 'required' ? t('requirements.required') : item.importance === 'recommended' ? t('requirements.recommended')
-              : item.importance === 'optional' ? t('requirements.optional') : t('requirements.review')}
-          </Tag>
+          <RequirementTypeTag importance={item.importance} />
           {onLocate && match.matches.length > 0 && order.length === 0 && <Button size="sm" variant="ghost" onClick={() => onLocate(match.matches[0].modId)}>{t('requirements.locate')}</Button>}
           {disabled && <Button variant="secondary" icon={Check} className="min-w-[110px] max-w-full" isLoading={busy} onClick={() => void enable()}>{t('requirements.enable')}</Button>}
         </div>
