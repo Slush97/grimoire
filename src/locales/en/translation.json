@@ -1885,7 +1885,7 @@
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
       "revealInFolder": "Reveal in folder",
-      "soloLaunch": "Start with only this enabled",
+      "soloLaunch": "Enable only this",
       "openDoorStuck": "Open in Door Stuck",
       "preview3d": "3D preview of {{name}}",
       "previewHint": "Hold Alt for a 3D preview. Drag to turn, click to pin",
