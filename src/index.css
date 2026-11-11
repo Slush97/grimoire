@@ -455,7 +455,7 @@ body {
    class is toggled by initAutoHideScrollbars), so at rest nothing sits over the
    hero art. The gutter is reserved either way, so content never shifts. */
 .scrollbar-glass.is-scrolling {
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: rgb(from var(--color-hl) r g b / 0.22) transparent;
 }
 
 .scrollbar-glass::-webkit-scrollbar-track {
@@ -470,13 +470,43 @@ body {
 }
 
 .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgb(from var(--color-hl) r g b / 0.22);
   background-clip: padding-box;
 }
 
 .scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgb(from var(--color-hl) r g b / 0.35);
   background-clip: padding-box;
+}
+
+/* The tint over the Locker hero view's frosted glass: solid behind the rail,
+   feathering out to the hero art on the right. On the dark themes the art is
+   as dark as the glass, so text stays readable while the tint fades under
+   the selection column. Dark text over half-faded paper is not, so the light
+   theme holds the tint near opaque to the column's right edge (about three
+   quarters of this layer) and fades after it. */
+.locker-hero-glass {
+  background: linear-gradient(
+    to right,
+    var(--color-bg-secondary) 0%,
+    rgba(26, 26, 26, 0.95) 40%,
+    rgba(26, 26, 26, 0.75) 58%,
+    rgba(26, 26, 26, 0.4) 74%,
+    rgba(26, 26, 26, 0.15) 87%,
+    transparent 97%
+  );
+}
+
+:root[data-theme='light'] .locker-hero-glass {
+  background: linear-gradient(
+    to right,
+    var(--color-bg-secondary) 0%,
+    rgb(from var(--color-bg-secondary) r g b / 0.96) 66%,
+    rgb(from var(--color-bg-secondary) r g b / 0.86) 75%,
+    rgb(from var(--color-bg-secondary) r g b / 0.55) 84%,
+    rgb(from var(--color-bg-secondary) r g b / 0.2) 92%,
+    transparent 98%
+  );
 }
 
 /* Font utility classes */

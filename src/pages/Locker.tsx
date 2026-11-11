@@ -1581,11 +1581,9 @@ export default function Locker() {
       )}
     </div>
 
-      {/* The hero and Global views are full-bleed art under dark glass, so they
-          keep the dark tokens in the light theme (always-dark). */}
       {overlayHero && (
         <div
-          className={`always-dark fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
+          className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
             heroOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
           }`}
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
@@ -1646,6 +1644,8 @@ export default function Locker() {
           </div>
         </div>
       )}
+      {/* The Global view sets its cards straight on full-bleed art under a dark
+          wash, so it keeps the dark tokens in the light theme (always-dark). */}
       {globalOverlay.item && (
         <div
           className={`always-dark fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
