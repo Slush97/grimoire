@@ -190,6 +190,7 @@ export function MatchRow({
                 title: t('stats.scoreboard.open'),
                 onClick: onOpen,
                 onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.target !== e.currentTarget) return
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         onOpen()

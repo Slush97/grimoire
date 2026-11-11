@@ -1,8 +1,8 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Flame, ShieldCheck } from 'lucide-react'
 import type { PlayerRank, RankDistributionEntry, RankedSeason } from '../../types/deadlock-stats'
-import { protectionLeft, subrankProgress, topPercent, winStreak } from '../../lib/rankProgress'
+import { currentInterval, protectionLeft, subrankProgress, topPercent, winStreak } from '../../lib/rankProgress'
 import { rankLabel } from './format'
 
 // The rank card's sub-line, styled like its neighbours' ("418W / 297L"):
@@ -24,7 +24,11 @@ function formatPercent(p: number): string {
 export function RankDetails({ rank, seasons, distribution }: RankDetailsProps) {
     const { t } = useTranslation()
     const progress = subrankProgress(rank, seasons)
-    const top = distribution ? topPercent(distribution, rank.badge) : null
+    const [now] = useState(() => Date.now() / 1000)
+    // A badge last set in an earlier season isn't comparable with this season's players.
+    const last = rank.last_match
+    const inCurrentSeason = last != null && (last.rank_interval ?? 1) === currentInterval(seasons, now)?.interval
+    const top = distribution && inCurrentSeason ? topPercent(distribution, rank.badge) : null
     const streak = winStreak(rank.last_match)
     const shields = protectionLeft(rank.last_match)
 
@@ -33,7 +37,9 @@ export function RankDetails({ rank, seasons, distribution }: RankDetailsProps) {
         parts.push({
             key: 'top',
             title: t('stats.overview.topPercentTitle'),
-            node: t('stats.overview.topPercent', { percent: formatPercent(top) }),
+            node: top < 0.1
+                ? t('stats.overview.topPercentFloor')
+                : t('stats.overview.topPercent', { percent: formatPercent(top) }),
         })
     }
     if (streak >= 2) {

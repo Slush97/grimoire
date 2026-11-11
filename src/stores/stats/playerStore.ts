@@ -8,7 +8,6 @@ import type {
     PlayerHeroStats,
     PlayerMatchHistory,
     AggregatedStats,
-    MMRSnapshot,
     StoredMatch,
 } from '../../types/deadlock-stats'
 import type { SteamUser } from './types'
@@ -24,7 +23,6 @@ export interface PlayerDataBundle {
     heroStats: PlayerHeroStats | null
     matchHistory: PlayerMatchHistory | null
     aggregated: AggregatedStats | null
-    localMMRHistory: MMRSnapshot[]
     localMatchHistory: StoredMatch[]
 }
 
@@ -35,7 +33,6 @@ const EMPTY_BUNDLE: PlayerDataBundle = {
     heroStats: null,
     matchHistory: null,
     aggregated: null,
-    localMMRHistory: [],
     localMatchHistory: [],
 }
 
@@ -70,11 +67,12 @@ interface PlayerState {
 }
 
 async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
-    const [ranks, heroStats, matchHistory, localMMR, rankedSeasons, rankDistribution] = await Promise.all([
-        window.electronAPI.stats.getPlayerRank([accountId]) as Promise<PlayerRank[]>,
+    const [ranks, heroStats, matchHistory, rankedSeasons, rankDistribution] = await Promise.all([
+        // A rank 429 or outage must not take the hero stats and match history down with it.
+        (window.electronAPI.stats.getPlayerRank([accountId]) as Promise<PlayerRank[]>)
+            .catch(() => [] as PlayerRank[]),
         window.electronAPI.stats.getPlayerHeroStats(accountId) as Promise<PlayerHeroStats>,
         window.electronAPI.stats.getPlayerMatchHistory(accountId, 20) as Promise<PlayerMatchHistory>,
-        window.electronAPI.stats.getLocalMMRHistory(accountId, 60) as Promise<MMRSnapshot[]>,
         // Rank card extras: without them the card still shows the rank.
         (window.electronAPI.stats.getRankedSeasons() as Promise<RankedSeason[]>)
             .catch(() => [] as RankedSeason[]),
@@ -100,7 +98,6 @@ async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
         heroStats,
         matchHistory,
         aggregated,
-        localMMRHistory: localMMR,
         localMatchHistory: localMatches,
     }
 }

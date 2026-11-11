@@ -21,8 +21,7 @@ export function OverviewTab() {
     const heroName = useHeroName()
     const [openMatch, setOpenMatch] = useState<number | null>(null)
 
-    const { rank, rankedSeasons, rankDistribution, heroStats, matchHistory, aggregated, localMMRHistory } =
-        playerData.data
+    const { rank, rankedSeasons, rankDistribution, heroStats, matchHistory, aggregated } = playerData.data
 
     const winRate =
         aggregated && aggregated.total_matches > 0
@@ -99,7 +98,7 @@ export function OverviewTab() {
                 icon={TrendingUp}
                 description={t('stats.overview.rankedTrajectoryDescription')}
             >
-                <MmrChart key={accountId} matches={matchHistory?.matches ?? []} snapshots={localMMRHistory} />
+                <MmrChart key={accountId} matches={matchHistory?.matches ?? []} />
             </Card>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

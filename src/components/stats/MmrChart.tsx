@@ -1,15 +1,13 @@
 import { memo, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrendingUp } from 'lucide-react'
-import type { MMRSnapshot, PlayerMatch } from '../../types/deadlock-stats'
+import type { PlayerMatch } from '../../types/deadlock-stats'
 import { useHeroStore } from '../../stores/stats/heroStore'
 import { badgeScore } from '../../lib/rankScore'
 import { rankDivisionName, rankLabel } from './format'
 
-// Ranked trajectory. Primary source is the badge each ranked match in the
-// player's match history reports (one point per ranked match, full account
-// lifetime); locally recorded daily snapshots are the fallback when that
-// history has fewer than two ranked matches. Inline SVG, no charting dependency.
+// Ranked trajectory: the badge each ranked match in the player's match history
+// reports (one point per ranked match). Inline SVG, no charting dependency.
 //
 // The scale is 6 points per division (division d spans [(d-1)*6, d*6)),
 // so the y-domain snaps to rank boundaries and the y-axis is drawn as rank
@@ -18,7 +16,6 @@ import { rankDivisionName, rankLabel } from './format'
 
 interface MmrChartProps {
     matches: PlayerMatch[]
-    snapshots: MMRSnapshot[]
     height?: number
 }
 
@@ -108,7 +105,7 @@ function smoothPath(pts: { x: number; y: number }[]): string {
     return d
 }
 
-export const MmrChart = memo(function MmrChart({ matches, snapshots, height = 220 }: MmrChartProps) {
+export const MmrChart = memo(function MmrChart({ matches, height = 220 }: MmrChartProps) {
     const { t, i18n } = useTranslation()
     const locale = i18n.language
     // Hover updates are frequent. Reuse Intl formatters instead of rebuilding
@@ -125,35 +122,21 @@ export const MmrChart = memo(function MmrChart({ matches, snapshots, height = 22
 
     // All chartable points, oldest first. Unranked matches and placement
     // games carry no badge and are skipped.
-    const { allPoints, fromSnapshots } = useMemo(() => {
-        const apiPoints: ChartPoint[] = []
+    const allPoints = useMemo(() => {
+        const pts: ChartPoint[] = []
         for (const m of matches) {
             const v = badgeScore(m.ranked_display_badge)
             if (v === null) continue
             const badge = m.ranked_display_badge as number
-            apiPoints.push({
+            pts.push({
                 t: m.start_time * 1000,
                 v,
                 division: Math.floor(badge / 10),
                 tier: badge % 10,
             })
         }
-        apiPoints.sort((a, b) => a.t - b.t)
-        if (apiPoints.length >= 2) return { allPoints: apiPoints, fromSnapshots: false }
-
-        const snapshotPoints: ChartPoint[] = snapshots
-            .filter((s) => typeof s.mmr === 'number' && Number.isFinite(s.mmr))
-            .map((s) => ({
-                t: Date.parse(`${s.snapshot_date}T00:00:00`),
-                v: s.mmr,
-                ...divisionForScore(s.mmr),
-            }))
-            .filter((p) => Number.isFinite(p.t))
-            .sort((a, b) => a.t - b.t)
-        return snapshotPoints.length >= 2
-            ? { allPoints: snapshotPoints, fromSnapshots: true }
-            : { allPoints: apiPoints, fromSnapshots: false }
-    }, [matches, snapshots])
+        return pts.sort((a, b) => a.t - b.t)
+    }, [matches])
 
     // Ranges are anchored to the newest data point (not the wall clock) so a
     // player coming back from a break still sees their last stretch of play,
@@ -329,7 +312,6 @@ export const MmrChart = memo(function MmrChart({ matches, snapshots, height = 22
                     </span>
                     <span className="ml-1.5">
                         {t('stats.mmrChart.dateRange', { from: formatDay(first.t, dateFormat), to: formatDay(last.t, dateFormat) })}
-                        {fromSnapshots ? ` ${t('stats.mmrChart.localDailySnapshots')}` : ''}
                     </span>
                 </div>
                 {rangeButtons}

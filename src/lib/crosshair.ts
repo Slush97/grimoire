@@ -361,7 +361,12 @@ export function isCrosshairShareCode(text: string): boolean {
 export function crosshairShareCodeParams(raw: Partial<CrosshairSettings>): Record<string, number | boolean> {
     const s = normalizeCrosshairSettings(raw);
     const params: Record<string, number | boolean> = { themed: false };
-    for (const [name, field] of SHARE_CODE_FIELDS) params[name] = s[field];
+    for (const [name, field] of SHARE_CODE_FIELDS) {
+        const v = s[field];
+        // The API types everything but the opacities as int32 and 400s on a fraction
+        // (an in-game import keeps floats like dot_size 8.301266). Truncate, as the HUD does.
+        params[name] = typeof v === 'number' && !name.endsWith('_opacity') ? Math.trunc(v) : v;
+    }
     return params;
 }
 

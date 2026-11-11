@@ -25,6 +25,23 @@ describe('crosshair share codes', () => {
         expect(Object.keys(params)).toHaveLength(20);
     });
 
+    it('truncates int fields the API types as integers and keeps opacities fractional', () => {
+        const params = crosshairShareCodeParams({
+            ...CROSSHAIR_DEFAULTS,
+            dotSize: 8.301266,
+            pipGap: 4.9,
+            colorR: 254.6,
+            pipOpacity: 0.55,
+            dotOutlineOpacity: 0.7,
+        });
+        expect(params.dot_size).toBe(8);
+        expect(params.pip_gap).toBe(4);
+        expect(params.color_r).toBe(254);
+        expect(params.pip_opacity).toBe(0.55);
+        expect(params.dot_outline_opacity).toBe(0.7);
+        expect(params.pip_gap_static).toBe(true);
+    });
+
     it('loads a decoded code and keeps the hero-specific toggle', () => {
         const current = { ...CROSSHAIR_DEFAULTS, disableHeroSpecificCrosshairs: true };
         const s = crosshairFromShareCode({ themed: true, pip_width: 3, pip_gap_static: false, color_b: 120 }, current);

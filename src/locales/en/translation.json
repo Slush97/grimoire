@@ -760,6 +760,7 @@
       "rank": "Rank",
       "rankProgressTitle": "{{points}} / {{needed}} points to {{next}}",
       "topPercent": "Top {{percent}}%",
+      "topPercentFloor": "Top <0.1%",
       "topPercentTitle": "Share of this season's ranked players at or above this rank",
       "winStreakTitle": "Win streak: {{count}}",
       "protectionTitle_one": "Demotion protection: {{count}} shield left",
@@ -805,9 +806,8 @@
     },
     "mmrChart": {
       "all": "All",
-      "localDailySnapshots": "(local daily snapshots)",
       "noMatchesInRange": "No ranked matches in this range. Try a wider one.",
-      "noRankHistory": "No ranked matches for this player yet.",
+      "noRankHistory": "Not enough ranked matches to chart yet.",
       "rangeDays": "{{days}}D",
       "divisionFallback": "Division {{division}}",
       "dateRange": "{{from}} to {{to}}",

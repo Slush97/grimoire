@@ -36,6 +36,9 @@ async function loadSeasons(): Promise<LeaderboardSeason[]> {
         .map((i) => ({ id: i.leaderboard_id as number, name: i.name }))
 }
 
+// Only the newest load may publish: a slower earlier region or season request must not overwrite it.
+let latestLoad = 0
+
 export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
     region: 'NAmerica',
     seasons: [],
@@ -45,6 +48,7 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
 
     loadLeaderboard: async (region, season) => {
         const target = region ?? get().region
+        const load = ++latestLoad
         if (season !== undefined) set({ seasonPicked: true })
         set((s) => ({ region: target, leaderboard: asyncLoading(s.leaderboard) }))
         try {
@@ -63,10 +67,10 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
                 shown = seasons[at + 1].id
                 entries = (await window.electronAPI.stats.getLeaderboard(target, shown)) as LeaderboardEntry[]
             }
-            if (get().region !== target) return
+            if (load !== latestLoad) return
             set({ season: shown, leaderboard: asyncLoaded(entries) })
         } catch (err) {
-            if (get().region !== target) return
+            if (load !== latestLoad) return
             set((s) => ({ leaderboard: asyncError(s.leaderboard, err) }))
         }
     },

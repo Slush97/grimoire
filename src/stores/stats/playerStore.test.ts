@@ -8,6 +8,36 @@ const player = (accountId = 1): TrackedPlayer => ({
     avatar_url: '', is_primary: 0, added_at: 1, last_updated: 1,
 })
 
+describe('player data bundle', () => {
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('still loads hero stats and matches when the rank request fails', async () => {
+        const heroStats = { heroes: [] }
+        const matchHistory = { matches: [] }
+        vi.stubGlobal('window', {
+            electronAPI: {
+                stats: {
+                    getPlayerRank: vi.fn().mockRejectedValue(new Error('Deadlock API error: 429')),
+                    getPlayerHeroStats: vi.fn().mockResolvedValue(heroStats),
+                    getPlayerMatchHistory: vi.fn().mockResolvedValue(matchHistory),
+                    getRankedSeasons: vi.fn().mockResolvedValue([]),
+                    getSeasonRankDistribution: vi.fn().mockResolvedValue([]),
+                    recordMatches: vi.fn().mockResolvedValue(undefined),
+                    getAggregatedStats: vi.fn().mockResolvedValue(null),
+                    getLocalMatchHistory: vi.fn().mockResolvedValue([]),
+                },
+            },
+        })
+        usePlayerStore.setState({ ...usePlayerStore.getInitialState(), selectedAccountId: 7 }, true)
+        await usePlayerStore.getState().loadPlayerData(7)
+        const { playerData } = usePlayerStore.getState()
+        expect(playerData.status).toBe('loaded')
+        expect(playerData.data.rank).toBeNull()
+        expect(playerData.data.heroStats).toBe(heroStats)
+        expect(playerData.data.matchHistory).toBe(matchHistory)
+    })
+})
+
 describe('tracked profile reconciliation', () => {
     const refreshTrackedProfiles = vi.fn()
 

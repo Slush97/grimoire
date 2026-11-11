@@ -5,8 +5,8 @@
     {
       "code": "bg",
       "name": "български",
-      "translatedKeys": 1798,
-      "pct": 52
+      "translatedKeys": 1797,
+      "pct": 51
     },
     {
       "code": "en",
@@ -17,13 +17,13 @@
     {
       "code": "fr",
       "name": "français",
-      "translatedKeys": 1995,
+      "translatedKeys": 1994,
       "pct": 57
     },
     {
       "code": "ru",
       "name": "русский",
-      "translatedKeys": 3486,
+      "translatedKeys": 3485,
       "pct": 100
     }
   ]

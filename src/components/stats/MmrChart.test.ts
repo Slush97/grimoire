@@ -21,7 +21,7 @@ describe('chart date formatting', () => {
         for (const locale of ['en-US', 'de', 'ja']) {
             language.value = locale
             const markup = renderToStaticMarkup(createElement(MmrChart, {
-                matches: [entry(first, 1), entry(last, 2)], snapshots: [],
+                matches: [entry(first, 1), entry(last, 2)],
             }))
             for (const time of [first, last]) {
                 expect(markup).toContain(new Date(time * 1000).toLocaleDateString(locale, {
@@ -34,7 +34,7 @@ describe('chart date formatting', () => {
     it('retains the invalid date fallback instead of throwing on malformed timestamps', () => {
         language.value = 'en-US'
         const markup = renderToStaticMarkup(createElement(MmrChart, {
-            matches: [entry(Number.NaN, 1), entry(Number.NaN, 2)], snapshots: [],
+            matches: [entry(Number.NaN, 1), entry(Number.NaN, 2)],
         }))
         expect(markup).toContain(new Date(Number.NaN).toLocaleDateString())
     })
@@ -46,13 +46,11 @@ describe('ranked points', () => {
         const day = Date.UTC(2026, 0, 4) / 1000
         const unranked = renderToStaticMarkup(createElement(MmrChart, {
             matches: [entry(day, 1, null), entry(day + 86400, 2, null), entry(day + 2 * 86400, 3)],
-            snapshots: [],
         }))
         expect(unranked).toContain('stats.mmrChart.noRankHistory')
 
         const ranked = renderToStaticMarkup(createElement(MmrChart, {
             matches: [entry(day, 1, null), entry(day + 86400, 2), entry(day + 2 * 86400, 3)],
-            snapshots: [],
         }))
         expect(ranked).not.toContain('stats.mmrChart.noRankHistory')
         expect(ranked).toContain('<path')
