@@ -63,7 +63,7 @@ function HeroCard({ hero, onPick }: { hero: HeroInfo; onPick: () => void }) {
       type="button"
       onClick={onPick}
       title={hero.name}
-      className={`group relative flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-md border border-border bg-bg-secondary text-left transition-all hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg hover:shadow-black/30 cursor-pointer ${
+      className={`always-dark group relative flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-md border border-border bg-bg-secondary text-left transition-all hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg hover:shadow-black/30 cursor-pointer ${
         hero.selectable ? '' : 'opacity-70'
       }`}
     >

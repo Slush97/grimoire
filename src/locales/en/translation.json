@@ -1026,8 +1026,11 @@
       "accentCustom": "Custom accent",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
-      "oled": {
-        "title": "OLED mode"
+      "theme": {
+        "title": "Theme",
+        "dark": "Dark",
+        "oled": "OLED",
+        "light": "Light"
       },
       "launchButtons": {
         "combine": "Combine launch buttons",

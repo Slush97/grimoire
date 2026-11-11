@@ -9,6 +9,10 @@
   }
 }
 
+/* For the rare utility only the light theme needs (`light:invert` on a
+   white-only icon). Prefer a token: this is for what a token cannot say. */
+@custom-variant light (&:where([data-theme='light'] *));
+
 /* Z-index scale. New surfaces pick from this ladder instead of inventing
    values (no more z-[9999]):
      z-30  page-level overlays inside the content area (Locker hero/global panels)
@@ -117,10 +121,16 @@
   --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
   /* Highlight ink for translucent surface tints: hover fills, hairline
-     borders, bevels (`bg-hl/5`, `border-hl/10`). White on the dark theme, so
-     it renders identically to the old `white/N` tints, but it is one token a
-     future light theme can flip to dark ink. Never use it for text. */
+     borders, bevels (`bg-hl/5`, `border-hl/10`). White on the dark themes, so
+     it renders identically to the old `white/N` tints; the light theme flips
+     it to dark ink. Never use it for text. */
   --color-hl: #ffffff;
+  /* Recess ink for translucent wells on a token surface: code chips, inset
+     footers, nested panels (`bg-shade/30`). Black on the dark themes, so it
+     renders identically to the old `black/N` wells; the light theme swaps in
+     a much weaker ink, because a well that reads on near-black is a grey slab
+     on paper. Literal `black/N` stays for scrims over imagery. */
+  --color-shade: #000000;
   /* Warm off-white for the Browse "readable" card title, deliberately softer
      than pure white. */
   --color-mod-title: #eee8df;
@@ -156,9 +166,11 @@
   --font-mod-title: 'Reaver', serif;
 }
 
-/* The app is permanently dark. Declaring it here (not per-theme) keeps
-   UA-drawn widgets (select popups, checkboxes, date-picker calendars)
-   rendering dark regardless of the OLED toggle. */
+/* Themes. The @theme block above is the default dark one; applyTheme() puts
+   `data-theme` on the root for the other two. Each theme is also a class, so a
+   subtree can render in a theme other than the app's (the Settings preview
+   tiles). color-scheme travels with the tokens so UA-drawn widgets (select
+   popups, checkboxes, date-picker calendars) match the surface they sit on. */
 :root {
   color-scheme: dark;
 }
@@ -166,13 +178,183 @@
 /* OLED mode keeps the existing dark-theme contrast model while moving the
    largest surfaces to true black. Raised and recessed surfaces remain subtly
    separated so cards, inputs, and popovers do not collapse into one plane. */
-:root[data-oled='true'] {
+:root[data-theme='oled'],
+.theme-oled {
   --color-bg-primary: #000000;
   --color-bg-secondary: #080808;
   --color-bg-tertiary: #141414;
   --color-bg-sunken: #030303;
   --color-bg-glass: #020304;
   --color-border: #242424;
+}
+
+/* Light mode: warm paper rather than pure white, so the serif titles and the
+   accent sit on something closer to a page. Cards (secondary) are the lightest
+   plane; inputs and chips (tertiary) and recessed wells (sunken) step darker.
+   State colors drop to their deep shades because the dark theme's pastel
+   green and yellow vanish on a light surface. */
+:root[data-theme='light'],
+.theme-light {
+  color-scheme: light;
+  --color-bg-primary: #f1efea;
+  --color-bg-secondary: #faf9f6;
+  --color-bg-tertiary: #e9e6df;
+  --color-bg-sunken: #f6f4f0;
+  --color-bg-glass: #fbfaf8;
+  --color-text-primary: #1c1b19;
+  --color-text-secondary: #57544e;
+  --color-text-tertiary: #716d65;
+  --color-border: #d6d2c8;
+  --color-hl: #1c1b19;
+  --color-shade: rgb(28 27 25 / 0.2);
+  --color-mod-title: #262421;
+  --color-state-success: #15803d;
+  --color-state-warning: #a16207;
+  --color-state-danger: #dc2626;
+  --color-state-info: #2563eb;
+  --color-state-update: #ea580c;
+}
+
+/* Raw Tailwind palette colors still in use (the debt `pnpm ui:check` tracks)
+   are pastels picked to read on near-black: a pale yellow label vanishes on
+   paper. Until they move to state tokens, the light theme points each pastel
+   shade in use at its deep counterpart (100 to 900, 200 to 800, 300 and 400
+   to 700) and the 950 tints at 100. Add a shade here when a new one shows up
+   in the code; drop the block when the debt is gone. */
+:root[data-theme='light'],
+.theme-light {
+  --color-amber-200: oklch(47.3% 0.137 46.201);
+  --color-amber-300: oklch(55.5% 0.163 48.998);
+  --color-amber-400: oklch(55.5% 0.163 48.998);
+  --color-amber-950: oklch(96.2% 0.059 95.617);
+  --color-blue-300: oklch(48.8% 0.243 264.376);
+  --color-blue-400: oklch(48.8% 0.243 264.376);
+  --color-cyan-200: oklch(45% 0.085 224.283);
+  --color-cyan-300: oklch(52% 0.105 223.128);
+  --color-emerald-300: oklch(50.8% 0.118 165.612);
+  --color-emerald-950: oklch(95% 0.052 163.051);
+  --color-green-300: oklch(52.7% 0.154 150.069);
+  --color-green-400: oklch(52.7% 0.154 150.069);
+  --color-orange-400: oklch(55.3% 0.195 38.402);
+  --color-red-100: oklch(39.6% 0.141 25.723);
+  --color-red-200: oklch(44.4% 0.177 26.899);
+  --color-red-300: oklch(50.5% 0.213 27.518);
+  --color-red-400: oklch(50.5% 0.213 27.518);
+  --color-rose-300: oklch(51.4% 0.222 16.935);
+  --color-sky-300: oklch(50% 0.134 242.749);
+  --color-violet-300: oklch(49.1% 0.27 292.581);
+  --color-yellow-100: oklch(42.1% 0.095 57.708);
+  --color-yellow-200: oklch(47.6% 0.114 61.907);
+  --color-yellow-300: oklch(55.4% 0.135 66.442);
+  --color-yellow-400: oklch(55.4% 0.135 66.442);
+}
+
+/* The dark tokens again, for a subtree inside another theme. `always-dark`
+   is for regions that paint their own dark backdrop whatever the theme: art
+   and thumbnails under a scrim, 3D viewports, dark glass panels. A control
+   whose first layer is an `art-backdrop` (the sidebar's launch buttons and
+   active tab) counts without being told. Both only act in the light theme,
+   so OLED keeps its own surfaces there. Keep the values in step with
+   @theme. */
+.theme-dark,
+:root[data-theme='light'] :is(.always-dark, :has(> .art-backdrop)) {
+  color-scheme: dark;
+  --color-bg-primary: #0f0f0f;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-tertiary: #242424;
+  --color-bg-sunken: #141414;
+  --color-bg-glass: #0a0c10;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #8a8a94;
+  --color-border: #2d2d2d;
+  --color-hl: #ffffff;
+  --color-shade: #000000;
+  --color-mod-title: #eee8df;
+  --color-state-success: #4ade80;
+  --color-state-warning: #facc15;
+  --color-state-danger: #f87171;
+  --color-state-info: #60a5fa;
+  --color-state-update: #f97316;
+  /* Tailwind's own pastels, undoing the light theme's remap. */
+  --color-amber-200: oklch(92.4% 0.12 95.746);
+  --color-amber-300: oklch(87.9% 0.169 91.605);
+  --color-amber-400: oklch(82.8% 0.189 84.429);
+  --color-amber-950: oklch(27.9% 0.077 45.635);
+  --color-blue-300: oklch(80.9% 0.105 251.813);
+  --color-blue-400: oklch(70.7% 0.165 254.624);
+  --color-cyan-200: oklch(91.7% 0.08 205.041);
+  --color-cyan-300: oklch(86.5% 0.127 207.078);
+  --color-emerald-300: oklch(84.5% 0.143 164.978);
+  --color-emerald-950: oklch(26.2% 0.051 172.552);
+  --color-green-300: oklch(87.1% 0.15 154.449);
+  --color-green-400: oklch(79.2% 0.209 151.711);
+  --color-orange-400: oklch(75% 0.183 55.934);
+  --color-red-100: oklch(93.6% 0.032 17.717);
+  --color-red-200: oklch(88.5% 0.062 18.334);
+  --color-red-300: oklch(80.8% 0.114 19.571);
+  --color-red-400: oklch(70.4% 0.191 22.216);
+  --color-rose-300: oklch(81% 0.117 11.638);
+  --color-sky-300: oklch(82.8% 0.111 230.318);
+  --color-violet-300: oklch(81.1% 0.111 293.571);
+  --color-yellow-100: oklch(97.3% 0.071 103.193);
+  --color-yellow-200: oklch(94.5% 0.129 101.54);
+  --color-yellow-300: oklch(90.5% 0.182 98.111);
+  --color-yellow-400: oklch(85.2% 0.199 91.936);
+}
+
+/* A themed subtree states its own ink: `color` is inherited as a computed
+   value, so without this the text inside would keep the outer theme's. In the
+   base layer, so a text utility on the same element still wins. */
+@layer base {
+  .theme-dark,
+  .theme-oled,
+  .theme-light,
+  .always-dark,
+  :has(> .art-backdrop) {
+    color: var(--color-text-primary);
+  }
+}
+
+/* Light-theme surfaces that the rules below paint from literal dark values.
+   Kept together here so the dark rules stay as they were. */
+:root[data-theme='light'] .premium-glass-card {
+  background: linear-gradient(
+    135deg,
+    rgb(from var(--color-bg-secondary) r g b / 0.72) 0%,
+    rgb(from var(--color-bg-secondary) r g b / 0.96) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    0 2px 10px rgb(60 50 30 / 0.08);
+}
+
+:root[data-theme='light'] .premium-glass-card:hover:not(:where(.installed-is-scrolling *)) {
+  background: var(--color-bg-secondary);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    0 10px 26px rgb(60 50 30 / 0.16);
+}
+
+:root[data-theme='light'] .premium-card-glow:hover:not(:where(.installed-is-scrolling *)) {
+  box-shadow: 0 10px 26px rgb(60 50 30 / 0.18);
+}
+
+:root[data-theme='light'] .premium-card-glow-active:hover:not(:where(.installed-is-scrolling *)) {
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--color-accent) 16%, transparent),
+    0 10px 26px rgb(60 50 30 / 0.18);
+}
+
+:root[data-theme='light'] .premium-card-glow-warning:hover:not(:where(.installed-is-scrolling *)) {
+  box-shadow:
+    0 0 22px rgb(from var(--color-state-warning) r g b / 0.16),
+    0 10px 26px rgb(60 50 30 / 0.18);
+  border-color: rgb(from var(--color-state-warning) r g b / 0.5);
+}
+
+:root[data-theme='light'] .premium-inline-rename-input {
+  background: rgb(from var(--color-hl) r g b / 0.06);
 }
 
 /* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
@@ -609,8 +791,8 @@ body {
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.018);
+    inset 0 1px 0 rgb(from var(--color-hl) r g b / 0.045),
+    inset 0 0 0 1px rgb(from var(--color-hl) r g b / 0.018);
 }
 
 .browse-readable-card:focus-visible {
@@ -732,8 +914,8 @@ body {
   .browse-art-parallax-card:not([data-parallax-disabled='true']):hover > .browse-card-hover-surface {
     transform: translateY(-2px);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.055),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+      inset 0 1px 0 rgb(from var(--color-hl) r g b / 0.055),
+      inset 0 0 0 1px rgb(from var(--color-hl) r g b / 0.024),
       0 14px 30px rgba(0, 0, 0, 0.3);
   }
 
@@ -747,19 +929,19 @@ body {
 
 .browse-is-scrolling .browse-card-hover-surface:hover {
   transform: none !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  box-shadow: 0 1px 0 rgb(from var(--color-hl) r g b / 0.03) !important;
 }
 
 .browse-readable-card:hover {
-  border-color: rgba(235, 240, 250, 0.14);
+  border-color: rgb(from var(--color-hl) r g b / 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.055),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+    inset 0 1px 0 rgb(from var(--color-hl) r g b / 0.055),
+    inset 0 0 0 1px rgb(from var(--color-hl) r g b / 0.024),
     0 14px 30px rgba(0, 0, 0, 0.3);
 }
 
 .browse-is-scrolling .browse-readable-card:hover {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgb(from var(--color-hl) r g b / 0.07) !important;
 }
 
 .browse-is-scrolling .browse-card-hover-surface:not(.browse-readable-card):hover {
@@ -1412,7 +1594,7 @@ body {
   pointer-events: none;
   background-image: repeating-linear-gradient(
     135deg,
-    var(--stripe-color, rgba(255, 255, 255, 0.06)) 0 8px,
+    var(--stripe-color, rgb(from var(--color-hl) r g b / 0.06)) 0 8px,
     transparent 8px 20px
   );
   background-size: 28px 28px;
@@ -1611,7 +1793,7 @@ body {
   padding: 0.55em 0.7em;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgb(from var(--color-hl) r g b / 0.035);
   color: var(--color-text-secondary);
 }
 
@@ -1663,9 +1845,9 @@ body {
     rgba(12, 12, 12, 0.75) 100%
   );
   backdrop-filter: blur(14px) saturate(125%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(from var(--color-hl) r g b / 0.08);
   box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgb(from var(--color-hl) r g b / 0.06),
     0 4px 20px rgba(0, 0, 0, 0.35);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1676,9 +1858,9 @@ body {
     rgba(25, 25, 25, 0.55) 0%,
     rgba(18, 18, 18, 0.8) 100%
   );
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgb(from var(--color-hl) r g b / 0.16);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgb(from var(--color-hl) r g b / 0.08),
     0 12px 32px rgba(0, 0, 0, 0.5);
   /* Lift only, no scale(): this card has backdrop-filter, and scaling a
      backdrop-filtered element upscales its whole rasterized surface, softening

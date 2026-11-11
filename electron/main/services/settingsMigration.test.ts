@@ -172,17 +172,31 @@ describe('loadSettings hidden mod normalization', () => {
   });
 });
 
-describe('loadSettings OLED mode', () => {
-  it('defaults OLED mode to off for existing settings', () => {
-    writeFileSync(settingsPath(), JSON.stringify({}));
+describe('loadSettings theme', () => {
+  const load = (saved: object) => {
+    writeFileSync(settingsPath(), JSON.stringify(saved));
+    return loadSettings();
+  };
 
-    expect(loadSettings().oledMode).toBe(false);
+  it('defaults to dark for existing settings', () => {
+    expect(load({}).theme).toBe('dark');
+    expect(load({ oledMode: false }).theme).toBe('dark');
   });
 
-  it('keeps an enabled OLED mode from saved settings', () => {
-    writeFileSync(settingsPath(), JSON.stringify({ oledMode: true }));
+  it('carries the old OLED toggle over as the OLED theme and drops the key', () => {
+    const settings = load({ oledMode: true });
 
-    expect(loadSettings().oledMode).toBe(true);
+    expect(settings.theme).toBe('oled');
+    expect(settings).not.toHaveProperty('oledMode');
+  });
+
+  it('keeps a saved theme, also over a leftover OLED toggle', () => {
+    expect(load({ theme: 'light' }).theme).toBe('light');
+    expect(load({ theme: 'light', oledMode: true }).theme).toBe('light');
+  });
+
+  it('falls back to dark for a theme it does not know', () => {
+    expect(load({ theme: 'sepia' }).theme).toBe('dark');
   });
 });
 
