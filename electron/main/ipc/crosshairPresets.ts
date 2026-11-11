@@ -1,14 +1,18 @@
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, clipboard } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 // Wire types are single-sourced in src/types/electron.ts; re-exported to
 // keep this module's surface unchanged.
 import type { CrosshairSettings, CrosshairPreset } from '../../../src/types/electron';
 import {
+    crosshairFromShareCode,
+    crosshairShareCodeParams,
     generateCrosshairCommands,
+    isCrosshairShareCode,
     normalizeCrosshairSettings,
     parseMachineConvarsCrosshair,
 } from '../../../src/lib/crosshair';
+import { decodeCrosshairShareCode, encodeCrosshairShareCode } from '../services/stats';
 import { getManualAutoexecCommands, readAutoexec, writeAutoexec, getAutoexecPath } from '../services/autoexec';
 export type { CrosshairSettings, CrosshairPreset };
 
@@ -188,6 +192,19 @@ ipcMain.handle('crosshair:createAutoexec', async (_event, gamePath: string) => {
 
 // Import the player's live in-game crosshair from machine_convars.vcfg (the
 // KV file where the game persists settings changed in its own UI)
+// The game's crosshair share codes. The clipboard is read here rather than in
+// the renderer, and only text shaped like a code is sent to deadlock-api, so
+// anything else on the clipboard never leaves the machine.
+ipcMain.handle('crosshair:copyShareCode', async (_event, settings: CrosshairSettings) => {
+    await clipboard.writeText(await encodeCrosshairShareCode(crosshairShareCodeParams(settings)));
+});
+
+ipcMain.handle('crosshair:pasteShareCode', async (_event, current: CrosshairSettings) => {
+    const code = (await clipboard.readText()).trim();
+    if (!isCrosshairShareCode(code)) return null;
+    return crosshairFromShareCode(await decodeCrosshairShareCode(code), current);
+});
+
 ipcMain.handle('crosshair:importFromGame', async (_event, gamePath: string) => {
     if (!gamePath) {
         return { found: false, settings: null };

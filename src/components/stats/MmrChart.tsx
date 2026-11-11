@@ -1,29 +1,30 @@
 import { memo, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrendingUp } from 'lucide-react'
-import type { MMRSnapshot, PlayerMMRHistoryEntry } from '../../types/deadlock-stats'
+import type { MMRSnapshot, PlayerMatch } from '../../types/deadlock-stats'
 import { useHeroStore } from '../../stores/stats/heroStore'
+import { badgeScore } from '../../lib/rankScore'
 import { rankDivisionName, rankLabel } from './format'
 
-// Ranked score trajectory. Primary source is the per-match mmr-history API
-// feed (one point per ranked match, full account lifetime); locally recorded
-// daily snapshots are the fallback when that feed is unavailable. Inline SVG,
-// no charting dependency.
+// Ranked trajectory. Primary source is the badge each ranked match in the
+// player's match history reports (one point per ranked match, full account
+// lifetime); locally recorded daily snapshots are the fallback when that
+// history has fewer than two ranked matches. Inline SVG, no charting dependency.
 //
-// The score scale is 6 points per division (division d spans [(d-1)*6, d*6)),
+// The scale is 6 points per division (division d spans [(d-1)*6, d*6)),
 // so the y-domain snaps to rank boundaries and the y-axis is drawn as rank
 // badges sitting on their boundary lines. Narrow ranges (within ~2 divisions)
 // step down to subrank boundaries so the stratification stays readable.
 
 interface MmrChartProps {
-    history: PlayerMMRHistoryEntry[]
+    matches: PlayerMatch[]
     snapshots: MMRSnapshot[]
     height?: number
 }
 
 interface ChartPoint {
     t: number // ms epoch
-    v: number // player_score
+    v: number // ladder position, see lib/rankScore
     division: number
     tier: number
 }
@@ -107,7 +108,7 @@ function smoothPath(pts: { x: number; y: number }[]): string {
     return d
 }
 
-export const MmrChart = memo(function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
+export const MmrChart = memo(function MmrChart({ matches, snapshots, height = 220 }: MmrChartProps) {
     const { t, i18n } = useTranslation()
     const locale = i18n.language
     // Hover updates are frequent. Reuse Intl formatters instead of rebuilding
@@ -122,18 +123,22 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
     const [hovered, setHovered] = useState<number | null>(null)
     const ranks = useHeroStore((s) => s.ranks)
 
-    // All chartable points, oldest first. Zero-score/zero-division entries are
-    // pre-calibration placeholders with no trajectory meaning.
+    // All chartable points, oldest first. Unranked matches and placement
+    // games carry no badge and are skipped.
     const { allPoints, fromSnapshots } = useMemo(() => {
-        const apiPoints: ChartPoint[] = history
-            .filter((e) => e.player_score > 0 || e.division > 0)
-            .map((e) => ({
-                t: e.start_time * 1000,
-                v: e.player_score,
-                division: e.division,
-                tier: e.division_tier,
-            }))
-            .sort((a, b) => a.t - b.t)
+        const apiPoints: ChartPoint[] = []
+        for (const m of matches) {
+            const v = badgeScore(m.ranked_display_badge)
+            if (v === null) continue
+            const badge = m.ranked_display_badge as number
+            apiPoints.push({
+                t: m.start_time * 1000,
+                v,
+                division: Math.floor(badge / 10),
+                tier: badge % 10,
+            })
+        }
+        apiPoints.sort((a, b) => a.t - b.t)
         if (apiPoints.length >= 2) return { allPoints: apiPoints, fromSnapshots: false }
 
         const snapshotPoints: ChartPoint[] = snapshots
@@ -148,7 +153,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
         return snapshotPoints.length >= 2
             ? { allPoints: snapshotPoints, fromSnapshots: true }
             : { allPoints: apiPoints, fromSnapshots: false }
-    }, [history, snapshots])
+    }, [matches, snapshots])
 
     // Ranges are anchored to the newest data point (not the wall clock) so a
     // player coming back from a break still sees their last stretch of play,
@@ -276,7 +281,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                     <p className="text-sm">
                         {allPoints.length >= 2
                             ? t('stats.mmrChart.noMatchesInRange')
-                            : t('stats.mmrChart.noScoreHistory')}
+                            : t('stats.mmrChart.noRankHistory')}
                     </p>
                 </div>
             </div>
@@ -320,7 +325,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                 <div className="text-xs text-text-secondary">
                     <span className={delta >= 0 ? 'text-green-400' : 'text-state-danger'}>
                         {delta >= 0 ? '+' : ''}
-                        {delta.toFixed(1)}
+                        {delta.toFixed(0)}
                     </span>
                     <span className="ml-1.5">
                         {t('stats.mmrChart.dateRange', { from: formatDay(first.t, dateFormat), to: formatDay(last.t, dateFormat) })}
@@ -371,7 +376,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                         preserveAspectRatio="none"
                         className="w-full h-full block"
                         role="img"
-                        aria-label={t('stats.mmrChart.scoreRangeAria', { fromScore: first.v.toFixed(0), fromRank: rankLabel(first.division, first.tier), toScore: last.v.toFixed(0), toRank: rankLabel(last.division, last.tier) })}
+                        aria-label={t('stats.mmrChart.rankRangeAria', { fromRank: rankLabel(first.division, first.tier), toRank: rankLabel(last.division, last.tier) })}
                         onMouseMove={handleMove}
                         onMouseLeave={() => setHovered(null)}
                     >
@@ -427,7 +432,7 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                         )}
                     </svg>
 
-                    {/* Cursor tooltip: subrank badge + rank + score + date */}
+                    {/* Cursor tooltip: subrank badge + rank + date */}
                     {hoveredPoint && hoveredXY && (
                         <div
                             className="absolute pointer-events-none z-10 bg-bg-secondary border border-hl/10 rounded-sm shadow-lg px-2.5 py-1.5 flex items-center gap-2"
@@ -450,9 +455,6 @@ export const MmrChart = memo(function MmrChart({ history, snapshots, height = 22
                             <div className="whitespace-nowrap">
                                 <div className="text-sm font-medium leading-tight">
                                     {rankLabel(hoveredPoint.division, hoveredPoint.tier)}
-                                    <span className="text-text-secondary font-normal ml-1.5">
-                                        {hoveredPoint.v.toFixed(1)}
-                                    </span>
                                 </div>
                                 <div className="text-xs text-text-secondary leading-tight">
                                     {formatDay(hoveredPoint.t, dateFormat)}

@@ -745,6 +745,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoexecStatus: (gamePath: string) => ipcRenderer.invoke('crosshair:getAutoexecStatus', gamePath),
     createAutoexec: (gamePath: string) => ipcRenderer.invoke('crosshair:createAutoexec', gamePath),
     importCrosshairFromGame: (gamePath: string) => ipcRenderer.invoke('crosshair:importFromGame', gamePath),
+    copyCrosshairShareCode: (settings: CrosshairSettings) => ipcRenderer.invoke('crosshair:copyShareCode', settings),
+    pasteCrosshairShareCode: (current: CrosshairSettings) => ipcRenderer.invoke('crosshair:pasteShareCode', current),
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
 
@@ -864,10 +866,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:setPrimaryPlayer', accountId),
 
         // Player Data (API)
-        getPlayerMMR: (accountIds: number[]) =>
-            ipcRenderer.invoke('stats:getPlayerMMR', accountIds),
-        getPlayerMMRHistory: (accountId: number) =>
-            ipcRenderer.invoke('stats:getPlayerMMRHistory', accountId),
+        getPlayerRank: (accountIds: number[]) =>
+            ipcRenderer.invoke('stats:getPlayerRank', accountIds),
+        getRankedSeasons: () => ipcRenderer.invoke('stats:getRankedSeasons'),
+        getMatchScoreboard: (matchId: number) => ipcRenderer.invoke('stats:getMatchScoreboard', matchId),
+        getSeasonRankDistribution: () => ipcRenderer.invoke('stats:getSeasonRankDistribution'),
         getHeroes: () => ipcRenderer.invoke('stats:getHeroes'),
         getRanks: () => ipcRenderer.invoke('stats:getRanks'),
         getPlayerHeroStats: (accountId: number) =>
@@ -899,8 +902,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getActiveMatches: () => ipcRenderer.invoke('stats:getActiveMatches'),
 
         // Leaderboards
-        getLeaderboard: (region: string) =>
-            ipcRenderer.invoke('stats:getLeaderboard', region),
+        getLeaderboard: (region: string, leaderboardId?: number) =>
+            ipcRenderer.invoke('stats:getLeaderboard', region, leaderboardId),
         getHeroLeaderboard: (region: string, heroId: number) =>
             ipcRenderer.invoke('stats:getHeroLeaderboard', region, heroId),
 
@@ -913,25 +916,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getHeroSynergies', heroId),
         getItemAnalytics: () => ipcRenderer.invoke('stats:getItemAnalytics'),
         getBadgeDistribution: () => ipcRenderer.invoke('stats:getBadgeDistribution'),
-        getMMRDistribution: () => ipcRenderer.invoke('stats:getMMRDistribution'),
-
-        // Extended MMR
-        getHeroMMR: (accountIds: number[], heroId: number) =>
-            ipcRenderer.invoke('stats:getHeroMMR', accountIds, heroId),
-        getHeroMMRHistory: (accountId: number, heroId: number) =>
-            ipcRenderer.invoke('stats:getHeroMMRHistory', accountId, heroId),
-        getMMRDistributionGlobal: (filters?: unknown) =>
-            ipcRenderer.invoke('stats:getMMRDistributionGlobal', filters),
-        getHeroMMRDistribution: (heroId: number, filters?: unknown) =>
-            ipcRenderer.invoke('stats:getHeroMMRDistribution', heroId, filters),
 
         // Player Social Stats
         getEnemyStats: (accountId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getEnemyStats', accountId, filters),
         getMateStats: (accountId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getMateStats', accountId, filters),
-        getPartyStats: (accountId: number, filters?: unknown) =>
-            ipcRenderer.invoke('stats:getPartyStats', accountId, filters),
         searchSteamProfiles: (query: string) =>
             ipcRenderer.invoke('stats:searchSteamProfiles', query),
 

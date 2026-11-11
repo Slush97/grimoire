@@ -1430,6 +1430,10 @@ export interface ElectronAPI {
     /** Read the player's live in-game crosshair from machine_convars.vcfg.
      *  settings is null when the file is missing or has no crosshair convars. */
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
+    /** Copy settings to the clipboard as the game's crosshair share code (via deadlock-api). */
+    copyCrosshairShareCode: (settings: CrosshairSettings) => Promise<void>;
+    /** Decode the share code on the clipboard, or null when it holds none (nothing is sent then). */
+    pasteCrosshairShareCode: (current: CrosshairSettings) => Promise<CrosshairSettings | null>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
@@ -1559,8 +1563,10 @@ export interface ElectronAPI {
         setPrimaryPlayer: (accountId: number) => Promise<void>;
 
         // Player Data (API)
-        getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
-        getPlayerMMRHistory: (accountId: number) => Promise<unknown[]>;
+        getPlayerRank: (accountIds: number[]) => Promise<unknown[]>;
+        getRankedSeasons: () => Promise<unknown[]>;
+        getMatchScoreboard: (matchId: number) => Promise<unknown>;
+        getSeasonRankDistribution: () => Promise<unknown[]>;
         getHeroes: () => Promise<unknown[]>;
         getRanks: () => Promise<unknown[]>;
         getPlayerHeroStats: (accountId: number) => Promise<unknown>;
@@ -1581,7 +1587,7 @@ export interface ElectronAPI {
         getActiveMatches: () => Promise<unknown[]>;
 
         // Leaderboards
-        getLeaderboard: (region: string) => Promise<unknown[]>;
+        getLeaderboard: (region: string, leaderboardId?: number) => Promise<unknown[]>;
         getHeroLeaderboard: (region: string, heroId: number) => Promise<unknown[]>;
 
         // Analytics
@@ -1590,18 +1596,10 @@ export interface ElectronAPI {
         getHeroSynergies: (heroId?: number) => Promise<unknown[]>;
         getItemAnalytics: () => Promise<unknown[]>;
         getBadgeDistribution: () => Promise<unknown[]>;
-        getMMRDistribution: () => Promise<unknown>;
-
-        // Extended MMR
-        getHeroMMR: (accountIds: number[], heroId: number) => Promise<unknown[]>;
-        getHeroMMRHistory: (accountId: number, heroId: number) => Promise<unknown[]>;
-        getMMRDistributionGlobal: (filters?: unknown) => Promise<unknown[]>;
-        getHeroMMRDistribution: (heroId: number, filters?: unknown) => Promise<unknown[]>;
 
         // Player Social Stats
         getEnemyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
         getMateStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
-        getPartyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
         searchSteamProfiles: (query: string) => Promise<unknown[]>;
 
         // Advanced Analytics

@@ -764,12 +764,20 @@
       "playerDataTitle": "Не удалось загрузить данные игрока"
     },
     "overview": {
-      "rankedScore": "Ранговый счёт",
+      "rank": "Ранг",
+      "rankProgressTitle": "{{points}} / {{needed}} очков до ранга {{next}}",
+      "topPercent": "Топ {{percent}}%",
+      "topPercentTitle": "Доля ранговых игроков сезона с этим рангом или выше",
+      "winStreakTitle": "Серия побед: {{count}}",
+      "protectionTitle_one": "Защита от понижения ранга: {{count}}",
+      "protectionTitle_few": "Защита от понижения ранга: {{count}}",
+      "protectionTitle_many": "Защита от понижения ранга: {{count}}",
+      "protectionTitle_other": "Защита от понижения ранга: {{count}}",
       "winLoss": "{{wins}} поб. / {{losses}} пор.",
       "winRate": "Процент побед",
       "bestStreak": "Лучшая серия: {{count}}",
       "rankedTrajectory": "Динамика ранга",
-      "rankedTrajectoryDescription": "Счёт после каждого рангового матча за всю историю аккаунта",
+      "rankedTrajectoryDescription": "Ранг после каждого рангового матча за всю историю аккаунта",
       "recentMatches": "Недавние матчи",
       "lastMatches": "Последние матчи: {{count}}",
       "noRecentMatches": "Нет недавних матчей",
@@ -808,11 +816,11 @@
       "all": "Всё",
       "localDailySnapshots": "(ежедневные локальные снимки)",
       "noMatchesInRange": "В этом диапазоне нет ранговых матчей. Попробуйте диапазон шире.",
-      "noScoreHistory": "У этого игрока пока нет истории рангового счёта.",
+      "noRankHistory": "У этого игрока пока нет ранговых матчей.",
       "rangeDays": "{{days}} дн",
       "divisionFallback": "Дивизион {{division}}",
       "dateRange": "с {{from}} по {{to}}",
-      "scoreRangeAria": "Ранговый счёт: от {{fromScore}} ({{fromRank}}) до {{toScore}} ({{toRank}})"
+      "rankRangeAria": "Ранг: от {{fromRank}} до {{toRank}}"
     },
     "matches": {
       "matchHistory": "История матчей",
@@ -829,22 +837,48 @@
       "loss": "Поражение",
       "souls": "души",
       "damage": "урон",
-      "viewMatchOnStatlocker": "Открыть матч на Statlocker"
+      "viewMatchOnStatlocker": "Открыть матч на Statlocker",
+      "rankPoints": "Очки ранга",
+      "rankPointsProtected": "Очки ранга. Активирована защита от потери ранга.",
+      "brawl": "Стычка"
+    },
+    "scoreboard": {
+      "open": "Открыть таблицу матча",
+      "title": "Матч",
+      "loadFailed": "Не удалось загрузить матч. Возможно, на deadlock-api его ещё нет.",
+      "mode": {
+        "ranked": "Ранговый режим",
+        "standard": "Обычный матч",
+        "brawl": "Уличная стычка"
+      },
+      "soulsLead": "Перевес по душам",
+      "minutes": "{{minutes}} мин",
+      "yourTeam": "Ваша команда",
+      "enemyTeam": "Противники",
+      "farm": "Доб./укр.",
+      "farmTitle": "Добивания / укр. шаров",
+      "healing": "Лечение",
+      "build": "Сборка",
+      "mvp": "MVP #{{rank}}",
+      "level": "Уровень {{level}}",
+      "bans": "Баны"
     },
     "leaderboard": {
       "asia": "Азия",
       "topPlayers": "Лучшие игроки",
       "valveLeaderboardUpdatedHourly": "Таблица лидеров Valve, обновляется каждый час",
-      "noDataForRegion": "Для этого региона нет данных таблицы лидеров"
+      "noDataForRegion": "Для этого региона нет данных таблицы лидеров",
+      "season": "Сезон",
+      "trackedPosition": "{{name}} #{{rank}}"
     },
     "ranks": {
       "initiate": "Послушник",
       "seeker": "Искатель",
-      "alchemist": "Алхимик",
-      "arcanist": "Чародей",
+      "acolyte": "Аколит",
+      "sentinel": "Страж",
+      "mystic": "Мистик",
       "ritualist": "Ритуалист",
       "emissary": "Эмиссар",
-      "archon": "Архонт",
       "oracle": "Оракул",
       "phantom": "Фантом",
       "ascendant": "Владыка",
@@ -1349,6 +1383,10 @@
     "actions": {
       "applyToGame": "Применить в игре",
       "copyCode": "Скопировать код",
+      "copyCodeTitle": "Скопировать прицел в виде кода, которым можно поделиться с другими игроками.",
+      "copyCommands": "Скопировать команды",
+      "pasteCode": "Вставить код",
+      "pasteCodeTitle": "Применить код прицела из буфера обмена.",
       "importFromGame": "Импорт из игры",
       "importTitle": "Загрузить в редактор текущие настройки прицела из игры",
       "saveCurrent": "Сохранить текущий"
@@ -1358,7 +1396,9 @@
       "clearFailed": "Не удалось убрать прицел. Проверьте путь к игре в настройках.",
       "configureGamePath": "Сначала укажите путь к Deadlock в настройках.",
       "noSettingsFound": "В конфиге игры нет настроек прицела. Измените в игре любую настройку прицела и повторите попытку.",
-      "readConfigFailed": "Не удалось прочитать конфиг игры. Проверьте путь к игре в настройках."
+      "readConfigFailed": "Не удалось прочитать конфиг игры. Проверьте путь к игре в настройках.",
+      "noShareCode": "Буфер обмена не содержит код прицела.",
+      "shareCodeFailed": "Не удалось связаться с deadlock-api.com. Повторите попытку чуть позже."
     },
     "colors": {
       "blue": "Синий",
@@ -1391,7 +1431,7 @@
       "description": "Настройте прицел и посмотрите, как он выглядит на настоящей сцене"
     },
     "hints": {
-      "applyExplainer": "«Скопировать код» копирует весь прицел для вставки в игровую консоль (клавиша F7). Применённый сохранённый пресет записывается в autoexec.cfg, поэтому не пропадёт после перезапуска.",
+      "applyExplainer": "«Скопировать команды» копирует весь прицел для вставки в игровую консоль (клавиша F7). Применённый сохранённый пресет записывается в autoexec.cfg, поэтому не пропадёт после перезапуска.",
       "dotHidden": "Точка полностью прозрачна. Чтобы её увидеть, увеличьте «Непрозрачность».",
       "pressF7": "Нажмите F7 в игре"
     },
@@ -1432,7 +1472,8 @@
       "lines": "Линии"
     },
     "status": {
-      "imported": "Импортировано"
+      "imported": "Импортировано",
+      "pasted": "Применён"
     },
     "toggles": {
       "staticGap": "Фиксированный зазор. Если выключено, он растёт вместе с разбросом оружия (в превью не показано).",
